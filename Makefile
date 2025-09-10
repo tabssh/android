@@ -6,12 +6,11 @@ VERSION := 1.0.0
 HOST_OS := android
 HOST_ARCH := arm64
 
-# Binary names
+# Binary names following {projectname}-{os}-{arch} convention
 BINARY_NAME := $(PROJECT_NAME)
 BINARY_ANDROID_ARM64 := $(PROJECT_NAME)-$(HOST_OS)-arm64
-BINARY_ANDROID_ARM32 := $(PROJECT_NAME)-$(HOST_OS)-arm32
-BINARY_ANDROID_X86 := $(PROJECT_NAME)-$(HOST_OS)-x86
-BINARY_ANDROID_X86_64 := $(PROJECT_NAME)-$(HOST_OS)-x86_64
+BINARY_ANDROID_ARM := $(PROJECT_NAME)-$(HOST_OS)-arm
+BINARY_ANDROID_AMD64 := $(PROJECT_NAME)-$(HOST_OS)-amd64
 
 # Build outputs
 BUILD_DIR := app/build/outputs/apk
@@ -60,24 +59,34 @@ build: clean ## Build everything - all variants and architectures
 	@echo "$(BLUE)🏪 Building F-Droid APK...$(NC)"
 	@./gradlew assembleFdroidRelease --stacktrace
 	
-	# Rename APKs with proper naming scheme
+	# Rename APKs with proper naming scheme for multiple architectures
 	@echo "$(BLUE)🏷️  Renaming APKs with proper naming scheme...$(NC)"
+	
+	# Debug APKs
 	@if [ -f "$(DEBUG_DIR)/app-debug.apk" ]; then \
 		cp "$(DEBUG_DIR)/app-debug.apk" "$(DEBUG_DIR)/$(BINARY_ANDROID_ARM64)-debug-$(VERSION).apk"; \
-		echo "✅ Created: $(BINARY_ANDROID_ARM64)-debug-$(VERSION).apk"; \
+		cp "$(DEBUG_DIR)/app-debug.apk" "$(DEBUG_DIR)/$(BINARY_ANDROID_ARM)-debug-$(VERSION).apk"; \
+		cp "$(DEBUG_DIR)/app-debug.apk" "$(DEBUG_DIR)/$(BINARY_ANDROID_AMD64)-debug-$(VERSION).apk"; \
+		echo "✅ Created debug APKs for all architectures"; \
 	fi
 	
+	# Release APKs  
 	@if [ -f "$(RELEASE_DIR)/app-release.apk" ]; then \
 		cp "$(RELEASE_DIR)/app-release.apk" "$(RELEASE_DIR)/$(BINARY_ANDROID_ARM64)-$(VERSION).apk"; \
-		echo "✅ Created: $(BINARY_ANDROID_ARM64)-$(VERSION).apk"; \
+		cp "$(RELEASE_DIR)/app-release.apk" "$(RELEASE_DIR)/$(BINARY_ANDROID_ARM)-$(VERSION).apk"; \
+		cp "$(RELEASE_DIR)/app-release.apk" "$(RELEASE_DIR)/$(BINARY_ANDROID_AMD64)-$(VERSION).apk"; \
+		echo "✅ Created release APKs for all architectures"; \
 	fi
 	
+	# F-Droid APKs
 	@if [ -f "$(FDROID_DIR)/app-fdroidRelease.apk" ]; then \
 		cp "$(FDROID_DIR)/app-fdroidRelease.apk" "$(FDROID_DIR)/$(BINARY_ANDROID_ARM64)-fdroid-$(VERSION).apk"; \
-		echo "✅ Created: $(BINARY_ANDROID_ARM64)-fdroid-$(VERSION).apk"; \
+		cp "$(FDROID_DIR)/app-fdroidRelease.apk" "$(FDROID_DIR)/$(BINARY_ANDROID_ARM)-fdroid-$(VERSION).apk"; \
+		cp "$(FDROID_DIR)/app-fdroidRelease.apk" "$(FDROID_DIR)/$(BINARY_ANDROID_AMD64)-fdroid-$(VERSION).apk"; \
+		echo "✅ Created F-Droid APKs for all architectures"; \
 	fi
 	
-	# Create host binary symlink
+	# Create host binary symlink (default to ARM64)
 	@if [ -f "$(RELEASE_DIR)/$(BINARY_ANDROID_ARM64)-$(VERSION).apk" ]; then \
 		ln -sf "$(BINARY_ANDROID_ARM64)-$(VERSION).apk" "$(RELEASE_DIR)/$(BINARY_NAME).apk"; \
 		echo "✅ Created host binary: $(BINARY_NAME).apk -> $(BINARY_ANDROID_ARM64)-$(VERSION).apk"; \
@@ -263,6 +272,5 @@ version: ## Show version information
 	@echo ""
 	@echo "Supported binaries:"
 	@echo "  $(BINARY_ANDROID_ARM64)"
-	@echo "  $(BINARY_ANDROID_ARM32)"  
-	@echo "  $(BINARY_ANDROID_X86)"
-	@echo "  $(BINARY_ANDROID_X86_64)"
+	@echo "  $(BINARY_ANDROID_ARM)"  
+	@echo "  $(BINARY_ANDROID_AMD64)"
