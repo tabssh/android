@@ -92,6 +92,17 @@ build: clean ## Build everything - all variants and architectures
 		echo "✅ Created host binary: $(BINARY_NAME).apk -> $(BINARY_ANDROID_ARM64)-$(VERSION).apk"; \
 	fi
 	
+	# Generate SHA256 checksums for security verification
+	@echo "$(BLUE)🔐 Generating SHA256 checksums...$(NC)"
+	@cd $(RELEASE_DIR) && if ls *.apk 1>/dev/null 2>&1; then \
+		sha256sum *.apk > $(PROJECT_NAME)-android-checksums-$(VERSION).sha256; \
+		echo "✅ Release checksums: $(PROJECT_NAME)-android-checksums-$(VERSION).sha256"; \
+	fi
+	@cd $(FDROID_DIR) && if ls *.apk 1>/dev/null 2>&1; then \
+		sha256sum *.apk > $(PROJECT_NAME)-android-fdroid-checksums-$(VERSION).sha256; \
+		echo "✅ F-Droid checksums: $(PROJECT_NAME)-android-fdroid-checksums-$(VERSION).sha256"; \
+	fi
+	
 	@echo ""
 	@echo "$(GREEN)✅ Build complete!$(NC)"
 	@echo "=================="
@@ -130,6 +141,14 @@ release: build ## Release to GitHub with proper binary names
 	@cp metadata/io.github.tabssh.yml release-assets/
 	@cp README.md release-assets/
 	@cp CHANGELOG.md release-assets/
+	@if [ -f "$(RELEASE_DIR)/$(PROJECT_NAME)-android-checksums-$(VERSION).sha256" ]; then \
+		cp "$(RELEASE_DIR)/$(PROJECT_NAME)-android-checksums-$(VERSION).sha256" release-assets/; \
+		echo "✅ Added release checksums"; \
+	fi
+	@if [ -f "$(FDROID_DIR)/$(PROJECT_NAME)-android-fdroid-checksums-$(VERSION).sha256" ]; then \
+		cp "$(FDROID_DIR)/$(PROJECT_NAME)-android-fdroid-checksums-$(VERSION).sha256" release-assets/; \
+		echo "✅ Added F-Droid checksums"; \
+	fi
 	@echo "✅ Added metadata and documentation"
 	
 	# Generate release notes
