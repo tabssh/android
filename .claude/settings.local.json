@@ -9,7 +9,8 @@
       "Bash(gh repo view:*)",
       "Bash(gh run list:*)",
       "Bash(gh run view:*)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(act:*)"
     ],
     "deny": [],
     "ask": []
