@@ -28,13 +28,7 @@ RUN yes | sdkmanager --licenses || true
 RUN sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
 # Set working directory
-WORKDIR /workspace
-
-# Copy project files
-COPY . .
-
-# Make gradlew executable
-RUN chmod +x ./gradlew
+WORKDIR /build
 
 # Build command
 CMD ["./gradlew", "build", "--no-daemon"]
