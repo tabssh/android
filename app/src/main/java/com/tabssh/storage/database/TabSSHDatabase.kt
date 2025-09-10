@@ -1,11 +1,11 @@
-package com.tabssh.storage.database
+package io.github.tabssh.storage.database
 
 import android.content.Context
 import androidx.room.*
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.tabssh.storage.database.dao.*
-import com.tabssh.storage.database.entities.*
+import io.github.tabssh.storage.database.dao.*
+import io.github.tabssh.storage.database.entities.*
 
 /**
  * Main Room database for TabSSH

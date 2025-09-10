@@ -1,7 +1,7 @@
-package com.tabssh.themes.parser
+package io.github.tabssh.themes.parser
 
-import com.tabssh.themes.definitions.Theme
-import com.tabssh.utils.logging.Logger
+import io.github.tabssh.themes.definitions.Theme
+import io.github.tabssh.utils.logging.Logger
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString

@@ -1,6 +1,6 @@
-package com.tabssh.terminal.emulator
+package io.github.tabssh.terminal.emulator
 
-import com.tabssh.utils.logging.Logger
+import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

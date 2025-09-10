@@ -1,11 +1,11 @@
-package com.tabssh.platform
+package io.github.tabssh.platform
 
 import android.content.Context
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Build
 import android.view.KeyEvent
-import com.tabssh.utils.logging.Logger
+import io.github.tabssh.utils.logging.Logger
 
 /**
  * Manages platform-specific optimizations for Android TV and Chromebook

@@ -86,7 +86,7 @@ jobs:
           app/build/outputs/apk/fdroidRelease/tabssh-android-arm64-fdroid-${{ steps.version.outputs.VERSION }}.apk
           app/build/outputs/mapping/release/mapping.txt
           RELEASE_NOTES.md
-          metadata/com.tabssh.yml
+          metadata/io.github.tabssh.yml
         body_path: RELEASE_NOTES.md
         generate_release_notes: false
         prerelease: false
@@ -98,7 +98,7 @@ jobs:
       run: |
         mkdir -p fdroid-submission
         cp app/build/outputs/apk/fdroidRelease/tabssh-android-arm64-fdroid-${{ steps.version.outputs.VERSION }}.apk fdroid-submission/
-        cp metadata/com.tabssh.yml fdroid-submission/
+        cp metadata/io.github.tabssh.yml fdroid-submission/
         cp README.md fdroid-submission/
         cp CHANGELOG.md fdroid-submission/
         echo "F-Droid submission package ready in fdroid-submission/"

@@ -1,4 +1,4 @@
-package com.tabssh.accessibility
+package io.github.tabssh.accessibility
 
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Context
@@ -9,11 +9,11 @@ import android.view.accessibility.AccessibilityNodeInfo
 import androidx.core.view.AccessibilityDelegateCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
-import com.tabssh.R
-import com.tabssh.storage.preferences.PreferenceManager
-import com.tabssh.terminal.emulator.TerminalBuffer
-import com.tabssh.ui.views.TerminalView
-import com.tabssh.utils.logging.Logger
+import io.github.tabssh.R
+import io.github.tabssh.storage.preferences.PreferenceManager
+import io.github.tabssh.terminal.emulator.TerminalBuffer
+import io.github.tabssh.ui.views.TerminalView
+import io.github.tabssh.utils.logging.Logger
 
 /**
  * Comprehensive accessibility manager for TabSSH

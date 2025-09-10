@@ -1,11 +1,11 @@
-package com.tabssh.ui.adapters
+package io.github.tabssh.ui.adapters
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
-import com.tabssh.R
-import com.tabssh.databinding.ItemFileBinding
-import com.tabssh.sftp.RemoteFileInfo
+import io.github.tabssh.R
+import io.github.tabssh.databinding.ItemFileBinding
+import io.github.tabssh.sftp.RemoteFileInfo
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*

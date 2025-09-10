@@ -1,10 +1,10 @@
-package com.tabssh.sftp
+package io.github.tabssh.sftp
 
 import com.jcraft.jsch.ChannelSftp
 import com.jcraft.jsch.SftpATTRS
 import com.jcraft.jsch.SftpException
-import com.tabssh.ssh.connection.SSHConnection
-import com.tabssh.utils.logging.Logger
+import io.github.tabssh.ssh.connection.SSHConnection
+import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

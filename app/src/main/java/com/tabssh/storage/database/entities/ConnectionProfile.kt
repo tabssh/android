@@ -1,9 +1,9 @@
-package com.tabssh.storage.database.entities
+package io.github.tabssh.storage.database.entities
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
-import com.tabssh.ssh.auth.AuthType
+import io.github.tabssh.ssh.auth.AuthType
 import java.util.UUID
 
 /**

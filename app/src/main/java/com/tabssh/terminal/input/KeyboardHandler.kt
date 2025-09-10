@@ -1,8 +1,8 @@
-package com.tabssh.terminal.input
+package io.github.tabssh.terminal.input
 
 import android.view.KeyEvent
-import com.tabssh.terminal.emulator.TerminalEmulator
-import com.tabssh.utils.logging.Logger
+import io.github.tabssh.terminal.emulator.TerminalEmulator
+import io.github.tabssh.utils.logging.Logger
 
 /**
  * Handles keyboard input and converts it to terminal sequences

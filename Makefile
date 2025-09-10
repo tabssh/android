@@ -118,7 +118,7 @@ release: build ## Release to GitHub with proper binary names
 		echo "✅ Added: $(BINARY_ANDROID_ARM64)-fdroid-$(VERSION).apk"; \
 	fi
 	
-	@cp metadata/com.tabssh.yml release-assets/
+	@cp metadata/io.github.tabssh.yml release-assets/
 	@cp README.md release-assets/
 	@cp CHANGELOG.md release-assets/
 	@echo "✅ Added metadata and documentation"
@@ -217,9 +217,9 @@ validate: ## Run local validation (same as CI)
 	
 	# F-Droid metadata
 	@echo "📦 F-Droid metadata:"
-	@test -f "metadata/com.tabssh.yml" && echo "✅ F-Droid metadata exists"
-	@grep -q "Categories:" metadata/com.tabssh.yml && echo "✅ Categories specified"
-	@grep -q "License: MIT" metadata/com.tabssh.yml && echo "✅ MIT license confirmed"
+	@test -f "metadata/io.github.tabssh.yml" && echo "✅ F-Droid metadata exists"
+	@grep -q "Categories:" metadata/io.github.tabssh.yml && echo "✅ Categories specified"
+	@grep -q "License: MIT" metadata/io.github.tabssh.yml && echo "✅ MIT license confirmed"
 	
 	# Documentation
 	@echo "📚 Documentation:"

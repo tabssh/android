@@ -1,7 +1,7 @@
-package com.tabssh.themes.validator
+package io.github.tabssh.themes.validator
 
-import com.tabssh.themes.definitions.BuiltInThemes
-import com.tabssh.themes.definitions.Theme
+import io.github.tabssh.themes.definitions.BuiltInThemes
+import io.github.tabssh.themes.definitions.Theme
 import org.junit.Before
 import org.junit.Test
 import kotlin.test.*

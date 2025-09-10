@@ -1,7 +1,7 @@
-package com.tabssh.themes.validator
+package io.github.tabssh.themes.validator
 
-import com.tabssh.themes.definitions.Theme
-import com.tabssh.utils.logging.Logger
+import io.github.tabssh.themes.definitions.Theme
+import io.github.tabssh.utils.logging.Logger
 import kotlin.math.pow
 
 /**

@@ -1,11 +1,11 @@
-package com.tabssh.ui.tabs
+package io.github.tabssh.ui.tabs
 
-import com.tabssh.storage.database.entities.ConnectionProfile
-import com.tabssh.ssh.connection.SSHConnection
-import com.tabssh.terminal.emulator.TerminalEmulator
-import com.tabssh.terminal.emulator.TerminalManager
-import com.tabssh.storage.preferences.PreferenceManager
-import com.tabssh.utils.logging.Logger
+import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.ssh.connection.SSHConnection
+import io.github.tabssh.terminal.emulator.TerminalEmulator
+import io.github.tabssh.terminal.emulator.TerminalManager
+import io.github.tabssh.storage.preferences.PreferenceManager
+import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

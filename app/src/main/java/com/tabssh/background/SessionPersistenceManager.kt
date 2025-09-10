@@ -1,14 +1,14 @@
-package com.tabssh.background
+package io.github.tabssh.background
 
 import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.os.Bundle
-import com.tabssh.TabSSHApplication
-import com.tabssh.storage.database.entities.TabSession
-import com.tabssh.ui.tabs.SSHTab
-import com.tabssh.ui.tabs.TabManager
-import com.tabssh.utils.logging.Logger
+import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.storage.database.entities.TabSession
+import io.github.tabssh.ui.tabs.SSHTab
+import io.github.tabssh.ui.tabs.TabManager
+import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
 
 /**

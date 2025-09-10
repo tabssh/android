@@ -1,6 +1,6 @@
-package com.tabssh.sftp
+package io.github.tabssh.sftp
 
-import com.tabssh.utils.logging.Logger
+import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

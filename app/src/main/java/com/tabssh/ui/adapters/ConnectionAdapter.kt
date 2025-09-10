@@ -1,11 +1,11 @@
-package com.tabssh.ui.adapters
+package io.github.tabssh.ui.adapters
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
-import com.tabssh.databinding.ItemConnectionBinding
-import com.tabssh.storage.database.entities.ConnectionProfile
-import com.tabssh.utils.logging.Logger
+import io.github.tabssh.databinding.ItemConnectionBinding
+import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.utils.logging.Logger
 import java.text.SimpleDateFormat
 import java.util.*
 

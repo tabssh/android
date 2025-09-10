@@ -1,4 +1,4 @@
-package com.tabssh.ui.activities
+package io.github.tabssh.ui.activities
 
 import android.content.Context
 import android.content.Intent
@@ -10,16 +10,16 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.tabs.TabLayout
-import com.tabssh.R
-import com.tabssh.TabSSHApplication
-import com.tabssh.databinding.ActivityTabTerminalBinding
-import com.tabssh.storage.database.entities.ConnectionProfile
-import com.tabssh.ssh.connection.ConnectionState
-import com.tabssh.ui.tabs.SSHTab
-import com.tabssh.ui.tabs.TabManager
-import com.tabssh.ui.tabs.TabManagerListener
-import com.tabssh.ui.views.TerminalView
-import com.tabssh.utils.logging.Logger
+import io.github.tabssh.R
+import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.databinding.ActivityTabTerminalBinding
+import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.ssh.connection.ConnectionState
+import io.github.tabssh.ui.tabs.SSHTab
+import io.github.tabssh.ui.tabs.TabManager
+import io.github.tabssh.ui.tabs.TabManagerListener
+import io.github.tabssh.ui.views.TerminalView
+import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.launch
 
 /**

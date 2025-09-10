@@ -1,4 +1,4 @@
-package com.tabssh.ui.activities
+package io.github.tabssh.ui.activities
 
 import android.content.Context
 import android.content.Intent
@@ -6,13 +6,13 @@ import android.os.Bundle
 import android.widget.ArrayAdapter
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import com.tabssh.R
-import com.tabssh.TabSSHApplication
-import com.tabssh.databinding.ActivityConnectionEditBinding
-import com.tabssh.storage.database.entities.ConnectionProfile
-import com.tabssh.storage.database.entities.StoredKey
-import com.tabssh.ssh.auth.AuthType
-import com.tabssh.utils.logging.Logger
+import io.github.tabssh.R
+import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.databinding.ActivityConnectionEditBinding
+import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.storage.database.entities.StoredKey
+import io.github.tabssh.ssh.auth.AuthType
+import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.launch
 
 /**

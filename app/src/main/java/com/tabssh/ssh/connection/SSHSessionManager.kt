@@ -1,8 +1,8 @@
-package com.tabssh.ssh.connection
+package io.github.tabssh.ssh.connection
 
 import android.content.Context
-import com.tabssh.storage.database.entities.ConnectionProfile
-import com.tabssh.utils.logging.Logger
+import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

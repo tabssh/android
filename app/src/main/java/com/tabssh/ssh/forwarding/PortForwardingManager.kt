@@ -1,8 +1,8 @@
-package com.tabssh.ssh.forwarding
+package io.github.tabssh.ssh.forwarding
 
 import com.jcraft.jsch.Session
-import com.tabssh.ssh.connection.SSHConnection
-import com.tabssh.utils.logging.Logger
+import io.github.tabssh.ssh.connection.SSHConnection
+import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

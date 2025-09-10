@@ -1,4 +1,4 @@
-package com.tabssh.ui.dialogs
+package io.github.tabssh.ui.dialogs
 
 import android.app.Dialog
 import android.content.DialogInterface
@@ -9,10 +9,10 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
-import com.tabssh.R
-import com.tabssh.TabSSHApplication
-import com.tabssh.storage.database.entities.ConnectionProfile
-import com.tabssh.utils.logging.Logger
+import io.github.tabssh.R
+import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.launch
 
 /**

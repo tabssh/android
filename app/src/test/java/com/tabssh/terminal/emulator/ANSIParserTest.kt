@@ -1,4 +1,4 @@
-package com.tabssh.terminal.emulator
+package io.github.tabssh.terminal.emulator
 
 import org.junit.Before
 import org.junit.Test

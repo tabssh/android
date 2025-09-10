@@ -45,8 +45,8 @@
             android:layout_height="0dp"
             android:layout_weight="1"
             android:background="@color/terminal_background"
-            app:fontSize="@dimen/terminal_text_size_default"
-            app:fontFamily="monospace"
+            app:terminalFontSize="@dimen/terminal_text_size_default"
+            app:terminalFontFamily="monospace"
             app:showScrollbar="true"
             app:scrollbackLines="1000" />
 

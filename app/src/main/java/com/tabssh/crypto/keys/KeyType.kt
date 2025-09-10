@@ -1,4 +1,4 @@
-package com.tabssh.crypto.keys
+package io.github.tabssh.crypto.keys
 
 /**
  * SSH key types supported by TabSSH

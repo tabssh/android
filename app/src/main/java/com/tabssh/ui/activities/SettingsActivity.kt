@@ -1,12 +1,12 @@
-package com.tabssh.ui.activities
+package io.github.tabssh.ui.activities
 
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.preference.PreferenceFragmentCompat
-import com.tabssh.R
-import com.tabssh.databinding.ActivitySettingsBinding
-import com.tabssh.ui.fragments.settings.*
-import com.tabssh.utils.logging.Logger
+import io.github.tabssh.R
+import io.github.tabssh.databinding.ActivitySettingsBinding
+import io.github.tabssh.ui.fragments.settings.*
+import io.github.tabssh.utils.logging.Logger
 
 /**
  * Settings activity with comprehensive preference categories

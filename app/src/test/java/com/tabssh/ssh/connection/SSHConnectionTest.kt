@@ -1,7 +1,7 @@
-package com.tabssh.ssh.connection
+package io.github.tabssh.ssh.connection
 
-import com.tabssh.storage.database.entities.ConnectionProfile
-import com.tabssh.ssh.auth.AuthType
+import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.ssh.auth.AuthType
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
