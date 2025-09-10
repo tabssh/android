@@ -1,9 +1,9 @@
-package com.tabssh.storage.preferences
+package io.github.tabssh.storage.preferences
 
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.preference.PreferenceManager as AndroidPreferenceManager
-import com.tabssh.utils.logging.Logger
+import io.github.tabssh.utils.logging.Logger
 
 /**
  * Centralized preference management for TabSSH

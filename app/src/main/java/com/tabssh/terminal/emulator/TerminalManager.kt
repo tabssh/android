@@ -1,8 +1,8 @@
-package com.tabssh.terminal.emulator
+package io.github.tabssh.terminal.emulator
 
 import android.content.Context
-import com.tabssh.storage.preferences.PreferenceManager
-import com.tabssh.utils.logging.Logger
+import io.github.tabssh.storage.preferences.PreferenceManager
+import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
 import java.util.concurrent.ConcurrentHashMap
 

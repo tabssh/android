@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace 'com.tabssh'
+    namespace 'io.github.tabssh'
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.tabssh"
+        applicationId "io.github.tabssh"
         minSdk 21  // Android 5.0 (covers 99%+ of devices)
         targetSdk 34
         versionCode 1

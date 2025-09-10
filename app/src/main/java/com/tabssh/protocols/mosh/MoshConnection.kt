@@ -1,10 +1,10 @@
-package com.tabssh.protocols.mosh
+package io.github.tabssh.protocols.mosh
 
 import android.content.Context
-import com.tabssh.storage.database.entities.ConnectionProfile
-import com.tabssh.ssh.connection.SSHConnection
-import com.tabssh.ssh.connection.ConnectionState
-import com.tabssh.utils.logging.Logger
+import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.ssh.connection.SSHConnection
+import io.github.tabssh.ssh.connection.ConnectionState
+import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

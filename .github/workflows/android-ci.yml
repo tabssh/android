@@ -40,13 +40,13 @@ jobs:
       run: |
         echo "📦 Validating F-Droid metadata..."
         
-        if [ -f "metadata/com.tabssh.yml" ]; then
+        if [ -f "metadata/io.github.tabssh.yml" ]; then
           echo "✅ F-Droid metadata exists"
           
           # Check essential metadata fields
-          if grep -q "Categories:" metadata/com.tabssh.yml && \
-             grep -q "License: MIT" metadata/com.tabssh.yml && \
-             grep -q "Summary:" metadata/com.tabssh.yml; then
+          if grep -q "Categories:" metadata/io.github.tabssh.yml && \
+             grep -q "License: MIT" metadata/io.github.tabssh.yml && \
+             grep -q "Summary:" metadata/io.github.tabssh.yml; then
             echo "✅ F-Droid metadata is valid"
           else
             echo "❌ F-Droid metadata incomplete"

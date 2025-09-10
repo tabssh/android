@@ -1,4 +1,4 @@
-package com.tabssh.ui.activities
+package io.github.tabssh.ui.activities
 
 import android.content.Context
 import android.content.Intent
@@ -8,16 +8,16 @@ import android.view.MenuItem
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.tabssh.R
-import com.tabssh.TabSSHApplication
-import com.tabssh.databinding.ActivitySftpBinding
-import com.tabssh.sftp.RemoteFileInfo
-import com.tabssh.sftp.SFTPManager
-import com.tabssh.sftp.TransferTask
-import com.tabssh.sftp.TransferListener
-import com.tabssh.ui.adapters.FileAdapter
-import com.tabssh.ui.adapters.TransferAdapter
-import com.tabssh.utils.logging.Logger
+import io.github.tabssh.R
+import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.databinding.ActivitySftpBinding
+import io.github.tabssh.sftp.RemoteFileInfo
+import io.github.tabssh.sftp.SFTPManager
+import io.github.tabssh.sftp.TransferTask
+import io.github.tabssh.sftp.TransferListener
+import io.github.tabssh.ui.adapters.FileAdapter
+import io.github.tabssh.ui.adapters.TransferAdapter
+import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.launch
 import java.io.File
 

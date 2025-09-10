@@ -1,4 +1,4 @@
-package com.tabssh.crypto.storage
+package io.github.tabssh.crypto.storage
 
 import android.content.Context
 import android.content.SharedPreferences

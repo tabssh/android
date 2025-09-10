@@ -31,9 +31,9 @@
         <attr name="terminalTextColor" />
         <attr name="terminalCursorColor" />
         <attr name="terminalSelectionColor" />
-        <attr name="fontFamily" format="string" />
-        <attr name="fontSize" format="dimension" />
-        <attr name="lineSpacing" format="float" />
+        <attr name="terminalFontFamily" format="string" />
+        <attr name="terminalFontSize" format="dimension" />
+        <attr name="terminalLineSpacing" format="float" />
         <attr name="cursorStyle" format="enum">
             <enum name="block" value="0" />
             <enum name="underline" value="1" />

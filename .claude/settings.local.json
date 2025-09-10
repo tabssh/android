@@ -17,7 +17,8 @@
       "Bash(make:*)",
       "Bash(find:*)",
       "Bash(git add:*)",
-      "Bash(sed:*)"
+      "Bash(sed:*)",
+      "Bash(./scripts/prepare-fdroid-submission.sh:*)"
     ],
     "deny": [],
     "ask": []

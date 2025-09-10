@@ -1,4 +1,4 @@
-package com.tabssh.utils.logging
+package io.github.tabssh.utils.logging
 
 import android.content.Context
 import android.util.Log

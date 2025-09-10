@@ -1,4 +1,4 @@
-package com.tabssh.ui
+package io.github.tabssh.ui
 
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -6,8 +6,8 @@ import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.action.ViewActions.*
 import androidx.test.espresso.assertion.ViewAssertions.*
 import androidx.test.espresso.matcher.ViewMatchers.*
-import com.tabssh.R
-import com.tabssh.ui.activities.MainActivity
+import io.github.tabssh.R
+import io.github.tabssh.ui.activities.MainActivity
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith

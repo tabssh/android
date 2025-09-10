@@ -1,10 +1,10 @@
-package com.tabssh.protocols.x11
+package io.github.tabssh.protocols.x11
 
 import android.content.Context
 import android.graphics.Bitmap
 import android.view.Surface
-import com.tabssh.ssh.connection.SSHConnection
-import com.tabssh.utils.logging.Logger
+import io.github.tabssh.ssh.connection.SSHConnection
+import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

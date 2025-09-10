@@ -1,7 +1,7 @@
-package com.tabssh.storage.database.dao
+package io.github.tabssh.storage.database.dao
 
 import androidx.room.*
-import com.tabssh.storage.database.entities.TabSession
+import io.github.tabssh.storage.database.entities.TabSession
 import kotlinx.coroutines.flow.Flow
 
 /**

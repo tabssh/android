@@ -1,4 +1,4 @@
-package com.tabssh.ui.views
+package io.github.tabssh.ui.views
 
 import android.content.Context
 import android.graphics.Canvas
@@ -13,12 +13,12 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodManager
 import androidx.core.content.ContextCompat
-import com.tabssh.R
-import com.tabssh.terminal.emulator.TerminalEmulator
-import com.tabssh.terminal.emulator.TerminalListener
-import com.tabssh.terminal.input.KeyboardHandler
-import com.tabssh.terminal.renderer.TerminalRenderer
-import com.tabssh.utils.logging.Logger
+import io.github.tabssh.R
+import io.github.tabssh.terminal.emulator.TerminalEmulator
+import io.github.tabssh.terminal.emulator.TerminalListener
+import io.github.tabssh.terminal.input.KeyboardHandler
+import io.github.tabssh.terminal.renderer.TerminalRenderer
+import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
 
 /**
@@ -90,8 +90,8 @@ class TerminalView @JvmOverloads constructor(
             val typedArray = context.obtainStyledAttributes(attrs, R.styleable.TerminalView)
             try {
                 // Load terminal-specific attributes
-                val fontSize = typedArray.getDimension(R.styleable.TerminalView_fontSize, 14f)
-                val fontFamily = typedArray.getString(R.styleable.TerminalView_fontFamily) ?: "monospace"
+                val fontSize = typedArray.getDimension(R.styleable.TerminalView_terminalFontSize, 14f)
+                val fontFamily = typedArray.getString(R.styleable.TerminalView_terminalFontFamily) ?: "monospace"
                 val showScrollbar = typedArray.getBoolean(R.styleable.TerminalView_showScrollbar, true)
                 
                 // Apply to renderer

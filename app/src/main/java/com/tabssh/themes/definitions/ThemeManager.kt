@@ -1,12 +1,12 @@
-package com.tabssh.themes.definitions
+package io.github.tabssh.themes.definitions
 
 import android.content.Context
-import com.tabssh.storage.database.TabSSHDatabase
-import com.tabssh.storage.database.entities.ThemeDefinition
-import com.tabssh.storage.preferences.PreferenceManager
-import com.tabssh.themes.validator.ThemeValidator
-import com.tabssh.themes.parser.ThemeParser
-import com.tabssh.utils.logging.Logger
+import io.github.tabssh.storage.database.TabSSHDatabase
+import io.github.tabssh.storage.database.entities.ThemeDefinition
+import io.github.tabssh.storage.preferences.PreferenceManager
+import io.github.tabssh.themes.validator.ThemeValidator
+import io.github.tabssh.themes.parser.ThemeParser
+import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

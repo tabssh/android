@@ -1,4 +1,4 @@
-package com.tabssh.themes.definitions
+package io.github.tabssh.themes.definitions
 
 /**
  * All 12 built-in themes for TabSSH

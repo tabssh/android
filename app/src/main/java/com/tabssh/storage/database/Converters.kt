@@ -1,4 +1,4 @@
-package com.tabssh.storage.database
+package io.github.tabssh.storage.database
 
 import androidx.room.TypeConverter
 import kotlinx.serialization.json.Json

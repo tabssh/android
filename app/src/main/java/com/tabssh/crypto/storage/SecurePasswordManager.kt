@@ -1,4 +1,4 @@
-package com.tabssh.crypto.storage
+package io.github.tabssh.crypto.storage
 
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
@@ -7,7 +7,7 @@ import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
-import com.tabssh.utils.logging.Logger
+import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.security.KeyStore
 import javax.crypto.Cipher

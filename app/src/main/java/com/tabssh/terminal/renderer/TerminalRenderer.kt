@@ -1,10 +1,10 @@
-package com.tabssh.terminal.renderer
+package io.github.tabssh.terminal.renderer
 
 import android.graphics.*
 import android.text.TextPaint
-import com.tabssh.terminal.emulator.TerminalBuffer
-import com.tabssh.terminal.emulator.TerminalChar
-import com.tabssh.utils.logging.Logger
+import io.github.tabssh.terminal.emulator.TerminalBuffer
+import io.github.tabssh.terminal.emulator.TerminalChar
+import io.github.tabssh.utils.logging.Logger
 import kotlin.math.ceil
 import kotlin.math.max
 

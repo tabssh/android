@@ -1,10 +1,10 @@
-package com.tabssh.utils.performance
+package io.github.tabssh.utils.performance
 
 import android.content.Context
 import android.os.BatteryManager
 import android.os.PowerManager
 import android.os.Process
-import com.tabssh.utils.logging.Logger
+import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

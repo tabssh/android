@@ -1,4 +1,4 @@
-package com.tabssh.terminal.emulator
+package io.github.tabssh.terminal.emulator
 
 /**
  * Represents a single character in the terminal with its attributes

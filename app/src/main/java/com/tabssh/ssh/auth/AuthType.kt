@@ -1,4 +1,4 @@
-package com.tabssh.ssh.auth
+package io.github.tabssh.ssh.auth
 
 /**
  * SSH authentication types supported by TabSSH

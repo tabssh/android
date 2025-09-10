@@ -1,12 +1,12 @@
-package com.tabssh.ui.adapters
+package io.github.tabssh.ui.adapters
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
-import com.tabssh.databinding.ItemTransferBinding
-import com.tabssh.sftp.TransferTask
-import com.tabssh.sftp.TransferState
-import com.tabssh.sftp.TransferType
+import io.github.tabssh.databinding.ItemTransferBinding
+import io.github.tabssh.sftp.TransferTask
+import io.github.tabssh.sftp.TransferState
+import io.github.tabssh.sftp.TransferType
 
 /**
  * Adapter for displaying file transfer progress
