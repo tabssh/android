@@ -16,7 +16,8 @@
       "Bash(curl:*)",
       "Bash(make:*)",
       "Bash(find:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(sed:*)"
     ],
     "deny": [],
     "ask": []
