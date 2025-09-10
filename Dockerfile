@@ -1,4 +1,4 @@
-FROM openjdk:11-jdk-slim
+FROM openjdk:17-jdk-slim
 
 # Install required packages for Android development
 RUN apt-get update && apt-get install -y \
