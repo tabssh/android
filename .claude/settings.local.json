@@ -25,7 +25,8 @@
       "Bash(export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools)",
       "Bash(echo:*)",
       "Bash(wget:*)",
-      "Bash(unzip:*)"
+      "Bash(unzip:*)",
+      "Bash(./scripts/comprehensive-validation.sh:*)"
     ],
     "deny": [],
     "ask": []
