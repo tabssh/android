@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Internal storage for temporary files -->
+    <files-path name="internal_files" path="." />
+    
+    <!-- Cache directory for temporary files -->
+    <cache-path name="cache" path="." />
+    
+    <!-- External storage for downloads -->
+    <external-files-path name="downloads" path="Downloads/" />
+    
+    <!-- SSH key exports -->
+    <files-path name="keys" path="keys/" />
+    
+    <!-- Backup exports -->
+    <files-path name="backups" path="backups/" />
+</paths>

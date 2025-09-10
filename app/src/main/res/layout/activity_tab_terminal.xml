@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".ui.activities.TabTerminalActivity">
+
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/app_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar">
+
+        <androidx.appcompat.widget.Toolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            app:popupTheme="@style/ThemeOverlay.AppCompat.Light"
+            style="@style/Widget.TabSSH.Toolbar" />
+
+        <com.google.android.material.tabs.TabLayout
+            android:id="@+id/tab_layout"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/tab_height"
+            app:tabMode="scrollable"
+            app:tabGravity="start"
+            app:tabMaxWidth="@dimen/tab_max_width"
+            app:tabMinWidth="@dimen/tab_min_width"
+            style="@style/Widget.TabSSH.TabLayout" />
+
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+        <!-- Terminal display area -->
+        <com.tabssh.ui.views.TerminalView
+            android:id="@+id/terminal_view"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:background="@color/terminal_background"
+            app:fontSize="@dimen/terminal_text_size_default"
+            app:fontFamily="monospace"
+            app:showScrollbar="true"
+            app:scrollbackLines="1000" />
+
+        <!-- Function keys row -->
+        <HorizontalScrollView
+            android:id="@+id/function_keys_container"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/function_key_height"
+            android:background="?attr/colorSurfaceVariant"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingHorizontal="@dimen/space_sm">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_ctrl"
+                    style="@style/Widget.TabSSH.Button.Outlined"
+                    android:layout_width="@dimen/function_key_width"
+                    android:layout_height="@dimen/function_key_height"
+                    android:layout_marginEnd="@dimen/space_xs"
+                    android:text="Ctrl"
+                    android:textSize="12sp"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_alt"
+                    style="@style/Widget.TabSSH.Button.Outlined"
+                    android:layout_width="@dimen/function_key_width"
+                    android:layout_height="@dimen/function_key_height"
+                    android:layout_marginEnd="@dimen/space_xs"
+                    android:text="Alt"
+                    android:textSize="12sp"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_esc"
+                    style="@style/Widget.TabSSH.Button.Outlined"
+                    android:layout_width="@dimen/function_key_width"
+                    android:layout_height="@dimen/function_key_height"
+                    android:layout_marginEnd="@dimen/space_xs"
+                    android:text="Esc"
+                    android:textSize="12sp"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_tab"
+                    style="@style/Widget.TabSSH.Button.Outlined"
+                    android:layout_width="@dimen/function_key_width"
+                    android:layout_height="@dimen/function_key_height"
+                    android:layout_marginEnd="@dimen/space_xs"
+                    android:text="Tab"
+                    android:textSize="12sp"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_arrow_up"
+                    style="@style/Widget.TabSSH.Button.Outlined"
+                    android:layout_width="@dimen/function_key_width"
+                    android:layout_height="@dimen/function_key_height"
+                    android:layout_marginEnd="@dimen/space_xs"
+                    android:text="↑"
+                    android:textSize="14sp"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_arrow_down"
+                    style="@style/Widget.TabSSH.Button.Outlined"
+                    android:layout_width="@dimen/function_key_width"
+                    android:layout_height="@dimen/function_key_height"
+                    android:layout_marginEnd="@dimen/space_lg"
+                    android:text="↓"
+                    android:textSize="14sp"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp" />
+
+            </LinearLayout>
+
+        </HorizontalScrollView>
+
+        <!-- Bottom action bar -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/bottom_bar_height"
+            android:orientation="horizontal"
+            android:background="?attr/colorSurface"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="@dimen/space_md">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_keyboard"
+                style="@style/Widget.TabSSH.Button.Outlined"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="@dimen/space_sm"
+                android:text="Kbd"
+                android:drawableTop="@drawable/ic_keyboard" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_files"
+                style="@style/Widget.TabSSH.Button.Outlined"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="@dimen/space_sm"
+                android:text="Files"
+                android:drawableTop="@drawable/ic_folder" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_paste"
+                style="@style/Widget.TabSSH.Button.Outlined"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="@dimen/space_sm"
+                android:text="Paste"
+                android:drawableTop="@drawable/ic_paste" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_menu"
+                style="@style/Widget.TabSSH.Button.Outlined"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Menu"
+                android:drawableTop="@drawable/ic_menu" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

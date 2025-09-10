@@ -1,0 +1,40 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+buildscript {
+    ext.kotlin_version = "1.9.10"
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath "com.android.tools.build:gradle:8.1.2"
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+
+plugins {
+    id 'org.owasp.dependencycheck' version '8.4.0'
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}
+
+// Dependency security scanning configuration
+dependencyCheck {
+    format = 'ALL'
+    suppressionFile = 'config/dependency-check-suppressions.xml'
+    failBuildOnCVSS = 7.0
+    
+    analyzers {
+        experimentalEnabled = true
+        archiveEnabled = true
+        assemblyEnabled = false
+    }
+}

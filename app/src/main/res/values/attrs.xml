@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Custom attributes for TabSSH themes -->
+    <declare-styleable name="TabSSHTheme">
+        <!-- Terminal colors -->
+        <attr name="terminalBackgroundColor" format="color" />
+        <attr name="terminalTextColor" format="color" />
+        <attr name="terminalCursorColor" format="color" />
+        <attr name="terminalSelectionColor" format="color" />
+        
+        <!-- Tab colors -->
+        <attr name="tabBackgroundColor" format="color" />
+        <attr name="tabTextColor" format="color" />
+        <attr name="tabSelectedColor" format="color" />
+        <attr name="tabIndicatorColor" format="color" />
+        
+        <!-- Connection status colors -->
+        <attr name="connectionStatusConnected" format="color" />
+        <attr name="connectionStatusConnecting" format="color" />
+        <attr name="connectionStatusDisconnected" format="color" />
+        <attr name="connectionStatusError" format="color" />
+        
+        <!-- Accessibility features -->
+        <attr name="isHighContrastMode" format="boolean" />
+        <attr name="focusIndicatorColor" format="color" />
+    </declare-styleable>
+    
+    <!-- Terminal view attributes -->
+    <declare-styleable name="TerminalView">
+        <attr name="terminalBackgroundColor" />
+        <attr name="terminalTextColor" />
+        <attr name="terminalCursorColor" />
+        <attr name="terminalSelectionColor" />
+        <attr name="fontFamily" format="string" />
+        <attr name="fontSize" format="dimension" />
+        <attr name="lineSpacing" format="float" />
+        <attr name="cursorStyle" format="enum">
+            <enum name="block" value="0" />
+            <enum name="underline" value="1" />
+            <enum name="vertical_bar" value="2" />
+        </attr>
+        <attr name="cursorBlink" format="boolean" />
+        <attr name="showScrollbar" format="boolean" />
+        <attr name="scrollbackLines" format="integer" />
+    </declare-styleable>
+    
+    <!-- Connection item attributes -->
+    <declare-styleable name="ConnectionItemView">
+        <attr name="connectionStatusConnected" />
+        <attr name="connectionStatusConnecting" />
+        <attr name="connectionStatusDisconnected" />
+        <attr name="connectionStatusError" />
+        <attr name="showActiveIndicator" format="boolean" />
+    </declare-styleable>
+    
+    <!-- Tab view attributes -->
+    <declare-styleable name="TabView">
+        <attr name="tabBackgroundColor" />
+        <attr name="tabTextColor" />
+        <attr name="tabSelectedColor" />
+        <attr name="tabIndicatorColor" />
+        <attr name="showCloseButton" format="boolean" />
+        <attr name="maxTabWidth" format="dimension" />
+        <attr name="minTabWidth" format="dimension" />
+    </declare-styleable>
+    
+    <!-- Function key bar attributes -->
+    <declare-styleable name="FunctionKeyBar">
+        <attr name="keyBackgroundColor" format="color" />
+        <attr name="keyTextColor" format="color" />
+        <attr name="keyPressedColor" format="color" />
+        <attr name="showFunctionKeys" format="boolean" />
+        <attr name="keySize" format="dimension" />
+    </declare-styleable>
+    
+    <!-- File browser attributes -->
+    <declare-styleable name="FileBrowserView">
+        <attr name="localPaneBackgroundColor" format="color" />
+        <attr name="remotePaneBackgroundColor" format="color" />
+        <attr name="dividerColor" format="color" />
+        <attr name="showDualPane" format="boolean" />
+    </declare-styleable>
+    
+    <!-- Accessibility attributes -->
+    <declare-styleable name="AccessibilityView">
+        <attr name="isHighContrastMode" />
+        <attr name="focusIndicatorColor" />
+        <attr name="minimumTouchTargetSize" format="dimension" />
+        <attr name="enableVoiceOver" format="boolean" />
+    </declare-styleable>
+    
+    <!-- Animation attributes -->
+    <declare-styleable name="TabSSHAnimations">
+        <attr name="enableAnimations" format="boolean" />
+        <attr name="animationDuration" format="integer" />
+        <attr name="fadeInDuration" format="integer" />
+        <attr name="fadeOutDuration" format="integer" />
+    </declare-styleable>
+</resources>

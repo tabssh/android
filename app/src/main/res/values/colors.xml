@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Primary color palette -->
+    <color name="primary_50">#FFF3F4F6</color>
+    <color name="primary_100">#FFE4E7EB</color>
+    <color name="primary_200">#FFC5CAD6</color>
+    <color name="primary_300">#FF9CA6BA</color>
+    <color name="primary_400">#FF6B7790</color>
+    <color name="primary_500">#FF1976D2</color>
+    <color name="primary_600">#FF1565C0</color>
+    <color name="primary_700">#FF0D47A1</color>
+    <color name="primary_800">#FF0A3D87</color>
+    <color name="primary_900">#FF082F6B</color>
+    
+    <!-- Secondary color palette -->
+    <color name="secondary_50">#FFF0F4FF</color>
+    <color name="secondary_100">#FFE1EAFF</color>
+    <color name="secondary_200">#FFC3D5FF</color>
+    <color name="secondary_300">#FFA5C0FF</color>
+    <color name="secondary_400">#FF87ABFF</color>
+    <color name="secondary_500">#FF6996FF</color>
+    <color name="secondary_600">#FF5A87E6</color>
+    <color name="secondary_700">#FF4B78CC</color>
+    <color name="secondary_800">#FF3C69B3</color>
+    <color name="secondary_900">#FF2D5A99</color>
+    
+    <!-- Semantic colors -->
+    <color name="success">#FF4CAF50</color>
+    <color name="success_dark">#FF388E3C</color>
+    <color name="warning">#FFFF9800</color>
+    <color name="warning_dark">#FFF57C00</color>
+    <color name="error">#FFF44336</color>
+    <color name="error_dark">#FFD32F2F</color>
+    <color name="info">#FF2196F3</color>
+    <color name="info_dark">#FF1976D2</color>
+    
+    <!-- Connection status colors -->
+    <color name="connected">@color/success</color>
+    <color name="connecting">@color/warning</color>
+    <color name="disconnected">#FF757575</color>
+    <color name="connection_error">@color/error</color>
+    
+    <!-- Neutral colors -->
+    <color name="white">#FFFFFFFF</color>
+    <color name="black">#FF000000</color>
+    <color name="gray_50">#FFFAFAFA</color>
+    <color name="gray_100">#FFF5F5F5</color>
+    <color name="gray_200">#FFEEEEEE</color>
+    <color name="gray_300">#FFE0E0E0</color>
+    <color name="gray_400">#FFBDBDBD</color>
+    <color name="gray_500">#FF9E9E9E</color>
+    <color name="gray_600">#FF757575</color>
+    <color name="gray_700">#FF616161</color>
+    <color name="gray_800">#FF424242</color>
+    <color name="gray_900">#FF212121</color>
+    
+    <!-- Terminal default colors (will be overridden by themes) -->
+    <color name="terminal_background">#FF000000</color>
+    <color name="terminal_foreground">#FFFFFFFF</color>
+    <color name="terminal_cursor">#FFFFFFFF</color>
+    <color name="terminal_selection">#FF0066FF</color>
+    
+    <!-- UI specific colors -->
+    <color name="tab_background">#FF2C2C2C</color>
+    <color name="tab_text">#FFFFFFFF</color>
+    <color name="tab_selected">#FF1976D2</color>
+    <color name="tab_indicator">#FF1976D2</color>
+    
+    <!-- Accessibility colors -->
+    <color name="high_contrast_background">#FF000000</color>
+    <color name="high_contrast_foreground">#FFFFFFFF</color>
+    <color name="focus_indicator">#FF0066FF</color>
+    
+    <!-- Material Design 3 colors -->
+    <color name="surface">#FFFFFFFF</color>
+    <color name="surface_variant">#FFF5F5F5</color>
+    <color name="on_surface">#FF212121</color>
+    <color name="on_surface_variant">#FF616161</color>
+    <color name="outline">#FFE0E0E0</color>
+    <color name="outline_variant">#FFF5F5F5</color>
+    
+    <!-- Dark theme colors -->
+    <color name="surface_dark">#FF121212</color>
+    <color name="surface_variant_dark">#FF1E1E1E</color>
+    <color name="on_surface_dark">#FFFFFFFF</color>
+    <color name="on_surface_variant_dark">#FFBDBDBD</color>
+    <color name="outline_dark">#FF424242</color>
+    <color name="outline_variant_dark">#FF2C2C2C</color>
+</resources>

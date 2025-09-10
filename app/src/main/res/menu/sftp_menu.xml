@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/action_select_all_local"
+        android:title="Select All Local"
+        android:icon="@drawable/ic_select_all"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_select_all_remote"
+        android:title="Select All Remote"
+        android:icon="@drawable/ic_select_all"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_clear_transfers"
+        android:title="Clear Completed"
+        android:icon="@drawable/ic_clear"
+        app:showAsAction="ifRoom" />
+
+    <item
+        android:id="@+id/action_transfer_settings"
+        android:title="Transfer Settings"
+        android:icon="@drawable/ic_settings_general"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_bookmarks"
+        android:title="Bookmarks"
+        android:icon="@drawable/ic_bookmark"
+        app:showAsAction="never" />
+
+</menu>
