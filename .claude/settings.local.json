@@ -19,7 +19,13 @@
       "Bash(git add:*)",
       "Bash(sed:*)",
       "Bash(./scripts/prepare-fdroid-submission.sh:*)",
-      "Bash(./scripts/notify-release.sh:*)"
+      "Bash(./scripts/notify-release.sh:*)",
+      "Read(//root/**)",
+      "Bash(export ANDROID_HOME=/root/Android/Sdk)",
+      "Bash(export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools)",
+      "Bash(echo:*)",
+      "Bash(wget:*)",
+      "Bash(unzip:*)"
     ],
     "deny": [],
     "ask": []
