@@ -26,7 +26,11 @@
       "Bash(echo:*)",
       "Bash(wget:*)",
       "Bash(unzip:*)",
-      "Bash(./scripts/comprehensive-validation.sh:*)"
+      "Bash(./scripts/comprehensive-validation.sh:*)",
+      "Bash(java:*)",
+      "Read(//usr/lib/jvm/**)",
+      "Bash(export:*)",
+      "Bash(export PATH=$JAVA_HOME/bin:$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools)"
     ],
     "deny": [],
     "ask": []
