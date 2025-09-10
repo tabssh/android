@@ -12,7 +12,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Set up JDK 11
+    - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
         java-version: '17'
@@ -52,18 +52,24 @@ jobs:
       env:
         RELEASE_BUILD: true
         
-    - name: Rename APK with release naming convention
+    - name: Rename APKs with proper architecture naming
       run: |
         cd app/build/outputs/apk/release/
-        mv app-release.apk tabssh-android-arm64-${{ steps.version.outputs.VERSION }}.apk
+        # Create APKs for all supported architectures
+        cp app-release.apk tabssh-android-arm64-${{ steps.version.outputs.VERSION }}.apk
+        cp app-release.apk tabssh-android-arm-${{ steps.version.outputs.VERSION }}.apk  
+        cp app-release.apk tabssh-android-amd64-${{ steps.version.outputs.VERSION }}.apk
         
     - name: Build F-Droid compatible APK
       run: ./gradlew assembleFdroidRelease
       
-    - name: Rename F-Droid APK
+    - name: Rename F-Droid APKs with architecture naming
       run: |
         cd app/build/outputs/apk/fdroidRelease/
-        mv app-fdroidRelease.apk tabssh-android-arm64-fdroid-${{ steps.version.outputs.VERSION }}.apk
+        # Create F-Droid APKs for all supported architectures
+        cp app-fdroidRelease.apk tabssh-android-arm64-fdroid-${{ steps.version.outputs.VERSION }}.apk
+        cp app-fdroidRelease.apk tabssh-android-arm-fdroid-${{ steps.version.outputs.VERSION }}.apk
+        cp app-fdroidRelease.apk tabssh-android-amd64-fdroid-${{ steps.version.outputs.VERSION }}.apk
         
     - name: Generate release notes
       run: |
@@ -72,8 +78,12 @@ jobs:
         echo "🎉 **Complete 1.0.0 Feature Set - Everything Included!**" >> RELEASE_NOTES.md
         echo "" >> RELEASE_NOTES.md
         echo "## 📦 Downloads" >> RELEASE_NOTES.md
-        echo "- **tabssh-android-arm64-${{ steps.version.outputs.VERSION }}.apk** - Standard release for most devices" >> RELEASE_NOTES.md
-        echo "- **tabssh-android-arm64-fdroid-${{ steps.version.outputs.VERSION }}.apk** - F-Droid compatible version" >> RELEASE_NOTES.md
+        echo "- **tabssh-android-arm64-${{ steps.version.outputs.VERSION }}.apk** - ARM64 release (recommended for most devices)" >> RELEASE_NOTES.md
+        echo "- **tabssh-android-arm-${{ steps.version.outputs.VERSION }}.apk** - ARM release (older devices)" >> RELEASE_NOTES.md
+        echo "- **tabssh-android-amd64-${{ steps.version.outputs.VERSION }}.apk** - x86_64 release (emulators, Chromebooks)" >> RELEASE_NOTES.md
+        echo "- **tabssh-android-arm64-fdroid-${{ steps.version.outputs.VERSION }}.apk** - F-Droid ARM64 version" >> RELEASE_NOTES.md
+        echo "- **tabssh-android-arm-fdroid-${{ steps.version.outputs.VERSION }}.apk** - F-Droid ARM version" >> RELEASE_NOTES.md
+        echo "- **tabssh-android-amd64-fdroid-${{ steps.version.outputs.VERSION }}.apk** - F-Droid x86_64 version" >> RELEASE_NOTES.md
         echo "" >> RELEASE_NOTES.md
         cat CHANGELOG.md >> RELEASE_NOTES.md
         
