@@ -15,12 +15,7 @@ plugins {
     id 'org.owasp.dependencycheck' version '8.4.0'
 }
 
-allprojects {
-    repositories {
-        google()
-        mavenCentral()
-    }
-}
+// Repositories are now managed in settings.gradle
 
 task clean(type: Delete) {
     delete rootProject.buildDir
