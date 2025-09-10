@@ -10,7 +10,8 @@
       "Bash(gh run list:*)",
       "Bash(gh run view:*)",
       "Read(//tmp/**)",
-      "Bash(act:*)"
+      "Bash(act:*)",
+      "Bash(test:*)"
     ],
     "deny": [],
     "ask": []
