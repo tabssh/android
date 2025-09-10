@@ -2,7 +2,7 @@
 
 **Version**: 1.0  
 **Date**: January 2025  
-**Repository**: https://github.com/TabSSH/android  
+**Repository**: https://github.com/tabssh/android  
 **Website**: https://tabssh.github.io  
 
 ---
@@ -1603,9 +1603,9 @@ AuthorName: TabSSH Team
 AuthorEmail: hello@tabssh.org
 AuthorWebSite: https://tabssh.github.io
 
-SourceCode: https://github.com/TabSSH/android
-IssueTracker: https://github.com/TabSSH/android/issues
-Changelog: https://github.com/TabSSH/android/blob/main/CHANGELOG.md
+SourceCode: https://github.com/tabssh/android
+IssueTracker: https://github.com/tabssh/android/issues
+Changelog: https://github.com/tabssh/android/blob/main/CHANGELOG.md
 
 Summary: Modern SSH client with tabbed interface
 
@@ -3012,7 +3012,7 @@ This comprehensive specification defines TabSSH as a modern, secure, and accessi
 
 The modular architecture, comprehensive testing strategy, and clear development roadmap position TabSSH to become the premier open-source SSH client for Android, filling the gap left by proprietary alternatives while maintaining the highest standards of security and usability.
 
-**Repository**: https://github.com/TabSSH/android  
+**Repository**: https://github.com/tabssh/android  
 **Website**: https://tabssh.github.io  
 **License**: MIT  
 **Target Release**: Q2 2025  

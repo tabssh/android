@@ -158,9 +158,9 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## 🤝 Community
 
-- **GitHub**: [Issues](https://github.com/TabSSH/android/issues) | [Discussions](https://github.com/TabSSH/android/discussions)
+- **GitHub**: [Issues](https://github.com/tabssh/android/issues) | [Discussions](https://github.com/tabssh/android/discussions)
 - **Website**: [tabssh.github.io](https://tabssh.github.io)
-- **Documentation**: [docs.tabssh.org](https://docs.tabssh.org)
+- **Documentation**: [tabssh.github.io/docs](https://tabssh.github.io/docs)
 
 ## 🙏 Acknowledgments
 
