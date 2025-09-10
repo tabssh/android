@@ -79,21 +79,16 @@ android {
     }
     
     // Lint configuration
-    lintOptions {
+    lint {
         abortOnError true
         checkReleaseBuilds true
         disable 'InvalidPackage'
         
         // Security-focused lint checks
-        check 'SecureRandom'
-        check 'TrustAllX509TrustManager'
-        check 'BadHostnameVerifier'
-        check 'SSLCertificateSocketFactoryCreateSocket'
+        checkOnly 'SecureRandom', 'TrustAllX509TrustManager', 'BadHostnameVerifier', 'SSLCertificateSocketFactoryCreateSocket'
         
         // Accessibility checks
-        check 'ContentDescription'
-        check 'ClickableViewAccessibility'
-        check 'TouchTargetSize'
+        enable 'ContentDescription', 'ClickableViewAccessibility', 'TouchTargetSize'
     }
     
     testOptions {

@@ -12,7 +12,9 @@
       "Read(//tmp/**)",
       "Bash(act:*)",
       "Bash(test:*)",
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "Bash(curl:*)",
+      "Bash(make:*)"
     ],
     "deny": [],
     "ask": []
