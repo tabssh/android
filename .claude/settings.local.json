@@ -14,7 +14,9 @@
       "Bash(test:*)",
       "Bash(timeout:*)",
       "Bash(curl:*)",
-      "Bash(make:*)"
+      "Bash(make:*)",
+      "Bash(find:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []
