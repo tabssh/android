@@ -108,6 +108,8 @@
     </style>
     
     <!-- Widget styles -->
+    <style name="Widget.TabSSH" />
+    
     <style name="Widget.TabSSH.Button" parent="Widget.Material3.Button">
         <item name="android:textColor">@color/white</item>
         <item name="backgroundTint">@color/primary_500</item>
