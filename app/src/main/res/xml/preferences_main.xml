@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.preference.PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <!-- General Settings -->
+    <androidx.preference.Preference
+        android:key="category_general"
+        android:title="@string/settings_general"
+        android:summary="Startup behavior, backup, language"
+        android:icon="@drawable/ic_settings_general"
+        android:selectable="true" />
+
+    <!-- Security Settings -->
+    <androidx.preference.Preference
+        android:key="category_security"
+        android:title="@string/settings_security"
+        android:summary="Password storage, biometrics, host keys"
+        android:icon="@drawable/ic_security"
+        android:selectable="true" />
+
+    <!-- Terminal Settings -->
+    <androidx.preference.Preference
+        android:key="category_terminal"
+        android:title="@string/settings_terminal"
+        android:summary="Themes, fonts, behavior, keyboard"
+        android:icon="@drawable/ic_terminal"
+        android:selectable="true" />
+
+    <!-- Interface Settings -->
+    <androidx.preference.Preference
+        android:key="category_interface"
+        android:title="@string/settings_interface"
+        android:summary="Tabs, gestures, fullscreen, appearance"
+        android:icon="@drawable/ic_interface"
+        android:selectable="true" />
+
+    <!-- Connection Settings -->
+    <androidx.preference.Preference
+        android:key="category_connections"
+        android:title="@string/settings_connections"
+        android:summary="SSH defaults, timeouts, keep-alive"
+        android:icon="@drawable/ic_connection"
+        android:selectable="true" />
+
+    <!-- Accessibility Settings -->
+    <androidx.preference.Preference
+        android:key="category_accessibility"
+        android:title="@string/settings_accessibility"
+        android:summary="Screen reader, contrast, touch targets"
+        android:icon="@drawable/ic_accessibility"
+        android:selectable="true" />
+
+    <!-- About -->
+    <androidx.preference.Preference
+        android:key="category_about"
+        android:title="@string/settings_about"
+        android:summary="Version, license, open source info"
+        android:icon="@drawable/ic_info"
+        android:selectable="true" />
+
+</androidx.preference.PreferenceScreen>

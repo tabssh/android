@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="@dimen/file_item_height"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:padding="@dimen/space_sm"
+    android:background="?attr/selectableItemBackground">
+
+    <ImageView
+        android:id="@+id/icon_file"
+        android:layout_width="@dimen/file_icon_size"
+        android:layout_height="@dimen/file_icon_size"
+        android:layout_marginEnd="@dimen/space_md"
+        android:src="@drawable/ic_file_generic"
+        android:contentDescription="File icon" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/text_file_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="@dimen/text_size_body"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end"
+            tools:text="filename.txt" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/text_file_size"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textSize="@dimen/text_size_caption"
+                android:textColor="?android:attr/textColorSecondary"
+                tools:text="1.5 KB" />
+
+            <TextView
+                android:id="@+id/text_file_date"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="@dimen/text_size_caption"
+                android:textColor="?android:attr/textColorSecondary"
+                android:layout_marginStart="@dimen/space_sm"
+                tools:text="Dec 15, 14:30" />
+
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/text_file_permissions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="@dimen/text_size_caption"
+            android:textColor="?android:attr/textColorSecondary"
+            android:fontFamily="monospace"
+            tools:text="-rw-r--r--" />
+
+    </LinearLayout>
+
+</LinearLayout>

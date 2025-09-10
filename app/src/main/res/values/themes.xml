@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    
+    <!-- Base theme - Light -->
+    <style name="Theme.TabSSH" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/primary_500</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorPrimaryContainer">@color/primary_100</item>
+        <item name="colorOnPrimaryContainer">@color/primary_900</item>
+        
+        <item name="colorSecondary">@color/secondary_500</item>
+        <item name="colorOnSecondary">@color/white</item>
+        <item name="colorSecondaryContainer">@color/secondary_100</item>
+        <item name="colorOnSecondaryContainer">@color/secondary_900</item>
+        
+        <item name="colorTertiary">@color/info</item>
+        <item name="colorOnTertiary">@color/white</item>
+        
+        <item name="colorError">@color/error</item>
+        <item name="colorOnError">@color/white</item>
+        <item name="colorErrorContainer">@color/error_dark</item>
+        
+        <item name="colorSurface">@color/surface</item>
+        <item name="colorOnSurface">@color/on_surface</item>
+        <item name="colorSurfaceVariant">@color/surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/on_surface_variant</item>
+        
+        <item name="colorOutline">@color/outline</item>
+        <item name="colorOutlineVariant">@color/outline_variant</item>
+        
+        <item name="android:statusBarColor">@color/primary_600</item>
+        <item name="android:navigationBarColor">@color/surface</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        
+        <!-- Custom attributes -->
+        <item name="terminalBackgroundColor">@color/terminal_background</item>
+        <item name="terminalTextColor">@color/terminal_foreground</item>
+        <item name="tabBackgroundColor">@color/tab_background</item>
+        <item name="tabTextColor">@color/tab_text</item>
+        <item name="connectionStatusConnected">@color/connected</item>
+        <item name="connectionStatusConnecting">@color/connecting</item>
+        <item name="connectionStatusDisconnected">@color/disconnected</item>
+        <item name="connectionStatusError">@color/connection_error</item>
+    </style>
+    
+    <!-- Dark theme -->
+    <style name="Theme.TabSSH.Dark" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/primary_400</item>
+        <item name="colorOnPrimary">@color/primary_900</item>
+        <item name="colorPrimaryContainer">@color/primary_800</item>
+        <item name="colorOnPrimaryContainer">@color/primary_100</item>
+        
+        <item name="colorSecondary">@color/secondary_400</item>
+        <item name="colorOnSecondary">@color/secondary_900</item>
+        <item name="colorSecondaryContainer">@color/secondary_800</item>
+        <item name="colorOnSecondaryContainer">@color/secondary_100</item>
+        
+        <item name="colorTertiary">@color/info</item>
+        <item name="colorOnTertiary">@color/white</item>
+        
+        <item name="colorError">@color/error</item>
+        <item name="colorOnError">@color/white</item>
+        
+        <item name="colorSurface">@color/surface_dark</item>
+        <item name="colorOnSurface">@color/on_surface_dark</item>
+        <item name="colorSurfaceVariant">@color/surface_variant_dark</item>
+        <item name="colorOnSurfaceVariant">@color/on_surface_variant_dark</item>
+        
+        <item name="colorOutline">@color/outline_dark</item>
+        <item name="colorOutlineVariant">@color/outline_variant_dark</item>
+        
+        <item name="android:statusBarColor">@color/surface_dark</item>
+        <item name="android:navigationBarColor">@color/surface_dark</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        
+        <!-- Custom attributes -->
+        <item name="terminalBackgroundColor">@color/terminal_background</item>
+        <item name="terminalTextColor">@color/terminal_foreground</item>
+        <item name="tabBackgroundColor">@color/surface_variant_dark</item>
+        <item name="tabTextColor">@color/on_surface_dark</item>
+        <item name="connectionStatusConnected">@color/connected</item>
+        <item name="connectionStatusConnecting">@color/connecting</item>
+        <item name="connectionStatusDisconnected">@color/disconnected</item>
+        <item name="connectionStatusError">@color/connection_error</item>
+    </style>
+    
+    <!-- High contrast theme for accessibility -->
+    <style name="Theme.TabSSH.HighContrast" parent="Theme.TabSSH">
+        <item name="colorPrimary">@color/black</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorSurface">@color/white</item>
+        <item name="colorOnSurface">@color/black</item>
+        <item name="terminalBackgroundColor">@color/high_contrast_background</item>
+        <item name="terminalTextColor">@color/high_contrast_foreground</item>
+    </style>
+    
+    <!-- Fullscreen theme for terminal -->
+    <style name="Theme.TabSSH.Fullscreen" parent="Theme.TabSSH">
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+    
+    <!-- Settings theme -->
+    <style name="Theme.TabSSH.Settings" parent="Theme.TabSSH">
+        <!-- Settings specific customizations -->
+    </style>
+    
+    <!-- Widget styles -->
+    <style name="Widget.TabSSH.Button" parent="Widget.Material3.Button">
+        <item name="android:textColor">@color/white</item>
+        <item name="backgroundTint">@color/primary_500</item>
+    </style>
+    
+    <style name="Widget.TabSSH.Button.Outlined" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:textColor">@color/primary_500</item>
+        <item name="strokeColor">@color/primary_500</item>
+    </style>
+    
+    <style name="Widget.TabSSH.TextInputLayout" parent="Widget.Material3.TextInputLayout.OutlinedBox">
+        <item name="boxStrokeColor">@color/primary_500</item>
+        <item name="hintTextColor">@color/primary_500</item>
+    </style>
+    
+    <!-- Tab styles -->
+    <style name="Widget.TabSSH.TabLayout" parent="Widget.Material3.TabLayout">
+        <item name="tabBackground">@drawable/tab_background_selector</item>
+        <item name="tabTextColor">@color/tab_text</item>
+        <item name="tabSelectedTextColor">@color/primary_500</item>
+        <item name="tabIndicatorColor">@color/primary_500</item>
+        <item name="tabIndicatorHeight">3dp</item>
+    </style>
+    
+    <!-- Terminal specific styles -->
+    <style name="Widget.TabSSH.Terminal">
+        <item name="android:background">@color/terminal_background</item>
+        <item name="android:textColor">@color/terminal_foreground</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:lineSpacingMultiplier">1.2</item>
+    </style>
+    
+    <!-- Toolbar styles -->
+    <style name="Widget.TabSSH.Toolbar" parent="Widget.Material3.Toolbar">
+        <item name="titleTextColor">@color/white</item>
+        <item name="subtitleTextColor">@color/primary_100</item>
+        <item name="navigationIconTint">@color/white</item>
+    </style>
+    
+    <!-- FAB styles -->
+    <style name="Widget.TabSSH.FloatingActionButton" parent="Widget.Material3.FloatingActionButton.Primary">
+        <item name="backgroundTint">@color/primary_500</item>
+        <item name="tint">@color/white</item>
+    </style>
+    
+</resources>

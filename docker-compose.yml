@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  tabssh-builder:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/workspace
+      - gradle-cache:/home/gradle/.gradle
+    working_dir: /workspace
+    environment:
+      - GRADLE_USER_HOME=/home/gradle/.gradle
+    command: >
+      bash -c "
+        echo '🚀 TabSSH 1.0.0 - Docker Build Environment';
+        echo '==========================================';
+        echo '';
+        echo '📊 Project Analysis:';
+        find app/src/main/java -name '*.kt' | wc -l | xargs echo '   Kotlin files:';
+        find app/src/test/java -name '*.kt' | wc -l | xargs echo '   Test files:';
+        find app/src/main/res -name '*.xml' | wc -l | xargs echo '   Resource files:';
+        echo '';
+        echo '🔧 Running build validation...';
+        ./gradlew tasks --console=plain;
+        echo '';
+        echo '✅ TabSSH 1.0.0 Docker environment ready!';
+        echo 'Run: docker-compose run tabssh-builder ./gradlew build';
+      "
+
+  tabssh-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/workspace
+      - gradle-cache:/home/gradle/.gradle
+    working_dir: /workspace
+    environment:
+      - GRADLE_USER_HOME=/home/gradle/.gradle
+    command: >
+      bash -c "
+        echo '🧪 TabSSH 1.0.0 - Test Suite';
+        echo '============================';
+        ./gradlew test --console=plain;
+        ./gradlew lintDebug --console=plain;
+        echo '';
+        echo '📊 Test Results Summary:';
+        find app/build/test-results -name '*.xml' -exec grep -l 'testsuite' {} \; | wc -l | xargs echo '   Test suites:';
+        echo '';
+        echo '✅ Test validation complete!';
+      "
+
+  tabssh-build:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/workspace
+      - gradle-cache:/home/gradle/.gradle
+    working_dir: /workspace
+    environment:
+      - GRADLE_USER_HOME=/home/gradle/.gradle
+    command: >
+      bash -c "
+        echo '📱 TabSSH 1.0.0 - APK Build';
+        echo '===========================';
+        ./gradlew assembleDebug --console=plain;
+        ls -la app/build/outputs/apk/debug/;
+        echo '';
+        echo '✅ APK build complete!';
+        echo 'Output: app/build/outputs/apk/debug/app-debug.apk';
+      "
+
+volumes:
+  gradle-cache:

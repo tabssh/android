@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App name -->
+    <string name="app_name">TabSSH</string>
+    <string name="app_name_debug">TabSSH Debug</string>
+    
+    <!-- Main activity -->
+    <string name="main_activity_title">TabSSH</string>
+    <string name="quick_connect_title">Quick Connect</string>
+    <string name="connections_title">Connections</string>
+    <string name="host_hint">Host</string>
+    <string name="port_hint">Port</string>
+    <string name="username_hint">Username</string>
+    <string name="connect_button">Connect</string>
+    <string name="add_connection">Add Connection</string>
+    <string name="search_connections">Search connections</string>
+    
+    <!-- Connection management -->
+    <string name="connection_name_hint">Connection name</string>
+    <string name="connection_host_hint">hostname or IP address</string>
+    <string name="connection_port_hint">22</string>
+    <string name="connection_username_hint">username</string>
+    <string name="save_connection">Save</string>
+    <string name="edit_connection">Edit Connection</string>
+    <string name="delete_connection">Delete Connection</string>
+    <string name="duplicate_connection">Duplicate Connection</string>
+    <string name="connection_saved">Connection saved</string>
+    <string name="connection_deleted">Connection deleted</string>
+    
+    <!-- Authentication -->
+    <string name="auth_type_password">Password</string>
+    <string name="auth_type_public_key">Public Key</string>
+    <string name="auth_type_keyboard_interactive">Keyboard Interactive</string>
+    <string name="password_hint">Password</string>
+    <string name="select_key">Select Key</string>
+    <string name="generate_key">Generate Key</string>
+    <string name="import_key">Import Key</string>
+    
+    <!-- Terminal activity -->
+    <string name="terminal_activity_title">Terminal</string>
+    <string name="new_tab">New Tab</string>
+    <string name="close_tab">Close Tab</string>
+    <string name="tab_menu">Tab Menu</string>
+    <string name="function_keys">Function Keys</string>
+    <string name="show_keyboard">Show Keyboard</string>
+    <string name="hide_keyboard">Hide Keyboard</string>
+    <string name="paste">Paste</string>
+    <string name="copy">Copy</string>
+    <string name="select_all">Select All</string>
+    <string name="open_files">Files</string>
+    
+    <!-- Connection status -->
+    <string name="status_connecting">Connecting…</string>
+    <string name="status_connected">Connected</string>
+    <string name="status_disconnected">Disconnected</string>
+    <string name="status_error">Error</string>
+    <string name="status_authenticating">Authenticating…</string>
+    
+    <!-- Errors -->
+    <string name="error_connection_failed">Connection failed</string>
+    <string name="error_authentication_failed">Authentication failed</string>
+    <string name="error_host_key_changed">Host key has changed!</string>
+    <string name="error_host_key_unknown">Unknown host key</string>
+    <string name="error_network_unreachable">Network unreachable</string>
+    <string name="error_connection_timeout">Connection timeout</string>
+    <string name="error_invalid_host">Invalid hostname or IP address</string>
+    <string name="error_invalid_port">Invalid port number</string>
+    <string name="error_permission_denied">Permission denied</string>
+    
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_general">General</string>
+    <string name="settings_terminal">Terminal</string>
+    <string name="settings_security">Security</string>
+    <string name="settings_interface">Interface</string>
+    <string name="settings_connections">Connections</string>
+    <string name="settings_accessibility">Accessibility</string>
+    <string name="settings_about">About</string>
+    
+    <!-- General settings -->
+    <string name="pref_startup_behavior">Startup Behavior</string>
+    <string name="pref_startup_behavior_summary">What to do when app starts</string>
+    <string name="pref_auto_backup">Auto Backup</string>
+    <string name="pref_auto_backup_summary">Automatically backup connections and keys</string>
+    <string name="pref_language">Language</string>
+    <string name="pref_language_summary">App language</string>
+    
+    <!-- Security settings -->
+    <string name="pref_password_storage">Password Storage</string>
+    <string name="pref_password_storage_summary">How to store passwords</string>
+    <string name="pref_biometric_auth">Biometric Authentication</string>
+    <string name="pref_biometric_auth_summary">Use fingerprint/face unlock</string>
+    <string name="pref_host_key_checking">Host Key Checking</string>
+    <string name="pref_host_key_checking_summary">Verify host identity</string>
+    <string name="pref_auto_lock">Auto Lock</string>
+    <string name="pref_auto_lock_summary">Lock app when backgrounded</string>
+    <string name="pref_screenshot_protection">Screenshot Protection</string>
+    <string name="pref_screenshot_protection_summary">Prevent screenshots</string>
+    
+    <!-- Terminal settings -->
+    <string name="pref_theme">Theme</string>
+    <string name="pref_theme_summary">Terminal color scheme</string>
+    <string name="pref_font_family">Font Family</string>
+    <string name="pref_font_family_summary">Terminal font</string>
+    <string name="pref_font_size">Font Size</string>
+    <string name="pref_font_size_summary">Terminal text size</string>
+    <string name="pref_cursor_style">Cursor Style</string>
+    <string name="pref_cursor_style_summary">Cursor appearance</string>
+    <string name="pref_scrollback_lines">Scrollback Lines</string>
+    <string name="pref_scrollback_lines_summary">Lines to keep in history</string>
+    
+    <!-- Interface settings -->
+    <string name="pref_max_tabs">Maximum Tabs</string>
+    <string name="pref_max_tabs_summary">Maximum number of open tabs</string>
+    <string name="pref_show_function_keys">Show Function Keys</string>
+    <string name="pref_show_function_keys_summary">Display function key row</string>
+    <string name="pref_fullscreen_mode">Fullscreen Mode</string>
+    <string name="pref_fullscreen_mode_summary">Hide status bar</string>
+    <string name="pref_keep_screen_on">Keep Screen On</string>
+    <string name="pref_keep_screen_on_summary">Prevent screen timeout</string>
+    
+    <!-- Accessibility -->
+    <string name="accessibility_terminal">SSH Terminal</string>
+    <string name="accessibility_connection_list">Connection List</string>
+    <string name="accessibility_tab_list">Tab List</string>
+    <string name="accessibility_function_keys">Function Keys</string>
+    <string name="accessibility_connected">Connected</string>
+    <string name="accessibility_disconnected">Disconnected</string>
+    <string name="accessibility_connecting">Connecting</string>
+    <string name="accessibility_read_screen">Read entire screen</string>
+    <string name="accessibility_read_line">Read current line</string>
+    
+    <!-- File operations -->
+    <string name="file_browser_title">File Browser</string>
+    <string name="local_files">Local</string>
+    <string name="remote_files">Remote</string>
+    <string name="upload_file">Upload</string>
+    <string name="download_file">Download</string>
+    <string name="new_folder">New Folder</string>
+    <string name="delete_file">Delete</string>
+    <string name="rename_file">Rename</string>
+    <string name="file_properties">Properties</string>
+    <string name="transfer_progress">Transfer Progress</string>
+    <string name="transfer_complete">Transfer complete</string>
+    <string name="transfer_failed">Transfer failed</string>
+    
+    <!-- Biometric authentication -->
+    <string name="biometric_title">Authenticate</string>
+    <string name="biometric_subtitle">Use your biometric to access stored passwords</string>
+    <string name="biometric_description">Place your finger on the sensor or look at the camera</string>
+    <string name="biometric_negative">Cancel</string>
+    <string name="biometric_error">Biometric authentication failed</string>
+    <string name="biometric_not_available">Biometric authentication not available</string>
+    
+    <!-- About -->
+    <string name="about_version">Version</string>
+    <string name="about_build">Build</string>
+    <string name="about_license">License</string>
+    <string name="about_source_code">Source Code</string>
+    <string name="about_website">Website</string>
+    <string name="about_privacy_policy">Privacy Policy</string>
+    <string name="about_open_source_licenses">Open Source Licenses</string>
+    
+    <!-- Common actions -->
+    <string name="ok">OK</string>
+    <string name="cancel">Cancel</string>
+    <string name="yes">Yes</string>
+    <string name="no">No</string>
+    <string name="close">Close</string>
+    <string name="save">Save</string>
+    <string name="delete">Delete</string>
+    <string name="edit">Edit</string>
+    <string name="share">Share</string>
+    <string name="retry">Retry</string>
+    <string name="dismiss">Dismiss</string>
+</resources>

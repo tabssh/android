@@ -1,0 +1,209 @@
+name: Android CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up JDK 11
+      uses: actions/setup-java@v3
+      with:
+        java-version: '11'
+        distribution: 'temurin'
+        
+    - name: Cache Gradle packages
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+          
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+      
+    - name: Run lint
+      run: ./gradlew lintDebug
+      
+    - name: Run unit tests
+      run: ./gradlew testDebugUnitTest
+      
+    - name: Generate test coverage report
+      run: ./gradlew jacocoTestReport
+      
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./app/build/reports/jacoco/jacocoTestReport/jacocoTestReport.xml
+        fail_ci_if_error: true
+      
+    - name: Run security scan
+      run: ./gradlew dependencyCheckAnalyze
+      
+    - name: Upload security report
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-report
+        path: app/build/reports/dependency-check-report.html
+        
+    - name: Build debug APK
+      run: ./gradlew assembleDebug
+      
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: debug-apk
+        path: app/build/outputs/apk/debug/
+        
+  ui-test:
+    runs-on: macos-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up JDK 11
+      uses: actions/setup-java@v3
+      with:
+        java-version: '11'
+        distribution: 'temurin'
+        
+    - name: Cache Gradle packages
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+          
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+        
+    - name: Run UI tests
+      uses: reactivecircus/android-emulator-runner@v2
+      with:
+        api-level: 29
+        target: default
+        arch: x86_64
+        script: ./gradlew connectedDebugAndroidTest
+        
+    - name: Upload UI test results
+      uses: actions/upload-artifact@v3
+      with:
+        name: ui-test-results
+        path: app/build/reports/androidTests/
+        
+  accessibility-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up JDK 11
+      uses: actions/setup-java@v3
+      with:
+        java-version: '11'
+        distribution: 'temurin'
+        
+    - name: Cache Gradle packages
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+    
+    - name: Run accessibility tests
+      run: ./gradlew testDebugUnitTest -Pandroid.testInstrumentationRunnerArguments.class=com.tabssh.AccessibilityTestSuite
+      
+    - name: Validate theme accessibility
+      run: ./gradlew validateThemeAccessibility
+      
+    - name: Check WCAG compliance
+      run: ./gradlew checkWCAGCompliance
+      
+  security-audit:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up JDK 11
+      uses: actions/setup-java@v3
+      with:
+        java-version: '11'
+        distribution: 'temurin'
+    
+    - name: Run comprehensive security scan
+      run: ./gradlew dependencyCheckAnalyze
+      
+    - name: Static security analysis
+      run: ./gradlew spotbugsMain
+      
+    - name: Check for hardcoded secrets
+      run: ./gradlew detectSecrets
+      
+    - name: Verify ProGuard rules
+      run: ./gradlew verifyProguardRules
+      
+    - name: Test cryptographic implementations
+      run: ./gradlew testCryptography
+      
+  performance-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up JDK 11
+      uses: actions/setup-java@v3
+      with:
+        java-version: '11'
+        distribution: 'temurin'
+        
+    - name: Run performance benchmarks
+      run: ./gradlew runPerformanceBenchmarks
+      
+    - name: Memory leak detection
+      run: ./gradlew detectMemoryLeaks
+      
+    - name: Battery usage analysis
+      run: ./gradlew analyzeBatteryUsage
+      
+    - name: Startup time benchmarks
+      run: ./gradlew measureStartupTime
+      
+  fdroid-validation:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Validate F-Droid metadata
+      run: |
+        # Check that metadata is properly formatted
+        python3 -m yaml.tool metadata/com.tabssh.yml
+        
+    - name: Verify reproducible builds
+      run: ./gradlew assembleRelease --build-cache
+      
+    - name: Check for F-Droid compliance
+      run: |
+        # Verify no proprietary dependencies
+        ./gradlew checkFDroidCompliance
+        
+    - name: Generate F-Droid compatible APK
+      run: ./gradlew assembleFdroidRelease

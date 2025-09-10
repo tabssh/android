@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Spacing system (8dp grid) -->
+    <dimen name="space_xs">4dp</dimen>
+    <dimen name="space_sm">8dp</dimen>
+    <dimen name="space_md">16dp</dimen>
+    <dimen name="space_lg">24dp</dimen>
+    <dimen name="space_xl">32dp</dimen>
+    <dimen name="space_xxl">48dp</dimen>
+    
+    <!-- Text sizes -->
+    <dimen name="text_size_caption">12sp</dimen>
+    <dimen name="text_size_body">14sp</dimen>
+    <dimen name="text_size_subtitle">16sp</dimen>
+    <dimen name="text_size_title">18sp</dimen>
+    <dimen name="text_size_headline">20sp</dimen>
+    <dimen name="text_size_display">24sp</dimen>
+    
+    <!-- Terminal typography -->
+    <dimen name="terminal_text_size_default">14sp</dimen>
+    <dimen name="terminal_text_size_min">8sp</dimen>
+    <dimen name="terminal_text_size_max">32sp</dimen>
+    
+    <!-- Component dimensions -->
+    <dimen name="tab_height">48dp</dimen>
+    <dimen name="tab_min_width">72dp</dimen>
+    <dimen name="tab_max_width">168dp</dimen>
+    <dimen name="toolbar_height">56dp</dimen>
+    <dimen name="bottom_bar_height">56dp</dimen>
+    <dimen name="function_key_height">40dp</dimen>
+    <dimen name="function_key_width">64dp</dimen>
+    
+    <!-- Touch targets -->
+    <dimen name="min_touch_target">48dp</dimen>
+    <dimen name="large_touch_target">56dp</dimen>
+    <dimen name="button_height">48dp</dimen>
+    <dimen name="input_field_height">56dp</dimen>
+    
+    <!-- Cards and containers -->
+    <dimen name="card_corner_radius">12dp</dimen>
+    <dimen name="card_elevation">4dp</dimen>
+    <dimen name="container_padding">16dp</dimen>
+    <dimen name="list_item_padding">16dp</dimen>
+    <dimen name="dialog_padding">24dp</dimen>
+    
+    <!-- Borders and dividers -->
+    <dimen name="divider_height">1dp</dimen>
+    <dimen name="border_width">2dp</dimen>
+    <dimen name="focus_border_width">3dp</dimen>
+    <dimen name="tab_indicator_height">3dp</dimen>
+    
+    <!-- Icons -->
+    <dimen name="icon_size_small">16dp</dimen>
+    <dimen name="icon_size_medium">24dp</dimen>
+    <dimen name="icon_size_large">32dp</dimen>
+    <dimen name="icon_size_xlarge">48dp</dimen>
+    
+    <!-- Connection item dimensions -->
+    <dimen name="connection_item_height">72dp</dimen>
+    <dimen name="connection_icon_size">40dp</dimen>
+    <dimen name="connection_status_indicator_size">12dp</dimen>
+    
+    <!-- Terminal specific dimensions -->
+    <dimen name="terminal_padding">8dp</dimen>
+    <dimen name="terminal_cursor_width">2dp</dimen>
+    <dimen name="terminal_selection_handle_size">20dp</dimen>
+    <dimen name="scrollbar_width">4dp</dimen>
+    
+    <!-- Tab specific dimensions -->
+    <dimen name="tab_close_button_size">20dp</dimen>
+    <dimen name="tab_icon_size">16dp</dimen>
+    <dimen name="tab_padding">12dp</dimen>
+    
+    <!-- File browser dimensions -->
+    <dimen name="file_item_height">56dp</dimen>
+    <dimen name="file_icon_size">32dp</dimen>
+    <dimen name="file_browser_divider_width">2dp</dimen>
+    
+    <!-- Progress indicators -->
+    <dimen name="progress_bar_height">4dp</dimen>
+    <dimen name="circular_progress_size">24dp</dimen>
+    <dimen name="loading_indicator_size">48dp</dimen>
+    
+    <!-- Keyboard dimensions -->
+    <dimen name="keyboard_height_default">200dp</dimen>
+    <dimen name="keyboard_height_compact">160dp</dimen>
+    <dimen name="keyboard_key_height">40dp</dimen>
+    <dimen name="keyboard_key_spacing">2dp</dimen>
+    
+    <!-- Accessibility dimensions -->
+    <dimen name="accessibility_min_touch_target">48dp</dimen>
+    <dimen name="accessibility_large_touch_target">56dp</dimen>
+    <dimen name="focus_indicator_stroke_width">3dp</dimen>
+    <dimen name="high_contrast_border_width">2dp</dimen>
+    
+    <!-- Animation dimensions -->
+    <dimen name="fab_translation_y">112dp</dimen>
+    <dimen name="slide_animation_distance">100dp</dimen>
+    
+    <!-- Elevation levels -->
+    <dimen name="elevation_none">0dp</dimen>
+    <dimen name="elevation_low">2dp</dimen>
+    <dimen name="elevation_medium">4dp</dimen>
+    <dimen name="elevation_high">8dp</dimen>
+    <dimen name="elevation_very_high">16dp</dimen>
+    
+    <!-- Bottom sheet dimensions -->
+    <dimen name="bottom_sheet_peek_height">64dp</dimen>
+    <dimen name="bottom_sheet_corner_radius">16dp</dimen>
+    
+    <!-- Dialog dimensions -->
+    <dimen name="dialog_corner_radius">16dp</dimen>
+    <dimen name="dialog_min_width">280dp</dimen>
+    <dimen name="dialog_max_width">560dp</dimen>
+</resources>

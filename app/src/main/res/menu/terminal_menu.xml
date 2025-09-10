@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/action_new_tab"
+        android:title="New Tab"
+        android:icon="@drawable/ic_add"
+        app:showAsAction="ifRoom" />
+
+    <item
+        android:id="@+id/action_close_tab"
+        android:title="Close Tab"
+        android:icon="@drawable/ic_close"
+        app:showAsAction="ifRoom" />
+
+    <item
+        android:id="@+id/action_settings"
+        android:title="@string/settings_title"
+        android:icon="@drawable/ic_settings_general"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_disconnect_all"
+        android:title="Disconnect All"
+        android:icon="@drawable/ic_disconnect"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_copy"
+        android:title="Copy"
+        android:icon="@drawable/ic_copy"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_paste"
+        android:title="Paste"
+        android:icon="@drawable/ic_paste"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_select_all"
+        android:title="Select All"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_share_session"
+        android:title="Share Session"
+        android:icon="@drawable/ic_share"
+        app:showAsAction="never" />
+
+</menu>
