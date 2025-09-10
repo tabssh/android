@@ -11,7 +11,8 @@
       "Bash(gh run view:*)",
       "Read(//tmp/**)",
       "Bash(act:*)",
-      "Bash(test:*)"
+      "Bash(test:*)",
+      "Bash(timeout:*)"
     ],
     "deny": [],
     "ask": []

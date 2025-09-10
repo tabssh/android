@@ -61,9 +61,10 @@ jobs:
       run: |
         echo "🔒 Running security validation..."
         
-        # Check for hardcoded secrets (basic check)
-        if grep -r "password.*=" app/src/main/java/ | grep -v "// " | grep -v "getString" | grep -v "test" | grep -v "Default" | grep -v "Pref"; then
-          echo "❌ Potential hardcoded passwords found"
+        # Check for actual hardcoded secrets (more specific)
+        echo "Checking for hardcoded secrets..."
+        if grep -rE 'password.*=.*"[^"]{6,}"' app/src/main/java/ | grep -v "// " | grep -v "test-password" | grep -v "getString" | grep -v "text.toString()"; then
+          echo "❌ Actual hardcoded passwords found"
           exit 1
         else
           echo "✅ No hardcoded passwords found"

@@ -6,13 +6,13 @@ Categories:
 License: MIT
 
 AuthorName: TabSSH Team
-AuthorEmail: hello@tabssh.org
+AuthorEmail: hello@tabssh.github.io
 AuthorWebSite: https://tabssh.github.io
 
-SourceCode: https://github.com/TabSSH/android
-IssueTracker: https://github.com/TabSSH/android/issues
-Changelog: https://github.com/TabSSH/android/blob/main/CHANGELOG.md
-Donate: https://github.com/sponsors/TabSSH
+SourceCode: https://github.com/tabssh/android
+IssueTracker: https://github.com/tabssh/android/issues
+Changelog: https://github.com/tabssh/android/blob/main/CHANGELOG.md
+Donate: https://github.com/sponsors/tabssh
 
 Summary: Complete mobile SSH client with tabbed interface
 
