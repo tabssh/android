@@ -5,7 +5,11 @@
       "Bash(./gradlew:*)",
       "Bash(gradle:*)",
       "Bash(./scripts/validate-implementation.sh:*)",
-      "Bash(docker:*)"
+      "Bash(docker:*)",
+      "Bash(gh repo view:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)",
+      "Read(//tmp/**)"
     ],
     "deny": [],
     "ask": []
