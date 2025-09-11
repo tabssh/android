@@ -73,7 +73,7 @@ class SSHSessionManager(private val context: Context) {
         }
         
         // Create new connection
-        val connection = SSHConnection(profile, scope)
+        val connection = SSHConnection(profile, scope, context)
         
         // Add connection listener to track state changes
         connection.addConnectionListener(object : ConnectionListener {

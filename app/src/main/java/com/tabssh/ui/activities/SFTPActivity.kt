@@ -690,3 +690,48 @@ class SFTPActivity : AppCompatActivity() {
         Logger.d("SFTPActivity", "SFTP activity destroyed")
     }
 }
+    /**
+     * CRITICAL INTEGRATION: Actually perform file upload
+     */
+    private fun performUpload(localFile: File, remotePath: String) {
+        if (!::sftpManager.isInitialized) return
+        
+        lifecycleScope.launch {
+            try {
+                val transferTask = sftpManager.uploadFile(
+                    localFile = localFile,
+                    remotePath = remotePath,
+                    listener = createTransferListener()
+                )
+                
+                activeTransfers.add(transferTask)
+                transferAdapter.notifyItemInserted(activeTransfers.size - 1)
+                
+                showToast("📤 Uploading: ${localFile.name}")
+                
+            } catch (e: Exception) {
+                Logger.e("SFTPActivity", "Upload failed", e)
+                showToast("Upload failed: ${e.message}")
+            }
+        }
+    }
+    
+    private fun createTransferListener(): io.github.tabssh.sftp.TransferListener {
+        return object : io.github.tabssh.sftp.TransferListener {
+            override fun onProgress(transfer: io.github.tabssh.sftp.TransferTask, bytesTransferred: Long, totalBytes: Long) {
+                runOnUiThread {
+                    updateTransferProgress(transfer)
+                }
+            }
+            
+            override fun onCompleted(transfer: io.github.tabssh.sftp.TransferTask, result: io.github.tabssh.sftp.TransferResult) {
+                runOnUiThread {
+                    handleTransferCompleted(transfer, result)
+                    
+                    // Refresh file lists
+                    loadLocalDirectory(currentLocalPath)
+                    loadRemoteDirectory(currentRemotePath)
+                }
+            }
+        }
+    }

@@ -131,22 +131,49 @@ class SSHConnectionService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         
-        val contentText = if (activeConnections > 0) {
-            "$activeConnections active SSH connection${if (activeConnections == 1) "" else "s"}"
-        } else {
-            "SSH service running"
+        // Action buttons for notification
+        val disconnectIntent = PendingIntent.getService(
+            this,
+            1,
+            Intent(this, SSHConnectionService::class.java).apply { action = ACTION_STOP_SERVICE },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        
+        val contentText = when (activeConnections) {
+            0 -> "Ready for SSH connections"
+            1 -> "1 active SSH connection"
+            else -> "$activeConnections active SSH connections"
         }
         
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("TabSSH")
             .setContentText(contentText)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(pendingIntent)
-            .setOngoing(true)
+            .setOngoing(true) // CRITICAL: Keeps service running in background
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setShowWhen(false)
-            .build()
+            .setAutoCancel(false) // Prevent accidental dismissal
+        
+        // Add action button to disconnect all
+        if (activeConnections > 0) {
+            builder.addAction(
+                R.drawable.ic_disconnect,
+                "Disconnect All",
+                disconnectIntent
+            )
+        }
+        
+        // Add connection status details
+        if (activeConnections > 0) {
+            val bigTextStyle = NotificationCompat.BigTextStyle()
+                .setBigContentTitle("TabSSH - $activeConnections Active")
+                .bigText("SSH connections running in background.\n\nTap to open terminal interface.")
+            builder.setStyle(bigTextStyle)
+        }
+        
+        return builder.build()
     }
     
     private fun updateNotification() {
