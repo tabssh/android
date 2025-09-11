@@ -445,3 +445,55 @@ class TabTerminalActivity : AppCompatActivity() {
             .show()
     }
 }
+    private fun monitorTerminalConnection(tab: io.github.tabssh.ui.tabs.SSHTab) {
+        // Monitor connection state and update UI accordingly
+        lifecycleScope.launch {
+            tab.connectionState.collect { state ->
+                runOnUiThread {
+                    when (state) {
+                        io.github.tabssh.ssh.connection.ConnectionState.CONNECTED -> {
+                            supportActionBar?.subtitle = "Connected"
+                        }
+                        io.github.tabssh.ssh.connection.ConnectionState.CONNECTING -> {
+                            supportActionBar?.subtitle = "Connecting..."
+                        }
+                        io.github.tabssh.ssh.connection.ConnectionState.DISCONNECTED -> {
+                            supportActionBar?.subtitle = "Disconnected"
+                        }
+                        io.github.tabssh.ssh.connection.ConnectionState.ERROR -> {
+                            supportActionBar?.subtitle = "Connection Error"
+                        }
+                        else -> {}
+                    }
+                }
+            }
+        }
+    }
+
+    
+    /**
+     * CRITICAL INTEGRATION: Connect SSH streams to terminal emulator
+     */
+    private suspend fun connectTabToSSH(tab: SSHTab, sshConnection: SSHConnection): Boolean {
+        return try {
+            val shellChannel = sshConnection.openShellChannel()
+            
+            if (shellChannel != null) {
+                // Connect terminal to SSH I/O streams
+                tab.terminal.connect(shellChannel.inputStream, shellChannel.outputStream)
+                
+                // Connect UI to terminal
+                runOnUiThread {
+                    currentTerminalView?.setTerminal(tab.terminal)
+                }
+                
+                Logger.i("TabTerminalActivity", "SSH-Terminal integration complete")
+                true
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            Logger.e("TabTerminalActivity", "SSH-Terminal integration failed", e)
+            false
+        }
+    }

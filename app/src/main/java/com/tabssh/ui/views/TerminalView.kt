@@ -571,3 +571,12 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
         return true
     }
 }
+    private fun getTerminalTheme(): io.github.tabssh.themes.definitions.Theme? {
+        return try {
+            val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
+            app?.themeManager?.currentTheme?.value
+        } catch (e: Exception) {
+            Logger.w("TerminalView", "Could not get current theme", e)
+            null
+        }
+    }

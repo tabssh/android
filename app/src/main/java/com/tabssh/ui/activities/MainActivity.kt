@@ -183,7 +183,9 @@ class MainActivity : AppCompatActivity() {
                     // Show authentication dialog or edit connection
                     showAuthenticationDialog(profile)
                 } else {
-                    // Connect directly
+                    // Connect directly - start background service for persistent connections
+                    io.github.tabssh.services.SSHConnectionService.startService(this@MainActivity)
+                    
                     val intent = TabTerminalActivity.createIntent(this@MainActivity, profile, autoConnect = true)
                     startActivity(intent)
                 }
