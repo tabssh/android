@@ -1,14 +1,16 @@
-package io.github.tabssh.background
+package com.tabssh.background
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.os.Bundle
-import io.github.tabssh.TabSSHApplication
-import io.github.tabssh.storage.database.entities.TabSession
-import io.github.tabssh.ui.tabs.SSHTab
-import io.github.tabssh.ui.tabs.TabManager
-import io.github.tabssh.utils.logging.Logger
+import com.tabssh.TabSSHApplication
+import com.tabssh.storage.database.entities.TabSession
+import com.tabssh.ui.tabs.SSHTab
+import com.tabssh.ui.tabs.TabManager
+import com.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
 
 /**
@@ -247,27 +249,35 @@ class SessionPersistenceManager(
             val terminal = tab.terminal
             val buffer = terminal.getBuffer()
             val stats = tab.getConnectionStats()
-            
+
             // Compress terminal content for storage
             val scrollbackContent = if (immediate || stats.isActive) {
-                compressTerminalContent(terminal.getScrollbackContent())
+                compressTerminalContent(buffer.getScrollbackContent())
             } else null
-            
+
             val tabSession = TabSession(
+                sessionId = java.util.UUID.randomUUID().toString(),
+                tabId = tab.tabId,
                 connectionId = tab.profile.id,
-                tabTitle = tab.getDisplayTitle(),
-                tabOrder = tabIndex,
+                title = tab.getDisplayTitle(),
                 isActive = stats.isActive,
-                workingDirectory = null, // Would be detected from terminal state
-                environmentVariables = null, // Would be preserved if available
-                terminalSizeRows = buffer.getRows(),
-                terminalSizeCols = buffer.getCols(),
+                terminalContent = scrollbackContent ?: "",
                 cursorRow = buffer.getCursorRow(),
                 cursorCol = buffer.getCursorCol(),
-                scrollbackContent = scrollbackContent,
+                scrollPosition = 0,
+                workingDirectory = "/",
+                environmentVars = "{}",
+                createdAt = System.currentTimeMillis(),
                 lastActivity = stats.lastActivity,
-                sessionDuration = stats.sessionDuration,
-                bytesTransferred = stats.bytesReceived + stats.bytesSent
+                sessionState = if (stats.isActive) TabSession.STATE_CONNECTED else TabSession.STATE_DISCONNECTED,
+                terminalRows = buffer.getRows(),
+                terminalCols = buffer.getCols(),
+                fontSize = 14f,
+                connectionState = if (stats.isActive) "CONNECTED" else "DISCONNECTED",
+                lastError = null,
+                hasUnreadOutput = false,
+                unreadLines = 0,
+                tabOrder = tabIndex
             )
             
             database.tabSessionDao().insertSession(tabSession)
@@ -282,7 +292,7 @@ class SessionPersistenceManager(
      */
     suspend fun restoreSessionState(): Boolean {
         return try {
-            val savedSessions = database.tabSessionDao().getActiveSessions()
+            val savedSessions = database.tabSessionDao().getActiveSessionsList()
             
             if (savedSessions.isEmpty()) {
                 Logger.d("SessionPersistenceManager", "No saved sessions to restore")
@@ -299,7 +309,7 @@ class SessionPersistenceManager(
                     
                     if (connectionProfile != null) {
                         // Create tab without auto-connecting
-                        val tab = tabManager.createTab(connectionProfile, null)
+                        val tab = tabManager.createTab(connectionProfile)
                         
                         if (tab != null) {
                             // Restore terminal state
@@ -334,11 +344,11 @@ class SessionPersistenceManager(
     
     private suspend fun restoreTabTerminalState(tab: SSHTab, session: TabSession) {
         try {
-            // Restore terminal size
-            tab.resize(session.terminalSizeRows, session.terminalSizeCols)
-            
+            // Restore terminal.size
+            tab.terminal.resize(session.terminalRows, session.terminalCols)
+
             // Restore scrollback content if available
-            session.scrollbackContent?.let { compressedContent ->
+            session.terminalContent.takeIf { it.isNotEmpty() }?.let { compressedContent ->
                 val content = decompressTerminalContent(compressedContent)
                 // This would restore terminal buffer content
                 // Implementation depends on terminal buffer restoration capability
@@ -347,7 +357,7 @@ class SessionPersistenceManager(
             // Restore cursor position
             // tab.terminal.getBuffer().setCursorPosition(session.cursorRow, session.cursorCol)
             
-            Logger.d("SessionPersistenceManager", "Restored terminal state for tab: ${session.tabTitle}")
+            Logger.d("SessionPersistenceManager", "Restored terminal state for tab: ${session.title}")
             
         } catch (e: Exception) {
             Logger.e("SessionPersistenceManager", "Failed to restore terminal state", e)
@@ -378,16 +388,15 @@ class SessionPersistenceManager(
     private fun compressTerminalContent(content: String): String {
         // Simple compression - could use more sophisticated algorithms
         return try {
-            java.util.zip.GZIPOutputStream(
-                java.io.ByteArrayOutputStream()
-            ).use { gzipOut ->
+            val baos = java.io.ByteArrayOutputStream()
+            java.util.zip.GZIPOutputStream(baos).use { gzipOut ->
                 gzipOut.write(content.toByteArray())
                 gzipOut.finish()
-                android.util.Base64.encodeToString(
-                    (gzipOut as java.util.zip.GZIPOutputStream).def.finish() as ByteArray,
-                    android.util.Base64.NO_WRAP
-                )
             }
+            android.util.Base64.encodeToString(
+                baos.toByteArray(),
+                android.util.Base64.NO_WRAP
+            )
         } catch (e: Exception) {
             Logger.w("SessionPersistenceManager", "Failed to compress terminal content", e)
             content // Return uncompressed if compression fails
@@ -434,16 +443,16 @@ class SessionPersistenceManager(
      * Get session persistence statistics
      */
     suspend fun getSessionStatistics(): SessionStatistics {
-        val activeSessions = database.tabSessionDao().getActiveSessions()
-        val totalSessions = database.tabSessionDao().getAllSessions().value?.size ?: 0
-        
+        val activeSessions = database.tabSessionDao().getActiveSessionsList()
+        val totalSessions = database.tabSessionDao().getAllTabs()
+
         return SessionStatistics(
             isAppInForeground = isAppInForeground,
             activeActivityCount = activeActivityCount,
             lastBackgroundTime = lastBackgroundTime,
             preserveSessionsEnabled = preserveSessionsOnBackground,
             activeSavedSessions = activeSessions.size,
-            totalSavedSessions = totalSessions,
+            totalSavedSessions = totalSessions.size,
             backgroundDuration = if (lastBackgroundTime > 0 && !isAppInForeground) {
                 System.currentTimeMillis() - lastBackgroundTime
             } else 0L

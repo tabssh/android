@@ -1,16 +1,17 @@
-package io.github.tabssh.themes.definitions
+package com.tabssh.themes.definitions
 
 import android.content.Context
-import io.github.tabssh.storage.database.TabSSHDatabase
-import io.github.tabssh.storage.database.entities.ThemeDefinition
-import io.github.tabssh.storage.preferences.PreferenceManager
-import io.github.tabssh.themes.validator.ThemeValidator
-import io.github.tabssh.themes.parser.ThemeParser
-import io.github.tabssh.utils.logging.Logger
+import com.tabssh.storage.database.TabSSHDatabase
+import com.tabssh.storage.database.entities.ThemeDefinition
+import com.tabssh.storage.preferences.PreferenceManager
+import com.tabssh.themes.validator.ThemeValidator
+import com.tabssh.themes.parser.ThemeParser
+import com.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
 
 /**
@@ -101,9 +102,9 @@ class ThemeManager(private val context: Context) {
     
     private suspend fun loadAvailableThemes() {
         Logger.d("ThemeManager", "Loading available themes")
-        
-        val themeDefinitions = database.themeDao().getAllThemes().value ?: emptyList()
-        val themes = themeDefinitions.mapNotNull { definition ->
+
+        val themeDefinitions: List<ThemeDefinition> = database.themeDao().getAllThemes().first()
+        val themes: List<Theme> = themeDefinitions.mapNotNull { definition: ThemeDefinition ->
             try {
                 convertThemeDefinitionToTheme(definition)
             } catch (e: Exception) {
@@ -111,22 +112,22 @@ class ThemeManager(private val context: Context) {
                 null
             }
         }
-        
+
         _availableThemes.value = themes
-        
+
         // Update cache
         themeCache.clear()
-        themes.forEach { theme ->
+        themes.forEach { theme: Theme ->
             themeCache[theme.id] = theme
         }
-        
+
         Logger.d("ThemeManager", "Loaded ${themes.size} themes")
     }
-    
+
     private suspend fun loadCurrentTheme() {
         val currentThemeId = preferenceManager.getTheme()
         val theme = getThemeById(currentThemeId) ?: BuiltInThemes.dracula()
-        
+
         _currentTheme.value = theme
         Logger.d("ThemeManager", "Current theme: ${theme.name}")
     }
@@ -167,7 +168,7 @@ class ThemeManager(private val context: Context) {
             
             // Apply the theme
             _currentTheme.value = theme
-            
+
             // Save to preferences
             preferenceManager.setTheme(theme.id)
             
@@ -202,14 +203,14 @@ class ThemeManager(private val context: Context) {
      * Get all available themes
      */
     fun getAvailableThemes(): List<Theme> = _availableThemes.value
-    
+
     /**
      * Get built-in themes only
      */
     fun getBuiltInThemes(): List<Theme> {
         return _availableThemes.value.filter { it.isBuiltIn }
     }
-    
+
     /**
      * Get custom themes only
      */
@@ -298,7 +299,7 @@ class ThemeManager(private val context: Context) {
             
             // Reload themes
             loadAvailableThemes()
-            
+
             // Switch to default if this was the current theme
             if (_currentTheme.value?.id == themeId) {
                 applyTheme(BuiltInThemes.dracula())
@@ -338,11 +339,11 @@ class ThemeManager(private val context: Context) {
      * Get theme usage statistics
      */
     suspend fun getThemeStatistics(): ThemeStatistics {
-        val allThemes = database.themeDao().getAllThemes().value ?: emptyList()
-        val customThemes = allThemes.count { !it.isBuiltIn }
-        val totalUsage = allThemes.sumOf { it.usageCount }
-        val mostPopular = allThemes.maxByOrNull { it.usageCount }
-        
+        val allThemes: List<ThemeDefinition> = database.themeDao().getAllThemes().first()
+        val customThemes = allThemes.count { it: ThemeDefinition -> !it.isBuiltIn }
+        val totalUsage = allThemes.sumOf { it: ThemeDefinition -> it.usageCount }
+        val mostPopular = allThemes.maxByOrNull { it: ThemeDefinition -> it.usageCount }
+
         return ThemeStatistics(
             totalThemes = allThemes.size,
             builtInThemes = allThemes.size - customThemes,

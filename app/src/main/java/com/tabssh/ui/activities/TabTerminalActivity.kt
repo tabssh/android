@@ -1,8 +1,9 @@
-package io.github.tabssh.ui.activities
-
+package com.tabssh.ui.activities
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.KeyEvent
 import android.view.Menu
 import android.view.MenuItem
@@ -10,16 +11,18 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.tabs.TabLayout
-import io.github.tabssh.R
-import io.github.tabssh.TabSSHApplication
-import io.github.tabssh.databinding.ActivityTabTerminalBinding
-import io.github.tabssh.storage.database.entities.ConnectionProfile
-import io.github.tabssh.ssh.connection.ConnectionState
-import io.github.tabssh.ui.tabs.SSHTab
-import io.github.tabssh.ui.tabs.TabManager
-import io.github.tabssh.ui.tabs.TabManagerListener
-import io.github.tabssh.ui.views.TerminalView
-import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.*
+import com.tabssh.ssh.connection.SSHConnection
+import com.tabssh.ui.views.TerminalView
+import com.tabssh.R
+import com.tabssh.TabSSHApplication
+import com.tabssh.databinding.ActivityTabTerminalBinding
+import com.tabssh.storage.database.entities.ConnectionProfile
+import com.tabssh.ssh.connection.ConnectionState
+import com.tabssh.ui.tabs.SSHTab
+import com.tabssh.ui.tabs.TabManager
+import com.tabssh.ui.tabs.TabManagerListener
+import com.tabssh.utils.logging.Logger
 import kotlinx.coroutines.launch
 
 /**
@@ -45,7 +48,7 @@ class TabTerminalActivity : AppCompatActivity() {
     private lateinit var tabManager: TabManager
     
     // UI components
-    private var currentTerminalView: TerminalView? = null
+    private var terminalView: TerminalView? = null
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -77,36 +80,36 @@ class TabTerminalActivity : AppCompatActivity() {
     }
     
     private fun setupTabManager() {
-        tabManager = TabManager(app.terminalManager, app.preferencesManager)
+        tabManager = TabManager(maxTabs = 10)
         
         // Set up tab manager listener
         tabManager.addListener(object : TabManagerListener {
             override fun onTabCreated(tab: SSHTab) {
-                runOnUiThread {
+                Handler(Looper.getMainLooper()).post {
                     addTabToUI(tab)
                     Logger.d("TabTerminalActivity", "Tab created: ${tab.profile.getDisplayName()}")
                 }
             }
-            
+
             override fun onTabClosed(tab: SSHTab, index: Int) {
-                runOnUiThread {
+                Handler(Looper.getMainLooper()).post {
                     removeTabFromUI(index)
-                    
+
                     // Close activity if no tabs remain
                     if (tabManager.getTabCount() == 0) {
                         finish()
                     }
                 }
             }
-            
+
             override fun onActiveTabChanged(index: Int) {
-                runOnUiThread {
+                Handler(Looper.getMainLooper()).post {
                     switchToTab(index)
                 }
             }
-            
+
             override fun onTabConnectionStateChanged(tab: SSHTab, state: ConnectionState) {
-                runOnUiThread {
+                Handler(Looper.getMainLooper()).post {
                     updateTabIcon(tab, state)
                 }
             }
@@ -127,7 +130,7 @@ class TabTerminalActivity : AppCompatActivity() {
     }
     
     private fun setupTerminalView() {
-        currentTerminalView = binding.terminalView
+        terminalView = binding.terminalView
         
         // Set up terminal view
         binding.terminalView.apply {
@@ -157,7 +160,7 @@ class TabTerminalActivity : AppCompatActivity() {
         val autoConnect = intent.getBooleanExtra(EXTRA_AUTO_CONNECT, true)
         
         if (connectionProfileId != null) {
-            lifecycleScope.launch {
+            CoroutineScope(Dispatchers.Main).launch {
                 val profile = app.database.connectionDao().getConnectionById(connectionProfileId)
                 if (profile != null && autoConnect) {
                     connectToProfile(profile)
@@ -175,7 +178,7 @@ class TabTerminalActivity : AppCompatActivity() {
             
             if (sshConnection != null) {
                 // Create new tab with the connection
-                val tab = tabManager.createTab(profile, sshConnection)
+                val tab = tabManager.createTab(profile)
                 
                 if (tab != null) {
                     Logger.i("TabTerminalActivity", "Connected to ${profile.getDisplayName()}")
@@ -221,11 +224,18 @@ class TabTerminalActivity : AppCompatActivity() {
         val tab = tabManager.getTab(index)
         if (tab != null) {
             // Connect terminal view to the tab's terminal
-            currentTerminalView?.setTerminal(tab.terminal)
-            
+            val terminal = tab.terminal
+            terminalView?.initialize(terminal.getRows(), terminal.getCols())
+
+            // Deactivate previous tab
+            tabManager.getActiveTab()?.deactivate()
+
+            // Activate new tab
+            tab.activate()
+
             // Update toolbar title
             supportActionBar?.title = tab.getDisplayTitle()
-            
+
             Logger.d("TabTerminalActivity", "Switched to tab: ${tab.profile.getDisplayName()}")
         }
     }
@@ -323,12 +333,10 @@ class TabTerminalActivity : AppCompatActivity() {
         }
         
         // Let terminal view handle other keys
-        return currentTerminalView?.onKeyDown(keyCode, event) ?: super.onKeyDown(keyCode, event)
+        return terminalView?.onKeyDown(keyCode, event) ?: super.onKeyDown(keyCode, event)
     }
     
     private fun sendKey(key: String) {
-        val handler = currentTerminalView?.getTerminal()?.let { KeyboardHandler(it) }
-        
         when (key) {
             "ctrl" -> {
                 // Toggle ctrl mode or show ctrl key menu
@@ -338,22 +346,22 @@ class TabTerminalActivity : AppCompatActivity() {
                 showToast("Alt key pressed")
             }
             "esc" -> {
-                handler?.sendKeySequence("\u001B")
+                terminalView?.sendKeySequence("\u001B")
             }
             "tab" -> {
-                handler?.sendKeySequence("\t")
+                terminalView?.sendKeySequence("\t")
             }
             "up" -> {
-                handler?.sendKeySequence("\u001B[A")
+                terminalView?.sendKeySequence("\u001B[A")
             }
             "down" -> {
-                handler?.sendKeySequence("\u001B[B")
+                terminalView?.sendKeySequence("\u001B[B")
             }
         }
     }
     
     private fun toggleKeyboard() {
-        currentTerminalView?.toggleKeyboard()
+        terminalView?.sendText("")
     }
     
     private fun openFileManager() {
@@ -370,7 +378,10 @@ class TabTerminalActivity : AppCompatActivity() {
     }
     
     private fun pasteFromClipboard() {
-        currentTerminalView?.paste()
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        clipboard.primaryClip?.getItemAt(0)?.text?.let { text ->
+            terminalView?.sendText(text.toString())
+        }
     }
     
     private fun showConnectionSelector() {
@@ -380,8 +391,8 @@ class TabTerminalActivity : AppCompatActivity() {
     }
     
     private fun closeCurrentTab() {
-        lifecycleScope.launch {
-            val activeIndex = tabManager.activeTabIndex.value
+        CoroutineScope(Dispatchers.Main).launch {
+            val activeIndex = tabManager.getActiveTabIndex()
             if (activeIndex >= 0) {
                 tabManager.closeTab(activeIndex)
             }
@@ -389,7 +400,7 @@ class TabTerminalActivity : AppCompatActivity() {
     }
     
     private fun disconnectAllTabs() {
-        lifecycleScope.launch {
+        CoroutineScope(Dispatchers.Main).launch {
             tabManager.closeAllTabs()
         }
     }
@@ -400,11 +411,15 @@ class TabTerminalActivity : AppCompatActivity() {
     
     override fun onResume() {
         super.onResume()
-        
+
         // Restore active tab if needed
         val activeTab = tabManager.getActiveTab()
         if (activeTab != null) {
-            currentTerminalView?.setTerminal(activeTab.terminal)
+            // Reconnect terminal view to active tab
+            val terminal = activeTab.terminal
+            terminalView?.initialize(terminal.getRows(), terminal.getCols())
+            activeTab.activate()
+            supportActionBar?.title = activeTab.getDisplayTitle()
         }
     }
     
@@ -412,7 +427,7 @@ class TabTerminalActivity : AppCompatActivity() {
         super.onPause()
         
         // Save session state
-        lifecycleScope.launch {
+        CoroutineScope(Dispatchers.Main).launch {
             tabManager.saveTabState()
         }
     }
@@ -445,55 +460,3 @@ class TabTerminalActivity : AppCompatActivity() {
             .show()
     }
 }
-    private fun monitorTerminalConnection(tab: io.github.tabssh.ui.tabs.SSHTab) {
-        // Monitor connection state and update UI accordingly
-        lifecycleScope.launch {
-            tab.connectionState.collect { state ->
-                runOnUiThread {
-                    when (state) {
-                        io.github.tabssh.ssh.connection.ConnectionState.CONNECTED -> {
-                            supportActionBar?.subtitle = "Connected"
-                        }
-                        io.github.tabssh.ssh.connection.ConnectionState.CONNECTING -> {
-                            supportActionBar?.subtitle = "Connecting..."
-                        }
-                        io.github.tabssh.ssh.connection.ConnectionState.DISCONNECTED -> {
-                            supportActionBar?.subtitle = "Disconnected"
-                        }
-                        io.github.tabssh.ssh.connection.ConnectionState.ERROR -> {
-                            supportActionBar?.subtitle = "Connection Error"
-                        }
-                        else -> {}
-                    }
-                }
-            }
-        }
-    }
-
-    
-    /**
-     * CRITICAL INTEGRATION: Connect SSH streams to terminal emulator
-     */
-    private suspend fun connectTabToSSH(tab: SSHTab, sshConnection: SSHConnection): Boolean {
-        return try {
-            val shellChannel = sshConnection.openShellChannel()
-            
-            if (shellChannel != null) {
-                // Connect terminal to SSH I/O streams
-                tab.terminal.connect(shellChannel.inputStream, shellChannel.outputStream)
-                
-                // Connect UI to terminal
-                runOnUiThread {
-                    currentTerminalView?.setTerminal(tab.terminal)
-                }
-                
-                Logger.i("TabTerminalActivity", "SSH-Terminal integration complete")
-                true
-            } else {
-                false
-            }
-        } catch (e: Exception) {
-            Logger.e("TabTerminalActivity", "SSH-Terminal integration failed", e)
-            false
-        }
-    }

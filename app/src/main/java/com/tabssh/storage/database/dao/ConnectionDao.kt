@@ -1,8 +1,8 @@
-package io.github.tabssh.storage.database.dao
+package com.tabssh.storage.database.dao
 
 import androidx.lifecycle.LiveData
 import androidx.room.*
-import io.github.tabssh.storage.database.entities.ConnectionProfile
+import com.tabssh.storage.database.entities.ConnectionProfile
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -19,6 +19,9 @@ interface ConnectionDao {
     
     @Query("SELECT * FROM connections WHERE id = :id")
     suspend fun getConnectionById(id: String): ConnectionProfile?
+
+    @Query("SELECT * FROM connections WHERE id = :id")
+    suspend fun getConnection(id: String): ConnectionProfile?
     
     @Query("SELECT * FROM connections WHERE group_id = :groupId ORDER BY sort_order, name")
     suspend fun getConnectionsByGroup(groupId: String): List<ConnectionProfile>

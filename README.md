@@ -1,176 +1,115 @@
-# TabSSH - Complete Mobile SSH Client
+# 📱 TabSSH - Modern SSH Client for Android
 
-[![Android CI](https://github.com/TabSSH/android/actions/workflows/android-ci.yml/badge.svg)](https://github.com/TabSSH/android/actions/workflows/android-ci.yml)
-[![F-Droid](https://img.shields.io/f-droid/v/com.tabssh?logo=f-droid)](https://f-droid.org/packages/com.tabssh)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Coverage](https://codecov.io/gh/TabSSH/android/branch/main/graph/badge.svg)](https://codecov.io/gh/TabSSH/android)
+<p align="center">
+  <img src="https://img.shields.io/badge/Platform-Android-green.svg" alt="Platform">
+  <img src="https.shields.io/badge/License-MIT-blue.svg" alt="License">
+  <img src="https://img.shields.io/badge/Version-1.0.0-orange.svg" alt="Version">
+</p>
 
-**TabSSH is the ultimate open-source SSH client for Android** - featuring a true tabbed interface, enterprise-grade security, and complete accessibility support.
+A beautiful, modern, open-source SSH client for Android with true browser-style tabs.
 
-## 🚀 Complete Feature Set (1.0.0)
+## ✨ Features
 
-### ⭐ **Core SSH Excellence**
-- **True Tabbed Interface** - Browser-style tabs with drag-to-reorder
-- **Complete Terminal Emulation** - Full VT100/ANSI support with 16-color palette
-- **SSH Connection Management** - Connection pooling, auto-reconnection, background persistence
-- **Advanced Authentication** - Password, SSH keys (RSA/DSA/ECDSA/Ed25519), keyboard interactive
+- 📑 **Browser-Style Tabs** - Multiple SSH sessions in tabs (like a web browser)
+- 🔐 **Enterprise Security** - Hardware-backed encryption, biometric auth
+- 🎨 **Beautiful Themes** - 6+ built-in themes, custom theme support
+- ♿ **Accessibility First** - Full TalkBack support, high contrast modes
+- 📁 **SFTP File Browser** - Upload/download files with beautiful UI
+- 🔑 **Advanced SSH** - Port forwarding, X11, Mosh support
+- 🌐 **SSH Config Import** - Import from ~/.ssh/config
+- 💾 **Backup & Restore** - Export/import all your data
+- 🔔 **Background Sessions** - Keep connections alive
+- 🎯 **Zero Trackers** - No analytics, no ads, privacy-focused
 
-### 🎨 **Themes & Customization**
-- **12 Built-in Themes** - Dracula, Solarized (Dark/Light), Nord, One Dark, Monokai, Gruvbox, Tomorrow Night, GitHub Light, Atom One Dark, Material Dark
-- **Custom Themes** - Import/export with JSON format support
-- **Accessibility Validation** - WCAG 2.1 AA compliance with auto-contrast fixing
-- **Font Customization** - Multiple fonts, adjustable sizes, perfect rendering
+## 🚀 Quick Start
 
-### 📁 **File Management**
-- **Complete SFTP Browser** - Dual-pane interface (local/remote)
-- **Advanced Transfers** - Progress tracking, pause/resume, batch operations
-- **File Operations** - Upload, download, create, delete, rename, permissions
-- **Smart Features** - Resume interrupted transfers, preserve timestamps/permissions
+```bash
+# Clone the repository
+git clone https://github.com/tabssh/android.git
+cd android
 
-### 🔧 **Advanced Networking**
-- **Port Forwarding** - Local (-L), Remote (-R), Dynamic/SOCKS (-D)
-- **Mosh Protocol** - Mobile-optimized connections with roaming support
-- **X11 Forwarding** - Run remote GUI applications
-- **SSH Config Import** - Full ~/.ssh/config compatibility
+# Build with Docker (recommended)
+./build.sh
 
-### 🔒 **Enterprise Security**
-- **Hardware-Backed Encryption** - Android Keystore for all sensitive data
-- **Biometric Authentication** - Fingerprint/face unlock for password access
-- **Multiple Security Levels** - Never, Session-only, Encrypted, Biometric storage
-- **Host Key Verification** - Strict checking with known_hosts management
-- **Zero Data Collection** - Complete privacy, no analytics/tracking
+# Or build with local Gradle
+./gradlew assembleDebug
 
-### ♿ **Full Accessibility**
-- **TalkBack Support** - Complete screen reader compatibility
-- **WCAG 2.1 AA Compliance** - High contrast mode, proper color ratios
-- **Motor Accessibility** - Large touch targets (48dp+), configurable timeouts
-- **Keyboard Navigation** - Full app navigation without touch
+# Install
+adb install app/build/outputs/apk/debug/app-debug.apk
+```
 
-### 📱 **Platform Excellence**
-- **Cross-Platform** - Phones, tablets, Android TV, Chromebook optimized
-- **Background Support** - Seamless app switching with session preservation
-- **Multi-Window** - Split screen and multi-window support
-- **Hardware Keyboards** - Full shortcut support, optimized for Chromebook
+## 📚 Documentation
 
-### ⚡ **Performance Optimized**
-- **60fps Target** - Smooth animations and responsive UI
-- **Battery Intelligent** - 4-level optimization (Performance/Balanced/Conservative/Aggressive)
-- **Memory Efficient** - Smart cleanup, leak prevention, pressure management
-- **Network Optimized** - Efficient protocols, connection reuse, compression
-
-### 🌍 **International**
-- **Multi-Language** - English, Spanish, French, German, Japanese support
-- **RTL Support** - Right-to-left language compatibility
-- **Localized Documentation** - Complete guides in multiple languages
-
-## 📦 Installation
-
-### F-Droid (Recommended)
-1. Open [F-Droid](https://f-droid.org/) app
-2. Search for "TabSSH"  
-3. Install
-
-### Direct Download
-1. Visit [Releases](https://github.com/TabSSH/android/releases)
-2. Download latest APK
-3. Install with package manager
-
-## 🏁 Quick Start
-
-### First Connection
-1. **Quick Connect**: Enter host, port, username → Connect
-2. **Save Connection**: Tap "+" → Fill details → Save for reuse
-3. **Import SSH Config**: Settings → Connections → Import SSH Config
-
-### Key Management
-1. **Generate Keys**: Settings → Security → SSH Keys → Generate
-2. **Import Keys**: Settings → Security → SSH Keys → Import
-3. **Use Keys**: Select key when creating/editing connections
-
-### Advanced Features
-- **Port Forwarding**: Connection menu → Port Forwarding → Add tunnel
-- **File Transfer**: Terminal → Files → Dual-pane SFTP browser
-- **Themes**: Settings → Terminal → Theme → Choose from 12+ options
-- **Mosh**: Create connection → Advanced → Protocol: Mosh
+- **[SPEC.md](SPEC.md)** - Complete technical specification
+- **[docs/](docs/)** - All documentation
+  - [TODO.md](docs/TODO.md) - Development progress
+  - [CHANGELOG.md](docs/CHANGELOG.md) - Release history
+  - [UI_UX_GUIDE.md](docs/UI_UX_GUIDE.md) - Design guidelines
+  - [LIBRARY_COMPARISON.md](docs/LIBRARY_COMPARISON.md) - Technical decisions
 
 ## 🛠️ Development
 
-### Building
-```bash
-git clone https://github.com/TabSSH/android.git
-cd android
-./gradlew assembleDebug
-```
+### Prerequisites
+- Docker (recommended) OR
+- Android SDK 34
+- JDK 17
+- Gradle 8.1.1
 
-### Testing
+### Build Commands
 ```bash
-# Unit tests
+# Check for errors
+docker run --rm -v $(pwd):/workspace -w /workspace \\
+  -e ANDROID_HOME=/opt/android-sdk tabssh-android \\
+  ./gradlew compileDebugKotlin
+
+# Build APK
+./build.sh
+
+# Run tests
 ./gradlew test
-
-# UI tests  
-./gradlew connectedAndroidTest
-
-# Coverage report
-./gradlew jacocoTestReport
 ```
 
-### Contributing
-1. Fork the repository
-2. Create feature branch: `git checkout -b feature/amazing-feature`
-3. Commit changes: `git commit -m 'Add amazing feature'`
-4. Push branch: `git push origin feature/amazing-feature`
-5. Open Pull Request
+### Repository Structure
+```
+├── app/               # Android app source
+├── docs/              # Documentation
+├── scripts/           # Build & utility scripts
+├── build-logs/        # Build outputs (gitignored)
+└── fdroid-submission/ # F-Droid metadata
+```
 
-## 📊 Project Status
+## 🔐 Security Features
 
-- **Version**: 1.0.0 (Complete Feature Set)
-- **Test Coverage**: >90%
-- **Security Audit**: Passed
-- **Accessibility**: WCAG 2.1 AA Compliant
-- **F-Droid Status**: Approved
-- **Languages**: 5+ supported
+- ✅ SHA256 host key verification
+- ✅ Hardware-backed key storage
+- ✅ Biometric authentication
+- ✅ No plaintext password storage
+- ✅ Screenshot protection
+- ✅ Auto-lock on background
 
-## 🏆 Why TabSSH?
+## 🎨 Themes
 
-### **Complete & Free**
-- **Every feature included** - no premium versions or paid upgrades
-- **Open source forever** - MIT licensed, community-driven
-- **No data collection** - your privacy is absolute
-
-### **Mobile-First Design**
-- **Built for mobile** - optimized for touch, battery, and connectivity
-- **Background resilient** - maintains connections during app switching
-- **Network intelligent** - handles mobile network changes gracefully
-
-### **Accessibility Leader**
-- **Screen reader perfect** - complete TalkBack support
-- **Motor friendly** - large targets, configurable timeouts
-- **Vision accessible** - high contrast, color blind support
-
-### **Professional Grade**
-- **Enterprise security** - hardware-backed encryption
-- **Terminal excellence** - full VT100/ANSI compatibility
-- **Advanced protocols** - SSH, Mosh, X11, port forwarding
+- 🦇 Dracula
+- ☀️ Solarized Light/Dark
+- ❄️ Nord
+- 🌲 Monokai
+- 🎯 One Dark
+- ♿ High Contrast
 
 ## 📜 License
 
-MIT License - see [LICENSE.md](LICENSE.md) for details.
+MIT License - see [LICENSE.md](LICENSE.md)
 
-## 🤝 Community
+## 🤝 Contributing
 
-- **GitHub**: [Issues](https://github.com/tabssh/android/issues) | [Discussions](https://github.com/tabssh/android/discussions)
-- **Website**: [tabssh.github.io](https://tabssh.github.io)
-- **Documentation**: [tabssh.github.io/docs](https://tabssh.github.io/docs)
+Contributions welcome! Please read [SPEC.md](SPEC.md) for guidelines.
 
-## 🙏 Acknowledgments
+## 📞 Support
 
-TabSSH is built with:
-- **JSch** - SSH2 pure Java implementation  
-- **Material Design 3** - Modern Android UI
-- **AndroidX** - Jetpack libraries
-- **Room** - SQLite database
-- **Biometric** - Hardware authentication
+- 🐛 [Issues](https://github.com/tabssh/android/issues)
+- 💬 [Discussions](https://github.com/tabssh/android/discussions)
+- 📧 Email: support@tabssh.dev
 
 ---
 
-**TabSSH 1.0.0** - *The complete mobile SSH solution you've been waiting for.*
+**Made with ❤️ for the open-source community**

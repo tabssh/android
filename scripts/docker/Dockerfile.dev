@@ -1,0 +1,101 @@
+# TabSSH Android Development Container
+# Based on Debian 12 with complete Android development environment
+
+FROM debian:12-slim
+
+# Set environment variables
+ENV ANDROID_HOME=/opt/android-sdk
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+ENV PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/34.0.0:$JAVA_HOME/bin
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    # Basic tools
+    curl \
+    wget \
+    unzip \
+    git \
+    build-essential \
+    # Java 17 OpenJDK
+    openjdk-17-jdk \
+    openjdk-17-jre \
+    # Android development dependencies
+    lib32stdc++6 \
+    lib32z1 \
+    libbz2-1.0 \
+    libncurses5 \
+    libncurses6 \
+    # Additional utilities
+    vim \
+    nano \
+    htop \
+    tree \
+    file \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create android-sdk directory
+RUN mkdir -p $ANDROID_HOME
+
+# Download and install Android Command Line Tools
+WORKDIR /tmp
+RUN wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip \
+    && unzip -q commandlinetools-linux-9477386_latest.zip -d $ANDROID_HOME \
+    && rm commandlinetools-linux-9477386_latest.zip
+
+# Reorganize cmdline-tools directory structure
+RUN cd $ANDROID_HOME && \
+    mkdir -p cmdline-tools/latest && \
+    mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
+
+# Accept Android SDK licenses
+RUN yes | sdkmanager --licenses >/dev/null 2>&1 || true
+
+# Install Android SDK components
+RUN sdkmanager --install \
+    "platform-tools" \
+    "platforms;android-34" \
+    "platforms;android-33" \
+    "platforms;android-32" \
+    "platforms;android-31" \
+    "build-tools;34.0.0" \
+    "build-tools;33.0.1" \
+    "build-tools;33.0.0" \
+    "build-tools;32.0.0" \
+    "extras;android;m2repository" \
+    "extras;google;m2repository" \
+    "ndk;25.2.9519653" \
+    "cmake;3.22.1" \
+    >/dev/null 2>&1
+
+# Install Gradle (latest version)
+RUN wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip \
+    && unzip -q gradle-8.5-bin.zip -d /opt \
+    && rm gradle-8.5-bin.zip \
+    && ln -s /opt/gradle-8.5/bin/gradle /usr/local/bin/gradle
+
+# Set up working directory
+WORKDIR /workspace
+
+# Create gradle cache volume mount point
+RUN mkdir -p /home/gradle/.gradle && chmod -R 777 /home/gradle
+
+# Create a non-root user for development
+RUN groupadd -g 1000 developer && \
+    useradd -u 1000 -g 1000 -m -s /bin/bash developer && \
+    usermod -aG sudo developer
+
+# Give developer user access to android SDK
+RUN chown -R developer:developer $ANDROID_HOME /home/gradle
+
+# Set default user
+USER developer
+
+# Verify installation
+RUN java -version && \
+    gradle --version && \
+    adb --version && \
+    sdkmanager --list | head -20
+
+# Set entrypoint
+ENTRYPOINT ["/bin/bash"]
+CMD ["-l"]

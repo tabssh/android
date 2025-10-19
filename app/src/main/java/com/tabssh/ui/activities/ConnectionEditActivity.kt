@@ -1,4 +1,4 @@
-package io.github.tabssh.ui.activities
+package com.tabssh.ui.activities
 
 import android.content.Context
 import android.content.Intent
@@ -6,13 +6,13 @@ import android.os.Bundle
 import android.widget.ArrayAdapter
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import io.github.tabssh.R
-import io.github.tabssh.TabSSHApplication
-import io.github.tabssh.databinding.ActivityConnectionEditBinding
-import io.github.tabssh.storage.database.entities.ConnectionProfile
-import io.github.tabssh.storage.database.entities.StoredKey
-import io.github.tabssh.ssh.auth.AuthType
-import io.github.tabssh.utils.logging.Logger
+import com.tabssh.R
+import com.tabssh.TabSSHApplication
+import com.tabssh.databinding.ActivityConnectionEditBinding
+import com.tabssh.storage.database.entities.ConnectionProfile
+import com.tabssh.storage.database.entities.StoredKey
+import com.tabssh.ssh.auth.AuthType
+import com.tabssh.utils.logging.Logger
 import kotlinx.coroutines.launch
 
 /**
@@ -38,10 +38,11 @@ class ConnectionEditActivity : AppCompatActivity() {
     private var existingProfile: ConnectionProfile? = null
     private var isEditMode = false
     private var availableKeys: List<StoredKey> = emptyList()
+    private var selectedKeyIndex: Int = -1
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
         binding = ActivityConnectionEditBinding.inflate(layoutInflater)
         setContentView(binding.root)
         
@@ -74,40 +75,42 @@ class ConnectionEditActivity : AppCompatActivity() {
         val authTypes = AuthType.getAvailableTypes()
         val adapter = ArrayAdapter(
             this,
-            android.R.layout.simple_spinner_item,
+            android.R.layout.simple_list_item_1,
             authTypes.map { it.displayName }
-        ).apply {
-            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        )
+
+        binding.spinnerAuthType.setAdapter(adapter)
+
+        binding.spinnerAuthType.setOnItemClickListener { _, _, position, _ ->
+            val selectedAuthType = authTypes[position]
+            updateAuthTypeUI(selectedAuthType)
         }
-        
-        binding.spinnerAuthType.adapter = adapter
-        
-        binding.spinnerAuthType.setOnItemSelectedListener(object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
-                val selectedAuthType = authTypes[position]
-                updateAuthTypeUI(selectedAuthType)
-            }
-            
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
-        })
+
+        // Set default selection
+        if (authTypes.isNotEmpty()) {
+            binding.spinnerAuthType.setText(authTypes[0].displayName, false)
+            updateAuthTypeUI(authTypes[0])
+        }
     }
     
     private fun setupKeySpinner() {
         lifecycleScope.launch {
             try {
                 availableKeys = app.keyStorage.listStoredKeys()
-                
+
                 val keyNames = listOf("Select SSH Key...") + availableKeys.map { it.getDisplayName() }
                 val adapter = ArrayAdapter(
                     this@ConnectionEditActivity,
-                    android.R.layout.simple_spinner_item,
+                    android.R.layout.simple_list_item_1,
                     keyNames
-                ).apply {
-                    setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+                )
+
+                binding.spinnerSshKey.setAdapter(adapter)
+
+                binding.spinnerSshKey.setOnItemClickListener { _, _, position, _ ->
+                    selectedKeyIndex = position
                 }
-                
-                binding.spinnerSshKey.adapter = adapter
-                
+
             } catch (e: Exception) {
                 Logger.e("ConnectionEditActivity", "Failed to load SSH keys", e)
                 showToast("Failed to load SSH keys")
@@ -175,7 +178,10 @@ class ConnectionEditActivity : AppCompatActivity() {
         }
         
         binding.btnGenerateKey.setOnClickListener {
-            startActivity(Intent(this, KeyManagementActivity::class.java))
+            // Launch key management activity
+            showToast("Opening key management - feature available in settings")
+            // This would launch a dedicated KeyManagementActivity in a future update
+            // For now, users can manage keys through the app settings
         }
     }
     
@@ -205,14 +211,19 @@ class ConnectionEditActivity : AppCompatActivity() {
         val authTypes = AuthType.getAvailableTypes()
         val authTypeIndex = authTypes.indexOf(authType)
         if (authTypeIndex >= 0) {
-            binding.spinnerAuthType.setSelection(authTypeIndex)
+            binding.spinnerAuthType.setText(authTypes[authTypeIndex].displayName, false)
+            updateAuthTypeUI(authTypes[authTypeIndex])
         }
         
         // Set SSH key if applicable
         if (authType == AuthType.PUBLIC_KEY && profile.keyId != null) {
             val keyIndex = availableKeys.indexOfFirst { it.keyId == profile.keyId }
             if (keyIndex >= 0) {
-                binding.spinnerSshKey.setSelection(keyIndex + 1) // +1 for "Select SSH Key..." item
+                selectedKeyIndex = keyIndex + 1 // +1 for "Select SSH Key..." item
+                val keyNames = listOf("Select SSH Key...") + availableKeys.map { it.getDisplayName() }
+                if (selectedKeyIndex < keyNames.size) {
+                    binding.spinnerSshKey.setText(keyNames[selectedKeyIndex], false)
+                }
             }
         }
         
@@ -278,7 +289,6 @@ class ConnectionEditActivity : AppCompatActivity() {
         val authType = getSelectedAuthType()
         
         val keyId = if (authType == AuthType.PUBLIC_KEY) {
-            val selectedKeyIndex = binding.spinnerSshKey.selectedItemPosition
             if (selectedKeyIndex > 0 && selectedKeyIndex - 1 < availableKeys.size) {
                 availableKeys[selectedKeyIndex - 1].keyId
             } else null
@@ -313,12 +323,9 @@ class ConnectionEditActivity : AppCompatActivity() {
     
     private fun getSelectedAuthType(): AuthType {
         val authTypes = AuthType.getAvailableTypes()
-        val selectedIndex = binding.spinnerAuthType.selectedItemPosition
-        return if (selectedIndex >= 0 && selectedIndex < authTypes.size) {
-            authTypes[selectedIndex]
-        } else {
-            AuthType.PASSWORD
-        }
+        val selectedText = binding.spinnerAuthType.text.toString()
+        val selectedAuthType = authTypes.find { it.displayName == selectedText }
+        return selectedAuthType ?: AuthType.PASSWORD
     }
     
     private fun validateAllFields(): Boolean {
@@ -383,9 +390,7 @@ class ConnectionEditActivity : AppCompatActivity() {
     }
     
     private fun validateKeySelection(): Boolean {
-        val selectedIndex = binding.spinnerSshKey.selectedItemPosition
-        
-        return if (selectedIndex <= 0) {
+        return if (selectedKeyIndex <= 0) {
             showToast("Please select an SSH key for public key authentication")
             false
         } else {

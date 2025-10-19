@@ -1,9 +1,9 @@
-package io.github.tabssh.storage.preferences
+package com.tabssh.storage.preferences
 
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.preference.PreferenceManager as AndroidPreferenceManager
-import io.github.tabssh.utils.logging.Logger
+import com.tabssh.utils.logging.Logger
 
 /**
  * Centralized preference management for TabSSH
@@ -229,6 +229,56 @@ class PreferenceManager(private val context: Context) {
      */
     fun exportPreferences(): String {
         val allPrefs = preferences.all
-        return kotlinx.serialization.json.Json.encodeToString(allPrefs)
+        return org.json.JSONObject(allPrefs as Map<*, *>).toString()
+    }
+
+    // Additional missing methods from compilation errors
+    fun getBackupFrequency(): String = getString(KEY_BACKUP_FREQUENCY, "weekly")
+    fun setAutoBackup(enabled: Boolean) = setBoolean(KEY_AUTO_BACKUP, enabled)
+    fun setBackupFrequency(frequency: String) = setString(KEY_BACKUP_FREQUENCY, frequency)
+
+    fun getTerminalTheme(): String = getString(KEY_THEME, DEFAULT_THEME)
+    fun setTerminalTheme(theme: String) = setString(KEY_THEME, theme)
+
+    fun setCursorBlink(enabled: Boolean) = setBoolean(KEY_CURSOR_BLINK, enabled)
+
+    fun getConnectionPassword(connectionId: String): String? {
+        return getString("password_$connectionId", "")
+    }
+
+    fun setConnectionPassword(connectionId: String, password: String) {
+        setString("password_$connectionId", password)
+    }
+
+    // Proxy settings
+    fun isProxyEnabled(): Boolean = getBoolean("proxy_enabled", false)
+    fun setProxyEnabled(enabled: Boolean) = setBoolean("proxy_enabled", enabled)
+
+    fun getProxyType(): String = getString("proxy_type", "SOCKS5")
+    fun setProxyType(type: String) = setString("proxy_type", type)
+
+    fun getProxyHost(): String = getString("proxy_host", "")
+    fun setProxyHost(host: String) = setString("proxy_host", host)
+
+    fun getProxyPort(): Int = getInt("proxy_port", 1080)
+    fun setProxyPort(port: Int) = setInt("proxy_port", port)
+
+    fun getProxyUsername(): String? = getString("proxy_username", "")
+    fun setProxyUsername(username: String?) = setString("proxy_username", username ?: "")
+
+    fun getProxyPassword(): String? = getString("proxy_password", "")
+    fun setProxyPassword(password: String?) = setString("proxy_password", password ?: "")
+
+    fun getProxyBypassHosts(): List<String> {
+        val hosts = getString("proxy_bypass_hosts", "")
+        return if (hosts.isNotEmpty()) hosts.split(",") else emptyList()
+    }
+    fun setProxyBypassHosts(hosts: List<String>) = setString("proxy_bypass_hosts", hosts.joinToString(","))
+
+    fun getHostProxyConfiguration(host: String): String? {
+        return getString("proxy_host_$host", "")
+    }
+    fun setHostProxyConfiguration(host: String, config: String) {
+        setString("proxy_host_$host", config)
     }
 }

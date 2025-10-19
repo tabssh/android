@@ -1,5 +1,7 @@
-package io.github.tabssh.services
+package com.tabssh.services
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -10,12 +12,12 @@ import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
-import io.github.tabssh.R
-import io.github.tabssh.TabSSHApplication
-import io.github.tabssh.ssh.connection.SessionManagerListener
-import io.github.tabssh.ssh.connection.ConnectionState
-import io.github.tabssh.ui.activities.MainActivity
-import io.github.tabssh.utils.logging.Logger
+import com.tabssh.R
+import com.tabssh.TabSSHApplication
+import com.tabssh.ssh.connection.SessionManagerListener
+import com.tabssh.ssh.connection.ConnectionState
+import com.tabssh.ui.activities.MainActivity
+import com.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
 
 /**

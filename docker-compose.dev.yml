@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  tabssh-dev:
+    build:
+      context: .
+      dockerfile: scripts/docker/Dockerfile.dev
+    container_name: tabssh-android-dev
+    volumes:
+      - .:/workspace
+      - gradle-cache:/root/.gradle
+      - android-sdk:/opt/android-sdk
+    working_dir: /workspace
+    environment:
+      - ANDROID_HOME=/opt/android-sdk
+      - GRADLE_USER_HOME=/root/.gradle
+    command: /bin/bash
+    stdin_open: true
+    tty: true
+    networks:
+      - tabssh-dev-network
+
+  # Optional: Emulator service for testing
+  tabssh-emulator:
+    image: thyrlian/android-sdk
+    container_name: tabssh-emulator
+    privileged: true
+    volumes:
+      - .:/workspace
+      - emulator-data:/root/.android
+    environment:
+      - ANDROID_HOME=/opt/android-sdk
+      - EMULATOR_DEVICE=Nexus_5X_API_30
+    command: |
+      bash -c "
+      sdkmanager 'system-images;android-30;google_apis;x86_64' &&
+      avdmanager create avd -n test_device -k 'system-images;android-30;google_apis;x86_64' -d 'Nexus 5X' &&
+      emulator -avd test_device -no-window -no-audio
+      "
+    networks:
+      - tabssh-dev-network
+    profiles:
+      - with-emulator
+
+volumes:
+  gradle-cache:
+    driver: local
+  android-sdk:
+    driver: local
+  emulator-data:
+    driver: local
+
+networks:
+  tabssh-dev-network:
+    driver: bridge

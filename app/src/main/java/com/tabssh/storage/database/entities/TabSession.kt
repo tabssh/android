@@ -1,60 +1,106 @@
-package io.github.tabssh.storage.database.entities
+package com.tabssh.storage.database.entities
 
-import androidx.room.ColumnInfo
-import androidx.room.Entity
-import androidx.room.PrimaryKey
-import java.util.UUID
+import androidx.room.*
 
 /**
- * Database entity representing a saved tab session for restoration
+ * Entity representing a saved tab session for persistence across app restarts
+ * Stores terminal state, connection info, and session data
  */
-@Entity(tableName = "tab_sessions")
+@Entity(
+    tableName = "tab_sessions",
+    foreignKeys = [
+        ForeignKey(
+            entity = ConnectionProfile::class,
+            parentColumns = ["id"],
+            childColumns = ["connection_id"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [
+        Index("connection_id"),
+        Index("tab_id", unique = true),
+        Index("is_active")
+    ]
+)
 data class TabSession(
     @PrimaryKey
-    val sessionId: String = UUID.randomUUID().toString(),
-    
+    @ColumnInfo(name = "session_id")
+    val sessionId: String,
+
+    @ColumnInfo(name = "tab_id")
+    val tabId: String,
+
     @ColumnInfo(name = "connection_id")
     val connectionId: String,
-    
-    @ColumnInfo(name = "tab_title")
-    val tabTitle: String,
-    
-    @ColumnInfo(name = "tab_order")
-    val tabOrder: Int,
-    
+
+    @ColumnInfo(name = "title")
+    val title: String,
+
     @ColumnInfo(name = "is_active")
     val isActive: Boolean = false,
-    
-    @ColumnInfo(name = "working_directory")
-    val workingDirectory: String? = null,
-    
-    @ColumnInfo(name = "environment_variables")
-    val environmentVariables: String? = null, // JSON string
-    
-    @ColumnInfo(name = "terminal_size_rows")
-    val terminalSizeRows: Int = 24,
-    
-    @ColumnInfo(name = "terminal_size_cols")
-    val terminalSizeCols: Int = 80,
-    
+
+    // Terminal state
+    @ColumnInfo(name = "terminal_content")
+    val terminalContent: String = "",
+
     @ColumnInfo(name = "cursor_row")
     val cursorRow: Int = 0,
-    
+
     @ColumnInfo(name = "cursor_col")
     val cursorCol: Int = 0,
-    
-    @ColumnInfo(name = "scrollback_content")
-    val scrollbackContent: String? = null, // Compressed terminal content
-    
+
+    @ColumnInfo(name = "scroll_position")
+    val scrollPosition: Int = 0,
+
+    // Session environment
+    @ColumnInfo(name = "working_directory")
+    val workingDirectory: String = "/",
+
+    @ColumnInfo(name = "environment_vars")
+    val environmentVars: String = "{}",
+
+    // Session metadata
     @ColumnInfo(name = "created_at")
-    val createdAt: Long = System.currentTimeMillis(),
-    
+    val createdAt: Long,
+
     @ColumnInfo(name = "last_activity")
-    val lastActivity: Long = System.currentTimeMillis(),
-    
-    @ColumnInfo(name = "session_duration")
-    val sessionDuration: Long = 0, // milliseconds
-    
-    @ColumnInfo(name = "bytes_transferred")
-    val bytesTransferred: Long = 0
-)
+    val lastActivity: Long,
+
+    @ColumnInfo(name = "session_state")
+    val sessionState: String = "DISCONNECTED",
+
+    // Terminal settings
+    @ColumnInfo(name = "terminal_rows")
+    val terminalRows: Int = 24,
+
+    @ColumnInfo(name = "terminal_cols")
+    val terminalCols: Int = 80,
+
+    @ColumnInfo(name = "font_size")
+    val fontSize: Float = 14f,
+
+    // Connection state
+    @ColumnInfo(name = "connection_state")
+    val connectionState: String = "DISCONNECTED",
+
+    @ColumnInfo(name = "last_error")
+    val lastError: String? = null,
+
+    // Tab metadata
+    @ColumnInfo(name = "has_unread_output")
+    val hasUnreadOutput: Boolean = false,
+
+    @ColumnInfo(name = "unread_lines")
+    val unreadLines: Int = 0,
+
+    @ColumnInfo(name = "tab_order")
+    val tabOrder: Int = 0
+) {
+    companion object {
+        const val STATE_CONNECTING = "CONNECTING"
+        const val STATE_CONNECTED = "CONNECTED"
+        const val STATE_DISCONNECTED = "DISCONNECTED"
+        const val STATE_ERROR = "ERROR"
+        const val STATE_RECONNECTING = "RECONNECTING"
+    }
+}

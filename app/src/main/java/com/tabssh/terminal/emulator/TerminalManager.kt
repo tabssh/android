@@ -1,8 +1,8 @@
-package io.github.tabssh.terminal.emulator
+package com.tabssh.terminal.emulator
 
 import android.content.Context
-import io.github.tabssh.storage.preferences.PreferenceManager
-import io.github.tabssh.utils.logging.Logger
+import com.tabssh.storage.preferences.PreferenceManager
+import com.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
 import java.util.concurrent.ConcurrentHashMap
 
@@ -66,10 +66,8 @@ class TerminalManager(private val context: Context) {
         }
         
         // Create new terminal
-        val terminal = TerminalEmulator(rows, cols, scrollback).apply {
-            setTerminalType(defaultTerminalType)
-            setEncoding(defaultEncoding)
-        }
+        val buffer = TerminalBuffer(rows, cols)
+        val terminal = TerminalEmulator(buffer)
         
         terminals[terminalId] = terminal
         

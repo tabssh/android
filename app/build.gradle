@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace 'io.github.tabssh'
+    namespace 'com.tabssh'
     compileSdk 34
 
     defaultConfig {
-        applicationId "io.github.tabssh"
+        applicationId "com.tabssh"
         minSdk 21  // Android 5.0 (covers 99%+ of devices)
         targetSdk 34
         versionCode 1
@@ -109,6 +109,14 @@ android {
     testOptions {
         unitTests.includeAndroidResources = true
     }
+
+    // Custom APK naming: tabssh-{arch}.apk
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            def abiName = output.getFilter(com.android.build.OutputFile.ABI) ?: "universal"
+            outputFileName = "tabssh-${abiName}.apk"
+        }
+    }
 }
 
 dependencies {
@@ -144,6 +152,7 @@ dependencies {
     
     // JSON handling
     implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0'
+    implementation 'com.google.code.gson:gson:2.10.1'
     
     // Coroutines
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'

@@ -1,10 +1,10 @@
-package io.github.tabssh.utils.performance
+package com.tabssh.utils.performance
 
 import android.content.Context
 import android.os.BatteryManager
 import android.os.PowerManager
 import android.os.Process
-import io.github.tabssh.utils.logging.Logger
+import com.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -210,13 +210,36 @@ class PerformanceManager(private val context: Context) {
     }
     
     private fun getCPUUsage(): Float {
-        // Simplified CPU usage calculation
-        // Real implementation would track process CPU time
+        // Calculate CPU usage by reading /proc/stat and /proc/[pid]/stat
+        // This provides approximate CPU usage percentage for the app
         return try {
-            val statFile = "/proc/${Process.myPid()}/stat"
-            // This is a placeholder - real CPU monitoring is more complex
-            0.0f
+            val pid = Process.myPid()
+            val statFile = java.io.File("/proc/$pid/stat")
+
+            if (!statFile.exists()) return 0.0f
+
+            val statContent = statFile.readText()
+            val stats = statContent.split(" ")
+
+            // /proc/[pid]/stat format:
+            // Fields 14-17 contain: utime, stime, cutime, cstime (in clock ticks)
+            if (stats.size < 17) return 0.0f
+
+            val utime = stats[13].toLongOrNull() ?: 0L // User mode time
+            val stime = stats[14].toLongOrNull() ?: 0L // Kernel mode time
+
+            // Get system uptime to calculate percentage
+            val uptimeFile = java.io.File("/proc/uptime")
+            val uptime = uptimeFile.readText().split(" ")[0].toFloatOrNull() ?: 0f
+
+            // Calculate CPU usage (simplified)
+            val processTime = (utime + stime) / 100.0f // Convert clock ticks to seconds
+            val cpuUsage = (processTime / uptime) * 100.0f
+
+            cpuUsage.coerceIn(0f, 100f)
+
         } catch (e: Exception) {
+            Logger.e("PerformanceManager", "Error calculating CPU usage", e)
             0.0f
         }
     }
