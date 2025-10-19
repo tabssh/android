@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: scripts/docker/Dockerfile.dev
-    container_name: tabssh-android-dev
+    container_name: ghcr.io/tabssh/android:dev
     volumes:
       - .:/workspace
       - gradle-cache:/root/.gradle
@@ -53,3 +53,4 @@ volumes:
 networks:
   tabssh-dev-network:
     driver: bridge
+
