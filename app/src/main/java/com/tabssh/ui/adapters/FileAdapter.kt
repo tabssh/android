@@ -1,11 +1,11 @@
-package io.github.tabssh.ui.adapters
+package com.tabssh.ui.adapters
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
-import io.github.tabssh.R
-import io.github.tabssh.databinding.ItemFileBinding
-import io.github.tabssh.sftp.RemoteFileInfo
+import com.tabssh.R
+import com.tabssh.databinding.ItemFileBinding
+import com.tabssh.sftp.RemoteFileInfo
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -14,45 +14,49 @@ import java.util.*
  * Adapter for displaying files in SFTP browser
  * Supports both local files and remote files
  */
-class FileAdapter : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
-    
+class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
+
     // Local files
     private var localFiles: List<File> = emptyList()
     private var onFileClick: ((File) -> Unit)? = null
     private var onFileLongClick: ((File) -> Unit)? = null
-    
+
     // Remote files
     private var remoteFiles: List<RemoteFileInfo> = emptyList()
     private var onRemoteFileClick: ((RemoteFileInfo) -> Unit)? = null
     private var onRemoteFileLongClick: ((RemoteFileInfo) -> Unit)? = null
-    
+
     private var isRemote = false
     private val dateFormat = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault())
-    
-    // Constructor for local files
-    constructor(
+
+    /**
+     * Set local files to display
+     */
+    fun setLocalFiles(
         files: List<File>,
-        isRemote: Boolean = false,
         onFileClick: ((File) -> Unit)? = null,
         onFileLongClick: ((File) -> Unit)? = null
     ) {
         this.localFiles = files
-        this.isRemote = isRemote
+        this.isRemote = false
         this.onFileClick = onFileClick
         this.onFileLongClick = onFileLongClick
+        notifyDataSetChanged()
     }
-    
-    // Constructor for remote files
-    constructor(
-        remoteFiles: List<RemoteFileInfo>,
-        isRemote: Boolean = true,
+
+    /**
+     * Set remote files to display
+     */
+    fun setRemoteFiles(
+        files: List<RemoteFileInfo>,
         onRemoteFileClick: ((RemoteFileInfo) -> Unit)? = null,
         onRemoteFileLongClick: ((RemoteFileInfo) -> Unit)? = null
     ) {
-        this.remoteFiles = remoteFiles
-        this.isRemote = isRemote
+        this.remoteFiles = files
+        this.isRemote = true
         this.onRemoteFileClick = onRemoteFileClick
         this.onRemoteFileLongClick = onRemoteFileLongClick
+        notifyDataSetChanged()
     }
     
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): FileViewHolder {

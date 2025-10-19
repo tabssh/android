@@ -1,8 +1,8 @@
-package io.github.tabssh.ssh.forwarding
+package com.tabssh.ssh.forwarding
 
 import com.jcraft.jsch.Session
-import io.github.tabssh.ssh.connection.SSHConnection
-import io.github.tabssh.utils.logging.Logger
+import com.tabssh.ssh.connection.SSHConnection
+import com.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -170,9 +170,9 @@ class PortForwardingManager(private val sshConnection: SSHConnection) {
                     true
                 }
                 TunnelType.DYNAMIC_FORWARD -> {
-                    val assignedPort = session.setPortForwardingL(tunnel.localPort)
-                    tunnel.actualLocalPort = assignedPort
-                    assignedPort > 0
+                    session.setPortForwardingL(tunnel.localPort.toString())
+                    tunnel.actualLocalPort = tunnel.localPort
+                    true
                 }
             }
             
@@ -338,9 +338,17 @@ class PortForwardingManager(private val sshConnection: SSHConnection) {
     }
     
     private fun getSSHSession(): Session? {
-        // This would get the JSch Session from the SSH connection
-        // Implementation depends on how SSHConnection exposes the session
-        return null // Placeholder - would need actual session access
+        // Get the JSch Session from the SSH connection
+        // This uses Java reflection to access the internal session since
+        // SSHConnection doesn't expose it directly in the public API
+        return try {
+            val sessionField = sshConnection.javaClass.getDeclaredField("session")
+            sessionField.isAccessible = true
+            sessionField.get(sshConnection) as? Session
+        } catch (e: Exception) {
+            Logger.e("PortForwardingManager", "Failed to get SSH session for port forwarding", e)
+            null
+        }
     }
     
     private fun generateTunnelId(): String = java.util.UUID.randomUUID().toString()

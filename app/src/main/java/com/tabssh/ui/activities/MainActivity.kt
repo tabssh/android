@@ -1,4 +1,4 @@
-package io.github.tabssh.ui.activities
+package com.tabssh.ui.activities
 
 import android.content.Intent
 import android.os.Bundle
@@ -6,12 +6,12 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
-import io.github.tabssh.R
-import io.github.tabssh.TabSSHApplication
-import io.github.tabssh.databinding.ActivityMainBinding
-import io.github.tabssh.storage.database.entities.ConnectionProfile
-import io.github.tabssh.ui.adapters.ConnectionAdapter
-import io.github.tabssh.utils.logging.Logger
+import com.tabssh.R
+import com.tabssh.TabSSHApplication
+import com.tabssh.databinding.ActivityMainBinding
+import com.tabssh.storage.database.entities.ConnectionProfile
+import com.tabssh.ui.adapters.ConnectionAdapter
+import com.tabssh.utils.logging.Logger
 import kotlinx.coroutines.launch
 
 /**
@@ -184,7 +184,7 @@ class MainActivity : AppCompatActivity() {
                     showAuthenticationDialog(profile)
                 } else {
                     // Connect directly - start background service for persistent connections
-                    io.github.tabssh.services.SSHConnectionService.startService(this@MainActivity)
+                    com.tabssh.services.SSHConnectionService.startService(this@MainActivity)
                     
                     val intent = TabTerminalActivity.createIntent(this@MainActivity, profile, autoConnect = true)
                     startActivity(intent)

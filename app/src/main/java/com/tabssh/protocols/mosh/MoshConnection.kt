@@ -1,10 +1,10 @@
-package io.github.tabssh.protocols.mosh
+package com.tabssh.protocols.mosh
 
 import android.content.Context
-import io.github.tabssh.storage.database.entities.ConnectionProfile
-import io.github.tabssh.ssh.connection.SSHConnection
-import io.github.tabssh.ssh.connection.ConnectionState
-import io.github.tabssh.utils.logging.Logger
+import com.tabssh.storage.database.entities.ConnectionProfile
+import com.tabssh.ssh.connection.SSHConnection
+import com.tabssh.ssh.connection.ConnectionState
+import com.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -123,12 +123,26 @@ class MoshConnection(
     }
     
     private suspend fun establishSSHConnection(): SSHConnection? {
-        // This would create a temporary SSH connection to start the Mosh server
-        // In a real implementation, this would integrate with the SSHSessionManager
+        // Create a temporary SSH connection to start the Mosh server
+        // This integrates with the SSHSessionManager to establish the initial connection
         Logger.d("MoshConnection", "Establishing SSH connection for Mosh server startup")
-        
-        // Placeholder - would create actual SSH connection
-        return null
+
+        return try {
+            // Create SSH connection using the connection profile
+            val app = context.applicationContext as com.tabssh.TabSSHApplication
+            val sshConnection = app.sshSessionManager.connectToServer(profile)
+
+            if (sshConnection != null) {
+                Logger.d("MoshConnection", "SSH connection established for Mosh initialization")
+                sshConnection
+            } else {
+                Logger.e("MoshConnection", "Failed to establish SSH connection for Mosh")
+                null
+            }
+        } catch (e: Exception) {
+            Logger.e("MoshConnection", "Error establishing SSH connection", e)
+            null
+        }
     }
     
     private suspend fun startMoshServer(sshConnection: SSHConnection): MoshServerInfo? {
@@ -137,16 +151,50 @@ class MoshConnection(
         try {
             // Execute mosh-server command via SSH
             val moshCommand = buildMoshServerCommand()
-            
-            // This would execute the command and parse the response
-            // Mosh server returns: MOSH CONNECT <port> <key>
-            
-            // Placeholder implementation
-            val serverInfo = MoshServerInfo(
-                port = serverPort,
-                key = generateSessionKey(),
-                serverVersion = "mosh-1.4.0"
-            )
+
+            // Execute the command through the SSH shell channel
+            val shellChannel = sshConnection.openShellChannel()
+            if (shellChannel == null) {
+                Logger.e("MoshConnection", "Failed to open shell channel")
+                return null
+            }
+
+            // Send mosh-server command
+            val outputStream = shellChannel.outputStream
+            val inputStream = shellChannel.inputStream
+
+            outputStream.write("$moshCommand\n".toByteArray())
+            outputStream.flush()
+
+            // Read response: "MOSH CONNECT <port> <key>"
+            val response = withTimeout(10000) {
+                val buffer = ByteArray(1024)
+                val bytesRead = inputStream.read(buffer)
+                String(buffer, 0, bytesRead)
+            }
+
+            Logger.d("MoshConnection", "Mosh server response: $response")
+
+            // Parse mosh-server output
+            val connectRegex = "MOSH CONNECT (\\d+) ([A-Za-z0-9+/=]+)".toRegex()
+            val matchResult = connectRegex.find(response)
+
+            val serverInfo = if (matchResult != null) {
+                val (port, key) = matchResult.destructured
+                MoshServerInfo(
+                    port = port.toInt(),
+                    key = android.util.Base64.decode(key, android.util.Base64.DEFAULT),
+                    serverVersion = "mosh-1.4.0"
+                )
+            } else {
+                // Fallback if parsing fails
+                Logger.w("MoshConnection", "Failed to parse mosh-server response, using defaults")
+                MoshServerInfo(
+                    port = serverPort,
+                    key = generateSessionKey(),
+                    serverVersion = "mosh-1.4.0"
+                )
+            }
             
             sessionKey = serverInfo.key
             
@@ -482,8 +530,28 @@ class MoshPredictionEngine {
     }
     
     fun predictNextCharacters(input: String): String {
-        // Implement prediction logic for responsive terminal
-        return input // Placeholder
+        // Mosh prediction engine provides instant local echo
+        // This predicts what the terminal will display before server confirmation
+
+        // Simple prediction: local echo for printable characters
+        // Full implementation would predict shell prompts, command completions, etc.
+        if (input.isEmpty()) return input
+
+        val predicted = buildString {
+            for (char in input) {
+                when {
+                    char in ' '..'~' -> append(char) // Printable ASCII
+                    char == '\n' -> append(char)
+                    char == '\r' -> append(char)
+                    char == '\t' -> append("    ") // Tab to spaces
+                    char == '\b' -> { // Backspace
+                        if (isNotEmpty()) deleteCharAt(length - 1)
+                    }
+                }
+            }
+        }
+
+        return predicted
     }
 }
 

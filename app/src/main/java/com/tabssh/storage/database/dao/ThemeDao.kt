@@ -1,8 +1,8 @@
-package io.github.tabssh.storage.database.dao
+package com.tabssh.storage.database.dao
 
 import androidx.lifecycle.LiveData
 import androidx.room.*
-import io.github.tabssh.storage.database.entities.ThemeDefinition
+import com.tabssh.storage.database.entities.ThemeDefinition
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -19,6 +19,9 @@ interface ThemeDao {
     
     @Query("SELECT * FROM themes WHERE themeId = :themeId")
     suspend fun getThemeById(themeId: String): ThemeDefinition?
+
+    @Query("SELECT * FROM themes WHERE themeId = :themeId")
+    suspend fun getTheme(themeId: String): ThemeDefinition?
     
     @Query("SELECT * FROM themes WHERE name = :name")
     suspend fun getThemeByName(name: String): ThemeDefinition?

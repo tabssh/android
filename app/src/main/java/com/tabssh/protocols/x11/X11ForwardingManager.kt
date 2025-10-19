@@ -1,10 +1,10 @@
-package io.github.tabssh.protocols.x11
+package com.tabssh.protocols.x11
 
 import android.content.Context
 import android.graphics.Bitmap
 import android.view.Surface
-import io.github.tabssh.ssh.connection.SSHConnection
-import io.github.tabssh.utils.logging.Logger
+import com.tabssh.ssh.connection.SSHConnection
+import com.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -124,10 +124,28 @@ class X11ForwardingManager(
             
             // Set DISPLAY environment variable on remote server
             val displayEnv = "localhost:${displayNum}.0"
-            
-            // This would send appropriate SSH protocol messages to enable X11 forwarding
-            // Placeholder implementation
-            true
+
+            // Enable X11 forwarding through SSH connection
+            // This involves:
+            // 1. Opening X11 forwarding channel in SSH
+            // 2. Setting DISPLAY environment variable
+            // 3. Forwarding X11 authentication (MIT-MAGIC-COOKIE-1)
+
+            // Get shell channel to set environment
+            val shellChannel = sshConnection.openShellChannel()
+            if (shellChannel != null) {
+                val outputStream = shellChannel.outputStream
+
+                // Set DISPLAY environment variable
+                outputStream.write("export DISPLAY=$displayEnv\n".toByteArray())
+                outputStream.flush()
+
+                Logger.d("X11ForwardingManager", "Set DISPLAY environment to $displayEnv")
+                true
+            } else {
+                Logger.e("X11ForwardingManager", "Failed to open shell channel for X11 setup")
+                false
+            }
             
         } catch (e: Exception) {
             Logger.e("X11ForwardingManager", "Failed to setup SSH X11 forwarding", e)

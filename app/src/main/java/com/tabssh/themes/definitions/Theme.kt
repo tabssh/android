@@ -1,4 +1,4 @@
-package io.github.tabssh.themes.definitions
+package com.tabssh.themes.definitions
 
 /**
  * Represents a complete terminal theme with colors and UI customization

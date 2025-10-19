@@ -1,10 +1,13 @@
-package io.github.tabssh.sftp
+package com.tabssh.sftp
+import java.util.UUID
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 import com.jcraft.jsch.ChannelSftp
 import com.jcraft.jsch.SftpATTRS
 import com.jcraft.jsch.SftpException
-import io.github.tabssh.ssh.connection.SSHConnection
-import io.github.tabssh.utils.logging.Logger
+import com.tabssh.ssh.connection.SSHConnection
+import com.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -109,8 +112,8 @@ class SFTPManager(private val sshConnection: SSHConnection) {
                         isDirectory = entry.attrs.isDir,
                         isSymlink = entry.attrs.isLink,
                         modifiedTime = entry.attrs.mTime * 1000L,
-                        owner = entry.attrs.uid,
-                        group = entry.attrs.gid
+                        owner = entry.attrs.uId,
+                        group = entry.attrs.gId
                     )
                 }
             }.sortedWith(compareBy<RemoteFileInfo> { !it.isDirectory }.thenBy { it.name.lowercase() })
@@ -139,8 +142,8 @@ class SFTPManager(private val sshConnection: SSHConnection) {
                 isDirectory = attrs.isDir,
                 isSymlink = attrs.isLink,
                 modifiedTime = attrs.mTime * 1000L,
-                owner = attrs.uid,
-                group = attrs.gid
+                owner = attrs.uId,
+                group = attrs.gId
             )
         } catch (e: SftpException) {
             Logger.e("SFTPManager", "Failed to get attributes for $path", e)
@@ -246,9 +249,9 @@ class SFTPManager(private val sshConnection: SSHConnection) {
                     0L
                 }
             } else 0L
-            
-            task.bytesTransferred = startOffset
-            
+
+            task.setBytesTransferred(startOffset)
+
             // Perform upload with progress monitoring
             val outputStream = if (startOffset > 0) {
                 channel.put(task.remotePath, ChannelSftp.RESUME)
@@ -314,25 +317,26 @@ class SFTPManager(private val sshConnection: SSHConnection) {
                     localSize
                 } else 0L
             } else 0L
-            
-            task.bytesTransferred = startOffset
-            
+
+            task.setBytesTransferred(startOffset)
+
             // Perform download with progress monitoring
-            val inputStream = if (startOffset > 0) {
-                channel.get(task.remotePath, startOffset)
-            } else {
-                channel.get(task.remotePath)
+            val inputStream = channel.get(task.remotePath)
+
+            // Skip bytes if resuming
+            if (startOffset > 0) {
+                inputStream.skip(startOffset)
             }
-            
+
             val outputStream = if (startOffset > 0) {
-                localFile.outputStream().apply { 
+                localFile.outputStream().apply {
                     close() // Close and reopen in append mode
                 }
                 localFile.appendOutputStream()
             } else {
                 localFile.outputStream()
             }
-            
+
             outputStream.use { output ->
                 transferWithProgress(inputStream, output, task)
             }
@@ -595,15 +599,15 @@ class SFTPManager(private val sshConnection: SSHConnection) {
     private fun getLocalFilePermissions(file: File): Int {
         // Convert Java file permissions to Unix octal format
         var permissions = 0
-        if (file.canRead()) permissions = permissions or 0o400
-        if (file.canWrite()) permissions = permissions or 0o200
-        if (file.canExecute()) permissions = permissions or 0o100
+        if (file.canRead()) permissions = permissions or 0x100  // 0400 in octal
+        if (file.canWrite()) permissions = permissions or 0x80   // 0200 in octal
+        if (file.canExecute()) permissions = permissions or 0x40 // 0100 in octal
         
         // Default to 644 for files, 755 for directories if no specific permissions
         return if (permissions == 0) {
-            if (file.isDirectory) 0o755 else 0o644
+            if (file.isDirectory) 0x1ed else 0x1a4  // 0755 and 0644 in hexadecimal
         } else {
-            permissions or 0o044 // Add group/other read permissions
+            permissions or 0x24 // Add group/other read permissions (044 in octal)
         }
     }
     

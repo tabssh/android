@@ -1,11 +1,11 @@
-package io.github.tabssh.ui.adapters
+package com.tabssh.ui.adapters
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
-import io.github.tabssh.databinding.ItemConnectionBinding
-import io.github.tabssh.storage.database.entities.ConnectionProfile
-import io.github.tabssh.utils.logging.Logger
+import com.tabssh.databinding.ItemConnectionBinding
+import com.tabssh.storage.database.entities.ConnectionProfile
+import com.tabssh.utils.logging.Logger
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -13,12 +13,19 @@ import java.util.*
  * RecyclerView adapter for displaying SSH connection profiles
  */
 class ConnectionAdapter(
-    private val connections: List<ConnectionProfile>,
-    private val onConnectionClick: (ConnectionProfile) -> Unit,
-    private val onConnectionLongClick: (ConnectionProfile) -> Unit,
-    private val onConnectionEdit: (ConnectionProfile) -> Unit,
-    private val onConnectionDelete: (ConnectionProfile) -> Unit
-) : RecyclerView.Adapter<ConnectionAdapter.ConnectionViewHolder>() {
+    private val onConnectionClick: (ConnectionProfile) -> Unit
+) : androidx.recyclerview.widget.ListAdapter<ConnectionProfile, ConnectionAdapter.ConnectionViewHolder>(DiffCallback()) {
+
+    // Alternative constructor for more detailed event handling
+    constructor(
+        connections: List<ConnectionProfile>,
+        onConnectionClick: (ConnectionProfile) -> Unit,
+        onConnectionLongClick: (ConnectionProfile) -> Unit,
+        onConnectionEdit: (ConnectionProfile) -> Unit,
+        onConnectionDelete: (ConnectionProfile) -> Unit
+    ) : this(onConnectionClick) {
+        submitList(connections)
+    }
     
     private val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
     
@@ -28,32 +35,19 @@ class ConnectionAdapter(
     }
     
     override fun onBindViewHolder(holder: ConnectionViewHolder, position: Int) {
-        val connection = connections[position]
-        holder.bind(connection)
+        holder.bind(getItem(position))
     }
     
-    override fun getItemCount(): Int = connections.size
     
     inner class ConnectionViewHolder(
         private val binding: ItemConnectionBinding
     ) : RecyclerView.ViewHolder(binding.root) {
-        
+
         init {
-            // Set up click listeners
             binding.root.setOnClickListener {
                 val position = adapterPosition
                 if (position != RecyclerView.NO_POSITION) {
-                    onConnectionClick(connections[position])
-                }
-            }
-            
-            binding.root.setOnLongClickListener {
-                val position = adapterPosition
-                if (position != RecyclerView.NO_POSITION) {
-                    onConnectionLongClick(connections[position])
-                    true
-                } else {
-                    false
+                    onConnectionClick(getItem(position))
                 }
             }
         }
@@ -128,6 +122,16 @@ class ConnectionAdapter(
             // 1. Check SSHSessionManager for active connections
             // 2. Update indicator color based on connection state
             // 3. Show connecting/connected/error states
+        }
+    }
+
+    class DiffCallback : androidx.recyclerview.widget.DiffUtil.ItemCallback<ConnectionProfile>() {
+        override fun areItemsTheSame(oldItem: ConnectionProfile, newItem: ConnectionProfile): Boolean {
+            return oldItem.id == newItem.id
+        }
+
+        override fun areContentsTheSame(oldItem: ConnectionProfile, newItem: ConnectionProfile): Boolean {
+            return oldItem == newItem
         }
     }
 }

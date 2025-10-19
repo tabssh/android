@@ -1,11 +1,11 @@
-package io.github.tabssh.platform
+package com.tabssh.platform
 
 import android.content.Context
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Build
 import android.view.KeyEvent
-import io.github.tabssh.utils.logging.Logger
+import com.tabssh.utils.logging.Logger
 
 /**
  * Manages platform-specific optimizations for Android TV and Chromebook
@@ -331,9 +331,9 @@ class PlatformManager(private val context: Context) {
     fun getCurrentPlatform(): Platform = currentPlatform
     fun getCurrentInputMode(): InputMode = inputMode
     
-    fun isAndroidTV(): Boolean = currentPlatform == Platform.ANDROID_TV
-    fun isChromebook(): Boolean = currentPlatform == Platform.CHROMEBOOK
-    fun isTablet(): Boolean = currentPlatform == Platform.TABLET
+    fun isPlatformAndroidTV(): Boolean = currentPlatform == Platform.ANDROID_TV
+    fun isPlatformChromebook(): Boolean = currentPlatform == Platform.CHROMEBOOK
+    fun isPlatformTablet(): Boolean = currentPlatform == Platform.TABLET
     fun isPhone(): Boolean = currentPlatform == Platform.PHONE
     
     fun hasHardwareKeyboard(): Boolean = inputMode == InputMode.HARDWARE_KEYBOARD

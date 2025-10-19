@@ -1,10 +1,10 @@
-package io.github.tabssh.ui.tabs
+package com.tabssh.ui.tabs
 
-import io.github.tabssh.storage.database.entities.ConnectionProfile
-import io.github.tabssh.ssh.connection.SSHConnection
-import io.github.tabssh.ssh.connection.ConnectionState
-import io.github.tabssh.terminal.emulator.TerminalEmulator
-import io.github.tabssh.utils.logging.Logger
+import com.tabssh.storage.database.entities.ConnectionProfile
+import com.tabssh.ssh.connection.SSHConnection
+import com.tabssh.ssh.connection.ConnectionState
+import com.tabssh.terminal.emulator.TerminalEmulator
+import com.tabssh.utils.logging.Logger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -57,14 +57,11 @@ class SSHTab(
     
     init {
         Logger.d("SSHTab", "Created tab ${profile.getDisplayName()}")
-        
+
         // Set up terminal listener to track activity
         setupTerminalListener()
-        
-        // Set initial title from terminal if available
-        terminal.title.value.takeIf { it != "Terminal" }?.let { terminalTitle ->
-            _title.value = terminalTitle
-        }
+
+        // Title will be updated via onTitleChanged listener
     }
     
     private fun setupTerminalListener() {
@@ -72,19 +69,19 @@ class SSHTab(
             override fun onDataReceived(data: ByteArray) {
                 updateActivity()
                 bytesReceived += data.size
-                
+
                 // Mark as having unread output if tab is not active
                 if (!_isActive.value) {
                     _hasUnreadOutput.value = true
                     _unreadLines.value += 1
                 }
             }
-            
+
             override fun onDataSent(data: ByteArray) {
                 updateActivity()
                 bytesSent += data.size
             }
-            
+
             override fun onTitleChanged(newTitle: String) {
                 // Update tab title from terminal (e.g., from OSC sequences)
                 if (newTitle.isNotBlank()) {
@@ -94,18 +91,18 @@ class SSHTab(
                 }
                 Logger.d("SSHTab", "Tab title changed to: $newTitle")
             }
-            
+
             override fun onTerminalError(error: Exception) {
                 _hasError.value = true
                 Logger.e("SSHTab", "Terminal error in tab ${profile.getDisplayName()}", error)
             }
-            
+
             override fun onTerminalConnected() {
                 sessionStartTime = System.currentTimeMillis()
                 _connectionState.value = ConnectionState.CONNECTED
                 _hasError.value = false
             }
-            
+
             override fun onTerminalDisconnected() {
                 _connectionState.value = ConnectionState.DISCONNECTED
             }
@@ -314,13 +311,21 @@ class SSHTab(
     fun resetTitle() {
         _title.value = profile.getDisplayName()
     }
-    
+
+    /**
+     * Paste clipboard content into terminal
+     */
+    fun paste(clipboardText: String) {
+        sendText(clipboardText)
+        Logger.d("SSHTab", "Pasted ${clipboardText.length} characters to terminal")
+    }
+
     /**
      * Cleanup tab resources
      */
     fun cleanup() {
         Logger.d("SSHTab", "Cleaning up tab ${profile.getDisplayName()}")
-        
+
         disconnect()
         terminal.cleanup()
     }

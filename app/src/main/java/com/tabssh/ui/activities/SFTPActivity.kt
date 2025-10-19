@@ -1,4 +1,4 @@
-package io.github.tabssh.ui.activities
+package com.tabssh.ui.activities
 
 import android.content.Context
 import android.content.Intent
@@ -8,16 +8,16 @@ import android.view.MenuItem
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
-import io.github.tabssh.R
-import io.github.tabssh.TabSSHApplication
-import io.github.tabssh.databinding.ActivitySftpBinding
-import io.github.tabssh.sftp.RemoteFileInfo
-import io.github.tabssh.sftp.SFTPManager
-import io.github.tabssh.sftp.TransferTask
-import io.github.tabssh.sftp.TransferListener
-import io.github.tabssh.ui.adapters.FileAdapter
-import io.github.tabssh.ui.adapters.TransferAdapter
-import io.github.tabssh.utils.logging.Logger
+import com.tabssh.R
+import com.tabssh.TabSSHApplication
+import com.tabssh.databinding.ActivitySftpBinding
+import com.tabssh.sftp.RemoteFileInfo
+import com.tabssh.sftp.SFTPManager
+import com.tabssh.sftp.TransferTask
+import com.tabssh.sftp.TransferListener
+import com.tabssh.ui.adapters.FileAdapter
+import com.tabssh.ui.adapters.TransferAdapter
+import com.tabssh.utils.logging.Logger
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -124,26 +124,26 @@ class SFTPActivity : AppCompatActivity() {
     
     private fun setupFileAdapters() {
         // Local file adapter
-        localFileAdapter = FileAdapter(
+        localFileAdapter = FileAdapter()
+        localFileAdapter.setLocalFiles(
             files = localFiles,
-            isRemote = false,
             onFileClick = { file -> handleLocalFileClick(file) },
             onFileLongClick = { file -> showLocalFileMenu(file) }
         )
-        
+
         binding.recyclerLocalFiles.apply {
             layoutManager = LinearLayoutManager(this@SFTPActivity)
             adapter = localFileAdapter
         }
-        
+
         // Remote file adapter
-        remoteFileAdapter = FileAdapter(
-            remoteFiles = remoteFiles,
-            isRemote = true,
+        remoteFileAdapter = FileAdapter()
+        remoteFileAdapter.setRemoteFiles(
+            files = remoteFiles,
             onRemoteFileClick = { file -> handleRemoteFileClick(file) },
             onRemoteFileLongClick = { file -> showRemoteFileMenu(file) }
         )
-        
+
         binding.recyclerRemoteFiles.apply {
             layoutManager = LinearLayoutManager(this@SFTPActivity)
             adapter = remoteFileAdapter
@@ -280,15 +280,17 @@ class SFTPActivity : AppCompatActivity() {
     }
     
     private fun uploadSelectedFiles() {
-        // This would upload selected local files to current remote directory
-        // For now, show placeholder message
-        showToast("Upload functionality - select files to upload")
+        // Upload selected local files to current remote directory
+        // TODO: Implement file selection in FileAdapter
+        showToast("Please use long-press to upload individual files")
+        Logger.d("SFTPActivity", "Upload selected files - feature pending file adapter selection support")
     }
-    
+
     private fun downloadSelectedFiles() {
-        // This would download selected remote files to current local directory
-        // For now, show placeholder message
-        showToast("Download functionality - select files to download")
+        // Download selected remote files to current local directory
+        // TODO: Implement file selection in FileAdapter
+        showToast("Please use long-press to download individual files")
+        Logger.d("SFTPActivity", "Download selected files - feature pending file adapter selection support")
     }
     
     private fun showCreateFolderDialog() {
@@ -682,56 +684,11 @@ class SFTPActivity : AppCompatActivity() {
     
     override fun onDestroy() {
         super.onDestroy()
-        
+
         if (::sftpManager.isInitialized) {
             sftpManager.cleanup()
         }
-        
+
         Logger.d("SFTPActivity", "SFTP activity destroyed")
     }
 }
-    /**
-     * CRITICAL INTEGRATION: Actually perform file upload
-     */
-    private fun performUpload(localFile: File, remotePath: String) {
-        if (!::sftpManager.isInitialized) return
-        
-        lifecycleScope.launch {
-            try {
-                val transferTask = sftpManager.uploadFile(
-                    localFile = localFile,
-                    remotePath = remotePath,
-                    listener = createTransferListener()
-                )
-                
-                activeTransfers.add(transferTask)
-                transferAdapter.notifyItemInserted(activeTransfers.size - 1)
-                
-                showToast("📤 Uploading: ${localFile.name}")
-                
-            } catch (e: Exception) {
-                Logger.e("SFTPActivity", "Upload failed", e)
-                showToast("Upload failed: ${e.message}")
-            }
-        }
-    }
-    
-    private fun createTransferListener(): io.github.tabssh.sftp.TransferListener {
-        return object : io.github.tabssh.sftp.TransferListener {
-            override fun onProgress(transfer: io.github.tabssh.sftp.TransferTask, bytesTransferred: Long, totalBytes: Long) {
-                runOnUiThread {
-                    updateTransferProgress(transfer)
-                }
-            }
-            
-            override fun onCompleted(transfer: io.github.tabssh.sftp.TransferTask, result: io.github.tabssh.sftp.TransferResult) {
-                runOnUiThread {
-                    handleTransferCompleted(transfer, result)
-                    
-                    // Refresh file lists
-                    loadLocalDirectory(currentLocalPath)
-                    loadRemoteDirectory(currentRemotePath)
-                }
-            }
-        }
-    }

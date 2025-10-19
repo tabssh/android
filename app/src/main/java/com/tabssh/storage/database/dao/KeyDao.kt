@@ -1,8 +1,8 @@
-package io.github.tabssh.storage.database.dao
+package com.tabssh.storage.database.dao
 
 import androidx.lifecycle.LiveData
 import androidx.room.*
-import io.github.tabssh.storage.database.entities.StoredKey
+import com.tabssh.storage.database.entities.StoredKey
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -19,6 +19,9 @@ interface KeyDao {
     
     @Query("SELECT * FROM stored_keys WHERE keyId = :keyId")
     suspend fun getKeyById(keyId: String): StoredKey?
+
+    @Query("SELECT * FROM stored_keys WHERE keyId = :keyId")
+    suspend fun getKey(keyId: String): StoredKey?
     
     @Query("SELECT * FROM stored_keys WHERE name = :name")
     suspend fun getKeyByName(name: String): StoredKey?

@@ -130,12 +130,19 @@ build/
 local.properties
 # Log/OS Files
 *.log
+*.txt
+build-logs/
 # Android Studio generated files and folders
 captures/
 .externalNativeBuild/
 .cxx/
 *.apk
 output.json
+
+# ignore all APKs
+binaries/**
+Ireleases/**
+
 # IntelliJ
 *.iml
 .idea/

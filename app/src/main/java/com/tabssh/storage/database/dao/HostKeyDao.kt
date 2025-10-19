@@ -1,7 +1,7 @@
-package io.github.tabssh.storage.database.dao
+package com.tabssh.storage.database.dao
 
 import androidx.room.*
-import io.github.tabssh.storage.database.entities.HostKeyEntry
+import com.tabssh.storage.database.entities.HostKeyEntry
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -30,6 +30,9 @@ interface HostKeyDao {
     
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdateHostKey(hostKey: HostKeyEntry)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertHostKey(hostKey: HostKeyEntry)
     
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdateHostKeys(hostKeys: List<HostKeyEntry>)

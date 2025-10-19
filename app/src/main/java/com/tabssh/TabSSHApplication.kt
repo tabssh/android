@@ -1,14 +1,14 @@
-package io.github.tabssh
+package com.tabssh
 
 import android.app.Application
-import io.github.tabssh.storage.database.TabSSHDatabase
-import io.github.tabssh.crypto.storage.SecurePasswordManager
-import io.github.tabssh.crypto.keys.KeyStorage
-import io.github.tabssh.ssh.connection.SSHSessionManager
-import io.github.tabssh.terminal.emulator.TerminalManager
-import io.github.tabssh.themes.definitions.ThemeManager
-import io.github.tabssh.storage.preferences.PreferenceManager
-import io.github.tabssh.utils.logging.Logger
+import com.tabssh.storage.database.TabSSHDatabase
+import com.tabssh.crypto.storage.SecurePasswordManager
+import com.tabssh.crypto.keys.KeyStorage
+import com.tabssh.ssh.connection.SSHSessionManager
+import com.tabssh.terminal.emulator.TerminalManager
+import com.tabssh.themes.definitions.ThemeManager
+import com.tabssh.storage.preferences.PreferenceManager
+import com.tabssh.utils.logging.Logger
 
 /**
  * Main application class for TabSSH

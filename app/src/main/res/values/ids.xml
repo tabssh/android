@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Accessibility action IDs -->
+    <item name="action_read_screen" type="id"/>
+    <item name="action_read_line" type="id"/>
+
+    <!-- Terminal view IDs -->
+    <item name="terminal_container" type="id"/>
+    <item name="terminal_surface" type="id"/>
+
+    <!-- Tab IDs -->
+    <item name="tab_container" type="id"/>
+    <item name="tab_list" type="id"/>
+
+    <!-- Connection IDs -->
+    <item name="connection_list" type="id"/>
+    <item name="connection_item" type="id"/>
+
+    <!-- Host Key Dialog IDs -->
+    <item name="text_hostname" type="id"/>
+    <item name="text_old_fingerprint" type="id"/>
+    <item name="text_new_fingerprint" type="id"/>
+    <item name="text_old_key_type" type="id"/>
+    <item name="text_new_key_type" type="id"/>
+    <item name="text_first_seen" type="id"/>
+</resources>

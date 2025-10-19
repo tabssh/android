@@ -1,9 +1,9 @@
-package io.github.tabssh.storage.database.entities
+package com.tabssh.storage.database.entities
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
-import io.github.tabssh.ssh.auth.AuthType
+import com.tabssh.ssh.auth.AuthType
 import java.util.UUID
 
 /**
@@ -96,7 +96,9 @@ data class ConnectionProfile(
     }
     
     fun isActive(): Boolean {
-        // This would be determined by checking active sessions
-        return false // Placeholder
+        // Determine if this connection profile is currently active
+        // by checking if it has been recently connected
+        val recentThreshold = System.currentTimeMillis() - (5 * 60 * 1000) // 5 minutes
+        return lastConnected > 0 && lastConnected > recentThreshold
     }
 }

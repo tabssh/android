@@ -1,6 +1,6 @@
-package io.github.tabssh.terminal.emulator
+package com.tabssh.terminal.emulator
 
-import io.github.tabssh.utils.logging.Logger
+import com.tabssh.utils.logging.Logger
 import java.util.*
 
 /**
@@ -394,8 +394,8 @@ class ANSIParser(private val buffer: TerminalBuffer) {
                 4 -> buffer.setCharacterAttributes(underline = true) // Underline
                 5, 6 -> buffer.setCharacterAttributes(blink = true) // Blink
                 7 -> buffer.setCharacterAttributes(reverse = true) // Reverse
-                8 -> { /* Conceal - not implemented */ }
-                9 -> { /* Strikethrough - not implemented */ }
+                8 -> { /* Conceal/hidden text - not supported */ }
+                9 -> { /* Strikethrough - not supported */ }
                 22 -> buffer.setCharacterAttributes(bold = false) // Normal intensity
                 23 -> { /* Not italic */ }
                 24 -> buffer.setCharacterAttributes(underline = false) // Not underlined
@@ -506,7 +506,7 @@ class ANSIParser(private val buffer: TerminalBuffer) {
         for (param in parameters) {
             when (param) {
                 4 -> buffer.setInsertMode(set) // Insert mode
-                20 -> { /* Automatic newline mode - not implemented */ }
+                20 -> { /* Automatic newline mode (LNM) - not supported */ }
                 1049 -> buffer.useAlternateScreen(set) // Alternate screen buffer
                 25 -> { /* Cursor visible - would affect cursor rendering */ }
                 7 -> buffer.setWrapMode(set) // Auto wrap mode

@@ -1,4 +1,7 @@
-package io.github.tabssh.crypto.storage
+package com.tabssh.crypto.storage
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
@@ -7,7 +10,7 @@ import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
-import io.github.tabssh.utils.logging.Logger
+import com.tabssh.utils.logging.Logger
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.security.KeyStore
 import javax.crypto.Cipher
@@ -281,7 +284,7 @@ class SecurePasswordManager(private val context: Context) {
                         Logger.d("SecurePasswordManager", "Biometric authentication succeeded for password storage")
                         
                         // Store password after successful biometric authentication
-                        activity.lifecycleScope.launch {
+                        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
                             val success = storeEncryptedPassword(connectionId, password, true)
                             continuation.resume(success)
                         }
@@ -333,7 +336,7 @@ class SecurePasswordManager(private val context: Context) {
                         Logger.d("SecurePasswordManager", "Biometric authentication succeeded for password retrieval")
                         
                         // Retrieve password after successful biometric authentication
-                        activity.lifecycleScope.launch {
+                        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
                             val password = retrieveEncryptedPassword(connectionId, true)
                             continuation.resume(password)
                         }

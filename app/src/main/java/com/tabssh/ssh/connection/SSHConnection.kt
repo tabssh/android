@@ -1,9 +1,9 @@
-package io.github.tabssh.ssh.connection
+package com.tabssh.ssh.connection
 
 import com.jcraft.jsch.*
-import io.github.tabssh.storage.database.entities.ConnectionProfile
-import io.github.tabssh.ssh.auth.AuthType
-import io.github.tabssh.utils.logging.Logger
+import com.tabssh.storage.database.entities.ConnectionProfile
+import com.tabssh.ssh.auth.AuthType
+import com.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,25 +24,29 @@ class SSHConnection(
     private var session: Session? = null
     private var shellChannel: ChannelShell? = null
     private var sftpChannel: ChannelSftp? = null
-    
+
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
-    
+
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
-    
+
     private val _bytesTransferred = MutableStateFlow(0L)
     val bytesTransferred: StateFlow<Long> = _bytesTransferred.asStateFlow()
-    
+
     private var connectJob: Job? = null
     private var reconnectAttempts = 0
     private val maxReconnectAttempts = 3
-    
+
     private val listeners = mutableListOf<ConnectionListener>()
-    
+
+    // Host key verification
+    private val hostKeyVerifier = HostKeyVerifier(context)
+    var hostKeyChangedCallback: ((HostKeyChangedInfo) -> HostKeyAction)? = null
+
     val id: String = profile.id
     val displayName: String = profile.getDisplayName()
-    
+
     init {
         Logger.d("SSHConnection", "Created connection for ${profile.getDisplayName()}")
     }
@@ -64,9 +68,18 @@ class SSHConnection(
                 notifyListeners { onConnecting(id) }
                 
                 Logger.i("SSHConnection", "Connecting to ${profile.host}:${profile.port}")
-                
-                // Create JSch session
+
+                // Create JSch session with host key verification
                 val jsch = JSch()
+
+                // Set custom host key repository for database-backed verification
+                jsch.hostKeyRepository = hostKeyVerifier
+
+                // Configure host key changed callback
+                hostKeyVerifier.setHostKeyChangedCallback { info ->
+                    hostKeyChangedCallback?.invoke(info) ?: HostKeyAction.REJECT_CONNECTION
+                }
+
                 val newSession = jsch.getSession(profile.username, profile.host, profile.port)
                 
                 // Configure session
@@ -105,13 +118,9 @@ class SSHConnection(
     private fun configureSession(session: Session) {
         // Configure SSH session properties
         val config = java.util.Properties()
-        
-        // Host key verification
-        config["StrictHostKeyChecking"] = if (profile.host == "localhost" || profile.host.startsWith("192.168.") || profile.host.startsWith("10.")) {
-            "no"  // Less strict for local networks during development
-        } else {
-            "yes" // Strict for remote connections
-        }
+
+        // Host key verification - use "ask" to trigger our custom verification
+        config["StrictHostKeyChecking"] = "ask"
         
         // Compression
         if (profile.compression) {
@@ -234,17 +243,20 @@ class SSHConnection(
     private suspend fun authenticateWithKeyboardInteractive(session: Session): Boolean = withContext(Dispatchers.IO) {
         return@withContext try {
             Logger.d("SSHConnection", "Attempting keyboard interactive authentication")
-            
+
+            // Get password before creating UserInfo since getPassword() cannot be suspend
+            val password = getPasswordForAuthentication()
+
             // Set up keyboard interactive handler
             session.setUserInfo(object : com.jcraft.jsch.UserInfo {
-                override fun getPassword(): String? = getPasswordForAuthentication()
-                
+                override fun getPassword(): String? = password
+
                 override fun promptYesNo(str: String): Boolean {
                     Logger.d("SSHConnection", "Keyboard interactive prompt: $str")
                     // For security questions, default to yes for known safe prompts
                     return str.contains("continue", ignoreCase = true)
                 }
-                
+
                 override fun getPassphrase(): String? = null
                 override fun promptPassphrase(message: String): Boolean = false
                 override fun promptPassword(message: String): Boolean = true
@@ -252,9 +264,9 @@ class SSHConnection(
                     Logger.i("SSHConnection", "Server message: $message")
                 }
             })
-            
+
             session.connect()
-            
+
             if (session.isConnected) {
                 Logger.i("SSHConnection", "Keyboard interactive authentication successful")
                 true
@@ -262,7 +274,7 @@ class SSHConnection(
                 Logger.w("SSHConnection", "Keyboard interactive authentication failed")
                 false
             }
-            
+
         } catch (e: Exception) {
             Logger.e("SSHConnection", "Keyboard interactive authentication error", e)
             false
@@ -270,7 +282,18 @@ class SSHConnection(
     }
     
     private suspend fun authenticateWithGSSAPI(session: Session): Boolean {
-        Logger.w("SSHConnection", "GSSAPI authentication not implemented - enterprise feature")
+        // GSSAPI/Kerberos authentication is an enterprise feature
+        // Requires additional setup: Kerberos principal, keytab, realm configuration
+        // This is typically used in corporate environments with Active Directory
+        Logger.w("SSHConnection", "GSSAPI authentication requires enterprise Kerberos configuration")
+        Logger.i("SSHConnection", "For GSSAPI auth, configure: krb5.conf, keytab, and enable in connection profile")
+
+        // Would require:
+        // 1. Kerberos library integration (e.g., MIT Kerberos or Heimdal)
+        // 2. GSS-API Java implementation (e.g., via javax.security.auth.kerberos)
+        // 3. Proper configuration of realm, KDC, and service principals
+        // 4. Integration with Android KeyStore for credential management
+
         return false
     }
     
@@ -279,14 +302,8 @@ class SSHConnection(
      */
     private suspend fun getPasswordForAuthentication(): String? = withContext(Dispatchers.IO) {
         return@withContext try {
-            // Get the application context to access secure password manager
-            val context = scope.coroutineContext[kotlinx.coroutines.CoroutineName]?.name?.let { 
-                // This is a workaround - in real implementation, would pass context properly
-                null 
-            }
-            
             // Try to get from secure storage first
-            val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
+            val app = context.applicationContext as? com.tabssh.TabSSHApplication
             if (app != null) {
                 val storedPassword = app.securePasswordManager.retrievePassword(profile.id)
                 if (storedPassword != null) {
@@ -314,7 +331,7 @@ class SSHConnection(
     private suspend fun getPrivateKeyForAuthentication(keyId: String): java.security.PrivateKey? = withContext(Dispatchers.IO) {
         return@withContext try {
             // Get application instance to access key storage
-            val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
+            val app = context.applicationContext as? com.tabssh.TabSSHApplication
             if (app != null) {
                 val privateKey = app.keyStorage.retrievePrivateKey(keyId)
                 if (privateKey != null) {

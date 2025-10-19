@@ -1,0 +1,314 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/colorSurface"
+    android:padding="20dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- Beautiful Warning Header -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#FFF3E0"
+            android:padding="16dp"
+            android:layout_marginBottom="20dp"
+            android:elevation="2dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="🔐 Server Identity Changed"
+                android:textStyle="bold"
+                android:textSize="20sp"
+                android:textColor="#E65100"
+                android:gravity="center"
+                android:paddingBottom="8dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="The SSH server presented a different key than previously stored"
+                android:textSize="13sp"
+                android:textColor="#BF360C"
+                android:gravity="center"
+                android:alpha="0.9" />
+
+        </LinearLayout>
+
+        <!-- Possible Reasons Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            style="?attr/materialCardViewElevatedStyle">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="💭 Possible Reasons:"
+                    android:textStyle="bold"
+                    android:textSize="14sp"
+                    android:paddingBottom="8dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="✓ Server was reinstalled or upgraded\n✓ SSH configuration was changed\n⚠️ Man-in-the-middle attack (rare but serious)"
+                    android:textSize="13sp"
+                    android:lineSpacingExtra="4dp" />
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Hostname Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            style="?attr/materialCardViewFilledStyle">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="🌐 Server:"
+                    android:textStyle="bold"
+                    android:textSize="14sp"
+                    android:paddingBottom="4dp" />
+
+                <TextView
+                    android:id="@+id/text_hostname"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="16sp"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"
+                    android:textColor="?attr/colorPrimary"
+                    tools:text="example.com:22" />
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Old Key Information Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            style="?attr/materialCardViewOutlinedStyle">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp"
+                android:background="#FFEBEE">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="📜 Previous Key (Stored)"
+                    android:textStyle="bold"
+                    android:textSize="14sp"
+                    android:textColor="#C62828"
+                    android:paddingBottom="8dp" />
+
+                <TextView
+                    android:id="@+id/text_old_key_type"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="13sp"
+                    android:paddingBottom="6dp"
+                    android:textColor="#B71C1C"
+                    tools:text="🔑 ssh-ed25519" />
+
+                <TextView
+                    android:id="@+id/text_old_fingerprint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="11sp"
+                    android:fontFamily="monospace"
+                    android:textIsSelectable="true"
+                    android:background="#FFFFFF"
+                    android:padding="8dp"
+                    android:textColor="#000000"
+                    tools:text="SHA256:abc123..." />
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- New Key Information Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            style="?attr/materialCardViewOutlinedStyle">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp"
+                android:background="#E3F2FD">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="✨ New Key (From Server)"
+                    android:textStyle="bold"
+                    android:textSize="14sp"
+                    android:textColor="#1565C0"
+                    android:paddingBottom="8dp" />
+
+                <TextView
+                    android:id="@+id/text_new_key_type"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="13sp"
+                    android:paddingBottom="6dp"
+                    android:textColor="#0D47A1"
+                    tools:text="🔑 ssh-ed25519" />
+
+                <TextView
+                    android:id="@+id/text_new_fingerprint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="11sp"
+                    android:fontFamily="monospace"
+                    android:textIsSelectable="true"
+                    android:background="#FFFFFF"
+                    android:padding="8dp"
+                    android:textColor="#000000"
+                    tools:text="SHA256:xyz789..." />
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Timeline Info Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            style="?attr/materialCardViewFilledStyle">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="📅 Timeline"
+                    android:textStyle="bold"
+                    android:textSize="14sp"
+                    android:paddingBottom="8dp" />
+
+                <TextView
+                    android:id="@+id/text_first_seen"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="13sp"
+                    tools:text="First connected: 2025-01-15 10:30" />
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Beautiful Security Guidance Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            style="?attr/materialCardViewElevatedStyle">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp"
+                android:background="@android:color/white">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="💡 What Should I Do?"
+                    android:textStyle="bold"
+                    android:textSize="15sp"
+                    android:textColor="#1976D2"
+                    android:paddingBottom="12dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="✅ Accept New Key"
+                    android:textStyle="bold"
+                    android:textSize="13sp"
+                    android:textColor="#2E7D32"
+                    android:paddingBottom="4dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="   If you know the server was reinstalled, reconfigured, or legitimately updated"
+                    android:textSize="12sp"
+                    android:paddingBottom="12dp"
+                    android:paddingStart="4dp"
+                    android:paddingEnd="4dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="⏱️ Accept Once"
+                    android:textStyle="bold"
+                    android:textSize="13sp"
+                    android:textColor="#F57C00"
+                    android:paddingBottom="4dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="   Temporary access for this session. Warning will appear again next time"
+                    android:textSize="12sp"
+                    android:paddingBottom="12dp"
+                    android:paddingStart="4dp"
+                    android:paddingEnd="4dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="🚫 Reject"
+                    android:textStyle="bold"
+                    android:textSize="13sp"
+                    android:textColor="#C62828"
+                    android:paddingBottom="4dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="   If you're unsure, contact your administrator or suspect a security issue"
+                    android:textSize="12sp"
+                    android:paddingStart="4dp"
+                    android:paddingEnd="4dp" />
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+    </LinearLayout>
+</ScrollView>

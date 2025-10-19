@@ -1,11 +1,12 @@
-package io.github.tabssh.storage.database
+package com.tabssh.storage.database
 
 import android.content.Context
 import androidx.room.*
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-import io.github.tabssh.storage.database.dao.*
-import io.github.tabssh.storage.database.entities.*
+import com.tabssh.storage.database.dao.*
+import com.tabssh.storage.database.entities.*
+import com.tabssh.utils.logging.Logger
 
 /**
  * Main Room database for TabSSH
@@ -16,7 +17,8 @@ import io.github.tabssh.storage.database.entities.*
         StoredKey::class,
         HostKeyEntry::class,
         TabSession::class,
-        ThemeDefinition::class
+        ThemeDefinition::class,
+        TrustedCertificate::class
     ],
     version = 1,
     exportSchema = true
@@ -29,6 +31,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
     abstract fun hostKeyDao(): HostKeyDao
     abstract fun tabSessionDao(): TabSessionDao
     abstract fun themeDao(): ThemeDao
+    abstract fun certificateDao(): CertificateDao
     
     companion object {
         @Volatile
@@ -100,9 +103,11 @@ abstract class TabSSHDatabase : RoomDatabase() {
         // Clean up old inactive sessions (older than 30 days)
         val cutoffTime = System.currentTimeMillis() - (30L * 24 * 60 * 60 * 1000)
         tabSessionDao().deleteOldInactiveSessions(cutoffTime)
-        
+
         // Vacuum database to reclaim space
         openHelper.writableDatabase.execSQL("VACUUM")
+
+        Logger.d("TabSSHDatabase", "Database maintenance completed")
     }
     
     /**
@@ -129,3 +134,7 @@ data class DatabaseStats(
     val sessionCount: Int,
     val themeCount: Int
 )
+
+/**
+ * Type converters for Room database
+ */

@@ -1,4 +1,4 @@
-package io.github.tabssh.ssh.connection
+package com.tabssh.ssh.connection
 
 /**
  * Represents the state of an SSH connection

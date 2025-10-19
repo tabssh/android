@@ -31,18 +31,18 @@
             android:orientation="vertical"
             android:padding="@dimen/container_padding">
 
-            <!-- Welcome message (temporary) -->
+            <!-- Welcome message -->
             <TextView
                 android:id="@+id/text_welcome"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Welcome to TabSSH!"
+                android:text="@string/welcome_message"
                 android:textSize="@dimen/text_size_title"
                 android:textStyle="bold"
                 android:gravity="center"
                 android:layout_marginBottom="@dimen/space_lg" />
 
-            <!-- Quick Connect Section (placeholder) -->
+            <!-- Quick Connect Section -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -130,7 +130,7 @@
 
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Connections Section (placeholder) -->
+            <!-- Saved Connections Section -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -166,7 +166,7 @@
 
                     </LinearLayout>
 
-                    <!-- Placeholder for connection list -->
+                    <!-- Connection list RecyclerView -->
                     <androidx.recyclerview.widget.RecyclerView
                         android:id="@+id/recycler_connections"
                         android:layout_width="match_parent"

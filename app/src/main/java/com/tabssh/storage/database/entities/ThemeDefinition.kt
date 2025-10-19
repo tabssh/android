@@ -1,4 +1,4 @@
-package io.github.tabssh.storage.database.entities
+package com.tabssh.storage.database.entities
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
