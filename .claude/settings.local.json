@@ -64,7 +64,8 @@
       "Bash(pkill:*)",
       "Bash(cp:*)",
       "WebFetch(domain:github.com)",
-      "Bash(gh release list)"
+      "Bash(gh release list)",
+      "Bash(aapt dump badging releases/tabssh-universal.apk)"
     ],
     "deny": [],
     "ask": []
