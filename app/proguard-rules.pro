@@ -32,6 +32,16 @@
 # Keep security classes
 -keep class androidx.security.crypto.** { *; }
 
+# Keep Tink crypto library classes
+-keep class com.google.crypto.tink.** { *; }
+-dontwarn com.google.crypto.tink.**
+
+# Keep JSR-305 annotations for Tink
+-dontwarn javax.annotation.**
+-dontwarn javax.annotation.concurrent.**
+-keep class javax.annotation.** { *; }
+-keep class javax.annotation.concurrent.** { *; }
+
 # Keep model classes for serialization
 -keep class com.tabssh.model.** { *; }
 
