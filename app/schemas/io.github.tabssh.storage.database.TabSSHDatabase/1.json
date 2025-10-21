@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "8804a7eb919524d5a61028542106d25e",
+    "identityHash": "c803d954703c6f9497ff92b48a864218",
     "entities": [
       {
         "tableName": "connections",
@@ -300,11 +300,11 @@
       },
       {
         "tableName": "tab_sessions",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sessionId` TEXT NOT NULL, `tab_id` TEXT NOT NULL, `connection_id` TEXT NOT NULL, `title` TEXT NOT NULL, `state` TEXT NOT NULL, `terminal_content` TEXT, `cursor_row` INTEGER NOT NULL, `cursor_col` INTEGER NOT NULL, `scrollback_position` INTEGER NOT NULL, `working_directory` TEXT, `environment_vars` TEXT, `tab_order` INTEGER NOT NULL, `is_active` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `last_activity` INTEGER NOT NULL, PRIMARY KEY(`sessionId`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`session_id` TEXT NOT NULL, `tab_id` TEXT NOT NULL, `connection_id` TEXT NOT NULL, `title` TEXT NOT NULL, `is_active` INTEGER NOT NULL, `terminal_content` TEXT NOT NULL, `cursor_row` INTEGER NOT NULL, `cursor_col` INTEGER NOT NULL, `scroll_position` INTEGER NOT NULL, `working_directory` TEXT NOT NULL, `environment_vars` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `last_activity` INTEGER NOT NULL, `session_state` TEXT NOT NULL, `terminal_rows` INTEGER NOT NULL, `terminal_cols` INTEGER NOT NULL, `font_size` REAL NOT NULL, `connection_state` TEXT NOT NULL, `last_error` TEXT, `has_unread_output` INTEGER NOT NULL, `unread_lines` INTEGER NOT NULL, `tab_order` INTEGER NOT NULL, PRIMARY KEY(`session_id`), FOREIGN KEY(`connection_id`) REFERENCES `connections`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "sessionId",
-            "columnName": "sessionId",
+            "columnName": "session_id",
             "affinity": "TEXT",
             "notNull": true
           },
@@ -327,16 +327,16 @@
             "notNull": true
           },
           {
-            "fieldPath": "state",
-            "columnName": "state",
-            "affinity": "TEXT",
+            "fieldPath": "isActive",
+            "columnName": "is_active",
+            "affinity": "INTEGER",
             "notNull": true
           },
           {
             "fieldPath": "terminalContent",
             "columnName": "terminal_content",
             "affinity": "TEXT",
-            "notNull": false
+            "notNull": true
           },
           {
             "fieldPath": "cursorRow",
@@ -351,8 +351,8 @@
             "notNull": true
           },
           {
-            "fieldPath": "scrollbackPosition",
-            "columnName": "scrollback_position",
+            "fieldPath": "scrollPosition",
+            "columnName": "scroll_position",
             "affinity": "INTEGER",
             "notNull": true
           },
@@ -360,24 +360,12 @@
             "fieldPath": "workingDirectory",
             "columnName": "working_directory",
             "affinity": "TEXT",
-            "notNull": false
+            "notNull": true
           },
           {
             "fieldPath": "environmentVars",
             "columnName": "environment_vars",
             "affinity": "TEXT",
-            "notNull": false
-          },
-          {
-            "fieldPath": "tabOrder",
-            "columnName": "tab_order",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "isActive",
-            "columnName": "is_active",
-            "affinity": "INTEGER",
             "notNull": true
           },
           {
@@ -391,16 +379,110 @@
             "columnName": "last_activity",
             "affinity": "INTEGER",
             "notNull": true
+          },
+          {
+            "fieldPath": "sessionState",
+            "columnName": "session_state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "terminalRows",
+            "columnName": "terminal_rows",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "terminalCols",
+            "columnName": "terminal_cols",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fontSize",
+            "columnName": "font_size",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "connectionState",
+            "columnName": "connection_state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastError",
+            "columnName": "last_error",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "hasUnreadOutput",
+            "columnName": "has_unread_output",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unreadLines",
+            "columnName": "unread_lines",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tabOrder",
+            "columnName": "tab_order",
+            "affinity": "INTEGER",
+            "notNull": true
           }
         ],
         "primaryKey": {
           "autoGenerate": false,
           "columnNames": [
-            "sessionId"
+            "session_id"
           ]
         },
-        "indices": [],
-        "foreignKeys": []
+        "indices": [
+          {
+            "name": "index_tab_sessions_connection_id",
+            "unique": false,
+            "columnNames": [
+              "connection_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tab_sessions_connection_id` ON `${TABLE_NAME}` (`connection_id`)"
+          },
+          {
+            "name": "index_tab_sessions_tab_id",
+            "unique": true,
+            "columnNames": [
+              "tab_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_tab_sessions_tab_id` ON `${TABLE_NAME}` (`tab_id`)"
+          },
+          {
+            "name": "index_tab_sessions_is_active",
+            "unique": false,
+            "columnNames": [
+              "is_active"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tab_sessions_is_active` ON `${TABLE_NAME}` (`is_active`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "connections",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "connection_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
       },
       {
         "tableName": "themes",
@@ -508,11 +590,11 @@
       },
       {
         "tableName": "trusted_certificates",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`certificateId` TEXT NOT NULL, `hostname` TEXT NOT NULL, `fingerprint` TEXT NOT NULL, `subject` TEXT NOT NULL, `issuer` TEXT NOT NULL, `not_before` INTEGER NOT NULL, `not_after` INTEGER NOT NULL, `certificate_data` TEXT NOT NULL, `is_permanent` INTEGER NOT NULL, `added_at` INTEGER NOT NULL, `last_used` INTEGER NOT NULL, PRIMARY KEY(`certificateId`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `hostname` TEXT NOT NULL, `port` INTEGER NOT NULL, `fingerprint` TEXT NOT NULL, `algorithm` TEXT NOT NULL, `certificate_data` TEXT NOT NULL, `subject` TEXT NOT NULL, `issuer` TEXT NOT NULL, `serial_number` TEXT NOT NULL, `not_before` INTEGER NOT NULL, `not_after` INTEGER NOT NULL, `expires_at` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `last_used` INTEGER NOT NULL, `trust_level` TEXT NOT NULL, `is_self_signed` INTEGER NOT NULL, `is_ca_signed` INTEGER NOT NULL, `key_usage` TEXT, `extended_key_usage` TEXT, `subject_alternative_names` TEXT, `verification_status` TEXT NOT NULL, `notes` TEXT, PRIMARY KEY(`id`))",
         "fields": [
           {
-            "fieldPath": "certificateId",
-            "columnName": "certificateId",
+            "fieldPath": "id",
+            "columnName": "id",
             "affinity": "TEXT",
             "notNull": true
           },
@@ -523,8 +605,26 @@
             "notNull": true
           },
           {
+            "fieldPath": "port",
+            "columnName": "port",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
             "fieldPath": "fingerprint",
             "columnName": "fingerprint",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "algorithm",
+            "columnName": "algorithm",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "certificateData",
+            "columnName": "certificate_data",
             "affinity": "TEXT",
             "notNull": true
           },
@@ -541,6 +641,12 @@
             "notNull": true
           },
           {
+            "fieldPath": "serialNumber",
+            "columnName": "serial_number",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
             "fieldPath": "notBefore",
             "columnName": "not_before",
             "affinity": "INTEGER",
@@ -553,20 +659,14 @@
             "notNull": true
           },
           {
-            "fieldPath": "certificateData",
-            "columnName": "certificate_data",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "isPermanent",
-            "columnName": "is_permanent",
+            "fieldPath": "expiresAt",
+            "columnName": "expires_at",
             "affinity": "INTEGER",
             "notNull": true
           },
           {
-            "fieldPath": "addedAt",
-            "columnName": "added_at",
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
             "affinity": "INTEGER",
             "notNull": true
           },
@@ -575,22 +675,99 @@
             "columnName": "last_used",
             "affinity": "INTEGER",
             "notNull": true
+          },
+          {
+            "fieldPath": "trustLevel",
+            "columnName": "trust_level",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isSelfSigned",
+            "columnName": "is_self_signed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isCaSigned",
+            "columnName": "is_ca_signed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "keyUsage",
+            "columnName": "key_usage",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "extendedKeyUsage",
+            "columnName": "extended_key_usage",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "subjectAlternativeNames",
+            "columnName": "subject_alternative_names",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "verificationStatus",
+            "columnName": "verification_status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": false
           }
         ],
         "primaryKey": {
           "autoGenerate": false,
           "columnNames": [
-            "certificateId"
+            "id"
           ]
         },
-        "indices": [],
+        "indices": [
+          {
+            "name": "index_trusted_certificates_hostname",
+            "unique": false,
+            "columnNames": [
+              "hostname"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_trusted_certificates_hostname` ON `${TABLE_NAME}` (`hostname`)"
+          },
+          {
+            "name": "index_trusted_certificates_fingerprint",
+            "unique": true,
+            "columnNames": [
+              "fingerprint"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_trusted_certificates_fingerprint` ON `${TABLE_NAME}` (`fingerprint`)"
+          },
+          {
+            "name": "index_trusted_certificates_hostname_port",
+            "unique": true,
+            "columnNames": [
+              "hostname",
+              "port"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_trusted_certificates_hostname_port` ON `${TABLE_NAME}` (`hostname`, `port`)"
+          }
+        ],
         "foreignKeys": []
       }
     ],
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '8804a7eb919524d5a61028542106d25e')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'c803d954703c6f9497ff92b48a864218')"
     ]
   }
 }

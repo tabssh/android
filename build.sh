@@ -22,14 +22,25 @@ if ! docker images | grep -q "tabssh-android"; then
     echo -e "${GREEN}✅ Docker image built${NC}"
 fi
 
+# Create keystore directory for persistent signing
+mkdir -p .android-keystore
+echo -e "${BLUE}🔐 Using persistent keystore at .android-keystore/${NC}"
+
 # Step 1: Clean previous builds
 echo -e "${BLUE}🧹 Cleaning previous builds...${NC}"
-./gradlew clean --no-daemon
+docker run --rm --network=host \
+    -v $(pwd):/workspace \
+    -v $(pwd)/.android-keystore:/root/.android \
+    -w /workspace \
+    -e ANDROID_HOME=/opt/android-sdk \
+    tabssh-android \
+    ./gradlew clean --no-daemon
 
 # Step 2: Check for compilation errors
 echo -e "${BLUE}🔍 Checking for compilation errors...${NC}"
-ERROR_COUNT=$(docker run --rm \
+ERROR_COUNT=$(docker run --rm --network=host \
     -v $(pwd):/workspace \
+    -v $(pwd)/.android-keystore:/root/.android \
     -w /workspace \
     -e ANDROID_HOME=/opt/android-sdk \
     tabssh-android \
@@ -39,8 +50,9 @@ echo "Found $ERROR_COUNT compilation errors"
 
 if [ "$ERROR_COUNT" -gt 0 ]; then
     echo -e "${RED}❌ Compilation errors found. Showing first 20:${NC}"
-    docker run --rm \
+    docker run --rm --network=host \
         -v $(pwd):/workspace \
+        -v $(pwd)/.android-keystore:/root/.android \
         -w /workspace \
         -e ANDROID_HOME=/opt/android-sdk \
         tabssh-android \
@@ -54,8 +66,9 @@ echo -e "${GREEN}✅ No compilation errors!${NC}"
 
 # Step 3: Build debug APK
 echo -e "${BLUE}📦 Building debug APK...${NC}"
-docker run --rm \
+docker run --rm --network=host \
     -v $(pwd):/workspace \
+    -v $(pwd)/.android-keystore:/root/.android \
     -w /workspace \
     -e ANDROID_HOME=/opt/android-sdk \
     tabssh-android \

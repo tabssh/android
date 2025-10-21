@@ -50,6 +50,18 @@
                 android:ellipsize="end"
                 tools:text="user@example.com:22" />
 
+            <TextView
+                android:id="@+id/text_connection_count"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="@dimen/text_size_caption"
+                android:textColor="?android:attr/textColorTertiary"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:visibility="gone"
+                tools:text="Connected 42 times"
+                tools:visibility="visible" />
+
         </LinearLayout>
 
         <View

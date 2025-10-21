@@ -21,6 +21,9 @@
     <!-- Vibration for notifications -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Post notifications (Android 13+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:name=".TabSSHApplication"
         android:allowBackup="false"
@@ -30,7 +33,7 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.TabSSH"
+        android:theme="@style/Theme.TabSSH.Dark"
         android:hardwareAccelerated="true"
         android:largeHeap="true"
         tools:targetApi="31">

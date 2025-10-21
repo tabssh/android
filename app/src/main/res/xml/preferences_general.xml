@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        android:title="Appearance"
+        android:key="category_appearance">
+
+        <ListPreference
+            android:key="app_theme"
+            android:title="App Theme"
+            android:summary="Choose light or dark theme"
+            android:entries="@array/theme_entries"
+            android:entryValues="@array/theme_values"
+            android:defaultValue="dark"
+            app:useSimpleSummaryProvider="true" />
+
+        <ListPreference
+            android:key="app_language"
+            android:title="Language"
+            android:summary="Application language"
+            android:entries="@array/language_entries"
+            android:entryValues="@array/language_values"
+            android:defaultValue="en"
+            app:useSimpleSummaryProvider="true" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="Behavior"
+        android:key="category_behavior">
+
+        <SwitchPreferenceCompat
+            android:key="confirm_exit"
+            android:title="Confirm on exit"
+            android:summary="Ask for confirmation before exiting"
+            android:defaultValue="false" />
+
+        <SwitchPreferenceCompat
+            android:key="keep_screen_on"
+            android:title="Keep screen on"
+            android:summary="Prevent screen from sleeping during connections"
+            android:defaultValue="false" />
+
+    </PreferenceCategory>
+
+</PreferenceScreen>

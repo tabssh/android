@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        android:title="App Security"
+        android:key="category_app_security">
+
+        <SwitchPreferenceCompat
+            android:key="security_lock_enabled"
+            android:title="Security Lock"
+            android:summary="Lock app after period of inactivity"
+            android:defaultValue="false" />
+
+        <ListPreference
+            android:key="security_lock_timeout"
+            android:title="Lock Timeout"
+            android:summary="Time before app locks"
+            android:entries="@array/lock_timeout_entries"
+            android:entryValues="@array/lock_timeout_values"
+            android:defaultValue="300"
+            android:dependency="security_lock_enabled"
+            app:useSimpleSummaryProvider="true" />
+
+        <SwitchPreferenceCompat
+            android:key="biometric_auth"
+            android:title="Biometric Authentication"
+            android:summary="Use fingerprint or face unlock"
+            android:defaultValue="false"
+            android:dependency="security_lock_enabled" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="SSH Security"
+        android:key="category_ssh_security">
+
+        <Preference
+            android:key="clear_known_hosts"
+            android:title="Clear known hosts"
+            android:summary="Wipe previously seen host keys/fingerprints" />
+
+        <SwitchPreferenceCompat
+            android:key="ssh_agent_forwarding"
+            android:title="SSH Agent Forwarding"
+            android:summary="Forward authentication agent connections"
+            android:defaultValue="false" />
+
+        <SwitchPreferenceCompat
+            android:key="strict_host_key_checking"
+            android:title="Strict Host Key Checking"
+            android:summary="Always verify host keys"
+            android:defaultValue="true" />
+
+    </PreferenceCategory>
+
+</PreferenceScreen>

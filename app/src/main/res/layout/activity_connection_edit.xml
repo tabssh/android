@@ -51,6 +51,7 @@
                         android:text="Connection Details"
                         android:textStyle="bold"
                         android:textSize="@dimen/text_size_subtitle"
+                        android:textColor="#212121"
                         android:layout_marginBottom="@dimen/space_md" />
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -145,6 +146,7 @@
                         android:text="Authentication"
                         android:textStyle="bold"
                         android:textSize="@dimen/text_size_subtitle"
+                        android:textColor="#212121"
                         android:layout_marginBottom="@dimen/space_md" />
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -195,7 +197,8 @@
                                 android:id="@+id/switch_save_password"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:text="Save password securely" />
+                                android:text="Save password securely"
+                                android:textColor="#212121" />
 
                         </LinearLayout>
 
@@ -257,6 +260,7 @@
                         android:text="Advanced Settings"
                         android:textStyle="bold"
                         android:textSize="@dimen/text_size_subtitle"
+                        android:textColor="#212121"
                         android:layout_marginBottom="@dimen/space_md" />
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -280,6 +284,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_md"
                         android:text="Enable Compression"
+                        android:textColor="#212121"
                         android:checked="true" />
 
                     <com.google.android.material.materialswitch.MaterialSwitch
@@ -288,6 +293,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_sm"
                         android:text="Keep Alive"
+                        android:textColor="#212121"
                         android:checked="true" />
 
                 </LinearLayout>

@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Theme options -->
+    <string-array name="theme_entries">
+        <item>Dark</item>
+        <item>Light</item>
+        <item>System Default</item>
+    </string-array>
+    <string-array name="theme_values">
+        <item>dark</item>
+        <item>light</item>
+        <item>system</item>
+    </string-array>
+
+    <!-- Language options -->
+    <string-array name="language_entries">
+        <item>English</item>
+        <item>Spanish</item>
+        <item>French</item>
+        <item>German</item>
+        <item>Chinese</item>
+        <item>Japanese</item>
+    </string-array>
+    <string-array name="language_values">
+        <item>en</item>
+        <item>es</item>
+        <item>fr</item>
+        <item>de</item>
+        <item>zh</item>
+        <item>ja</item>
+    </string-array>
+
+    <!-- Lock timeout options -->
+    <string-array name="lock_timeout_entries">
+        <item>1 minute</item>
+        <item>5 minutes</item>
+        <item>15 minutes</item>
+        <item>30 minutes</item>
+        <item>1 hour</item>
+    </string-array>
+    <string-array name="lock_timeout_values">
+        <item>60</item>
+        <item>300</item>
+        <item>900</item>
+        <item>1800</item>
+        <item>3600</item>
+    </string-array>
+
+    <!-- Terminal themes -->
+    <string-array name="terminal_theme_entries">
+        <item>Dracula</item>
+        <item>Monokai</item>
+        <item>Solarized Dark</item>
+        <item>Solarized Light</item>
+        <item>Gruvbox</item>
+        <item>Nord</item>
+        <item>One Dark</item>
+        <item>Tokyo Night</item>
+    </string-array>
+    <string-array name="terminal_theme_values">
+        <item>dracula</item>
+        <item>monokai</item>
+        <item>solarized_dark</item>
+        <item>solarized_light</item>
+        <item>gruvbox</item>
+        <item>nord</item>
+        <item>one_dark</item>
+        <item>tokyo_night</item>
+    </string-array>
+
+    <!-- Terminal fonts -->
+    <string-array name="terminal_font_entries">
+        <item>Cascadia Code</item>
+        <item>Fira Code</item>
+        <item>JetBrains Mono</item>
+        <item>Source Code Pro</item>
+        <item>Consolas</item>
+        <item>Menlo</item>
+        <item>Monaco</item>
+        <item>Courier New</item>
+    </string-array>
+    <string-array name="terminal_font_values">
+        <item>cascadia_code</item>
+        <item>fira_code</item>
+        <item>jetbrains_mono</item>
+        <item>source_code_pro</item>
+        <item>consolas</item>
+        <item>menlo</item>
+        <item>monaco</item>
+        <item>courier_new</item>
+    </string-array>
+
+    <!-- Cursor styles -->
+    <string-array name="cursor_style_entries">
+        <item>Block</item>
+        <item>Underline</item>
+        <item>Vertical Bar</item>
+    </string-array>
+    <string-array name="cursor_style_values">
+        <item>block</item>
+        <item>underline</item>
+        <item>bar</item>
+    </string-array>
+</resources>
