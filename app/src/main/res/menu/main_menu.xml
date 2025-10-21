@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/action_settings"
+        android:title="Settings"
+        android:icon="@android:drawable/ic_menu_preferences"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_manage_keys"
+        android:title="Manage SSH Keys"
+        android:icon="@android:drawable/ic_lock_lock"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_import_connections"
+        android:title="Import Connections"
+        android:icon="@android:drawable/ic_menu_upload"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_export_connections"
+        android:title="Export Connections"
+        android:icon="@android:drawable/ic_menu_save"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_about"
+        android:title="About"
+        android:icon="@android:drawable/ic_menu_info_details"
+        app:showAsAction="never" />
+</menu>

@@ -1,73 +1,69 @@
 {
+  "model": "sonnet[1m]",
   "permissions": {
     "allow": [
-      "Bash(chmod:*)",
-      "Bash(./gradlew:*)",
-      "Bash(gradle:*)",
-      "Bash(./scripts/validate-implementation.sh:*)",
-      "Bash(docker:*)",
-      "Bash(gh repo view:*)",
-      "Bash(gh run list:*)",
-      "Bash(gh run view:*)",
-      "Read(//tmp/**)",
-      "Bash(act:*)",
-      "Bash(test:*)",
-      "Bash(timeout:*)",
+      "Read(**)",
+      "Write(**)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "Bash(mkdir:*)",
+      "Bash(tree:*)",
+      "Bash(go:*)",
       "Bash(curl:*)",
+      "Bash(wget:*)",
+      "Bash(echo:*)",
       "Bash(make:*)",
       "Bash(find:*)",
-      "Bash(git add:*)",
-      "Bash(sed:*)",
-      "Bash(./scripts/prepare-fdroid-submission.sh:*)",
-      "Bash(./scripts/notify-release.sh:*)",
-      "Read(//root/**)",
-      "Bash(export ANDROID_HOME=/root/Android/Sdk)",
-      "Bash(export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools)",
-      "Bash(echo:*)",
-      "Bash(wget:*)",
-      "Bash(unzip:*)",
-      "Bash(./scripts/comprehensive-validation.sh:*)",
-      "Bash(java:*)",
-      "Read(//usr/lib/jvm/**)",
-      "Bash(export:*)",
-      "Bash(export PATH=$JAVA_HOME/bin:$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools)",
-      "Bash(docker-compose build:*)",
-      "Bash(./build-with-docker.sh:*)",
-      "Bash(rm:*)",
-      "Read(///**)",
-      "Bash(while read dir)",
-      "Bash(done)",
-      "Read(//usr/**)",
-      "Bash(yum install:*)",
-      "Bash(tee:*)",
-      "Bash(./fix_all_errors.sh)",
-      "WebSearch",
-      "Bash(./fix_all_compilation_errors.sh)",
-      "Bash(./final_fix.sh)",
-      "Bash(docker-compose run:*)",
-      "Bash(bash:*)",
-      "Bash(./build-dev.sh:*)",
-      "Bash(/dev/null)",
-      "Bash(./docker-fix-errors.sh:*)",
-      "Bash(./docker-quick-build.sh:*)",
-      "Bash(./docker-final-build.sh:*)",
-      "Bash(./docker-check-errors.sh:*)",
-      "Bash(./docker-fast-compile.sh:*)",
-      "Bash(./quick-check.sh:*)",
-      "Bash(DOCKER_BUILDKIT=0 docker build -t tabssh-android .)",
-      "Bash(cat:*)",
+      "Bash(grep:*)",
       "Bash(awk:*)",
-      "Read(//opt/**)",
-      "Bash(ls:*)",
-      "Bash(./build.sh:*)",
-      "Bash(ps:*)",
+      "Bash(sed:*)",
+      "Bash(cat:*)",
+      "Bash(chmod:*)",
+      "Bash(chown:*)",
+      "Bash(docker:*)",
+      "Bash(docker-compose:*)",
+      "Bash(incus:*)",
+      "Bash(git:*)",
       "Bash(pkill:*)",
+      "Bash(rm:*)",
+      "Bash(mv:*)",
       "Bash(cp:*)",
-      "WebFetch(domain:github.com)",
-      "Bash(gh release list)",
-      "Bash(aapt dump badging releases/tabssh-universal.apk)"
+      "Bash(ls:*)",
+      "Bash(pwd:*)",
+      "Bash(cd:*)",
+      "Bash(head:*)",
+      "Bash(timeout:*)",
+      "Bash(do:*)",
+      "Bash(ln:*)",
+      "Bash(test:*)",
+      "Bash(do)",
+      "Bash(sort:*)",
+      "Bash(paste:*)",
+      "Bash(*:*)"
     ],
-    "deny": [],
+    "deny": [
+      "Bash(git commit:*)"
+    ],
     "ask": []
+  },
+  "preferences": {
+    "auto_commit": false
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write(**)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if grep -qi 'anthropic\\|claude' \"$file\" 2>/dev/null; then echo 'Error: File contains vendor names (Anthropic/Claude)' >&2; exit 1; fi"
+          }
+        ]
+      }
+    ]
+  },
+  "env": {
+    "MAX_THINKING_TOKENS": "1000"
   }
 }
+

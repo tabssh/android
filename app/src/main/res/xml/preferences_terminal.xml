@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        android:title="Appearance"
+        android:key="category_terminal_appearance">
+
+        <ListPreference
+            android:key="terminal_theme"
+            android:title="Theme / Colors"
+            android:summary="Terminal color scheme"
+            android:entries="@array/terminal_theme_entries"
+            android:entryValues="@array/terminal_theme_values"
+            android:defaultValue="dracula"
+            app:useSimpleSummaryProvider="true" />
+
+        <ListPreference
+            android:key="terminal_font"
+            android:title="Font"
+            android:summary="Monospace font family"
+            android:entries="@array/terminal_font_entries"
+            android:entryValues="@array/terminal_font_values"
+            android:defaultValue="cascadia_code"
+            app:useSimpleSummaryProvider="true" />
+
+        <SeekBarPreference
+            android:key="terminal_font_size"
+            android:title="Font Size"
+            android:summary="Terminal text size"
+            android:defaultValue="14"
+            android:max="32"
+            android:min="8"
+            app:showSeekBarValue="true" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="Behavior"
+        android:key="category_terminal_behavior">
+
+        <ListPreference
+            android:key="terminal_cursor_style"
+            android:title="Cursor Style"
+            android:summary="Cursor appearance"
+            android:entries="@array/cursor_style_entries"
+            android:entryValues="@array/cursor_style_values"
+            android:defaultValue="block"
+            app:useSimpleSummaryProvider="true" />
+
+        <SwitchPreferenceCompat
+            android:key="terminal_cursor_blink"
+            android:title="Cursor Blink"
+            android:summary="Blinking cursor"
+            android:defaultValue="true" />
+
+        <EditTextPreference
+            android:key="terminal_scrollback"
+            android:title="Scrollback Buffer"
+            android:summary="Number of lines to keep in history"
+            android:defaultValue="2000"
+            android:inputType="number"
+            app:useSimpleSummaryProvider="true" />
+
+        <SwitchPreferenceCompat
+            android:key="terminal_bell"
+            android:title="Terminal Bell"
+            android:summary="Audible bell on BEL character"
+            android:defaultValue="true" />
+
+    </PreferenceCategory>
+
+</PreferenceScreen>

@@ -7,6 +7,7 @@
     <!-- Main activity -->
     <string name="main_activity_title">📱 TabSSH</string>
     <string name="quick_connect_title">⚡ Quick Connect</string>
+    <string name="frequently_used_title">⭐ Frequently Used</string>
     <string name="connections_title">🌐 My Servers</string>
     <string name="host_hint">🌐 Hostname or IP</string>
     <string name="port_hint">🔌 Port (default: 22)</string>

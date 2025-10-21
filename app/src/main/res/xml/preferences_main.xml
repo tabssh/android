@@ -1,61 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.preference.PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto">
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- General Settings -->
-    <androidx.preference.Preference
-        android:key="category_general"
-        android:title="@string/settings_general"
-        android:summary="Startup behavior, backup, language"
-        android:icon="@drawable/ic_settings_general"
-        android:selectable="true" />
+    <Preference
+        android:key="general_settings"
+        android:title="General"
+        android:summary="App theme and language"
+        android:icon="@android:drawable/ic_menu_preferences"
+        android:fragment="com.tabssh.ui.activities.GeneralSettingsFragment" />
 
-    <!-- Security Settings -->
-    <androidx.preference.Preference
-        android:key="category_security"
-        android:title="@string/settings_security"
-        android:summary="Password storage, biometrics, host keys"
-        android:icon="@drawable/ic_security"
-        android:selectable="true" />
+    <Preference
+        android:key="security_settings"
+        android:title="App Security"
+        android:summary="Lock, biometrics, and SSH security"
+        android:icon="@android:drawable/ic_lock_lock"
+        android:fragment="com.tabssh.ui.activities.SecuritySettingsFragment" />
 
-    <!-- Terminal Settings -->
-    <androidx.preference.Preference
-        android:key="category_terminal"
-        android:title="@string/settings_terminal"
-        android:summary="Themes, fonts, behavior, keyboard"
-        android:icon="@drawable/ic_terminal"
-        android:selectable="true" />
+    <Preference
+        android:key="terminal_settings"
+        android:title="Terminal"
+        android:summary="Theme, font, and terminal behavior"
+        android:icon="@android:drawable/ic_menu_edit"
+        android:fragment="com.tabssh.ui.activities.TerminalSettingsFragment" />
 
-    <!-- Interface Settings -->
-    <androidx.preference.Preference
-        android:key="category_interface"
-        android:title="@string/settings_interface"
-        android:summary="Tabs, gestures, fullscreen, appearance"
-        android:icon="@drawable/ic_interface"
-        android:selectable="true" />
+    <Preference
+        android:key="connection_settings"
+        android:title="Connection"
+        android:summary="Default connection settings"
+        android:icon="@android:drawable/stat_sys_data_bluetooth"
+        android:fragment="com.tabssh.ui.activities.ConnectionSettingsFragment" />
 
-    <!-- Connection Settings -->
-    <androidx.preference.Preference
-        android:key="category_connections"
-        android:title="@string/settings_connections"
-        android:summary="SSH defaults, timeouts, keep-alive"
-        android:icon="@drawable/ic_connection"
-        android:selectable="true" />
-
-    <!-- Accessibility Settings -->
-    <androidx.preference.Preference
-        android:key="category_accessibility"
-        android:title="@string/settings_accessibility"
-        android:summary="Screen reader, contrast, touch targets"
-        android:icon="@drawable/ic_accessibility"
-        android:selectable="true" />
-
-    <!-- About -->
-    <androidx.preference.Preference
-        android:key="category_about"
-        android:title="@string/settings_about"
-        android:summary="Version, license, open source info"
-        android:icon="@drawable/ic_info"
-        android:selectable="true" />
-
-</androidx.preference.PreferenceScreen>
+</PreferenceScreen>

@@ -10,13 +10,15 @@
     <com.google.android.material.appbar.AppBarLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar">
+        android:background="@color/primary_500">
 
         <androidx.appcompat.widget.Toolbar
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
-            app:popupTheme="@style/ThemeOverlay.AppCompat.Light" />
+            android:background="@color/primary_500"
+            app:titleTextColor="@color/white"
+            app:popupTheme="@style/ThemeOverlay.Material3.Light" />
 
     </com.google.android.material.appbar.AppBarLayout>
 
@@ -31,16 +33,7 @@
             android:orientation="vertical"
             android:padding="@dimen/container_padding">
 
-            <!-- Welcome message -->
-            <TextView
-                android:id="@+id/text_welcome"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/welcome_message"
-                android:textSize="@dimen/text_size_title"
-                android:textStyle="bold"
-                android:gravity="center"
-                android:layout_marginBottom="@dimen/space_lg" />
+            <!-- Welcome message removed - now in toolbar -->
 
             <!-- Quick Connect Section -->
             <com.google.android.material.card.MaterialCardView
@@ -60,8 +53,10 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/quick_connect_title"
+                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
                         android:textSize="@dimen/text_size_subtitle"
                         android:textStyle="bold"
+                        android:textColor="?attr/colorOnSurface"
                         android:layout_marginBottom="@dimen/space_md" />
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -130,6 +125,60 @@
 
             </com.google.android.material.card.MaterialCardView>
 
+            <!-- Frequently Used Section -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_frequently_used"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/space_lg"
+                android:visibility="gone"
+                app:cardCornerRadius="@dimen/card_corner_radius"
+                app:cardElevation="@dimen/card_elevation">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="@dimen/space_md">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <ImageView
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:src="@drawable/ic_bookmark"
+                            android:layout_marginEnd="@dimen/space_sm"
+                            android:contentDescription="Frequently used" />
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/frequently_used_title"
+                            android:textSize="@dimen/text_size_subtitle"
+                            android:textStyle="bold"
+                            android:textColor="?attr/colorOnSurface" />
+
+                    </LinearLayout>
+
+                    <!-- Frequently used connections RecyclerView -->
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/recycler_frequently_used"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_md"
+                        tools:listitem="@layout/item_connection"
+                        tools:itemCount="3"
+                        tools:visibility="visible" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
             <!-- Saved Connections Section -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
@@ -154,8 +203,10 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="@string/connections_title"
+                            android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
                             android:textSize="@dimen/text_size_subtitle"
-                            android:textStyle="bold" />
+                            android:textStyle="bold"
+                            android:textColor="?attr/colorOnSurface" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btn_add_connection"
@@ -182,11 +233,12 @@
                         android:id="@+id/text_empty_connections"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="No saved connections.\nTap 'Add Connection' to create your first connection."
+                        android:text="No saved connections.\nTap 'Add Server' to create your first connection."
                         android:textSize="@dimen/text_size_body"
                         android:gravity="center"
                         android:layout_marginTop="@dimen/space_lg"
-                        android:layout_marginBottom="@dimen/space_lg" />
+                        android:layout_marginBottom="@dimen/space_lg"
+                        android:textColor="#757575" />
 
                 </LinearLayout>
 

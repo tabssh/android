@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        android:title="Connection Defaults"
+        android:key="category_connection_defaults">
+
+        <EditTextPreference
+            android:key="default_username"
+            android:title="Default Username"
+            android:summary="Username for quick connect"
+            android:defaultValue=""
+            app:useSimpleSummaryProvider="true" />
+
+        <EditTextPreference
+            android:key="default_port"
+            android:title="Default Port"
+            android:summary="SSH port number"
+            android:defaultValue="22"
+            android:inputType="number"
+            app:useSimpleSummaryProvider="true" />
+
+        <EditTextPreference
+            android:key="connect_timeout"
+            android:title="Connection Timeout"
+            android:summary="Seconds to wait for connection"
+            android:defaultValue="15"
+            android:inputType="number"
+            app:useSimpleSummaryProvider="true" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="Connection Behavior"
+        android:key="category_connection_behavior">
+
+        <SwitchPreferenceCompat
+            android:key="keep_alive_enabled"
+            android:title="Keep-Alive"
+            android:summary="Send periodic keep-alive packets"
+            android:defaultValue="true" />
+
+        <EditTextPreference
+            android:key="keep_alive_interval"
+            android:title="Keep-Alive Interval"
+            android:summary="Seconds between keep-alive packets"
+            android:defaultValue="30"
+            android:inputType="number"
+            android:dependency="keep_alive_enabled"
+            app:useSimpleSummaryProvider="true" />
+
+        <SwitchPreferenceCompat
+            android:key="compression_enabled"
+            android:title="Compression"
+            android:summary="Enable SSH compression"
+            android:defaultValue="true" />
+
+        <SwitchPreferenceCompat
+            android:key="auto_reconnect"
+            android:title="Auto Reconnect"
+            android:summary="Automatically reconnect on connection loss"
+            android:defaultValue="false" />
+
+    </PreferenceCategory>
+
+</PreferenceScreen>
