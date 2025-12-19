@@ -21,6 +21,22 @@ A beautiful, modern, open-source SSH client for Android with true browser-style 
 - 🔔 **Background Sessions** - Keep connections alive
 - 🎯 **Zero Trackers** - No analytics, no ads, privacy-focused
 
+## 📦 Installation
+
+### Download APK
+Download the latest release from [GitHub Releases](https://github.com/tabssh/android/releases):
+- **Universal APK** - Works on all devices (recommended)
+- **Architecture-specific APKs** - Optimized for your device
+
+### Install
+1. Download `tabssh-universal.apk`
+2. Enable "Install from Unknown Sources" in Android settings
+3. Open the APK file and install
+4. Launch TabSSH and start connecting!
+
+### F-Droid
+Coming soon to F-Droid repository.
+
 ## 🚀 Quick Start
 
 ```bash
