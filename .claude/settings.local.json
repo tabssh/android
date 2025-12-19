@@ -36,7 +36,8 @@
       "Bash(else)",
       "Bash(echo:*)",
       "Bash(fi)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(timeout 30 gh run watch:*)"
     ],
     "deny": [
       "Bash(git commit:*)",
