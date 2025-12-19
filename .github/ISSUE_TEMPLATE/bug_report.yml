@@ -1,0 +1,192 @@
+name: 🐛 Bug Report
+description: Report a bug or unexpected behavior in TabSSH
+title: "[Bug]: "
+labels: ["bug", "triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the form below to help us investigate and fix the issue.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission Checklist
+      description: Please complete these checks before submitting
+      options:
+        - label: I have searched existing issues to ensure this bug hasn't been reported
+          required: true
+        - label: I have updated to the latest version of TabSSH
+          required: true
+        - label: I have read the [documentation](https://github.com/tabssh/android/blob/main/README.md)
+          required: false
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of the bug
+      placeholder: What happened? What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: Step-by-step instructions to reproduce the bug
+      placeholder: |
+        1. Open TabSSH
+        2. Create new connection with...
+        3. Tap connect
+        4. See error...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should have happened?
+      placeholder: The connection should succeed and show the terminal
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened?
+      placeholder: Connection failed with error "..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: version
+    attributes:
+      label: TabSSH Version
+      description: Which version are you using?
+      options:
+        - 1.0.0 (latest)
+        - Development build
+        - Custom build
+        - Other (specify in additional context)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: android-version
+    attributes:
+      label: Android Version
+      description: Which version of Android are you using?
+      options:
+        - Android 14 (API 34)
+        - Android 13 (API 33)
+        - Android 12 (API 31-32)
+        - Android 11 (API 30)
+        - Android 10 (API 29)
+        - Android 9 (API 28)
+        - Android 8.1 (API 27)
+        - Android 8.0 (API 26)
+        - Android 7.x (API 24-25)
+        - Android 6.0 (API 23)
+        - Android 5.x (API 21-22)
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device Information
+      description: Device manufacturer and model
+      placeholder: e.g., Samsung Galaxy S23, Google Pixel 8, OnePlus 11
+    validations:
+      required: true
+
+  - type: dropdown
+    id: architecture
+    attributes:
+      label: Device Architecture
+      description: Which APK variant are you using?
+      options:
+        - Universal APK
+        - arm64-v8a (64-bit ARM)
+        - armeabi-v7a (32-bit ARM)
+        - x86_64 (64-bit x86)
+        - x86 (32-bit x86)
+        - Don't know
+    validations:
+      required: false
+
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: How Often Does This Occur?
+      description: How frequently can you reproduce this bug?
+      options:
+        - Always (100% of the time)
+        - Often (75% of the time)
+        - Sometimes (50% of the time)
+        - Rarely (25% of the time)
+        - Once (can't reproduce)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How severe is this bug?
+      options:
+        - Critical (app crashes, data loss)
+        - High (feature completely broken)
+        - Medium (feature partially broken)
+        - Low (minor inconvenience)
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Include relevant logs if available. You can get logs with:
+        `adb logcat | grep TabSSH`
+      placeholder: Paste logs here (if applicable)
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: If applicable, add screenshots to help explain the problem
+      placeholder: Drag and drop images here or paste image URLs
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: |
+        Add any other context about the problem here. Examples:
+        - Does this happen on WiFi, mobile data, or both?
+        - Does this happen with all SSH servers or specific ones?
+        - Does this happen with password auth, key auth, or both?
+        - Are you using any special SSH configurations?
+      placeholder: Any additional information that might help diagnose the issue
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Would you like to contribute a fix?
+      options:
+        - label: I would like to work on a fix for this bug
+          required: false
