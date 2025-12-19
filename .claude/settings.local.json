@@ -1,69 +1,28 @@
 {
-  "model": "sonnet[1m]",
   "permissions": {
     "allow": [
       "Read(**)",
       "Write(**)",
-      "WebSearch",
-      "WebFetch(domain:github.com)",
-      "Bash(mkdir:*)",
-      "Bash(tree:*)",
-      "Bash(go:*)",
-      "Bash(curl:*)",
-      "Bash(wget:*)",
-      "Bash(echo:*)",
-      "Bash(make:*)",
-      "Bash(find:*)",
-      "Bash(grep:*)",
-      "Bash(awk:*)",
-      "Bash(sed:*)",
-      "Bash(cat:*)",
-      "Bash(chmod:*)",
-      "Bash(chown:*)",
-      "Bash(docker:*)",
-      "Bash(docker-compose:*)",
-      "Bash(incus:*)",
-      "Bash(git:*)",
-      "Bash(pkill:*)",
-      "Bash(rm:*)",
-      "Bash(mv:*)",
-      "Bash(cp:*)",
+      "Bash(:*:*)",
+      "Bash(docker run:*)",
+      "Bash(make dev:*)",
+      "Bash(tee:*)",
+      "Bash(./build.sh:*)",
+      "Bash(docker ps:*)",
       "Bash(ls:*)",
-      "Bash(pwd:*)",
-      "Bash(cd:*)",
-      "Bash(head:*)",
-      "Bash(timeout:*)",
-      "Bash(do:*)",
-      "Bash(ln:*)",
-      "Bash(test:*)",
-      "Bash(do)",
-      "Bash(sort:*)",
-      "Bash(paste:*)",
-      "Bash(*:*)"
+      "Bash(aapt dump:*)",
+      "Bash(md5sum:*)",
+      "Bash(unzip:*)",
+      "Bash(make build:*)",
+      "Bash(cat:*)"
     ],
     "deny": [
-      "Bash(git commit:*)"
-    ],
-    "ask": []
-  },
-  "preferences": {
-    "auto_commit": false
-  },
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Write(**)",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "if grep -qi 'anthropic\\|claude' \"$file\" 2>/dev/null; then echo 'Error: File contains vendor names (Anthropic/Claude)' >&2; exit 1; fi"
-          }
-        ]
-      }
+      "Bash(git commit:*)",
+      "Bash(git commit :*)"
     ]
   },
-  "env": {
-    "MAX_THINKING_TOKENS": "1000"
+  "model": "sonnet",
+  "preferences": {
+    "auto_commit": false
   }
 }
-

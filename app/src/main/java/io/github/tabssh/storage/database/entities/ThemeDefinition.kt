@@ -50,9 +50,22 @@ data class ThemeDefinition(
     
     @ColumnInfo(name = "last_modified")
     val lastModified: Long = System.currentTimeMillis(),
-    
+
     @ColumnInfo(name = "usage_count")
-    val usageCount: Int = 0
+    val usageCount: Int = 0,
+
+    // Sync metadata fields
+    @ColumnInfo(name = "last_synced_at")
+    val lastSyncedAt: Long = 0,
+
+    @ColumnInfo(name = "sync_version")
+    val syncVersion: Long = 0,
+
+    @ColumnInfo(name = "modified_at")
+    val modifiedAt: Long = System.currentTimeMillis(),
+
+    @ColumnInfo(name = "sync_device_id")
+    val syncDeviceId: String = ""
 ) {
     fun getDisplayName(): String {
         return if (author.isNullOrBlank()) {

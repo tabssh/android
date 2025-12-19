@@ -33,9 +33,22 @@ data class StoredKey(
     
     @ColumnInfo(name = "requires_passphrase")
     val requiresPassphrase: Boolean = false,
-    
+
     @ColumnInfo(name = "key_size")
-    val keySize: Int? = null
+    val keySize: Int? = null,
+
+    // Sync metadata fields
+    @ColumnInfo(name = "last_synced_at")
+    val lastSyncedAt: Long = 0,
+
+    @ColumnInfo(name = "sync_version")
+    val syncVersion: Long = 0,
+
+    @ColumnInfo(name = "modified_at")
+    val modifiedAt: Long = System.currentTimeMillis(),
+
+    @ColumnInfo(name = "sync_device_id")
+    val syncDeviceId: String = ""
 ) {
     fun getDisplayName(): String {
         return if (comment.isNullOrBlank()) {
