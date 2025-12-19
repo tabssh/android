@@ -2,7 +2,7 @@ name: Development Builds
 
 on:
   push:
-    branches: [ devel, develop ]
+    branches: [ main, master, devel, develop ]
 
 jobs:
   build-devel:
