@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory android:title="Sync Configuration">
+
+        <SwitchPreferenceCompat
+            android:key="sync_enabled"
+            android:title="Enable sync"
+            android:summary="Synchronize data across devices"
+            android:defaultValue="false" />
+
+        <ListPreference
+            android:key="sync_backend"
+            android:title="Sync backend"
+            android:summary="%s"
+            android:entries="@array/sync_backend_entries"
+            android:entryValues="@array/sync_backend_values"
+            android:defaultValue="google_drive"
+            android:dependency="sync_enabled" />
+
+        <Preference
+            android:key="sync_account"
+            android:title="Google account"
+            android:summary="Not connected"
+            android:dependency="sync_enabled" />
+
+        <EditTextPreference
+            android:key="webdav_server_url"
+            android:title="WebDAV server URL"
+            android:summary="https://cloud.example.com/remote.php/dav/files/username"
+            android:dependency="sync_enabled" />
+
+        <EditTextPreference
+            android:key="webdav_username"
+            android:title="WebDAV username"
+            android:summary="Username for WebDAV authentication"
+            android:dependency="sync_enabled" />
+
+        <EditTextPreference
+            android:key="webdav_password"
+            android:title="WebDAV password"
+            android:summary="App-specific password (recommended)"
+            android:inputType="textPassword"
+            android:dependency="sync_enabled" />
+
+        <EditTextPreference
+            android:key="webdav_sync_folder"
+            android:title="WebDAV sync folder"
+            android:summary="Remote folder path"
+            android:defaultValue="/TabSSH"
+            android:dependency="sync_enabled" />
+
+        <Preference
+            android:key="webdav_test_connection"
+            android:title="Test WebDAV connection"
+            android:summary="Verify server connectivity"
+            android:dependency="sync_enabled" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="Sync Security">
+
+        <Preference
+            android:key="sync_password"
+            android:title="Sync encryption password"
+            android:summary="Set encryption password for synced data (required)"
+            android:dependency="sync_enabled" />
+
+        <Preference
+            android:key="sync_manual_trigger"
+            android:title="Sync now"
+            android:summary="Manually trigger sync operation"
+            android:dependency="sync_enabled" />
+
+        <Preference
+            android:key="sync_last_time"
+            android:title="Last sync"
+            android:summary="Never synced"
+            android:selectable="false"
+            android:dependency="sync_enabled" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="Sync Settings"
+        android:dependency="sync_enabled">
+
+        <ListPreference
+            android:key="sync_frequency"
+            android:title="Sync frequency"
+            android:summary="%s"
+            android:entries="@array/sync_frequency_entries"
+            android:entryValues="@array/sync_frequency_values"
+            android:defaultValue="1h" />
+
+        <SwitchPreferenceCompat
+            android:key="sync_wifi_only"
+            android:title="WiFi only"
+            android:summary="Only sync when connected to WiFi"
+            android:defaultValue="true" />
+
+        <SwitchPreferenceCompat
+            android:key="sync_on_change"
+            android:title="Sync on change"
+            android:summary="Automatically sync when data changes"
+            android:defaultValue="true" />
+
+        <SwitchPreferenceCompat
+            android:key="sync_auto_resolve"
+            android:title="Auto-resolve conflicts"
+            android:summary="Automatically resolve conflicts using timestamps"
+            android:defaultValue="true" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
+            android:title="What to Sync"
+        android:dependency="sync_enabled">
+
+        <SwitchPreferenceCompat
+            android:key="sync_connections"
+            android:title="Connections"
+            android:summary="Sync SSH connection profiles"
+            android:defaultValue="true" />
+
+        <SwitchPreferenceCompat
+            android:key="sync_keys"
+            android:title="SSH keys"
+            android:summary="Sync SSH key metadata (not private keys)"
+            android:defaultValue="true" />
+
+        <SwitchPreferenceCompat
+            android:key="sync_settings"
+            android:title="App settings"
+            android:summary="Sync all app preferences and settings"
+            android:defaultValue="true" />
+
+        <SwitchPreferenceCompat
+            android:key="sync_themes"
+            android:title="Themes"
+            android:summary="Sync custom terminal themes"
+            android:defaultValue="true" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="Advanced"
+        android:dependency="sync_enabled">
+
+        <Preference
+            android:key="sync_clear_data"
+            android:title="Clear sync data"
+            android:summary="Remove all synced data from Google Drive" />
+
+        <Preference
+            android:key="sync_force_upload"
+            android:title="Force upload"
+            android:summary="Upload local data and overwrite remote" />
+
+        <Preference
+            android:key="sync_force_download"
+            android:title="Force download"
+            android:summary="Download remote data and overwrite local" />
+
+    </PreferenceCategory>
+
+</PreferenceScreen>

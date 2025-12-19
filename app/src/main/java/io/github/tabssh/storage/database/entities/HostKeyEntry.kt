@@ -32,9 +32,22 @@ data class HostKeyEntry(
     
     @ColumnInfo(name = "last_verified")
     val lastVerified: Long = System.currentTimeMillis(),
-    
+
     @ColumnInfo(name = "trust_level")
-    val trustLevel: String = "UNKNOWN" // UNKNOWN, ACCEPTED, VERIFIED
+    val trustLevel: String = "UNKNOWN", // UNKNOWN, ACCEPTED, VERIFIED
+
+    // Sync metadata fields
+    @ColumnInfo(name = "last_synced_at")
+    val lastSyncedAt: Long = 0,
+
+    @ColumnInfo(name = "sync_version")
+    val syncVersion: Long = 0,
+
+    @ColumnInfo(name = "modified_at")
+    val modifiedAt: Long = System.currentTimeMillis(),
+
+    @ColumnInfo(name = "sync_device_id")
+    val syncDeviceId: String = ""
 ) {
     companion object {
         fun createId(hostname: String, port: Int): String {

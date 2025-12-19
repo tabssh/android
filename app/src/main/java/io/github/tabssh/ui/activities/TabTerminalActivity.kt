@@ -39,7 +39,7 @@ class TabTerminalActivity : AppCompatActivity() {
         fun createIntent(context: Context, profile: ConnectionProfile, autoConnect: Boolean = true): Intent {
             return Intent(context, TabTerminalActivity::class.java).apply {
                 putExtra(EXTRA_CONNECTION_PROFILE_ID, profile.id)
-                putExtra(EXTRA_CONNECTION_PROFILE, profile) // Pass entire profile for Quick Connect
+                // Note: Cannot pass entire profile object - use ID to load from database
                 putExtra(EXTRA_AUTO_CONNECT, autoConnect)
             }
         }

@@ -101,4 +101,37 @@
         <item>underline</item>
         <item>bar</item>
     </string-array>
+
+    <!-- Sync backend options -->
+    <string-array name="sync_backend_entries">
+        <item>Google Drive</item>
+        <item>WebDAV (Nextcloud/ownCloud)</item>
+    </string-array>
+    <string-array name="sync_backend_values">
+        <item>google_drive</item>
+        <item>webdav</item>
+    </string-array>
+
+    <!-- Sync frequency options -->
+    <string-array name="sync_frequency_entries">
+        <item>Manual only</item>
+        <item>Every 15 minutes</item>
+        <item>Every 30 minutes</item>
+        <item>Every hour</item>
+        <item>Every 3 hours</item>
+        <item>Every 6 hours</item>
+        <item>Every 12 hours</item>
+        <item>Every 24 hours</item>
+    </string-array>
+    <string-array name="sync_frequency_values">
+        <item>manual</item>
+        <item>15min</item>
+        <item>30min</item>
+        <item>1h</item>
+        <item>3h</item>
+        <item>6h</item>
+        <item>12h</item>
+        <item>24h</item>
+    </string-array>
+
 </resources>

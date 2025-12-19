@@ -1,4 +1,4 @@
-FROM openjdk:17-jdk-slim
+FROM eclipse-temurin:17-jdk
 
 # Install required packages for Android development
 RUN apt-get update && apt-get install -y \

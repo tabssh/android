@@ -103,7 +103,10 @@ class PreferenceManager(private val context: Context) {
     
     fun isAutoLockOnBackground(): Boolean = getBoolean(KEY_AUTO_LOCK_ON_BACKGROUND, false)
     fun setAutoLockOnBackground(enabled: Boolean) = setBoolean(KEY_AUTO_LOCK_ON_BACKGROUND, enabled)
-    
+
+    fun getAutoLockTimeout(): Int = getInt(KEY_AUTO_LOCK_TIMEOUT, 300)
+    fun setAutoLockTimeout(timeout: Int) = setInt(KEY_AUTO_LOCK_TIMEOUT, timeout)
+
     fun isStrictHostKeyChecking(): Boolean = getBoolean(KEY_STRICT_HOST_KEY_CHECKING, true)
     fun setStrictHostKeyChecking(enabled: Boolean) = setBoolean(KEY_STRICT_HOST_KEY_CHECKING, enabled)
     
@@ -215,7 +218,15 @@ class PreferenceManager(private val context: Context) {
     private fun setFloat(key: String, value: Float) {
         preferences.edit().putFloat(key, value).apply()
     }
-    
+
+    private fun getLong(key: String, defaultValue: Long): Long {
+        return preferences.getLong(key, defaultValue)
+    }
+
+    private fun setLong(key: String, value: Long) {
+        preferences.edit().putLong(key, value).apply()
+    }
+
     /**
      * Clear all preferences (factory reset)
      */
@@ -281,4 +292,59 @@ class PreferenceManager(private val context: Context) {
     fun setHostProxyConfiguration(host: String, config: String) {
         setString("proxy_host_$host", config)
     }
+
+    // Sync preferences
+    fun isSyncEnabled(): Boolean = getBoolean("sync_enabled", false)
+    fun setSyncEnabled(enabled: Boolean) = setBoolean("sync_enabled", enabled)
+
+    fun getSyncFrequency(): String = getString("sync_frequency", "1h")
+    fun setSyncFrequency(frequency: String) = setString("sync_frequency", frequency)
+
+    fun isSyncPasswordSet(): Boolean = getBoolean("sync_password_set", false)
+    fun setSyncPasswordSet(isSet: Boolean) = setBoolean("sync_password_set", isSet)
+
+    fun getLastSyncTime(): Long = preferences.getLong("sync_last_time", 0)
+    fun setLastSyncTime(timestamp: Long) = preferences.edit().putLong("sync_last_time", timestamp).apply()
+
+    fun isSyncWifiOnly(): Boolean = getBoolean("sync_wifi_only", true)
+    fun setSyncWifiOnly(wifiOnly: Boolean) = setBoolean("sync_wifi_only", wifiOnly)
+
+    fun isSyncConnectionsEnabled(): Boolean = getBoolean("sync_connections", true)
+    fun setSyncConnectionsEnabled(enabled: Boolean) = setBoolean("sync_connections", enabled)
+
+    fun isSyncKeysEnabled(): Boolean = getBoolean("sync_keys", true)
+    fun setSyncKeysEnabled(enabled: Boolean) = setBoolean("sync_keys", enabled)
+
+    fun isSyncSettingsEnabled(): Boolean = getBoolean("sync_settings", true)
+    fun setSyncSettingsEnabled(enabled: Boolean) = setBoolean("sync_settings", enabled)
+
+    fun isSyncThemesEnabled(): Boolean = getBoolean("sync_themes", true)
+    fun setSyncThemesEnabled(enabled: Boolean) = setBoolean("sync_themes", enabled)
+
+    fun isSyncOnChangeEnabled(): Boolean = getBoolean("sync_on_change", true)
+    fun setSyncOnChangeEnabled(enabled: Boolean) = setBoolean("sync_on_change", enabled)
+
+    fun isAutoResolveConflictsEnabled(): Boolean = getBoolean("sync_auto_resolve", true)
+    fun setAutoResolveConflicts(enabled: Boolean) = setBoolean("sync_auto_resolve", enabled)
+
+    // Sync backend selection
+    fun getSyncBackend(): String = getString("sync_backend", "google_drive")
+    fun setSyncBackend(backend: String) = setString("sync_backend", backend)
+
+    // WebDAV sync preferences
+    fun getWebDAVServerUrl(): String = getString("webdav_server_url", "")
+    fun setWebDAVServerUrl(url: String) = setString("webdav_server_url", url)
+
+    fun getWebDAVUsername(): String = getString("webdav_username", "")
+    fun setWebDAVUsername(username: String) = setString("webdav_username", username)
+
+    fun getWebDAVPassword(): String = getString("webdav_password", "")
+    fun setWebDAVPassword(password: String) = setString("webdav_password", password)
+
+    fun getWebDAVSyncFolder(): String = getString("webdav_sync_folder", "/TabSSH")
+    fun setWebDAVSyncFolder(folder: String) = setString("webdav_sync_folder", folder)
+
+    fun getPreferencesLastModified(): Long = preferences.getLong("preferences_last_modified", 0)
+    fun setPreferencesLastModified(timestamp: Long = System.currentTimeMillis()) =
+        preferences.edit().putLong("preferences_last_modified", timestamp).apply()
 }

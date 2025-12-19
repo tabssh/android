@@ -72,6 +72,13 @@
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- SSH Key Management activity -->
+        <activity
+            android:name=".ui.activities.KeyManagementActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.activities.MainActivity"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- SFTP file browser activity -->
         <activity
             android:name=".ui.activities.SFTPActivity"

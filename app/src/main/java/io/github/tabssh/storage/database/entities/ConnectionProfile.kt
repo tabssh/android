@@ -79,9 +79,22 @@ data class ConnectionProfile(
     
     @ColumnInfo(name = "connection_count")
     val connectionCount: Int = 0,
-    
+
     @ColumnInfo(name = "advanced_settings")
-    val advancedSettings: String? = null // JSON string
+    val advancedSettings: String? = null, // JSON string
+
+    // Sync metadata fields
+    @ColumnInfo(name = "last_synced_at")
+    val lastSyncedAt: Long = 0,
+
+    @ColumnInfo(name = "sync_version")
+    val syncVersion: Long = 0,
+
+    @ColumnInfo(name = "modified_at")
+    val modifiedAt: Long = System.currentTimeMillis(),
+
+    @ColumnInfo(name = "sync_device_id")
+    val syncDeviceId: String = ""
 ) {
     fun getAuthTypeEnum(): AuthType {
         return try {

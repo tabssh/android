@@ -28,9 +28,27 @@ Description: |
     * Complete VT100/ANSI terminal emulation with full escape sequence support
     * SSH connection management with connection pooling and auto-reconnection
     * Secure by default with hardware-backed encryption (Android Keystore)
-    * SSH key management supporting RSA, DSA, ECDSA, and Ed25519
+    * Universal SSH key support - ALL formats and types
     * SSH config import with full ~/.ssh/config compatibility
     * Host key verification and known_hosts management
+
+    🔑 SSH KEY MANAGEMENT (NEW v1.0.0):
+    * Universal key parser - OpenSSH, PEM, PKCS#8, PuTTY formats
+    * All key types - RSA (2048/3072/4096), ECDSA (P-256/384/521), Ed25519, DSA
+    * In-app key generation with passphrase protection
+    * Encrypted key import with passphrase support
+    * SHA-256 fingerprint display
+    * Dedicated key management UI - view, import, generate, delete keys
+    * Export keys in PEM or OpenSSH format
+
+    ☁️ SYNC & BACKUP (NEW v1.0.0):
+    * Google Drive sync with AES-256-GCM encryption
+    * WebDAV sync for degoogled devices (Nextcloud/ownCloud compatible)
+    * Automatic backend fallback on devices without Google Play Services
+    * Multi-device synchronization with intelligent conflict resolution
+    * Import/Export connections as encrypted ZIP backups
+    * Password-based encryption for all synced data
+    * Zero-configuration sync on degoogled ROMs (LineageOS, CalyxOS, GrapheneOS)
 
     🎨 THEMES & CUSTOMIZATION:
     * 12 beautiful built-in themes (Dracula, Solarized, Nord, Monokai, One Dark, etc.)
@@ -94,10 +112,20 @@ Description: |
 
 RequiresRoot: false
 
+AntiFeatures: []
+
 Builds:
   - versionName: '1.0.0'
     versionCode: 1
     commit: v1.0.0
-    subdir: .
+    subdir: android
     gradle:
       - fdroidRelease
+    prebuild:
+      - echo "sdk.dir=$$SDK$$" > local.properties
+      - echo "ndk.dir=$$NDK$$" >> local.properties
+
+AutoUpdateMode: Version v%v
+UpdateCheckMode: Tags
+CurrentVersion: '1.0.0'
+CurrentVersionCode: 1

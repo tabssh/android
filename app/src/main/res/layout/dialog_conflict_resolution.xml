@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:id="@+id/conflict_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Sync Conflict Detected"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:textColor="?android:attr/textColorPrimary"
+        android:layout_marginBottom="8dp" />
+
+    <TextView
+        android:id="@+id/conflict_entity_type"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Connection: example.com"
+        android:textSize="16sp"
+        android:textColor="?android:attr/textColorSecondary"
+        android:layout_marginBottom="16dp" />
+
+    <TextView
+        android:id="@+id/field_name"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Field: hostname"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textColor="?android:attr/textColorPrimary"
+        android:layout_marginBottom="8dp" />
+
+    <TextView
+        android:id="@+id/local_value"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Local: example.com (2h ago)"
+        android:textSize="12sp"
+        android:textColor="?android:attr/textColorSecondary"
+        android:layout_marginBottom="4dp" />
+
+    <TextView
+        android:id="@+id/remote_value"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Remote: example.org (1h ago)"
+        android:textSize="12sp"
+        android:textColor="?android:attr/textColorSecondary"
+        android:layout_marginBottom="16dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Choose resolution:"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textColor="?android:attr/textColorPrimary"
+        android:layout_marginBottom="8dp" />
+
+    <RadioGroup
+        android:id="@+id/resolution_options"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <RadioButton
+            android:id="@+id/radio_keep_local"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Keep Local Version"
+            android:checked="true"
+            android:textSize="14sp" />
+
+        <RadioButton
+            android:id="@+id/radio_keep_remote"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Keep Remote Version"
+            android:textSize="14sp" />
+
+        <RadioButton
+            android:id="@+id/radio_keep_both"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Keep Both (Duplicate)"
+            android:textSize="14sp" />
+
+        <RadioButton
+            android:id="@+id/radio_skip"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Skip This Item"
+            android:textSize="14sp" />
+
+    </RadioGroup>
+
+</LinearLayout>

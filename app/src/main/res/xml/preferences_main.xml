@@ -29,4 +29,11 @@
         android:icon="@android:drawable/stat_sys_data_bluetooth"
         android:fragment="com.tabssh.ui.activities.ConnectionSettingsFragment" />
 
+    <Preference
+        android:key="sync_settings"
+        android:title="Google Drive Sync"
+        android:summary="Sync data across devices"
+        android:icon="@android:drawable/ic_menu_rotate"
+        android:fragment="io.github.tabssh.ui.fragments.SyncSettingsFragment" />
+
 </PreferenceScreen>

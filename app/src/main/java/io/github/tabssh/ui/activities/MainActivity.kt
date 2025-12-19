@@ -3,9 +3,12 @@ package io.github.tabssh.ui.activities
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -13,11 +16,14 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.backup.BackupManager
 import io.github.tabssh.databinding.ActivityMainBinding
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.ui.adapters.ConnectionAdapter
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.*
 
 /**
  * Main activity showing connection list and quick connect
@@ -27,25 +33,38 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val REQUEST_NOTIFICATION_PERMISSION = 1001
+        private const val REQUEST_CODE_IMPORT_BACKUP = 1002
+        private const val REQUEST_CODE_EXPORT_BACKUP = 1003
     }
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var app: TabSSHApplication
     private lateinit var connectionAdapter: ConnectionAdapter
     private lateinit var frequentlyUsedAdapter: ConnectionAdapter
+    private lateinit var backupManager: BackupManager
 
     private val connections = mutableListOf<ConnectionProfile>()
     private val frequentlyUsedConnections = mutableListOf<ConnectionProfile>()
+
+    // Activity result launchers for import/export
+    private val importBackupLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { importBackupFromUri(it) }
+    }
+
+    private val exportBackupLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        uri?.let { exportBackupToUri(it) }
+    }
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
         Logger.d("MainActivity", "onCreate")
-        
+
         app = application as TabSSHApplication
+        backupManager = BackupManager(this)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        
+
         setupToolbar()
         setupRecyclerView()
         setupFrequentlyUsedRecyclerView()
@@ -111,18 +130,18 @@ class MainActivity : AppCompatActivity() {
                 true
             }
             R.id.action_manage_keys -> {
-                showToast("SSH Key Management - Coming soon")
-                // TODO: Launch key management activity
+                val intent = Intent(this, KeyManagementActivity::class.java)
+                startActivity(intent)
                 true
             }
             R.id.action_import_connections -> {
-                showToast("Import Connections - Coming soon")
-                // TODO: Implement connection import
+                importBackupLauncher.launch(arrayOf("application/zip", "application/octet-stream"))
                 true
             }
             R.id.action_export_connections -> {
-                showToast("Export Connections - Coming soon")
-                // TODO: Implement connection export
+                val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+                val filename = "tabssh_backup_$timestamp.zip"
+                exportBackupLauncher.launch(filename)
                 true
             }
             R.id.action_about -> {
@@ -496,7 +515,99 @@ class MainActivity : AppCompatActivity() {
     private fun showToast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
-    
+
+    /**
+     * Import backup from URI
+     */
+    private fun importBackupFromUri(uri: Uri) {
+        lifecycleScope.launch {
+            try {
+                Logger.i("MainActivity", "Importing backup from: $uri")
+
+                val result = backupManager.restoreBackup(uri)
+
+                if (result.success) {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("Import Successful")
+                        .setMessage("Restored ${result.restoredItems.values.sum()} items:\n" +
+                                result.restoredItems.entries.joinToString("\n") { "${it.key}: ${it.value}" })
+                        .setPositiveButton("OK") { _, _ ->
+                            // Refresh connection list
+                            loadConnections()
+                            loadFrequentlyUsedConnections()
+                        }
+                        .show()
+                } else {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("Import Failed")
+                        .setMessage(result.message)
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
+            } catch (e: Exception) {
+                Logger.e("MainActivity", "Import failed", e)
+                showToast("Import failed: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Export backup to URI
+     */
+    private fun exportBackupToUri(uri: Uri) {
+        // Show export options dialog
+        val options = arrayOf("Include passwords (encrypted)", "No passwords")
+        var includePasswords = false
+
+        AlertDialog.Builder(this)
+            .setTitle("Export Options")
+            .setSingleChoiceItems(options, 1) { _, which ->
+                includePasswords = (which == 0)
+            }
+            .setPositiveButton("Export") { _, _ ->
+                performExport(uri, includePasswords)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Perform actual export
+     */
+    private fun performExport(uri: Uri, includePasswords: Boolean) {
+        lifecycleScope.launch {
+            try {
+                Logger.i("MainActivity", "Exporting backup to: $uri")
+
+                val result = backupManager.createBackup(
+                    outputUri = uri,
+                    includePasswords = includePasswords,
+                    encryptBackup = includePasswords,
+                    password = if (includePasswords) null else null // TODO: Get password from user
+                )
+
+                if (result.success) {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("Export Successful")
+                        .setMessage("Backup created successfully!\n\n" +
+                                "Items exported:\n" +
+                                result.metadata?.itemCounts?.entries?.joinToString("\n") { "${it.key}: ${it.value}" })
+                        .setPositiveButton("OK", null)
+                        .show()
+                } else {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("Export Failed")
+                        .setMessage(result.message)
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
+            } catch (e: Exception) {
+                Logger.e("MainActivity", "Export failed", e)
+                showToast("Export failed: ${e.message}")
+            }
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         Logger.d("MainActivity", "onResume")
