@@ -23,17 +23,17 @@ jobs:
     - name: Validate project structure
       run: |
         echo "🔍 Validating TabSSH project structure..."
-        
+
         # Check essential files
         test -f "app/build.gradle" && echo "✅ App build.gradle exists"
         test -f "app/src/main/AndroidManifest.xml" && echo "✅ AndroidManifest.xml exists"
-        test -f "app/src/main/java/com/tabssh/TabSSHApplication.kt" && echo "✅ Application class exists"
-        
+        test -f "app/src/main/java/io/github/tabssh/TabSSHApplication.kt" && echo "✅ Application class exists"
+
         # Check core implementation
-        test -f "app/src/main/java/com/tabssh/ssh/connection/SSHSessionManager.kt" && echo "✅ SSH manager exists"
-        test -f "app/src/main/java/com/tabssh/terminal/emulator/TerminalEmulator.kt" && echo "✅ Terminal emulator exists"
-        test -f "app/src/main/java/com/tabssh/ui/activities/MainActivity.kt" && echo "✅ Main activity exists"
-        
+        test -f "app/src/main/java/io/github/tabssh/ssh/connection/SSHSessionManager.kt" && echo "✅ SSH manager exists"
+        test -f "app/src/main/java/io/github/tabssh/terminal/emulator/TerminalEmulator.kt" && echo "✅ Terminal emulator exists"
+        test -f "app/src/main/java/io/github/tabssh/ui/activities/MainActivity.kt" && echo "✅ Main activity exists"
+
         echo "✅ Project structure validation passed"
         
     - name: Validate F-Droid metadata
@@ -71,7 +71,7 @@ jobs:
         fi
         
         # Check for secure defaults
-        if grep -q "StrictHostKeyChecking.*yes" app/src/main/java/com/tabssh/ssh/connection/SSHConnection.kt; then
+        if grep -q "StrictHostKeyChecking.*yes" app/src/main/java/io/github/tabssh/ssh/connection/SSHConnection.kt; then
           echo "✅ Secure SSH defaults found"
         fi
         
@@ -93,14 +93,14 @@ jobs:
         
         # Validate critical components exist
         REQUIRED_FILES=(
-          "app/src/main/java/com/tabssh/TabSSHApplication.kt"
-          "app/src/main/java/com/tabssh/storage/database/TabSSHDatabase.kt"
-          "app/src/main/java/com/tabssh/ssh/connection/SSHSessionManager.kt"
-          "app/src/main/java/com/tabssh/terminal/emulator/TerminalEmulator.kt"
-          "app/src/main/java/com/tabssh/ui/tabs/TabManager.kt"
-          "app/src/main/java/com/tabssh/crypto/storage/SecurePasswordManager.kt"
-          "app/src/main/java/com/tabssh/themes/definitions/ThemeManager.kt"
-          "app/src/main/java/com/tabssh/sftp/SFTPManager.kt"
+          "app/src/main/java/io/github/tabssh/TabSSHApplication.kt"
+          "app/src/main/java/io/github/tabssh/storage/database/TabSSHDatabase.kt"
+          "app/src/main/java/io/github/tabssh/ssh/connection/SSHSessionManager.kt"
+          "app/src/main/java/io/github/tabssh/terminal/emulator/TerminalEmulator.kt"
+          "app/src/main/java/io/github/tabssh/ui/tabs/TabManager.kt"
+          "app/src/main/java/io/github/tabssh/crypto/storage/SecurePasswordManager.kt"
+          "app/src/main/java/io/github/tabssh/themes/definitions/ThemeManager.kt"
+          "app/src/main/java/io/github/tabssh/sftp/SFTPManager.kt"
         )
         
         MISSING_COUNT=0
