@@ -16,7 +16,11 @@
       "Bash(make build:*)",
       "Bash(cat:*)",
       "Bash(python3:*)",
-      "Bash(./gradlew :app:generateDebugBuildConfig:*)"
+      "Bash(./gradlew :app:generateDebugBuildConfig:*)",
+      "Bash(gh --version:*)",
+      "Bash(gh auth:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run:*)"
     ],
     "deny": [
       "Bash(git commit:*)",
