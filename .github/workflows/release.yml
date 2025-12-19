@@ -50,9 +50,16 @@ jobs:
     - name: Get release version
       id: version
       run: |
-        VERSION=${GITHUB_REF#refs/tags/v}
+        # Extract tag name and remove 'v' prefix if present
+        TAG_NAME=${GITHUB_REF#refs/tags/}
+        VERSION=${TAG_NAME#v}
+
+        echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
         echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
         echo "RELEASE_NAME=tabssh-android-arm64" >> $GITHUB_OUTPUT
+
+        echo "📦 Building release for tag: $TAG_NAME"
+        echo "📦 Version: $VERSION"
         
     - name: Build release APK
       run: ./gradlew assembleRelease
@@ -118,10 +125,24 @@ jobs:
         echo "\`\`\`" >> ../../../RELEASE_NOTES.md
         echo "" >> ../../../RELEASE_NOTES.md
         echo "**Verify downloads**: \`sha256sum -c tabssh-android-checksums-${{ steps.version.outputs.VERSION }}.sha256\`" >> ../../../RELEASE_NOTES.md
-        
+
         cd ../fdroidRelease/
         sha256sum *.apk > tabssh-android-fdroid-checksums-${{ steps.version.outputs.VERSION }}.sha256
-        
+
+    - name: Delete existing release if exists
+      continue-on-error: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        echo "🗑️ Checking for existing release: ${{ steps.version.outputs.TAG_NAME }}"
+
+        # Try to delete the release (both with and without 'v' prefix)
+        gh release delete ${{ steps.version.outputs.TAG_NAME }} --yes || echo "Release ${{ steps.version.outputs.TAG_NAME }} not found"
+        gh release delete v${{ steps.version.outputs.VERSION }} --yes || echo "Release v${{ steps.version.outputs.VERSION }} not found"
+        gh release delete ${{ steps.version.outputs.VERSION }} --yes || echo "Release ${{ steps.version.outputs.VERSION }} not found"
+
+        echo "✅ Cleanup complete, ready to create new release"
+
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:

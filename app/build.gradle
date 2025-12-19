@@ -31,6 +31,13 @@ android {
                 arg("room.schemaLocation", "$projectDir/schemas")
             }
         }
+
+        // Build information - version, commit ID, and build date
+        buildConfigField "String", "VERSION_NAME", "\"${versionName}\""
+        buildConfigField "int", "VERSION_CODE", "${versionCode}"
+        buildConfigField "String", "GIT_COMMIT_ID", "\"${getGitCommitId()}\""
+        buildConfigField "String", "BUILD_DATE", "\"${getBuildDate()}\""
+        buildConfigField "String", "FULL_VERSION", "\"${versionName} (${versionCode}) - ${getGitCommitId()}\""
     }
 
     signingConfigs {
@@ -263,5 +270,30 @@ tasks.register('checkFDroidCompliance') {
     doLast {
         println "📦 Checking F-Droid compliance..."
         println "✅ F-Droid compliance verified"
+    }
+}
+// Helper function to get Git commit ID
+def getGitCommitId() {
+    try {
+        def stdout = new ByteArrayOutputStream()
+        exec {
+            commandLine 'git', 'rev-parse', '--short', 'HEAD'
+            standardOutput = stdout
+            ignoreExitValue = true
+        }
+        return stdout.toString().trim()
+    } catch (Exception e) {
+        return "unknown"
+    }
+}
+
+// Helper function to get build date in format: 12/18/2025 at 14:06:03
+def getBuildDate() {
+    try {
+        def dateFormat = new java.text.SimpleDateFormat("MM/dd/yyyy 'at' HH:mm:ss", java.util.Locale.US)
+        dateFormat.setTimeZone(java.util.TimeZone.getDefault())
+        return dateFormat.format(new java.util.Date())
+    } catch (Exception e) {
+        return "unknown"
     }
 }

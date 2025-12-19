@@ -14,7 +14,9 @@
       "Bash(md5sum:*)",
       "Bash(unzip:*)",
       "Bash(make build:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(python3:*)",
+      "Bash(./gradlew :app:generateDebugBuildConfig:*)"
     ],
     "deny": [
       "Bash(git commit:*)",

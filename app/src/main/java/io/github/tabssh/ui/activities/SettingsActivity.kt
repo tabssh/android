@@ -36,6 +36,20 @@ class SettingsActivity : AppCompatActivity() {
 class SettingsMainFragment : PreferenceFragmentCompat() {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences_main, rootKey)
+
+        // Set version information from BuildConfig
+        findPreference<Preference>("about_version")?.apply {
+            summary = "${io.github.tabssh.BuildConfig.VERSION_NAME} (${io.github.tabssh.BuildConfig.VERSION_CODE})"
+        }
+
+        findPreference<Preference>("about_build")?.apply {
+            val buildInfo = """
+                Commit: ${io.github.tabssh.BuildConfig.GIT_COMMIT_ID}
+                Built: ${io.github.tabssh.BuildConfig.BUILD_DATE}
+                Type: ${io.github.tabssh.BuildConfig.BUILD_TYPE}
+            """.trimIndent()
+            summary = buildInfo
+        }
     }
 }
 
