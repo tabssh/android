@@ -1,0 +1,221 @@
+name: Development Builds
+
+on:
+  push:
+    branches: [ devel, develop ]
+
+jobs:
+  build-devel:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+      with:
+        api-level: 34
+        build-tools: 34.0.0
+
+    - name: Cache Gradle packages
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+
+    - name: Get version from gradle
+      id: version
+      run: |
+        # Extract version from app/build.gradle
+        VERSION_NAME=$(grep 'versionName' app/build.gradle | head -1 | sed 's/.*"\(.*\)".*/\1/')
+        VERSION_CODE=$(grep 'versionCode' app/build.gradle | head -1 | sed 's/[^0-9]*//g')
+
+        # Get git commit short hash
+        COMMIT_HASH=$(git rev-parse --short HEAD)
+
+        # Build development version string
+        DEV_VERSION="${VERSION_NAME}-dev.${VERSION_CODE}+${COMMIT_HASH}"
+
+        echo "VERSION_NAME=${VERSION_NAME}" >> $GITHUB_OUTPUT
+        echo "VERSION_CODE=${VERSION_CODE}" >> $GITHUB_OUTPUT
+        echo "DEV_VERSION=${DEV_VERSION}" >> $GITHUB_OUTPUT
+        echo "COMMIT_HASH=${COMMIT_HASH}" >> $GITHUB_OUTPUT
+
+        echo "📦 Building version: ${DEV_VERSION}"
+
+    - name: Build debug APKs
+      run: ./gradlew assembleDebug --no-daemon
+
+    - name: Rename APKs with version
+      run: |
+        cd app/build/outputs/apk/debug/
+
+        # Rename all APK variants
+        for apk in *.apk; do
+          if [[ "$apk" == *"universal"* ]]; then
+            cp "$apk" "tabssh-universal-${{ steps.version.outputs.DEV_VERSION }}.apk"
+          elif [[ "$apk" == *"arm64-v8a"* ]]; then
+            cp "$apk" "tabssh-arm64-v8a-${{ steps.version.outputs.DEV_VERSION }}.apk"
+          elif [[ "$apk" == *"armeabi-v7a"* ]]; then
+            cp "$apk" "tabssh-armeabi-v7a-${{ steps.version.outputs.DEV_VERSION }}.apk"
+          elif [[ "$apk" == *"x86_64"* ]]; then
+            cp "$apk" "tabssh-x86_64-${{ steps.version.outputs.DEV_VERSION }}.apk"
+          elif [[ "$apk" == *"x86"* ]] && [[ "$apk" != *"x86_64"* ]]; then
+            cp "$apk" "tabssh-x86-${{ steps.version.outputs.DEV_VERSION }}.apk"
+          fi
+        done
+
+        echo "📱 APKs renamed:"
+        ls -lh tabssh-*-${{ steps.version.outputs.DEV_VERSION }}.apk
+
+    - name: Generate checksums
+      run: |
+        cd app/build/outputs/apk/debug/
+        sha256sum tabssh-*-${{ steps.version.outputs.DEV_VERSION }}.apk > checksums-${{ steps.version.outputs.DEV_VERSION }}.sha256
+
+        echo "🔐 SHA256 Checksums:"
+        cat checksums-${{ steps.version.outputs.DEV_VERSION }}.sha256
+
+    - name: Generate release notes
+      run: |
+        cat > RELEASE_NOTES_DEV.md << 'EOF'
+        # TabSSH Development Build
+
+        **⚠️ This is a development/testing build - Not for production use**
+
+        ## Build Information
+
+        - **Version:** ${{ steps.version.outputs.DEV_VERSION }}
+        - **Base Version:** ${{ steps.version.outputs.VERSION_NAME }}
+        - **Build Number:** ${{ steps.version.outputs.VERSION_CODE }}
+        - **Commit:** ${{ steps.version.outputs.COMMIT_HASH }}
+        - **Branch:** ${{ github.ref_name }}
+        - **Built:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+
+        ## Downloads
+
+        - **tabssh-universal-${{ steps.version.outputs.DEV_VERSION }}.apk** - Recommended (works on all devices)
+        - **tabssh-arm64-v8a-${{ steps.version.outputs.DEV_VERSION }}.apk** - Modern ARM 64-bit devices
+        - **tabssh-armeabi-v7a-${{ steps.version.outputs.DEV_VERSION }}.apk** - Older ARM 32-bit devices
+        - **tabssh-x86_64-${{ steps.version.outputs.DEV_VERSION }}.apk** - x86 64-bit (emulators)
+        - **tabssh-x86-${{ steps.version.outputs.DEV_VERSION }}.apk** - x86 32-bit (older emulators)
+
+        ## What's New in This Build
+
+        Latest changes from the `${{ github.ref_name }}` branch:
+
+        EOF
+
+        # Add recent commits
+        echo "### Recent Commits" >> RELEASE_NOTES_DEV.md
+        echo "" >> RELEASE_NOTES_DEV.md
+        git log --pretty=format:"- %s (%h)" -10 >> RELEASE_NOTES_DEV.md
+        echo "" >> RELEASE_NOTES_DEV.md
+        echo "" >> RELEASE_NOTES_DEV.md
+
+        # Add checksums
+        echo "## 🔐 SHA256 Checksums" >> RELEASE_NOTES_DEV.md
+        echo "" >> RELEASE_NOTES_DEV.md
+        echo '```' >> RELEASE_NOTES_DEV.md
+        cat app/build/outputs/apk/debug/checksums-${{ steps.version.outputs.DEV_VERSION }}.sha256 >> RELEASE_NOTES_DEV.md
+        echo '```' >> RELEASE_NOTES_DEV.md
+        echo "" >> RELEASE_NOTES_DEV.md
+
+        # Add warning
+        cat >> RELEASE_NOTES_DEV.md << 'EOF'
+        ## ⚠️ Important Notes
+
+        - This is a **development build** for testing purposes
+        - May contain bugs or unfinished features
+        - Not recommended for production use
+        - Replaces previous development build
+        - Use official releases for stable versions
+
+        ## Installation
+
+        ```bash
+        # Via ADB
+        adb install tabssh-universal-${{ steps.version.outputs.DEV_VERSION }}.apk
+
+        # Manual
+        1. Download APK to device
+        2. Enable "Install from Unknown Sources"
+        3. Tap APK to install
+        ```
+
+        ## Reporting Issues
+
+        Found a bug? Report it: https://github.com/tabssh/android/issues
+
+        ---
+
+        **Built automatically from commit ${{ steps.version.outputs.COMMIT_HASH }}**
+        EOF
+
+    - name: Delete existing development release
+      continue-on-error: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        echo "🗑️ Checking for existing development release..."
+
+        # Try to delete the 'development' release
+        gh release delete development --yes || echo "No existing development release found"
+
+        # Also delete the tag if it exists
+        git push origin :refs/tags/development || echo "No development tag to delete"
+
+    - name: Create development release
+      uses: softprops/action-gh-release@v1
+      with:
+        name: "Development Build (${{ steps.version.outputs.DEV_VERSION }})"
+        tag_name: development
+        files: |
+          app/build/outputs/apk/debug/tabssh-universal-${{ steps.version.outputs.DEV_VERSION }}.apk
+          app/build/outputs/apk/debug/tabssh-arm64-v8a-${{ steps.version.outputs.DEV_VERSION }}.apk
+          app/build/outputs/apk/debug/tabssh-armeabi-v7a-${{ steps.version.outputs.DEV_VERSION }}.apk
+          app/build/outputs/apk/debug/tabssh-x86_64-${{ steps.version.outputs.DEV_VERSION }}.apk
+          app/build/outputs/apk/debug/tabssh-x86-${{ steps.version.outputs.DEV_VERSION }}.apk
+          app/build/outputs/apk/debug/checksums-${{ steps.version.outputs.DEV_VERSION }}.sha256
+          RELEASE_NOTES_DEV.md
+        body_path: RELEASE_NOTES_DEV.md
+        prerelease: true
+        draft: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build summary
+      run: |
+        echo "## 🎉 Development Build Complete!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Version:** ${{ steps.version.outputs.DEV_VERSION }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Commit:** ${{ steps.version.outputs.COMMIT_HASH }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📦 APKs Built:" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        cd app/build/outputs/apk/debug/
+        for apk in tabssh-*-${{ steps.version.outputs.DEV_VERSION }}.apk; do
+          SIZE=$(du -h "$apk" | cut -f1)
+          echo "- \`$apk\` ($SIZE)" >> $GITHUB_STEP_SUMMARY
+        done
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🔗 Download:" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "https://github.com/${{ github.repository }}/releases/tag/development" >> $GITHUB_STEP_SUMMARY

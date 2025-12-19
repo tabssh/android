@@ -36,4 +36,23 @@
         android:icon="@android:drawable/ic_menu_rotate"
         android:fragment="io.github.tabssh.ui.fragments.SyncSettingsFragment" />
 
+    <PreferenceCategory
+        android:title="About">
+
+        <Preference
+            android:key="about_version"
+            android:title="Version"
+            android:summary="TabSSH 1.0.0"
+            android:icon="@android:drawable/ic_menu_info_details"
+            android:selectable="false" />
+
+        <Preference
+            android:key="about_build"
+            android:title="Build Information"
+            android:summary="Build details"
+            android:icon="@android:drawable/ic_menu_info_details"
+            android:selectable="false" />
+
+    </PreferenceCategory>
+
 </PreferenceScreen>
