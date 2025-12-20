@@ -19,9 +19,11 @@ import io.github.tabssh.utils.logging.Logger
         TabSession::class,
         ThemeDefinition::class,
         TrustedCertificate::class,
-        SyncState::class
+        SyncState::class,
+        ConnectionGroup::class,
+        Snippet::class
     ],
-    version = 2,
+    version = 5,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -34,6 +36,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
     abstract fun themeDao(): ThemeDao
     abstract fun certificateDao(): CertificateDao
     abstract fun syncStateDao(): SyncStateDao
+    abstract fun connectionGroupDao(): ConnectionGroupDao
+    abstract fun snippetDao(): SnippetDao
     
     companion object {
         @Volatile
@@ -98,6 +102,86 @@ abstract class TabSSHDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Migration from version 2 to 3: Add connection groups/folders
+         */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Create connection_groups table
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS connection_groups (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        name TEXT NOT NULL,
+                        parent_id TEXT,
+                        icon TEXT,
+                        color TEXT,
+                        sort_order INTEGER NOT NULL DEFAULT 0,
+                        is_collapsed INTEGER NOT NULL DEFAULT 0,
+                        created_at INTEGER NOT NULL DEFAULT 0,
+                        modified_at INTEGER NOT NULL DEFAULT 0,
+                        last_synced_at INTEGER NOT NULL DEFAULT 0,
+                        sync_version INTEGER NOT NULL DEFAULT 0,
+                        sync_device_id TEXT NOT NULL DEFAULT ''
+                    )
+                """.trimIndent())
+
+                // Create indexes for better query performance
+                database.execSQL("CREATE INDEX IF NOT EXISTS idx_groups_parent ON connection_groups(parent_id)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS idx_groups_sort ON connection_groups(sort_order)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS idx_connections_group ON connections(group_id)")
+
+                Logger.d("TabSSHDatabase", "Migration from version 2 to 3 completed successfully")
+            }
+        }
+
+        /**
+         * Migration from version 3 to 4: Add snippets library
+         */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Create snippets table
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS snippets (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        name TEXT NOT NULL,
+                        command TEXT NOT NULL,
+                        description TEXT NOT NULL DEFAULT '',
+                        category TEXT NOT NULL DEFAULT 'General',
+                        tags TEXT NOT NULL DEFAULT '',
+                        usage_count INTEGER NOT NULL DEFAULT 0,
+                        is_favorite INTEGER NOT NULL DEFAULT 0,
+                        sort_order INTEGER NOT NULL DEFAULT 0,
+                        created_at INTEGER NOT NULL DEFAULT 0,
+                        modified_at INTEGER NOT NULL DEFAULT 0,
+                        last_synced_at INTEGER NOT NULL DEFAULT 0,
+                        sync_version INTEGER NOT NULL DEFAULT 0,
+                        sync_device_id TEXT NOT NULL DEFAULT ''
+                    )
+                """.trimIndent())
+
+                // Create indexes for better query performance
+                database.execSQL("CREATE INDEX IF NOT EXISTS idx_snippets_category ON snippets(category)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS idx_snippets_favorite ON snippets(is_favorite) WHERE is_favorite = 1")
+                database.execSQL("CREATE INDEX IF NOT EXISTS idx_snippets_usage ON snippets(usage_count)")
+
+                Logger.d("TabSSHDatabase", "Migration from version 3 to 4 completed successfully")
+            }
+        }
+
+        /**
+         * Migration from version 4 to 5: Add proxy/jump host support
+         */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Add proxy/jump host fields to connections table
+                database.execSQL("ALTER TABLE connections ADD COLUMN proxy_username TEXT")
+                database.execSQL("ALTER TABLE connections ADD COLUMN proxy_auth_type TEXT")
+                database.execSQL("ALTER TABLE connections ADD COLUMN proxy_key_id TEXT")
+
+                Logger.d("TabSSHDatabase", "Migration from version 4 to 5 completed successfully")
+            }
+        }
+
         fun getDatabase(context: Context): TabSSHDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -107,7 +191,10 @@ abstract class TabSSHDatabase : RoomDatabase() {
                 )
                 .addCallback(DatabaseCallback())
                 .addMigrations(
-                    MIGRATION_1_2
+                    MIGRATION_1_2,
+                    MIGRATION_2_3,
+                    MIGRATION_3_4,
+                    MIGRATION_4_5
                 )
                 .build()
                 INSTANCE = instance

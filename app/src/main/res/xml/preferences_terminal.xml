@@ -68,6 +68,18 @@
             android:summary="Audible bell on BEL character"
             android:defaultValue="true" />
 
+        <SwitchPreferenceCompat
+            android:key="volume_keys_font_size"
+            android:title="Volume Keys Control Font"
+            android:summary="Use volume up/down to increase/decrease font size"
+            android:defaultValue="true" />
+
+        <SwitchPreferenceCompat
+            android:key="detect_urls"
+            android:title="Detect URLs"
+            android:summary="Enable clickable URLs in terminal (long press to open)"
+            android:defaultValue="true" />
+
     </PreferenceCategory>
 
 </PreferenceScreen>

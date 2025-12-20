@@ -31,6 +31,12 @@
         android:key="category_behavior">
 
         <SwitchPreferenceCompat
+            android:key="swipe_between_tabs"
+            android:title="Swipe Between Tabs"
+            android:summary="Swipe left/right to switch between SSH sessions"
+            android:defaultValue="true" />
+
+        <SwitchPreferenceCompat
             android:key="confirm_exit"
             android:title="Confirm on exit"
             android:summary="Ask for confirmation before exiting"

@@ -58,6 +58,7 @@ class ConnectionEditActivity : AppCompatActivity() {
         setupToolbar()
         setupAuthTypeSpinner()
         setupKeySpinner()
+        setupProxyTypeSpinner()
         setupValidation()
         setupButtons()
         
@@ -139,6 +140,88 @@ class ConnectionEditActivity : AppCompatActivity() {
         }
     }
     
+    private fun setupProxyTypeSpinner() {
+        val proxyTypes = listOf("None", "HTTP", "SOCKS4", "SOCKS5", "SSH Jump Host")
+        val adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_list_item_1,
+            proxyTypes
+        )
+
+        binding.spinnerProxyType.setAdapter(adapter)
+
+        binding.spinnerProxyType.setOnItemClickListener { _, _, position, _ ->
+            val selectedProxyType = proxyTypes[position]
+            updateProxyTypeUI(selectedProxyType)
+        }
+
+        // Set default to "None"
+        binding.spinnerProxyType.setText(proxyTypes[0], false)
+        updateProxyTypeUI(proxyTypes[0])
+
+        // Setup proxy auth type spinner
+        val authTypes = AuthType.getAvailableTypes()
+        val authAdapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_list_item_1,
+            authTypes.map { it.displayName }
+        )
+
+        binding.spinnerProxyAuthType.setAdapter(authAdapter)
+
+        binding.spinnerProxyAuthType.setOnItemClickListener { _, _, position, _ ->
+            val selectedAuthType = authTypes[position]
+            updateProxyAuthTypeUI(selectedAuthType)
+        }
+
+        // Setup proxy SSH key spinner (reuse available keys)
+        lifecycleScope.launch {
+            val keyNames = listOf("Select SSH Key...") + availableKeys.map { it.getDisplayName() }
+            val keyAdapter = ArrayAdapter(
+                this@ConnectionEditActivity,
+                android.R.layout.simple_list_item_1,
+                keyNames
+            )
+
+            binding.spinnerProxySshKey.setAdapter(keyAdapter)
+        }
+    }
+
+    private fun updateProxyTypeUI(proxyType: String) {
+        when (proxyType) {
+            "None" -> {
+                binding.layoutProxyConfig.visibility = android.view.View.GONE
+                binding.layoutJumpHostAuth.visibility = android.view.View.GONE
+            }
+            "SSH Jump Host" -> {
+                binding.layoutProxyConfig.visibility = android.view.View.VISIBLE
+                binding.layoutJumpHostAuth.visibility = android.view.View.VISIBLE
+                binding.editProxyPort.setText("22")
+            }
+            "HTTP" -> {
+                binding.layoutProxyConfig.visibility = android.view.View.VISIBLE
+                binding.layoutJumpHostAuth.visibility = android.view.View.GONE
+                binding.editProxyPort.setText("8080")
+            }
+            "SOCKS4", "SOCKS5" -> {
+                binding.layoutProxyConfig.visibility = android.view.View.VISIBLE
+                binding.layoutJumpHostAuth.visibility = android.view.View.GONE
+                binding.editProxyPort.setText("1080")
+            }
+        }
+    }
+
+    private fun updateProxyAuthTypeUI(authType: AuthType) {
+        when (authType) {
+            AuthType.PUBLIC_KEY -> {
+                binding.layoutProxyKey.visibility = android.view.View.VISIBLE
+            }
+            else -> {
+                binding.layoutProxyKey.visibility = android.view.View.GONE
+            }
+        }
+    }
+
     private fun updateAuthTypeUI(authType: AuthType) {
         when (authType) {
             AuthType.PASSWORD -> {
@@ -256,6 +339,52 @@ class ConnectionEditActivity : AppCompatActivity() {
         if (selectedGroupId != null) {
             supportActionBar?.subtitle = selectedGroupName
         }
+
+        // Proxy/Jump Host settings
+        val proxyTypes = listOf("None", "HTTP", "SOCKS4", "SOCKS5", "SSH Jump Host")
+        val proxyType = profile.proxyType ?: "None"
+        val proxyTypeDisplay = when (proxyType) {
+            "SSH" -> "SSH Jump Host"
+            else -> if (proxyTypes.contains(proxyType)) proxyType else "None"
+        }
+        binding.spinnerProxyType.setText(proxyTypeDisplay, false)
+        updateProxyTypeUI(proxyTypeDisplay)
+
+        if (proxyType != null && proxyType != "None") {
+            profile.proxyHost?.let { binding.editProxyHost.setText(it) }
+            profile.proxyPort?.let { binding.editProxyPort.setText(it.toString()) }
+
+            // SSH Jump Host specific fields
+            if (proxyType == "SSH") {
+                profile.proxyUsername?.let { binding.editProxyUsername.setText(it) }
+
+                // Set proxy auth type
+                if (profile.proxyAuthType != null) {
+                    val proxyAuthType = try {
+                        AuthType.valueOf(profile.proxyAuthType)
+                    } catch (e: IllegalArgumentException) {
+                        AuthType.PASSWORD
+                    }
+                    val authTypes = AuthType.getAvailableTypes()
+                    val proxyAuthTypeIndex = authTypes.indexOf(proxyAuthType)
+                    if (proxyAuthTypeIndex >= 0) {
+                        binding.spinnerProxyAuthType.setText(authTypes[proxyAuthTypeIndex].displayName, false)
+                        updateProxyAuthTypeUI(authTypes[proxyAuthTypeIndex])
+                    }
+
+                    // Set proxy SSH key if applicable
+                    if (proxyAuthType == AuthType.PUBLIC_KEY && profile.proxyKeyId != null) {
+                        val keyIndex = availableKeys.indexOfFirst { it.keyId == profile.proxyKeyId }
+                        if (keyIndex >= 0) {
+                            val keyNames = listOf("Select SSH Key...") + availableKeys.map { it.getDisplayName() }
+                            if (keyIndex + 1 < keyNames.size) {
+                                binding.spinnerProxySshKey.setText(keyNames[keyIndex + 1], false)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
     
     private fun saveConnection() {
@@ -322,7 +451,40 @@ class ConnectionEditActivity : AppCompatActivity() {
         val terminalType = binding.editTerminalType.text.toString().takeIf { it.isNotBlank() } ?: "xterm-256color"
         val compression = binding.switchCompression.isChecked
         val keepAlive = binding.switchKeepAlive.isChecked
-        
+
+        // Proxy/Jump Host settings
+        val proxyTypeDisplay = binding.spinnerProxyType.text.toString()
+        val proxyType = when (proxyTypeDisplay) {
+            "SSH Jump Host" -> "SSH"
+            "None" -> null
+            else -> proxyTypeDisplay
+        }
+
+        val proxyHost = if (proxyType != null) {
+            binding.editProxyHost.text.toString().takeIf { it.isNotBlank() }
+        } else null
+
+        val proxyPort = if (proxyType != null) {
+            binding.editProxyPort.text.toString().toIntOrNull()
+        } else null
+
+        val proxyUsername = if (proxyType == "SSH") {
+            binding.editProxyUsername.text.toString().takeIf { it.isNotBlank() }
+        } else null
+
+        val proxyAuthType = if (proxyType == "SSH") {
+            val authTypes = AuthType.getAvailableTypes()
+            val selectedText = binding.spinnerProxyAuthType.text.toString()
+            authTypes.find { it.displayName == selectedText }?.name
+        } else null
+
+        val proxyKeyId = if (proxyType == "SSH" && proxyAuthType == AuthType.PUBLIC_KEY.name) {
+            val selectedProxyKeyText = binding.spinnerProxySshKey.text.toString()
+            if (selectedProxyKeyText != "Select SSH Key...") {
+                availableKeys.find { it.getDisplayName() == selectedProxyKeyText }?.keyId
+            } else null
+        } else null
+
         return existingProfile?.copy(
             name = name,
             host = host,
@@ -333,7 +495,13 @@ class ConnectionEditActivity : AppCompatActivity() {
             terminalType = terminalType,
             compression = compression,
             keepAlive = keepAlive,
-            groupId = selectedGroupId
+            groupId = selectedGroupId,
+            proxyType = proxyType,
+            proxyHost = proxyHost,
+            proxyPort = proxyPort,
+            proxyUsername = proxyUsername,
+            proxyAuthType = proxyAuthType,
+            proxyKeyId = proxyKeyId
         ) ?: ConnectionProfile(
             name = name,
             host = host,
@@ -344,7 +512,13 @@ class ConnectionEditActivity : AppCompatActivity() {
             terminalType = terminalType,
             compression = compression,
             keepAlive = keepAlive,
-            groupId = selectedGroupId
+            groupId = selectedGroupId,
+            proxyType = proxyType,
+            proxyHost = proxyHost,
+            proxyPort = proxyPort,
+            proxyUsername = proxyUsername,
+            proxyAuthType = proxyAuthType,
+            proxyKeyId = proxyKeyId
         )
     }
     

@@ -18,7 +18,7 @@ NC='\033[0m' # No Color
 # Check if Docker image exists
 if ! docker images | grep -q "tabssh-android"; then
     echo -e "${YELLOW}📦 Docker image not found. Building...${NC}"
-    docker build -t tabssh-android -f scripts/docker/Dockerfile .
+    docker build -t tabssh-android -f docker/Dockerfile .
     echo -e "${GREEN}✅ Docker image built${NC}"
 fi
 

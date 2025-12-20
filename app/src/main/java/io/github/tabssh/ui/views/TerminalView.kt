@@ -83,6 +83,14 @@ class TerminalView @JvmOverloads constructor(
     // Accessibility
     private var accessibilityHelper: TerminalAccessibilityHelper? = null
 
+    // URL detection
+    private val urlPattern = Regex(
+        "(https?://[a-zA-Z0-9.-]+(?:\\.[a-zA-Z]{2,})+(?:/[^\\s]*)?)|" +
+        "(www\\.[a-zA-Z0-9.-]+(?:\\.[a-zA-Z]{2,})+(?:/[^\\s]*)?)",
+        RegexOption.IGNORE_CASE
+    )
+    var onUrlDetected: ((String) -> Unit)? = null
+
     init {
         // Enable focus and touch
         isFocusable = true
@@ -277,6 +285,36 @@ class TerminalView @JvmOverloads constructor(
     }
 
     /**
+     * Set font size and recalculate terminal layout
+     * @param sizeInSp Font size in SP units (8-32)
+     */
+    fun setFontSize(sizeInSp: Int) {
+        val clampedSize = sizeInSp.coerceIn(8, 32)
+        textPaint.textSize = clampedSize * resources.displayMetrics.density
+        calculateCellDimensions()
+
+        // Recalculate terminal dimensions based on new cell size
+        val availableWidth = width - paddingLeft - paddingRight
+        val availableHeight = height - paddingTop - paddingBottom
+
+        if (availableWidth > 0 && availableHeight > 0) {
+            terminalCols = (availableWidth / cellWidth).toInt().coerceAtLeast(80)
+            terminalRows = (availableHeight / cellHeight).toInt().coerceAtLeast(24)
+            terminalEmulator?.resize(terminalCols, terminalRows)
+        }
+
+        invalidate()
+        Logger.d("TerminalView", "Font size changed to ${clampedSize}sp (${terminalCols}x${terminalRows})")
+    }
+
+    /**
+     * Get current font size in SP units
+     */
+    fun getFontSize(): Int {
+        return (textPaint.textSize / resources.displayMetrics.density).toInt()
+    }
+
+    /**
      * Get terminal size
      */
     fun getTerminalSize(): Pair<Int, Int> = Pair(terminalCols, terminalRows)
@@ -348,6 +386,59 @@ class TerminalView @JvmOverloads constructor(
                     cellWidth, cellHeight, scrollY)
             }
         }
+    }
+
+    /**
+     * Get text content at screen coordinates
+     * @param x Touch X coordinate
+     * @param y Touch Y coordinate
+     * @return Line of text at the coordinates, or null if out of bounds
+     */
+    private fun getTextAtPosition(x: Float, y: Float): Pair<Int, String>? {
+        val row = ((y - paddingTop + scrollY) / cellHeight).toInt()
+        val col = ((x - paddingLeft) / cellWidth).toInt()
+
+        if (row < 0 || col < 0 || row >= terminalRows || col >= terminalCols) {
+            return null
+        }
+
+        terminalBuffer?.let { buffer ->
+            val lineChars = buffer.getLine(row)
+            val lineText = lineChars?.map { it.char }?.joinToString("") ?: ""
+            return Pair(row, lineText)
+        }
+
+        return null
+    }
+
+    /**
+     * Detect URL at the given position
+     * @param x Touch X coordinate
+     * @param y Touch Y coordinate
+     * @return Detected URL or null
+     */
+    private fun detectUrlAtPosition(x: Float, y: Float): String? {
+        val (row, lineText) = getTextAtPosition(x, y) ?: return null
+
+        // Find all URLs in the line
+        val matches = urlPattern.findAll(lineText)
+
+        // Calculate the column position
+        val col = ((x - paddingLeft) / cellWidth).toInt()
+
+        // Check if the touch position is within any URL
+        for (match in matches) {
+            if (col >= match.range.first && col <= match.range.last) {
+                var url = match.value
+                // Add http:// prefix if it starts with www.
+                if (url.startsWith("www.", ignoreCase = true) && !url.startsWith("http", ignoreCase = true)) {
+                    url = "http://$url"
+                }
+                return url
+            }
+        }
+
+        return null
     }
 
     override fun onTouch(v: View, event: MotionEvent): Boolean {
@@ -454,6 +545,16 @@ class TerminalView @JvmOverloads constructor(
         override fun onDoubleTap(e: MotionEvent): Boolean {
             toggleKeyboard()
             return true
+        }
+
+        override fun onLongPress(e: MotionEvent) {
+            // Detect URL at long press position
+            val url = detectUrlAtPosition(e.x, e.y)
+            if (url != null) {
+                // Notify listener about detected URL
+                onUrlDetected?.invoke(url)
+                Logger.d("TerminalView", "URL detected: $url")
+            }
         }
 
         override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
