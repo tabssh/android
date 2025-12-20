@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_background"
+    android:padding="8dp">
+
+    <!-- Widget Title -->
+    <TextView
+        android:id="@+id/text_widget_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="TabSSH"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textColor="?attr/colorOnSurface"
+        android:paddingBottom="4dp" />
+
+    <!-- Connection Name -->
+    <TextView
+        android:id="@+id/text_connection_name"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="SSH Connection"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:textColor="?attr/colorPrimary"
+        android:paddingBottom="2dp" />
+
+    <!-- Connection Details -->
+    <TextView
+        android:id="@+id/text_connection_details"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="user@hostname:22"
+        android:textSize="12sp"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:paddingBottom="8dp" />
+
+    <!-- Connect Button -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/button_connect"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Connect"
+        style="@style/Widget.Material3.Button.ElevatedButton" />
+
+</LinearLayout>

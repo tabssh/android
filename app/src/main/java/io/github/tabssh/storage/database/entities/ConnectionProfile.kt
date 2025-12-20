@@ -55,12 +55,21 @@ data class ConnectionProfile(
     
     @ColumnInfo(name = "proxy_host")
     val proxyHost: String? = null,
-    
+
     @ColumnInfo(name = "proxy_port")
     val proxyPort: Int? = null,
-    
+
     @ColumnInfo(name = "proxy_type")
-    val proxyType: String? = null,
+    val proxyType: String? = null, // "HTTP", "SOCKS4", "SOCKS5", "SSH"
+
+    @ColumnInfo(name = "proxy_username")
+    val proxyUsername: String? = null,
+
+    @ColumnInfo(name = "proxy_auth_type")
+    val proxyAuthType: String? = null, // For SSH jump host
+
+    @ColumnInfo(name = "proxy_key_id")
+    val proxyKeyId: String? = null, // For SSH jump host with key auth
     
     @ColumnInfo(name = "theme")
     val theme: String = "dracula",

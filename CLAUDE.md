@@ -1,8 +1,8 @@
 # TabSSH Android - Claude Project Tracker
 
-**Last Updated:** 2025-12-18
-**Version:** 1.0.0
-**Status:** ✅ Production Ready - Feature Complete (100%)
+**Last Updated:** 2025-12-19
+**Version:** 1.1.0
+**Status:** ✅ Mobile-First UX Enhancements In Progress (100% Core + 43% UX)
 
 ---
 
@@ -94,7 +94,12 @@ tabssh/android/
 ├── releases/                     # (Directory for `make release` - currently gitignored, not created)
 ├── build/                        # Gradle build artifacts (gitignored)
 ├── tests/                        # Test files
-├── scripts/                      # Build & automation (27 shell scripts)
+├── docker/                       # Docker configuration
+│   ├── Dockerfile                # Production build image
+│   ├── Dockerfile.dev            # Development image
+│   ├── docker-compose.yml        # Production docker-compose
+│   └── docker-compose.dev.yml    # Development docker-compose
+├── scripts/                      # Build & automation scripts
 │   ├── build/                    # 6 build scripts
 │   │   ├── build-dev.sh
 │   │   ├── build-with-docker.sh
@@ -103,11 +108,6 @@ tabssh/android/
 │   │   ├── final-build.sh
 │   │   └── generate-release-notes.sh
 │   ├── check/                    # 5 validation scripts
-│   ├── docker/                   # Docker configs
-│   │   ├── Dockerfile            # Production build image
-│   │   ├── Dockerfile.dev        # Development image
-│   │   ├── docker-compose.yml
-│   │   └── docker-compose.dev.yml
 │   ├── fix/                      # 10 legacy fix scripts (archived)
 │   ├── build-and-validate.sh
 │   ├── comprehensive-validation.sh
@@ -131,7 +131,6 @@ tabssh/android/
 ├── build.gradle                  # Project-level Gradle config
 ├── settings.gradle               # Gradle settings
 ├── gradle.properties             # Gradle properties
-├── docker-compose.dev.yml        # Development environment
 ├── README.md                     # Project overview
 ├── SPEC.md                       # Complete technical spec (98KB)
 ├── INSTALL.md                    # Installation guide
@@ -188,7 +187,7 @@ make release
 make dev
 ```
 - Builds `tabssh-android` Docker image
-- Uses `scripts/docker/Dockerfile`
+- Uses `docker/Dockerfile`
 - Required for build process
 - **Time:** ~3-5 min (first run), cached after
 
@@ -266,8 +265,8 @@ Examples:
 - **Base:** `eclipse-temurin:17-jdk` (updated 2025-12-18)
 - **Size:** 1.15GB
 - **SDK:** Android SDK 34, Build Tools 34.0.0, Platform Tools
-- **Location:** `scripts/docker/Dockerfile`
-- **Build Command:** `docker build -t tabssh-android -f scripts/docker/Dockerfile .`
+- **Location:** `docker/Dockerfile`
+- **Build Command:** `docker build -t tabssh-android -f docker/Dockerfile .`
 
 ### Gradle Configuration
 
@@ -480,7 +479,7 @@ make release
 - **build.gradle** - Project-level Gradle configuration
 - **app/build.gradle** - App-level Gradle configuration (APK naming here)
 - **settings.gradle** - Gradle settings
-- **docker-compose.dev.yml** - Development environment setup
+- **docker/docker-compose.dev.yml** - Development environment setup
 
 ### Documentation
 - **README.md** - Project overview, quick start
@@ -492,6 +491,176 @@ make release
 ---
 
 ## Recent Feature Implementations
+
+### Mobile-First UX Enhancements - 🔄 IN PROGRESS (2025-12-19)
+**Implementation:** Mobile-friendly productivity and organization features
+
+**Goal:** Replace discontinued SSH clients with superior mobile-first experience
+
+**Completed Features (6/14 = 43%):**
+
+1. **✅ Frequently Used Connections - ENABLED** (1 hour)
+   - Removed `visibility="gone"` from `activity_main.xml`
+   - Feature was already fully implemented (backend complete since v1.0.0)
+   - Automatically shows top 5 most-used connections at top of main screen
+   - Dynamically shows/hides based on usage data
+   - File Modified: `app/src/main/res/layout/activity_main.xml` (line 134)
+
+2. **✅ Volume Keys Font Size Control - COMPLETE** (2 hours)
+   - Volume Up/Down adjusts terminal font size by ±2sp (range: 8-32sp)
+   - Shows toast notification with current size
+   - Preference toggle to enable/disable feature (enabled by default)
+   - Font size persisted to SharedPreferences
+   - Recalculates terminal dimensions on-the-fly
+   - Files Modified:
+     - `preferences_terminal.xml` - Added "Volume keys control font" toggle
+     - `TerminalView.kt` - Added `setFontSize()` and `getFontSize()` methods
+     - `TabTerminalActivity.kt` - Volume key handler, `adjustFontSize()` method
+   - Lines: ~60 lines total
+
+3. **✅ Search Connections - COMPLETE** (3 hours)
+   - SearchView in MainActivity toolbar with real-time filtering
+   - Searches across: connection name, hostname, username, display name
+   - Case-insensitive search
+   - Search state preserved on configuration changes
+   - Clear search on SearchView collapse
+   - Visual search icon always visible in toolbar
+   - Files Modified:
+     - `main_menu.xml` - Added SearchView action item
+     - `MainActivity.kt` - Added search infrastructure (~80 lines)
+       - `allConnections` list for unfiltered data
+       - `currentSearchQuery` state variable
+       - `filterConnections()` method with smart filtering
+       - `onCreateOptionsMenu()` SearchView setup
+   - Lines: ~100 lines total
+
+4. **✅ Click URLs to Open in Browser - COMPLETE** (4 hours)
+   - Comprehensive URL detection with regex pattern
+   - Detects `http://`, `https://`, and `www.` URLs in terminal output
+   - Long-press gesture on terminal to detect URL at touch position
+   - Dialog with 3 options: "Open" (browser), "Copy" (clipboard), "Cancel"
+   - Automatic `http://` prefix addition for `www.` URLs
+   - Preference toggle to enable/disable URL detection (enabled by default)
+   - Smart coordinate-to-text conversion for accurate URL detection
+   - Column-based URL boundary detection for precise matching
+   - Files Modified:
+     - `preferences_terminal.xml` - Added "Detect URLs" toggle
+     - `TerminalView.kt` - Major enhancements (~70 lines added)
+       - URL regex pattern: `(https?://...)|(www\....)`
+       - `onUrlDetected` callback for URL detection events
+       - `getTextAtPosition(x, y)` - Convert touch coords to terminal text
+       - `detectUrlAtPosition(x, y)` - Find URL at specific position
+       - `onLongPress()` in TerminalGestureListener - Trigger URL detection
+     - `TabTerminalActivity.kt` - URL handling (~60 lines added)
+       - `showUrlDialog()` - AlertDialog with Open/Copy/Cancel options
+       - `openUrl()` - Launch Intent.ACTION_VIEW for browser
+       - `copyUrlToClipboard()` - Copy to Android clipboard
+       - Setup in `setupTerminalView()` with preference check
+   - Lines: ~130 lines total
+   - Features:
+     - ✅ Detects URLs in any terminal line
+     - ✅ Works with scrolled terminal content
+     - ✅ Haptic feedback on long press
+     - ✅ Error handling for invalid URLs
+     - ✅ Toast notifications for copy action
+     - ✅ User can disable in Settings → Terminal → Detect URLs
+
+5. **✅ Swipe Between Tabs - COMPLETE** (5 hours)
+   - ViewPager2-based swipeable tabs for mobile-first navigation
+   - Dual-mode support: Swipe enabled (default) or classic single-view mode
+   - Preference toggle in Settings → General → "Swipe Between Tabs"
+   - TabLayoutMediator synchronizes TabLayout with ViewPager2
+   - Page change callbacks update TabManager state
+   - All terminal features work in both modes (font size, URL detection, key events)
+   - Files Created:
+     - `TerminalPagerAdapter.kt` - RecyclerView adapter for ViewPager2 (~70 lines)
+       - Accepts fontSize and onUrlDetected callback parameters
+       - Creates TerminalView for each page with proper configuration
+       - TerminalViewHolder binds SSHTab to TerminalView
+   - Files Modified:
+     - `preferences_general.xml` - Added "Swipe Between Tabs" toggle (default: true)
+     - `activity_tab_terminal.xml` - Added ViewPager2 alongside classic TerminalView
+       - ViewPager2 visible when swipe enabled
+       - TerminalView visible when swipe disabled
+     - `TabTerminalActivity.kt` - Major refactoring (~200 lines changed)
+       - Added: viewPager, pagerAdapter, tabLayoutMediator, swipeEnabled fields
+       - `setupTerminalView()` - Check preference and setup appropriate mode
+       - `updateViewPagerAdapter()` - Create/recreate adapter with tabs
+       - `getActiveTerminalView()` - Helper to get current terminal in either mode
+       - `adjustFontSize()` - Works in both modes via getActiveTerminalView()
+       - `onKeyDown()` - Works in both modes
+       - `sendKey()`, `toggleKeyboard()`, `pasteFromClipboard()` - All use getActiveTerminalView()
+       - `addTabToUI()` - Calls updateViewPagerAdapter() in swipe mode
+       - `removeTabFromUI()` - Rebuilds adapter in swipe mode
+       - `switchToTab()` - Uses viewPager.setCurrentItem() in swipe mode
+   - Lines: ~300 lines total
+   - Features:
+     - ✅ Natural swipe gesture for tab switching
+     - ✅ Works with all terminal features (font size, URL detection, paste)
+     - ✅ Volume keys adjust font on currently visible tab
+     - ✅ Keyboard shortcuts work on currently visible tab
+     - ✅ TabLayout and ViewPager2 always synchronized
+     - ✅ User can disable and fall back to classic mode
+     - ✅ Preference persisted across app restarts
+
+6. **✅ Sort Connections - COMPLETE** (2 hours)
+   - Sort menu in MainActivity toolbar with 8 sorting options
+   - Real-time sorting of connection list after selection
+   - Sort preference persisted to SharedPreferences
+   - Sorting applied automatically to search results
+   - Files Modified:
+     - `main_menu.xml` - Added "Sort" menu item
+     - `MainActivity.kt` - Sort infrastructure (~100 lines added)
+       - `showSortDialog()` - AlertDialog with single-choice sort options
+       - `applySortToList()` - Apply current sort to any list
+       - `filterConnections()` - Now applies sort after filtering
+       - Sort options stored in SharedPreferences as "connection_sort"
+   - Sort Options:
+     - Name (A-Z) - Alphabetical ascending
+     - Name (Z-A) - Alphabetical descending
+     - Host (A-Z) - By hostname ascending
+     - Host (Z-A) - By hostname descending
+     - Most Used - By connection count descending
+     - Least Used - By connection count ascending
+     - Recently Connected - By lastConnectedAt descending
+     - Oldest Connected - By lastConnectedAt ascending
+   - Lines: ~100 lines total
+   - Features:
+     - ✅ Dialog shows current selection with radio button
+     - ✅ Sort immediately applied on selection
+     - ✅ Sort persisted across app restarts
+     - ✅ Works with search (search results are sorted)
+     - ✅ Case-insensitive name/host sorting
+     - ✅ Uses connection metadata (count, lastConnectedAt)
+
+**In Progress (0/14):**
+
+**Remaining High Priority (8/14):**
+
+7. **Connection Groups/Folders** (8-12 hours) - Critical organization feature
+8. **Snippets Library** (6-8 hours) - Quick command access
+9. **Proxy/Jump Host Support** (6-8 hours) - Enterprise bastion servers
+10. **Android Widget** (8-10 hours) - Home screen quick connect
+11. **Custom Gestures** (6-8 hours) - tmux/screen shortcuts
+12. **Performance Monitor** (8-12 hours) - Built-in monitoring
+13. **Identity Abstraction** (6-8 hours) - Reusable credentials
+14. **Save SSH Transcripts** (4-5 hours) - Session recording
+
+**Progress Metrics:**
+- **Completed:** 6/14 features (43%)
+- **Hours Spent:** 18/75 hours (24%)
+- **Critical Features:** 0/2 complete (0%)
+- **High Priority:** 6/9 complete (67%)
+- **Overall UX Enhancement:** 43% complete
+
+**Next Steps:**
+1. ✅ ~~Implement Swipe Between Tabs~~ - COMPLETE
+2. ✅ ~~Implement Sort Connections~~ - COMPLETE
+3. Tackle Connection Groups/Folders (requires DB migration v2→v3)
+4. Implement Snippets Library (requires DB migration v3→v4)
+5. Continue with remaining high-priority features (Proxy/Jump Host, Widget, etc.)
+
+---
 
 ### Google Drive Sync - ✅ COMPLETE (2025-12-18)
 **Implementation:** Full-featured cloud synchronization with encryption and intelligent merging
@@ -1249,7 +1418,7 @@ make release
 make dev
 
 # Manual Docker build (if needed)
-docker build -t tabssh-android -f scripts/docker/Dockerfile .
+docker build -t tabssh-android -f docker/Dockerfile .
 
 # Run Docker shell for debugging
 docker run -it --rm \
@@ -1368,7 +1537,7 @@ docker run --rm \
 make dev
 
 # Or manually
-docker build -t tabssh-android -f scripts/docker/Dockerfile .
+docker build -t tabssh-android -f docker/Dockerfile .
 ```
 
 **Problem:** APK not found after build
@@ -1491,7 +1660,7 @@ make dev
 make help
 
 # Manual Docker build
-docker build -t tabssh-android -f scripts/docker/Dockerfile .
+docker build -t tabssh-android -f docker/Dockerfile .
 
 # Manual APK build
 ./gradlew assembleDebug

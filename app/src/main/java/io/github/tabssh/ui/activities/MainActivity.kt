@@ -19,7 +19,11 @@ import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.backup.BackupManager
 import io.github.tabssh.databinding.ActivityMainBinding
 import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.storage.database.entities.ConnectionGroup
 import io.github.tabssh.ui.adapters.ConnectionAdapter
+import io.github.tabssh.ui.adapters.GroupedConnectionAdapter
+import io.github.tabssh.ui.models.ConnectionListItem
+import io.github.tabssh.ui.utils.ConnectionListBuilder
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -39,12 +43,19 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var app: TabSSHApplication
-    private lateinit var connectionAdapter: ConnectionAdapter
+    private lateinit var groupedConnectionAdapter: GroupedConnectionAdapter
     private lateinit var frequentlyUsedAdapter: ConnectionAdapter
     private lateinit var backupManager: BackupManager
 
     private val connections = mutableListOf<ConnectionProfile>()
+    private val allConnections = mutableListOf<ConnectionProfile>()
+    private val allGroups = mutableListOf<ConnectionGroup>()
     private val frequentlyUsedConnections = mutableListOf<ConnectionProfile>()
+    private val displayItems = mutableListOf<ConnectionListItem>()
+    private val groupExpansionState = mutableMapOf<String, Boolean>()
+    private var ungroupedExpanded: Boolean = true
+    private var currentSearchQuery: String = ""
+    private var groupingEnabled: Boolean = true
 
     // Activity result launchers for import/export
     private val importBackupLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -74,7 +85,8 @@ class MainActivity : AppCompatActivity() {
         // Request notification permission on Android 13+
         requestNotificationPermissionIfNeeded()
 
-        // Load connections from database
+        // Load data from database
+        loadGroups()
         loadConnections()
         loadFrequentlyUsedConnections()
 
@@ -119,11 +131,61 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreateOptionsMenu(menu: android.view.Menu): Boolean {
         menuInflater.inflate(R.menu.main_menu, menu)
+
+        // Setup SearchView
+        val searchItem = menu.findItem(R.id.action_search)
+        val searchView = searchItem?.actionView as? androidx.appcompat.widget.SearchView
+
+        searchView?.apply {
+            queryHint = "Search connections..."
+            maxWidth = Integer.MAX_VALUE // Full width when expanded
+
+            // Set up query listener
+            setOnQueryTextListener(object : androidx.appcompat.widget.SearchView.OnQueryTextListener {
+                override fun onQueryTextSubmit(query: String?): Boolean {
+                    // Search when user presses search button
+                    query?.let {
+                        currentSearchQuery = it
+                        filterConnections(it)
+                    }
+                    return true
+                }
+
+                override fun onQueryTextChange(newText: String?): Boolean {
+                    // Real-time search as user types
+                    currentSearchQuery = newText ?: ""
+                    filterConnections(currentSearchQuery)
+                    return true
+                }
+            })
+
+            // Restore search query if it exists
+            if (currentSearchQuery.isNotBlank()) {
+                searchItem.expandActionView()
+                setQuery(currentSearchQuery, false)
+            }
+
+            // Clear search when SearchView is collapsed
+            setOnCloseListener {
+                currentSearchQuery = ""
+                filterConnections("")
+                false
+            }
+        }
+
         return true
     }
 
     override fun onOptionsItemSelected(item: android.view.MenuItem): Boolean {
         return when (item.itemId) {
+            R.id.action_sort -> {
+                showSortDialog()
+                true
+            }
+            R.id.action_create_group -> {
+                showCreateGroupDialog()
+                true
+            }
             R.id.action_settings -> {
                 val intent = Intent(this, SettingsActivity::class.java)
                 startActivity(intent)
@@ -167,20 +229,22 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun setupRecyclerView() {
-        connectionAdapter = ConnectionAdapter(
-            connections = connections,
+        groupedConnectionAdapter = GroupedConnectionAdapter(
+            items = displayItems,
             onConnectionClick = { profile -> connectToProfile(profile) },
             onConnectionLongClick = { profile -> showConnectionMenu(profile) },
             onConnectionEdit = { profile -> editConnection(profile) },
-            onConnectionDelete = { profile -> deleteConnection(profile) }
+            onConnectionDelete = { profile -> deleteConnection(profile) },
+            onGroupClick = { groupHeader -> toggleGroupExpansion(groupHeader) },
+            onGroupLongClick = { groupHeader -> showGroupMenu(groupHeader) }
         )
-        
+
         binding.recyclerConnections.apply {
             layoutManager = LinearLayoutManager(this@MainActivity)
-            adapter = connectionAdapter
+            adapter = groupedConnectionAdapter
             visibility = android.view.View.VISIBLE
         }
-        
+
         // Hide empty message when RecyclerView is shown
         binding.textEmptyConnections.visibility = android.view.View.GONE
     }
@@ -228,20 +292,165 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 app.database.connectionDao().getAllConnections().collect { connectionList ->
-                    connections.clear()
-                    connections.addAll(connectionList)
-                    
-                    runOnUiThread {
-                        connectionAdapter.notifyDataSetChanged()
-                        updateEmptyState()
-                    }
-                    
+                    allConnections.clear()
+                    allConnections.addAll(connectionList)
+
+                    // Rebuild display list
+                    rebuildDisplayList()
+
                     Logger.d("MainActivity", "Loaded ${connectionList.size} connections")
                 }
             } catch (e: Exception) {
                 Logger.e("MainActivity", "Failed to load connections", e)
                 showToast("Failed to load connections")
             }
+        }
+    }
+
+    private fun loadGroups() {
+        lifecycleScope.launch {
+            try {
+                app.database.connectionGroupDao().getAllGroups().collect { groupList ->
+                    allGroups.clear()
+                    allGroups.addAll(groupList)
+
+                    // Rebuild display list
+                    rebuildDisplayList()
+
+                    Logger.d("MainActivity", "Loaded ${groupList.size} groups")
+                }
+            } catch (e: Exception) {
+                Logger.e("MainActivity", "Failed to load groups", e)
+                showToast("Failed to load groups")
+            }
+        }
+    }
+
+    /**
+     * Rebuild the display list with groups and connections
+     */
+    private fun rebuildDisplayList() {
+        // Filter connections if search is active
+        val filteredConnections = if (currentSearchQuery.isBlank()) {
+            allConnections
+        } else {
+            allConnections.filter { connection ->
+                connection.name.contains(currentSearchQuery, ignoreCase = true) ||
+                connection.host.contains(currentSearchQuery, ignoreCase = true) ||
+                connection.username.contains(currentSearchQuery, ignoreCase = true) ||
+                connection.getDisplayName().contains(currentSearchQuery, ignoreCase = true)
+            }
+        }
+
+        // Apply sort
+        val sortedConnections = applySortToList(filteredConnections)
+
+        // Build display list
+        val items = if (currentSearchQuery.isBlank() && groupingEnabled) {
+            // Grouped view
+            ConnectionListBuilder.buildGroupedList(
+                groups = allGroups,
+                connections = sortedConnections,
+                groupExpansionState = groupExpansionState,
+                showUngrouped = true,
+                ungroupedExpanded = ungroupedExpanded
+            )
+        } else {
+            // Flat view (for search results or when grouping disabled)
+            ConnectionListBuilder.buildFlatList(sortedConnections)
+        }
+
+        displayItems.clear()
+        displayItems.addAll(items)
+
+        runOnUiThread {
+            groupedConnectionAdapter.notifyDataSetChanged()
+            updateEmptyState()
+
+            Logger.d("MainActivity", "Rebuilt display list: ${displayItems.size} items (${sortedConnections.size} connections, ${allGroups.size} groups)")
+        }
+    }
+
+    /**
+     * Filter connections based on search query (legacy method for compatibility)
+     */
+    private fun filterConnections(query: String) {
+        currentSearchQuery = query
+        rebuildDisplayList()
+    }
+
+    /**
+     * Show sort options dialog
+     */
+    private fun showSortDialog() {
+        val sortOptions = arrayOf(
+            "Name (A-Z)",
+            "Name (Z-A)",
+            "Host (A-Z)",
+            "Host (Z-A)",
+            "Most Used",
+            "Least Used",
+            "Recently Connected",
+            "Oldest Connected"
+        )
+
+        val currentSort = app.preferencesManager.getString("connection_sort", "name_asc")
+        val currentIndex = when (currentSort) {
+            "name_asc" -> 0
+            "name_desc" -> 1
+            "host_asc" -> 2
+            "host_desc" -> 3
+            "most_used" -> 4
+            "least_used" -> 5
+            "recent" -> 6
+            "oldest" -> 7
+            else -> 0
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Sort Connections")
+            .setSingleChoiceItems(sortOptions, currentIndex) { dialog, which ->
+                val sortType = when (which) {
+                    0 -> "name_asc"
+                    1 -> "name_desc"
+                    2 -> "host_asc"
+                    3 -> "host_desc"
+                    4 -> "most_used"
+                    5 -> "least_used"
+                    6 -> "recent"
+                    7 -> "oldest"
+                    else -> "name_asc"
+                }
+
+                // Save preference
+                app.preferencesManager.setString("connection_sort", sortType)
+
+                // Re-apply filter (which will apply the new sort)
+                filterConnections(currentSearchQuery)
+
+                Logger.d("MainActivity", "Sort changed to: $sortType")
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Apply the current sort preference to a list of connections
+     */
+    private fun applySortToList(list: List<ConnectionProfile>): List<ConnectionProfile> {
+        val sortType = app.preferencesManager.getString("connection_sort", "name_asc")
+
+        return when (sortType) {
+            "name_asc" -> list.sortedBy { it.name.lowercase() }
+            "name_desc" -> list.sortedByDescending { it.name.lowercase() }
+            "host_asc" -> list.sortedBy { it.host.lowercase() }
+            "host_desc" -> list.sortedByDescending { it.host.lowercase() }
+            "most_used" -> list.sortedByDescending { it.connectionCount }
+            "least_used" -> list.sortedBy { it.connectionCount }
+            "recent" -> list.sortedByDescending { it.lastConnected }
+            "oldest" -> list.sortedBy { it.lastConnected }
+            else -> list.sortedBy { it.name.lowercase() }
         }
     }
 
@@ -448,19 +657,118 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun showConnectionMenu(profile: ConnectionProfile) {
-        val items = arrayOf("Connect", "Edit", "Duplicate", "Delete")
-        
+        val items = arrayOf("Connect", "Edit", "Move to Group", "Duplicate", "Delete")
+
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle(profile.getDisplayName())
             .setItems(items) { _, which ->
                 when (which) {
                     0 -> connectToProfile(profile)
                     1 -> editConnection(profile)
-                    2 -> duplicateConnection(profile)
-                    3 -> deleteConnection(profile)
+                    2 -> showMoveToGroupDialog(profile)
+                    3 -> duplicateConnection(profile)
+                    4 -> deleteConnection(profile)
                 }
             }
             .show()
+    }
+
+    /**
+     * Show dialog to move connection to a group
+     */
+    private fun showMoveToGroupDialog(profile: ConnectionProfile) {
+        val groupNames = mutableListOf("(Ungrouped)", "+ Create New Group")
+        groupNames.addAll(1, allGroups.map { it.name })
+
+        val currentGroupIndex = if (profile.groupId == null) {
+            0
+        } else {
+            allGroups.indexOfFirst { it.id == profile.groupId }.let { if (it >= 0) it + 2 else 0 }
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Move to Group")
+            .setSingleChoiceItems(groupNames.toTypedArray(), currentGroupIndex) { dialog, which ->
+                when (which) {
+                    0 -> {
+                        // Move to ungrouped
+                        moveConnectionToGroup(profile, null)
+                        dialog.dismiss()
+                    }
+                    1 -> {
+                        // Create new group
+                        dialog.dismiss()
+                        showCreateGroupDialog(profile)
+                    }
+                    else -> {
+                        // Move to existing group
+                        val group = allGroups[which - 2]
+                        moveConnectionToGroup(profile, group.id)
+                        dialog.dismiss()
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Show dialog to create a new group
+     */
+    private fun showCreateGroupDialog(connectionToMove: ConnectionProfile? = null) {
+        val input = android.widget.EditText(this).apply {
+            hint = "Group name"
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Create Group")
+            .setView(input)
+            .setPositiveButton("Create") { _, _ ->
+                val groupName = input.text.toString().trim()
+                if (groupName.isNotBlank()) {
+                    lifecycleScope.launch {
+                        val newGroup = ConnectionGroup(
+                            name = groupName,
+                            sortOrder = allGroups.size,
+                            createdAt = System.currentTimeMillis(),
+                            modifiedAt = System.currentTimeMillis()
+                        )
+                        app.database.connectionGroupDao().insertGroup(newGroup)
+
+                        // Move connection to new group if specified
+                        connectionToMove?.let {
+                            moveConnectionToGroup(it, newGroup.id)
+                        }
+
+                        Logger.d("MainActivity", "Created new group: $groupName")
+                        showToast("Group created: $groupName")
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Move connection to a group (or remove from group if groupId is null)
+     */
+    private fun moveConnectionToGroup(profile: ConnectionProfile, groupId: String?) {
+        lifecycleScope.launch {
+            val updatedProfile = profile.copy(
+                groupId = groupId,
+                modifiedAt = System.currentTimeMillis()
+            )
+            app.database.connectionDao().updateConnection(updatedProfile)
+
+            val groupName = if (groupId == null) {
+                "Ungrouped"
+            } else {
+                allGroups.find { it.id == groupId }?.name ?: "Unknown"
+            }
+
+            Logger.d("MainActivity", "Moved ${profile.name} to: $groupName")
+            showToast("Moved to: $groupName")
+        }
     }
     
     private fun editConnection(profile: ConnectionProfile) {
@@ -608,11 +916,106 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Toggle group expansion state
+     */
+    private fun toggleGroupExpansion(groupHeader: ConnectionListItem.GroupHeader) {
+        val newState = !groupHeader.isExpanded
+        groupExpansionState[groupHeader.group.id] = newState
+
+        // Update database
+        lifecycleScope.launch {
+            app.database.connectionGroupDao().updateGroupCollapsedState(groupHeader.group.id, !newState)
+        }
+
+        // Rebuild display
+        rebuildDisplayList()
+
+        Logger.d("MainActivity", "Toggled group ${groupHeader.group.name}: ${if (newState) "expanded" else "collapsed"}")
+    }
+
+    /**
+     * Show group management menu
+     */
+    private fun showGroupMenu(groupHeader: ConnectionListItem.GroupHeader) {
+        val options = arrayOf("Rename Group", "Delete Group")
+
+        AlertDialog.Builder(this)
+            .setTitle(groupHeader.group.name)
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> showRenameGroupDialog(groupHeader.group)
+                    1 -> showDeleteGroupDialog(groupHeader.group)
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Show rename group dialog
+     */
+    private fun showRenameGroupDialog(group: ConnectionGroup) {
+        val input = android.widget.EditText(this).apply {
+            setText(group.name)
+            selectAll()
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Rename Group")
+            .setView(input)
+            .setPositiveButton("Rename") { _, _ ->
+                val newName = input.text.toString().trim()
+                if (newName.isNotBlank()) {
+                    lifecycleScope.launch {
+                        val updatedGroup = group.copy(
+                            name = newName,
+                            modifiedAt = System.currentTimeMillis()
+                        )
+                        app.database.connectionGroupDao().updateGroup(updatedGroup)
+                        Logger.d("MainActivity", "Renamed group to: $newName")
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Show delete group dialog
+     */
+    private fun showDeleteGroupDialog(group: ConnectionGroup) {
+        lifecycleScope.launch {
+            val connectionCount = app.database.connectionGroupDao().getConnectionCountInGroup(group.id)
+
+            val message = if (connectionCount > 0) {
+                "This group contains $connectionCount connection(s). Deleting the group will move them to Ungrouped."
+            } else {
+                "Delete this group?"
+            }
+
+            runOnUiThread {
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("Delete ${group.name}?")
+                    .setMessage(message)
+                    .setPositiveButton("Delete") { _, _ ->
+                        lifecycleScope.launch {
+                            app.database.connectionGroupDao().deleteGroup(group)
+                            Logger.d("MainActivity", "Deleted group: ${group.name}")
+                        }
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         Logger.d("MainActivity", "onResume")
-        
-        // Refresh connections in case they were modified
+
+        // Refresh data in case it was modified
+        loadGroups()
         loadConnections()
         loadFrequentlyUsedConnections()
     }

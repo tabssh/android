@@ -80,10 +80,10 @@ release: ## Build production releases and push to GitHub
 
 dev: ## Build Docker development container
 	@echo -e "$(GREEN)🐳 Building development container...$(NC)"
-	@docker build -t tabssh-android -f scripts/docker/Dockerfile .
+	@docker build -t tabssh-android -f docker/Dockerfile .
 	@echo -e "$(GREEN)✅ Container built: tabssh-android$(NC)"
 	@echo ""
-	@echo -e "$(BLUE)Run:$(NC) docker-compose -f docker-compose.dev.yml up -d"
+	@echo -e "$(BLUE)Run:$(NC) docker-compose -f docker/docker-compose.dev.yml up -d"
 
 clean: ## Clean build artifacts (binaries/ and app/build/)
 	@echo -e "$(BLUE)🧹 Cleaning build artifacts...$(NC)"

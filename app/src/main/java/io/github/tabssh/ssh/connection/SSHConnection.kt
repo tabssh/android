@@ -24,6 +24,8 @@ class SSHConnection(
     private var session: Session? = null
     private var shellChannel: ChannelShell? = null
     private var sftpChannel: ChannelSftp? = null
+    private var jumpHostSession: Session? = null
+    private var jumpHostLocalPort: Int = 0
 
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
@@ -80,7 +82,16 @@ class SSHConnection(
                     hostKeyChangedCallback?.invoke(info) ?: HostKeyAction.REJECT_CONNECTION
                 }
 
-                val newSession = jsch.getSession(profile.username, profile.host, profile.port)
+                // Setup jump host if configured
+                val jumpHostPort = setupJumpHost(jsch)
+
+                // Create main session - connect through jump host if configured
+                val newSession = if (jumpHostPort != null) {
+                    Logger.i("SSHConnection", "Connecting to target through jump host on localhost:$jumpHostPort")
+                    jsch.getSession(profile.username, "localhost", jumpHostPort)
+                } else {
+                    jsch.getSession(profile.username, profile.host, profile.port)
+                }
                 
                 // Configure session
                 configureSession(newSession)
@@ -145,7 +156,97 @@ class SSHConnection(
         
         Logger.d("SSHConnection", "Session configured with compression=${profile.compression}, keep-alive=${profile.keepAlive}")
     }
-    
+
+    /**
+     * Setup SSH jump host (bastion) connection if configured
+     * Returns local port number for forwarding, or null if no jump host
+     */
+    private suspend fun setupJumpHost(jsch: JSch): Int? = withContext(Dispatchers.IO) {
+        if (profile.proxyType != "SSH" || profile.proxyHost == null) {
+            return@withContext null
+        }
+
+        try {
+            Logger.i("SSHConnection", "Setting up SSH jump host: ${profile.proxyHost}:${profile.proxyPort}")
+
+            val jumpHost = profile.proxyHost
+            val jumpPort = profile.proxyPort ?: 22
+            val jumpUsername = profile.proxyUsername ?: profile.username
+
+            // Create jump host session
+            val jumpSession = jsch.getSession(jumpUsername, jumpHost, jumpPort)
+
+            // Configure jump host session
+            val config = java.util.Properties()
+            config["StrictHostKeyChecking"] = "ask"
+            jumpSession.setConfig(config)
+            jumpSession.timeout = profile.connectTimeout * 1000
+
+            // Authenticate to jump host
+            when (profile.proxyAuthType) {
+                AuthType.PUBLIC_KEY.name -> {
+                    if (profile.proxyKeyId != null) {
+                        Logger.d("SSHConnection", "Jump host: Using public key authentication")
+                        // Load jump host SSH key using KeyStorage
+                        val app = (context.applicationContext as io.github.tabssh.TabSSHApplication)
+                        val privateKey = app.keyStorage.retrievePrivateKey(profile.proxyKeyId)
+                        if (privateKey != null) {
+                            jsch.addIdentity(
+                                profile.proxyKeyId,
+                                privateKey.encoded,
+                                null, // public key (JSch can derive it)
+                                null // passphrase
+                            )
+                        } else {
+                            throw SSHException("Jump host key not found: ${profile.proxyKeyId}")
+                        }
+                    }
+                }
+                AuthType.PASSWORD.name, null -> {
+                    Logger.d("SSHConnection", "Jump host: Using password authentication")
+                    // Use same password as main connection for jump host
+                    val password = getPasswordForAuthentication()
+                    if (password != null) {
+                        jumpSession.setPassword(password)
+                    }
+                }
+                else -> {
+                    Logger.w("SSHConnection", "Jump host: Unsupported auth type ${profile.proxyAuthType}, using password")
+                    val password = getPasswordForAuthentication()
+                    if (password != null) {
+                        jumpSession.setPassword(password)
+                    }
+                }
+            }
+
+            // Connect to jump host
+            jumpSession.connect()
+            jumpHostSession = jumpSession
+
+            Logger.i("SSHConnection", "Jump host connected successfully")
+
+            // Setup port forwarding through jump host
+            // Forward a random local port to the target host's SSH port
+            val localPort = jumpSession.setPortForwardingL(
+                0, // 0 = random available port
+                profile.host,
+                profile.port
+            )
+
+            jumpHostLocalPort = localPort
+
+            Logger.i("SSHConnection", "Jump host port forwarding established: localhost:$localPort -> ${profile.host}:${profile.port}")
+
+            return@withContext localPort
+
+        } catch (e: Exception) {
+            Logger.e("SSHConnection", "Failed to setup jump host", e)
+            jumpHostSession?.disconnect()
+            jumpHostSession = null
+            throw SSHException("Jump host setup failed: ${e.message}", e)
+        }
+    }
+
     private suspend fun authenticate(session: Session): Boolean {
         _connectionState.value = ConnectionState.AUTHENTICATING
         notifyListeners { onAuthenticating(id) }
@@ -415,21 +516,36 @@ class SSHConnection(
      */
     fun disconnect() {
         Logger.i("SSHConnection", "Disconnecting from ${profile.host}")
-        
+
         connectJob?.cancel()
-        
+
         shellChannel?.disconnect()
         shellChannel = null
-        
+
         sftpChannel?.disconnect()
         sftpChannel = null
-        
+
         session?.disconnect()
         session = null
-        
+
+        // Disconnect jump host session if active
+        if (jumpHostSession != null) {
+            Logger.i("SSHConnection", "Disconnecting jump host session")
+            try {
+                if (jumpHostLocalPort > 0) {
+                    jumpHostSession?.delPortForwardingL(jumpHostLocalPort)
+                }
+            } catch (e: Exception) {
+                Logger.w("SSHConnection", "Failed to remove port forwarding", e)
+            }
+            jumpHostSession?.disconnect()
+            jumpHostSession = null
+            jumpHostLocalPort = 0
+        }
+
         _connectionState.value = ConnectionState.DISCONNECTED
         _errorMessage.value = null
-        
+
         notifyListeners { onDisconnected(id) }
     }
     

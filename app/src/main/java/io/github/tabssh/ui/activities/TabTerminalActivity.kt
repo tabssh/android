@@ -7,12 +7,16 @@ import android.os.Looper
 import android.view.KeyEvent
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.tabs.TabLayout
+import com.google.android.material.tabs.TabLayoutMediator
 import kotlinx.coroutines.*
 import io.github.tabssh.ssh.connection.SSHConnection
+import io.github.tabssh.ui.adapters.TerminalPagerAdapter
 import io.github.tabssh.ui.views.TerminalView
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
@@ -48,9 +52,13 @@ class TabTerminalActivity : AppCompatActivity() {
     private lateinit var binding: ActivityTabTerminalBinding
     private lateinit var app: TabSSHApplication
     private lateinit var tabManager: TabManager
-    
+
     // UI components
     private var terminalView: TerminalView? = null
+    private var viewPager: ViewPager2? = null
+    private var pagerAdapter: TerminalPagerAdapter? = null
+    private var tabLayoutMediator: TabLayoutMediator? = null
+    private var swipeEnabled: Boolean = true
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -132,12 +140,84 @@ class TabTerminalActivity : AppCompatActivity() {
     }
     
     private fun setupTerminalView() {
-        terminalView = binding.terminalView
-        
-        // Set up terminal view
-        binding.terminalView.apply {
-            // Terminal view will be connected to active tab's terminal
+        // Check if swipe is enabled
+        swipeEnabled = app.preferencesManager.getBoolean("swipe_between_tabs", true)
+
+        if (swipeEnabled) {
+            // Use ViewPager2 for swipeable tabs
+            viewPager = binding.viewPager
+            binding.viewPager.visibility = View.VISIBLE
+            binding.terminalView.visibility = View.GONE
+
+            // ViewPager2 will be set up when tabs are created
+            Logger.d("TabTerminalActivity", "Swipe between tabs enabled")
+        } else {
+            // Use single TerminalView (classic mode)
+            terminalView = binding.terminalView
+            binding.viewPager.visibility = View.GONE
+            binding.terminalView.visibility = View.VISIBLE
+
+            // Set up terminal view
+            binding.terminalView.apply {
+                // Load font size from preferences
+                val fontSize = app.preferencesManager.getInt("terminal_font_size", 14)
+                setFontSize(fontSize)
+
+                // Set up URL detection handler
+                val urlDetectionEnabled = app.preferencesManager.getBoolean("detect_urls", true)
+                if (urlDetectionEnabled) {
+                    onUrlDetected = { url ->
+                        showUrlDialog(url)
+                    }
+                }
+
+                // Terminal view will be connected to active tab's terminal
+            }
+
+            Logger.d("TabTerminalActivity", "Single terminal view mode (swipe disabled)")
         }
+    }
+
+    /**
+     * Show dialog for detected URL with options to open or copy
+     */
+    private fun showUrlDialog(url: String) {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("URL Detected")
+            .setMessage(url)
+            .setPositiveButton("Open") { _, _ ->
+                openUrl(url)
+            }
+            .setNeutralButton("Copy") { _, _ ->
+                copyUrlToClipboard(url)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Open URL in browser
+     */
+    private fun openUrl(url: String) {
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
+            startActivity(intent)
+            Logger.d("TabTerminalActivity", "Opening URL: $url")
+        } catch (e: Exception) {
+            Logger.e("TabTerminalActivity", "Failed to open URL: $url", e)
+            Toast.makeText(this, "Failed to open URL", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Copy URL to clipboard
+     */
+    private fun copyUrlToClipboard(url: String) {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        val clip = android.content.ClipData.newPlainText("URL", url)
+        clipboard.setPrimaryClip(clip)
+        Toast.makeText(this, "URL copied to clipboard", Toast.LENGTH_SHORT).show()
+        Logger.d("TabTerminalActivity", "Copied URL to clipboard: $url")
     }
     
     private fun setupFunctionKeys() {
@@ -151,16 +231,36 @@ class TabTerminalActivity : AppCompatActivity() {
         
         // Bottom action bar
         binding.btnKeyboard.setOnClickListener { toggleKeyboard() }
+        binding.btnSnippets.setOnClickListener { showSnippetsDialog() }
         binding.btnFiles.setOnClickListener { openFileManager() }
         binding.btnPaste.setOnClickListener { pasteFromClipboard() }
     }
     
     private fun handleIntent(intent: Intent?) {
         if (intent == null) return
-        
+
+        // Check for widget connection intent
+        val widgetConnectionId = intent.getStringExtra("connection_id")
+        if (widgetConnectionId != null) {
+            Logger.d("TabTerminalActivity", "Handling widget connection: $widgetConnectionId")
+            lifecycleScope.launch {
+                val profile = withContext(Dispatchers.IO) {
+                    app.database.connectionDao().getConnectionById(widgetConnectionId)
+                }
+                if (profile != null) {
+                    connectToProfile(profile)
+                } else {
+                    Logger.w("TabTerminalActivity", "Widget connection profile not found: $widgetConnectionId")
+                    Toast.makeText(this@TabTerminalActivity, "Connection not found", Toast.LENGTH_SHORT).show()
+                }
+            }
+            return
+        }
+
+        // Handle normal connection intent
         val connectionProfileId = intent.getStringExtra(EXTRA_CONNECTION_PROFILE)
         val autoConnect = intent.getBooleanExtra(EXTRA_AUTO_CONNECT, true)
-        
+
         if (connectionProfileId != null) {
             CoroutineScope(Dispatchers.Main).launch {
                 val profile = app.database.connectionDao().getConnectionById(connectionProfileId)
@@ -208,47 +308,122 @@ class TabTerminalActivity : AppCompatActivity() {
     }
     
     private fun addTabToUI(tab: SSHTab) {
-        val tabLayout = binding.tabLayout
-        val newTab = tabLayout.newTab()
+        if (swipeEnabled) {
+            // Rebuild ViewPager2 adapter with updated tabs
+            updateViewPagerAdapter()
+            Logger.d("TabTerminalActivity", "Added tab to ViewPager2: ${tab.profile.getDisplayName()}")
+        } else {
+            // Classic mode: add tab to TabLayout only
+            val tabLayout = binding.tabLayout
+            val newTab = tabLayout.newTab()
 
-        newTab.text = tab.getShortTitle()
-        newTab.tag = tab.tabId
+            newTab.text = tab.getShortTitle()
+            newTab.tag = tab.tabId
 
-        tabLayout.addTab(newTab)
+            tabLayout.addTab(newTab)
 
-        // Select the new tab
-        newTab.select()
+            // Select the new tab
+            newTab.select()
 
-        // Attach the terminal to the view
-        terminalView?.attachTerminalEmulator(tab.terminal)
+            // Attach the terminal to the view
+            terminalView?.attachTerminalEmulator(tab.terminal)
 
-        Logger.d("TabTerminalActivity", "Added tab to UI: ${tab.profile.getDisplayName()}")
+            Logger.d("TabTerminalActivity", "Added tab to UI: ${tab.profile.getDisplayName()}")
+        }
     }
-    
-    private fun removeTabFromUI(index: Int) {
-        val tabLayout = binding.tabLayout
-        if (index < tabLayout.tabCount) {
-            tabLayout.removeTabAt(index)
+
+    /**
+     * Update ViewPager2 adapter with current tabs
+     */
+    private fun updateViewPagerAdapter() {
+        val allTabs = tabManager.getAllTabs()
+
+        // Get font size preference
+        val fontSize = app.preferencesManager.getInt("terminal_font_size", 14)
+
+        // Create URL detection callback if enabled
+        val urlDetectionCallback = if (app.preferencesManager.getBoolean("detect_urls", true)) {
+            { url: String -> showUrlDialog(url) }
+        } else {
+            null
+        }
+
+        if (pagerAdapter == null) {
+            // First time setup
+            pagerAdapter = TerminalPagerAdapter(allTabs, fontSize, urlDetectionCallback)
+            viewPager?.adapter = pagerAdapter
+
+            // Setup TabLayoutMediator to sync TabLayout with ViewPager2
+            tabLayoutMediator?.detach()
+            tabLayoutMediator = TabLayoutMediator(binding.tabLayout, binding.viewPager) { tab, position ->
+                tab.text = allTabs.getOrNull(position)?.getShortTitle() ?: "Tab ${position + 1}"
+                tab.tag = allTabs.getOrNull(position)?.tabId
+            }
+            tabLayoutMediator?.attach()
+
+            // Register page change callback
+            viewPager?.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+                override fun onPageSelected(position: Int) {
+                    tabManager.switchToTab(position)
+                    Logger.d("TabTerminalActivity", "Swiped to tab $position")
+                }
+            })
+        } else {
+            // Recreate adapter with new tabs list
+            val currentPosition = viewPager?.currentItem ?: 0
+            pagerAdapter = TerminalPagerAdapter(allTabs, fontSize, urlDetectionCallback)
+            viewPager?.adapter = pagerAdapter
+
+            // Restore position (or select last tab if adding)
+            val newPosition = if (currentPosition >= allTabs.size) allTabs.size - 1 else currentPosition
+            viewPager?.setCurrentItem(newPosition, false)
+
+            // Re-attach mediator
+            tabLayoutMediator?.detach()
+            tabLayoutMediator = TabLayoutMediator(binding.tabLayout, binding.viewPager) { tab, position ->
+                tab.text = allTabs.getOrNull(position)?.getShortTitle() ?: "Tab ${position + 1}"
+                tab.tag = allTabs.getOrNull(position)?.tabId
+            }
+            tabLayoutMediator?.attach()
         }
     }
     
+    private fun removeTabFromUI(index: Int) {
+        if (swipeEnabled) {
+            // Rebuild ViewPager2 adapter
+            updateViewPagerAdapter()
+        } else {
+            // Classic mode: remove from TabLayout
+            val tabLayout = binding.tabLayout
+            if (index < tabLayout.tabCount) {
+                tabLayout.removeTabAt(index)
+            }
+        }
+    }
+
     private fun switchToTab(index: Int) {
-        val tab = tabManager.getTab(index)
-        if (tab != null) {
-            // Connect terminal view to the tab's terminal emulator
-            val terminal = tab.terminal
-            terminalView?.attachTerminalEmulator(terminal)
+        if (swipeEnabled) {
+            // Swipe mode: update ViewPager2 position
+            viewPager?.setCurrentItem(index, true)
+        } else {
+            // Classic mode: attach terminal to single view
+            val tab = tabManager.getTab(index)
+            if (tab != null) {
+                // Connect terminal view to the tab's terminal emulator
+                val terminal = tab.terminal
+                terminalView?.attachTerminalEmulator(terminal)
 
-            // Deactivate previous tab
-            tabManager.getActiveTab()?.deactivate()
+                // Deactivate previous tab
+                tabManager.getActiveTab()?.deactivate()
 
-            // Activate new tab
-            tab.activate()
+                // Activate new tab
+                tab.activate()
 
-            // Update toolbar title
-            supportActionBar?.title = tab.getDisplayTitle()
+                // Update toolbar title
+                supportActionBar?.title = tab.getDisplayTitle()
 
-            Logger.d("TabTerminalActivity", "Switched to tab: ${tab.profile.getDisplayName()}")
+                Logger.d("TabTerminalActivity", "Switched to tab: ${tab.profile.getDisplayName()}")
+            }
         }
     }
     
@@ -317,6 +492,21 @@ class TabTerminalActivity : AppCompatActivity() {
     }
     
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        // Handle volume keys for font size control (if enabled)
+        val volumeKeysEnabled = app.preferencesManager.getBoolean("volume_keys_font_size", true)
+        if (volumeKeysEnabled) {
+            when (keyCode) {
+                KeyEvent.KEYCODE_VOLUME_UP -> {
+                    adjustFontSize(+2)
+                    return true
+                }
+                KeyEvent.KEYCODE_VOLUME_DOWN -> {
+                    adjustFontSize(-2)
+                    return true
+                }
+            }
+        }
+
         // Handle keyboard shortcuts
         if (event.isCtrlPressed) {
             when (keyCode) {
@@ -343,12 +533,49 @@ class TabTerminalActivity : AppCompatActivity() {
                 }
             }
         }
-        
+
         // Let terminal view handle other keys
-        return terminalView?.onKeyDown(keyCode, event) ?: super.onKeyDown(keyCode, event)
+        val activeTerminal = getActiveTerminalView()
+        return activeTerminal?.onKeyDown(keyCode, event) ?: super.onKeyDown(keyCode, event)
+    }
+
+    /**
+     * Get the currently active terminal view (works in both classic and swipe modes)
+     */
+    private fun getActiveTerminalView(): TerminalView? {
+        return if (swipeEnabled) {
+            // Get the currently visible page in ViewPager2
+            val currentItem = viewPager?.currentItem ?: return null
+            val holder = (viewPager?.getChildAt(0) as? androidx.recyclerview.widget.RecyclerView)
+                ?.findViewHolderForAdapterPosition(currentItem) as? TerminalPagerAdapter.TerminalViewHolder
+            holder?.terminalView
+        } else {
+            terminalView
+        }
+    }
+
+    /**
+     * Adjust terminal font size by delta
+     */
+    private fun adjustFontSize(delta: Int) {
+        val view = getActiveTerminalView()
+        view?.let {
+            val currentSize = it.getFontSize()
+            val newSize = (currentSize + delta).coerceIn(8, 32)
+            it.setFontSize(newSize)
+
+            // Save to preferences
+            app.preferencesManager.setInt("terminal_font_size", newSize)
+
+            // Show toast with current size
+            Toast.makeText(this, "Font Size: ${newSize}sp", Toast.LENGTH_SHORT).show()
+
+            Logger.d("TabTerminalActivity", "Font size adjusted: $currentSize → $newSize")
+        }
     }
     
     private fun sendKey(key: String) {
+        val terminal = getActiveTerminalView()
         when (key) {
             "ctrl" -> {
                 // Toggle ctrl mode or show ctrl key menu
@@ -358,24 +585,24 @@ class TabTerminalActivity : AppCompatActivity() {
                 showToast("Alt key pressed")
             }
             "esc" -> {
-                terminalView?.sendKeySequence("\u001B")
+                terminal?.sendKeySequence("\u001B")
             }
             "tab" -> {
-                terminalView?.sendKeySequence("\t")
+                terminal?.sendKeySequence("\t")
             }
             "up" -> {
-                terminalView?.sendKeySequence("\u001B[A")
+                terminal?.sendKeySequence("\u001B[A")
             }
             "down" -> {
-                terminalView?.sendKeySequence("\u001B[B")
+                terminal?.sendKeySequence("\u001B[B")
             }
         }
     }
-    
+
     private fun toggleKeyboard() {
-        terminalView?.sendText("")
+        getActiveTerminalView()?.sendText("")
     }
-    
+
     private fun openFileManager() {
         val activeTab = tabManager.getActiveTab()
         if (activeTab != null && activeTab.isConnected()) {
@@ -388,11 +615,11 @@ class TabTerminalActivity : AppCompatActivity() {
             showToast("Connect to a server first")
         }
     }
-    
+
     private fun pasteFromClipboard() {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
         clipboard.primaryClip?.getItemAt(0)?.text?.let { text ->
-            terminalView?.sendText(text.toString())
+            getActiveTerminalView()?.sendText(text.toString())
         }
     }
     
@@ -401,7 +628,271 @@ class TabTerminalActivity : AppCompatActivity() {
         val intent = Intent(this, ConnectionEditActivity::class.java)
         startActivity(intent)
     }
-    
+
+    /**
+     * Show snippets dialog for quick command access
+     */
+    private fun showSnippetsDialog() {
+        lifecycleScope.launch {
+            try {
+                val snippets = app.database.snippetDao().getFrequentlyUsedSnippets(20)
+
+                if (snippets.isEmpty()) {
+                    // Show create snippet dialog if no snippets exist
+                    showToast("No snippets yet. Create one first!")
+                    showCreateSnippetDialog()
+                    return@launch
+                }
+
+                // Build snippet list
+                val snippetNames = snippets.map { snippet ->
+                    if (snippet.hasVariables()) {
+                        "${snippet.name} ${snippet.category}"
+                    } else {
+                        "${snippet.name} - ${snippet.category}"
+                    }
+                }.toTypedArray()
+
+                runOnUiThread {
+                    androidx.appcompat.app.AlertDialog.Builder(this@TabTerminalActivity)
+                        .setTitle("Insert Snippet")
+                        .setItems(snippetNames) { _, which ->
+                            val snippet = snippets[which]
+                            insertSnippet(snippet)
+                        }
+                        .setNeutralButton("Manage Snippets") { _, _ ->
+                            showManageSnippetsMenu()
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                }
+            } catch (e: Exception) {
+                Logger.e("TabTerminalActivity", "Failed to load snippets", e)
+                showToast("Failed to load snippets")
+            }
+        }
+    }
+
+    /**
+     * Insert a snippet into the active terminal
+     */
+    private fun insertSnippet(snippet: io.github.tabssh.storage.database.entities.Snippet) {
+        lifecycleScope.launch {
+            try {
+                // Check if snippet has variables
+                if (snippet.hasVariables()) {
+                    // Show dialog to fill in variables
+                    showVariablesDialog(snippet)
+                } else {
+                    // Insert directly
+                    val terminal = getActiveTerminalView()
+                    terminal?.sendText(snippet.command)
+
+                    // Increment usage count
+                    app.database.snippetDao().incrementUsageCount(snippet.id)
+
+                    Logger.d("TabTerminalActivity", "Inserted snippet: ${snippet.name}")
+                }
+            } catch (e: Exception) {
+                Logger.e("TabTerminalActivity", "Failed to insert snippet", e)
+                showToast("Failed to insert snippet")
+            }
+        }
+    }
+
+    /**
+     * Show dialog to fill in snippet variables
+     */
+    private fun showVariablesDialog(snippet: io.github.tabssh.storage.database.entities.Snippet) {
+        val variables = snippet.getVariables()
+        val values = mutableMapOf<String, String>()
+        val inputs = mutableListOf<android.widget.EditText>()
+
+        // Create linear layout with inputs for each variable
+        val layout = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(50, 20, 50, 20)
+        }
+
+        variables.forEach { varName ->
+            val label = android.widget.TextView(this).apply {
+                text = varName
+                textSize = 14f
+            }
+            val input = android.widget.EditText(this).apply {
+                hint = "Enter value for $varName"
+            }
+            inputs.add(input)
+
+            layout.addView(label)
+            layout.addView(input)
+        }
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Fill Variables")
+            .setView(layout)
+            .setPositiveButton("Insert") { _, _ ->
+                // Collect values
+                variables.forEachIndexed { index, varName ->
+                    values[varName] = inputs[index].text.toString()
+                }
+
+                // Apply variables and insert
+                val command = snippet.applyVariables(values)
+                getActiveTerminalView()?.sendText(command)
+
+                // Increment usage count
+                lifecycleScope.launch {
+                    app.database.snippetDao().incrementUsageCount(snippet.id)
+                }
+
+                Logger.d("TabTerminalActivity", "Inserted snippet with variables: ${snippet.name}")
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Show manage snippets menu
+     */
+    private fun showManageSnippetsMenu() {
+        val options = arrayOf("Create New Snippet", "View All Snippets", "Search Snippets")
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Manage Snippets")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> showCreateSnippetDialog()
+                    1 -> showAllSnippetsDialog()
+                    2 -> showSearchSnippetsDialog()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Show dialog to create a new snippet
+     */
+    private fun showCreateSnippetDialog() {
+        val layout = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(50, 20, 50, 20)
+        }
+
+        val inputName = android.widget.EditText(this).apply {
+            hint = "Snippet name"
+        }
+        val inputCommand = android.widget.EditText(this).apply {
+            hint = "Command (use {variable} for placeholders)"
+        }
+        val inputCategory = android.widget.EditText(this).apply {
+            hint = "Category (optional)"
+            setText("General")
+        }
+
+        layout.addView(inputName)
+        layout.addView(inputCommand)
+        layout.addView(inputCategory)
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Create Snippet")
+            .setView(layout)
+            .setPositiveButton("Create") { _, _ ->
+                val name = inputName.text.toString().trim()
+                val command = inputCommand.text.toString().trim()
+                val category = inputCategory.text.toString().trim().ifBlank { "General" }
+
+                if (name.isNotBlank() && command.isNotBlank()) {
+                    lifecycleScope.launch {
+                        val snippet = io.github.tabssh.storage.database.entities.Snippet(
+                            name = name,
+                            command = command,
+                            category = category
+                        )
+                        app.database.snippetDao().insertSnippet(snippet)
+                        showToast("Snippet created: $name")
+                        Logger.d("TabTerminalActivity", "Created snippet: $name")
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Show all snippets dialog
+     */
+    private fun showAllSnippetsDialog() {
+        lifecycleScope.launch {
+            val allSnippets = app.database.snippetDao().getFrequentlyUsedSnippets(100)
+
+            if (allSnippets.isEmpty()) {
+                showToast("No snippets yet")
+                return@launch
+            }
+
+            val snippetNames = allSnippets.map { "${it.name} - ${it.category}" }.toTypedArray()
+
+            runOnUiThread {
+                androidx.appcompat.app.AlertDialog.Builder(this@TabTerminalActivity)
+                    .setTitle("All Snippets")
+                    .setItems(snippetNames) { _, which ->
+                        insertSnippet(allSnippets[which])
+                    }
+                    .setNegativeButton("Close", null)
+                    .show()
+            }
+        }
+    }
+
+    /**
+     * Show search snippets dialog
+     */
+    private fun showSearchSnippetsDialog() {
+        val input = android.widget.EditText(this).apply {
+            hint = "Search snippets..."
+        }
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Search Snippets")
+            .setView(input)
+            .setPositiveButton("Search") { _, _ ->
+                val query = input.text.toString().trim()
+                if (query.isNotBlank()) {
+                    searchAndShowSnippets(query)
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Search and show matching snippets
+     */
+    private fun searchAndShowSnippets(query: String) {
+        lifecycleScope.launch {
+            app.database.snippetDao().searchSnippets(query).collect { results ->
+                if (results.isEmpty()) {
+                    showToast("No matching snippets")
+                    return@collect
+                }
+
+                val snippetNames = results.map { "${it.name} - ${it.category}" }.toTypedArray()
+
+                runOnUiThread {
+                    androidx.appcompat.app.AlertDialog.Builder(this@TabTerminalActivity)
+                        .setTitle("Search Results")
+                        .setItems(snippetNames) { _, which ->
+                            insertSnippet(results[which])
+                        }
+                        .setNegativeButton("Close", null)
+                        .show()
+                }
+            }
+        }
+    }
+
     private fun closeCurrentTab() {
         CoroutineScope(Dispatchers.Main).launch {
             val activeIndex = tabManager.getActiveTabIndex()
@@ -427,9 +918,11 @@ class TabTerminalActivity : AppCompatActivity() {
         // Restore active tab if needed
         val activeTab = tabManager.getActiveTab()
         if (activeTab != null) {
-            // Reconnect terminal view to active tab
-            val terminal = activeTab.terminal
-            terminalView?.initialize(terminal.getRows(), terminal.getCols())
+            if (!swipeEnabled) {
+                // In classic mode, reconnect terminal view to active tab
+                val terminal = activeTab.terminal
+                terminalView?.initialize(terminal.getRows(), terminal.getCols())
+            }
             activeTab.activate()
             supportActionBar?.title = activeTab.getDisplayTitle()
         }

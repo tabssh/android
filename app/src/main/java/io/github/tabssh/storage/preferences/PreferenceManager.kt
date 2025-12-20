@@ -187,27 +187,27 @@ class PreferenceManager(private val context: Context) {
     fun setLargeTouchTargets(enabled: Boolean) = setBoolean(KEY_LARGE_TOUCH_TARGETS, enabled)
     
     // Helper methods
-    private fun getString(key: String, defaultValue: String): String {
+    internal fun getString(key: String, defaultValue: String): String {
         return preferences.getString(key, defaultValue) ?: defaultValue
     }
-    
-    private fun setString(key: String, value: String) {
+
+    internal fun setString(key: String, value: String) {
         preferences.edit().putString(key, value).apply()
     }
-    
-    private fun getBoolean(key: String, defaultValue: Boolean): Boolean {
+
+    internal fun getBoolean(key: String, defaultValue: Boolean): Boolean {
         return preferences.getBoolean(key, defaultValue)
     }
-    
-    private fun setBoolean(key: String, value: Boolean) {
+
+    internal fun setBoolean(key: String, value: Boolean) {
         preferences.edit().putBoolean(key, value).apply()
     }
-    
-    private fun getInt(key: String, defaultValue: Int): Int {
+
+    internal fun getInt(key: String, defaultValue: Int): Int {
         return preferences.getInt(key, defaultValue)
     }
-    
-    private fun setInt(key: String, value: Int) {
+
+    internal fun setInt(key: String, value: Int) {
         preferences.edit().putInt(key, value).apply()
     }
     

@@ -37,7 +37,14 @@
       "Bash(echo:*)",
       "Bash(fi)",
       "Bash(done)",
-      "Bash(timeout 30 gh run watch:*)"
+      "Bash(timeout 30 gh run watch:*)",
+      "WebSearch",
+      "WebFetch(domain:juicessh.com)",
+      "WebFetch(domain:play.google.com)",
+      "WebFetch(domain:www.smileblogs.com)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(git add:*)"
     ],
     "deny": [
       "Bash(git commit:*)",

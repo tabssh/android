@@ -38,13 +38,22 @@
         android:orientation="vertical"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
-        <!-- Terminal display area -->
+        <!-- Terminal display area with ViewPager2 for swipe support -->
+        <androidx.viewpager2.widget.ViewPager2
+            android:id="@+id/view_pager"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:background="@color/terminal_background" />
+
+        <!-- Single terminal view (used when swipe is disabled) -->
         <io.github.tabssh.ui.views.TerminalView
             android:id="@+id/terminal_view"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
             android:background="@color/terminal_background"
+            android:visibility="gone"
             app:terminalFontSize="@dimen/terminal_text_size_default"
             app:terminalFontFamily="monospace"
             app:showScrollbar="true"
@@ -165,6 +174,16 @@
                 android:layout_marginEnd="@dimen/space_sm"
                 android:text="Kbd"
                 android:drawableTop="@drawable/ic_keyboard" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_snippets"
+                style="@style/Widget.TabSSH.Button.Outlined"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="@dimen/space_sm"
+                android:text="Snip"
+                android:drawableTop="@drawable/ic_code" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_files"
