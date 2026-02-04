@@ -48,5 +48,21 @@
         android:title="Share Session"
         android:icon="@drawable/ic_share"
         app:showAsAction="never" />
+    
+    <item
+        android:id="@+id/action_port_forwarding"
+        android:title="Port Forwarding"
+        android:icon="@drawable/ic_interface"
+        app:showAsAction="never" />
+    
+    <item
+        android:id="@+id/action_toggle_recording"
+        android:title="Start Recording"
+        app:showAsAction="never" />
+    
+    <item
+        android:id="@+id/action_view_transcripts"
+        android:title="View Transcripts"
+        app:showAsAction="never" />
 
 </menu>

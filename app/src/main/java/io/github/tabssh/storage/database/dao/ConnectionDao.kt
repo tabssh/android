@@ -35,6 +35,9 @@ interface ConnectionDao {
     @Query("SELECT * FROM connections WHERE connection_count > 0 ORDER BY connection_count DESC, last_connected DESC LIMIT :limit")
     suspend fun getFrequentlyUsedConnections(limit: Int = 10): List<ConnectionProfile>
     
+    @Query("SELECT * FROM connections WHERE group_id IS NULL ORDER BY name ASC")
+    fun getUngroupedConnections(): Flow<List<ConnectionProfile>>
+    
     @Query("SELECT COUNT(*) FROM connections")
     suspend fun getConnectionCount(): Int
     

@@ -16,6 +16,10 @@ class SettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
+
+        // Setup toolbar
+        val toolbar = findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
+        setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.title = "Settings"
 
@@ -25,10 +29,16 @@ class SettingsActivity : AppCompatActivity() {
                 .replace(R.id.settings_container, SettingsMainFragment())
                 .commit()
         }
+
+        Logger.d("SettingsActivity", "onCreate completed")
     }
 
     override fun onSupportNavigateUp(): Boolean {
-        onBackPressed()
+        if (supportFragmentManager.backStackEntryCount > 0) {
+            supportFragmentManager.popBackStack()
+            return true
+        }
+        finish()
         return true
     }
 }
@@ -37,18 +47,33 @@ class SettingsMainFragment : PreferenceFragmentCompat() {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences_main, rootKey)
 
-        // Set version information from BuildConfig
+        // Set version information from BuildConfig with fallback values
         findPreference<Preference>("about_version")?.apply {
-            summary = "${io.github.tabssh.BuildConfig.VERSION_NAME} (${io.github.tabssh.BuildConfig.VERSION_CODE})"
+            try {
+                val versionName = io.github.tabssh.BuildConfig.VERSION_NAME ?: "1.0.0"
+                val versionCode = io.github.tabssh.BuildConfig.VERSION_CODE
+                summary = "$versionName ($versionCode)"
+            } catch (e: Exception) {
+                Logger.e("SettingsMainFragment", "Failed to load version info", e)
+                summary = "1.0.0 (1)"
+            }
         }
 
         findPreference<Preference>("about_build")?.apply {
-            val buildInfo = """
-                Commit: ${io.github.tabssh.BuildConfig.GIT_COMMIT_ID}
-                Built: ${io.github.tabssh.BuildConfig.BUILD_DATE}
-                Type: ${io.github.tabssh.BuildConfig.BUILD_TYPE}
-            """.trimIndent()
-            summary = buildInfo
+            try {
+                val commitId = io.github.tabssh.BuildConfig.GIT_COMMIT_ID ?: "unknown"
+                val buildDate = io.github.tabssh.BuildConfig.BUILD_DATE ?: "unknown"
+                val buildType = io.github.tabssh.BuildConfig.BUILD_TYPE ?: "debug"
+                val buildInfo = """
+                    Commit: $commitId
+                    Built: $buildDate
+                    Type: $buildType
+                """.trimIndent()
+                summary = buildInfo
+            } catch (e: Exception) {
+                Logger.e("SettingsMainFragment", "Failed to load build info", e)
+                summary = "Build information unavailable"
+            }
         }
     }
 }
@@ -73,6 +98,7 @@ class SecuritySettingsFragment : PreferenceFragmentCompat() {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences_security, rootKey)
 
+        // Clear known hosts functionality
         findPreference<Preference>("clear_known_hosts")?.setOnPreferenceClickListener {
             androidx.appcompat.app.AlertDialog.Builder(requireContext())
                 .setTitle("Clear Known Hosts")
@@ -84,16 +110,80 @@ class SecuritySettingsFragment : PreferenceFragmentCompat() {
                 .show()
             true
         }
+
+        // Security lock - enable/disable biometric based on lock state
+        findPreference<SwitchPreferenceCompat>("security_lock_enabled")?.setOnPreferenceChangeListener { _, newValue ->
+            val enabled = newValue as Boolean
+            if (enabled) {
+                android.widget.Toast.makeText(requireContext(), "Security lock enabled", android.widget.Toast.LENGTH_SHORT).show()
+            } else {
+                android.widget.Toast.makeText(requireContext(), "Security lock disabled", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            true
+        }
+
+        // Biometric authentication
+        findPreference<SwitchPreferenceCompat>("biometric_auth")?.setOnPreferenceChangeListener { _, newValue ->
+            val enabled = newValue as Boolean
+            if (enabled) {
+                // Check if biometric is available
+                val biometricManager = androidx.biometric.BiometricManager.from(requireContext())
+                when (biometricManager.canAuthenticate(androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG)) {
+                    androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS -> {
+                        android.widget.Toast.makeText(requireContext(), "Biometric authentication enabled", android.widget.Toast.LENGTH_SHORT).show()
+                        true
+                    }
+                    androidx.biometric.BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> {
+                        android.widget.Toast.makeText(requireContext(), "No biometric hardware available", android.widget.Toast.LENGTH_SHORT).show()
+                        false
+                    }
+                    androidx.biometric.BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE -> {
+                        android.widget.Toast.makeText(requireContext(), "Biometric hardware unavailable", android.widget.Toast.LENGTH_SHORT).show()
+                        false
+                    }
+                    androidx.biometric.BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> {
+                        android.widget.Toast.makeText(requireContext(), "No biometric enrolled. Please add fingerprint/face in device settings", android.widget.Toast.LENGTH_LONG).show()
+                        false
+                    }
+                    else -> {
+                        android.widget.Toast.makeText(requireContext(), "Biometric authentication not available", android.widget.Toast.LENGTH_SHORT).show()
+                        false
+                    }
+                }
+            } else {
+                android.widget.Toast.makeText(requireContext(), "Biometric authentication disabled", android.widget.Toast.LENGTH_SHORT).show()
+                true
+            }
+        }
+
+        // Lock timeout
+        findPreference<Preference>("security_lock_timeout")?.setOnPreferenceChangeListener { _, newValue ->
+            val timeout = newValue as String
+            val minutes = timeout.toInt() / 60
+            android.widget.Toast.makeText(requireContext(), "Lock timeout set to $minutes minute(s)", android.widget.Toast.LENGTH_SHORT).show()
+            true
+        }
     }
 
     private fun clearKnownHosts() {
         try {
-            val app = requireActivity().application as TabSSHApplication
+            val app = requireActivity().application as? TabSSHApplication
+            if (app == null) {
+                Logger.e("Settings", "Failed to get TabSSHApplication instance")
+                android.widget.Toast.makeText(requireContext(), "Error: Application not available", android.widget.Toast.LENGTH_SHORT).show()
+                return
+            }
+            
             // Clear host keys from database
             lifecycleScope.launch {
-                app.database.hostKeyDao().deleteAllHostKeys()
-                android.widget.Toast.makeText(requireContext(), "Known hosts cleared", android.widget.Toast.LENGTH_SHORT).show()
-                Logger.i("Settings", "Cleared all known hosts")
+                try {
+                    app.database.hostKeyDao().deleteAllHostKeys()
+                    android.widget.Toast.makeText(requireContext(), "Known hosts cleared", android.widget.Toast.LENGTH_SHORT).show()
+                    Logger.i("Settings", "Cleared all known hosts")
+                } catch (e: Exception) {
+                    Logger.e("Settings", "Database error while clearing known hosts", e)
+                    android.widget.Toast.makeText(requireContext(), "Error clearing known hosts: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                }
             }
         } catch (e: Exception) {
             Logger.e("Settings", "Failed to clear known hosts", e)
@@ -105,11 +195,109 @@ class SecuritySettingsFragment : PreferenceFragmentCompat() {
 class TerminalSettingsFragment : PreferenceFragmentCompat() {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences_terminal, rootKey)
+
+        // Terminal theme change listener
+        findPreference<Preference>("terminal_theme")?.setOnPreferenceChangeListener { _, newValue ->
+            val themeName = newValue as String
+            android.widget.Toast.makeText(requireContext(), "Terminal theme changed to $themeName", android.widget.Toast.LENGTH_SHORT).show()
+            Logger.i("Settings", "Terminal theme changed to: $themeName")
+            true
+        }
+
+        // Terminal font change listener
+        findPreference<Preference>("terminal_font")?.setOnPreferenceChangeListener { _, newValue ->
+            val fontName = newValue as String
+            android.widget.Toast.makeText(requireContext(), "Terminal font changed to $fontName", android.widget.Toast.LENGTH_SHORT).show()
+            Logger.i("Settings", "Terminal font changed to: $fontName")
+            true
+        }
+
+        // Font size change listener
+        findPreference<Preference>("terminal_font_size")?.setOnPreferenceChangeListener { _, newValue ->
+            val size = newValue as Int
+            android.widget.Toast.makeText(requireContext(), "Font size: ${size}sp", android.widget.Toast.LENGTH_SHORT).show()
+            Logger.i("Settings", "Terminal font size changed to: $size")
+            true
+        }
+
+        // Cursor style change listener
+        findPreference<Preference>("terminal_cursor_style")?.setOnPreferenceChangeListener { _, newValue ->
+            val style = newValue as String
+            android.widget.Toast.makeText(requireContext(), "Cursor style: $style", android.widget.Toast.LENGTH_SHORT).show()
+            Logger.i("Settings", "Cursor style changed to: $style")
+            true
+        }
+
+        // Scrollback buffer change listener
+        findPreference<Preference>("terminal_scrollback")?.setOnPreferenceChangeListener { _, newValue ->
+            val lines = newValue as String
+            try {
+                val numLines = lines.toInt()
+                if (numLines < 100 || numLines > 50000) {
+                    android.widget.Toast.makeText(requireContext(), "Scrollback must be between 100-50000 lines", android.widget.Toast.LENGTH_SHORT).show()
+                    return@setOnPreferenceChangeListener false
+                }
+                android.widget.Toast.makeText(requireContext(), "Scrollback: $numLines lines", android.widget.Toast.LENGTH_SHORT).show()
+                Logger.i("Settings", "Scrollback buffer changed to: $numLines")
+                true
+            } catch (e: NumberFormatException) {
+                android.widget.Toast.makeText(requireContext(), "Invalid number", android.widget.Toast.LENGTH_SHORT).show()
+                false
+            }
+        }
     }
 }
 
 class ConnectionSettingsFragment : PreferenceFragmentCompat() {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences_connection, rootKey)
+
+        // Default username change listener
+        findPreference<Preference>("default_username")?.setOnPreferenceChangeListener { _, newValue ->
+            val username = newValue as String
+            if (username.isBlank()) {
+                android.widget.Toast.makeText(requireContext(), "Username cannot be empty", android.widget.Toast.LENGTH_SHORT).show()
+                return@setOnPreferenceChangeListener false
+            }
+            android.widget.Toast.makeText(requireContext(), "Default username: $username", android.widget.Toast.LENGTH_SHORT).show()
+            Logger.i("Settings", "Default username changed to: $username")
+            true
+        }
+
+        // Default port change listener
+        findPreference<Preference>("default_port")?.setOnPreferenceChangeListener { _, newValue ->
+            val port = newValue as String
+            try {
+                val portNum = port.toInt()
+                if (portNum < 1 || portNum > 65535) {
+                    android.widget.Toast.makeText(requireContext(), "Port must be between 1-65535", android.widget.Toast.LENGTH_SHORT).show()
+                    return@setOnPreferenceChangeListener false
+                }
+                android.widget.Toast.makeText(requireContext(), "Default port: $portNum", android.widget.Toast.LENGTH_SHORT).show()
+                Logger.i("Settings", "Default port changed to: $portNum")
+                true
+            } catch (e: NumberFormatException) {
+                android.widget.Toast.makeText(requireContext(), "Invalid port number", android.widget.Toast.LENGTH_SHORT).show()
+                false
+            }
+        }
+
+        // Connection timeout change listener
+        findPreference<Preference>("connection_timeout")?.setOnPreferenceChangeListener { _, newValue ->
+            val timeout = newValue as String
+            val seconds = timeout.toInt()
+            android.widget.Toast.makeText(requireContext(), "Connection timeout: ${seconds}s", android.widget.Toast.LENGTH_SHORT).show()
+            Logger.i("Settings", "Connection timeout changed to: $seconds")
+            true
+        }
+
+        // Keep-alive interval change listener
+        findPreference<Preference>("keep_alive_interval")?.setOnPreferenceChangeListener { _, newValue ->
+            val interval = newValue as String
+            val seconds = interval.toInt()
+            android.widget.Toast.makeText(requireContext(), "Keep-alive interval: ${seconds}s", android.widget.Toast.LENGTH_SHORT).show()
+            Logger.i("Settings", "Keep-alive interval changed to: $seconds")
+            true
+        }
     }
 }

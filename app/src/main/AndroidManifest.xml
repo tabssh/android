@@ -79,10 +79,32 @@
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- Group Management activity -->
+        <activity
+            android:name=".ui.activities.GroupManagementActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.activities.MainActivity"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- Snippet Management activity -->
+        <activity
+            android:name=".ui.activities.SnippetManagerActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.activities.MainActivity"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- SFTP file browser activity -->
         <activity
             android:name=".ui.activities.SFTPActivity"
             android:exported="false"
+            android:parentActivityName=".ui.activities.TabTerminalActivity"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- Port Forwarding activity -->
+        <activity
+            android:name=".ui.activities.PortForwardingActivity"
+            android:exported="false"
+            android:label="Port Forwarding"
             android:parentActivityName=".ui.activities.TabTerminalActivity"
             android:windowSoftInputMode="adjustResize" />
 
@@ -125,6 +147,18 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_info" />
         </receiver>
+        
+        <activity
+            android:name=".ui.activities.IdentityManagementActivity"
+            android:label="Manage Identities"
+            android:parentActivityName=".ui.activities.MainActivity"
+            android:exported="false" />
+        
+        <activity
+            android:name=".ui.activities.TranscriptViewerActivity"
+            android:label="Session Transcripts"
+            android:parentActivityName=".ui.activities.TabTerminalActivity"
+            android:exported="false" />
 
     </application>
 

@@ -6,28 +6,28 @@
         android:title="General"
         android:summary="App theme and language"
         android:icon="@android:drawable/ic_menu_preferences"
-        android:fragment="com.tabssh.ui.activities.GeneralSettingsFragment" />
+        android:fragment="io.github.tabssh.ui.activities.GeneralSettingsFragment" />
 
     <Preference
         android:key="security_settings"
         android:title="App Security"
         android:summary="Lock, biometrics, and SSH security"
         android:icon="@android:drawable/ic_lock_lock"
-        android:fragment="com.tabssh.ui.activities.SecuritySettingsFragment" />
+        android:fragment="io.github.tabssh.ui.activities.SecuritySettingsFragment" />
 
     <Preference
         android:key="terminal_settings"
         android:title="Terminal"
         android:summary="Theme, font, and terminal behavior"
         android:icon="@android:drawable/ic_menu_edit"
-        android:fragment="com.tabssh.ui.activities.TerminalSettingsFragment" />
+        android:fragment="io.github.tabssh.ui.activities.TerminalSettingsFragment" />
 
     <Preference
         android:key="connection_settings"
         android:title="Connection"
         android:summary="Default connection settings"
         android:icon="@android:drawable/stat_sys_data_bluetooth"
-        android:fragment="com.tabssh.ui.activities.ConnectionSettingsFragment" />
+        android:fragment="io.github.tabssh.ui.activities.ConnectionSettingsFragment" />
 
     <Preference
         android:key="sync_settings"
@@ -42,7 +42,7 @@
         <Preference
             android:key="about_version"
             android:title="Version"
-            android:summary="TabSSH 1.0.0"
+            android:summary="TabSSH 1.1.0"
             android:icon="@android:drawable/ic_menu_info_details"
             android:selectable="false" />
 

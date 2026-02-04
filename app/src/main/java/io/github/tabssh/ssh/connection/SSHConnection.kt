@@ -92,23 +92,24 @@ class SSHConnection(
                 } else {
                     jsch.getSession(profile.username, profile.host, profile.port)
                 }
-                
+
                 // Configure session
                 configureSession(newSession)
-                
+
                 // Set timeout
                 newSession.timeout = profile.connectTimeout * 1000
-                
-                // Connect
+
+                // Setup authentication BEFORE connecting
+                _connectionState.value = ConnectionState.AUTHENTICATING
+                notifyListeners { onAuthenticating(id) }
+
+                setupAuthentication(jsch, newSession)
+
+                // Connect (this performs both connection AND authentication in one step)
                 newSession.connect()
                 session = newSession
-                
-                Logger.d("SSHConnection", "TCP connection established, starting authentication")
-                
-                // Authenticate
-                if (!authenticate(newSession)) {
-                    throw SSHException("Authentication failed")
-                }
+
+                Logger.i("SSHConnection", "Successfully connected and authenticated to ${profile.host}")
                 
                 _connectionState.value = ConnectionState.CONNECTED
                 reconnectAttempts = 0
@@ -247,155 +248,66 @@ class SSHConnection(
         }
     }
 
-    private suspend fun authenticate(session: Session): Boolean {
-        _connectionState.value = ConnectionState.AUTHENTICATING
-        notifyListeners { onAuthenticating(id) }
-        
-        return when (profile.getAuthTypeEnum()) {
-            AuthType.PASSWORD -> authenticateWithPassword(session)
-            AuthType.PUBLIC_KEY -> authenticateWithPublicKey(session)
-            AuthType.KEYBOARD_INTERACTIVE -> authenticateWithKeyboardInteractive(session)
-            AuthType.GSSAPI -> authenticateWithGSSAPI(session)
-        }
-    }
-    
-    private suspend fun authenticateWithPassword(session: Session): Boolean = withContext(Dispatchers.IO) {
-        return@withContext try {
-            Logger.d("SSHConnection", "Attempting password authentication for ${profile.host}")
-            
-            // Get password from secure storage or prompt user
-            val password = getPasswordForAuthentication()
-            
-            if (password != null) {
-                session.setPassword(password)
-                session.connect()
-                
-                if (session.isConnected) {
-                    Logger.i("SSHConnection", "Password authentication successful")
-                    true
+    /**
+     * Setup authentication credentials BEFORE connecting
+     * JSch requires credentials to be configured before calling session.connect()
+     */
+    private suspend fun setupAuthentication(jsch: JSch, session: Session) = withContext(Dispatchers.IO) {
+        when (profile.getAuthTypeEnum()) {
+            AuthType.PASSWORD -> {
+                Logger.d("SSHConnection", "Setting up password authentication for ${profile.host}")
+                val password = getPasswordForAuthentication()
+                if (password != null) {
+                    session.setPassword(password)
                 } else {
-                    Logger.w("SSHConnection", "Password authentication failed - session not connected")
-                    false
+                    throw SSHException("No password available for authentication")
                 }
-            } else {
-                Logger.w("SSHConnection", "No password available for authentication")
-                false
             }
-            
-        } catch (e: com.jcraft.jsch.JSchException) {
-            if (e.message?.contains("Auth fail") == true) {
-                Logger.w("SSHConnection", "Password authentication failed - invalid credentials")
-            } else {
-                Logger.e("SSHConnection", "Password authentication error", e)
-            }
-            false
-        } catch (e: Exception) {
-            Logger.e("SSHConnection", "Unexpected error in password authentication", e)
-            false
-        }
-    }
-    
-    private suspend fun authenticateWithPublicKey(session: Session): Boolean = withContext(Dispatchers.IO) {
-        return@withContext try {
-            Logger.d("SSHConnection", "Attempting public key authentication")
-            
-            if (profile.keyId == null) {
-                Logger.w("SSHConnection", "No SSH key specified for public key authentication")
-                return@withContext false
-            }
-            
-            // Get private key from secure storage
-            val privateKey = getPrivateKeyForAuthentication(profile.keyId!!)
-            
-            if (privateKey != null) {
-                // Add identity to JSch
-                val jsch = com.jcraft.jsch.JSch()
-                jsch.addIdentity(profile.keyId!!, privateKey.encoded, null, null)
-                
-                // Create new session with the identity
-                val authSession = jsch.getSession(profile.username, profile.host, profile.port)
-                configureSession(authSession)
-                authSession.connect()
-                
-                if (authSession.isConnected) {
-                    // Replace the session reference
-                    session.disconnect()
-                    // This is a simplified approach - real implementation would handle session replacement properly
-                    Logger.i("SSHConnection", "Public key authentication successful")
-                    true
+
+            AuthType.PUBLIC_KEY -> {
+                Logger.d("SSHConnection", "Setting up public key authentication")
+                if (profile.keyId == null) {
+                    throw SSHException("No SSH key specified for public key authentication")
+                }
+
+                val privateKey = getPrivateKeyForAuthentication(profile.keyId!!)
+                if (privateKey != null) {
+                    jsch.addIdentity(profile.keyId!!, privateKey.encoded, null, null)
+                    Logger.d("SSHConnection", "Added SSH key identity: ${profile.keyId}")
                 } else {
-                    Logger.w("SSHConnection", "Public key authentication failed")
-                    false
+                    throw SSHException("Could not retrieve private key for authentication")
                 }
-            } else {
-                Logger.w("SSHConnection", "Could not retrieve private key for authentication")
-                false
-            }
-            
-        } catch (e: com.jcraft.jsch.JSchException) {
-            Logger.e("SSHConnection", "Public key authentication failed", e)
-            false
-        } catch (e: Exception) {
-            Logger.e("SSHConnection", "Unexpected error in public key authentication", e)
-            false
-        }
-    }
-    
-    private suspend fun authenticateWithKeyboardInteractive(session: Session): Boolean = withContext(Dispatchers.IO) {
-        return@withContext try {
-            Logger.d("SSHConnection", "Attempting keyboard interactive authentication")
-
-            // Get password before creating UserInfo since getPassword() cannot be suspend
-            val password = getPasswordForAuthentication()
-
-            // Set up keyboard interactive handler
-            session.setUserInfo(object : com.jcraft.jsch.UserInfo {
-                override fun getPassword(): String? = password
-
-                override fun promptYesNo(str: String): Boolean {
-                    Logger.d("SSHConnection", "Keyboard interactive prompt: $str")
-                    // For security questions, default to yes for known safe prompts
-                    return str.contains("continue", ignoreCase = true)
-                }
-
-                override fun getPassphrase(): String? = null
-                override fun promptPassphrase(message: String): Boolean = false
-                override fun promptPassword(message: String): Boolean = true
-                override fun showMessage(message: String) {
-                    Logger.i("SSHConnection", "Server message: $message")
-                }
-            })
-
-            session.connect()
-
-            if (session.isConnected) {
-                Logger.i("SSHConnection", "Keyboard interactive authentication successful")
-                true
-            } else {
-                Logger.w("SSHConnection", "Keyboard interactive authentication failed")
-                false
             }
 
-        } catch (e: Exception) {
-            Logger.e("SSHConnection", "Keyboard interactive authentication error", e)
-            false
+            AuthType.KEYBOARD_INTERACTIVE -> {
+                Logger.d("SSHConnection", "Setting up keyboard interactive authentication")
+                val password = getPasswordForAuthentication()
+
+                session.setUserInfo(object : com.jcraft.jsch.UserInfo {
+                    override fun getPassword(): String? = password
+
+                    override fun promptYesNo(str: String): Boolean {
+                        Logger.d("SSHConnection", "Keyboard interactive prompt: $str")
+                        return str.contains("continue", ignoreCase = true)
+                    }
+
+                    override fun getPassphrase(): String? = null
+                    override fun promptPassphrase(message: String): Boolean = false
+                    override fun promptPassword(message: String): Boolean = true
+                    override fun showMessage(message: String) {
+                        Logger.i("SSHConnection", "Server message: $message")
+                    }
+                })
+            }
+
+            AuthType.GSSAPI -> {
+                // GSSAPI authentication is rarely used on Android and requires enterprise Kerberos
+                // infrastructure. Most SSH servers don't require it, so we gracefully skip it.
+                Logger.w("SSHConnection", "GSSAPI authentication not supported (rarely needed on Android)")
+                // Don't throw exception - let JSch try other available methods
+                // JSch will automatically fallback to password/keyboard-interactive if available
+            }
         }
-    }
-    
-    private suspend fun authenticateWithGSSAPI(session: Session): Boolean {
-        // GSSAPI/Kerberos authentication is an enterprise feature
-        // Requires additional setup: Kerberos principal, keytab, realm configuration
-        // This is typically used in corporate environments with Active Directory
-        Logger.w("SSHConnection", "GSSAPI authentication requires enterprise Kerberos configuration")
-        Logger.i("SSHConnection", "For GSSAPI auth, configure: krb5.conf, keytab, and enable in connection profile")
-
-        // Would require:
-        // 1. Kerberos library integration (e.g., MIT Kerberos or Heimdal)
-        // 2. GSS-API Java implementation (e.g., via javax.security.auth.kerberos)
-        // 3. Proper configuration of realm, KDC, and service principals
-        // 4. Integration with Android KeyStore for credential management
-
-        return false
     }
     
     /**

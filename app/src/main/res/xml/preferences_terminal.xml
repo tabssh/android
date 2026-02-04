@@ -80,6 +80,34 @@
             android:summary="Enable clickable URLs in terminal (long press to open)"
             android:defaultValue="true" />
 
+        <SwitchPreferenceCompat
+            android:key="show_performance_overlay"
+            android:title="Show Performance Overlay"
+            android:summary="Display CPU, memory, battery, and network stats"
+            android:defaultValue="false" />
+        
+        <SwitchPreferenceCompat
+            android:key="enable_custom_gestures"
+            android:title="Custom Gestures"
+            android:summary="Enable multi-touch gestures for tmux/screen shortcuts"
+            android:defaultValue="false" />
+        
+        <ListPreference
+            android:key="gesture_multiplexer_type"
+            android:title="Multiplexer Type"
+            android:summary="Select tmux or screen for gesture commands"
+            android:entries="@array/multiplexer_type_entries"
+            android:entryValues="@array/multiplexer_type_values"
+            android:defaultValue="tmux"
+            android:dependency="enable_custom_gestures"
+            app:useSimpleSummaryProvider="true" />
+        
+        <SwitchPreferenceCompat
+            android:key="auto_record_sessions"
+            android:title="Auto-Record Sessions"
+            android:summary="Automatically record all SSH sessions to transcripts"
+            android:defaultValue="false" />
+
     </PreferenceCategory>
 
 </PreferenceScreen>

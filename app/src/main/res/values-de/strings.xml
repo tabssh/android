@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App name -->
+    <string name="app_name">TabSSH</string>
+    <string name="app_name_debug">TabSSH Debug 🐛</string>
+
+    <!-- Main activity -->
+    <string name="main_activity_title">📱 TabSSH</string>
+    <string name="quick_connect_title">⚡ Schnellverbindung</string>
+    <string name="frequently_used_title">⭐ Häufig verwendet</string>
+    <string name="connections_title">🌐 Meine Server</string>
+    <string name="host_hint">🌐 Hostname oder IP</string>
+    <string name="port_hint">🔌 Port (Standard: 22)</string>
+    <string name="username_hint">👤 Benutzername</string>
+    <string name="connect_button">🚀 Verbinden</string>
+    <string name="add_connection">➕ Server hinzufügen</string>
+    <string name="search_connections">🔍 Server suchen…</string>
+    <string name="no_connections_title">📭 Noch keine Server</string>
+    <string name="no_connections_message">✨ Fügen Sie Ihren ersten SSH-Server hinzu, um zu beginnen!\n\nTippen Sie auf die ➕ Schaltfläche, um eine Verbindung zu erstellen.</string>
+
+    <!-- Connection management -->
+    <string name="connection_name_hint">✏️ Verbindungsname (z.B. \"Mein VPS\")</string>
+    <string name="connection_host_hint">🌐 Hostname oder IP-Adresse</string>
+    <string name="connection_port_hint">22</string>
+    <string name="connection_username_hint">👤 Benutzername</string>
+    <string name="save_connection">💾 Speichern</string>
+    <string name="edit_connection">✏️ Verbindung bearbeiten</string>
+    <string name="delete_connection">🗑️ Verbindung löschen</string>
+    <string name="duplicate_connection">📋 Verbindung duplizieren</string>
+    <string name="connection_saved">✅ Verbindung erfolgreich gespeichert!</string>
+    <string name="connection_deleted">🗑️ Verbindung gelöscht</string>
+    
+    <!-- Authentication -->
+    <string name="auth_type_password">🔑 Passwort</string>
+    <string name="auth_type_public_key">🔐 Public Key (SSH-Schlüssel)</string>
+    <string name="auth_type_keyboard_interactive">⌨️ Keyboard Interactive</string>
+    <string name="password_hint">🔒 Passwort</string>
+    <string name="select_key">🔑 SSH-Schlüssel auswählen</string>
+    <string name="generate_key">✨ Neuen Schlüssel erstellen</string>
+    <string name="import_key">📥 Schlüssel importieren</string>
+    
+    <!-- Terminal activity -->
+    <string name="terminal_activity_title">💻 Terminal</string>
+    <string name="new_tab">➕ Neuer Tab</string>
+    <string name="close_tab">❌ Tab schließen</string>
+    <string name="tab_menu">📑 Tab-Menü</string>
+    <string name="function_keys">🔤 Funktionstasten</string>
+    <string name="show_keyboard">⌨️ Tastatur anzeigen</string>
+    <string name="hide_keyboard">⌨️ Tastatur ausblenden</string>
+    <string name="paste">📋 Einfügen</string>
+    <string name="copy">📋 Kopieren</string>
+    <string name="select_all">🔲 Alles auswählen</string>
+    <string name="open_files">📁 Dateien</string>
+
+    <!-- Accessibility strings -->
+    <string name="accessibility_terminal">SSH-Terminal</string>
+    <string name="accessibility_read_screen">Gesamten Bildschirm vorlesen</string>
+    <string name="accessibility_read_line">Aktuelle Zeile vorlesen</string>
+    <string name="accessibility_scroll_up">Nach oben scrollen</string>
+    <string name="accessibility_scroll_down">Nach unten scrollen</string>
+    
+    <!-- Connection status -->
+    <string name="status_connecting">🔄 Verbinde…</string>
+    <string name="status_connected">✅ Verbunden</string>
+    <string name="status_disconnected">⚪ Getrennt</string>
+    <string name="status_error">❌ Fehler</string>
+    <string name="status_authenticating">🔐 Authentifiziere…</string>
+    
+    <!-- Errors -->
+    <string name="error_connection_failed">❌ Verbindung fehlgeschlagen</string>
+    <string name="error_authentication_failed">🔐 Authentifizierung fehlgeschlagen - überprüfen Sie Ihre Zugangsdaten</string>
+    <string name="error_host_key_changed">⚠️ Host-Schlüssel hat sich geändert!</string>
+    <string name="error_host_key_unknown">❓ Unbekannter Host-Schlüssel - erste Verbindung</string>
+    <string name="error_network_unreachable">📡 Netzwerk nicht erreichbar - prüfen Sie Ihre Internetverbindung</string>
+    <string name="error_connection_timeout">⏱️ Verbindungszeitüberschreitung - Server hat nicht geantwortet</string>
+    <string name="error_invalid_host">❌ Ungültiger Hostname oder IP-Adresse</string>
+    <string name="error_invalid_port">❌ Ungültiger Port (muss 1-65535 sein)</string>
+    <string name="error_permission_denied">🚫 Zugriff verweigert - überprüfen Sie Ihre Zugangsdaten</string>
+    
+    <!-- Settings -->
+    <string name="settings_title">⚙️ Einstellungen</string>
+    <string name="settings_general">🎛️ Allgemein</string>
+    <string name="settings_terminal">💻 Terminal</string>
+    <string name="settings_security">🔐 Sicherheit &amp; Datenschutz</string>
+    <string name="settings_interface">🎨 Oberfläche</string>
+    <string name="settings_connections">🌐 Verbindungen</string>
+    <string name="settings_accessibility">♿ Barrierefreiheit</string>
+    <string name="settings_about">ℹ️ Über TabSSH</string>
+    
+    <!-- General settings -->
+    <string name="pref_startup_behavior">Startverhalten</string>
+    <string name="pref_startup_behavior_summary">Was beim App-Start geschehen soll</string>
+    <string name="pref_auto_backup">Automatische Sicherung</string>
+    <string name="pref_auto_backup_summary">Verbindungen und Schlüssel automatisch sichern</string>
+    <string name="pref_language">Sprache</string>
+    <string name="pref_language_summary">App-Sprache</string>
+    
+    <!-- Security settings -->
+    <string name="pref_password_storage">Passwortspeicherung</string>
+    <string name="pref_password_storage_summary">Wie Passwörter gespeichert werden</string>
+    <string name="pref_biometric_auth">Biometrische Authentifizierung</string>
+    <string name="pref_biometric_auth_summary">Fingerabdruck/Gesichtserkennung verwenden</string>
+    <string name="pref_host_key_checking">Host-Schlüssel-Überprüfung</string>
+    <string name="pref_host_key_checking_summary">Host-Identität verifizieren</string>
+    <string name="pref_auto_lock">Automatische Sperre</string>
+    <string name="pref_auto_lock_summary">App im Hintergrund sperren</string>
+    <string name="pref_screenshot_protection">Screenshot-Schutz</string>
+    <string name="pref_screenshot_protection_summary">Screenshots verhindern</string>
+    
+    <!-- Terminal settings -->
+    <string name="pref_theme">Design</string>
+    <string name="pref_theme_summary">Terminal-Farbschema</string>
+    <string name="pref_font_family">Schriftart</string>
+    <string name="pref_font_family_summary">Terminal-Schriftart</string>
+    <string name="pref_font_size">Schriftgröße</string>
+    <string name="pref_font_size_summary">Terminal-Textgröße</string>
+    <string name="pref_cursor_style">Cursor-Stil</string>
+    <string name="pref_cursor_style_summary">Cursor-Darstellung</string>
+    <string name="pref_scrollback_lines">Scrollback-Zeilen</string>
+    <string name="pref_scrollback_lines_summary">Zeilen im Verlauf behalten</string>
+    
+    <!-- Interface settings -->
+    <string name="pref_max_tabs">Maximale Tabs</string>
+    <string name="pref_max_tabs_summary">Maximale Anzahl geöffneter Tabs</string>
+    <string name="pref_show_function_keys">Funktionstasten anzeigen</string>
+    <string name="pref_show_function_keys_summary">Funktionstastenzeile anzeigen</string>
+    <string name="pref_fullscreen_mode">Vollbildmodus</string>
+    <string name="pref_fullscreen_mode_summary">Statusleiste ausblenden</string>
+    <string name="pref_keep_screen_on">Bildschirm eingeschaltet lassen</string>
+    <string name="pref_keep_screen_on_summary">Bildschirm-Timeout verhindern</string>
+    <string name="accessibility_connection_list">Verbindungsliste</string>
+    <string name="accessibility_tab_list">Tab-Liste</string>
+    <string name="accessibility_function_keys">Funktionstasten</string>
+    <string name="accessibility_connected">Verbunden</string>
+    <string name="accessibility_disconnected">Getrennt</string>
+    <string name="accessibility_connecting">Verbinde</string>
+    
+    <!-- File operations -->
+    <string name="file_browser_title">📁 Dateibrowser</string>
+    <string name="local_files">📱 Lokale Dateien</string>
+    <string name="remote_files">🌐 Remote-Dateien</string>
+    <string name="upload_file">⬆️ Hochladen</string>
+    <string name="download_file">⬇️ Herunterladen</string>
+    <string name="new_folder">📁 Neuer Ordner</string>
+    <string name="delete_file">🗑️ Löschen</string>
+    <string name="rename_file">✏️ Umbenennen</string>
+    <string name="file_properties">ℹ️ Eigenschaften</string>
+    <string name="transfer_progress">📊 Übertragungsfortschritt</string>
+    <string name="transfer_complete">✅ Übertragung abgeschlossen!</string>
+    <string name="transfer_failed">❌ Übertragung fehlgeschlagen</string>
+    
+    <!-- Biometric authentication -->
+    <string name="biometric_title">🔐 Authentifizieren</string>
+    <string name="biometric_subtitle">👆 Verwenden Sie Ihren Fingerabdruck oder Ihr Gesicht zum Entsperren</string>
+    <string name="biometric_description">🔒 Sicherer Zugriff auf Ihre gespeicherten Passwörter</string>
+    <string name="biometric_negative">❌ Abbrechen</string>
+    <string name="biometric_error">❌ Authentifizierung fehlgeschlagen - bitte versuchen Sie es erneut</string>
+    <string name="biometric_not_available">⚠️ Biometrische Authentifizierung auf diesem Gerät nicht verfügbar</string>
+    
+    <!-- About -->
+    <string name="about_version">📦 Version</string>
+    <string name="about_build">🔨 Build</string>
+    <string name="about_license">📜 Lizenz (MIT)</string>
+    <string name="about_source_code">💻 Quellcode</string>
+    <string name="about_website">🌐 Webseite</string>
+    <string name="about_privacy_policy">🔒 Datenschutzerklärung</string>
+    <string name="about_open_source_licenses">📚 Open-Source-Lizenzen</string>
+    
+    <!-- Common actions -->
+    <string name="ok">✅ OK</string>
+    <string name="cancel">❌ Abbrechen</string>
+    <string name="yes">✅ Ja</string>
+    <string name="no">❌ Nein</string>
+    <string name="close">❌ Schließen</string>
+    <string name="save">💾 Speichern</string>
+    <string name="delete">🗑️ Löschen</string>
+    <string name="edit">✏️ Bearbeiten</string>
+    <string name="share">📤 Teilen</string>
+    <string name="retry">🔄 Wiederholen</string>
+    <string name="dismiss">👋 Verwerfen</string>
+
+    <!-- Additional beautiful strings -->
+    <string name="welcome_message">👋 Willkommen bei TabSSH!</string>
+    <string name="first_launch_hint">💡 Tipp: Erstellen Sie Ihre erste Verbindung, um zu beginnen</string>
+    <string name="connecting_to">🔄 Verbinde mit %s…</string>
+    <string name="connected_to">✅ Verbunden mit %s</string>
+    <string name="disconnected_from">⚪ Getrennt von %s</string>
+    <string name="tab_count">📑 %d Tabs geöffnet</string>
+    <string name="bytes_transferred">📊 Übertragen: %s</string>
+    <string name="session_duration">⏱️ Sitzung: %s</string>
+    <string name="fingerprint_verified">✅ Host-Schlüssel verifiziert</string>
+    <string name="secure_connection">🔐 Sichere Verbindung hergestellt</string>
+
+    <!-- Widget -->
+    <string name="widget_description">🚀 Schnellverbindung zu Ihrem bevorzugten SSH-Server</string>
+
+</resources>

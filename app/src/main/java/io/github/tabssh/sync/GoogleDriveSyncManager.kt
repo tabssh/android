@@ -374,4 +374,145 @@ class GoogleDriveSyncManager(private val context: Context) {
      * Get authentication manager
      */
     fun getAuthManager(): DriveAuthenticationManager = authManager
+    
+    /**
+     * Clear all remote sync data from Google Drive
+     */
+    suspend fun clearRemoteData() = withContext(Dispatchers.IO) {
+        Logger.d(TAG, "Clearing remote sync data")
+        
+        if (!authManager.isAuthenticated()) {
+            throw IllegalStateException("Not authenticated")
+        }
+        
+        try {
+            val deviceId = metadataManager.getDeviceId()
+            syncExecutor.deleteSyncFile(deviceId)
+            Logger.i(TAG, "Remote sync data cleared successfully")
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to clear remote data", e)
+            throw e
+        }
+    }
+    
+    /**
+     * Force upload of local data to Google Drive (overwrite remote)
+     */
+    suspend fun forceUpload(): Boolean = withContext(Dispatchers.IO) {
+        Logger.d(TAG, "Force uploading local data")
+        
+        if (!authManager.isAuthenticated()) {
+            Logger.e(TAG, "Cannot force upload: not authenticated")
+            return@withContext false
+        }
+        
+        if (syncPassword == null) {
+            Logger.e(TAG, "Cannot force upload: sync password not set")
+            return@withContext false
+        }
+        
+        try {
+            updateProgress(SyncStage.COLLECTING_DATA, 0, 3, "Collecting local data...")
+            
+            val localData = dataCollector.collectAllSyncData()
+            
+            updateProgress(SyncStage.ENCRYPTING, 1, 3, "Encrypting data...")
+            
+            val encryptedData = encryptSyncData(localData, syncPassword!!)
+            
+            updateProgress(SyncStage.UPLOADING, 2, 3, "Uploading to Google Drive...")
+            
+            syncExecutor.uploadSyncFile(encryptedData, metadataManager.getDeviceId())
+            
+            updateProgress(SyncStage.COMPLETED, 3, 3, "Upload complete")
+            
+            preferenceManager.setLastSyncTime(System.currentTimeMillis())
+            
+            Logger.i(TAG, "Force upload completed successfully")
+            return@withContext true
+            
+        } catch (e: Exception) {
+            Logger.e(TAG, "Force upload failed", e)
+            updateProgress(SyncStage.ERROR, 0, 0, "Upload failed: ${e.message}")
+            return@withContext false
+        }
+    }
+    
+    /**
+     * Force download of remote data from Google Drive (overwrite local)
+     */
+    suspend fun forceDownload(): Boolean = withContext(Dispatchers.IO) {
+        Logger.d(TAG, "Force downloading remote data")
+        
+        if (!authManager.isAuthenticated()) {
+            Logger.e(TAG, "Cannot force download: not authenticated")
+            return@withContext false
+        }
+        
+        if (syncPassword == null) {
+            Logger.e(TAG, "Cannot force download: sync password not set")
+            return@withContext false
+        }
+        
+        try {
+            updateProgress(SyncStage.DOWNLOADING, 0, 3, "Downloading from Google Drive...")
+            
+            val deviceId = metadataManager.getDeviceId()
+            val encryptedData = syncExecutor.downloadSyncFile(deviceId)
+            
+            if (encryptedData == null) {
+                Logger.w(TAG, "No remote data found for this device")
+                updateProgress(SyncStage.ERROR, 0, 0, "No remote data found")
+                return@withContext false
+            }
+            
+            updateProgress(SyncStage.DECRYPTING, 1, 3, "Decrypting data...")
+            
+            val decryptedData = decryptSyncData(encryptedData, syncPassword!!)
+            val remoteData = deserializeSyncData(decryptedData)
+            
+            updateProgress(SyncStage.APPLYING, 2, 3, "Applying remote data...")
+            
+            // For force download, create merge results that will replace local data
+            val connectionResult = io.github.tabssh.sync.models.MergeResult(
+                merged = remoteData.connections,
+                conflicts = emptyList()
+            )
+            
+            val keyResult = io.github.tabssh.sync.models.MergeResult(
+                merged = remoteData.keys,
+                conflicts = emptyList()
+            )
+            
+            val themeResult = io.github.tabssh.sync.models.MergeResult(
+                merged = remoteData.themes,
+                conflicts = emptyList()
+            )
+            
+            val hostKeyResult = io.github.tabssh.sync.models.MergeResult(
+                merged = remoteData.hostKeys,
+                conflicts = emptyList()
+            )
+            
+            dataApplier.applyMergeResult(
+                connectionResult,
+                keyResult,
+                themeResult,
+                hostKeyResult,
+                remoteData.preferences
+            )
+            
+            updateProgress(SyncStage.COMPLETED, 3, 3, "Download complete")
+            
+            preferenceManager.setLastSyncTime(System.currentTimeMillis())
+            
+            Logger.i(TAG, "Force download completed successfully")
+            return@withContext true
+            
+        } catch (e: Exception) {
+            Logger.e(TAG, "Force download failed", e)
+            updateProgress(SyncStage.ERROR, 0, 0, "Download failed: ${e.message}")
+            return@withContext false
+        }
+    }
 }

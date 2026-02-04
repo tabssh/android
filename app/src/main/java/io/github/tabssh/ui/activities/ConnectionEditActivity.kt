@@ -850,47 +850,90 @@ class ConnectionEditActivity : AppCompatActivity() {
                 // Show progress
                 showToast("Importing SSH key...")
                 
-                // Import key using enhanced KeyStorage
-                val result = app.keyStorage.importKeyFromText(
-                    keyContent = keyContent,
-                    passphrase = null, // TODO: Add passphrase dialog if needed
-                    keyName = extractKeyNameFromFilename(filename)
-                )
+                // Check if key is encrypted (needs passphrase)
+                val needsPassphrase = keyContent.contains("ENCRYPTED") || 
+                                     keyContent.contains("Proc-Type: 4,ENCRYPTED")
                 
-                when (result) {
-                    is io.github.tabssh.crypto.keys.ImportResult.Success -> {
-                        Logger.i("ConnectionEditActivity", "Key imported successfully: ${result.keyId}")
-                        showToast("✅ SSH key imported successfully!")
-                        
-                        // Refresh key list
-                        setupKeySpinner()
-                        
-                        // Auto-select the imported key
-                        val importedKeyIndex = availableKeys.indexOfFirst { it.keyId == result.keyId }
-                        if (importedKeyIndex >= 0) {
-                            selectedKeyIndex = importedKeyIndex + 1 // +1 for "Select SSH Key..." offset
-                            val keyNames = listOf("Select SSH Key...") + availableKeys.map { it.getDisplayName() }
-                            if (selectedKeyIndex < keyNames.size) {
-                                binding.spinnerSshKey.setText(keyNames[selectedKeyIndex], false)
-                            }
-                        }
-                    }
-                    is io.github.tabssh.crypto.keys.ImportResult.Error -> {
-                        Logger.e("ConnectionEditActivity", "Key import failed: ${result.message}")
-                        
-                        // Check if passphrase is needed
-                        if (result.message.contains("encrypted") && result.message.contains("passphrase")) {
-                            showPassphraseDialog(keyContent, filename)
-                        } else {
-                            showKeyImportErrorDialog(result.message)
+                if (needsPassphrase) {
+                    // Show passphrase dialog
+                    showKeyPassphraseDialog(keyContent, filename)
+                } else {
+                    // Import without passphrase
+                    performKeyImport(keyContent, filename, null)
+                }
+            } catch (e: Exception) {
+                Logger.e("ConnectionEditActivity", "Failed to import key", e)
+                showToast("❌ Import failed: ${e.message}")
+            }
+        }
+    }
+    
+    private fun showKeyPassphraseDialog(keyContent: String, filename: String) {
+        val passphraseInput = android.widget.EditText(this).apply {
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            hint = "Key passphrase"
+        }
+        
+        val layout = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(50, 40, 50, 10)
+            addView(passphraseInput)
+        }
+        
+        android.app.AlertDialog.Builder(this)
+            .setTitle("🔐 Encrypted SSH Key")
+            .setMessage("This key is encrypted. Enter passphrase to decrypt.")
+            .setView(layout)
+            .setPositiveButton("Import") { _, _ ->
+                val passphrase = passphraseInput.text.toString()
+                if (passphrase.isEmpty()) {
+                    showToast("Passphrase is required")
+                    return@setPositiveButton
+                }
+                lifecycleScope.launch {
+                    performKeyImport(keyContent, filename, passphrase)
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+    
+    private suspend fun performKeyImport(keyContent: String, filename: String, passphrase: String?) {
+        try {
+            // Import key using enhanced KeyStorage
+            val result = app.keyStorage.importKeyFromText(
+                keyContent = keyContent,
+                passphrase = passphrase,
+                keyName = extractKeyNameFromFilename(filename)
+            )
+            
+            when (result) {
+                is io.github.tabssh.crypto.keys.ImportResult.Success -> {
+                    Logger.i("ConnectionEditActivity", "Key imported successfully: ${result.keyId}")
+                    showToast("✅ SSH key imported successfully!")
+                    
+                    // Refresh key list
+                    setupKeySpinner()
+                    
+                    // Auto-select the imported key
+                    val importedKeyIndex = availableKeys.indexOfFirst { it.keyId == result.keyId }
+                    if (importedKeyIndex >= 0) {
+                        selectedKeyIndex = importedKeyIndex + 1 // +1 for "Select SSH Key..." offset
+                        val keyNames = listOf("Select SSH Key...") + availableKeys.map { it.getDisplayName() }
+                        if (selectedKeyIndex < keyNames.size) {
+                            binding.spinnerSshKey.setText(keyNames[selectedKeyIndex], false)
                         }
                     }
                 }
-                
-            } catch (e: Exception) {
-                Logger.e("ConnectionEditActivity", "Key import failed", e)
-                showToast("❌ Key import failed: ${e.message}")
+                is io.github.tabssh.crypto.keys.ImportResult.Error -> {
+                    Logger.e("ConnectionEditActivity", "Key import failed: ${result.message}")
+                    showKeyImportErrorDialog(result.message)
+                }
             }
+            
+        } catch (e: Exception) {
+            Logger.e("ConnectionEditActivity", "Key import failed", e)
+            showToast("❌ Key import failed: ${e.message}")
         }
     }
     

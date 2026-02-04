@@ -71,6 +71,9 @@ data class ConnectionProfile(
     @ColumnInfo(name = "proxy_key_id")
     val proxyKeyId: String? = null, // For SSH jump host with key auth
     
+    @ColumnInfo(name = "identity_id")
+    val identityId: String? = null, // Link to reusable identity
+    
     @ColumnInfo(name = "theme")
     val theme: String = "dracula",
     

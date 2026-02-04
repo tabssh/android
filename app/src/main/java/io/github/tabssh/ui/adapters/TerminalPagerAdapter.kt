@@ -13,7 +13,10 @@ import io.github.tabssh.utils.logging.Logger
 class TerminalPagerAdapter(
     private val tabs: List<SSHTab>,
     private val fontSize: Int = 14,
-    private val onUrlDetected: ((String) -> Unit)? = null
+    private val onUrlDetected: ((String) -> Unit)? = null,
+    private val gesturesEnabled: Boolean = false,
+    private val multiplexerType: io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType = io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.NONE,
+    private val onCommandSent: ((ByteArray) -> Unit)? = null
 ) : RecyclerView.Adapter<TerminalPagerAdapter.TerminalViewHolder>() {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): TerminalViewHolder {
@@ -22,7 +25,7 @@ class TerminalPagerAdapter(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         )
-        return TerminalViewHolder(terminalView, fontSize, onUrlDetected)
+        return TerminalViewHolder(terminalView, fontSize, onUrlDetected, gesturesEnabled, multiplexerType, onCommandSent)
     }
 
     override fun onBindViewHolder(holder: TerminalViewHolder, position: Int) {
@@ -40,7 +43,10 @@ class TerminalPagerAdapter(
     class TerminalViewHolder(
         val terminalView: TerminalView,
         private val fontSize: Int,
-        private val onUrlDetected: ((String) -> Unit)?
+        private val onUrlDetected: ((String) -> Unit)?,
+        private val gesturesEnabled: Boolean,
+        private val multiplexerType: io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType,
+        private val onCommandSent: ((ByteArray) -> Unit)?
     ) : RecyclerView.ViewHolder(terminalView) {
 
         fun bind(tab: SSHTab) {
@@ -53,6 +59,12 @@ class TerminalPagerAdapter(
             // Set up URL detection callback
             if (onUrlDetected != null) {
                 terminalView.onUrlDetected = onUrlDetected
+            }
+            
+            // Set up gesture support
+            if (gesturesEnabled) {
+                terminalView.enableGestureSupport(multiplexerType)
+                terminalView.onCommandSent = onCommandSent
             }
 
             // Terminal theme is already applied in TerminalView initialization
