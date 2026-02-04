@@ -255,48 +255,225 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
      * Show authentication dialog
      */
     private fun showAuthenticationDialog() {
-        // TODO: Implement authentication dialog
         Logger.d(TAG, "Show authentication dialog")
+        
+        val backend = preferenceManager.getSyncBackend()
+        
+        when (backend) {
+            "google_drive" -> {
+                // Launch Google Sign-In flow
+                try {
+                    val authManager = syncManager.getAuthManager()
+                    authManager.signIn(requireActivity())
+                } catch (e: Exception) {
+                    Logger.e(TAG, "Failed to start Google Sign-In", e)
+                    android.widget.Toast.makeText(requireContext(), "Failed to start Google Sign-In: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+            "webdav" -> {
+                // WebDAV uses username/password from preferences, no separate auth dialog needed
+                android.widget.Toast.makeText(requireContext(), "WebDAV authentication uses server credentials from settings", android.widget.Toast.LENGTH_SHORT).show()
+                updateAccountSummary()
+            }
+            else -> {
+                Logger.w(TAG, "Unknown sync backend: $backend")
+            }
+        }
     }
 
     /**
      * Show password setup dialog
      */
     private fun showPasswordSetupDialog() {
-        // TODO: Implement password setup dialog
         Logger.d(TAG, "Show password setup dialog")
+        
+        val editText = android.widget.EditText(requireContext()).apply {
+            hint = "Enter encryption password"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        
+        val confirmEditText = android.widget.EditText(requireContext()).apply {
+            hint = "Confirm password"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        
+        val layout = android.widget.LinearLayout(requireContext()).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(64, 32, 64, 32)
+            addView(editText)
+            addView(confirmEditText)
+        }
+        
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Set Encryption Password")
+            .setMessage("This password will be used to encrypt your synced data. Keep it safe!")
+            .setView(layout)
+            .setPositiveButton("Set Password") { _, _ ->
+                val password = editText.text.toString()
+                val confirm = confirmEditText.text.toString()
+                
+                when {
+                    password.isBlank() -> {
+                        android.widget.Toast.makeText(requireContext(), "Password cannot be empty", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    password.length < 8 -> {
+                        android.widget.Toast.makeText(requireContext(), "Password must be at least 8 characters", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    password != confirm -> {
+                        android.widget.Toast.makeText(requireContext(), "Passwords do not match", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    else -> {
+                        // Save password
+                        syncManager.setSyncPassword(password)
+                        androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
+                            .edit()
+                            .putBoolean("sync_password_set", true)
+                            .apply()
+                        
+                        android.widget.Toast.makeText(requireContext(), "Encryption password set successfully", android.widget.Toast.LENGTH_SHORT).show()
+                        findPreference<Preference>("sync_password")?.summary = "Password set (tap to change)"
+                        Logger.i(TAG, "Sync encryption password set")
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     /**
      * Show account options dialog
      */
     private fun showAccountOptions() {
-        // TODO: Implement account options dialog
         Logger.d(TAG, "Show account options dialog")
+        
+        val options = arrayOf("Sign out", "Re-authenticate", "Account info")
+        
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Account Options")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> {
+                        // Sign out
+                        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                            .setTitle("Sign Out")
+                            .setMessage("Are you sure you want to sign out? You will need to authenticate again to use sync.")
+                            .setPositiveButton("Sign Out") { _, _ ->
+                                lifecycleScope.launch {
+                                    try {
+                                        syncManager.getAuthManager().signOut()
+                                        android.widget.Toast.makeText(requireContext(), "Signed out successfully", android.widget.Toast.LENGTH_SHORT).show()
+                                        updateAccountSummary()
+                                        Logger.i(TAG, "User signed out from sync")
+                                    } catch (e: Exception) {
+                                        Logger.e(TAG, "Failed to sign out", e)
+                                        android.widget.Toast.makeText(requireContext(), "Error signing out: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                            .setNegativeButton("Cancel", null)
+                            .show()
+                    }
+                    1 -> {
+                        // Re-authenticate
+                        showAuthenticationDialog()
+                    }
+                    2 -> {
+                        // Account info
+                        lifecycleScope.launch {
+                            val account = syncManager.getAuthManager().getCurrentAccount()
+                            val info = if (account != null) {
+                                """
+                                Email: ${account.email}
+                                Display Name: ${account.displayName ?: "N/A"}
+                                Backend: ${preferenceManager.getSyncBackend()}
+                                """.trimIndent()
+                            } else {
+                                "No account connected"
+                            }
+                            
+                            androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                                .setTitle("Account Information")
+                                .setMessage(info)
+                                .setPositiveButton("OK", null)
+                                .show()
+                        }
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     /**
      * Show clear data confirmation
      */
     private fun showClearDataConfirmation() {
-        // TODO: Implement clear data confirmation dialog
         Logger.d(TAG, "Show clear data confirmation")
+        
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Clear Remote Data")
+            .setMessage("This will permanently delete all sync data from Google Drive. Your local data will not be affected.\n\nAre you sure?")
+            .setPositiveButton("Clear") { _, _ ->
+                lifecycleScope.launch {
+                    try {
+                        syncManager.clearRemoteData()
+                        android.widget.Toast.makeText(requireContext(), "Remote data cleared", android.widget.Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        Logger.e(TAG, "Failed to clear remote data", e)
+                        android.widget.Toast.makeText(requireContext(), "Failed: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     /**
      * Show force upload confirmation
      */
     private fun showForceUploadConfirmation() {
-        // TODO: Implement force upload confirmation dialog
         Logger.d(TAG, "Show force upload confirmation")
+        
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Force Upload")
+            .setMessage("This will upload your local data to Google Drive, overwriting any existing remote data.\n\nContinue?")
+            .setPositiveButton("Upload") { _, _ ->
+                lifecycleScope.launch {
+                    val success = syncManager.forceUpload()
+                    if (success) {
+                        android.widget.Toast.makeText(requireContext(), "Upload successful", android.widget.Toast.LENGTH_SHORT).show()
+                        setupLastSyncTime()
+                    } else {
+                        android.widget.Toast.makeText(requireContext(), "Upload failed", android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     /**
      * Show force download confirmation
      */
     private fun showForceDownloadConfirmation() {
-        // TODO: Implement force download confirmation dialog
         Logger.d(TAG, "Show force download confirmation")
+        
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Force Download")
+            .setMessage("This will download remote data from Google Drive and overwrite your local data.\n\n⚠️ WARNING: All local changes will be lost!\n\nContinue?")
+            .setPositiveButton("Download") { _, _ ->
+                lifecycleScope.launch {
+                    val success = syncManager.forceDownload()
+                    if (success) {
+                        android.widget.Toast.makeText(requireContext(), "Download successful", android.widget.Toast.LENGTH_SHORT).show()
+                        setupLastSyncTime()
+                    } else {
+                        android.widget.Toast.makeText(requireContext(), "Download failed", android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {

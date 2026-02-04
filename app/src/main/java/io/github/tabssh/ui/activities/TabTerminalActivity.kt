@@ -60,6 +60,10 @@ class TabTerminalActivity : AppCompatActivity() {
     private var tabLayoutMediator: TabLayoutMediator? = null
     private var swipeEnabled: Boolean = true
     
+    // Performance overlay
+    private var performanceOverlay: io.github.tabssh.ui.views.PerformanceOverlayView? = null
+    private var performanceUpdateJob: Job? = null
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
@@ -74,6 +78,7 @@ class TabTerminalActivity : AppCompatActivity() {
         setupTabLayout()
         setupTerminalView()
         setupFunctionKeys()
+        setupPerformanceOverlay()
         
         // Handle intent
         handleIntent(intent)
@@ -170,6 +175,32 @@ class TabTerminalActivity : AppCompatActivity() {
                         showUrlDialog(url)
                     }
                 }
+                
+                // Set up custom gesture support
+                val gesturesEnabled = app.preferencesManager.getBoolean("enable_custom_gestures", false)
+                if (gesturesEnabled) {
+                    val multiplexerTypeStr = app.preferencesManager.getString("gesture_multiplexer_type", "tmux")
+                    val multiplexerType = when (multiplexerTypeStr) {
+                        "tmux" -> io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.TMUX
+                        "screen" -> io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.SCREEN
+                        else -> io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.TMUX
+                    }
+                    
+                    enableGestureSupport(multiplexerType)
+                    
+                    // Set up command callback
+                    onCommandSent = { command ->
+                        // Send command to active terminal
+                        tabManager.getActiveTab()?.let { tab ->
+                            tab.terminal.sendText(String(command, Charsets.UTF_8))
+                            android.widget.Toast.makeText(
+                                this@TabTerminalActivity,
+                                "Gesture command sent",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                }
 
                 // Terminal view will be connected to active tab's terminal
             }
@@ -218,6 +249,30 @@ class TabTerminalActivity : AppCompatActivity() {
         clipboard.setPrimaryClip(clip)
         Toast.makeText(this, "URL copied to clipboard", Toast.LENGTH_SHORT).show()
         Logger.d("TabTerminalActivity", "Copied URL to clipboard: $url")
+    }
+    
+    private fun setupPerformanceOverlay() {
+        // Check if performance overlay is enabled in settings
+        val showOverlay = app.preferencesManager.getBoolean("show_performance_overlay", false)
+        
+        if (showOverlay) {
+            // Create overlay view
+            performanceOverlay = io.github.tabssh.ui.views.PerformanceOverlayView(this)
+            
+            // Add to root view
+            binding.root.addView(performanceOverlay)
+            
+            // Start updating metrics
+            performanceUpdateJob = lifecycleScope.launch {
+                app.performanceManager.performanceMetrics.collect { metrics ->
+                    withContext(Dispatchers.Main) {
+                        performanceOverlay?.updateMetrics(metrics)
+                    }
+                }
+            }
+            
+            Logger.d("TabTerminalActivity", "Performance overlay enabled")
+        }
     }
     
     private fun setupFunctionKeys() {
@@ -283,6 +338,15 @@ class TabTerminalActivity : AppCompatActivity() {
                 val tab = tabManager.createTab(profile)
 
                 if (tab != null) {
+                    // Auto-start recording if enabled
+                    if (app.preferencesManager.getBoolean("auto_record_sessions", false)) {
+                        tab.sessionRecorder = io.github.tabssh.terminal.recording.SessionRecorder(
+                            this,
+                            profile.getDisplayName()
+                        )
+                        tab.sessionRecorder?.startRecording()
+                    }
+                    
                     // Connect the tab's terminal to SSH streams
                     val connected = tab.connect(sshConnection)
                     if (connected) {
@@ -347,10 +411,42 @@ class TabTerminalActivity : AppCompatActivity() {
         } else {
             null
         }
+        
+        // Get gesture settings
+        val gesturesEnabled = app.preferencesManager.getBoolean("enable_custom_gestures", false)
+        val multiplexerTypeStr = app.preferencesManager.getString("gesture_multiplexer_type", "tmux")
+        val multiplexerType = when (multiplexerTypeStr) {
+            "tmux" -> io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.TMUX
+            "screen" -> io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.SCREEN
+            else -> io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.TMUX
+        }
+        
+        // Create command send callback for gestures
+        val commandCallback: ((ByteArray) -> Unit)? = if (gesturesEnabled) {
+            { command ->
+                tabManager.getActiveTab()?.let { tab ->
+                    tab.terminal.sendText(String(command, Charsets.UTF_8))
+                    android.widget.Toast.makeText(
+                        this,
+                        "Gesture command sent",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        } else {
+            null
+        }
 
         if (pagerAdapter == null) {
             // First time setup
-            pagerAdapter = TerminalPagerAdapter(allTabs, fontSize, urlDetectionCallback)
+            pagerAdapter = TerminalPagerAdapter(
+                allTabs, 
+                fontSize, 
+                urlDetectionCallback, 
+                gesturesEnabled, 
+                multiplexerType, 
+                commandCallback
+            )
             viewPager?.adapter = pagerAdapter
 
             // Setup TabLayoutMediator to sync TabLayout with ViewPager2
@@ -371,7 +467,14 @@ class TabTerminalActivity : AppCompatActivity() {
         } else {
             // Recreate adapter with new tabs list
             val currentPosition = viewPager?.currentItem ?: 0
-            pagerAdapter = TerminalPagerAdapter(allTabs, fontSize, urlDetectionCallback)
+            pagerAdapter = TerminalPagerAdapter(
+                allTabs, 
+                fontSize, 
+                urlDetectionCallback, 
+                gesturesEnabled, 
+                multiplexerType, 
+                commandCallback
+            )
             viewPager?.adapter = pagerAdapter
 
             // Restore position (or select last tab if adding)
@@ -487,7 +590,53 @@ class TabTerminalActivity : AppCompatActivity() {
                 disconnectAllTabs()
                 true
             }
+            R.id.action_toggle_recording -> {
+                toggleRecording(item)
+                true
+            }
+            R.id.action_port_forwarding -> {
+                openPortForwarding()
+                true
+            }
+            R.id.action_view_transcripts -> {
+                startActivity(Intent(this, TranscriptViewerActivity::class.java))
+                true
+            }
             else -> super.onOptionsItemSelected(item)
+        }
+    }
+    
+    private fun openPortForwarding() {
+        val activeTab = tabManager.getActiveTab()
+        if (activeTab == null) {
+            Toast.makeText(this, "No active connection", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        val intent = Intent(this, PortForwardingActivity::class.java)
+        intent.putExtra("connection_id", activeTab.profile.id)
+        startActivity(intent)
+    }
+    
+    private fun toggleRecording(menuItem: MenuItem) {
+        val activeTab = tabManager.getActiveTab() ?: return
+        
+        if (activeTab.sessionRecorder?.isRecording() == true) {
+            // Stop recording
+            activeTab.sessionRecorder?.stopRecording()
+            menuItem.title = "Start Recording"
+            Toast.makeText(this, "Recording stopped", Toast.LENGTH_SHORT).show()
+        } else {
+            // Start recording
+            if (activeTab.sessionRecorder == null) {
+                activeTab.sessionRecorder = io.github.tabssh.terminal.recording.SessionRecorder(
+                    this,
+                    activeTab.profile.getDisplayName()
+                )
+            }
+            activeTab.sessionRecorder?.startRecording()
+            menuItem.title = "Stop Recording"
+            Toast.makeText(this, "Recording started", Toast.LENGTH_SHORT).show()
         }
     }
     
@@ -939,6 +1088,9 @@ class TabTerminalActivity : AppCompatActivity() {
     
     override fun onDestroy() {
         super.onDestroy()
+        
+        // Cancel performance overlay updates
+        performanceUpdateJob?.cancel()
         
         Logger.d("TabTerminalActivity", "Terminal activity destroyed")
         tabManager.cleanup()

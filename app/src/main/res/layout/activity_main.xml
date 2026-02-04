@@ -125,12 +125,13 @@
 
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Frequently Used Section -->
+            <!-- Frequently Used Section (Top 5) -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/card_frequently_used"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="@dimen/space_lg"
+                android:visibility="gone"
                 app:cardCornerRadius="@dimen/card_corner_radius"
                 app:cardElevation="@dimen/card_elevation">
 
@@ -146,18 +147,18 @@
                         android:orientation="horizontal"
                         android:gravity="center_vertical">
 
-                        <ImageView
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
-                            android:src="@drawable/ic_bookmark"
-                            android:layout_marginEnd="@dimen/space_sm"
-                            android:contentDescription="Frequently used" />
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🔥"
+                            android:textSize="20sp"
+                            android:layout_marginEnd="@dimen/space_sm" />
 
                         <TextView
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="@string/frequently_used_title"
+                            android:text="Frequently Used"
                             android:textSize="@dimen/text_size_subtitle"
                             android:textStyle="bold"
                             android:textColor="?attr/colorOnSurface" />
@@ -178,8 +179,63 @@
 
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Saved Connections Section -->
+            <!-- Groups Section -->
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_groups"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/space_lg"
+                android:visibility="gone"
+                app:cardCornerRadius="@dimen/card_corner_radius"
+                app:cardElevation="@dimen/card_elevation">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="@dimen/space_md">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="📁"
+                            android:textSize="20sp"
+                            android:layout_marginEnd="@dimen/space_sm" />
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Groups"
+                            android:textSize="@dimen/text_size_subtitle"
+                            android:textStyle="bold"
+                            android:textColor="?attr/colorOnSurface" />
+
+                    </LinearLayout>
+
+                    <!-- Groups RecyclerView with expand/collapse -->
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/recycler_groups"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_md"
+                        tools:listitem="@layout/item_group"
+                        tools:itemCount="2"
+                        tools:visibility="visible" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Ungrouped Servers Section -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_ungrouped"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 app:cardCornerRadius="@dimen/card_corner_radius"
@@ -198,10 +254,17 @@
                         android:gravity="center_vertical">
 
                         <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="💻"
+                            android:textSize="20sp"
+                            android:layout_marginEnd="@dimen/space_sm" />
+
+                        <TextView
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="@string/connections_title"
+                            android:text="Ungrouped Servers"
                             android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
                             android:textSize="@dimen/text_size_subtitle"
                             android:textStyle="bold"
@@ -216,7 +279,7 @@
 
                     </LinearLayout>
 
-                    <!-- Connection list RecyclerView -->
+                    <!-- Ungrouped connections RecyclerView (ONLY servers with group_id = null) -->
                     <androidx.recyclerview.widget.RecyclerView
                         android:id="@+id/recycler_connections"
                         android:layout_width="match_parent"
@@ -232,7 +295,7 @@
                         android:id="@+id/text_empty_connections"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="No saved connections.\nTap 'Add Server' to create your first connection."
+                        android:text="No ungrouped servers.\nAll connections are in groups, or tap 'Add Server' above to create a new one."
                         android:textSize="@dimen/text_size_body"
                         android:gravity="center"
                         android:layout_marginTop="@dimen/space_lg"

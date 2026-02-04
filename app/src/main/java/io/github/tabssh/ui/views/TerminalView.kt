@@ -90,6 +90,10 @@ class TerminalView @JvmOverloads constructor(
         RegexOption.IGNORE_CASE
     )
     var onUrlDetected: ((String) -> Unit)? = null
+    
+    // Multi-touch gesture handler for tmux/screen shortcuts
+    private var terminalGestureHandler: io.github.tabssh.terminal.gestures.TerminalGestureHandler? = null
+    var onCommandSent: ((ByteArray) -> Unit)? = null
 
     init {
         // Enable focus and touch
@@ -313,6 +317,30 @@ class TerminalView @JvmOverloads constructor(
     fun getFontSize(): Int {
         return (textPaint.textSize / resources.displayMetrics.density).toInt()
     }
+    
+    /**
+     * Enable custom gesture support for terminal multiplexers
+     * @param multiplexerType The multiplexer type (tmux, screen, or none)
+     */
+    fun enableGestureSupport(multiplexerType: io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType) {
+        if (multiplexerType == io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.NONE) {
+            terminalGestureHandler = null
+            Logger.d("TerminalView", "Gesture support disabled")
+        } else {
+            terminalGestureHandler = io.github.tabssh.terminal.gestures.TerminalGestureHandler(context) { gestureType ->
+                // Get command for gesture
+                val command = io.github.tabssh.terminal.gestures.GestureCommandMapper.getCommand(gestureType, multiplexerType)
+                val description = io.github.tabssh.terminal.gestures.GestureCommandMapper.getDescription(gestureType, multiplexerType)
+                
+                command?.let {
+                    // Send command via callback
+                    onCommandSent?.invoke(it)
+                    Logger.d("TerminalView", "Gesture detected: $description")
+                }
+            }
+            Logger.d("TerminalView", "Gesture support enabled for $multiplexerType")
+        }
+    }
 
     /**
      * Get terminal size
@@ -442,6 +470,13 @@ class TerminalView @JvmOverloads constructor(
     }
 
     override fun onTouch(v: View, event: MotionEvent): Boolean {
+        // Handle multi-touch gestures first
+        if (terminalGestureHandler != null && event.pointerCount >= 2) {
+            if (terminalGestureHandler?.onTouchEvent(event) == true) {
+                return true
+            }
+        }
+        
         gestureDetector.onTouchEvent(event)
         return true
     }

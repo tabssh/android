@@ -22,6 +22,12 @@
         app:showAsAction="never" />
 
     <item
+        android:id="@+id/action_manage_snippets"
+        android:title="Manage Snippets"
+        android:icon="@android:drawable/ic_menu_edit"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/action_settings"
         android:title="Settings"
         android:icon="@android:drawable/ic_menu_preferences"
@@ -43,6 +49,12 @@
         android:id="@+id/action_export_connections"
         android:title="Export Connections"
         android:icon="@android:drawable/ic_menu_save"
+        app:showAsAction="never" />
+    
+    <item
+        android:id="@+id/action_manage_identities"
+        android:title="Manage Identities"
+        android:icon="@android:drawable/ic_menu_myplaces"
         app:showAsAction="never" />
 
     <item

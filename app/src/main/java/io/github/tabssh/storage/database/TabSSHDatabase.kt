@@ -21,9 +21,10 @@ import io.github.tabssh.utils.logging.Logger
         TrustedCertificate::class,
         SyncState::class,
         ConnectionGroup::class,
-        Snippet::class
+        Snippet::class,
+        Identity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -38,6 +39,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
     abstract fun syncStateDao(): SyncStateDao
     abstract fun connectionGroupDao(): ConnectionGroupDao
     abstract fun snippetDao(): SnippetDao
+    abstract fun identityDao(): IdentityDao
     
     companion object {
         @Volatile
@@ -181,6 +183,32 @@ abstract class TabSSHDatabase : RoomDatabase() {
                 Logger.d("TabSSHDatabase", "Migration from version 4 to 5 completed successfully")
             }
         }
+        
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Create identities table
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS identities (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        name TEXT NOT NULL,
+                        username TEXT NOT NULL,
+                        auth_type TEXT NOT NULL,
+                        key_id TEXT,
+                        description TEXT,
+                        created_at INTEGER NOT NULL,
+                        modified_at INTEGER NOT NULL,
+                        last_synced_at INTEGER,
+                        sync_version INTEGER NOT NULL DEFAULT 1,
+                        sync_device_id TEXT
+                    )
+                """.trimIndent())
+                
+                // Add identity_id field to connections table
+                database.execSQL("ALTER TABLE connections ADD COLUMN identity_id TEXT")
+                
+                Logger.d("TabSSHDatabase", "Migration from version 5 to 6 completed successfully")
+            }
+        }
 
         fun getDatabase(context: Context): TabSSHDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -194,7 +222,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     MIGRATION_1_2,
                     MIGRATION_2_3,
                     MIGRATION_3_4,
-                    MIGRATION_4_5
+                    MIGRATION_4_5,
+                    MIGRATION_5_6
                 )
                 .build()
                 INSTANCE = instance

@@ -1,32 +1,48 @@
 package io.github.tabssh.ui.activities
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.view.LayoutInflater
 import android.view.MenuItem
+import android.view.View
+import android.view.ViewGroup
+import android.widget.TextView
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
-import android.widget.TextView
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.crypto.keys.GenerateResult
+import io.github.tabssh.crypto.keys.ImportResult
+import io.github.tabssh.crypto.keys.KeyType
 import io.github.tabssh.storage.database.entities.StoredKey
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Activity for managing SSH keys
- * Allows viewing and deleting stored SSH keys
+ * Allows viewing, importing, generating and deleting stored SSH keys
  */
 class KeyManagementActivity : AppCompatActivity() {
 
     private lateinit var app: TabSSHApplication
     private lateinit var recyclerView: RecyclerView
+    private lateinit var emptyStateLayout: View
+    private lateinit var fab: FloatingActionButton
     private lateinit var adapter: KeyAdapter
     private val keys = mutableListOf<StoredKey>()
+
+    private val importKeyLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { importKeyFromFile(it) }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,11 +56,31 @@ class KeyManagementActivity : AppCompatActivity() {
             title = "SSH Key Management"
         }
 
-        // Setup RecyclerView
+        // Setup views
         recyclerView = findViewById(R.id.recycler_view_keys)
+        emptyStateLayout = findViewById(R.id.layout_empty_state)
+        fab = findViewById(R.id.fab_add_key)
+
+        // Setup RecyclerView
         recyclerView.layoutManager = LinearLayoutManager(this)
         adapter = KeyAdapter(keys) { key -> showKeyDetails(key) }
         recyclerView.adapter = adapter
+
+        // Setup FAB
+        fab.setOnClickListener {
+            showKeyManagementOptions()
+        }
+
+        // Setup empty state buttons
+        findViewById<View>(R.id.button_import_key).setOnClickListener {
+            importKeyFromFilePicker()
+        }
+        findViewById<View>(R.id.button_paste_key).setOnClickListener {
+            showPasteKeyDialog()
+        }
+        findViewById<View>(R.id.button_generate_key).setOnClickListener {
+            showGenerateKeyDialog()
+        }
 
         // Load keys
         loadKeys()
@@ -60,15 +96,252 @@ class KeyManagementActivity : AppCompatActivity() {
 
                     // Show empty state if no keys
                     if (keys.isEmpty()) {
-                        findViewById<TextView>(R.id.text_empty_state)?.visibility = View.VISIBLE
+                        emptyStateLayout.visibility = View.VISIBLE
                         recyclerView.visibility = View.GONE
                     } else {
-                        findViewById<TextView>(R.id.text_empty_state)?.visibility = View.GONE
+                        emptyStateLayout.visibility = View.GONE
                         recyclerView.visibility = View.VISIBLE
                     }
                 }
             } catch (e: Exception) {
                 Logger.e("KeyManagementActivity", "Failed to load keys", e)
+            }
+        }
+    }
+
+    private fun showKeyManagementOptions() {
+        val options = arrayOf("Import from File", "Paste Key", "Generate New Key")
+
+        AlertDialog.Builder(this)
+            .setTitle("Add SSH Key")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> importKeyFromFilePicker()
+                    1 -> showPasteKeyDialog()
+                    2 -> showGenerateKeyDialog()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun importKeyFromFilePicker() {
+        importKeyLauncher.launch(arrayOf("*/*"))
+    }
+
+    private fun importKeyFromFile(uri: Uri) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val inputStream = contentResolver.openInputStream(uri)
+                    ?: return@launch
+
+                val keyContent = inputStream.bufferedReader().readText()
+                val filename = uri.lastPathSegment ?: "Imported Key"
+
+                withContext(Dispatchers.Main) {
+                    importKeyContent(keyContent, filename)
+                }
+            } catch (e: Exception) {
+                Logger.e("KeyManagementActivity", "Failed to read key file", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@KeyManagementActivity, "Failed to read key file: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun showPasteKeyDialog() {
+        val editText = android.widget.EditText(this).apply {
+            hint = "Paste your private key here (PEM format)"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            minLines = 10
+            maxLines = 20
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Paste SSH Private Key")
+            .setView(editText)
+            .setPositiveButton("Import") { _, _ ->
+                val keyContent = editText.text.toString()
+                if (keyContent.isNotBlank()) {
+                    importKeyContent(keyContent, "Pasted Key")
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun importKeyContent(keyContent: String, filename: String) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val result = app.keyStorage.importKeyFromText(
+                    keyContent = keyContent,
+                    passphrase = null,
+                    keyName = extractKeyNameFromFilename(filename)
+                )
+
+                withContext(Dispatchers.Main) {
+                    when (result) {
+                        is ImportResult.Success -> {
+                            Logger.i("KeyManagementActivity", "Key imported successfully: ${result.keyId}")
+                            Toast.makeText(this@KeyManagementActivity, "SSH key imported successfully!", Toast.LENGTH_SHORT).show()
+                            loadKeys()
+                        }
+                        is ImportResult.Error -> {
+                            Logger.e("KeyManagementActivity", "Key import failed: ${result.message}")
+                            if (result.message.contains("encrypted") && result.message.contains("passphrase")) {
+                                showPassphraseDialog(keyContent, filename)
+                            } else {
+                                showImportErrorDialog(result.message)
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Logger.e("KeyManagementActivity", "Key import failed", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@KeyManagementActivity, "Key import failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun showPassphraseDialog(keyContent: String, filename: String) {
+        val editText = android.widget.EditText(this).apply {
+            hint = "Enter passphrase"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Encrypted Key")
+            .setMessage("This key is encrypted. Please enter the passphrase.")
+            .setView(editText)
+            .setPositiveButton("Import") { _, _ ->
+                val passphrase = editText.text.toString()
+                importKeyWithPassphrase(keyContent, filename, passphrase)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun importKeyWithPassphrase(keyContent: String, filename: String, passphrase: String) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val result = app.keyStorage.importKeyFromText(
+                    keyContent = keyContent,
+                    passphrase = passphrase,
+                    keyName = extractKeyNameFromFilename(filename)
+                )
+
+                withContext(Dispatchers.Main) {
+                    when (result) {
+                        is ImportResult.Success -> {
+                            Logger.i("KeyManagementActivity", "Encrypted key imported successfully")
+                            Toast.makeText(this@KeyManagementActivity, "Encrypted SSH key imported successfully!", Toast.LENGTH_SHORT).show()
+                            loadKeys()
+                        }
+                        is ImportResult.Error -> {
+                            Logger.e("KeyManagementActivity", "Encrypted key import failed: ${result.message}")
+                            showImportErrorDialog(result.message)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Logger.e("KeyManagementActivity", "Encrypted key import failed", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@KeyManagementActivity, "Encrypted key import failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun showImportErrorDialog(errorMessage: String) {
+        AlertDialog.Builder(this)
+            .setTitle("Key Import Failed")
+            .setMessage("Failed to import SSH key:\n\n$errorMessage")
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
+    private fun extractKeyNameFromFilename(filename: String): String {
+        return filename.replace(Regex("\\.(pem|key|pub)$"), "").replace("_", " ").trim()
+    }
+
+    private fun showGenerateKeyDialog() {
+        val keyTypes = arrayOf("RSA 2048", "RSA 4096", "ECDSA P-256", "ECDSA P-384", "Ed25519")
+        var selectedType = 0
+
+        AlertDialog.Builder(this)
+            .setTitle("Generate SSH Key")
+            .setSingleChoiceItems(keyTypes, 0) { _, which ->
+                selectedType = which
+            }
+            .setPositiveButton("Generate") { _, _ ->
+                val nameEditText = android.widget.EditText(this).apply {
+                    hint = "Key name (e.g., my-server-key)"
+                }
+
+                AlertDialog.Builder(this)
+                    .setTitle("Key Name")
+                    .setView(nameEditText)
+                    .setPositiveButton("Generate") { _, _ ->
+                        val keyName = nameEditText.text.toString().takeIf { it.isNotBlank() } ?: "generated-key"
+                        val (keyType, keySize) = when (selectedType) {
+                            0 -> Pair(KeyType.RSA, 2048)
+                            1 -> Pair(KeyType.RSA, 4096)
+                            2 -> Pair(KeyType.ECDSA, 256)
+                            3 -> Pair(KeyType.ECDSA, 384)
+                            4 -> Pair(KeyType.ED25519, 256)
+                            else -> Pair(KeyType.RSA, 2048)
+                        }
+                        generateKey(keyType, keySize, keyName)
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun generateKey(keyType: KeyType, keySize: Int, keyName: String) {
+        val progressDialog = android.app.ProgressDialog(this).apply {
+            setMessage("Generating SSH key...")
+            setCancelable(false)
+            show()
+        }
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val result = app.keyStorage.generateKeyPair(keyType, keySize, keyName)
+
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+
+                    when (result) {
+                        is GenerateResult.Success -> {
+                            AlertDialog.Builder(this@KeyManagementActivity)
+                                .setTitle("Key Generated Successfully")
+                                .setMessage("SSH key '$keyName' has been generated.\n\nFingerprint:\n${result.fingerprint}")
+                                .setPositiveButton("OK") { _, _ ->
+                                    loadKeys()
+                                }
+                                .show()
+                        }
+                        is GenerateResult.Error -> {
+                            AlertDialog.Builder(this@KeyManagementActivity)
+                                .setTitle("Key Generation Failed")
+                                .setMessage("Failed to generate SSH key:\n\n${result.message}")
+                                .setPositiveButton("OK", null)
+                                .show()
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Logger.e("KeyManagementActivity", "Key generation failed", e)
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+                    Toast.makeText(this@KeyManagementActivity, "Key generation failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
@@ -97,9 +370,10 @@ class KeyManagementActivity : AppCompatActivity() {
                 lifecycleScope.launch {
                     try {
                         app.database.keyDao().deleteKey(key)
-                        loadKeys() // Refresh list
+                        Toast.makeText(this@KeyManagementActivity, "Key deleted", Toast.LENGTH_SHORT).show()
                     } catch (e: Exception) {
                         Logger.e("KeyManagementActivity", "Failed to delete key", e)
+                        Toast.makeText(this@KeyManagementActivity, "Failed to delete key", Toast.LENGTH_SHORT).show()
                     }
                 }
             }

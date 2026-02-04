@@ -45,12 +45,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var app: TabSSHApplication
     private lateinit var groupedConnectionAdapter: GroupedConnectionAdapter
     private lateinit var frequentlyUsedAdapter: ConnectionAdapter
+    private lateinit var ungroupedAdapter: ConnectionAdapter
     private lateinit var backupManager: BackupManager
 
     private val connections = mutableListOf<ConnectionProfile>()
     private val allConnections = mutableListOf<ConnectionProfile>()
     private val allGroups = mutableListOf<ConnectionGroup>()
     private val frequentlyUsedConnections = mutableListOf<ConnectionProfile>()
+    private val ungroupedConnections = mutableListOf<ConnectionProfile>()
     private val displayItems = mutableListOf<ConnectionListItem>()
     private val groupExpansionState = mutableMapOf<String, Boolean>()
     private var ungroupedExpanded: Boolean = true
@@ -183,7 +185,18 @@ class MainActivity : AppCompatActivity() {
                 true
             }
             R.id.action_create_group -> {
-                showCreateGroupDialog()
+                val intent = Intent(this, GroupManagementActivity::class.java)
+                startActivity(intent)
+                true
+            }
+            R.id.action_manage_snippets -> {
+                val intent = Intent(this, SnippetManagerActivity::class.java)
+                startActivity(intent)
+                true
+            }
+            R.id.action_manage_identities -> {
+                val intent = Intent(this, IdentityManagementActivity::class.java)
+                startActivity(intent)
                 true
             }
             R.id.action_settings -> {
@@ -229,6 +242,7 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun setupRecyclerView() {
+        // Setup Groups RecyclerView (with expand/collapse)
         groupedConnectionAdapter = GroupedConnectionAdapter(
             items = displayItems,
             onConnectionClick = { profile -> connectToProfile(profile) },
@@ -239,14 +253,24 @@ class MainActivity : AppCompatActivity() {
             onGroupLongClick = { groupHeader -> showGroupMenu(groupHeader) }
         )
 
-        binding.recyclerConnections.apply {
+        binding.recyclerGroups.apply {
             layoutManager = LinearLayoutManager(this@MainActivity)
             adapter = groupedConnectionAdapter
-            visibility = android.view.View.VISIBLE
         }
+        
+        // Setup Ungrouped RecyclerView
+        ungroupedAdapter = ConnectionAdapter(
+            connections = ungroupedConnections,
+            onConnectionClick = { profile -> connectToProfile(profile) },
+            onConnectionLongClick = { profile -> showConnectionMenu(profile) },
+            onConnectionEdit = { profile -> editConnection(profile) },
+            onConnectionDelete = { profile -> deleteConnection(profile) }
+        )
 
-        // Hide empty message when RecyclerView is shown
-        binding.textEmptyConnections.visibility = android.view.View.GONE
+        binding.recyclerConnections.apply {
+            layoutManager = LinearLayoutManager(this@MainActivity)
+            adapter = ungroupedAdapter
+        }
     }
 
     private fun setupFrequentlyUsedRecyclerView() {
@@ -291,18 +315,44 @@ class MainActivity : AppCompatActivity() {
     private fun loadConnections() {
         lifecycleScope.launch {
             try {
+                // Load all connections
                 app.database.connectionDao().getAllConnections().collect { connectionList ->
                     allConnections.clear()
                     allConnections.addAll(connectionList)
 
+                    // Load top 5 frequently used
+                    val frequentList = app.database.connectionDao().getFrequentlyUsedConnections(limit = 5)
+                    frequentlyUsedConnections.clear()
+                    frequentlyUsedConnections.addAll(frequentList)
+
                     // Rebuild display list
                     rebuildDisplayList()
 
-                    Logger.d("MainActivity", "Loaded ${connectionList.size} connections")
+                    Logger.d("MainActivity", "Loaded ${connectionList.size} connections, ${frequentList.size} frequent")
                 }
             } catch (e: Exception) {
                 Logger.e("MainActivity", "Failed to load connections", e)
                 showToast("Failed to load connections")
+            }
+        }
+        
+        // Load ungrouped connections separately
+        lifecycleScope.launch {
+            try {
+                app.database.connectionDao().getUngroupedConnections().collect { ungroupedList ->
+                    ungroupedConnections.clear()
+                    ungroupedConnections.addAll(ungroupedList)
+                    
+                    // Update ungrouped adapter
+                    runOnUiThread {
+                        ungroupedAdapter.notifyDataSetChanged()
+                        updateSectionVisibility()
+                    }
+                    
+                    Logger.d("MainActivity", "Loaded ${ungroupedList.size} ungrouped connections")
+                }
+            } catch (e: Exception) {
+                Logger.e("MainActivity", "Failed to load ungrouped connections", e)
             }
         }
     }
@@ -344,16 +394,19 @@ class MainActivity : AppCompatActivity() {
 
         // Apply sort
         val sortedConnections = applySortToList(filteredConnections)
+        
+        // Filter to ONLY grouped connections (for groups section)
+        val groupedOnly = sortedConnections.filter { it.groupId != null }
 
-        // Build display list
+        // Build display list for GROUPS section (no ungrouped here!)
         val items = if (currentSearchQuery.isBlank() && groupingEnabled) {
-            // Grouped view
+            // Grouped view - ONLY show grouped connections
             ConnectionListBuilder.buildGroupedList(
                 groups = allGroups,
-                connections = sortedConnections,
+                connections = groupedOnly,  // Changed: only grouped connections
                 groupExpansionState = groupExpansionState,
-                showUngrouped = true,
-                ungroupedExpanded = ungroupedExpanded
+                showUngrouped = false,  // Changed: don't show ungrouped in groups section
+                ungroupedExpanded = false
             )
         } else {
             // Flat view (for search results or when grouping disabled)
@@ -362,12 +415,15 @@ class MainActivity : AppCompatActivity() {
 
         displayItems.clear()
         displayItems.addAll(items)
+        
+        // Update frequently used adapter
+        frequentlyUsedAdapter.notifyDataSetChanged()
 
         runOnUiThread {
             groupedConnectionAdapter.notifyDataSetChanged()
-            updateEmptyState()
+            updateSectionVisibility()
 
-            Logger.d("MainActivity", "Rebuilt display list: ${displayItems.size} items (${sortedConnections.size} connections, ${allGroups.size} groups)")
+            Logger.d("MainActivity", "Rebuilt: ${frequentlyUsedConnections.size} frequent, ${displayItems.size} grouped items, ${ungroupedConnections.size} ungrouped")
         }
     }
 
@@ -377,6 +433,34 @@ class MainActivity : AppCompatActivity() {
     private fun filterConnections(query: String) {
         currentSearchQuery = query
         rebuildDisplayList()
+    }
+    
+    /**
+     * Update visibility of the 3 sections based on data
+     */
+    private fun updateSectionVisibility() {
+        // Show frequently used section only if there are frequent connections
+        binding.cardFrequentlyUsed.visibility = if (frequentlyUsedConnections.isNotEmpty()) {
+            android.view.View.VISIBLE
+        } else {
+            android.view.View.GONE
+        }
+        
+        // Show groups section only if there are groups
+        binding.cardGroups.visibility = if (allGroups.isNotEmpty()) {
+            android.view.View.VISIBLE
+        } else {
+            android.view.View.GONE
+        }
+        
+        // Update ungrouped section visibility (RecyclerView and empty state)
+        if (ungroupedConnections.isEmpty()) {
+            binding.recyclerConnections.visibility = android.view.View.GONE
+            binding.textEmptyConnections.visibility = android.view.View.VISIBLE
+        } else {
+            binding.recyclerConnections.visibility = android.view.View.VISIBLE
+            binding.textEmptyConnections.visibility = android.view.View.GONE
+        }
     }
 
     /**
@@ -634,12 +718,13 @@ class MainActivity : AppCompatActivity() {
                         io.github.tabssh.services.SSHConnectionService.startService(this@MainActivity)
 
                         // Open terminal with the password
+                        // Password is retrieved from SecurePasswordManager in TabTerminalActivity
+                        // No need to pass via Intent (security best practice)
                         val intent = TabTerminalActivity.createIntent(
                             this@MainActivity,
                             profile,
                             autoConnect = true
                         )
-                        // TODO: Pass password to terminal activity securely
                         startActivity(intent)
 
                     } catch (e: Exception) {
@@ -873,7 +958,43 @@ class MainActivity : AppCompatActivity() {
                 includePasswords = (which == 0)
             }
             .setPositiveButton("Export") { _, _ ->
-                performExport(uri, includePasswords)
+                if (includePasswords) {
+                    // Ask for encryption password
+                    showBackupPasswordDialog(uri)
+                } else {
+                    performExport(uri, false, null)
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Show password dialog for backup encryption
+     */
+    private fun showBackupPasswordDialog(uri: Uri) {
+        val passwordInput = android.widget.EditText(this).apply {
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            hint = "Encryption password"
+        }
+        
+        val layout = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(50, 40, 50, 10)
+            addView(passwordInput)
+        }
+        
+        android.app.AlertDialog.Builder(this)
+            .setTitle("🔐 Encrypt Backup")
+            .setMessage("Enter a strong password to encrypt your backup.\nYou'll need this password to restore.")
+            .setView(layout)
+            .setPositiveButton("Encrypt & Export") { _, _ ->
+                val password = passwordInput.text.toString()
+                if (password.length < 8) {
+                    showToast("Password must be at least 8 characters")
+                    return@setPositiveButton
+                }
+                performExport(uri, true, password)
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -882,7 +1003,7 @@ class MainActivity : AppCompatActivity() {
     /**
      * Perform actual export
      */
-    private fun performExport(uri: Uri, includePasswords: Boolean) {
+    private fun performExport(uri: Uri, includePasswords: Boolean, password: String?) {
         lifecycleScope.launch {
             try {
                 Logger.i("MainActivity", "Exporting backup to: $uri")
@@ -891,7 +1012,7 @@ class MainActivity : AppCompatActivity() {
                     outputUri = uri,
                     includePasswords = includePasswords,
                     encryptBackup = includePasswords,
-                    password = if (includePasswords) null else null // TODO: Get password from user
+                    password = password
                 )
 
                 if (result.success) {

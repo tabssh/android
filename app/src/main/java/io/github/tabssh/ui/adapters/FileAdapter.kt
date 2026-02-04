@@ -20,14 +20,63 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
     private var localFiles: List<File> = emptyList()
     private var onFileClick: ((File) -> Unit)? = null
     private var onFileLongClick: ((File) -> Unit)? = null
+    private val selectedLocalFiles = mutableSetOf<File>()
 
     // Remote files
     private var remoteFiles: List<RemoteFileInfo> = emptyList()
     private var onRemoteFileClick: ((RemoteFileInfo) -> Unit)? = null
     private var onRemoteFileLongClick: ((RemoteFileInfo) -> Unit)? = null
+    private val selectedRemoteFiles = mutableSetOf<RemoteFileInfo>()
 
     private var isRemote = false
     private val dateFormat = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault())
+    
+    /**
+     * Get selected local files
+     */
+    fun getSelectedFiles(): List<File> {
+        return if (isRemote) emptyList() else selectedLocalFiles.toList()
+    }
+    
+    /**
+     * Get selected remote files
+     */
+    fun getSelectedRemoteFiles(): List<RemoteFileInfo> {
+        return if (isRemote) selectedRemoteFiles.toList() else emptyList()
+    }
+    
+    /**
+     * Clear all selections
+     */
+    fun clearSelection() {
+        selectedLocalFiles.clear()
+        selectedRemoteFiles.clear()
+        notifyDataSetChanged()
+    }
+    
+    /**
+     * Toggle file selection
+     */
+    fun toggleSelection(file: File) {
+        if (selectedLocalFiles.contains(file)) {
+            selectedLocalFiles.remove(file)
+        } else {
+            selectedLocalFiles.add(file)
+        }
+        notifyDataSetChanged()
+    }
+    
+    /**
+     * Toggle remote file selection
+     */
+    fun toggleRemoteSelection(file: RemoteFileInfo) {
+        if (selectedRemoteFiles.contains(file)) {
+            selectedRemoteFiles.remove(file)
+        } else {
+            selectedRemoteFiles.add(file)
+        }
+        notifyDataSetChanged()
+    }
 
     /**
      * Set local files to display
@@ -84,6 +133,12 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
         
         fun bindLocalFile(file: File) {
             binding.apply {
+                val isSelected = selectedLocalFiles.contains(file)
+                
+                // Visual selection indicator
+                root.alpha = if (isSelected) 0.7f else 1.0f
+                root.setBackgroundColor(if (isSelected) 0x22_00_7A_FF else 0x00_00_00_00)
+                
                 iconFile.setImageResource(getLocalFileIcon(file))
                 textFileName.text = file.name
                 textFileSize.text = if (file.isDirectory) {
@@ -111,12 +166,19 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
                     append(file.name)
                     append(". Size: ${textFileSize.text}")
                     append(". Modified: ${textFileDate.text}")
+                    if (isSelected) append(". Selected")
                 }
             }
         }
         
         fun bindRemoteFile(file: RemoteFileInfo) {
             binding.apply {
+                val isSelected = selectedRemoteFiles.contains(file)
+                
+                // Visual selection indicator
+                root.alpha = if (isSelected) 0.7f else 1.0f
+                root.setBackgroundColor(if (isSelected) 0x22_00_7A_FF else 0x00_00_00_00)
+                
                 iconFile.setImageResource(getRemoteFileIcon(file))
                 textFileName.text = file.name
                 textFileSize.text = if (file.isDirectory) {
@@ -144,6 +206,7 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
                     append(". Size: ${file.getFormattedSize()}")
                     append(". Permissions: ${file.permissions}")
                     if (file.isSymlink) append(". Symbolic link")
+                    if (isSelected) append(". Selected")
                 }
             }
         }

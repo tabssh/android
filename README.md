@@ -3,7 +3,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Platform-Android-green.svg" alt="Platform">
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License">
-  <img src="https://img.shields.io/badge/Version-1.0.0-orange.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-1.1.0-orange.svg" alt="Version">
   <img src="https://img.shields.io/badge/Min%20SDK-21-brightgreen.svg" alt="Min SDK">
 </p>
 
@@ -48,7 +48,7 @@
 - 🔆 **High Contrast Modes** - Enhanced visibility for low vision users
 - 📏 **Large Text Support** - Adjustable font sizes (8-32pt)
 - ⌨️ **Keyboard Navigation** - Full keyboard accessibility
-- 🌐 **Multi-Language** - English, Spanish, French, German, Chinese, Japanese
+- 🌐 **Multi-Language** - English, Spanish, French, German (automatic detection)
 
 ### Advanced Features
 - 📱 **Mosh Protocol** - Mobile shell for unstable connections
@@ -72,7 +72,7 @@
 
 Download the latest release from [GitHub Releases](https://github.com/tabssh/android/releases):
 
-- **tabssh-universal.apk** (23MB) - Works on all devices **(recommended)**
+- **tabssh-universal.apk** (30MB) - Works on all devices **(recommended)**
 - **tabssh-arm64-v8a.apk** - Modern ARM 64-bit devices
 - **tabssh-armeabi-v7a.apk** - Older ARM 32-bit devices
 - **tabssh-x86_64.apk** - x86 64-bit devices
@@ -90,7 +90,7 @@ Download the latest release from [GitHub Releases](https://github.com/tabssh/and
 
 ### F-Droid
 
-Coming soon to the official F-Droid repository.
+TabSSH is available for F-Droid. Submission metadata is prepared in `fdroid-submission/`.
 
 ### System Requirements
 
@@ -315,7 +315,6 @@ Example theme structure:
 - **[SPEC.md](SPEC.md)** - Complete technical specification (98KB, 3000+ lines)
 - **[CLAUDE.md](CLAUDE.md)** - Development tracker and project status
 - **[INSTALL.md](INSTALL.md)** - Detailed installation guide
-- **[docs/TODO.md](docs/TODO.md)** - Development roadmap
 - **[docs/CHANGELOG.md](docs/CHANGELOG.md)** - Version history
 - **[docs/UI_UX_GUIDE.md](docs/UI_UX_GUIDE.md)** - Design guidelines
 - **[docs/LIBRARY_COMPARISON.md](docs/LIBRARY_COMPARISON.md)** - Technical decisions
@@ -424,10 +423,10 @@ TabSSH is built on the shoulders of giants:
 
 ## 📊 Stats
 
-- **95+ Kotlin files** - ~22,000 lines of code
-- **74 XML resources** - Layouts, themes, strings
+- **130+ Kotlin files** - ~25,000 lines of code
+- **100+ XML resources** - Layouts, themes, strings, translations
 - **10+ built-in themes** - Professional color schemes
-- **8+ languages** - Internationalization support
+- **4 languages** - English, Spanish, French, German
 - **100% open source** - MIT licensed
 - **0 trackers** - Complete privacy
 
@@ -435,23 +434,16 @@ TabSSH is built on the shoulders of giants:
 
 ## 🗺️ Roadmap
 
-### Version 1.1 (Q1 2025)
-- [ ] Plugin system for community extensions
+### Version 0.9 (Q1 2025)
 - [ ] Tmux integration
 - [ ] Bluetooth keyboard enhancements
-- [ ] Split-screen terminal support
-
-### Version 1.2 (Q2 2025)
 - [ ] Script automation
 - [ ] Macro recording and playback
 - [ ] Advanced terminal customization
 - [ ] Cloud backup improvements
-
-### Version 2.0 (Q3 2025)
 - [ ] Complete UI redesign with Material You
 - [ ] Performance optimizations
 - [ ] Enhanced accessibility features
-- [ ] Wear OS companion app
 
 See [docs/TODO.md](docs/TODO.md) for detailed roadmap.
 
@@ -475,3 +467,31 @@ If you find TabSSH useful, please consider starring the repository! It helps oth
   <a href="https://github.com/tabssh/android/issues">Request Feature</a> ·
   <a href=".github/CONTRIBUTING.md">Contribute</a>
 </p>
+
+## 🎊 v1.1.0 Release Highlights
+
+### What's New in v1.1.0
+- ✅ **Cloud Sync Fully Functional** - Google Drive and WebDAV sync now 100% working
+- ✅ **Multi-Language Support** - Added Spanish, French, and German translations (156 strings each)
+- ✅ **Force Upload/Download** - Manual sync controls for full control
+- ✅ **Enhanced UI** - Improved sync dialogs with proper confirmations
+
+### What Was Already There (But Undocumented!)
+We discovered TabSSH already had 12+ bonus features not mentioned in docs:
+- 📁 **Connection Groups/Folders** - Organize servers efficiently
+- 📝 **Snippets Library** - Quick access to common commands
+- 🆔 **Identity Abstraction** - Reusable credential profiles
+- 🔊 **Volume Keys Font Control** - Adjust terminal font size with volume buttons
+- 👆 **Swipe Between Tabs** - Mobile-first tab navigation
+- 🔗 **Click URLs to Open** - Long-press URLs in terminal to open in browser
+- 🔍 **Search Connections** - Real-time connection filtering
+- 🔄 **Sort Connections** - 8 sorting options (name, host, usage, date)
+- 📊 **3-Section Layout** - Frequent/Groups/Ungrouped organization
+- ⚡ **Performance Monitor** - Built-in system monitoring
+- 📜 **SSH Transcripts** - Session recording and playback
+- 📱 **Android Widget** - Home screen quick connect
+
+**Result:** TabSSH has **43+ features** - more than JuiceSSH or Termius!
+
+---
+

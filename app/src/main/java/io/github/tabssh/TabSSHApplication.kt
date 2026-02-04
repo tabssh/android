@@ -9,6 +9,7 @@ import io.github.tabssh.terminal.emulator.TerminalManager
 import io.github.tabssh.themes.definitions.ThemeManager
 import io.github.tabssh.storage.preferences.PreferenceManager
 import io.github.tabssh.utils.logging.Logger
+import io.github.tabssh.utils.performance.PerformanceManager
 
 /**
  * Main application class for TabSSH
@@ -24,6 +25,7 @@ class TabSSHApplication : Application() {
     val sshSessionManager by lazy { SSHSessionManager(this) }
     val terminalManager by lazy { TerminalManager(this) }
     val themeManager by lazy { ThemeManager(this) }
+    val performanceManager by lazy { PerformanceManager(this) }
     
     override fun onCreate() {
         super.onCreate()
@@ -57,6 +59,9 @@ class TabSSHApplication : Application() {
         
         // Initialize terminal system
         terminalManager.initialize()
+        
+        // Initialize performance monitoring
+        performanceManager.initialize()
         
         Logger.d("TabSSHApplication", "Core components initialized")
     }

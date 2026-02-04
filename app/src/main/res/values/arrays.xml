@@ -133,5 +133,15 @@
         <item>12h</item>
         <item>24h</item>
     </string-array>
+    
+    <!-- Multiplexer type options -->
+    <string-array name="multiplexer_type_entries">
+        <item>tmux (Ctrl+B)</item>
+        <item>screen (Ctrl+A)</item>
+    </string-array>
+    <string-array name="multiplexer_type_values">
+        <item>tmux</item>
+        <item>screen</item>
+    </string-array>
 
 </resources>

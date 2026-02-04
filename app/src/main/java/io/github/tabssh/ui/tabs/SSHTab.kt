@@ -20,8 +20,8 @@ class SSHTab(
 ) {
     val tabId: String = UUID.randomUUID().toString()
     
-    // Connection
-    private var connection: SSHConnection? = null
+    // Connection (public for gesture command sending)
+    var connection: SSHConnection? = null
     
     // Tab state
     private val _title = MutableStateFlow(profile.name)
@@ -55,6 +55,9 @@ class SSHTab(
     private var bytesReceived: Long = 0
     private var bytesSent: Long = 0
     
+    // Session recording
+    var sessionRecorder: io.github.tabssh.terminal.recording.SessionRecorder? = null
+    
     init {
         Logger.d("SSHTab", "Created tab ${profile.getDisplayName()}")
 
@@ -69,6 +72,9 @@ class SSHTab(
             override fun onDataReceived(data: ByteArray) {
                 updateActivity()
                 bytesReceived += data.size
+                
+                // Record to transcript if enabled
+                sessionRecorder?.recordOutput(String(data, Charsets.UTF_8))
 
                 // Mark as having unread output if tab is not active
                 if (!_isActive.value) {

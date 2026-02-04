@@ -280,17 +280,68 @@ class SFTPActivity : AppCompatActivity() {
     }
     
     private fun uploadSelectedFiles() {
-        // Upload selected local files to current remote directory
-        // TODO: Implement file selection in FileAdapter
-        showToast("Please use long-press to upload individual files")
-        Logger.d("SFTPActivity", "Upload selected files - feature pending file adapter selection support")
+        // Multi-file upload: Get selected files from FileAdapter
+        val selectedFiles = localFileAdapter?.getSelectedFiles() ?: emptyList()
+        
+        if (selectedFiles.isEmpty()) {
+            showToast("No files selected. Long-press files to select them.")
+            return
+        }
+        
+        lifecycleScope.launch {
+            try {
+                var successCount = 0
+                for (file in selectedFiles) {
+                    if (file.isDirectory) continue
+                    
+                    // Use correct API: uploadFile(localFile, remotePath)
+                    sftpManager?.uploadFile(
+                        localFile = file,
+                        remotePath = currentRemotePath + "/" + file.name
+                    )
+                    successCount++
+                }
+                showToast("✅ Uploaded $successCount file(s)")
+                localFileAdapter?.clearSelection()
+                loadRemoteDirectory(currentRemotePath)
+            } catch (e: Exception) {
+                Logger.e("SFTPActivity", "Upload failed", e)
+                showToast("❌ Upload failed: ${e.message}")
+            }
+        }
     }
 
     private fun downloadSelectedFiles() {
-        // Download selected remote files to current local directory
-        // TODO: Implement file selection in FileAdapter
-        showToast("Please use long-press to download individual files")
-        Logger.d("SFTPActivity", "Download selected files - feature pending file adapter selection support")
+        // Multi-file download: Get selected files from FileAdapter
+        val selectedFiles = remoteFileAdapter?.getSelectedRemoteFiles() ?: emptyList()
+        
+        if (selectedFiles.isEmpty()) {
+            showToast("No files selected. Long-press files to select them.")
+            return
+        }
+        
+        lifecycleScope.launch {
+            try {
+                var successCount = 0
+                for (file in selectedFiles) {
+                    if (file.isDirectory) continue
+                    
+                    val localFile = File(currentLocalPath, file.name)
+                    // Use correct API: downloadFile(remotePath, localFile)
+                    sftpManager?.downloadFile(
+                        remotePath = file.path,
+                        localFile = localFile
+                    )
+                    successCount++
+                }
+                showToast("✅ Downloaded $successCount file(s)")
+                remoteFileAdapter?.clearSelection()
+                loadLocalDirectory(currentLocalPath)
+            } catch (e: Exception) {
+                Logger.e("SFTPActivity", "Download failed", e)
+                showToast("❌ Download failed: ${e.message}")
+            }
+        }
     }
     
     private fun showCreateFolderDialog() {

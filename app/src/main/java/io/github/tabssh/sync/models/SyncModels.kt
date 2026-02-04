@@ -309,8 +309,10 @@ enum class SyncStage {
     MERGING,
     RESOLVING_CONFLICTS,
     APPLYING_CHANGES,
+    APPLYING,  // Added for force download
     COMPLETED,
-    FAILED
+    FAILED,
+    ERROR      // Added for error states
 }
 
 /**
