@@ -64,6 +64,10 @@ class TabTerminalActivity : AppCompatActivity() {
     private var performanceOverlay: io.github.tabssh.ui.views.PerformanceOverlayView? = null
     private var performanceUpdateJob: Job? = null
     
+    // Custom keyboard
+    private lateinit var keyboardLayoutManager: io.github.tabssh.ui.keyboard.KeyboardLayoutManager
+    private var customKeyboardVisible: Boolean = true
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
@@ -78,6 +82,7 @@ class TabTerminalActivity : AppCompatActivity() {
         setupTabLayout()
         setupTerminalView()
         setupFunctionKeys()
+        setupCustomKeyboard()
         setupPerformanceOverlay()
         
         // Handle intent
@@ -171,8 +176,14 @@ class TabTerminalActivity : AppCompatActivity() {
                 // Set up URL detection handler
                 val urlDetectionEnabled = app.preferencesManager.getBoolean("detect_urls", true)
                 if (urlDetectionEnabled) {
+                    // URL detection callback
                     onUrlDetected = { url ->
                         showUrlDialog(url)
+                    }
+                    
+                    // Context menu callback for long press on text
+                    onContextMenuRequested = { x, y ->
+                        showTextContextMenu(x, y)
                     }
                 }
                 
@@ -249,6 +260,72 @@ class TabTerminalActivity : AppCompatActivity() {
         clipboard.setPrimaryClip(clip)
         Toast.makeText(this, "URL copied to clipboard", Toast.LENGTH_SHORT).show()
         Logger.d("TabTerminalActivity", "Copied URL to clipboard: $url")
+    }
+    
+    /**
+     * Show text context menu when user long-presses on non-URL text
+     */
+    private fun showTextContextMenu(x: Float, y: Float) {
+        val items = arrayOf("Copy", "Paste", "Select All", "Share Session", "Cancel")
+        
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Terminal Actions")
+            .setItems(items) { dialog, which ->
+                when (which) {
+                    0 -> copyTerminalText() // Copy
+                    1 -> pasteFromClipboard() // Paste
+                    2 -> selectAllText() // Select All
+                    3 -> shareSession() // Share
+                    4 -> dialog.dismiss() // Cancel
+                }
+            }
+            .show()
+    }
+    
+    /**
+     * Copy visible terminal text to clipboard
+     */
+    private fun copyTerminalText() {
+        val terminal = getActiveTerminalView()
+        val text = terminal?.getVisibleText() ?: ""
+        
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        val clip = android.content.ClipData.newPlainText("Terminal", text)
+        clipboard.setPrimaryClip(clip)
+        
+        Toast.makeText(this, "Terminal text copied", Toast.LENGTH_SHORT).show()
+    }
+    
+    /**
+     * Select all terminal text (placeholder for future implementation)
+     */
+    private fun selectAllText() {
+        Toast.makeText(this, "Select all - coming soon", Toast.LENGTH_SHORT).show()
+    }
+    
+    /**
+     * Share current session info
+     */
+    private fun shareSession() {
+        val currentTab = tabManager.getCurrentTab()
+        val connection = currentTab?.connection
+        
+        val shareText = buildString {
+            append("TabSSH Session\n\n")
+            connection?.let {
+                append("Host: ${it.host}\n")
+                append("Port: ${it.port}\n")
+                append("User: ${it.username}\n")
+            }
+        }
+        
+        val sendIntent = Intent().apply {
+            action = Intent.ACTION_SEND
+            putExtra(Intent.EXTRA_TEXT, shareText)
+            type = "text/plain"
+        }
+        
+        startActivity(Intent.createChooser(sendIntent, "Share session info"))
     }
     
     private fun setupPerformanceOverlay() {
@@ -1117,3 +1194,43 @@ class TabTerminalActivity : AppCompatActivity() {
             .show()
     }
 }
+    
+    private fun setupCustomKeyboard() {
+        keyboardLayoutManager = io.github.tabssh.ui.keyboard.KeyboardLayoutManager(this, app.preferencesManager)
+        
+        val layout = keyboardLayoutManager.getLayout()
+        binding.customKeyboard.setLayout(layout)
+        
+        binding.customKeyboard.setOnKeyClickListener { key ->
+            handleCustomKeyPress(key)
+        }
+        
+        binding.customKeyboard.setOnToggleClickListener {
+            toggleCustomKeyboard()
+        }
+        
+        Logger.d("TabTerminalActivity", "Custom keyboard initialized")
+    }
+    
+    private fun handleCustomKeyPress(key: io.github.tabssh.ui.keyboard.KeyboardKey) {
+        val terminal = getActiveTerminalView()
+        
+        when (key.id) {
+            "PASTE" -> pasteFromClipboard()
+            "TOGGLE" -> toggleCustomKeyboard()
+            else -> {
+                if (key.keySequence.isNotEmpty()) {
+                    terminal?.sendText(key.keySequence)
+                }
+            }
+        }
+    }
+    
+    private fun toggleCustomKeyboard() {
+        customKeyboardVisible = !customKeyboardVisible
+        binding.customKeyboard.visibility = if (customKeyboardVisible) {
+            android.view.View.VISIBLE
+        } else {
+            android.view.View.GONE
+        }
+    }

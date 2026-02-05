@@ -28,6 +28,33 @@
         app:showAsAction="never" />
 
     <item
+        android:id="@+id/action_cluster_commands"
+        android:title="Cluster Commands"
+        android:icon="@android:drawable/ic_menu_share"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_hypervisors"
+        android:title="Hypervisor Management"
+        android:icon="@android:drawable/ic_menu_manage"
+        app:showAsAction="never">
+        <menu>
+            <item
+                android:id="@+id/action_proxmox"
+                android:title="Proxmox"
+                android:icon="@android:drawable/ic_menu_compass" />
+            <item
+                android:id="@+id/action_xcpng"
+                android:title="XCP-ng"
+                android:icon="@android:drawable/ic_menu_compass" />
+            <item
+                android:id="@+id/action_vmware"
+                android:title="VMware"
+                android:icon="@android:drawable/ic_menu_compass" />
+        </menu>
+    </item>
+
+    <item
         android:id="@+id/action_settings"
         android:title="Settings"
         android:icon="@android:drawable/ic_menu_preferences"
@@ -42,6 +69,12 @@
     <item
         android:id="@+id/action_import_connections"
         android:title="Import Connections"
+        android:icon="@android:drawable/ic_menu_upload"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_import_ssh_config"
+        android:title="Import SSH Config"
         android:icon="@android:drawable/ic_menu_upload"
         app:showAsAction="never" />
 

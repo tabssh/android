@@ -91,6 +91,9 @@ class TerminalView @JvmOverloads constructor(
     )
     var onUrlDetected: ((String) -> Unit)? = null
     
+    // Context menu callback for long press on text
+    var onContextMenuRequested: ((x: Float, y: Float) -> Unit)? = null
+    
     // Multi-touch gesture handler for tmux/screen shortcuts
     private var terminalGestureHandler: io.github.tabssh.terminal.gestures.TerminalGestureHandler? = null
     var onCommandSent: ((ByteArray) -> Unit)? = null
@@ -356,12 +359,32 @@ class TerminalView @JvmOverloads constructor(
     }
 
     /**
-     * Toggle soft keyboard
+     * Toggle soft keyboard (mobile-first UX)
      */
     fun toggleKeyboard() {
-        requestFocus()
-        inputMethodManager.showSoftInput(this, InputMethodManager.SHOW_FORCED)
-        Logger.d("TerminalView", "Showing keyboard")
+        if (hasWindowFocus()) {
+            if (inputMethodManager.isActive(this)) {
+                // Keyboard is visible - hide it
+                inputMethodManager.hideSoftInputFromWindow(windowToken, 0)
+                Logger.d("TerminalView", "Hiding keyboard")
+            } else {
+                // Keyboard is hidden - show it
+                requestFocus()
+                inputMethodManager.showSoftInput(this, InputMethodManager.SHOW_FORCED)
+                Logger.d("TerminalView", "Showing keyboard")
+            }
+        }
+    }
+
+    /**
+     * Show context menu at position (called on long press of non-URL text)
+     */
+    private fun showContextMenu(x: Float, y: Float) {
+        // Haptic feedback for long press
+        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        
+        // Notify parent activity to show context menu
+        onContextMenuRequested?.invoke(x, y)
     }
 
     private fun calculateCellDimensions() {
@@ -577,26 +600,30 @@ class TerminalView @JvmOverloads constructor(
             return true
         }
 
-        override fun onDoubleTap(e: MotionEvent): Boolean {
+        override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+            // Single tap = toggle keyboard (mobile-first UX)
             toggleKeyboard()
+            Logger.d("TerminalView", "Single tap - toggling keyboard")
+            return true
+        }
+
+        override fun onDoubleTap(e: MotionEvent): Boolean {
+            // Double tap reserved for future use (e.g., select word)
             return true
         }
 
         override fun onLongPress(e: MotionEvent) {
-            // Detect URL at long press position
+            // Long press detection: URL or text context menu
             val url = detectUrlAtPosition(e.x, e.y)
             if (url != null) {
-                // Notify listener about detected URL
+                // URL detected - show URL menu
                 onUrlDetected?.invoke(url)
                 Logger.d("TerminalView", "URL detected: $url")
+            } else {
+                // No URL - show text context menu
+                showContextMenu(e.x, e.y)
+                Logger.d("TerminalView", "Long press - showing context menu")
             }
-        }
-
-        override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-            requestFocus()
-            inputMethodManager.showSoftInput(this@TerminalView, InputMethodManager.SHOW_FORCED)
-            Logger.d("TerminalView", "Single tap - showing keyboard")
-            return true
         }
     }
 

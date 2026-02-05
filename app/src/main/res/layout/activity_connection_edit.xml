@@ -296,6 +296,33 @@
                         android:textColor="#212121"
                         android:checked="true" />
 
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/switch_x11_forwarding"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_sm"
+                        android:text="X11 Forwarding (Run GUI apps)"
+                        android:textColor="#212121"
+                        android:checked="false" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/switch_port_knock"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_sm"
+                        android:text="Port Knocking"
+                        android:textColor="#212121"
+                        android:checked="false" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_configure_port_knock"
+                        style="@style/Widget.TabSSH.Button.Outlined"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_sm"
+                        android:text="Configure Knock Sequence"
+                        android:visibility="gone" />
+
                 </LinearLayout>
 
             </com.google.android.material.card.MaterialCardView>

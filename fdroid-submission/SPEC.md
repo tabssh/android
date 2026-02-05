@@ -1600,7 +1600,7 @@ Categories:
 License: MIT
 
 AuthorName: TabSSH Team
-AuthorEmail: hello@tabssh.org
+AuthorEmail: git-admin+hello@casjaysdev.pro
 AuthorWebSite: https://tabssh.github.io
 
 SourceCode: https://github.com/tabssh/android
@@ -2938,7 +2938,7 @@ TabSSH 1.0.0 has a **complete professional architecture and comprehensive framew
 ## Issue Management
 - Bug reports: Use provided template with reproduction steps
 - Feature requests: Describe use case and benefit
-- Security issues: Report privately via security@tabssh.org
+- Security issues: Report privately via git-admin+security@casjaysdev.pro
 - Questions: Use GitHub Discussions
 
 ## Review Process

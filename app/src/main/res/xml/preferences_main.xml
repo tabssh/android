@@ -36,6 +36,20 @@
         android:icon="@android:drawable/ic_menu_rotate"
         android:fragment="io.github.tabssh.ui.fragments.SyncSettingsFragment" />
 
+    <Preference
+        android:key="audit_settings"
+        android:title="Audit Log"
+        android:summary="Session logging and compliance"
+        android:icon="@android:drawable/ic_menu_recent_history"
+        android:fragment="io.github.tabssh.ui.activities.AuditSettingsFragment" />
+
+    <Preference
+        android:key="tasker_settings"
+        android:title="Tasker Integration"
+        android:summary="Automate SSH with Tasker"
+        android:icon="@android:drawable/ic_menu_manage"
+        android:fragment="io.github.tabssh.ui.activities.TaskerSettingsFragment" />
+
     <PreferenceCategory
         android:title="About">
 

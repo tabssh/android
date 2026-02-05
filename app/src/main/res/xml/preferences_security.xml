@@ -52,6 +52,12 @@
             android:summary="Always verify host keys"
             android:defaultValue="true" />
 
+        <SwitchPreferenceCompat
+            android:key="port_knock_enabled_default"
+            android:title="Enable Port Knocking by Default"
+            android:summary="Execute port knock sequences for new connections (Default: OFF)"
+            android:defaultValue="false" />
+
     </PreferenceCategory>
 
 </PreferenceScreen>

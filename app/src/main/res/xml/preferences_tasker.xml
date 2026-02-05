@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        android:title="Tasker Integration"
+        android:summary="Automate SSH connections with Tasker">
+
+        <SwitchPreferenceCompat
+            android:key="tasker_enabled"
+            android:title="Enable Tasker Integration"
+            android:summary="Allow Tasker to control SSH connections"
+            android:defaultValue="true"
+            android:icon="@drawable/ic_automation" />
+
+        <Preference
+            android:key="tasker_actions_help"
+            android:title="Available Actions"
+            android:summary="Tap to view supported Tasker actions"
+            android:selectable="true" />
+
+        <Preference
+            android:key="tasker_events_help"
+            android:title="Available Events"
+            android:summary="Tap to view broadcast events"
+            android:selectable="true" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="Security">
+
+        <SwitchPreferenceCompat
+            android:key="tasker_require_unlock"
+            android:title="Require App Unlock"
+            android:summary="Tasker actions require biometric/password"
+            android:defaultValue="false"
+            android:dependency="tasker_enabled"
+            android:icon="@drawable/ic_lock" />
+
+        <MultiSelectListPreference
+            android:key="tasker_allowed_connections"
+            android:title="Allowed Connections"
+            android:summary="Restrict Tasker to specific connections (empty = all)"
+            android:dependency="tasker_enabled" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="Advanced">
+
+        <SwitchPreferenceCompat
+            android:key="tasker_log_events"
+            android:title="Log Tasker Events"
+            android:summary="Log all Tasker actions to audit log"
+            android:defaultValue="true"
+            android:dependency="tasker_enabled" />
+
+        <EditTextPreference
+            android:key="tasker_command_timeout"
+            android:title="Command Timeout"
+            android:summary="Default timeout for command execution (ms)"
+            android:defaultValue="30000"
+            android:inputType="number"
+            android:dependency="tasker_enabled" />
+
+    </PreferenceCategory>
+
+</PreferenceScreen>

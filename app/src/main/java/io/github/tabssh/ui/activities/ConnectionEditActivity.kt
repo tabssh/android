@@ -61,6 +61,7 @@ class ConnectionEditActivity : AppCompatActivity() {
         setupProxyTypeSpinner()
         setupValidation()
         setupButtons()
+        setupPortKnockUI()
         
         // Load existing connection if editing
         intent.getStringExtra(EXTRA_CONNECTION_ID)?.let { connectionId ->
@@ -332,6 +333,7 @@ class ConnectionEditActivity : AppCompatActivity() {
         binding.editTerminalType.setText(profile.terminalType)
         binding.switchCompression.isChecked = profile.compression
         binding.switchKeepAlive.isChecked = profile.keepAlive
+        binding.switchX11Forwarding.isChecked = profile.x11Forwarding
 
         // Group
         selectedGroupId = profile.groupId
@@ -451,6 +453,7 @@ class ConnectionEditActivity : AppCompatActivity() {
         val terminalType = binding.editTerminalType.text.toString().takeIf { it.isNotBlank() } ?: "xterm-256color"
         val compression = binding.switchCompression.isChecked
         val keepAlive = binding.switchKeepAlive.isChecked
+        val x11Forwarding = binding.switchX11Forwarding.isChecked
 
         // Proxy/Jump Host settings
         val proxyTypeDisplay = binding.spinnerProxyType.text.toString()
@@ -495,6 +498,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             terminalType = terminalType,
             compression = compression,
             keepAlive = keepAlive,
+            x11Forwarding = x11Forwarding,
             groupId = selectedGroupId,
             proxyType = proxyType,
             proxyHost = proxyHost,
@@ -512,6 +516,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             terminalType = terminalType,
             compression = compression,
             keepAlive = keepAlive,
+            x11Forwarding = x11Forwarding,
             groupId = selectedGroupId,
             proxyType = proxyType,
             proxyHost = proxyHost,
@@ -1112,4 +1117,28 @@ class ConnectionEditActivity : AppCompatActivity() {
         onBackPressed()
         return true
     }
-}
+}    
+    private fun setupPortKnockUI() {
+        // Toggle configure button visibility based on switch
+        binding.switchPortKnock.setOnCheckedChangeListener { _, isChecked ->
+            binding.btnConfigurePortKnock.visibility = if (isChecked) {
+                android.view.View.VISIBLE
+            } else {
+                android.view.View.GONE
+            }
+        }
+        
+        // Configure knock sequence button
+        binding.btnConfigurePortKnock.setOnClickListener {
+            showPortKnockConfigDialog()
+        }
+    }
+    
+    private fun showPortKnockConfigDialog() {
+        android.widget.Toast.makeText(this, "Port knock configuration - coming soon", android.widget.Toast.LENGTH_SHORT).show()
+        // TODO: Implement port knock sequence editor dialog
+        // - Add/remove knock entries
+        // - Configure port and protocol (TCP/UDP) for each
+        // - Reorder sequence
+        // - Save as JSON to connection profile
+    }

@@ -253,7 +253,7 @@ We follow the [Kotlin Coding Conventions](https://kotlinlang.org/docs/coding-con
 
 **DO NOT** open public issues for security vulnerabilities.
 
-Instead, please email: **security@tabssh.dev**
+Instead, please email: **git-admin+security@casjaysdev.pro**
 
 We will respond within 48 hours and work with you to resolve the issue responsibly.
 
@@ -373,7 +373,7 @@ furnished to do so, subject to the following conditions:
 - 🐛 **Bug Reports:** [GitHub Issues](https://github.com/tabssh/android/issues)
 - 💡 **Feature Requests:** [GitHub Issues](https://github.com/tabssh/android/issues)
 - 💬 **Discussions:** [GitHub Discussions](https://github.com/tabssh/android/discussions)
-- 📧 **Email:** support@tabssh.dev
+- 📧 **Email:** git-admin+support@casjaysdev.pro
 - 📖 **Documentation:** [docs/](docs/)
 
 ### Social
