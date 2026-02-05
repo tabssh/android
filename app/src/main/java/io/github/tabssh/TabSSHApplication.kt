@@ -26,6 +26,7 @@ class TabSSHApplication : Application() {
     val terminalManager by lazy { TerminalManager(this) }
     val themeManager by lazy { ThemeManager(this) }
     val performanceManager by lazy { PerformanceManager(this) }
+    val auditLogManager by lazy { io.github.tabssh.audit.AuditLogManager(this, database, preferencesManager) }
     
     override fun onCreate() {
         super.onCreate()
