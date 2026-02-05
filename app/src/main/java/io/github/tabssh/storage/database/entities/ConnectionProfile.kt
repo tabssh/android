@@ -47,6 +47,18 @@ data class ConnectionProfile(
     @ColumnInfo(name = "keep_alive")
     val keepAlive: Boolean = true,
     
+    @ColumnInfo(name = "x11_forwarding")
+    val x11Forwarding: Boolean = false,
+    
+    @ColumnInfo(name = "port_knock_enabled")
+    val portKnockEnabled: Boolean? = null, // null = use global default, true/false = override
+    
+    @ColumnInfo(name = "port_knock_sequence")
+    val portKnockSequence: String? = null, // JSON: [{"port":7000,"protocol":"TCP"},{"port":8000,"protocol":"UDP"}]
+    
+    @ColumnInfo(name = "port_knock_delay_ms")
+    val portKnockDelayMs: Int = 100, // Delay between knocks in milliseconds
+    
     @ColumnInfo(name = "connect_timeout")
     val connectTimeout: Int = 15,
     
