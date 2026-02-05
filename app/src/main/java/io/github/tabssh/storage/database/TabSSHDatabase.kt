@@ -22,9 +22,11 @@ import io.github.tabssh.utils.logging.Logger
         SyncState::class,
         ConnectionGroup::class,
         Snippet::class,
-        Identity::class
+        Identity::class,
+        AuditLogEntry::class,
+        HypervisorProfile::class
     ],
-    version = 6,
+    version = 10,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -35,11 +37,23 @@ abstract class TabSSHDatabase : RoomDatabase() {
     abstract fun hostKeyDao(): HostKeyDao
     abstract fun tabSessionDao(): TabSessionDao
     abstract fun themeDao(): ThemeDao
+    abstract fun trustedCertDao(): TrustedCertDao
+    abstract fun syncStateDao(): SyncStateDao
+    abstract fun connectionGroupDao(): ConnectionGroupDao
+    abstract fun snippetDao(): SnippetDao
+    abstract fun identityDao(): IdentityDao
+    abstract fun auditLogDao(): AuditLogDao
+    abstract fun hypervisorDao(): HypervisorDao
+    
+    abstract fun hostKeyDao(): HostKeyDao
+    abstract fun tabSessionDao(): TabSessionDao
+    abstract fun themeDao(): ThemeDao
     abstract fun certificateDao(): CertificateDao
     abstract fun syncStateDao(): SyncStateDao
     abstract fun connectionGroupDao(): ConnectionGroupDao
     abstract fun snippetDao(): SnippetDao
     abstract fun identityDao(): IdentityDao
+    abstract fun auditLogDao(): AuditLogDao
     
     companion object {
         @Volatile
@@ -209,6 +223,57 @@ abstract class TabSSHDatabase : RoomDatabase() {
                 Logger.d("TabSSHDatabase", "Migration from version 5 to 6 completed successfully")
             }
         }
+        
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Add X11 forwarding field to connections table
+                database.execSQL("ALTER TABLE connections ADD COLUMN x11_forwarding INTEGER NOT NULL DEFAULT 0")
+                
+                Logger.d("TabSSHDatabase", "Migration from version 6 to 7 completed successfully")
+            }
+        }
+        
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Create audit log table
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS audit_log (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        connection_id TEXT NOT NULL,
+                        session_id TEXT NOT NULL,
+                        timestamp INTEGER NOT NULL,
+                        event_type TEXT NOT NULL,
+                        command TEXT,
+                        output TEXT,
+                        exit_code INTEGER,
+                        user TEXT NOT NULL,
+                        host TEXT NOT NULL,
+                        port INTEGER NOT NULL,
+                        size_bytes INTEGER NOT NULL DEFAULT 0,
+                        metadata TEXT,
+                        FOREIGN KEY(connection_id) REFERENCES connections(id) ON DELETE CASCADE
+                    )
+                """.trimIndent())
+                
+                // Create indexes for performance
+                database.execSQL("CREATE INDEX IF NOT EXISTS idx_audit_log_connection ON audit_log(connection_id)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS idx_audit_log_session ON audit_log(session_id)")
+                
+                Logger.d("TabSSHDatabase", "Migration from version 7 to 8 completed successfully")
+            }
+        }
+        
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Add port knock fields to connections table
+                database.execSQL("ALTER TABLE connections ADD COLUMN port_knock_enabled INTEGER") // null = use global
+                database.execSQL("ALTER TABLE connections ADD COLUMN port_knock_sequence TEXT")
+                database.execSQL("ALTER TABLE connections ADD COLUMN port_knock_delay_ms INTEGER NOT NULL DEFAULT 100")
+                
+                Logger.d("TabSSHDatabase", "Migration from version 8 to 9 completed successfully")
+            }
+        }
 
         fun getDatabase(context: Context): TabSSHDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -223,7 +288,11 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     MIGRATION_2_3,
                     MIGRATION_3_4,
                     MIGRATION_4_5,
-                    MIGRATION_5_6
+                    MIGRATION_5_6,
+                    MIGRATION_6_7,
+                    MIGRATION_7_8,
+                    MIGRATION_8_9,
+                    MIGRATION_9_10
                 )
                 .build()
                 INSTANCE = instance
@@ -313,3 +382,28 @@ data class DatabaseStats(
 /**
  * Type converters for Room database
  */
+
+        // Migration 9 -> 10: Add hypervisor management
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Create hypervisors table
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS hypervisors (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        name TEXT NOT NULL,
+                        type TEXT NOT NULL,
+                        host TEXT NOT NULL,
+                        port INTEGER NOT NULL,
+                        username TEXT NOT NULL,
+                        password TEXT NOT NULL,
+                        realm TEXT,
+                        verify_ssl INTEGER NOT NULL DEFAULT 0,
+                        notes TEXT,
+                        last_connected INTEGER NOT NULL DEFAULT 0,
+                        created_at INTEGER NOT NULL
+                    )
+                """.trimIndent())
+                
+                Logger.i("Database", "Migration 9->10: Added hypervisors table")
+            }
+        }
