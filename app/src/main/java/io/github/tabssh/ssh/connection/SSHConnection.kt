@@ -71,6 +71,9 @@ class SSHConnection(
                 
                 Logger.i("SSHConnection", "Connecting to ${profile.host}:${profile.port}")
 
+                // Execute port knock sequence if enabled
+                executePortKnockIfEnabled()
+
                 // Create JSch session with host key verification
                 val jsch = JSch()
 
@@ -92,6 +95,9 @@ class SSHConnection(
                 } else {
                     jsch.getSession(profile.username, profile.host, profile.port)
                 }
+
+                // Setup HTTP/SOCKS proxy if configured
+                setupHttpSocksProxy(newSession)
 
                 // Configure session
                 configureSession(newSession)
@@ -156,6 +162,52 @@ class SSHConnection(
         session.setConfig(config)
         
         Logger.d("SSHConnection", "Session configured with compression=${profile.compression}, keep-alive=${profile.keepAlive}")
+    }
+    
+    /**
+     * Execute port knock sequence if enabled
+     */
+    private suspend fun executePortKnockIfEnabled() {
+        // Check global default setting
+        val app = context.applicationContext as io.github.tabssh.TabSSHApplication
+        val globalDefault = app.preferencesManager.getBoolean("port_knock_enabled_default", false)
+        
+        // Check per-connection override (null = use global default)
+        val knockEnabled = profile.portKnockEnabled ?: globalDefault
+        
+        if (!knockEnabled || profile.portKnockSequence == null) {
+            Logger.d("SSHConnection", "Port knocking disabled or no sequence configured")
+            return
+        }
+        
+        try {
+            val knocker = io.github.tabssh.network.portknock.PortKnocker()
+            val sequence = knocker.parseKnockSequence(profile.portKnockSequence)
+            
+            if (sequence.isEmpty()) {
+                Logger.w("SSHConnection", "Empty knock sequence")
+                return
+            }
+            
+            Logger.i("SSHConnection", "Executing port knock sequence on ${profile.host}")
+            val success = knocker.executeKnockSequence(
+                profile.host,
+                sequence,
+                profile.portKnockDelayMs
+            )
+            
+            if (success) {
+                Logger.i("SSHConnection", "Port knock sequence completed successfully")
+                // Small delay to allow firewall to open port
+                delay(500)
+            } else {
+                Logger.w("SSHConnection", "Port knock sequence failed")
+            }
+            
+        } catch (e: Exception) {
+            Logger.e("SSHConnection", "Error executing port knock", e)
+            // Don't fail connection on knock failure - proceed anyway
+        }
     }
 
     /**
@@ -245,6 +297,46 @@ class SSHConnection(
             jumpHostSession?.disconnect()
             jumpHostSession = null
             throw SSHException("Jump host setup failed: ${e.message}", e)
+        }
+    }
+
+    /**
+     * Setup HTTP/SOCKS proxy if configured (for non-SSH proxies)
+     */
+    private fun setupHttpSocksProxy(session: Session) {
+        val proxyType = profile.proxyType ?: return
+        val proxyHost = profile.proxyHost ?: return
+        val proxyPort = profile.proxyPort ?: return
+
+        when (proxyType.uppercase()) {
+            "HTTP" -> {
+                Logger.i("SSHConnection", "Setting up HTTP proxy: $proxyHost:$proxyPort")
+                val proxy = ProxyHTTP(proxyHost, proxyPort)
+                profile.proxyUsername?.let { username ->
+                    proxy.setUserPasswd(username, "") // Password not commonly used for HTTP proxies
+                }
+                session.setProxy(proxy)
+            }
+            "SOCKS4" -> {
+                Logger.i("SSHConnection", "Setting up SOCKS4 proxy: $proxyHost:$proxyPort")
+                val proxy = ProxySOCKS4(proxyHost, proxyPort)
+                profile.proxyUsername?.let { username ->
+                    proxy.setUserPasswd(username, "")
+                }
+                session.setProxy(proxy)
+            }
+            "SOCKS5" -> {
+                Logger.i("SSHConnection", "Setting up SOCKS5 proxy: $proxyHost:$proxyPort")
+                val proxy = ProxySOCKS5(proxyHost, proxyPort)
+                profile.proxyUsername?.let { username ->
+                    proxy.setUserPasswd(username, "")
+                }
+                session.setProxy(proxy)
+            }
+            else -> {
+                // SSH jump host or unknown - ignore (SSH jump host handled separately)
+                Logger.d("SSHConnection", "Proxy type $proxyType not applicable for HTTP/SOCKS setup")
+            }
         }
     }
 
