@@ -93,6 +93,38 @@
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- Cluster Command activity -->
+        <activity
+            android:name=".ui.activities.ClusterCommandActivity"
+            android:exported="false"
+            android:label="Cluster Commands"
+            android:parentActivityName=".ui.activities.MainActivity"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- Proxmox Manager activity -->
+        <activity
+            android:name=".ui.activities.ProxmoxManagerActivity"
+            android:exported="false"
+            android:label="Proxmox Manager"
+            android:parentActivityName=".ui.activities.MainActivity"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- XCP-ng Manager activity -->
+        <activity
+            android:name=".ui.activities.XCPngManagerActivity"
+            android:exported="false"
+            android:label="XCP-ng Manager"
+            android:parentActivityName=".ui.activities.MainActivity"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- VMware Manager activity -->
+        <activity
+            android:name=".ui.activities.VMwareManagerActivity"
+            android:exported="false"
+            android:label="VMware Manager"
+            android:parentActivityName=".ui.activities.MainActivity"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- SFTP file browser activity -->
         <activity
             android:name=".ui.activities.SFTPActivity"
@@ -114,6 +146,19 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- Tasker integration service -->
+        <service
+            android:name=".automation.TaskerIntentService"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="io.github.tabssh.action.CONNECT" />
+                <action android:name="io.github.tabssh.action.DISCONNECT" />
+                <action android:name="io.github.tabssh.action.SEND_COMMAND" />
+                <action android:name="io.github.tabssh.action.SEND_KEYS" />
+            </intent-filter>
+        </service>
 
         <!-- File provider for sharing files -->
         <provider
