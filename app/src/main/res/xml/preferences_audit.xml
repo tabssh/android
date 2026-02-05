@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.preference.PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory android:title="Audit Logging">
+        
+        <SwitchPreferenceCompat
+            android:key="audit_log_enabled"
+            android:title="Enable Audit Logging"
+            android:summary="Record terminal commands and events (Default: OFF for privacy)"
+            android:defaultValue="false"
+            android:icon="@android:drawable/ic_menu_save" />
+
+        <EditTextPreference
+            android:key="audit_log_max_size_mb"
+            android:title="Max Log Size (MB)"
+            android:summary="Maximum size for audit logs"
+            android:defaultValue="100"
+            android:inputType="number"
+            android:dependency="audit_log_enabled"
+            app:useSimpleSummaryProvider="true" />
+
+        <EditTextPreference
+            android:key="audit_log_max_age_days"
+            android:title="Max Log Age (Days)"
+            android:summary="Automatically delete logs older than this"
+            android:defaultValue="30"
+            android:inputType="number"
+            android:dependency="audit_log_enabled"
+            app:useSimpleSummaryProvider="true" />
+
+        <SwitchPreferenceCompat
+            android:key="audit_log_commands"
+            android:title="Log Commands"
+            android:summary="Record terminal commands"
+            android:defaultValue="true"
+            android:dependency="audit_log_enabled" />
+
+        <SwitchPreferenceCompat
+            android:key="audit_log_output"
+            android:title="Log Command Output"
+            android:summary="Record command output (increases size)"
+            android:defaultValue="false"
+            android:dependency="audit_log_enabled" />
+
+        <SwitchPreferenceCompat
+            android:key="audit_log_auto_cleanup"
+            android:title="Auto Cleanup"
+            android:summary="Automatically clean up old logs"
+            android:defaultValue="true"
+            android:dependency="audit_log_enabled" />
+
+        <Preference
+            android:key="audit_log_viewer"
+            android:title="View Audit Logs"
+            android:summary="Browse audit log entries"
+            android:dependency="audit_log_enabled" />
+
+        <Preference
+            android:key="audit_log_clear"
+            android:title="Clear All Logs"
+            android:summary="Delete all audit log entries"
+            android:dependency="audit_log_enabled" />
+
+    </PreferenceCategory>
+
+</androidx.preference.PreferenceScreen>

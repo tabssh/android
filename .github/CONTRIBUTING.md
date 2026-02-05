@@ -28,7 +28,7 @@ This project adheres to a Code of Conduct that all contributors are expected to 
 - **Be professional** - Keep discussions focused and on-topic
 - **No harassment** - Zero tolerance for harassment of any kind
 
-If you experience or witness unacceptable behavior, please report it to conduct@tabssh.dev.
+If you experience or witness unacceptable behavior, please report it to git-admin+conduct@casjaysdev.pro.
 
 ---
 
@@ -579,7 +579,7 @@ Use the [Feature Request template](.github/ISSUE_TEMPLATE/feature_request.yml) a
 
 - **GitHub Issues:** Bug reports and feature requests
 - **GitHub Discussions:** Q&A, ideas, and general discussion
-- **Email:** support@tabssh.dev
+- **Email:** git-admin+support@casjaysdev.pro
 - **Twitter:** [@tabssh](https://twitter.com/tabssh)
 - **Matrix:** [#tabssh:matrix.org](https://matrix.to/#/#tabssh:matrix.org)
 
@@ -626,7 +626,7 @@ See [LICENSE.md](../LICENSE.md) for details.
 If you have questions about contributing:
 
 - Open a [GitHub Discussion](https://github.com/tabssh/android/discussions)
-- Email us at contribute@tabssh.dev
+- Email us at git-admin+contribute@casjaysdev.pro
 - Check the [FAQ in README](../README.md#faq)
 
 ---

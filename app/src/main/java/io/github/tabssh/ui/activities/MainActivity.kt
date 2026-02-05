@@ -64,6 +64,10 @@ class MainActivity : AppCompatActivity() {
         uri?.let { importBackupFromUri(it) }
     }
 
+    private val importSSHConfigLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { importSSHConfigFromUri(it) }
+    }
+
     private val exportBackupLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         uri?.let { exportBackupToUri(it) }
     }
@@ -194,6 +198,26 @@ class MainActivity : AppCompatActivity() {
                 startActivity(intent)
                 true
             }
+            R.id.action_cluster_commands -> {
+                val intent = Intent(this, ClusterCommandActivity::class.java)
+                startActivity(intent)
+                true
+            }
+            R.id.action_proxmox -> {
+                val intent = Intent(this, ProxmoxManagerActivity::class.java)
+                startActivity(intent)
+                true
+            }
+            R.id.action_xcpng -> {
+                val intent = Intent(this, XCPngManagerActivity::class.java)
+                startActivity(intent)
+                true
+            }
+            R.id.action_vmware -> {
+                val intent = Intent(this, VMwareManagerActivity::class.java)
+                startActivity(intent)
+                true
+            }
             R.id.action_manage_identities -> {
                 val intent = Intent(this, IdentityManagementActivity::class.java)
                 startActivity(intent)
@@ -211,6 +235,10 @@ class MainActivity : AppCompatActivity() {
             }
             R.id.action_import_connections -> {
                 importBackupLauncher.launch(arrayOf("application/zip", "application/octet-stream"))
+                true
+            }
+            R.id.action_import_ssh_config -> {
+                importSSHConfigLauncher.launch(arrayOf("text/plain", "*/*"))
                 true
             }
             R.id.action_export_connections -> {
@@ -940,6 +968,51 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e("MainActivity", "Import failed", e)
                 showToast("Import failed: ${e.message}")
+            }
+        }
+    }
+
+    private fun importSSHConfigFromUri(uri: Uri) {
+        lifecycleScope.launch {
+            try {
+                val configContent = contentResolver.openInputStream(uri)?.use { inputStream ->
+                    inputStream.bufferedReader().use { it.readText() }
+                } ?: throw Exception("Failed to read SSH config file")
+
+                val parser = io.github.tabssh.ssh.config.SSHConfigParser()
+                val profiles = parser.parseConfig(configContent)
+
+                if (profiles.isEmpty()) {
+                    showToast("No valid host configurations found in SSH config")
+                    return@launch
+                }
+
+                // Insert all parsed profiles into database
+                var importedCount = 0
+                profiles.forEach { profile ->
+                    try {
+                        app.database.connectionDao().insertConnection(profile)
+                        importedCount++
+                    } catch (e: Exception) {
+                        Logger.w("MainActivity", "Skipped duplicate or invalid host: ${profile.name}", e)
+                    }
+                }
+
+                // Refresh the connection list
+                loadConnections()
+
+                // Show success dialog
+                android.app.AlertDialog.Builder(this@MainActivity)
+                    .setTitle("SSH Config Imported")
+                    .setMessage("Successfully imported $importedCount connection(s) from SSH config file.")
+                    .setPositiveButton("OK", null)
+                    .show()
+
+                Logger.i("MainActivity", "Imported $importedCount connections from SSH config")
+
+            } catch (e: Exception) {
+                Logger.e("MainActivity", "Failed to import SSH config", e)
+                showToast("Failed to import SSH config: ${e.message}")
             }
         }
     }

@@ -57,9 +57,9 @@
         <EditTextPreference
             android:key="terminal_scrollback"
             android:title="Scrollback Buffer"
-            android:summary="Number of lines to keep in history"
-            android:defaultValue="2000"
-            android:inputType="number"
+            android:summary="Lines in history (250 min, -1 unlimited)"
+            android:defaultValue="-1"
+            android:inputType="numberSigned"
             app:useSimpleSummaryProvider="true" />
 
         <SwitchPreferenceCompat

@@ -233,11 +233,17 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
             val lines = newValue as String
             try {
                 val numLines = lines.toInt()
-                if (numLines < 100 || numLines > 50000) {
-                    android.widget.Toast.makeText(requireContext(), "Scrollback must be between 100-50000 lines", android.widget.Toast.LENGTH_SHORT).show()
+                // -1 = unlimited, minimum 250 lines
+                if (numLines != -1 && numLines < 250) {
+                    android.widget.Toast.makeText(requireContext(), "Scrollback minimum is 250 lines (or -1 for unlimited)", android.widget.Toast.LENGTH_SHORT).show()
                     return@setOnPreferenceChangeListener false
                 }
-                android.widget.Toast.makeText(requireContext(), "Scrollback: $numLines lines", android.widget.Toast.LENGTH_SHORT).show()
+                if (numLines > 100000 && numLines != -1) {
+                    android.widget.Toast.makeText(requireContext(), "Scrollback maximum is 100,000 lines", android.widget.Toast.LENGTH_SHORT).show()
+                    return@setOnPreferenceChangeListener false
+                }
+                val message = if (numLines == -1) "Scrollback: Unlimited" else "Scrollback: $numLines lines"
+                android.widget.Toast.makeText(requireContext(), message, android.widget.Toast.LENGTH_SHORT).show()
                 Logger.i("Settings", "Scrollback buffer changed to: $numLines")
                 true
             } catch (e: NumberFormatException) {
@@ -299,5 +305,133 @@ class ConnectionSettingsFragment : PreferenceFragmentCompat() {
             Logger.i("Settings", "Keep-alive interval changed to: $seconds")
             true
         }
+    }
+}
+
+/**
+ * Audit Log Settings Fragment
+ */
+class AuditSettingsFragment : PreferenceFragmentCompat() {
+    override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
+        setPreferencesFromResource(R.xml.preferences_audit, rootKey)
+        
+        val app = requireActivity().application as TabSSHApplication
+        
+        // View logs button
+        findPreference<Preference>("audit_log_viewer")?.setOnPreferenceClickListener {
+            android.widget.Toast.makeText(requireContext(), "Audit log viewer - coming soon", android.widget.Toast.LENGTH_SHORT).show()
+            true
+        }
+        
+        // Clear logs button
+        findPreference<Preference>("audit_log_clear")?.setOnPreferenceClickListener {
+            androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setTitle("Clear Audit Logs")
+                .setMessage("Delete all audit log entries? This cannot be undone.")
+                .setPositiveButton("Clear") { _, _ ->
+                    lifecycleScope.launch {
+                        app.auditLogManager.deleteAllLogs()
+                        android.widget.Toast.makeText(requireContext(), "Audit logs cleared", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+            true
+        }
+        
+        Logger.d("AuditSettingsFragment", "Settings view created")
+    }
+}
+
+class TaskerSettingsFragment : PreferenceFragmentCompat() {
+    override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
+        setPreferencesFromResource(R.xml.preferences_tasker, rootKey)
+        
+        // Actions help
+        findPreference<Preference>("tasker_actions_help")?.setOnPreferenceClickListener {
+            showActionsHelp()
+            true
+        }
+        
+        // Events help
+        findPreference<Preference>("tasker_events_help")?.setOnPreferenceClickListener {
+            showEventsHelp()
+            true
+        }
+        
+        // Load connection list for allowed connections
+        val app = requireActivity().application as TabSSHApplication
+        lifecycleScope.launch {
+            val connections = app.database.connectionDao().getAllConnections()
+            val entries = connections.map { it.name }.toTypedArray()
+            val values = connections.map { it.id.toString() }.toTypedArray()
+            
+            findPreference<androidx.preference.MultiSelectListPreference>("tasker_allowed_connections")?.apply {
+                this.entries = entries
+                this.entryValues = values
+            }
+        }
+    }
+    
+    private fun showActionsHelp() {
+        val message = """
+            Available Tasker Actions:
+            
+            📱 CONNECT
+            Connect to SSH server
+            Extras: connection_id or connection_name
+            
+            📴 DISCONNECT
+            Disconnect from server
+            Extras: connection_id or connection_name
+            
+            ⌨️ SEND_COMMAND
+            Execute command
+            Extras: connection_id/name, command, wait_for_result, timeout_ms
+            
+            🔑 SEND_KEYS
+            Send key sequence
+            Extras: connection_id/name, keys
+            
+            Examples:
+            - Keys: "Enter", "Tab", "Ctrl+C"
+            - Command: "ls -la" with wait_for_result=true
+        """.trimIndent()
+        
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Tasker Actions")
+            .setMessage(message)
+            .setPositiveButton("OK", null)
+            .show()
+    }
+    
+    private fun showEventsHelp() {
+        val message = """
+            Broadcast Events:
+            
+            ✅ CONNECTED
+            Broadcast when connection established
+            Extras: connection_id, connection_name
+            
+            ❌ DISCONNECTED
+            Broadcast when connection closed
+            Extras: connection_id, connection_name
+            
+            📊 COMMAND_RESULT
+            Broadcast command output
+            Extras: connection_id, connection_name, command, result
+            
+            ⚠️ ERROR
+            Broadcast when error occurs
+            Extras: error
+            
+            Use these in Tasker with Event → Intent Received
+        """.trimIndent()
+        
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Tasker Events")
+            .setMessage(message)
+            .setPositiveButton("OK", null)
+            .show()
     }
 }

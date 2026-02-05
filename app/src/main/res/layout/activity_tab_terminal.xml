@@ -59,13 +59,22 @@
             app:showScrollbar="true"
             app:scrollbackLines="1000" />
 
+        <!-- Custom Keyboard Bar -->
+        <io.github.tabssh.ui.keyboard.CustomKeyboardView
+            android:id="@+id/custom_keyboard"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="?attr/colorSurfaceVariant"
+            android:visibility="visible" />
+
         <!-- Function keys row -->
         <HorizontalScrollView
             android:id="@+id/function_keys_container"
             android:layout_width="match_parent"
             android:layout_height="@dimen/function_key_height"
             android:background="?attr/colorSurfaceVariant"
-            android:scrollbars="none">
+            android:scrollbars="none"
+            android:visibility="gone">
 
             <LinearLayout
                 android:layout_width="wrap_content"

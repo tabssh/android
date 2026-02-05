@@ -2,55 +2,55 @@
 <resources>
     <!-- App name -->
     <string name="app_name">TabSSH</string>
-    <string name="app_name_debug">TabSSH Debug 🐛</string>
+    <string name="app_name_debug">TabSSH Debug</string>
 
     <!-- Main activity -->
-    <string name="main_activity_title">📱 TabSSH</string>
-    <string name="quick_connect_title">⚡ Quick Connect</string>
-    <string name="frequently_used_title">⭐ Frequently Used</string>
-    <string name="connections_title">🌐 My Servers</string>
-    <string name="host_hint">🌐 Hostname or IP</string>
-    <string name="port_hint">🔌 Port (default: 22)</string>
-    <string name="username_hint">👤 Username</string>
-    <string name="connect_button">🚀 Connect</string>
-    <string name="add_connection">➕ Add Server</string>
-    <string name="search_connections">🔍 Search servers…</string>
-    <string name="no_connections_title">📭 No Servers Yet</string>
-    <string name="no_connections_message">✨ Add your first SSH server to get started!\n\nTap the ➕ button to create a connection.</string>
+    <string name="main_activity_title">TabSSH</string>
+    <string name="quick_connect_title">Quick Connect</string>
+    <string name="frequently_used_title">Frequently Used</string>
+    <string name="connections_title">My Servers</string>
+    <string name="host_hint">Hostname or IP address</string>
+    <string name="port_hint">Port (default: 22)</string>
+    <string name="username_hint">Username</string>
+    <string name="connect_button">Connect</string>
+    <string name="add_connection">Add Server</string>
+    <string name="search_connections">Search servers…</string>
+    <string name="no_connections_title">No Servers Yet</string>
+    <string name="no_connections_message">Add your first SSH server to get started.\n\nTap the + button to create a connection.</string>
 
     <!-- Connection management -->
-    <string name="connection_name_hint">✏️ Connection name (e.g., "My VPS")</string>
-    <string name="connection_host_hint">🌐 hostname or IP address</string>
+    <string name="connection_name_hint">Connection name (e.g., "My VPS")</string>
+    <string name="connection_host_hint">Hostname or IP address</string>
     <string name="connection_port_hint">22</string>
-    <string name="connection_username_hint">👤 username</string>
-    <string name="save_connection">💾 Save</string>
-    <string name="edit_connection">✏️ Edit Connection</string>
-    <string name="delete_connection">🗑️ Delete Connection</string>
-    <string name="duplicate_connection">📋 Duplicate Connection</string>
-    <string name="connection_saved">✅ Connection saved successfully!</string>
-    <string name="connection_deleted">🗑️ Connection deleted</string>
+    <string name="connection_username_hint">Username</string>
+    <string name="save_connection">Save</string>
+    <string name="edit_connection">Edit Connection</string>
+    <string name="delete_connection">Delete Connection</string>
+    <string name="duplicate_connection">Duplicate Connection</string>
+    <string name="connection_saved">Connection saved successfully</string>
+    <string name="connection_deleted">Connection deleted</string>
     
     <!-- Authentication -->
-    <string name="auth_type_password">🔑 Password</string>
-    <string name="auth_type_public_key">🔐 Public Key (SSH Key)</string>
-    <string name="auth_type_keyboard_interactive">⌨️ Keyboard Interactive</string>
-    <string name="password_hint">🔒 Password</string>
-    <string name="select_key">🔑 Select SSH Key</string>
-    <string name="generate_key">✨ Generate New Key</string>
-    <string name="import_key">📥 Import Key</string>
+    <string name="auth_type_password">Password</string>
+    <string name="auth_type_public_key">Public Key (SSH Key)</string>
+    <string name="auth_type_keyboard_interactive">Keyboard Interactive</string>
+    <string name="password_hint">Password</string>
+    <string name="select_key">Select SSH Key</string>
+    <string name="generate_key">Generate New Key</string>
+    <string name="import_key">Import Key</string>
     
     <!-- Terminal activity -->
-    <string name="terminal_activity_title">💻 Terminal</string>
-    <string name="new_tab">➕ New Tab</string>
-    <string name="close_tab">❌ Close Tab</string>
-    <string name="tab_menu">📑 Tab Menu</string>
-    <string name="function_keys">🔤 Function Keys</string>
-    <string name="show_keyboard">⌨️ Show Keyboard</string>
-    <string name="hide_keyboard">⌨️ Hide Keyboard</string>
-    <string name="paste">📋 Paste</string>
-    <string name="copy">📋 Copy</string>
-    <string name="select_all">🔲 Select All</string>
-    <string name="open_files">📁 Files</string>
+    <string name="terminal_activity_title">Terminal</string>
+    <string name="new_tab">New Tab</string>
+    <string name="close_tab">Close Tab</string>
+    <string name="tab_menu">Tab Menu</string>
+    <string name="function_keys">Function Keys</string>
+    <string name="show_keyboard">Show Keyboard</string>
+    <string name="hide_keyboard">Hide Keyboard</string>
+    <string name="paste">Paste</string>
+    <string name="copy">Copy</string>
+    <string name="select_all">Select All</string>
+    <string name="open_files">Files</string>
 
     <!-- Accessibility strings -->
     <string name="accessibility_terminal">SSH Terminal</string>
@@ -60,32 +60,32 @@
     <string name="accessibility_scroll_down">Scroll down</string>
     
     <!-- Connection status -->
-    <string name="status_connecting">🔄 Connecting…</string>
-    <string name="status_connected">✅ Connected</string>
-    <string name="status_disconnected">⚪ Disconnected</string>
-    <string name="status_error">❌ Error</string>
-    <string name="status_authenticating">🔐 Authenticating…</string>
+    <string name="status_connecting">Connecting…</string>
+    <string name="status_connected">Connected</string>
+    <string name="status_disconnected">Disconnected</string>
+    <string name="status_error">Error</string>
+    <string name="status_authenticating">Authenticating…</string>
     
     <!-- Errors -->
-    <string name="error_connection_failed">❌ Connection failed</string>
-    <string name="error_authentication_failed">🔐 Authentication failed - check your credentials</string>
-    <string name="error_host_key_changed">⚠️ Host key has changed!</string>
-    <string name="error_host_key_unknown">❓ Unknown host key - first time connecting</string>
-    <string name="error_network_unreachable">📡 Network unreachable - check your internet</string>
-    <string name="error_connection_timeout">⏱️ Connection timeout - server didn\'t respond</string>
-    <string name="error_invalid_host">❌ Invalid hostname or IP address</string>
-    <string name="error_invalid_port">❌ Invalid port (must be 1-65535)</string>
-    <string name="error_permission_denied">🚫 Permission denied - check credentials</string>
+    <string name="error_connection_failed">Connection failed</string>
+    <string name="error_authentication_failed">Authentication failed - check your credentials</string>
+    <string name="error_host_key_changed">Host key has changed!</string>
+    <string name="error_host_key_unknown">Unknown host key - first time connecting</string>
+    <string name="error_network_unreachable">Network unreachable - check your internet connection</string>
+    <string name="error_connection_timeout">Connection timeout - server didn\'t respond</string>
+    <string name="error_invalid_host">Invalid hostname or IP address</string>
+    <string name="error_invalid_port">Invalid port (must be 1-65535)</string>
+    <string name="error_permission_denied">Permission denied - check credentials</string>
     
     <!-- Settings -->
-    <string name="settings_title">⚙️ Settings</string>
-    <string name="settings_general">🎛️ General</string>
-    <string name="settings_terminal">💻 Terminal</string>
-    <string name="settings_security">🔐 Security &amp; Privacy</string>
-    <string name="settings_interface">🎨 Interface</string>
-    <string name="settings_connections">🌐 Connections</string>
-    <string name="settings_accessibility">♿ Accessibility</string>
-    <string name="settings_about">ℹ️ About TabSSH</string>
+    <string name="settings_title">Settings</string>
+    <string name="settings_general">General</string>
+    <string name="settings_terminal">Terminal</string>
+    <string name="settings_security">Security &amp; Privacy</string>
+    <string name="settings_interface">Interface</string>
+    <string name="settings_connections">Connections</string>
+    <string name="settings_accessibility">Accessibility</string>
+    <string name="settings_about">About TabSSH</string>
     
     <!-- General settings -->
     <string name="pref_startup_behavior">Startup Behavior</string>
@@ -136,62 +136,65 @@
     <string name="accessibility_connecting">Connecting</string>
     
     <!-- File operations -->
-    <string name="file_browser_title">📁 File Browser</string>
-    <string name="local_files">📱 Local Files</string>
-    <string name="remote_files">🌐 Remote Files</string>
-    <string name="upload_file">⬆️ Upload</string>
-    <string name="download_file">⬇️ Download</string>
-    <string name="new_folder">📁 New Folder</string>
-    <string name="delete_file">🗑️ Delete</string>
-    <string name="rename_file">✏️ Rename</string>
-    <string name="file_properties">ℹ️ Properties</string>
-    <string name="transfer_progress">📊 Transfer Progress</string>
-    <string name="transfer_complete">✅ Transfer complete!</string>
-    <string name="transfer_failed">❌ Transfer failed</string>
+    <string name="file_browser_title">File Browser</string>
+    <string name="local_files">Local Files</string>
+    <string name="remote_files">Remote Files</string>
+    <string name="upload_file">Upload</string>
+    <string name="download_file">Download</string>
+    <string name="new_folder">New Folder</string>
+    <string name="delete_file">Delete</string>
+    <string name="rename_file">Rename</string>
+    <string name="file_properties">Properties</string>
+    <string name="transfer_progress">Transfer Progress</string>
+    <string name="transfer_complete">Transfer complete</string>
+    <string name="transfer_failed">Transfer failed</string>
     
     <!-- Biometric authentication -->
-    <string name="biometric_title">🔐 Authenticate</string>
-    <string name="biometric_subtitle">👆 Use your fingerprint or face to unlock</string>
-    <string name="biometric_description">🔒 Secure access to your stored passwords</string>
-    <string name="biometric_negative">❌ Cancel</string>
-    <string name="biometric_error">❌ Authentication failed - please try again</string>
-    <string name="biometric_not_available">⚠️ Biometric authentication not available on this device</string>
+    <string name="biometric_title">Authenticate</string>
+    <string name="biometric_subtitle">Use your fingerprint or face to unlock</string>
+    <string name="biometric_description">Secure access to your stored passwords</string>
+    <string name="biometric_negative">Cancel</string>
+    <string name="biometric_error">Authentication failed - please try again</string>
+    <string name="biometric_not_available">Biometric authentication not available on this device</string>
     
     <!-- About -->
-    <string name="about_version">📦 Version</string>
-    <string name="about_build">🔨 Build</string>
-    <string name="about_license">📜 License (MIT)</string>
-    <string name="about_source_code">💻 Source Code</string>
-    <string name="about_website">🌐 Website</string>
-    <string name="about_privacy_policy">🔒 Privacy Policy</string>
-    <string name="about_open_source_licenses">📚 Open Source Licenses</string>
+    <string name="about_version">Version</string>
+    <string name="about_build">Build</string>
+    <string name="about_license">License (MIT)</string>
+    <string name="about_source_code">Source Code</string>
+    <string name="about_website">Website</string>
+    <string name="about_privacy_policy">Privacy Policy</string>
+    <string name="about_open_source_licenses">Open Source Licenses</string>
     
     <!-- Common actions -->
-    <string name="ok">✅ OK</string>
-    <string name="cancel">❌ Cancel</string>
-    <string name="yes">✅ Yes</string>
-    <string name="no">❌ No</string>
-    <string name="close">❌ Close</string>
-    <string name="save">💾 Save</string>
-    <string name="delete">🗑️ Delete</string>
-    <string name="edit">✏️ Edit</string>
-    <string name="share">📤 Share</string>
-    <string name="retry">🔄 Retry</string>
-    <string name="dismiss">👋 Dismiss</string>
+    <string name="ok">OK</string>
+    <string name="cancel">Cancel</string>
+    <string name="yes">Yes</string>
+    <string name="no">No</string>
+    <string name="close">Close</string>
+    <string name="save">Save</string>
+    <string name="delete">Delete</string>
+    <string name="edit">Edit</string>
+    <string name="share">Share</string>
+    <string name="retry">Retry</string>
+    <string name="dismiss">Dismiss</string>
 
-    <!-- Additional beautiful strings -->
-    <string name="welcome_message">👋 Welcome to TabSSH!</string>
-    <string name="first_launch_hint">💡 Tip: Create your first connection to get started</string>
-    <string name="connecting_to">🔄 Connecting to %s…</string>
-    <string name="connected_to">✅ Connected to %s</string>
-    <string name="disconnected_from">⚪ Disconnected from %s</string>
-    <string name="tab_count">📑 %d tabs open</string>
-    <string name="bytes_transferred">📊 Transferred: %s</string>
-    <string name="session_duration">⏱️ Session: %s</string>
-    <string name="fingerprint_verified">✅ Host key verified</string>
-    <string name="secure_connection">🔐 Secure connection established</string>
+    <!-- Status messages with visual indicators (emojis kept for status) -->
+    <string name="welcome_message">Welcome to TabSSH!</string>
+    <string name="first_launch_hint">Tip: Create your first connection to get started</string>
+    <string name="connecting_to">Connecting to %s…</string>
+    <string name="connected_to">✓ Connected to %s</string>
+    <string name="disconnected_from">Disconnected from %s</string>
+    <string name="tab_count">%d tabs open</string>
+    <string name="bytes_transferred">Transferred: %s</string>
+    <string name="session_duration">Session: %s</string>
+    <string name="fingerprint_verified">✓ Host key verified</string>
+    <string name="secure_connection">✓ Secure connection established</string>
 
     <!-- Widget -->
-    <string name="widget_description">🚀 Quick Connect to your favorite SSH server</string>
+    <string name="widget_description">Quick Connect to your favorite SSH server</string>
+
+    <!-- Cluster commands -->
+    <string name="cluster_progress">%1$d/%2$d completed (%3$d success, %4$d failed)</string>
 
 </resources>

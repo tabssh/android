@@ -19,13 +19,36 @@ data class TerminalChar(
 /**
  * Terminal buffer for storing character grid and scrollback
  */
-class TerminalBuffer(private var rows: Int, private var cols: Int) {
+class TerminalBuffer(
+    private var rows: Int, 
+    private var cols: Int,
+    private var maxScrollbackLines: Int = -1 // -1 = unlimited
+) {
 
     private var screen = Array(rows) { Array(cols) { TerminalChar(' ', 7, 0, false, false, false) } }
     private val scrollback = mutableListOf<Array<TerminalChar>>()
     private var cursorX = 0
     private var cursorY = 0
     private var title = "Terminal"
+
+    /**
+     * Update scrollback limit (minimum 250, -1 for unlimited)
+     */
+    fun setScrollbackLimit(lines: Int) {
+        maxScrollbackLines = when {
+            lines == -1 -> -1 // unlimited
+            lines < 250 -> 250 // enforce minimum
+            else -> lines
+        }
+        
+        // Trim existing scrollback if needed
+        if (maxScrollbackLines != -1 && scrollback.size > maxScrollbackLines) {
+            val toRemove = scrollback.size - maxScrollbackLines
+            repeat(toRemove) {
+                scrollback.removeAt(0)
+            }
+        }
+    }
 
     fun getRows(): Int = rows
     fun getCols(): Int = cols
@@ -62,8 +85,8 @@ class TerminalBuffer(private var rows: Int, private var cols: Int) {
         // Clear last line
         screen[rows - 1] = Array(cols) { TerminalChar(' ', 7, 0, false, false, false) }
         
-        // Limit scrollback size
-        if (scrollback.size > 1000) {
+        // Limit scrollback size based on preference
+        if (maxScrollbackLines != -1 && scrollback.size > maxScrollbackLines) {
             scrollback.removeAt(0)
         }
     }
