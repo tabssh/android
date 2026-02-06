@@ -54,7 +54,7 @@ class CustomKeyboardView @JvmOverloads constructor(
      * Create button for a key
      */
     private fun createKeyButton(key: KeyboardKey): MaterialButton {
-        val button = MaterialButton(context, null, R.attr.materialButtonOutlinedStyle)
+        val button = MaterialButton(context, null, com.google.android.material.R.attr.materialButtonOutlinedStyle)
         
         // Set dimensions
         val params = LinearLayout.LayoutParams(
