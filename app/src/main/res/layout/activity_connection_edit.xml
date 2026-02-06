@@ -102,7 +102,8 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:inputType="number"
-                                android:text="22" />
+                                android:text="22"
+                                android:tooltipText="Default SSH port is 22" />
 
                         </com.google.android.material.textfield.TextInputLayout>
 
@@ -159,7 +160,8 @@
                             android:id="@+id/spinner_auth_type"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:inputType="none" />
+                            android:inputType="none"
+                            android:tooltipText="Choose how to authenticate with server" />
 
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -198,7 +200,8 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:text="Save password securely"
-                                android:textColor="#212121" />
+                                android:textColor="#212121"
+                                android:tooltipText="Encrypted with hardware-backed keystore" />
 
                         </LinearLayout>
 
@@ -223,7 +226,8 @@
                                 android:id="@+id/spinner_ssh_key"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:inputType="none" />
+                                android:inputType="none"
+                                android:tooltipText="Public key authentication (more secure)" />
 
                         </com.google.android.material.textfield.TextInputLayout>
 
@@ -274,7 +278,8 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="text"
-                            android:text="xterm-256color" />
+                            android:text="xterm-256color"
+                            android:tooltipText="xterm-256color for best compatibility" />
 
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -285,7 +290,8 @@
                         android:layout_marginTop="@dimen/space_md"
                         android:text="Enable Compression"
                         android:textColor="#212121"
-                        android:checked="true" />
+                        android:checked="true"
+                        android:tooltipText="Reduce bandwidth usage on slow connections" />
 
                     <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/switch_keep_alive"
@@ -294,7 +300,8 @@
                         android:layout_marginTop="@dimen/space_sm"
                         android:text="Keep Alive"
                         android:textColor="#212121"
-                        android:checked="true" />
+                        android:checked="true"
+                        android:tooltipText="Prevents connection timeout on idle" />
 
                     <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/switch_x11_forwarding"
@@ -303,7 +310,8 @@
                         android:layout_marginTop="@dimen/space_sm"
                         android:text="X11 Forwarding (Run GUI apps)"
                         android:textColor="#212121"
-                        android:checked="false" />
+                        android:checked="false"
+                        android:tooltipText="Forward X11 display to run graphical apps" />
 
                     <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/switch_port_knock"
