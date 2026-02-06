@@ -37,7 +37,6 @@ abstract class TabSSHDatabase : RoomDatabase() {
     abstract fun hostKeyDao(): HostKeyDao
     abstract fun tabSessionDao(): TabSessionDao
     abstract fun themeDao(): ThemeDao
-    abstract fun trustedCertDao(): TrustedCertDao
     abstract fun certificateDao(): CertificateDao
     abstract fun syncStateDao(): SyncStateDao
     abstract fun connectionGroupDao(): ConnectionGroupDao
