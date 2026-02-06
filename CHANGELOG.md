@@ -1,0 +1,1 @@
+fdroid-submission/CHANGELOG.md
