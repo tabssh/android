@@ -38,22 +38,13 @@ abstract class TabSSHDatabase : RoomDatabase() {
     abstract fun tabSessionDao(): TabSessionDao
     abstract fun themeDao(): ThemeDao
     abstract fun trustedCertDao(): TrustedCertDao
-    abstract fun syncStateDao(): SyncStateDao
-    abstract fun connectionGroupDao(): ConnectionGroupDao
-    abstract fun snippetDao(): SnippetDao
-    abstract fun identityDao(): IdentityDao
-    abstract fun auditLogDao(): AuditLogDao
-    abstract fun hypervisorDao(): HypervisorDao
-    
-    abstract fun hostKeyDao(): HostKeyDao
-    abstract fun tabSessionDao(): TabSessionDao
-    abstract fun themeDao(): ThemeDao
     abstract fun certificateDao(): CertificateDao
     abstract fun syncStateDao(): SyncStateDao
     abstract fun connectionGroupDao(): ConnectionGroupDao
     abstract fun snippetDao(): SnippetDao
     abstract fun identityDao(): IdentityDao
     abstract fun auditLogDao(): AuditLogDao
+    abstract fun hypervisorDao(): HypervisorDao
     
     companion object {
         @Volatile
