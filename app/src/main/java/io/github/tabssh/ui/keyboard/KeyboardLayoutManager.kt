@@ -21,9 +21,9 @@ class KeyboardLayoutManager(
      * Get current keyboard layout
      */
     fun getLayout(): List<KeyboardKey> {
-        val savedLayout = preferencesManager.getString(PREF_KEYBOARD_LAYOUT, null)
+        val savedLayout = preferencesManager.getString(PREF_KEYBOARD_LAYOUT, "")
         
-        return if (savedLayout != null) {
+        return if (savedLayout.isNotEmpty()) {
             parseLayout(savedLayout)
         } else {
             KeyboardKey.getDefaultKeys()
