@@ -49,6 +49,7 @@ class SSHConfigParser {
         var forwardAgent: Boolean = false,
         var forwardX11: Boolean = false,
         var requestTTY: String? = null,
+        var groupName: String? = null,
         var additionalOptions: MutableMap<String, String> = mutableMapOf()
     )
 
@@ -95,17 +96,38 @@ class SSHConfigParser {
             reader.forEachLine { line ->
                 val trimmedLine = line.trim()
 
-                // Skip empty lines and comments
-                if (trimmedLine.isEmpty() || trimmedLine.startsWith("#")) {
+                // Skip empty lines
+                if (trimmedLine.isEmpty()) {
                     return@forEachLine
                 }
 
-                // Split into directive and value
+                // Check if line is a comment (may contain group info)
+                if (trimmedLine.startsWith("#")) {
+                    return@forEachLine
+                }
+
+                // Split into directive and value (and optional inline comment)
                 val parts = trimmedLine.split("\\s+".toRegex(), limit = 2)
                 if (parts.isEmpty()) return@forEachLine
 
                 val directive = parts[0]
-                val value = if (parts.size > 1) parts[1].trim() else ""
+                val valueWithComment = if (parts.size > 1) parts[1].trim() else ""
+
+                // Extract value and inline comment
+                val commentIndex = valueWithComment.indexOf("##")
+                val value = if (commentIndex > 0) {
+                    valueWithComment.substring(0, commentIndex).trim()
+                } else {
+                    valueWithComment
+                }
+
+                // Extract group from inline comment if present (pattern: [group-name])
+                val groupMatch = if (commentIndex > 0) {
+                    val comment = valueWithComment.substring(commentIndex + 2).trim()
+                    Regex("\\[([^\\]]+)\\]").find(comment)
+                } else {
+                    null
+                }
 
                 when (directive.lowercase()) {
                     "host" -> {
@@ -113,6 +135,8 @@ class SSHConfigParser {
                         currentHost?.let { hosts.add(it) }
                         // Start new host
                         currentHost = SSHHost(hostPattern = value)
+                        // Extract group name from inline comment if present
+                        currentHost?.groupName = groupMatch?.groupValues?.get(1)
                     }
 
                     "hostname" -> currentHost?.hostname = value
@@ -202,7 +226,7 @@ class SSHConfigParser {
             username = username,
             authType = authType,
             keyId = host.identityFileStr?.hashCode()?.toString(), // Will need to be resolved separately if identityFileStr is present
-            groupId = "imported",
+            groupId = host.groupName ?: "imported",
             theme = "dracula",
             createdAt = System.currentTimeMillis(),
             lastConnected = 0,
