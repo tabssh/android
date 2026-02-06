@@ -192,7 +192,7 @@ class CustomKeyboardView @JvmOverloads constructor(
         }
         
         // Add back button
-        val backButton = MaterialButton(context, null, R.attr.materialButtonOutlinedStyle)
+        val backButton = MaterialButton(context, null, com.google.android.material.R.attr.materialButtonOutlinedStyle)
         backButton.text = "←"
         backButton.setOnClickListener {
             fnMode = false

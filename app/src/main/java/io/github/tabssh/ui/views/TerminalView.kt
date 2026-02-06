@@ -379,7 +379,7 @@ class TerminalView @JvmOverloads constructor(
     /**
      * Show context menu at position (called on long press of non-URL text)
      */
-    private fun showContextMenu(x: Float, y: Float) {
+    private fun showCustomContextMenu(x: Float, y: Float) {
         // Haptic feedback for long press
         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
         
@@ -621,7 +621,7 @@ class TerminalView @JvmOverloads constructor(
                 Logger.d("TerminalView", "URL detected: $url")
             } else {
                 // No URL - show text context menu
-                showContextMenu(e.x, e.y)
+                showCustomContextMenu(e.x, e.y)
                 Logger.d("TerminalView", "Long press - showing context menu")
             }
         }
