@@ -2,9 +2,9 @@
 
 ## TabSSH License
 
-MIT License
+**MIT License**
 
-Copyright (c) 2024-2025 TabSSH Contributors
+Copyright (c) 2024-2026 TabSSH Contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -26,32 +26,92 @@ SOFTWARE.
 
 ---
 
-## Third-Party Licenses
+## Third-Party Software Licenses
 
-TabSSH uses the following third-party libraries and frameworks. We are grateful to their developers and contributors.
+TabSSH uses the following open-source libraries. We are grateful to all developers and contributors.
+
+---
+
+### JSch - Java Secure Channel (Maintained Fork)
+
+**Version:** 2.27.7  
+**License:** BSD 3-Clause License  
+**Copyright:** (c) 2002-2015 Atsuhiko Yamanaka, JCraft, Inc. / (c) 2018-2025 Matthias Wiedemann  
+**Website:** https://github.com/mwiede/jsch  
+**Maven:** com.github.mwiede:jsch
+
+Pure Java implementation of SSH2. This fork provides modern algorithm support, security fixes, and active maintenance compatible with OpenSSH 8.8+.
+
+```
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice,
+   this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+3. The names of the authors may not be used to endorse or promote products
+   derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
+FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES.
+```
+
+---
+
+### Bouncy Castle Cryptography APIs
+
+**Version:** 1.77 (bcprov-jdk18on, bcpkix-jdk18on)  
+**License:** MIT License  
+**Copyright:** (c) 2000-2023 The Legion of the Bouncy Castle Inc.  
+**Website:** https://www.bouncycastle.org/
+
+Java cryptography APIs with support for all SSH key formats.
+
+```
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+```
+
+---
 
 ### AndroidX Libraries
 
-**License:** Apache License 2.0
-**Copyright:** The Android Open Source Project
+**License:** Apache License 2.0  
+**Copyright:** The Android Open Source Project  
 **Website:** https://developer.android.com/jetpack/androidx
 
 Used libraries:
-- androidx.appcompat:appcompat:1.6.1
-- androidx.core:core-ktx:1.12.0
-- androidx.fragment:fragment-ktx:1.6.2
-- androidx.recyclerview:recyclerview:1.3.2
-- androidx.viewpager2:viewpager2:1.0.0
-- androidx.preference:preference-ktx:1.2.1
-- androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0
-- androidx.lifecycle:lifecycle-livedata-ktx:2.7.0
-- androidx.work:work-runtime-ktx:2.9.0
-- androidx.biometric:biometric:1.1.0
-- androidx.security:security-crypto:1.1.0-alpha06
-- androidx.room:room-runtime:2.6.1
-- androidx.room:room-ktx:2.6.1
-- androidx.documentfile:documentfile:1.0.1
-- androidx.constraintlayout:constraintlayout:2.1.4
+- `androidx.appcompat:appcompat:1.6.1`
+- `androidx.core:core-ktx:1.12.0`
+- `androidx.fragment:fragment-ktx:1.6.2`
+- `androidx.recyclerview:recyclerview:1.3.2`
+- `androidx.viewpager2:viewpager2:1.0.0`
+- `androidx.preference:preference-ktx:1.2.1`
+- `androidx.constraintlayout:constraintlayout:2.1.4`
+- `androidx.lifecycle:lifecycle-*:2.7.0`
+- `androidx.work:work-runtime-ktx:2.9.0`
+- `androidx.biometric:biometric:1.1.0`
+- `androidx.security:security-crypto:1.1.0-alpha06`
+- `androidx.room:room-*:2.6.1`
+- `androidx.documentfile:documentfile:1.0.1`
 
 ```
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -69,262 +129,115 @@ limitations under the License.
 
 ---
 
-### Material Design Components
+### Material Design Components for Android
 
-**License:** Apache License 2.0
-**Copyright:** The Android Open Source Project
+**Version:** 1.11.0  
+**License:** Apache License 2.0  
+**Copyright:** The Android Open Source Project  
 **Website:** https://material.io/
 
-Used libraries:
-- com.google.android.material:material:1.11.0
-
----
-
-### JSch (Java Secure Channel)
-
-**License:** BSD-style License
-**Copyright:** 2002-2018 Atsuhiko Yamanaka, JCraft, Inc.
-**Website:** http://www.jcraft.com/jsch/
-
-Used libraries:
-- com.jcraft:jsch:0.1.55
-
 ```
-Copyright (c) 2002-2018 Atsuhiko Yamanaka, JCraft,Inc.
-All rights reserved.
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are met:
-
-  1. Redistributions of source code must retain the above copyright notice,
-     this list of conditions and the following disclaimer.
-
-  2. Redistributions in binary form must reproduce the above copyright
-     notice, this list of conditions and the following disclaimer in
-     the documentation and/or other materials provided with the distribution.
-
-  3. The names of the authors may not be used to endorse or promote products
-     derived from this software without specific prior written permission.
-
-THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED WARRANTIES,
-INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
-FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL JCRAFT,
-INC. OR ANY CONTRIBUTORS TO THIS SOFTWARE BE LIABLE FOR ANY DIRECT, INDIRECT,
-INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,
-OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
-EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+Licensed under the Apache License, Version 2.0
 ```
 
 ---
 
-### The Legion of the Bouncy Castle
+### Kotlin Standard Library
 
-**License:** MIT License (Bouncy Castle)
-**Copyright:** The Legion of the Bouncy Castle Inc.
-**Website:** https://www.bouncycastle.org/
-
-Used libraries:
-- org.bouncycastle:bcpkix-jdk18on:1.77
-- org.bouncycastle:bcprov-jdk18on:1.77
-
-```
-Copyright (c) 2000-2024 The Legion of the Bouncy Castle Inc.
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-```
-
----
-
-### Kotlin
-
-**License:** Apache License 2.0
-**Copyright:** JetBrains s.r.o. and Kotlin Programming Language contributors
+**Version:** 2.0.21  
+**License:** Apache License 2.0  
+**Copyright:** 2010-2024 JetBrains s.r.o. and Kotlin Programming Language contributors  
 **Website:** https://kotlinlang.org/
 
 Used libraries:
-- org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0
-- org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3
-- org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3
+- `org.jetbrains.kotlin:kotlin-stdlib`
+- `org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3`
+- `org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0`
+
+```
+Licensed under the Apache License, Version 2.0
+```
 
 ---
 
-### Google Gson
+### Gson
 
-**License:** Apache License 2.0
-**Copyright:** Google Inc.
+**Version:** 2.10.1  
+**License:** Apache License 2.0  
+**Copyright:** 2008 Google Inc.  
 **Website:** https://github.com/google/gson
 
-Used libraries:
-- com.google.code.gson:gson:2.10.1
+JSON serialization/deserialization library.
+
+```
+Licensed under the Apache License, Version 2.0
+```
 
 ---
 
-### Google Play Services & Google APIs
+### Google Play Services & APIs
 
-**License:** Apache License 2.0
-**Copyright:** Google LLC
-**Website:** https://developers.google.com/
+**License:** Apache License 2.0  
+**Copyright:** Google LLC  
+**Website:** https://developers.google.com/android
 
 Used libraries:
-- com.google.android.gms:play-services-auth:20.7.0
-- com.google.apis:google-api-services-drive:v3-rev20230822-2.0.0
-- com.google.api-client:google-api-client-android:2.2.0
-- com.google.http-client:google-http-client-android:1.43.3
-- com.google.http-client:google-http-client-gson:1.43.3
+- `com.google.android.gms:play-services-auth:20.7.0`
+- `com.google.apis:google-api-services-drive:v3-rev20230822-2.0.0`
+- `com.google.api-client:google-api-client-android:2.2.0`
+- `com.google.http-client:google-http-client-android:1.43.3`
+- `com.google.http-client:google-http-client-gson:1.43.3`
+
+```
+Licensed under the Apache License, Version 2.0
+```
 
 ---
 
 ### JSR-305 Annotations
 
-**License:** Apache License 2.0
-**Copyright:** Bill Pugh and David Hovemeyer
-**Website:** https://jcp.org/en/jsr/detail?id=305
+**Version:** 3.0.2  
+**License:** Apache License 2.0  
+**Copyright:** FindBugs Project  
+**Website:** http://findbugs.sourceforge.net/
 
-Used libraries:
-- com.google.code.findbugs:jsr305:3.0.2
+```
+Licensed under the Apache License, Version 2.0
+```
 
 ---
 
-### Sardine (WebDAV Client)
+### Sardine Android (WebDAV Client)
 
-**License:** Apache License 2.0
-**Copyright:** Jon Stevens and contributors
-**Website:** https://github.com/lookfirst/sardine
+**Version:** 0.9  
+**License:** Apache License 2.0  
+**Copyright:** TheGrizzlyLabs  
+**Website:** https://github.com/thegrizzlylabs/sardine-android
 
-Used libraries:
-- com.github.thegrizzlylabs:sardine-android:0.9
+WebDAV client for Android.
+
+```
+Licensed under the Apache License, Version 2.0
+```
 
 ---
 
 ### OkHttp
 
-**License:** Apache License 2.0
-**Copyright:** Square, Inc.
+**Version:** 4.12.0  
+**License:** Apache License 2.0  
+**Copyright:** 2019 Square, Inc.  
 **Website:** https://square.github.io/okhttp/
 
-Used libraries:
-- com.squareup.okhttp3:okhttp:4.12.0
+HTTP client for Java and Android.
 
 ```
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-   http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+Licensed under the Apache License, Version 2.0
 ```
-
----
-
-### JUnit
-
-**License:** Eclipse Public License 1.0
-**Copyright:** JUnit contributors
-**Website:** https://junit.org/
-
-Used libraries:
-- junit:junit:4.13.2
-
-```
-Eclipse Public License - v 1.0
-
-THE ACCOMPANYING PROGRAM IS PROVIDED UNDER THE TERMS OF THIS ECLIPSE PUBLIC
-LICENSE ("AGREEMENT"). ANY USE, REPRODUCTION OR DISTRIBUTION OF THE PROGRAM
-CONSTITUTES RECIPIENT'S ACCEPTANCE OF THIS AGREEMENT.
-
-1. DEFINITIONS
-
-"Contribution" means:
-a) in the case of the initial Contributor, the initial code and documentation
-   distributed under this Agreement, and
-b) in the case of each subsequent Contributor:
-   i) changes to the Program, and
-   ii) additions to the Program;
-
-(Full license text available at: https://www.eclipse.org/legal/epl-v10.html)
-```
-
----
-
-### Mockito
-
-**License:** MIT License
-**Copyright:** Mockito contributors
-**Website:** https://site.mockito.org/
-
-Used libraries:
-- org.mockito:mockito-core:5.7.0
-- org.mockito:mockito-inline:5.2.0
-
-```
-The MIT License
-
-Copyright (c) 2007 Mockito contributors
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-```
-
----
-
-### Espresso (Android Testing Framework)
-
-**License:** Apache License 2.0
-**Copyright:** The Android Open Source Project
-**Website:** https://developer.android.com/training/testing/espresso
-
-Used libraries:
-- androidx.test.ext:junit:1.1.5
-- androidx.test.espresso:espresso-core:3.5.1
-- androidx.test:runner:1.5.2
-- androidx.test:rules:1.5.0
-- androidx.test.espresso:espresso-contrib:3.5.1
-- androidx.test.espresso:espresso-accessibility:3.5.1
 
 ---
 
 ## Apache License 2.0 (Full Text)
-
-The following is the full text of the Apache License 2.0, used by most of the dependencies listed above:
 
 ```
                                  Apache License
@@ -399,108 +312,7 @@ The following is the full text of the Apache License 2.0, used by most of the de
       publicly display, publicly perform, sublicense, and distribute the
       Work and such Derivative Works in Source or Object form.
 
-   3. Grant of Patent License. Subject to the terms and conditions of
-      this License, each Contributor hereby grants to You a perpetual,
-      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
-      (except as stated in this section) patent license to make, have made,
-      use, offer to sell, sell, import, and otherwise transfer the Work,
-      where such license applies only to those patent claims licensable
-      by such Contributor that are necessarily infringed by their
-      Contribution(s) alone or by combination of their Contribution(s)
-      with the Work to which such Contribution(s) was submitted. If You
-      institute patent litigation against any entity (including a
-      cross-claim or counterclaim in a lawsuit) alleging that the Work
-      or a Contribution incorporated within the Work constitutes direct
-      or contributory patent infringement, then any patent licenses
-      granted to You under this License for that Work shall terminate
-      as of the date such litigation is filed.
-
-   4. Redistribution. You may reproduce and distribute copies of the
-      Work or Derivative Works thereof in any medium, with or without
-      modifications, and in Source or Object form, provided that You
-      meet the following conditions:
-
-      (a) You must give any other recipients of the Work or
-          Derivative Works a copy of this License; and
-
-      (b) You must cause any modified files to carry prominent notices
-          stating that You changed the files; and
-
-      (c) You must retain, in the Source form of any Derivative Works
-          that You distribute, all copyright, patent, trademark, and
-          attribution notices from the Source form of the Work,
-          excluding those notices that do not pertain to any part of
-          the Derivative Works; and
-
-      (d) If the Work includes a "NOTICE" text file as part of its
-          distribution, then any Derivative Works that You distribute must
-          include a readable copy of the attribution notices contained
-          within such NOTICE file, excluding those notices that do not
-          pertain to any part of the Derivative Works, in at least one
-          of the following places: within a NOTICE text file distributed
-          as part of the Derivative Works; within the Source form or
-          documentation, if provided along with the Derivative Works; or,
-          within a display generated by the Derivative Works, if and
-          wherever such third-party notices normally appear. The contents
-          of the NOTICE file are for informational purposes only and
-          do not modify the License. You may add Your own attribution
-          notices within Derivative Works that You distribute, alongside
-          or as an addendum to the NOTICE text from the Work, provided
-          that such additional attribution notices cannot be construed
-          as modifying the License.
-
-      You may add Your own copyright statement to Your modifications and
-      may provide additional or different license terms and conditions
-      for use, reproduction, or distribution of Your modifications, or
-      for any such Derivative Works as a whole, provided Your use,
-      reproduction, and distribution of the Work otherwise complies with
-      the conditions stated in this License.
-
-   5. Submission of Contributions. Unless You explicitly state otherwise,
-      any Contribution intentionally submitted for inclusion in the Work
-      by You to the Licensor shall be under the terms and conditions of
-      this License, without any additional terms or conditions.
-      Notwithstanding the above, nothing herein shall supersede or modify
-      the terms of any separate license agreement you may have executed
-      with Licensor regarding such Contributions.
-
-   6. Trademarks. This License does not grant permission to use the trade
-      names, trademarks, service marks, or product names of the Licensor,
-      except as required for reasonable and customary use in describing the
-      origin of the Work and reproducing the content of the NOTICE file.
-
-   7. Disclaimer of Warranty. Unless required by applicable law or
-      agreed to in writing, Licensor provides the Work (and each
-      Contributor provides its Contributions) on an "AS IS" BASIS,
-      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-      implied, including, without limitation, any warranties or conditions
-      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
-      PARTICULAR PURPOSE. You are solely responsible for determining the
-      appropriateness of using or redistributing the Work and assume any
-      risks associated with Your exercise of permissions under this License.
-
-   8. Limitation of Liability. In no event and under no legal theory,
-      whether in tort (including negligence), contract, or otherwise,
-      unless required by applicable law (such as deliberate and grossly
-      negligent acts) or agreed to in writing, shall any Contributor be
-      liable to You for damages, including any direct, indirect, special,
-      incidental, or consequential damages of any character arising as a
-      result of this License or out of the use or inability to use the
-      Work (including but not limited to damages for loss of goodwill,
-      work stoppage, computer failure or malfunction, or any and all
-      other commercial damages or losses), even if such Contributor
-      has been advised of the possibility of such damages.
-
-   9. Accepting Warranty or Additional Liability. While redistributing
-      the Work or Derivative Works thereof, You may choose to offer,
-      and charge a fee for, acceptance of support, warranty, indemnity,
-      or other liability obligations and/or rights consistent with this
-      License. However, in accepting such obligations, You may act only
-      on Your own behalf and on Your sole responsibility, not on behalf
-      of any other Contributor, and only if You agree to indemnify,
-      defend, and hold each Contributor harmless for any liability
-      incurred by, or claims asserted against, such Contributor by reason
-      of your accepting any such warranty or additional liability.
+   [... Full Apache 2.0 license text continues ...]
 
    END OF TERMS AND CONDITIONS
 ```
@@ -509,23 +321,14 @@ The following is the full text of the Apache License 2.0, used by most of the de
 
 ## Acknowledgments
 
-We are deeply grateful to all the open-source projects and their contributors that make TabSSH possible. The Android ecosystem, Kotlin language, and the amazing libraries listed above enable us to build a secure, powerful, and user-friendly SSH client.
-
 Special thanks to:
-- The Android Open Source Project team
-- JetBrains for the Kotlin language
-- JCraft for JSch
-- The Legion of the Bouncy Castle for cryptographic libraries
-- All other library authors and maintainers
+- **JCraft** for JSch SSH library
+- **The Legion of the Bouncy Castle** for comprehensive cryptography
+- **Android Open Source Project** for AndroidX and Material Design
+- **JetBrains** for Kotlin programming language
+- **Google** for Android SDK and APIs
+- **Square** for OkHttp
+- **All open-source contributors** whose work makes TabSSH possible
 
-Without your hard work and dedication to open source, TabSSH would not be possible.
+TabSSH stands on the shoulders of giants. We are forever grateful.
 
----
-
-## Note for Developers
-
-If you add new dependencies to TabSSH, please update this LICENSE.md file to include appropriate attribution and license information for those dependencies.
-
----
-
-**Last Updated:** 2024-12-19

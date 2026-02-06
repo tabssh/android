@@ -40,6 +40,7 @@
 - 🌈 **Built-in Themes** - Dracula, Solarized (Light/Dark), Nord, Monokai, One Dark, Tokyo Night, Gruvbox
 - 🎨 **Custom Themes** - Import/export JSON theme definitions
 - ⌨️ **Custom Keyboard** - SSH-optimized on-screen keyboard with special keys
+- 💡 **Smart Tooltips** - Helpful hints for settings and configuration options
 - 📊 **Visual Indicators** - Connection state, unread output, usage statistics
 - 🔄 **Tab Management** - Drag-to-reorder, Ctrl+Tab switching, persistent sessions
 
@@ -314,7 +315,6 @@ Example theme structure:
 
 - **[SPEC.md](SPEC.md)** - Complete technical specification (98KB, 3000+ lines)
 - **[CLAUDE.md](CLAUDE.md)** - Development tracker and project status
-- **[INSTALL.md](INSTALL.md)** - Detailed installation guide
 - **[docs/CHANGELOG.md](docs/CHANGELOG.md)** - Version history
 - **[docs/UI_UX_GUIDE.md](docs/UI_UX_GUIDE.md)** - Design guidelines
 - **[docs/LIBRARY_COMPARISON.md](docs/LIBRARY_COMPARISON.md)** - Technical decisions
@@ -408,7 +408,7 @@ A: Yes! Settings → Google Drive Sync (or WebDAV Sync for degoogled devices).
 
 TabSSH is built on the shoulders of giants:
 
-- **[JSch](http://www.jcraft.com/jsch/)** - Pure Java SSH implementation
+- **[JSch](https://github.com/mwiede/jsch)** (v2.27.7) - Modern SSH implementation with OpenSSH 8.8+ support
 - **[Material Design Components](https://material.io/)** - Beautiful UI framework
 - **[AndroidX Libraries](https://developer.android.com/jetpack/androidx)** - Modern Android development
 - **All contributors** - Thank you for making TabSSH better!

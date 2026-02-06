@@ -10,8 +10,7 @@
             android:key="tasker_enabled"
             android:title="Enable Tasker Integration"
             android:summary="Allow Tasker to control SSH connections"
-            android:defaultValue="true"
-            android:icon="@drawable/ic_automation" />
+            android:defaultValue="true" />
 
         <Preference
             android:key="tasker_actions_help"
@@ -35,8 +34,7 @@
             android:title="Require App Unlock"
             android:summary="Tasker actions require biometric/password"
             android:defaultValue="false"
-            android:dependency="tasker_enabled"
-            android:icon="@drawable/ic_lock" />
+            android:dependency="tasker_enabled" />
 
         <MultiSelectListPreference
             android:key="tasker_allowed_connections"

@@ -126,6 +126,8 @@ replay_pid*
 # Gradle files
 .gradle/
 build/
+# Kotlin compiler cache
+.kotlin/
 # Local configuration file (sdk path, etc)
 local.properties
 # Log/OS Files

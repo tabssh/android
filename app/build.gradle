@@ -157,8 +157,9 @@ dependencies {
     implementation 'com.google.android.material:material:1.11.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
     
-    // SSH Implementation
-    implementation 'com.jcraft:jsch:0.1.55'
+    // SSH Implementation - Using maintained fork with security fixes
+    // https://github.com/mwiede/jsch - Actively maintained, OpenSSH 8.8+ compatible
+    implementation 'com.github.mwiede:jsch:2.27.7'
     
     // Security
     implementation 'androidx.biometric:biometric:1.1.0'
