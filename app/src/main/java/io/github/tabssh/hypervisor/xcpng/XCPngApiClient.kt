@@ -1,6 +1,6 @@
 package io.github.tabssh.hypervisor.xcpng
+import io.github.tabssh.utils.logging.Logger
 
-import io.github.tabssh.utils.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.*
@@ -116,7 +116,7 @@ class XCPngApiClient(
                 val name = parseStringResponse(nameXml)
                 val powerState = parseStringResponse(powerXml)
                 val memory = parseIntResponse(memoryXml)
-                val vcpus = parseIntResponse(vcpusXml)
+                val vcpus = parseIntResponse(vcpusXml).toInt()
                 val isTemplate = parseBooleanResponse(templateXml)
                 
                 if (!isTemplate){

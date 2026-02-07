@@ -16,6 +16,12 @@ class ConnectionAdapter(
     private val onConnectionClick: (ConnectionProfile) -> Unit
 ) : androidx.recyclerview.widget.ListAdapter<ConnectionProfile, ConnectionAdapter.ConnectionViewHolder>(DiffCallback()) {
 
+    private var onItemLongClickListener: ((ConnectionProfile) -> Boolean)? = null
+    
+    fun setOnItemLongClickListener(listener: (ConnectionProfile) -> Boolean) {
+        onItemLongClickListener = listener
+    }
+
     // Alternative constructor for more detailed event handling
     constructor(
         connections: List<ConnectionProfile>,
@@ -45,9 +51,18 @@ class ConnectionAdapter(
 
         init {
             binding.root.setOnClickListener {
-                val position = adapterPosition
+                val position = bindingAdapterPosition
                 if (position != RecyclerView.NO_POSITION) {
                     onConnectionClick(getItem(position))
+                }
+            }
+            
+            binding.root.setOnLongClickListener {
+                val position = bindingAdapterPosition
+                if (position != RecyclerView.NO_POSITION) {
+                    onItemLongClickListener?.invoke(getItem(position)) ?: false
+                } else {
+                    false
                 }
             }
         }

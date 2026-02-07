@@ -1,6 +1,6 @@
 package io.github.tabssh.hypervisor.vmware
+import io.github.tabssh.utils.logging.Logger
 
-import io.github.tabssh.utils.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.*

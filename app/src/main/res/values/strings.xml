@@ -197,4 +197,18 @@
     <!-- Cluster commands -->
     <string name="cluster_progress">%1$d/%2$d completed (%3$d success, %4$d failed)</string>
 
+    <!-- Navigation Drawer -->
+    <string name="navigation_drawer_open">Open navigation drawer</string>
+    <string name="navigation_drawer_close">Close navigation drawer</string>
+
+    <!-- Performance Monitor -->
+    <string name="select_connection">Select Connection</string>
+    
+    <!-- Widgets -->
+    <string name="widget_1x1_description">Quick connect icon</string>
+    <string name="widget_2x1_description">Connection info with connect button</string>
+    <string name="widget_4x2_description">Favorite connections list</string>
+    <string name="widget_4x4_description">Full connection list</string>
+    
 </resources>
+

@@ -352,7 +352,7 @@ class ConnectionEditActivity : AppCompatActivity() {
         binding.spinnerProxyType.setText(proxyTypeDisplay, false)
         updateProxyTypeUI(proxyTypeDisplay)
 
-        if (proxyType != null && proxyType != "None") {
+        if (proxyType != "None") {
             profile.proxyHost?.let { binding.editProxyHost.setText(it) }
             profile.proxyPort?.let { binding.editProxyPort.setText(it.toString()) }
 
@@ -666,6 +666,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             type = "*/*"
         }
         try {
+            @Suppress("DEPRECATION")
             startActivityForResult(intent, REQUEST_CODE_IMPORT_KEY)
         } catch (e: Exception) {
             showToast("File picker not available")
@@ -1061,6 +1062,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             .show()
     }
 
+    @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
 
@@ -1114,10 +1116,10 @@ class ConnectionEditActivity : AppCompatActivity() {
     }
 
     override fun onSupportNavigateUp(): Boolean {
-        onBackPressed()
+        onBackPressedDispatcher.onBackPressed()
         return true
     }
-}    
+    
     private fun setupPortKnockUI() {
         // Toggle configure button visibility based on switch
         binding.switchPortKnock.setOnCheckedChangeListener { _, isChecked ->
@@ -1142,3 +1144,4 @@ class ConnectionEditActivity : AppCompatActivity() {
         // - Reorder sequence
         // - Save as JSON to connection profile
     }
+}

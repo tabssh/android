@@ -219,7 +219,7 @@ class PreferenceManager(private val context: Context) {
         preferences.edit().putFloat(key, value).apply()
     }
 
-    private fun getLong(key: String, defaultValue: Long): Long {
+    internal fun getLong(key: String, defaultValue: Long): Long {
         return preferences.getLong(key, defaultValue)
     }
 

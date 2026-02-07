@@ -290,6 +290,7 @@ class BackupManager(private val context: Context) {
     private fun getAppVersion(): String {
         return try {
             val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            @Suppress("DEPRECATION")
             "${packageInfo.versionName} (${packageInfo.versionCode})"
         } catch (e: Exception) {
             "Unknown"

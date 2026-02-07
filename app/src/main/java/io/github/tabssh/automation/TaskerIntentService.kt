@@ -1,11 +1,12 @@
 package io.github.tabssh.automation
+import io.github.tabssh.utils.logging.Logger
 
-import android.app.IntentService
+import android.content.Context
 import android.content.Intent
+import androidx.core.app.JobIntentService
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.ssh.connection.SSHConnection
-import io.github.tabssh.utils.Logger
 import kotlinx.coroutines.*
 
 /**
@@ -23,9 +24,11 @@ import kotlinx.coroutines.*
  * - io.github.tabssh.event.COMMAND_RESULT - Command output
  * - io.github.tabssh.event.ERROR - Error occurred
  */
-class TaskerIntentService : IntentService("TaskerIntentService") {
+class TaskerIntentService : JobIntentService() {
 
     companion object {
+        private const val JOB_ID = 1000
+        
         // Actions
         const val ACTION_CONNECT = "io.github.tabssh.action.CONNECT"
         const val ACTION_DISCONNECT = "io.github.tabssh.action.DISCONNECT"
@@ -50,22 +53,21 @@ class TaskerIntentService : IntentService("TaskerIntentService") {
         
         // Default timeout for command execution (30 seconds)
         const val DEFAULT_TIMEOUT_MS = 30000L
+        
+        fun enqueueWork(context: Context, intent: Intent) {
+            enqueueWork(context, TaskerIntentService::class.java, JOB_ID, intent)
+        }
     }
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private lateinit var app: TabSSHApplication
+    private val app: TabSSHApplication by lazy { application as TabSSHApplication }
 
     override fun onCreate() {
         super.onCreate()
-        app = application as TabSSHApplication
         Logger.d("TaskerIntentService", "Service created")
     }
 
-    override fun onHandleIntent(intent: Intent?) {
-        if (intent == null) {
-            Logger.w("TaskerIntentService", "Received null intent")
-            return
-        }
+    override fun onHandleWork(intent: Intent) {
 
         // Check if Tasker integration is enabled
         if (!app.preferencesManager.getBoolean("tasker_enabled",true)){
@@ -108,7 +110,7 @@ class TaskerIntentService : IntentService("TaskerIntentService") {
                     return@runBlocking
                 }
 
-                val connection = SSHConnection(this@TaskerIntentService, profile, app)
+                val connection = SSHConnection(profile, scope, this@TaskerIntentService)
                 connection.connect()
                 broadcastConnected(profile)
                 
@@ -141,7 +143,7 @@ class TaskerIntentService : IntentService("TaskerIntentService") {
                     return@runBlocking
                 }
 
-                val tab = app.tabManager.getTabs().find { it.profile.id == profile.id }
+                val tab = app.tabManager.getAllTabs().find { it.profile.id == profile.id }
                 
                 if (tab != null) {
                     tab.disconnect()
@@ -185,12 +187,18 @@ class TaskerIntentService : IntentService("TaskerIntentService") {
                     return@runBlocking
                 }
 
-                var tab = app.tabManager.getTabs().find { it.profile.id == profile.id }
+                var tab = app.tabManager.getAllTabs().find { it.profile.id == profile.id }
                 
                 if (tab == null) {
-                    val connection = SSHConnection(this@TaskerIntentService, profile, app)
+                    val connection = SSHConnection(profile, scope, this@TaskerIntentService)
                     connection.connect()
-                    tab = app.tabManager.createTab(profile, connection)
+                    tab = app.tabManager.createTab(profile)
+                    tab?.connect(connection)
+                }
+                
+                if (tab == null) {
+                    broadcastError("Failed to create tab")
+                    return@runBlocking
                 }
 
                 tab.terminal.sendText("$command\n")
@@ -198,7 +206,7 @@ class TaskerIntentService : IntentService("TaskerIntentService") {
                 if (waitForResult) {
                     withTimeout(timeoutMs) {
                         delay(500)
-                        val output = tab.terminal.getScreenText()
+                        val output = tab.terminal.getScreenContent()
                         broadcastCommandResult(profile, command, output)
                     }
                 } else {
@@ -240,7 +248,7 @@ class TaskerIntentService : IntentService("TaskerIntentService") {
                     return@runBlocking
                 }
 
-                val tab = app.tabManager.getTabs().find { it.profile.id == profile.id }
+                val tab = app.tabManager.getAllTabs().find { it.profile.id == profile.id }
                 
                 if (tab != null) {
                     val sequence = parseKeySequence(keys)

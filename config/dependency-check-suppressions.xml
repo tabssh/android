@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+    <!--SuppressfalsepositivesforAndroidlibraries-->
+    <suppress>
+        <notes>Android SDK and support libraries are maintained by Google</notes>
+        <packageUrl regex="true">^pkg:maven/com\.google\.android.*$</packageUrl>
+    </suppress>
+    <suppress>
+        <notes>AndroidX libraries are maintained by Google</notes>
+        <packageUrl regex="true">^pkg:maven/androidx\..*$</packageUrl>
+    </suppress>
+    <suppress>
+        <notes>JSch is widely used and maintained</notes>
+        <packageUrl regex="true">^pkg:maven/com\.jcraft/jsch.*$</packageUrl>
+    </suppress>
+</suppressions>

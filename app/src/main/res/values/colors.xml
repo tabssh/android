@@ -24,6 +24,18 @@
     <color name="secondary_800">#FF3C69B3</color>
     <color name="secondary_900">#FF2D5A99</color>
     
+    <!-- Accent color palette -->
+    <color name="accent_50">#FFF3E5F5</color>
+    <color name="accent_100">#FFE1BEE7</color>
+    <color name="accent_200">#FFCE93D8</color>
+    <color name="accent_300">#FFBA68C8</color>
+    <color name="accent_400">#FFAB47BC</color>
+    <color name="accent_500">#FF9C27B0</color>
+    <color name="accent_600">#FF8E24AA</color>
+    <color name="accent_700">#FF7B1FA2</color>
+    <color name="accent_800">#FF6A1B9A</color>
+    <color name="accent_900">#FF4A148C</color>
+    
     <!-- Semantic colors -->
     <color name="success">#FF4CAF50</color>
     <color name="success_dark">#FF388E3C</color>

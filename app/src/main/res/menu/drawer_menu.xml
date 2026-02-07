@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <group android:checkableBehavior="single">
+        <item
+            android:id="@+id/nav_settings"
+            android:icon="@drawable/ic_settings"
+            android:title="Settings" />
+        <item
+            android:id="@+id/nav_port_forwarding"
+            android:icon="@drawable/ic_forward"
+            android:title="Port Forwarding" />
+        <item
+            android:id="@+id/nav_snippets"
+            android:icon="@drawable/ic_code"
+            android:title="Snippets Library" />
+        <item
+            android:id="@+id/nav_import_export_connections"
+            android:icon="@drawable/ic_import_export"
+            android:title="Import/Export Connections" />
+        <item
+            android:id="@+id/nav_import_ssh_config"
+            android:icon="@drawable/ic_file"
+            android:title="Import/Export SSH Config" />
+    </group>
+    <item android:title="More">
+        <menu>
+            <item
+                android:id="@+id/nav_about"
+                android:icon="@drawable/ic_info"
+                android:title="About" />
+            <item
+                android:id="@+id/nav_help"
+                android:icon="@drawable/ic_help"
+                android:title="Help" />
+        </menu>
+    </item>
+</menu>
