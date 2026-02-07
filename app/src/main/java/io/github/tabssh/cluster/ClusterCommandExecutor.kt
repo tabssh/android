@@ -1,9 +1,9 @@
 package io.github.tabssh.cluster
+import io.github.tabssh.utils.logging.Logger
 
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.ssh.connection.SSHConnection
-import io.github.tabssh.utils.Logger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -91,7 +91,8 @@ class ClusterCommandExecutor(private val app: TabSSHApplication) {
         
         return try {
             withTimeout(timeoutMs) {
-                val connection = SSHConnection(app, profile, app)
+                val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+                val connection = SSHConnection(profile, scope, app)
                 connection.connect()
                 val output = connection.executeCommand(command)
                 connection.disconnect()

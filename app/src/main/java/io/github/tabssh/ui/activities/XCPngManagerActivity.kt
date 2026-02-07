@@ -1,4 +1,5 @@
 package io.github.tabssh.ui.activities
+import io.github.tabssh.utils.logging.Logger
 
 import android.os.Bundle
 import android.view.View
@@ -13,7 +14,6 @@ import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.hypervisor.xcpng.XCPngApiClient
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.HypervisorType
-import io.github.tabssh.utils.Logger
 import kotlinx.coroutines.launch
 
 class XCPngManagerActivity : AppCompatActivity() {

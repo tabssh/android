@@ -125,6 +125,14 @@
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- Hypervisor Edit activity -->
+        <activity
+            android:name=".ui.activities.HypervisorEditActivity"
+            android:exported="false"
+            android:label="Edit Hypervisor"
+            android:parentActivityName=".ui.activities.MainActivity"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- SFTP file browser activity -->
         <activity
             android:name=".ui.activities.SFTPActivity"
@@ -204,6 +212,68 @@
             android:label="Session Transcripts"
             android:parentActivityName=".ui.activities.TabTerminalActivity"
             android:exported="false" />
+
+        <!-- Widget Configuration Activity -->
+        <activity
+            android:name=".widget.WidgetConfigActivity"
+            android:label="Configure Widget"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
+        <!-- 1x1 Widget -->
+        <receiver
+            android:name=".widget.ConnectionWidgetProvider"
+            android:label="TabSSH 1x1"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_1x1_info" />
+        </receiver>
+
+        <!-- 2x1 Widget -->
+        <receiver
+            android:name=".widget.ConnectionWidgetProvider$Widget2x1"
+            android:label="TabSSH 2x1"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_2x1_info" />
+        </receiver>
+
+        <!-- 4x2 Widget -->
+        <receiver
+            android:name=".widget.ConnectionWidgetProvider$Widget4x2"
+            android:label="TabSSH 4x2"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_4x2_info" />
+        </receiver>
+
+        <!-- 4x4 Widget -->
+        <receiver
+            android:name=".widget.ConnectionWidgetProvider$Widget4x4"
+            android:label="TabSSH 4x4"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_4x4_info" />
+        </receiver>
 
     </application>
 

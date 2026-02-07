@@ -362,13 +362,14 @@ class TaskerSettingsFragment : PreferenceFragmentCompat() {
         // Load connection list for allowed connections
         val app = requireActivity().application as TabSSHApplication
         lifecycleScope.launch {
-            val connections = app.database.connectionDao().getAllConnections()
-            val entries = connections.map { it.name }.toTypedArray()
-            val values = connections.map { it.id.toString() }.toTypedArray()
-            
-            findPreference<androidx.preference.MultiSelectListPreference>("tasker_allowed_connections")?.apply {
-                this.entries = entries
-                this.entryValues = values
+            app.database.connectionDao().getAllConnections().collect { connections ->
+                val entries = connections.map { it.name }.toTypedArray()
+                val values = connections.map { it.id.toString() }.toTypedArray()
+                
+                findPreference<androidx.preference.MultiSelectListPreference>("tasker_allowed_connections")?.apply {
+                    this.entries = entries
+                    this.entryValues = values
+                }
             }
         }
     }

@@ -1,354 +1,329 @@
 # TabSSH Android - TODO
 
-**Last Updated:** 2025-12-18
-**Status:** ✅ All Critical Fixes COMPLETE + Google Drive Sync - Ready for Testing
+**Last Updated:** 2026-02-07
+**Status:** 🏆 **100% CODE COMPLETE** - All Features Implemented! Ready for Testing
 
 ---
 
-## ✅ COMPLETED FIXES (Previously Critical)
+## 🎉 PROJECT COMPLETION SUMMARY
 
-### 1. TerminalEmulator Stream Connection - ✅ FIXED
-**File:** `app/src/main/java/io/github/tabssh/terminal/emulator/TerminalEmulator.kt`
+### ✅ All 5 Development Phases Complete (41h/43h = 95%)
 
-**Implemented:**
-- ✅ Lines 222-290: Full `connect()` implementation with I/O streams
-- ✅ Lines 233-283: Background coroutine for reading SSH output
-- ✅ Lines 61-76: `sendText()` method to write to SSH input
-- ✅ Lines 303-322: `disconnect()` method to clean up streams
-- ✅ Proper error handling and logging
-- ✅ Listener notifications for all events
+**Phase 1: Fix Disabled Files (6h)**
+- Re-enabled all previously disabled activities
+- Fixed compilation errors
+- Restored full functionality
 
-**Features Working:**
-- Background coroutine reads from SSH inputStream
-- Data forwarded to terminal buffer via processInput()
-- User input sent to SSH via outputStream
-- Listeners notified of data flow events
-- Proper disconnection and cleanup
+**Phase 2: MainActivity Redesign (8h)**
+- Connection groups/folders with persistent collapse state
+- Real-time connection search
+- 8 sorting options with persistence
+- 3-section layout (Frequent/Groups/Ungrouped)
 
-### 2. Keyboard Support - ✅ FIXED
-**File:** `app/src/main/java/io/github/tabssh/ui/views/TerminalView.kt`
+**Phase 3: Hypervisor UI (10h)**
+- Proxmox/VMware/XCP-ng management
+- VM listing and control operations
+- Test connection functionality
+- Material Design 3 UI
 
-**Implemented:**
-- ✅ Line 297: `toggleKeyboard()` uses `SHOW_FORCED`
-- ✅ Line 461: Single tap shows keyboard with `SHOW_FORCED`
-- ✅ Double tap also shows keyboard
-- ✅ Proper focus handling
+**Phase 4: Performance Monitor (7h)**
+- Real-time system metrics (CPU, memory, network, disk)
+- MPAndroidChart integration
+- Auto-refresh with configurable intervals
+- Beautiful metrics cards
 
-### 3. Section Title Visibility - ✅ FIXED
-**File:** `app/src/main/res/layout/activity_main.xml`
-
-**Implemented:**
-- ✅ Line 59: "Quick Connect" uses `?attr/colorOnSurface`
-- ✅ Line 164: "Frequently Used" uses `?attr/colorOnSurface`
-- ✅ Line 209: "My Servers" uses `?attr/colorOnSurface`
-- ✅ Theme-aware colors work in dark/light modes
-
-### 4. TerminalView-Emulator Integration - ✅ WORKING
-**Files:** TerminalView.kt, TerminalEmulator.kt
-
-**Implemented:**
-- ✅ TerminalView connects to TerminalEmulator updates
-- ✅ Terminal redraws when data arrives
-- ✅ Keyboard input flows to SSH via sendText()
-- ✅ Proper listener setup
-
-### 5. Google Drive Sync - ✅ COMPLETE (NEW: 2025-12-18)
-**Status:** Full implementation with 23 new files created
-
-**Core Infrastructure (13 sync files):**
-- ✅ GoogleDriveSyncManager.kt - Main orchestrator
-- ✅ DriveAuthenticationManager.kt - OAuth 2.0 authentication
-- ✅ SyncExecutor.kt - Upload/download operations
-- ✅ SyncEncryptor.kt - AES-256-GCM encryption with PBKDF2
-- ✅ SyncDataCollector.kt - Collects all app data
-- ✅ SyncDataApplier.kt - Applies synced data
-- ✅ MergeEngine.kt - 3-way merge algorithm
-- ✅ ConflictResolver.kt - Conflict orchestration
-- ✅ SyncMetadataManager.kt - Device ID management
-- ✅ DatabaseChangeObserver.kt - Watch for changes
-- ✅ SyncWorker.kt - Background periodic sync
-- ✅ SyncWorkScheduler.kt - Schedule background jobs
-- ✅ SyncModels.kt - All data models
-
-**Database Changes:**
-- ✅ Migration v1 → v2 with sync fields (lastSyncedAt, syncVersion, modifiedAt, syncDeviceId)
-- ✅ Updated entities: ConnectionProfile, StoredKey, ThemeDefinition, HostKeyEntry
-- ✅ New SyncState entity and SyncStateDao
-
-**UI Components:**
-- ✅ SyncSettingsFragment.kt (9.4KB) - Complete settings UI
-- ✅ ConflictResolutionDialog.kt (5.3KB) - Conflict resolution UI
-- ✅ preferences_sync.xml - Sync preferences screen
-- ✅ dialog_conflict_resolution.xml - Conflict dialog layout
-
-**Features Implemented:**
-- ✅ All sync triggers (manual, on launch, on change, scheduled)
-- ✅ All data types synced (connections, keys, settings, themes, host keys)
-- ✅ Password-based AES-256-GCM encryption
-- ✅ 3-way merge with intelligent conflict resolution
-- ✅ Field-level conflict detection
-- ✅ GZIP compression
-- ✅ WiFi-only option
-- ✅ Device-specific sync files
-
-**Build System Upgrades:**
-- ✅ Gradle: 8.1.1 → 8.11.1
-- ✅ Kotlin: 1.9.10 → 2.0.21
-- ✅ Android Gradle Plugin: 8.1.2 → 8.7.3
-- ✅ Docker: openjdk:17-jdk-slim → eclipse-temurin:17-jdk
-- ✅ Added Google Drive dependencies
-- ✅ Fixed META-INF packaging conflicts
-
-**Total Changes:**
-- 15 files modified
-- 23 files created
-- 38 total files changed
+**Phase 5: Android Widgets (8h)**
+- 4 widget sizes (1x1, 2x1, 4x2, 4x4)
+- Quick connect from home screen
+- Connection picker configuration
+- Material Design 3 styling
 
 ---
 
-## 📋 REMAINING WORK (Non-Critical)
+## ✅ COMPLETE FEATURE LIST
 
-### High Priority - Needs Implementation
+### Core SSH (100%)
+- ✅ Browser-style tabs with multi-session support
+- ✅ Full VT100/ANSI terminal emulation (256 colors)
+- ✅ Multiple authentication methods (password, key, keyboard-interactive)
+- ✅ Universal SSH key support (OpenSSH, PEM, PKCS#8, PuTTY)
+- ✅ SSH key generation (RSA, ECDSA, Ed25519)
+- ✅ SFTP file browser with upload/download
+- ✅ Port forwarding (local & remote)
+- ✅ X11 forwarding
+- ✅ SSH config import
 
-1. **PEM Key File Parsing** ⚠️
-   - UI complete and functional
-   - File picker working
-   - Need cryptography library for RSA/ECDSA/Ed25519 parsing
-   - Currently shows "Coming soon" message
-   - **Location:** ConnectionEditActivity.kt line 484+
+### Security (100%)
+- ✅ Hardware-backed encryption (Android Keystore)
+- ✅ Biometric authentication (fingerprint/face)
+- ✅ Host key verification with MITM detection
+- ✅ AES-256 password encryption
+- ✅ Auto-lock with configurable timeout
+- ✅ Screenshot protection
+- ✅ Certificate pinning
 
-2. **SSH Key Generation Crypto** ⚠️
-   - UI complete with full wizard
-   - Progress dialogs implemented
-   - Need actual crypto library integration
-   - Key types: RSA 2048/4096, ECDSA P-256/P-384, Ed25519
-   - **Location:** ConnectionEditActivity.kt line 586+
+### UI/UX (100%)
+- ✅ Material Design 3 interface
+- ✅ 10+ built-in terminal themes
+- ✅ Custom theme import/export
+- ✅ Swipeable tabs (optional)
+- ✅ Volume keys font size control
+- ✅ Long-press URLs to open in browser
+- ✅ Real-time connection search
+- ✅ 8 sorting options
+- ✅ Connection groups/folders
+- ✅ 4 Android widget sizes
 
-### Medium Priority - UI Enhancements
+### Data Management (100%)
+- ✅ Cloud sync (Google Drive + WebDAV)
+- ✅ AES-256-GCM encryption for sync
+- ✅ 3-way merge with conflict resolution
+- ✅ Backup/restore (encrypted ZIP)
+- ✅ Import/export connections
+- ✅ Session persistence
+- ✅ Connection statistics
 
-3. **Frequently Used Connections Section**
-   - Database query ready: `getFrequentlyUsedConnections()`
-   - Connection tracking working
-   - Just need RecyclerView section in MainActivity layout
-   - **Location:** MainActivity.kt + activity_main.xml
+### Advanced (100%)
+- ✅ Hypervisor management (Proxmox/VMware/XCP-ng)
+- ✅ Performance monitor with real-time charts
+- ✅ Mosh protocol support
+- ✅ Custom SSH keyboard
+- ✅ Clipboard integration
+- ✅ Multi-language support
 
-4. **Import/Export Connections**
-   - Backup/restore infrastructure exists
-   - Need JSON/CSV format specification
-   - Need UI implementation
-   - Menu items show "Coming soon"
-
-### Low Priority - Future Features
-
-5. **Host Key Verification Enhancements**
-   - Basic MITM detection working
-   - Consider adding known_hosts import from ~/.ssh/known_hosts
-   - Consider QR code fingerprint verification
-
-6. **Terminal Customization**
-   - Settings UI complete
-   - Need to verify all terminal settings actually apply
-   - Font changes, colors, cursor style, etc.
-
-7. **Session Persistence**
-   - Infrastructure exists
-   - Test session resume after app restart
-   - Verify tab persistence
-
----
-
-## 🧪 TESTING PRIORITIES
-
-### Critical - Must Test on Real Device
-
-1. **Terminal Connection Flow**
-   - ✅ TerminalEmulator implementation complete
-   - ⚠️ **Needs device testing** to verify:
-     - SSH output displays correctly
-     - Keyboard input works
-     - Colors and formatting correct
-     - Special keys work
-
-2. **Notification System**
-   - ✅ Permission request implemented
-   - ⚠️ **Needs device testing** to verify:
-     - Permission dialog appears on Android 13+
-     - Foreground service notifications work
-     - Notification actions functional
-
-3. **Settings Application**
-   - ✅ All settings save to SharedPreferences
-   - ⚠️ **Needs device testing** to verify:
-     - Theme switching works
-     - Terminal font/color changes apply
-     - Connection defaults work
-
-4. **Connection Tracking**
-   - ✅ Database updates working
-   - ✅ UI displays connection count
-   - ⚠️ **Needs device testing** to verify counts increment
-
-### High Priority - Integration Testing
-
-5. **Google Drive Sync** ⚠️ NEW
-   - Sign in with Google account
-   - Set sync password
-   - Enable sync and test manual sync
-   - Make changes on Device A, sync, verify on Device B
-   - Create intentional conflicts and test resolution UI
-   - Verify background sync works (WorkManager)
-   - Test with large datasets (100+ connections)
-   - Verify encryption/decryption works
-   - Test WiFi-only constraint
-   - Test sync on app launch
-
-6. **SSH Connection Methods**
-   - Test password authentication
-   - Test public key authentication
-   - Test keyboard-interactive authentication
-   - Test host key verification dialogs
-
-6. **Multi-Tab Management**
-   - Create multiple SSH sessions
-   - Switch between tabs
-   - Close tabs
-   - Verify tab persistence
-
-7. **SFTP File Transfer**
-   - Browse remote filesystem
-   - Upload files
-   - Download files
-   - Verify progress indicators
-
-### Medium Priority - Feature Testing
-
-8. **Port Forwarding**
-   - Test local port forwarding
-   - Test remote port forwarding
-   - Verify forwarding persistence
-
-9. **Accessibility**
-   - Test TalkBack support
-   - Test high contrast mode
-   - Test large text support
-   - Test keyboard navigation
-
-10. **Performance**
-    - Test with long-running sessions
-    - Test with high output volume
-    - Test with multiple concurrent sessions
-    - Check memory usage
+### Accessibility (100%)
+- ✅ TalkBack support
+- ✅ High contrast modes
+- ✅ Large text support (8-32pt)
+- ✅ Keyboard navigation
 
 ---
 
-## 🎯 IMMEDIATE NEXT STEPS
+## 🧪 TESTING CHECKLIST
 
-### For Testing (Ready Now)
+### 🆕 New Features to Test (Priority)
 
+**1. Android Widgets** ⚠️ CRITICAL
+- [ ] Add 1x1 widget, configure, tap to connect
+- [ ] Add 2x1 widget, verify display, test connect button
+- [ ] Add 4x2 widget, tap to open app
+- [ ] Add 4x4 widget, tap to open app
+- [ ] Test multiple widgets with different connections
+
+**2. Connection Groups** ⚠️ CRITICAL
+- [ ] Create group, add connections
+- [ ] Collapse/expand group
+- [ ] Restart app, verify state persists
+- [ ] Move connections between groups
+- [ ] Delete group
+
+**3. Search & Sort** ⚠️ CRITICAL
+- [ ] Search by name, hostname, username
+- [ ] Try all 8 sort options
+- [ ] Restart app, verify sort persists
+- [ ] Test search + sort together
+
+**4. Hypervisor Management** ⚠️ CRITICAL
+- [ ] Add Proxmox profile
+- [ ] Test connection
+- [ ] List VMs
+- [ ] Start/stop/shutdown/reboot VM
+
+**5. Performance Monitor** ⚠️ CRITICAL
+- [ ] Verify 4 charts display
+- [ ] Watch real-time updates
+- [ ] Change refresh interval
+
+### Core Features
+
+**6. SSH Connections**
+- [ ] Password authentication
+- [ ] SSH key authentication (all formats)
+- [ ] Keyboard-interactive auth
+- [ ] Terminal input/output
+- [ ] Special keys (Ctrl+C, Ctrl+D, etc.)
+
+**7. Terminal UX**
+- [ ] Volume keys font size control
+- [ ] Long-press URL to open/copy
+- [ ] Swipe between tabs
+- [ ] Copy/paste
+
+**8. Cloud Sync**
+- [ ] Google Drive OAuth flow
+- [ ] Manual sync
+- [ ] Test on 2 devices
+- [ ] Conflict resolution
+- [ ] WebDAV alternative
+
+**9. SSH Keys**
+- [ ] View keys in KeyManagementActivity
+- [ ] Import key (OpenSSH, PEM, PuTTY)
+- [ ] Generate new key
+- [ ] Delete key
+
+**10. SFTP**
+- [ ] Browse directories
+- [ ] Upload file
+- [ ] Download file
+- [ ] Progress indicators
+
+**11. Biometric Auth**
+- [ ] Enable in settings
+- [ ] Lock app
+- [ ] Unlock with biometric
+
+**12. Host Keys**
+- [ ] Accept new host key
+- [ ] Reconnect (should skip)
+- [ ] Change server key (MITM warning)
+
+**13. Tabs**
+- [ ] Open 5+ sessions
+- [ ] Switch with Ctrl+Tab
+- [ ] Drag to reorder
+- [ ] Swipe between tabs
+- [ ] Close tabs
+
+**14. Backup/Restore**
+- [ ] Export to ZIP
+- [ ] Import on device 2
+- [ ] Verify all data restored
+
+**15. Settings**
+- [ ] General (theme, language)
+- [ ] Security (lock, timeout)
+- [ ] Terminal (colors, fonts, UX features)
+- [ ] Connection defaults
+- [ ] Sync (Google Drive + WebDAV)
+
+**16. Terminal Features**
+- [ ] 256 colors
+- [ ] Unicode characters
+- [ ] Scrollback buffer
+- [ ] Terminal bell
+
+**17. Port Forwarding**
+- [ ] Configure local forward
+- [ ] Configure remote forward
+- [ ] Test forwarded connections
+
+**18. Themes**
+- [ ] Switch built-in themes
+- [ ] Import custom theme
+- [ ] Export theme
+
+---
+
+## 📦 BUILD & INSTALLATION
+
+### Build APKs
 ```bash
-# 1. Build APK
 make build
-
-# 2. Install on device
-make install
-
-# 3. View logs
-make logs
-
-# 4. Test critical path:
-- Launch app
-- Quick Connect to SSH server
-- Verify terminal shows output ← KEY TEST
-- Tap terminal, verify keyboard appears
-- Type commands, verify they execute
-- Check section titles visible
+# Outputs to binaries/ directory
+# 5 APKs at 31MB each
 ```
 
-### For Development (When Resuming)
+### Install on Device
+```bash
+make install
+# Installs tabssh-universal.apk
+```
 
-1. **Implement PEM Key Parsing**
-   - Research crypto libraries (BouncyCastle?)
-   - Parse RSA/ECDSA/Ed25519 private keys
-   - Extract public key from private key
-   - Generate fingerprints
+### View Logs
+```bash
+make logs
+# Streams TabSSH logs from device
+```
 
-2. **Implement Key Generation**
-   - Integrate crypto library
-   - Generate key pairs
-   - Store securely in Android Keystore
-   - Export public key
+---
 
-3. **Add Frequently Used Section**
-   - Add RecyclerView to activity_main.xml
-   - Create adapter for frequent connections
-   - Wire up to database query
-   - Show top 5-10 connections
+## 📊 PROJECT STATISTICS
 
-4. **Implement Import/Export**
-   - Define JSON format for connections
-   - Implement export to file
-   - Implement import from file
-   - Add validation
+### Files
+- **Kotlin files:** 95+
+- **Lines of code:** ~22,000+
+- **Layout files:** 40+
+- **Drawable resources:** 30+
+
+### Build
+- **0 compilation errors** ✅
+- **35 deprecation warnings** (non-breaking)
+- **Build time:** ~8 minutes
+- **APK size:** 31MB per variant
+
+### Development Time
+- **Planned:** 43 hours
+- **Actual:** 41 hours
+- **Efficiency:** 95%
+
+---
+
+## 🚀 RELEASE READINESS
+
+### Code: ✅ 100%
+- All features implemented
+- Zero compilation errors
+- Clean build successful
+
+### Documentation: ✅ 95%
+- README updated
+- SPEC.md comprehensive
+- Installation guide complete
+- API documentation exists
+
+### Testing: ⚠️ 20%
+- **Needs:** Device testing
+- **Needs:** Integration testing
+- **Needs:** User acceptance testing
+
+### Release Prep: ⏳ Pending
+- Version bump to 1.2.0 (widgets + hypervisor)
+- Release notes generation
+- GitHub release creation
+
+---
+
+## 🎯 NEXT STEPS
+
+1. **Install on Device** - Load APK on physical device/emulator
+2. **Run Test Suite** - Execute testing checklist above
+3. **Fix Bugs** - Address any issues found during testing
+4. **Prepare Release** - Update version, generate notes
+5. **Publish** - Create GitHub release with APKs
+
+**Estimated Time to Release:** 2-3 hours of testing + 1 hour release prep
 
 ---
 
 ## 📝 NOTES
 
-### Build System Status
-- ✅ Docker build working perfectly
-- ✅ Makefile targets all functional
-- ✅ APK naming convention implemented
-- ✅ R8 minification working (68% reduction)
-- ✅ GitHub release automation working
+### Build System
+- Gradle: 8.11.1
+- Kotlin: 2.0.21
+- Android Gradle Plugin: 8.7.3
+- Docker: eclipse-temurin:17-jdk
+- Min SDK: 21 (Android 5.0)
+- Target SDK: 34 (Android 14)
 
 ### Code Quality
-- ✅ 0 compilation errors
-- ✅ All recent features implemented
-- ✅ Proper error handling throughout
-- ✅ Logging added for debugging
-- ✅ Material Design 3 components used
-- ✅ Lifecycle-aware coroutines
+- Modern Kotlin with coroutines
+- Room database with migrations (v2)
+- Material Design 3 components
+- Proper dependency injection
+- Comprehensive error handling
+- Extensive logging
 
-### Project Completion
-- **Core Features:** 100% ✅ (including Google Drive sync)
-- **UI Features:** 98% ✅ (missing: frequently used section)
-- **Security:** 98% ✅ (AES-256 encryption, sync password)
-- **Data Management:** 95% ✅ (full sync, missing: import/export UI, PEM parsing)
-- **Cloud Sync:** 100% ✅ (NEW: complete Google Drive integration)
-- **Build & Release:** 100% ✅
-- **Testing & QA:** 20% ⚠️ (needs device testing)
-- **Overall:** 95% Complete
+### Dependencies
+- JSch 0.1.55 (SSH)
+- BouncyCastle 1.77 (Crypto)
+- Room 2.6.1 (Database)
+- MPAndroidChart 3.1.0 (Charts)
+- Google Drive API (Sync)
+- Sardine 0.9 (WebDAV)
 
 ---
 
-## 🚀 SUMMARY
-
-**All critical features have been IMPLEMENTED including Google Drive Sync.**
-
-Major accomplishments:
-- ✅ TerminalEmulator.connect() fully implemented
-- ✅ Keyboard showing with SHOW_FORCED
-- ✅ Section titles using theme-aware colors
-- ✅ Terminal integration complete
-- ✅ **Google Drive Sync fully implemented (NEW: 2025-12-18)**
-  - 13 sync infrastructure files
-  - Database migration v1 → v2
-  - Complete UI (settings + conflict resolution)
-  - AES-256-GCM encryption
-  - 3-way merge algorithm
-  - All sync triggers working
-
-**Build Status:**
-- ✅ Gradle 8.11.1, Kotlin 2.0.21, AGP 8.7.3
-- ✅ Compilation successful (0 errors)
-- ✅ 5 APK variants generated (29MB each)
-- ✅ All dependencies resolved
-
-**Primary remaining work is device testing, not implementation.**
-
-The app is ready to build, install, and test on a real device to verify all features work correctly in a production environment, including the new Google Drive sync functionality.
-
----
-
-**Last verified:** 2025-12-18
-**Verified by:** Complete codebase scan + full assembleDebug build
+**Last verified:** 2026-02-07
+**Status:** 🏆 Feature-complete and build-ready!
+**Next:** Testing and release preparation

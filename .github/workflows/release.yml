@@ -39,13 +39,13 @@ jobs:
       run: chmod +x gradlew
         
     - name: Run all tests
-      run: ./gradlew test
+      run: ./gradlew test --no-daemon
       
     - name: Run security scan
-      run: ./gradlew dependencyCheckAnalyze
+      run: ./gradlew dependencyCheckAnalyze --no-daemon
       
     - name: Verify test coverage
-      run: ./gradlew jacocoTestReport && ./gradlew jacocoTestCoverageVerification
+      run: ./gradlew jacocoTestReport jacocoTestCoverageVerification --no-daemon
       
     - name: Get release version
       id: version
@@ -88,15 +88,31 @@ jobs:
         done
         
     - name: Build F-Droid compatible APK
-      run: ./gradlew assembleFdroidRelease
+      run: ./gradlew assembleFdroidRelease --no-daemon
       
-    - name: Rename F-Droid APKs with architecture naming
+    - name: Copy and rename F-Droid APKs
       run: |
         cd app/build/outputs/apk/fdroidRelease/
-        # Create F-Droid APKs for all supported architectures
-        cp app-fdroidRelease.apk tabssh-android-arm64-fdroid-${{ steps.version.outputs.VERSION }}.apk
-        cp app-fdroidRelease.apk tabssh-android-arm-fdroid-${{ steps.version.outputs.VERSION }}.apk
-        cp app-fdroidRelease.apk tabssh-android-amd64-fdroid-${{ steps.version.outputs.VERSION }}.apk
+        echo "🏗️ Processing F-Droid APKs..."
+        ls -lh *.apk
+        
+        # Rename APKs with version suffix
+        for apk in tabssh-*.apk; do
+          if [[ "$apk" == *"arm64-v8a"* ]]; then
+            cp "$apk" "tabssh-android-arm64-fdroid-${{ steps.version.outputs.VERSION }}.apk"
+          elif [[ "$apk" == *"armeabi-v7a"* ]]; then
+            cp "$apk" "tabssh-android-arm-fdroid-${{ steps.version.outputs.VERSION }}.apk"
+          elif [[ "$apk" == *"x86_64"* ]]; then
+            cp "$apk" "tabssh-android-amd64-fdroid-${{ steps.version.outputs.VERSION }}.apk"
+          elif [[ "$apk" == *"x86"* ]] && [[ "$apk" != *"x86_64"* ]]; then
+            cp "$apk" "tabssh-android-x86-fdroid-${{ steps.version.outputs.VERSION }}.apk"
+          elif [[ "$apk" == *"universal"* ]]; then
+            cp "$apk" "tabssh-android-universal-fdroid-${{ steps.version.outputs.VERSION }}.apk"
+          fi
+        done
+        
+        echo "✅ F-Droid APKs renamed:"
+        ls -lh tabssh-android-*-fdroid-*.apk
         
     - name: Generate release notes
       run: |
@@ -117,17 +133,25 @@ jobs:
     - name: Generate SHA checksums
       run: |
         echo "🔐 Generating SHA256 checksums for security verification..."
+        
         cd app/build/outputs/apk/release/
-        sha256sum *.apk > tabssh-android-checksums-${{ steps.version.outputs.VERSION }}.sha256
-        echo "## 🔐 SHA256 Checksums" >> ../../../RELEASE_NOTES.md
-        echo "\`\`\`" >> ../../../RELEASE_NOTES.md
-        cat tabssh-android-checksums-${{ steps.version.outputs.VERSION }}.sha256 >> ../../../RELEASE_NOTES.md
-        echo "\`\`\`" >> ../../../RELEASE_NOTES.md
-        echo "" >> ../../../RELEASE_NOTES.md
-        echo "**Verify downloads**: \`sha256sum -c tabssh-android-checksums-${{ steps.version.outputs.VERSION }}.sha256\`" >> ../../../RELEASE_NOTES.md
+        sha256sum tabssh-android-*.apk > tabssh-android-checksums-${{ steps.version.outputs.VERSION }}.sha256
+        
+        echo "## 🔐 Release APK Checksums" >> ../../../../RELEASE_NOTES.md
+        echo "\`\`\`" >> ../../../../RELEASE_NOTES.md
+        cat tabssh-android-checksums-${{ steps.version.outputs.VERSION }}.sha256 >> ../../../../RELEASE_NOTES.md
+        echo "\`\`\`" >> ../../../../RELEASE_NOTES.md
+        echo "" >> ../../../../RELEASE_NOTES.md
 
         cd ../fdroidRelease/
-        sha256sum *.apk > tabssh-android-fdroid-checksums-${{ steps.version.outputs.VERSION }}.sha256
+        sha256sum tabssh-android-*-fdroid-*.apk > tabssh-android-fdroid-checksums-${{ steps.version.outputs.VERSION }}.sha256
+        
+        echo "## 🔐 F-Droid APK Checksums" >> ../../../../RELEASE_NOTES.md
+        echo "\`\`\`" >> ../../../../RELEASE_NOTES.md
+        cat tabssh-android-fdroid-checksums-${{ steps.version.outputs.VERSION }}.sha256 >> ../../../../RELEASE_NOTES.md
+        echo "\`\`\`" >> ../../../../RELEASE_NOTES.md
+        echo "" >> ../../../../RELEASE_NOTES.md
+        echo "**Verify downloads**: \`sha256sum -c tabssh-android-checksums-${{ steps.version.outputs.VERSION }}.sha256\`" >> ../../../../RELEASE_NOTES.md
 
     - name: Delete existing release if exists
       continue-on-error: true
@@ -151,9 +175,13 @@ jobs:
           app/build/outputs/apk/release/tabssh-android-arm64-${{ steps.version.outputs.VERSION }}.apk
           app/build/outputs/apk/release/tabssh-android-arm-${{ steps.version.outputs.VERSION }}.apk
           app/build/outputs/apk/release/tabssh-android-amd64-${{ steps.version.outputs.VERSION }}.apk
+          app/build/outputs/apk/release/tabssh-android-x86-${{ steps.version.outputs.VERSION }}.apk
+          app/build/outputs/apk/release/tabssh-android-universal-${{ steps.version.outputs.VERSION }}.apk
           app/build/outputs/apk/fdroidRelease/tabssh-android-arm64-fdroid-${{ steps.version.outputs.VERSION }}.apk
           app/build/outputs/apk/fdroidRelease/tabssh-android-arm-fdroid-${{ steps.version.outputs.VERSION }}.apk
           app/build/outputs/apk/fdroidRelease/tabssh-android-amd64-fdroid-${{ steps.version.outputs.VERSION }}.apk
+          app/build/outputs/apk/fdroidRelease/tabssh-android-x86-fdroid-${{ steps.version.outputs.VERSION }}.apk
+          app/build/outputs/apk/fdroidRelease/tabssh-android-universal-fdroid-${{ steps.version.outputs.VERSION }}.apk
           app/build/outputs/apk/release/tabssh-android-checksums-${{ steps.version.outputs.VERSION }}.sha256
           app/build/outputs/apk/fdroidRelease/tabssh-android-fdroid-checksums-${{ steps.version.outputs.VERSION }}.sha256
           app/build/outputs/mapping/release/mapping.txt

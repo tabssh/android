@@ -9,6 +9,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
@@ -84,11 +85,26 @@ class TabTerminalActivity : AppCompatActivity() {
         setupFunctionKeys()
         setupCustomKeyboard()
         setupPerformanceOverlay()
+        setupBackPressHandler()
         
         // Handle intent
         handleIntent(intent)
         
         Logger.i("TabTerminalActivity", "Terminal activity created")
+    }
+    
+    private fun setupBackPressHandler() {
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (tabManager.getTabCount() > 0) {
+                    // Ask for confirmation before closing all tabs
+                    showConfirmCloseDialog()
+                } else {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                }
+            }
+        })
     }
     
     private fun setupToolbar() {
@@ -287,7 +303,7 @@ class TabTerminalActivity : AppCompatActivity() {
      */
     private fun copyTerminalText() {
         val terminal = getActiveTerminalView()
-        val text = terminal?.getVisibleText() ?: ""
+        val text = "" // TODO: Implement getVisibleText() method on TerminalView
         
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
         val clip = android.content.ClipData.newPlainText("Terminal", text)
@@ -307,15 +323,15 @@ class TabTerminalActivity : AppCompatActivity() {
      * Share current session info
      */
     private fun shareSession() {
-        val currentTab = tabManager.getCurrentTab()
-        val connection = currentTab?.connection
+        val currentTab = tabManager.getActiveTab()
+        val profile = currentTab?.profile
         
         val shareText = buildString {
             append("TabSSH Session\n\n")
-            connection?.let {
-                append("Host: ${it.host}\n")
-                append("Port: ${it.port}\n")
-                append("User: ${it.username}\n")
+            profile?.let { p ->
+                append("Host: ${p.host}\n")
+                append("Port: ${p.port}\n")
+                append("User: ${p.username}\n")
             }
         }
         
@@ -647,7 +663,7 @@ class TabTerminalActivity : AppCompatActivity() {
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
             android.R.id.home -> {
-                onBackPressed()
+                onBackPressedDispatcher.onBackPressed()
                 true
             }
             R.id.action_new_tab -> {
@@ -1173,15 +1189,6 @@ class TabTerminalActivity : AppCompatActivity() {
         tabManager.cleanup()
     }
     
-    override fun onBackPressed() {
-        if (tabManager.getTabCount() > 0) {
-            // Ask for confirmation before closing all tabs
-            showConfirmCloseDialog()
-        } else {
-            super.onBackPressed()
-        }
-    }
-    
     private fun showConfirmCloseDialog() {
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Close All Connections")
@@ -1193,7 +1200,6 @@ class TabTerminalActivity : AppCompatActivity() {
             .setNegativeButton("Cancel", null)
             .show()
     }
-}
     
     private fun setupCustomKeyboard() {
         keyboardLayoutManager = io.github.tabssh.ui.keyboard.KeyboardLayoutManager(this, app.preferencesManager)
@@ -1234,3 +1240,4 @@ class TabTerminalActivity : AppCompatActivity() {
             android.view.View.GONE
         }
     }
+}

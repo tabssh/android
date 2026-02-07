@@ -1,4 +1,5 @@
 package io.github.tabssh.ui.activities
+import io.github.tabssh.utils.logging.Logger
 
 import android.os.Bundle
 import android.view.View
@@ -11,7 +12,6 @@ import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.cluster.ClusterCommandExecutor
 import io.github.tabssh.storage.database.entities.ConnectionProfile
-import io.github.tabssh.utils.Logger
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 

@@ -3,7 +3,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Platform-Android-green.svg" alt="Platform">
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License">
-  <img src="https://img.shields.io/badge/Version-1.1.0-orange.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-1.0.0-orange.svg" alt="Version">
   <img src="https://img.shields.io/badge/Min%20SDK-21-brightgreen.svg" alt="Min SDK">
 </p>
 
@@ -58,6 +58,9 @@
 - 📊 **Connection Statistics** - Track usage and connection history
 - ☁️ **Cloud Sync** - Google Drive sync with WebDAV fallback for degoogled devices
 - 📝 **Custom Fonts** - Cascadia Code, Fira Code, JetBrains Mono, Source Code Pro, and more
+- 🏠 **Home Screen Widgets** - 4 sizes (1x1, 2x1, 4x2, 4x4) for quick SSH connections
+- 🌐 **Hypervisor Management** - Proxmox, VMware, XCP-ng VM control interface
+- 📊 **Performance Monitor** - Real-time system metrics (CPU, memory, network, disk)
 
 ### Privacy & Open Source
 - 🎯 **Zero Trackers** - No analytics, no ads, complete privacy

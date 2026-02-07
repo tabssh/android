@@ -488,6 +488,80 @@ class SSHConnection(
     }
     
     /**
+     * Execute a command on the remote server and return output
+     * @param command The command to execute
+     * @param timeoutMs Timeout in milliseconds (default: 30 seconds)
+     * @return Command output as string
+     */
+    suspend fun executeCommand(command: String, timeoutMs: Long = 30000): String = withContext(Dispatchers.IO) {
+        if (!isConnected()) {
+            throw IllegalStateException("Not connected to SSH server")
+        }
+        
+        val currentSession = session ?: throw IllegalStateException("Session is null")
+        
+        try {
+            val channel = currentSession.openChannel("exec") as ChannelExec
+            channel.setCommand(command)
+            
+            val inputStream = channel.inputStream
+            val errorStream = channel.errStream
+            
+            channel.connect(timeoutMs.toInt())
+            
+            val output = StringBuilder()
+            val buffer = ByteArray(1024)
+            
+            // Read stdout
+            while (true) {
+                val available = inputStream.available()
+                if (available > 0) {
+                    val bytesRead = inputStream.read(buffer)
+                    if (bytesRead > 0) {
+                        output.append(String(buffer, 0, bytesRead, Charsets.UTF_8))
+                    }
+                }
+                
+                // Check if channel is closed
+                if (channel.isClosed) {
+                    // Read any remaining data
+                    while (inputStream.available() > 0) {
+                        val bytesRead = inputStream.read(buffer)
+                        if (bytesRead > 0) {
+                            output.append(String(buffer, 0, bytesRead, Charsets.UTF_8))
+                        }
+                    }
+                    break
+                }
+                
+                kotlinx.coroutines.delay(100)
+            }
+            
+            // Read stderr if there's an error
+            val errorOutput = StringBuilder()
+            while (errorStream.available() > 0) {
+                val bytesRead = errorStream.read(buffer)
+                if (bytesRead > 0) {
+                    errorOutput.append(String(buffer, 0, bytesRead, Charsets.UTF_8))
+                }
+            }
+            
+            val exitStatus = channel.exitStatus
+            channel.disconnect()
+            
+            if (exitStatus != 0 && errorOutput.isNotEmpty()) {
+                Logger.w("SSHConnection", "Command exit status: $exitStatus, stderr: $errorOutput")
+            }
+            
+            output.toString()
+            
+        } catch (e: Exception) {
+            Logger.e("SSHConnection", "Failed to execute command: $command", e)
+            throw e
+        }
+    }
+    
+    /**
      * Open an SFTP channel for file operations
      */
     suspend fun openSftpChannel(): ChannelSftp? = withContext(Dispatchers.IO) {
