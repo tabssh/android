@@ -1,37 +1,118 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
+    
+    <!-- Main Actions -->
     <group android:checkableBehavior="single">
+        
         <item
-            android:id="@+id/nav_settings"
-            android:icon="@drawable/ic_settings"
-            android:title="Settings" />
+            android:id="@+id/nav_connections"
+            android:icon="@drawable/ic_computer"
+            android:title="Connections" />
+            
+        <item
+            android:id="@+id/nav_identities"
+            android:icon="@android:drawable/ic_menu_myplaces"
+            android:title="Identities" />
+            
+        <item
+            android:id="@+id/nav_manage_keys"
+            android:icon="@android:drawable/ic_lock_lock"
+            android:title="SSH Keys" />
+            
+        <item
+            android:id="@+id/nav_snippets"
+            android:icon="@drawable/ic_code"
+            android:title="Snippets" />
+            
         <item
             android:id="@+id/nav_port_forwarding"
             android:icon="@drawable/ic_forward"
             android:title="Port Forwarding" />
-        <item
-            android:id="@+id/nav_snippets"
-            android:icon="@drawable/ic_code"
-            android:title="Snippets Library" />
-        <item
-            android:id="@+id/nav_import_export_connections"
-            android:icon="@drawable/ic_import_export"
-            android:title="Import/Export Connections" />
-        <item
-            android:id="@+id/nav_import_ssh_config"
-            android:icon="@drawable/ic_file"
-            android:title="Import/Export SSH Config" />
+            
     </group>
-    <item android:title="More">
-        <menu>
-            <item
-                android:id="@+id/nav_about"
-                android:icon="@drawable/ic_info"
-                android:title="About" />
-            <item
-                android:id="@+id/nav_help"
-                android:icon="@drawable/ic_help"
-                android:title="Help" />
-        </menu>
-    </item>
+    
+    <!-- Hypervisors -->
+    <group android:id="@+id/group_hypervisors">
+        <item android:title="Hypervisors">
+            <menu>
+                <item
+                    android:id="@+id/nav_hypervisors"
+                    android:icon="@android:drawable/ic_menu_manage"
+                    android:title="All Hypervisors" />
+                <item
+                    android:id="@+id/nav_proxmox"
+                    android:icon="@android:drawable/ic_menu_compass"
+                    android:title="Proxmox" />
+                <item
+                    android:id="@+id/nav_xcpng"
+                    android:icon="@android:drawable/ic_menu_compass"
+                    android:title="XCP-ng" />
+                <item
+                    android:id="@+id/nav_vmware"
+                    android:icon="@android:drawable/ic_menu_compass"
+                    android:title="VMware" />
+            </menu>
+        </item>
+    </group>
+    
+    <!-- Tools -->
+    <group android:id="@+id/group_tools">
+        <item android:title="Tools">
+            <menu>
+                <item
+                    android:id="@+id/nav_manage_groups"
+                    android:icon="@android:drawable/ic_menu_manage"
+                    android:title="Manage Groups" />
+                <item
+                    android:id="@+id/nav_cluster_commands"
+                    android:icon="@android:drawable/ic_menu_share"
+                    android:title="Cluster Commands" />
+                <item
+                    android:id="@+id/nav_performance"
+                    android:icon="@android:drawable/ic_menu_view"
+                    android:title="Performance Monitor" />
+            </menu>
+        </item>
+    </group>
+    
+    <!-- Import/Export -->
+    <group android:id="@+id/group_import_export">
+        <item android:title="Import/Export">
+            <menu>
+                <item
+                    android:id="@+id/nav_import_connections"
+                    android:icon="@android:drawable/ic_menu_upload"
+                    android:title="Import Connections" />
+                <item
+                    android:id="@+id/nav_export_connections"
+                    android:icon="@android:drawable/ic_menu_save"
+                    android:title="Export Connections" />
+                <item
+                    android:id="@+id/nav_import_ssh_config"
+                    android:icon="@drawable/ic_file"
+                    android:title="Import SSH Config" />
+            </menu>
+        </item>
+    </group>
+    
+    <!-- Settings & Help -->
+    <group android:id="@+id/group_settings">
+        <item android:title="More">
+            <menu>
+                <item
+                    android:id="@+id/nav_settings"
+                    android:icon="@drawable/ic_settings"
+                    android:title="Settings" />
+                <item
+                    android:id="@+id/nav_help"
+                    android:icon="@drawable/ic_help"
+                    android:title="Help" />
+                <item
+                    android:id="@+id/nav_about"
+                    android:icon="@drawable/ic_info"
+                    android:title="About" />
+            </menu>
+        </item>
+    </group>
+    
 </menu>

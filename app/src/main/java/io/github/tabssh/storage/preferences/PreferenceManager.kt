@@ -328,21 +328,41 @@ class PreferenceManager(private val context: Context) {
     fun setAutoResolveConflicts(enabled: Boolean) = setBoolean("sync_auto_resolve", enabled)
 
     // Sync backend selection
-    fun getSyncBackend(): String = getString("sync_backend", "google_drive")
-    fun setSyncBackend(backend: String) = setString("sync_backend", backend)
+    fun getSyncBackend(): String {
+        return getString("sync_backend", "google_drive")
+    }
+    fun setSyncBackend(backend: String) {
+        setString("sync_backend", backend)
+    }
 
     // WebDAV sync preferences
-    fun getWebDAVServerUrl(): String = getString("webdav_server_url", "")
-    fun setWebDAVServerUrl(url: String) = setString("webdav_server_url", url)
+    fun getWebDAVServerUrl(): String {
+        return getString("webdav_server_url", "")
+    }
+    fun setWebDAVServerUrl(url: String) {
+        setString("webdav_server_url", url)
+    }
 
-    fun getWebDAVUsername(): String = getString("webdav_username", "")
-    fun setWebDAVUsername(username: String) = setString("webdav_username", username)
+    fun getWebDAVUsername(): String {
+        return getString("webdav_username", "")
+    }
+    fun setWebDAVUsername(username: String) {
+        setString("webdav_username", username)
+    }
 
-    fun getWebDAVPassword(): String = getString("webdav_password", "")
-    fun setWebDAVPassword(password: String) = setString("webdav_password", password)
+    fun getWebDAVPassword(): String {
+        return getString("webdav_password", "")
+    }
+    fun setWebDAVPassword(password: String) {
+        setString("webdav_password", password)
+    }
 
-    fun getWebDAVSyncFolder(): String = getString("webdav_sync_folder", "/TabSSH")
-    fun setWebDAVSyncFolder(folder: String) = setString("webdav_sync_folder", folder)
+    fun getWebDAVSyncFolder(): String {
+        return getString("webdav_sync_folder", "/TabSSH")
+    }
+    fun setWebDAVSyncFolder(folder: String) {
+        setString("webdav_sync_folder", folder)
+    }
 
     fun getPreferencesLastModified(): Long = preferences.getLong("preferences_last_modified", 0)
     fun setPreferencesLastModified(timestamp: Long = System.currentTimeMillis()) =

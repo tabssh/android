@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import androidx.lifecycle.lifecycleScope
+import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
@@ -25,17 +26,18 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
         private const val TAG = "SyncSettingsFragment"
     }
 
-    private lateinit var preferenceManager: io.github.tabssh.storage.preferences.PreferenceManager
+    private lateinit var prefManager: io.github.tabssh.storage.preferences.PreferenceManager
     private lateinit var syncManager: GoogleDriveSyncManager
     private lateinit var workScheduler: SyncWorkScheduler
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences_sync, rootKey)
 
-        preferenceManager = io.github.tabssh.storage.preferences.PreferenceManager(requireContext())
+        prefManager = io.github.tabssh.storage.preferences.PreferenceManager(requireContext())
         syncManager = GoogleDriveSyncManager(requireContext())
         workScheduler = SyncWorkScheduler(requireContext())
 
+        setupBackendPreference()
         setupSyncToggle()
         setupAccountPreference()
         setupPasswordPreference()
@@ -43,6 +45,83 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
         setupLastSyncTime()
         setupFrequencyPreference()
         setupAdvancedOptions()
+        setupWebDAVPreferences()
+        
+        // Initial visibility update
+        updatePreferencesVisibility()
+    }
+    
+    /**
+     * Setup backend selection
+     */
+    private fun setupBackendPreference() {
+        findPreference<ListPreference>("sync_backend")?.apply {
+            setOnPreferenceChangeListener { _, newValue ->
+                updatePreferencesVisibility(newValue as String)
+                true
+            }
+        }
+    }
+    
+    /**
+     * Update preferences visibility based on backend
+     */
+    private fun updatePreferencesVisibility(backend: String? = null) {
+        val selectedBackend = backend ?: prefManager.getString("sync_backend", "google_drive")
+        val isGoogleDrive = selectedBackend == "google_drive"
+        val isWebDAV = selectedBackend == "webdav"
+        
+        // Google Drive preferences
+        findPreference<Preference>("sync_account")?.isVisible = isGoogleDrive
+        
+        // WebDAV preferences
+        findPreference<EditTextPreference>("webdav_server_url")?.isVisible = isWebDAV
+        findPreference<EditTextPreference>("webdav_username")?.isVisible = isWebDAV
+        findPreference<EditTextPreference>("webdav_password")?.isVisible = isWebDAV
+        findPreference<EditTextPreference>("webdav_sync_folder")?.isVisible = isWebDAV
+        findPreference<Preference>("webdav_test_connection")?.isVisible = isWebDAV
+    }
+    
+    /**
+     * Setup WebDAV preferences
+     */
+    private fun setupWebDAVPreferences() {
+        findPreference<Preference>("webdav_test_connection")?.apply {
+            setOnPreferenceClickListener {
+                testWebDAVConnection()
+                true
+            }
+        }
+    }
+    
+    /**
+     * Test WebDAV connection
+     */
+    private fun testWebDAVConnection() {
+        lifecycleScope.launch {
+            try {
+                val url = prefManager.getString("webdav_server_url", "")
+                val username = prefManager.getString("webdav_username", "")
+                val password = prefManager.getString("webdav_password", "")
+                
+                if (url.isNullOrEmpty() || username.isNullOrEmpty() || password.isNullOrEmpty()) {
+                    showToast("Please fill in all WebDAV settings")
+                    return@launch
+                }
+                
+                // TODO: Implement actual WebDAV test
+                showToast("WebDAV connection test - Coming soon")
+                Logger.d(TAG, "Testing WebDAV connection to: $url")
+                
+            } catch (e: Exception) {
+                Logger.e(TAG, "WebDAV test failed", e)
+                showToast("WebDAV test failed: ${e.message}")
+            }
+        }
+    }
+    
+    private fun showToast(message: String) {
+        android.widget.Toast.makeText(requireContext(), message, android.widget.Toast.LENGTH_SHORT).show()
     }
 
     /**
@@ -54,15 +133,43 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
                 val enabled = newValue as Boolean
 
                 if (enabled) {
-                    if (!syncManager.getAuthManager().isAuthenticated()) {
-                        showAuthenticationDialog()
-                        false
-                    } else if (!androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext()).getBoolean("sync_password_set", false)) {
-                        showPasswordSetupDialog()
-                        false
-                    } else {
-                        enableSync()
-                        true
+                    val backend = prefManager.getSyncBackend()
+                    
+                    when (backend) {
+                        "google_drive" -> {
+                            // Google Drive requires authentication and password
+                            if (!syncManager.getAuthManager().isAuthenticated()) {
+                                showAuthenticationDialog()
+                                false
+                            } else if (!androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext()).getBoolean("sync_password_set", false)) {
+                                showPasswordSetupDialog()
+                                false
+                            } else {
+                                enableSync()
+                                true
+                            }
+                        }
+                        "webdav" -> {
+                            // WebDAV requires server settings and password
+                            val url = prefManager.getWebDAVServerUrl()
+                            val username = prefManager.getWebDAVUsername()
+                            val password = prefManager.getWebDAVPassword()
+                            
+                            if (url.isNullOrEmpty() || username.isNullOrEmpty() || password.isNullOrEmpty()) {
+                                showToast("Please configure WebDAV settings first")
+                                false
+                            } else if (!androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext()).getBoolean("sync_password_set", false)) {
+                                showPasswordSetupDialog()
+                                false
+                            } else {
+                                enableSync()
+                                true
+                            }
+                        }
+                        else -> {
+                            showToast("Unknown sync backend: $backend")
+                            false
+                        }
                     }
                 } else {
                     disableSync()
@@ -257,7 +364,7 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
     private fun showAuthenticationDialog() {
         Logger.d(TAG, "Show authentication dialog")
         
-        val backend = preferenceManager.getSyncBackend()
+        val backend = prefManager.getSyncBackend()
         
         when (backend) {
             "google_drive" -> {
@@ -385,7 +492,7 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
                                 """
                                 Email: ${account.email}
                                 Display Name: ${account.displayName ?: "N/A"}
-                                Backend: ${preferenceManager.getSyncBackend()}
+                                Backend: ${prefManager.getSyncBackend()}
                                 """.trimIndent()
                             } else {
                                 "No account connected"

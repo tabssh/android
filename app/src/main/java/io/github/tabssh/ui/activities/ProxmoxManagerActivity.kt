@@ -139,8 +139,25 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                 statusText.text = "Loading VMs..."
                 
                 val vmList = currentClient?.getAllVMs() ?: emptyList()
+                
+                // Fetch IP addresses for running VMs (in parallel)
+                val vmsWithIPs = vmList.map { vm ->
+                    if (vm.status == "running") {
+                        // Try to get IP address
+                        val ip = try {
+                            currentClient?.getVMIPAddress(vm.node, vm.vmid, vm.type)
+                        } catch (e: Exception) {
+                            Logger.d("ProxmoxManager", "Could not get IP for VM ${vm.vmid}: ${e.message}")
+                            null
+                        }
+                        vm.copy(ipAddress = ip)
+                    } else {
+                        vm
+                    }
+                }
+                
                 vms.clear()
-                vms.addAll(vmList)
+                vms.addAll(vmsWithIPs)
                 
                 vmRecyclerView.adapter = VMAdapter(vms) { vm, action ->
                     handleVMAction(vm, action)
@@ -164,6 +181,14 @@ class ProxmoxManagerActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 progressBar.visibility = View.VISIBLE
+                
+                when (action) {
+                    "console" -> {
+                        openVMConsole(vm)
+                        progressBar.visibility = View.GONE
+                        return@launch
+                    }
+                }
                 
                 val success = when (action) {
                     "start" -> currentClient?.startVM(vm.node, vm.vmid, vm.type) ?: false
@@ -228,6 +253,61 @@ class ProxmoxManagerActivity : AppCompatActivity() {
             .show()
     }
 
+    private fun openVMConsole(vm: ProxmoxApiClient.ProxmoxVM) {
+        if (vm.ipAddress == null) {
+            Toast.makeText(this, "VM IP address not available", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        lifecycleScope.launch {
+            try {
+                // Get or create connection profile for VM
+                val connectionName = "${vm.name}-console"
+                var connection = app.database.connectionDao().getAllConnections()
+                    .let { flow -> 
+                        var result: io.github.tabssh.storage.database.entities.ConnectionProfile? = null
+                        flow.collect { connections ->
+                            result = connections.firstOrNull { it.name == connectionName }
+                        }
+                        result
+                    }
+
+                if (connection == null) {
+                    // Create new connection profile
+                    connection = io.github.tabssh.storage.database.entities.ConnectionProfile(
+                        id = java.util.UUID.randomUUID().toString(),
+                        name = connectionName,
+                        host = vm.ipAddress!!,
+                        port = 22,
+                        username = "root",
+                        authType = io.github.tabssh.ssh.auth.AuthType.PASSWORD.name,
+                        createdAt = System.currentTimeMillis(),
+                        modifiedAt = System.currentTimeMillis()
+                    )
+                    app.database.connectionDao().insertConnection(connection)
+                    Logger.i("ProxmoxManager", "Created connection profile for VM: ${vm.name}")
+                } else {
+                    // Update existing connection with latest IP
+                    connection = connection.copy(
+                        host = vm.ipAddress!!,
+                        modifiedAt = System.currentTimeMillis()
+                    )
+                    app.database.connectionDao().updateConnection(connection)
+                    Logger.i("ProxmoxManager", "Updated connection profile for VM: ${vm.name}")
+                }
+
+                // Launch terminal activity
+                val intent = TabTerminalActivity.createIntent(this@ProxmoxManagerActivity, connection, autoConnect = false)
+                startActivity(intent)
+                
+                Toast.makeText(this@ProxmoxManagerActivity, "Opening console for ${vm.name}", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Logger.e("ProxmoxManager", "Failed to open VM console", e)
+                Toast.makeText(this@ProxmoxManagerActivity, "Failed to open console: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     override fun onSupportNavigateUp(): Boolean {
         finish()
         return true
@@ -244,6 +324,8 @@ class ProxmoxManagerActivity : AppCompatActivity() {
             val name: TextView = view.findViewById(R.id.vm_name)
             val status: TextView = view.findViewById(R.id.vm_status)
             val info: TextView = view.findViewById(R.id.vm_info)
+            val ipAddress: TextView = view.findViewById(R.id.vm_ip_address)
+            val consoleButton: Button = view.findViewById(R.id.console_button)
             val startButton: Button = view.findViewById(R.id.start_button)
             val stopButton: Button = view.findViewById(R.id.stop_button)
             val rebootButton: Button = view.findViewById(R.id.reboot_button)
@@ -262,6 +344,14 @@ class ProxmoxManagerActivity : AppCompatActivity() {
             holder.status.text = vm.status.uppercase()
             holder.info.text = "Node: ${vm.node} | CPU: ${(vm.cpu * 100).toInt()}% | RAM: ${vm.mem / 1024 / 1024}MB"
             
+            // Show IP address if available
+            if (vm.ipAddress != null) {
+                holder.ipAddress.visibility = android.view.View.VISIBLE
+                holder.ipAddress.text = "IP: ${vm.ipAddress}"
+            } else {
+                holder.ipAddress.visibility = android.view.View.GONE
+            }
+            
             // Set status color
             holder.status.setTextColor(
                 when (vm.status) {
@@ -272,10 +362,12 @@ class ProxmoxManagerActivity : AppCompatActivity() {
             )
             
             // Enable/disable buttons based on status
+            holder.consoleButton.isEnabled = vm.status == "running" && vm.ipAddress != null
             holder.startButton.isEnabled = vm.status != "running"
             holder.stopButton.isEnabled = vm.status == "running"
             holder.rebootButton.isEnabled = vm.status == "running"
             
+            holder.consoleButton.setOnClickListener { onAction(vm, "console") }
             holder.startButton.setOnClickListener { onAction(vm, "start") }
             holder.stopButton.setOnClickListener { onAction(vm, "stop") }
             holder.rebootButton.setOnClickListener { onAction(vm, "reboot") }

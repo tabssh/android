@@ -488,7 +488,7 @@ class SecurePasswordManager(private val context: Context) {
             .apply {
                 if (requiresBiometric && isBiometricAvailable()) {
                     setUserAuthenticationRequired(true)
-                    setUserAuthenticationValidityDurationSeconds(-1) // Require auth for each use
+                    setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG) // Require auth for each use
                 }
             }
             .build()

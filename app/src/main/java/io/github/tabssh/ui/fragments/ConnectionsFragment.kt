@@ -20,9 +20,12 @@ import com.google.android.material.appbar.MaterialToolbar
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.storage.database.entities.ConnectionGroup
 import io.github.tabssh.ui.activities.ConnectionEditActivity
 import io.github.tabssh.ui.activities.TabTerminalActivity
 import io.github.tabssh.ui.adapters.ConnectionAdapter
+import io.github.tabssh.ui.adapters.GroupedConnectionAdapter
+import io.github.tabssh.ui.models.ConnectionListItem
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.launch
 
@@ -37,10 +40,13 @@ class ConnectionsFragment : Fragment() {
     private lateinit var recyclerView: RecyclerView
     private lateinit var emptyLayout: View
     private lateinit var adapter: ConnectionAdapter
+    private var groupedAdapter: GroupedConnectionAdapter? = null
     
     private var allConnections = listOf<ConnectionProfile>()
+    private var allGroups = listOf<ConnectionGroup>()
     private var currentSearchQuery = ""
     private var currentSortOption = SortOption.NAME_ASC
+    private var useGroupedView = true // Default to grouped view
     
     enum class SortOption(val displayName: String) {
         NAME_ASC("Name (A-Z)"),
@@ -229,14 +235,109 @@ class ConnectionsFragment : Fragment() {
     private fun loadAllConnections() {
         lifecycleScope.launch {
             try {
+                // Load both connections and groups
                 app.database.connectionDao().getAllConnections().collect { connections: List<ConnectionProfile> ->
                     allConnections = connections
-                    applySortAndFilter()
+                    
+                    // Load groups if using grouped view
+                    if (useGroupedView) {
+                        app.database.connectionGroupDao().getAllGroups().collect { groups: List<ConnectionGroup> ->
+                            allGroups = groups
+                            applyGroupedView()
+                        }
+                    } else {
+                        applySortAndFilter()
+                    }
                     
                     Logger.d("ConnectionsFragment", "Loaded ${connections.size} connections")
                 }
             } catch (e: Exception) {
                 Logger.e("ConnectionsFragment", "Failed to load connections", e)
+            }
+        }
+    }
+    
+    private fun applyGroupedView() {
+        // Build ConnectionListItem list
+        val items = mutableListOf<ConnectionListItem>()
+        
+        // Add grouped connections
+        for (group in allGroups.sortedBy { it.sortOrder }) {
+            val groupConnections = allConnections.filter { it.groupId == group.id }
+            if (groupConnections.isNotEmpty()) {
+                // Add group header
+                items.add(ConnectionListItem.GroupHeader(
+                    group = group,
+                    connectionCount = groupConnections.size,
+                    isExpanded = !group.isCollapsed
+                ))
+                
+                // Add connections if group is expanded
+                if (!group.isCollapsed) {
+                    groupConnections.forEach { connection ->
+                        items.add(ConnectionListItem.Connection(
+                            profile = connection,
+                            isInGroup = true,
+                            indentLevel = 1
+                        ))
+                    }
+                }
+            }
+        }
+        
+        // Add ungrouped connections
+        val ungroupedConnections = allConnections.filter { it.groupId == null }
+        if (ungroupedConnections.isNotEmpty()) {
+            items.add(ConnectionListItem.UngroupedHeader(
+                connectionCount = ungroupedConnections.size,
+                isExpanded = true
+            ))
+            ungroupedConnections.forEach { connection ->
+                items.add(ConnectionListItem.Connection(
+                    profile = connection,
+                    isInGroup = false,
+                    indentLevel = 0
+                ))
+            }
+        }
+        
+        // Update adapter
+        if (groupedAdapter == null) {
+            groupedAdapter = GroupedConnectionAdapter(
+                items = items.toMutableList(),
+                onConnectionClick = { connection -> openConnection(connection) },
+                onConnectionLongClick = { connection -> showConnectionMenu(connection); },
+                onConnectionEdit = { connection -> editConnection(connection) },
+                onConnectionDelete = { connection -> deleteConnection(connection) },
+                onGroupClick = { groupHeader -> toggleGroupExpanded(groupHeader) },
+                onGroupLongClick = { groupHeader -> /* TODO: Show group menu */ }
+            )
+            recyclerView.adapter = groupedAdapter
+        } else {
+            // Update existing adapter
+            groupedAdapter!!.items.clear()
+            groupedAdapter!!.items.addAll(items)
+            groupedAdapter!!.notifyDataSetChanged()
+        }
+        
+        // Update empty state
+        if (items.isEmpty()) {
+            emptyLayout.visibility = View.VISIBLE
+            recyclerView.visibility = View.GONE
+        } else {
+            emptyLayout.visibility = View.GONE
+            recyclerView.visibility = View.VISIBLE
+        }
+    }
+    
+    private fun toggleGroupExpanded(groupHeader: ConnectionListItem.GroupHeader) {
+        lifecycleScope.launch {
+            try {
+                val newCollapsed = !groupHeader.isExpanded
+                app.database.connectionGroupDao().updateGroupCollapsedState(groupHeader.group.id, newCollapsed)
+                // Reload will happen via Flow
+            } catch (e: Exception) {
+                Logger.e("ConnectionsFragment", "Failed to toggle group", e)
             }
         }
     }

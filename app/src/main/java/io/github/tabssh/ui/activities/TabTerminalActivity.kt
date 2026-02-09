@@ -8,6 +8,7 @@ import android.view.KeyEvent
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
@@ -279,6 +280,114 @@ class TabTerminalActivity : AppCompatActivity() {
     }
     
     /**
+     * Show comprehensive SSH connection error dialog
+     */
+    private fun showSSHConnectionErrorDialog(
+        profile: io.github.tabssh.storage.database.entities.ConnectionProfile,
+        errorInfo: io.github.tabssh.ssh.connection.SSHConnectionErrorInfo
+    ) {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_ssh_connection_error, null)
+        
+        // Populate connection details
+        dialogView.findViewById<TextView>(R.id.text_connection_name)?.text = 
+            "Connection: ${profile.name ?: profile.getDisplayName()}"
+        dialogView.findViewById<TextView>(R.id.text_connection_host)?.text = 
+            "Host: ${profile.host}:${profile.port}"
+        dialogView.findViewById<TextView>(R.id.text_connection_username)?.text = 
+            "Username: ${profile.username}"
+        dialogView.findViewById<TextView>(R.id.text_auth_type)?.text = 
+            "Auth: ${profile.authType}"
+        
+        // Set error message
+        dialogView.findViewById<TextView>(R.id.text_error_message)?.text = errorInfo.userMessage
+        
+        // Set technical details
+        val technicalDetails = dialogView.findViewById<TextView>(R.id.text_technical_details)
+        technicalDetails?.text = errorInfo.technicalDetails
+        
+        // Set solutions
+        val solutionsText = errorInfo.possibleSolutions.joinToString("\n")
+        dialogView.findViewById<TextView>(R.id.text_solutions)?.text = solutionsText
+        
+        // Toggle technical details visibility
+        val showTechnicalButton = dialogView.findViewById<TextView>(R.id.text_show_technical)
+        showTechnicalButton?.setOnClickListener {
+            if (technicalDetails?.visibility == View.GONE) {
+                technicalDetails.visibility = View.VISIBLE
+                showTechnicalButton.text = "▼ Hide Technical Details"
+            } else {
+                technicalDetails?.visibility = View.GONE
+                showTechnicalButton.text = "▶ Show Technical Details"
+            }
+        }
+        
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("SSH Connection Failed: ${errorInfo.errorType}")
+            .setView(dialogView)
+            .create()
+        
+        // Copy Error button
+        dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.button_copy_error)
+            ?.setOnClickListener {
+                val fullError = buildString {
+                    appendLine("=== SSH Connection Error ===")
+                    appendLine()
+                    appendLine("Connection: ${profile.name ?: profile.getDisplayName()}")
+                    appendLine("Host: ${profile.host}:${profile.port}")
+                    appendLine("Username: ${profile.username}")
+                    appendLine("Auth: ${profile.authType}")
+                    appendLine()
+                    appendLine("Error Type: ${errorInfo.errorType}")
+                    appendLine()
+                    appendLine("Message:")
+                    appendLine(errorInfo.userMessage)
+                    appendLine()
+                    appendLine("Technical Details:")
+                    appendLine(errorInfo.technicalDetails)
+                    appendLine()
+                    appendLine("Possible Solutions:")
+                    errorInfo.possibleSolutions.forEach {
+                        appendLine(it)
+                    }
+                }
+                
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                val clip = android.content.ClipData.newPlainText("SSH Error", fullError)
+                clipboard.setPrimaryClip(clip)
+                Toast.makeText(this, "Error details copied to clipboard", Toast.LENGTH_SHORT).show()
+            }
+        
+        // Edit Connection button
+        dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.button_edit_connection)
+            ?.setOnClickListener {
+                dialog.dismiss()
+                val intent = Intent(this, io.github.tabssh.ui.activities.ConnectionEditActivity::class.java).apply {
+                    putExtra(io.github.tabssh.ui.activities.ConnectionEditActivity.EXTRA_CONNECTION_ID, profile.id)
+                }
+                startActivity(intent)
+                finish() // Close TabTerminalActivity
+            }
+        
+        // Retry button
+        dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.button_retry)
+            ?.setOnClickListener {
+                dialog.dismiss()
+                lifecycleScope.launch {
+                    connectToProfile(profile)
+                }
+            }
+        
+        // Close button
+        dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.button_close)
+            ?.setOnClickListener {
+                dialog.dismiss()
+                finish() // Close TabTerminalActivity
+            }
+        
+        dialog.show()
+    }
+    
+    /**
      * Show text context menu when user long-presses on non-URL text
      */
     private fun showTextContextMenu(x: Float, y: Float) {
@@ -445,22 +554,100 @@ class TabTerminalActivity : AppCompatActivity() {
                     if (connected) {
                         Logger.i("TabTerminalActivity", "Connected to ${profile.getDisplayName()}")
                         showToast("Connected to ${profile.getDisplayName()}")
+                        
+                        // Show connection success notification
+                        io.github.tabssh.utils.NotificationHelper.showConnectionSuccess(
+                            this,
+                            profile.getDisplayName(),
+                            profile.username
+                        )
                     } else {
                         Logger.e("TabTerminalActivity", "Failed to connect terminal to SSH for ${profile.getDisplayName()}")
                         showToast("Failed to connect terminal")
+                        
+                        // Check for detailed error info
+                        val errorInfo = sshConnection.detailedError.value
+                        if (errorInfo != null) {
+                            runOnUiThread {
+                                showSSHConnectionErrorDialog(profile, errorInfo)
+                            }
+                            
+                            // Show error notification
+                            io.github.tabssh.utils.NotificationHelper.showConnectionError(
+                                this,
+                                profile.getDisplayName(),
+                                errorInfo.userMessage
+                            )
+                        }
                     }
                 } else {
                     Logger.e("TabTerminalActivity", "Failed to create tab for ${profile.getDisplayName()}")
                     showToast("Failed to create terminal tab")
                 }
             } else {
+                // Connection failed - try to get detailed error from last connection attempt
                 Logger.e("TabTerminalActivity", "Failed to connect to ${profile.getDisplayName()}")
-                showToast("Connection failed: ${profile.getDisplayName()}")
+                
+                // Get the connection that failed (it may still exist even though connect() returned null)
+                val failedConnection = app.sshSessionManager.getConnection(profile.id)
+                val errorInfo = failedConnection?.detailedError?.value
+                
+                if (errorInfo != null) {
+                    runOnUiThread {
+                        showSSHConnectionErrorDialog(profile, errorInfo)
+                    }
+                    
+                    // Show error notification
+                    io.github.tabssh.utils.NotificationHelper.showConnectionError(
+                        this,
+                        profile.getDisplayName(),
+                        errorInfo.userMessage
+                    )
+                } else {
+                    // Fallback to simple toast if no detailed error available
+                    showToast("Connection failed: ${profile.getDisplayName()}")
+                    
+                    // Show generic error notification
+                    io.github.tabssh.utils.NotificationHelper.showConnectionError(
+                        this,
+                        profile.getDisplayName(),
+                        "Connection failed"
+                    )
+                }
             }
             
         } catch (e: Exception) {
             Logger.e("TabTerminalActivity", "Error connecting to ${profile.getDisplayName()}", e)
-            showToast("Connection error: ${e.message}")
+            
+            // Try to create a detailed error info from the exception
+            val errorInfo = io.github.tabssh.ssh.connection.SSHConnectionErrorInfo(
+                errorType = "Connection Error",
+                userMessage = e.message ?: "Unknown error occurred",
+                technicalDetails = buildString {
+                    appendLine("Exception: ${e.javaClass.simpleName}")
+                    appendLine("Message: ${e.message}")
+                    appendLine("\nStack Trace:")
+                    appendLine(e.stackTraceToString())
+                },
+                possibleSolutions = listOf(
+                    "• Try restarting the app",
+                    "• Check connection settings",
+                    "• Verify network connectivity",
+                    "• Check app logs for more details"
+                ),
+                exception = e
+            )
+            
+            runOnUiThread {
+                showSSHConnectionErrorDialog(profile, errorInfo)
+            }
+            
+            // Show error notification
+            io.github.tabssh.utils.NotificationHelper.showConnectionError(
+                this,
+                profile.getDisplayName(),
+                errorInfo.userMessage
+            )
         }
     }
     

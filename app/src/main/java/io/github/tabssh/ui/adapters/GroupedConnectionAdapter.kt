@@ -17,7 +17,7 @@ import io.github.tabssh.utils.logging.Logger
  * Supports group headers, ungrouped header, and individual connections
  */
 class GroupedConnectionAdapter(
-    private val items: MutableList<ConnectionListItem>,
+    val items: MutableList<ConnectionListItem>,
     private val onConnectionClick: (ConnectionProfile) -> Unit,
     private val onConnectionLongClick: (ConnectionProfile) -> Unit,
     private val onConnectionEdit: (ConnectionProfile) -> Unit,

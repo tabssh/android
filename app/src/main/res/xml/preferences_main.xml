@@ -35,6 +35,13 @@
         android:summary="Sync data across devices"
         android:icon="@android:drawable/ic_menu_rotate"
         android:fragment="io.github.tabssh.ui.fragments.SyncSettingsFragment" />
+    
+    <Preference
+        android:key="logging_settings"
+        android:title="Logging"
+        android:summary="Debug, host, error, and audit logging"
+        android:icon="@android:drawable/ic_menu_recent_history"
+        android:fragment="io.github.tabssh.ui.activities.LoggingSettingsFragment" />
 
     <Preference
         android:key="audit_settings"

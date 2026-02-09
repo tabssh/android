@@ -12,6 +12,19 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.net.SocketException
 import java.net.SocketTimeoutException
+import java.net.UnknownHostException
+import java.net.ConnectException
+
+/**
+ * Detailed error information for SSH connection failures
+ */
+data class SSHConnectionErrorInfo(
+    val errorType: String,
+    val userMessage: String,
+    val technicalDetails: String,
+    val possibleSolutions: List<String>,
+    val exception: Exception?
+)
 
 /**
  * Represents a single SSH connection with its session and channels
@@ -32,6 +45,9 @@ class SSHConnection(
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
+    private val _detailedError = MutableStateFlow<SSHConnectionErrorInfo?>(null)
+    val detailedError: StateFlow<SSHConnectionErrorInfo?> = _detailedError.asStateFlow()
 
     private val _bytesTransferred = MutableStateFlow(0L)
     val bytesTransferred: StateFlow<Long> = _bytesTransferred.asStateFlow()
@@ -628,23 +644,14 @@ class SSHConnection(
     }
     
     private fun handleConnectionError(error: Exception) {
-        val errorMsg = when (error) {
-            is SocketTimeoutException -> "Connection timeout"
-            is SocketException -> "Network error: ${error.message}"
-            is JSchException -> when {
-                error.message?.contains("Auth fail") == true -> "Authentication failed"
-                error.message?.contains("Connection refused") == true -> "Connection refused"
-                error.message?.contains("UnknownHostException") == true -> "Unknown host"
-                else -> "SSH error: ${error.message}"
-            }
-            is SSHException -> error.message ?: "SSH connection error"
-            else -> "Connection error: ${error.message}"
-        }
+        // Build detailed error information
+        val errorInfo = buildDetailedErrorInfo(error)
         
-        Logger.e("SSHConnection", "Connection failed: $errorMsg", error)
+        Logger.e("SSHConnection", "Connection failed: ${errorInfo.userMessage}", error)
         
         _connectionState.value = ConnectionState.ERROR
-        _errorMessage.value = errorMsg
+        _errorMessage.value = errorInfo.userMessage
+        _detailedError.value = errorInfo
         notifyListeners { onError(id, error) }
         
         // Auto-reconnect logic
@@ -656,6 +663,264 @@ class SSHConnection(
                 delay(5000) // Wait 5 seconds before retry
                 connect()
             }
+        }
+    }
+    
+    /**
+     * Build detailed error information with diagnostics and solutions
+     */
+    private fun buildDetailedErrorInfo(error: Exception): SSHConnectionErrorInfo {
+        return when (error) {
+            is SocketTimeoutException -> SSHConnectionErrorInfo(
+                errorType = "Connection Timeout",
+                userMessage = "Connection to ${profile.host}:${profile.port} timed out after ${profile.connectTimeout}s",
+                technicalDetails = buildString {
+                    appendLine("Exception: ${error.javaClass.simpleName}")
+                    appendLine("Target: ${profile.username}@${profile.host}:${profile.port}")
+                    appendLine("Timeout: ${profile.connectTimeout}s")
+                    appendLine("Proxy: ${profile.proxyType ?: "None"}")
+                    if (profile.portKnockEnabled == true) {
+                        appendLine("Port Knock: Enabled (${profile.portKnockSequence})")
+                    }
+                    appendLine("\nStack Trace:")
+                    appendLine(error.stackTraceToString())
+                },
+                possibleSolutions = listOf(
+                    "• Check if the server is running and accessible",
+                    "• Verify the hostname/IP address is correct",
+                    "• Ensure port ${profile.port} is not blocked by firewall",
+                    "• Try increasing connection timeout in settings",
+                    "• Check your network connection",
+                    "• If using port knocking, verify the sequence is correct"
+                ),
+                exception = error
+            )
+            
+            is UnknownHostException -> SSHConnectionErrorInfo(
+                errorType = "Unknown Host",
+                userMessage = "Cannot resolve hostname: ${profile.host}",
+                technicalDetails = buildString {
+                    appendLine("Exception: ${error.javaClass.simpleName}")
+                    appendLine("Hostname: ${profile.host}")
+                    appendLine("Port: ${profile.port}")
+                    appendLine("Message: ${error.message}")
+                    appendLine("\nStack Trace:")
+                    appendLine(error.stackTraceToString())
+                },
+                possibleSolutions = listOf(
+                    "• Check if the hostname is spelled correctly",
+                    "• Try using IP address instead of hostname",
+                    "• Verify DNS settings on your device",
+                    "• Check if you have internet connectivity",
+                    "• Test the hostname in a browser or ping tool"
+                ),
+                exception = error
+            )
+            
+            is ConnectException -> SSHConnectionErrorInfo(
+                errorType = "Connection Refused",
+                userMessage = "Server at ${profile.host}:${profile.port} refused connection",
+                technicalDetails = buildString {
+                    appendLine("Exception: ${error.javaClass.simpleName}")
+                    appendLine("Target: ${profile.username}@${profile.host}:${profile.port}")
+                    appendLine("Message: ${error.message}")
+                    appendLine("\nStack Trace:")
+                    appendLine(error.stackTraceToString())
+                },
+                possibleSolutions = listOf(
+                    "• Verify SSH server is running on port ${profile.port}",
+                    "• Check if firewall is blocking the connection",
+                    "• Ensure the port number is correct (default: 22)",
+                    "• Server may not be accepting connections",
+                    "• Try connecting from another device to verify server status"
+                ),
+                exception = error
+            )
+            
+            is SocketException -> SSHConnectionErrorInfo(
+                errorType = "Network Error",
+                userMessage = "Network error: ${error.message}",
+                technicalDetails = buildString {
+                    appendLine("Exception: ${error.javaClass.simpleName}")
+                    appendLine("Target: ${profile.username}@${profile.host}:${profile.port}")
+                    appendLine("Message: ${error.message}")
+                    appendLine("\nStack Trace:")
+                    appendLine(error.stackTraceToString())
+                },
+                possibleSolutions = listOf(
+                    "• Check your network connection",
+                    "• Try switching between WiFi and mobile data",
+                    "• Server may have dropped the connection",
+                    "• Check if there's a network proxy interfering",
+                    "• Restart your network connection"
+                ),
+                exception = error
+            )
+            
+            is JSchException -> {
+                val msg = error.message ?: "Unknown SSH error"
+                when {
+                    msg.contains("Auth fail", ignoreCase = true) -> SSHConnectionErrorInfo(
+                        errorType = "Authentication Failed",
+                        userMessage = "Authentication failed for ${profile.username}@${profile.host}",
+                        technicalDetails = buildString {
+                            appendLine("Exception: ${error.javaClass.simpleName}")
+                            appendLine("Target: ${profile.username}@${profile.host}:${profile.port}")
+                            appendLine("Auth Type: ${profile.authType}")
+                            appendLine("Message: ${error.message}")
+                            if (profile.authType == AuthType.PUBLIC_KEY.name) {
+                                appendLine("SSH Key ID: ${profile.keyId ?: "None"}")
+                            }
+                            appendLine("\nStack Trace:")
+                            appendLine(error.stackTraceToString())
+                        },
+                        possibleSolutions = if (profile.authType == AuthType.PUBLIC_KEY.name) {
+                            listOf(
+                                "• Verify the SSH key is correct and authorized on server",
+                                "• Check ~/.ssh/authorized_keys on the server",
+                                "• Ensure the private key matches the public key on server",
+                                "• Try using password authentication instead",
+                                "• Check if key passphrase is correct (if encrypted)",
+                                "• Server may require specific key types (RSA/ECDSA/Ed25519)"
+                            )
+                        } else {
+                            listOf(
+                                "• Check username and password are correct",
+                                "• Verify the user account exists on the server",
+                                "• Account may be locked or disabled",
+                                "• Try SSH key authentication instead",
+                                "• Check server logs for authentication errors",
+                                "• Server may require different auth method (keyboard-interactive)"
+                            )
+                        },
+                        exception = error
+                    )
+                    
+                    msg.contains("Connection refused", ignoreCase = true) -> SSHConnectionErrorInfo(
+                        errorType = "Connection Refused",
+                        userMessage = "Server at ${profile.host}:${profile.port} refused connection",
+                        technicalDetails = buildString {
+                            appendLine("Exception: ${error.javaClass.simpleName}")
+                            appendLine("Target: ${profile.username}@${profile.host}:${profile.port}")
+                            appendLine("Message: ${error.message}")
+                            appendLine("\nStack Trace:")
+                            appendLine(error.stackTraceToString())
+                        },
+                        possibleSolutions = listOf(
+                            "• Verify SSH server is running: sudo systemctl status sshd",
+                            "• Check if firewall is blocking port ${profile.port}",
+                            "• Ensure the port number is correct (default: 22)",
+                            "• Server may not be accepting connections",
+                            "• Check server's sshd_config: AllowUsers, DenyUsers, etc."
+                        ),
+                        exception = error
+                    )
+                    
+                    msg.contains("UnknownHostException", ignoreCase = true) -> SSHConnectionErrorInfo(
+                        errorType = "Unknown Host",
+                        userMessage = "Cannot resolve hostname: ${profile.host}",
+                        technicalDetails = buildString {
+                            appendLine("Exception: ${error.javaClass.simpleName}")
+                            appendLine("Hostname: ${profile.host}")
+                            appendLine("Port: ${profile.port}")
+                            appendLine("Message: ${error.message}")
+                            appendLine("\nStack Trace:")
+                            appendLine(error.stackTraceToString())
+                        },
+                        possibleSolutions = listOf(
+                            "• Check if the hostname is spelled correctly",
+                            "• Try using IP address instead of hostname",
+                            "• Verify DNS settings on your device",
+                            "• Check if you have internet connectivity"
+                        ),
+                        exception = error
+                    )
+                    
+                    msg.contains("Algorithm", ignoreCase = true) -> SSHConnectionErrorInfo(
+                        errorType = "Algorithm Mismatch",
+                        userMessage = "Server and client don't have compatible algorithms",
+                        technicalDetails = buildString {
+                            appendLine("Exception: ${error.javaClass.simpleName}")
+                            appendLine("Target: ${profile.username}@${profile.host}:${profile.port}")
+                            appendLine("Message: ${error.message}")
+                            appendLine("\nStack Trace:")
+                            appendLine(error.stackTraceToString())
+                        },
+                        possibleSolutions = listOf(
+                            "• Server may be using outdated/deprecated algorithms",
+                            "• Try enabling legacy algorithms in Settings → Security",
+                            "• Update the SSH server to support modern algorithms",
+                            "• Check server's sshd_config: Ciphers, MACs, KexAlgorithms",
+                            "• Consider upgrading server SSH version"
+                        ),
+                        exception = error
+                    )
+                    
+                    else -> SSHConnectionErrorInfo(
+                        errorType = "SSH Error",
+                        userMessage = msg,
+                        technicalDetails = buildString {
+                            appendLine("Exception: ${error.javaClass.simpleName}")
+                            appendLine("Target: ${profile.username}@${profile.host}:${profile.port}")
+                            appendLine("Message: ${error.message}")
+                            appendLine("\nStack Trace:")
+                            appendLine(error.stackTraceToString())
+                        },
+                        possibleSolutions = listOf(
+                            "• Check all connection parameters are correct",
+                            "• Try connecting with ssh command line to verify server",
+                            "• Check server logs: /var/log/auth.log or /var/log/secure",
+                            "• Enable debug logging in app settings for more details",
+                            "• Report this issue if problem persists"
+                        ),
+                        exception = error
+                    )
+                }
+            }
+            
+            is SSHException -> SSHConnectionErrorInfo(
+                errorType = "SSH Connection Error",
+                userMessage = error.message ?: "Unknown SSH connection error",
+                technicalDetails = buildString {
+                    appendLine("Exception: ${error.javaClass.simpleName}")
+                    appendLine("Target: ${profile.username}@${profile.host}:${profile.port}")
+                    appendLine("Message: ${error.message}")
+                    appendLine("\nCaused by:")
+                    error.cause?.let {
+                        appendLine(it.javaClass.simpleName + ": " + it.message)
+                    }
+                    appendLine("\nStack Trace:")
+                    appendLine(error.stackTraceToString())
+                },
+                possibleSolutions = listOf(
+                    "• Review connection settings for errors",
+                    "• Check server accessibility",
+                    "• Try connecting with standard SSH tools to verify",
+                    "• Check app permissions and network settings",
+                    "• Enable debug logging for more details"
+                ),
+                exception = error
+            )
+            
+            else -> SSHConnectionErrorInfo(
+                errorType = "Unknown Error",
+                userMessage = error.message ?: "An unexpected error occurred",
+                technicalDetails = buildString {
+                    appendLine("Exception: ${error.javaClass.simpleName}")
+                    appendLine("Target: ${profile.username}@${profile.host}:${profile.port}")
+                    appendLine("Message: ${error.message}")
+                    appendLine("\nStack Trace:")
+                    appendLine(error.stackTraceToString())
+                },
+                possibleSolutions = listOf(
+                    "• Try restarting the app",
+                    "• Check device has sufficient memory",
+                    "• Clear app cache if problem persists",
+                    "• Report this error to developers with debug logs",
+                    "• Try a different connection method"
+                ),
+                exception = error
+            )
         }
     }
     

@@ -26,7 +26,7 @@ import io.github.tabssh.utils.logging.Logger
         AuditLogEntry::class,
         HypervisorProfile::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -282,7 +282,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     MIGRATION_6_7,
                     MIGRATION_7_8,
                     MIGRATION_8_9,
-                    MIGRATION_9_10
+                    MIGRATION_9_10,
+                    MIGRATION_10_11
                 )
                 .build()
                 INSTANCE = instance
@@ -395,5 +396,13 @@ data class DatabaseStats(
                 """.trimIndent())
                 
                 Logger.i("Database", "Migration 9->10: Added hypervisors table")
+            }
+        }
+        
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Add use_mosh column to connections table
+                database.execSQL("ALTER TABLE connections ADD COLUMN use_mosh INTEGER NOT NULL DEFAULT 0")
+                Logger.i("Database", "Migration 10->11: Added use_mosh field to connections")
             }
         }

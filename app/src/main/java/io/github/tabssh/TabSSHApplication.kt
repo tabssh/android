@@ -36,6 +36,9 @@ class TabSSHApplication : Application() {
         Logger.initialize(this, BuildConfig.DEBUG_MODE)
         Logger.d("TabSSHApplication", "Application starting...")
         
+        // Create notification channels
+        io.github.tabssh.utils.NotificationHelper.createNotificationChannels(this)
+        
         // Initialize core components
         initializeCoreComponents()
         

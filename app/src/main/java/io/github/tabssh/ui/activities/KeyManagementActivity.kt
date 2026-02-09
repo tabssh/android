@@ -304,18 +304,14 @@ class KeyManagementActivity : AppCompatActivity() {
     }
 
     private fun generateKey(keyType: KeyType, keySize: Int, keyName: String) {
-        val progressDialog = android.app.ProgressDialog(this).apply {
-            setMessage("Generating SSH key...")
-            setCancelable(false)
-            show()
-        }
+        // Show indeterminate progress
+        Toast.makeText(this, "Generating SSH key...", Toast.LENGTH_SHORT).show()
 
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val result = app.keyStorage.generateKeyPair(keyType, keySize, keyName)
 
                 withContext(Dispatchers.Main) {
-                    progressDialog.dismiss()
 
                     when (result) {
                         is GenerateResult.Success -> {
@@ -339,7 +335,6 @@ class KeyManagementActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e("KeyManagementActivity", "Key generation failed", e)
                 withContext(Dispatchers.Main) {
-                    progressDialog.dismiss()
                     Toast.makeText(this@KeyManagementActivity, "Key generation failed: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }

@@ -48,7 +48,8 @@ class ProxmoxApiClient(
         val maxcpu: Int,
         val mem: Long,
         val maxmem: Long,
-        val uptime: Long
+        val uptime: Long,
+        val ipAddress: String? = null // IP address from guest agent
     )
 
     init {
@@ -195,6 +196,58 @@ class ProxmoxApiClient(
         } catch (e: Exception) {
             Logger.e("ProxmoxAPI", "Failed to shutdown VM", e)
             false
+        }
+    }
+
+    /**
+     * Get VM IP address from QEMU guest agent
+     */
+    suspend fun getVMIPAddress(node: String, vmid: Int, type: String = "qemu"): String? = withContext(Dispatchers.IO) {
+        try {
+            if (type == "lxc") {
+                // For LXC containers, get IP from config
+                val json = apiGet("/nodes/$node/lxc/$vmid/interfaces")
+                val data = json.optJSONArray("data")
+                if (data != null && data.length() > 0) {
+                    for (i in 0 until data.length()) {
+                        val iface = data.getJSONObject(i)
+                        val inet = iface.optString("inet", null)
+                        if (inet != null && !inet.startsWith("127.")) {
+                            return@withContext inet.split("/")[0] // Remove CIDR notation
+                        }
+                    }
+                }
+            } else {
+                // For QEMU VMs, use guest agent
+                try {
+                    val json = apiGet("/nodes/$node/qemu/$vmid/agent/network-get-interfaces")
+                    val result = json.optJSONObject("data")?.optJSONObject("result")
+                    val interfaces = result?.optJSONArray("result")
+                    
+                    if (interfaces != null) {
+                        for (i in 0 until interfaces.length()) {
+                            val iface = interfaces.getJSONObject(i)
+                            val ipAddresses = iface.optJSONArray("ip-addresses")
+                            if (ipAddresses != null) {
+                                for (j in 0 until ipAddresses.length()) {
+                                    val ipObj = ipAddresses.getJSONObject(j)
+                                    val ipType = ipObj.optString("ip-address-type")
+                                    val ip = ipObj.optString("ip-address")
+                                    if (ipType == "ipv4" && !ip.startsWith("127.")) {
+                                        return@withContext ip
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Logger.d("ProxmoxAPI", "Guest agent not available for VM $vmid: ${e.message}")
+                }
+            }
+            null
+        } catch (e: Exception) {
+            Logger.d("ProxmoxAPI", "Failed to get IP for VM $vmid", e)
+            null
         }
     }
 
