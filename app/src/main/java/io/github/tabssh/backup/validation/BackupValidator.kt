@@ -238,7 +238,7 @@ class BackupValidator {
             appendLine()
             appendLine("Contents:")
             items.forEach { (type, count) ->
-                appendLine("  ${type.capitalize()}: $count")
+                appendLine("  ${type.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }}: $count")
             }
         }
     }

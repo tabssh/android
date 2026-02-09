@@ -143,5 +143,41 @@
         <item>tmux</item>
         <item>screen</item>
     </string-array>
+    
+    <!-- Log level options -->
+    <string-array name="log_levels">
+        <item>Verbose</item>
+        <item>Debug</item>
+        <item>Info</item>
+        <item>Warning</item>
+        <item>Error</item>
+    </string-array>
+    <string-array name="log_level_values">
+        <item>verbose</item>
+        <item>debug</item>
+        <item>info</item>
+        <item>warning</item>
+        <item>error</item>
+    </string-array>
+    
+    <!-- Audit events options -->
+    <string-array name="audit_events">
+        <item>Login/Logout</item>
+        <item>Connection Created/Deleted</item>
+        <item>SSH Key Import/Export</item>
+        <item>Settings Changed</item>
+        <item>File Transfer (SFTP)</item>
+        <item>Port Forwarding</item>
+        <item>Sync Operations</item>
+    </string-array>
+    <string-array name="audit_event_values">
+        <item>login_logout</item>
+        <item>connection_changes</item>
+        <item>key_operations</item>
+        <item>settings_changed</item>
+        <item>file_transfer</item>
+        <item>port_forwarding</item>
+        <item>sync_operations</item>
+    </string-array>
 
 </resources>

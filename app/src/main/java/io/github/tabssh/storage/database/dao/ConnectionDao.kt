@@ -47,10 +47,10 @@ interface ConnectionDao {
     @Query("SELECT COUNT(*) FROM connections")
     suspend fun getConnectionCount(): Int
     
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertConnection(connection: ConnectionProfile): Long
     
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertConnections(connections: List<ConnectionProfile>)
     
     @Update

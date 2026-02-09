@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <!-- Debug Logging -->
+    <PreferenceCategory
+        android:title="Debug Logging"
+        android:icon="@android:drawable/ic_menu_info_details">
+
+        <SwitchPreferenceCompat
+            android:key="debug_logging_enabled"
+            android:title="Enable Debug Logging"
+            android:summary="Log debug information for troubleshooting"
+            android:defaultValue="false" />
+
+        <ListPreference
+            android:key="debug_log_level"
+            android:title="Debug Log Level"
+            android:summary="Set verbosity of debug logs"
+            android:entries="@array/log_levels"
+            android:entryValues="@array/log_level_values"
+            android:defaultValue="info"
+            android:dependency="debug_logging_enabled" />
+
+    </PreferenceCategory>
+
+    <!-- Host/Session Logging -->
+    <PreferenceCategory
+        android:title="Host Logging"
+        android:icon="@android:drawable/ic_menu_edit">
+
+        <SwitchPreferenceCompat
+            android:key="host_logging_enabled"
+            android:title="Enable Host Logging"
+            android:summary="Log session output for each connection"
+            android:defaultValue="false" />
+
+        <EditTextPreference
+            android:key="host_log_filename_pattern"
+            android:title="Log Filename Pattern"
+            android:summary="Use variables: {user}, {host}, {date}, {time}"
+            android:defaultValue="{user}_{host}.log"
+            android:dependency="host_logging_enabled" />
+
+        <SeekBarPreference
+            android:key="host_log_max_size_mb"
+            android:title="Max Log Size (MB)"
+            android:summary="Maximum size for each host log file"
+            android:defaultValue="1"
+            android:min="1"
+            android:max="20"
+            app:showSeekBarValue="true"
+            android:dependency="host_logging_enabled" />
+
+        <SwitchPreferenceCompat
+            android:key="host_log_append"
+            android:title="Append to Existing Logs"
+            android:summary="Append to log file or overwrite each session"
+            android:defaultValue="true"
+            android:dependency="host_logging_enabled" />
+
+        <SwitchPreferenceCompat
+            android:key="host_log_include_input"
+            android:title="Log User Input"
+            android:summary="Include commands typed by user (security risk)"
+            android:defaultValue="false"
+            android:dependency="host_logging_enabled" />
+
+        <SwitchPreferenceCompat
+            android:key="host_log_include_timestamps"
+            android:title="Include Timestamps"
+            android:summary="Prefix each line with timestamp"
+            android:defaultValue="true"
+            android:dependency="host_logging_enabled" />
+
+    </PreferenceCategory>
+
+    <!-- Error Logging -->
+    <PreferenceCategory
+        android:title="Error Logging"
+        android:icon="@drawable/ic_error">
+
+        <SwitchPreferenceCompat
+            android:key="error_logging_enabled"
+            android:title="Enable Error Logging"
+            android:summary="Log errors and exceptions to file"
+            android:defaultValue="true" />
+
+        <SwitchPreferenceCompat
+            android:key="error_log_include_stacktrace"
+            android:title="Include Stack Traces"
+            android:summary="Full stack traces in error logs"
+            android:defaultValue="true"
+            android:dependency="error_logging_enabled" />
+
+        <SeekBarPreference
+            android:key="error_log_max_size_mb"
+            android:title="Error Log Max Size (MB)"
+            android:summary="Maximum size for error log file"
+            android:defaultValue="5"
+            android:min="1"
+            android:max="20"
+            app:showSeekBarValue="true"
+            android:dependency="error_logging_enabled" />
+
+    </PreferenceCategory>
+
+    <!-- Audit Logging -->
+    <PreferenceCategory
+        android:title="Audit Logging"
+        android:icon="@android:drawable/ic_lock_lock">
+
+        <SwitchPreferenceCompat
+            android:key="audit_logging_enabled"
+            android:title="Enable Audit Logging"
+            android:summary="Log security events and user actions"
+            android:defaultValue="false" />
+
+        <MultiSelectListPreference
+            android:key="audit_log_events"
+            android:title="Audit Events"
+            android:summary="Select which events to audit"
+            android:entries="@array/audit_events"
+            android:entryValues="@array/audit_event_values"
+            android:dependency="audit_logging_enabled" />
+
+        <SeekBarPreference
+            android:key="audit_log_max_size_mb"
+            android:title="Audit Log Max Size (MB)"
+            android:summary="Maximum size for audit log file"
+            android:defaultValue="10"
+            android:min="1"
+            android:max="20"
+            app:showSeekBarValue="true"
+            android:dependency="audit_logging_enabled" />
+
+    </PreferenceCategory>
+
+    <!-- Log Management -->
+    <PreferenceCategory
+        android:title="Log Management"
+        android:icon="@android:drawable/ic_menu_manage">
+
+        <Preference
+            android:key="view_logs"
+            android:title="View Logs"
+            android:summary="Browse and view log files"
+            android:icon="@android:drawable/ic_menu_view" />
+
+        <Preference
+            android:key="export_logs"
+            android:title="Export Logs"
+            android:summary="Export all logs as ZIP file"
+            android:icon="@android:drawable/ic_menu_save" />
+
+        <Preference
+            android:key="clear_logs"
+            android:title="Clear All Logs"
+            android:summary="Delete all log files (cannot be undone)"
+            android:icon="@android:drawable/ic_menu_delete" />
+
+    </PreferenceCategory>
+
+</PreferenceScreen>

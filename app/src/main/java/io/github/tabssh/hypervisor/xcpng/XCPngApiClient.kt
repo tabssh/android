@@ -14,6 +14,8 @@ import javax.net.ssl.*
 /**
  * XCP-ng/XenServer API Client
  * Uses XML-RPC based API
+ * 
+ * Supports both direct XCP-ng/XenServer connections and Xen Orchestra connections
  */
 class XCPngApiClient(
     private val host: String,
@@ -33,7 +35,8 @@ class XCPngApiClient(
         val powerState: String,
         val memory: Long,
         val vcpus: Int,
-        val isTemplate: Boolean
+        val isTemplate: Boolean,
+        val ipAddress: String? = null // IP from guest metrics
     )
 
     data class XenHost(
@@ -67,6 +70,8 @@ class XCPngApiClient(
 
     suspend fun authenticate(): Boolean = withContext(Dispatchers.IO) {
         try {
+            Logger.d("XCPngAPI", "Attempting authentication to $baseUrl")
+            
             val xmlRequest = """
                 <?xml version="1.0"?>
                 <methodCall>
@@ -80,19 +85,36 @@ class XCPngApiClient(
 
             val response = xmlRpcCall(xmlRequest)
             
+            Logger.d("XCPngAPI", "Auth response length: ${response.length}")
+            
             // Parse XML response for session ID
             if (response.contains("<value>") && response.contains("OpaqueRef:")) {
                 val start = response.indexOf("<value>") + 7
                 val end = response.indexOf("</value>", start)
                 sessionId = response.substring(start, end)
-                Logger.i("XCPngAPI", "Authentication successful")
+                Logger.i("XCPngAPI", "Authentication successful, session: ${sessionId?.take(20)}...")
                 true
+            } else if (response.contains("Fault") || response.contains("fault")) {
+                // Parse error message
+                val errorStart = response.indexOf("<string>")
+                val errorEnd = response.indexOf("</string>", errorStart)
+                val errorMsg = if (errorStart > 0 && errorEnd > errorStart) {
+                    response.substring(errorStart + 8, errorEnd)
+                } else {
+                    "Unknown XML-RPC fault"
+                }
+                Logger.e("XCPngAPI", "Authentication failed: $errorMsg")
+                false
             } else {
-                Logger.e("XCPngAPI", "Authentication failed")
+                Logger.e("XCPngAPI", "Authentication failed - unexpected response format")
+                Logger.d("XCPngAPI", "Response: ${response.take(500)}")
                 false
             }
+        } catch (e: IOException) {
+            Logger.e("XCPngAPI", "Network error during authentication: ${e.message}", e)
+            false
         } catch (e: Exception) {
-            Logger.e("XCPngAPI", "Authentication error", e)
+            Logger.e("XCPngAPI", "Authentication error: ${e.message}", e)
             false
         }
     }
@@ -199,15 +221,23 @@ class XCPngApiClient(
         val request = Request.Builder()
             .url(baseUrl)
             .post(requestBody)
+            .header("Content-Type", "text/xml")
             .build()
 
-        val response = client.newCall(request).execute()
-        val responseBody = response.body?.string()
+        try {
+            val response = client.newCall(request).execute()
+            val responseBody = response.body?.string()
 
-        if (response.isSuccessful && responseBody != null) {
-            return responseBody
-        } else {
-            throw IOException("XML-RPC call failed: ${response.code}")
+            if (response.isSuccessful && responseBody != null) {
+                return responseBody
+            } else {
+                val errorMsg = "XML-RPC call failed: ${response.code} ${response.message}"
+                Logger.e("XCPngAPI", "$errorMsg - Body: ${responseBody?.take(200)}")
+                throw IOException(errorMsg)
+            }
+        } catch (e: IOException) {
+            Logger.e("XCPngAPI", "Network error during XML-RPC call: ${e.message}")
+            throw e
         }
     }
 

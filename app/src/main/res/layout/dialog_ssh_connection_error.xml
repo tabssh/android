@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:padding="24dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- Error Icon -->
+        <ImageView
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="16dp"
+            android:src="@drawable/ic_error"
+            android:tint="?colorError"
+            android:contentDescription="Error icon" />
+
+        <!-- Connection Details -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardElevation="2dp"
+            app:cardCornerRadius="8dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Connection Details"
+                    android:textStyle="bold"
+                    android:textSize="14sp"
+                    android:textColor="?android:textColorPrimary"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:id="@+id/text_connection_name"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Connection: Loading..."
+                    android:textSize="12sp"
+                    android:textColor="?android:textColorSecondary"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:id="@+id/text_connection_host"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Host: Loading..."
+                    android:textSize="12sp"
+                    android:textColor="?android:textColorSecondary"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:id="@+id/text_connection_username"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Username: Loading..."
+                    android:textSize="12sp"
+                    android:textColor="?android:textColorSecondary"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:id="@+id/text_auth_type"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Auth: Loading..."
+                    android:textSize="12sp"
+                    android:textColor="?android:textColorSecondary" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Error Message -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Error Message"
+            android:textStyle="bold"
+            android:textSize="14sp"
+            android:textColor="?android:textColorPrimary"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/text_error_message"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Loading error..."
+            android:textSize="13sp"
+            android:textColor="?colorError"
+            android:textIsSelectable="true"
+            android:padding="12dp"
+            android:background="@android:color/transparent"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Technical Details (Expandable) -->
+        <TextView
+            android:id="@+id/text_show_technical"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="▶ Show Technical Details"
+            android:textSize="13sp"
+            android:textColor="?colorPrimary"
+            android:clickable="true"
+            android:focusable="true"
+            android:paddingVertical="8dp"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/text_technical_details"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Loading technical details..."
+            android:textSize="11sp"
+            android:textColor="?android:textColorSecondary"
+            android:textIsSelectable="true"
+            android:fontFamily="monospace"
+            android:padding="12dp"
+            android:background="#10000000"
+            android:visibility="gone"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Possible Solutions -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Possible Solutions"
+            android:textStyle="bold"
+            android:textSize="14sp"
+            android:textColor="?android:textColorPrimary"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/text_solutions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Loading solutions..."
+            android:textSize="12sp"
+            android:textColor="?android:textColorSecondary"
+            android:textIsSelectable="true"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Action Buttons -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="end">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/button_copy_error"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Copy Error"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_marginEnd="8dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/button_edit_connection"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Edit Connection"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_marginEnd="8dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/button_retry"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Retry"
+                style="@style/Widget.Material3.Button"
+                android:layout_marginEnd="8dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/button_close"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Close"
+                style="@style/Widget.Material3.Button.TextButton" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</ScrollView>

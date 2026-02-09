@@ -100,6 +100,8 @@ class XCPngManagerActivity : AppCompatActivity() {
                 statusText.text = "Connecting to ${profile.name}..."
                 statusText.visibility = View.VISIBLE
                 
+                Logger.d("XCPngManager", "Connecting to ${profile.host}:${profile.port} as ${profile.username}")
+                
                 currentClient = XCPngApiClient(
                     host = profile.host,
                     port = profile.port,
@@ -115,13 +117,32 @@ class XCPngManagerActivity : AppCompatActivity() {
                     app.database.hypervisorDao().updateLastConnected(profile.id, System.currentTimeMillis())
                     refreshVMs()
                 } else {
-                    statusText.text = "Authentication failed"
+                    statusText.text = "Authentication failed - check credentials and network"
+                    Toast.makeText(this@XCPngManagerActivity, 
+                        "Failed to authenticate. Check:\n• Username/password\n• Host/port (${profile.host}:${profile.port})\n• Network connectivity\n• SSL certificate (verify SSL: ${profile.verifySsl})", 
+                        Toast.LENGTH_LONG).show()
                     progressBar.visibility = View.GONE
                 }
                 
+            } catch (e: java.net.UnknownHostException) {
+                Logger.e("XCPngManager", "Unknown host: ${profile.host}", e)
+                statusText.text = "Error: Host not found (${profile.host})"
+                Toast.makeText(this@XCPngManagerActivity, "Cannot resolve hostname: ${profile.host}", Toast.LENGTH_LONG).show()
+                progressBar.visibility = View.GONE
+            } catch (e: java.net.ConnectException) {
+                Logger.e("XCPngManager", "Connection refused", e)
+                statusText.text = "Error: Connection refused"
+                Toast.makeText(this@XCPngManagerActivity, "Connection refused. Check:\n• Port ${profile.port} is correct\n• XCP-ng API is accessible\n• Firewall allows connection", Toast.LENGTH_LONG).show()
+                progressBar.visibility = View.GONE
+            } catch (e: javax.net.ssl.SSLHandshakeException) {
+                Logger.e("XCPngManager", "SSL handshake failed", e)
+                statusText.text = "Error: SSL certificate issue"
+                Toast.makeText(this@XCPngManagerActivity, "SSL certificate verification failed. Try disabling 'Verify SSL' in hypervisor settings.", Toast.LENGTH_LONG).show()
+                progressBar.visibility = View.GONE
             } catch (e: Exception) {
                 Logger.e("XCPngManager", "Connection failed", e)
-                statusText.text = "Connection error"
+                statusText.text = "Connection error: ${e.message}"
+                Toast.makeText(this@XCPngManagerActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
                 progressBar.visibility = View.GONE
             }
         }
@@ -157,6 +178,14 @@ class XCPngManagerActivity : AppCompatActivity() {
             try {
                 progressBar.visibility = View.VISIBLE
                 
+                when (action) {
+                    "console" -> {
+                        openVMConsole(vm)
+                        progressBar.visibility = View.GONE
+                        return@launch
+                    }
+                }
+                
                 val success = when (action) {
                     "start" -> currentClient?.startVM(vm.uuid) ?: false
                     "stop" -> currentClient?.hardShutdownVM(vm.uuid) ?: false
@@ -176,6 +205,61 @@ class XCPngManagerActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e("XCPngManager", "VM action failed", e)
                 progressBar.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun openVMConsole(vm: XCPngApiClient.XenVM) {
+        if (vm.ipAddress == null) {
+            Toast.makeText(this, "VM IP address not available", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        lifecycleScope.launch {
+            try {
+                // Get or create connection profile for VM
+                val connectionName = "${vm.name}-console"
+                var connection = app.database.connectionDao().getAllConnections()
+                    .let { flow -> 
+                        var result: io.github.tabssh.storage.database.entities.ConnectionProfile? = null
+                        flow.collect { connections ->
+                            result = connections.firstOrNull { it.name == connectionName }
+                        }
+                        result
+                    }
+
+                if (connection == null) {
+                    // Create new connection profile
+                    connection = io.github.tabssh.storage.database.entities.ConnectionProfile(
+                        id = java.util.UUID.randomUUID().toString(),
+                        name = connectionName,
+                        host = vm.ipAddress!!,
+                        port = 22,
+                        username = "root",
+                        authType = io.github.tabssh.ssh.auth.AuthType.PASSWORD.name,
+                        createdAt = System.currentTimeMillis(),
+                        modifiedAt = System.currentTimeMillis()
+                    )
+                    app.database.connectionDao().insertConnection(connection)
+                    Logger.i("XCPngManager", "Created connection profile for VM: ${vm.name}")
+                } else {
+                    // Update existing connection with latest IP
+                    connection = connection.copy(
+                        host = vm.ipAddress!!,
+                        modifiedAt = System.currentTimeMillis()
+                    )
+                    app.database.connectionDao().updateConnection(connection)
+                    Logger.i("XCPngManager", "Updated connection profile for VM: ${vm.name}")
+                }
+
+                // Launch terminal activity
+                val intent = TabTerminalActivity.createIntent(this@XCPngManagerActivity, connection, autoConnect = false)
+                startActivity(intent)
+                
+                Toast.makeText(this@XCPngManagerActivity, "Opening console for ${vm.name}", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Logger.e("XCPngManager", "Failed to open VM console", e)
+                Toast.makeText(this@XCPngManagerActivity, "Failed to open console: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }

@@ -9,6 +9,7 @@ import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
+import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.navigation.NavigationView
@@ -18,6 +19,7 @@ import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.ui.adapters.MainPagerAdapter
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.launch
 
 /**
  * Main activity with 5-tab JuiceSSH-inspired layout
@@ -31,6 +33,20 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     private lateinit var tabLayout: TabLayout
     private lateinit var fab: FloatingActionButton
     private lateinit var pagerAdapter: MainPagerAdapter
+    private lateinit var backupManager: io.github.tabssh.backup.BackupManager
+    
+    // Import/Export launchers
+    private val importConnectionsLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let { importBackupFromUri(it) }
+    }
+    
+    private val exportConnectionsLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        uri?.let { exportBackupToUri(it) }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,6 +55,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         Logger.d("MainActivity", "onCreate - New 5-tab layout")
 
         app = application as TabSSHApplication
+        backupManager = io.github.tabssh.backup.BackupManager(this)
 
         // Setup toolbar
         val toolbar = findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
@@ -125,52 +142,242 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         Logger.i("MainActivity", "MainActivity created successfully")
     }
 
-    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
-        menuInflater.inflate(R.menu.main_menu, menu)
-        return true
-    }
+    // Toolbar options menu removed - all actions now in drawer
+    // override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+    //     menuInflater.inflate(R.menu.main_menu, menu)
+    //     return true
+    // }
 
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        return when (item.itemId) {
-            R.id.action_settings -> {
-                startActivity(Intent(this, SettingsActivity::class.java))
-                true
-            }
-            R.id.action_search -> {
-                // Search is handled within ConnectionsFragment
-                true
-            }
-            else -> super.onOptionsItemSelected(item)
-        }
-    }
+    // Toolbar menu handler removed - drawer menu only
+    // override fun onOptionsItemSelected(item: MenuItem): Boolean {
+    //     return super.onOptionsItemSelected(item)
+    // }
 
     override fun onNavigationItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
+            // Main actions
+            R.id.nav_connections -> {
+                viewPager.currentItem = 1 // Switch to Connections tab
+            }
+            R.id.nav_identities -> {
+                viewPager.currentItem = 2 // Switch to Identities tab
+            }
+            R.id.nav_manage_keys -> {
+                startActivity(Intent(this, KeyManagementActivity::class.java))
+            }
+            R.id.nav_snippets -> {
+                startActivity(Intent(this, SnippetManagerActivity::class.java))
+            }
+            R.id.nav_port_forwarding -> {
+                startActivity(Intent(this, PortForwardingActivity::class.java))
+            }
+            
+            // Hypervisors
+            R.id.nav_hypervisors -> {
+                viewPager.currentItem = 4 // Switch to Hypervisors tab
+            }
+            R.id.nav_proxmox -> {
+                // Open Proxmox manager directly
+                // TODO: Get first Proxmox hypervisor and open manager
+                android.widget.Toast.makeText(this, "Proxmox Manager - Select hypervisor first", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            R.id.nav_xcpng -> {
+                // Open XCP-ng manager directly
+                android.widget.Toast.makeText(this, "XCP-ng Manager - Select hypervisor first", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            R.id.nav_vmware -> {
+                // Open VMware manager directly
+                android.widget.Toast.makeText(this, "VMware Manager - Select hypervisor first", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            
+            // Tools
+            R.id.nav_manage_groups -> {
+                startActivity(Intent(this, GroupManagementActivity::class.java))
+            }
+            R.id.nav_cluster_commands -> {
+                startActivity(Intent(this, ClusterCommandActivity::class.java))
+            }
+            R.id.nav_performance -> {
+                viewPager.currentItem = 3 // Switch to Performance tab
+            }
+            
+            // Import/Export
+            R.id.nav_import_connections -> {
+                importConnectionsLauncher.launch(arrayOf("application/zip", "application/json"))
+            }
+            R.id.nav_export_connections -> {
+                exportConnectionsLauncher.launch("tabssh_connections_${System.currentTimeMillis()}.zip")
+            }
+            R.id.nav_import_ssh_config -> {
+                // SSH config import - show toast for now
+                android.widget.Toast.makeText(this, "SSH Config Import - Coming soon", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            
+            // Settings & Help
             R.id.nav_settings -> {
                 startActivity(Intent(this, SettingsActivity::class.java))
             }
-            R.id.nav_port_forwarding -> {
-                // TODO: Navigate to Port Forwarding settings
-            }
-            R.id.nav_snippets -> {
-                // TODO: Navigate to Snippets Library
-            }
-            R.id.nav_import_export_connections -> {
-                // TODO: Show import/export dialog
-            }
-            R.id.nav_import_ssh_config -> {
-                // TODO: Show SSH config import dialog
+            R.id.nav_help -> {
+                showHelpDialog()
             }
             R.id.nav_about -> {
-                // TODO: Show about dialog
-            }
-            R.id.nav_help -> {
-                // TODO: Show help
+                showAboutDialog()
             }
         }
         
         drawerLayout.closeDrawer(GravityCompat.START)
         return true
+    }
+    
+    /**
+     * Show help dialog
+     */
+    private fun showHelpDialog() {
+        val helpText = """
+        TabSSH - Modern SSH Client for Android
+        
+        Getting Started:
+        • Tap (+) to add a new connection
+        • Long-press a connection for more options
+        • Swipe left/right to navigate between tabs
+        
+        Features:
+        • Browser-style SSH tabs
+        • SSH key management
+        • Port forwarding
+        • SFTP file transfer
+        • Performance monitoring
+        • Hypervisor management
+        
+        For more help, visit:
+        https://github.com/tabssh/android
+        """.trimIndent()
+        
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Help")
+            .setMessage(helpText)
+            .setPositiveButton("OK", null)
+            .setNeutralButton("Visit Website") { _, _ ->
+                val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/tabssh/android"))
+                startActivity(intent)
+            }
+            .show()
+    }
+    
+    /**
+     * Show about dialog
+     */
+    private fun showAboutDialog() {
+        val aboutText = """
+        TabSSH
+        Version 1.1.0 (Build 3)
+        
+        A modern, open-source SSH client for Android with browser-style tabs, Material Design 3, and comprehensive security features.
+        
+        © 2024-2025 TabSSH Project
+        Licensed under MIT License
+        
+        Built with:
+        • Kotlin 2.0.21
+        • JSch (SSH library)
+        • Material Design Components
+        • MPAndroidChart
+        
+        Credits:
+        • Development: TabSSH Team
+        • Icon Design: Material Icons
+        • Community Contributors
+        """.trimIndent()
+        
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("About TabSSH")
+            .setMessage(aboutText)
+            .setPositiveButton("OK", null)
+            .setNeutralButton("GitHub") { _, _ ->
+                val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/tabssh/android"))
+                startActivity(intent)
+            }
+            .setNegativeButton("License") { _, _ ->
+                val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/tabssh/android/blob/main/LICENSE.md"))
+                startActivity(intent)
+            }
+            .show()
+    }
+    
+    /**
+     * Import connections backup from URI
+     */
+    private fun importBackupFromUri(uri: android.net.Uri) {
+        lifecycleScope.launch {
+            try {
+                // Ask for password (optional)
+                val password = null // TODO: Add password dialog
+                
+                val result = backupManager.restoreBackup(uri, password, overwriteExisting = false)
+                
+                if (result.success) {
+                    // Show success dialog
+                    val message = "Import successful!\n\nImported: ${result.restoredItems["connections"] ?: 0} connections"
+                    
+                    androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+                        .setTitle("Backup Imported")
+                        .setMessage(message)
+                        .setPositiveButton("OK", null)
+                        .show()
+                        
+                    Logger.i("MainActivity", "Imported backup successfully")
+                } else {
+                    throw Exception("Import failed")
+                }
+                
+            } catch (e: Exception) {
+                Logger.e("MainActivity", "Failed to import backup", e)
+                androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+                    .setTitle("Import Failed")
+                    .setMessage("Failed to import backup:\n${e.message}")
+                    .setPositiveButton("OK", null)
+                    .show()
+            }
+        }
+    }
+    
+    /**
+     * Export connections backup to URI
+     */
+    private fun exportBackupToUri(uri: android.net.Uri) {
+        lifecycleScope.launch {
+            try {
+                // Ask for password (optional)
+                val password = null // TODO: Add password dialog
+                
+                val result = backupManager.createBackup(
+                    outputUri = uri,
+                    includePasswords = false,
+                    encryptBackup = password != null,
+                    password = password
+                )
+                
+                if (result.success) {
+                    android.widget.Toast.makeText(
+                        this@MainActivity,
+                        "Backup exported successfully",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                    
+                    Logger.i("MainActivity", "Exported backup successfully")
+                } else {
+                    throw Exception("Export failed")
+                }
+                
+            } catch (e: Exception) {
+                Logger.e("MainActivity", "Failed to export backup", e)
+                androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+                    .setTitle("Export Failed")
+                    .setMessage("Failed to export backup:\n${e.message}")
+                    .setPositiveButton("OK", null)
+                    .show()
+            }
+        }
     }
 
     override fun onResume() {

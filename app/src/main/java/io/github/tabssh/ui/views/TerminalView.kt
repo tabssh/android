@@ -370,7 +370,7 @@ class TerminalView @JvmOverloads constructor(
             } else {
                 // Keyboard is hidden - show it
                 requestFocus()
-                inputMethodManager.showSoftInput(this, InputMethodManager.SHOW_FORCED)
+                inputMethodManager.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
                 Logger.d("TerminalView", "Showing keyboard")
             }
         }

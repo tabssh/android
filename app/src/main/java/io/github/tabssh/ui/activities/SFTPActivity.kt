@@ -464,6 +464,16 @@ class SFTPActivity : AppCompatActivity() {
                         override fun onProgress(transfer: TransferTask, bytesTransferred: Long, totalBytes: Long) {
                             runOnUiThread {
                                 updateTransferProgress(transfer)
+                                
+                                // Update notification with progress
+                                io.github.tabssh.utils.NotificationHelper.showFileTransferProgress(
+                                    this@SFTPActivity,
+                                    transfer.id.hashCode(),
+                                    localFile.name,
+                                    bytesTransferred,
+                                    totalBytes,
+                                    isUpload = true
+                                )
                             }
                         }
                         
@@ -471,6 +481,32 @@ class SFTPActivity : AppCompatActivity() {
                             runOnUiThread {
                                 handleTransferCompleted(transfer, result)
                                 loadRemoteDirectory(currentRemotePath) // Refresh remote files
+                                
+                                // Show completion notification
+                                when (result) {
+                                    is io.github.tabssh.sftp.TransferResult.Success -> {
+                                        io.github.tabssh.utils.NotificationHelper.showFileTransferComplete(
+                                            this@SFTPActivity,
+                                            transfer.id.hashCode(),
+                                            localFile.name,
+                                            isUpload = true
+                                        )
+                                    }
+                                    is io.github.tabssh.sftp.TransferResult.Error -> {
+                                        io.github.tabssh.utils.NotificationHelper.showConnectionError(
+                                            this@SFTPActivity,
+                                            localFile.name,
+                                            "Upload failed: ${result.message}"
+                                        )
+                                    }
+                                    is io.github.tabssh.sftp.TransferResult.Cancelled -> {
+                                        // Cancel notification silently
+                                        io.github.tabssh.utils.NotificationHelper.cancelNotification(
+                                            this@SFTPActivity,
+                                            transfer.id.hashCode()
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -500,6 +536,16 @@ class SFTPActivity : AppCompatActivity() {
                         override fun onProgress(transfer: TransferTask, bytesTransferred: Long, totalBytes: Long) {
                             runOnUiThread {
                                 updateTransferProgress(transfer)
+                                
+                                // Update notification with progress
+                                io.github.tabssh.utils.NotificationHelper.showFileTransferProgress(
+                                    this@SFTPActivity,
+                                    transfer.id.hashCode(),
+                                    remoteFile.name,
+                                    bytesTransferred,
+                                    totalBytes,
+                                    isUpload = false
+                                )
                             }
                         }
                         
@@ -507,6 +553,32 @@ class SFTPActivity : AppCompatActivity() {
                             runOnUiThread {
                                 handleTransferCompleted(transfer, result)
                                 loadLocalDirectory(currentLocalPath) // Refresh local files
+                                
+                                // Show completion notification
+                                when (result) {
+                                    is io.github.tabssh.sftp.TransferResult.Success -> {
+                                        io.github.tabssh.utils.NotificationHelper.showFileTransferComplete(
+                                            this@SFTPActivity,
+                                            transfer.id.hashCode(),
+                                            remoteFile.name,
+                                            isUpload = false
+                                        )
+                                    }
+                                    is io.github.tabssh.sftp.TransferResult.Error -> {
+                                        io.github.tabssh.utils.NotificationHelper.showConnectionError(
+                                            this@SFTPActivity,
+                                            remoteFile.name,
+                                            "Download failed: ${result.message}"
+                                        )
+                                    }
+                                    is io.github.tabssh.sftp.TransferResult.Cancelled -> {
+                                        // Cancel notification silently
+                                        io.github.tabssh.utils.NotificationHelper.cancelNotification(
+                                            this@SFTPActivity,
+                                            transfer.id.hashCode()
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

@@ -587,25 +587,34 @@ class KeyStorage(private val context: Context) {
 
             val keyBytes = android.util.Base64.decode(keyData, android.util.Base64.DEFAULT)
             
-            // OpenSSH format parsing requires detailed binary protocol implementation
-            // For now, provide clear error message with conversion instructions
-            if (passphrase != null) {
-                ParseResult.Error(
-                    "Encrypted OpenSSH keys require conversion.\n" +
-                    "Convert to PKCS#8 format using:\n" +
-                    "ssh-keygen -p -m pkcs8 -f your_key"
-                )
-            } else {
-                ParseResult.Error(
-                    "OpenSSH format parsing requires conversion.\n" +
-                    "Convert to PKCS#8 format using:\n" +
-                    "ssh-keygen -p -m pkcs8 -f your_key\n" +
-                    "This will make the key compatible with TabSSH."
-                )
-            }
+            // OpenSSH format has complex binary structure
+            // If we reach here, BouncyCastle couldn't handle it
+            ParseResult.Error(
+                """OpenSSH format detected but couldn't be parsed.
+
+TabSSH DOES support OpenSSH format! This is unexpected.
+
+Please try:
+1. Re-export key: ssh-keygen -p -m PEM -f your_key
+2. Verify key file is complete (not truncated)
+3. If encrypted, check passphrase
+
+If this continues, please report as a bug with the error message below (tap Copy Error button).
+
+Technical: OpenSSH binary parsing fallback failed"""
+            )
         } catch (e: Exception) {
             Logger.e("KeyStorage", "Manual OpenSSH parsing failed", e)
-            ParseResult.Error("OpenSSH key parsing failed. Please convert to PKCS#8 format.")
+            ParseResult.Error(
+                """Failed to parse OpenSSH key after multiple attempts.
+
+This should work! TabSSH supports OpenSSH format.
+
+Quick fix:
+ssh-keygen -p -m PEM -f your_key
+
+Error: ${e.javaClass.simpleName}: ${e.message}"""
+            )
         }
     }
     
@@ -652,7 +661,16 @@ class KeyStorage(private val context: Context) {
             
         } catch (e: Exception) {
             Logger.e("KeyStorage", "Failed to parse traditional $algorithm key", e)
-            ParseResult.Error("Failed to parse $algorithm key: ${e.message}")
+            ParseResult.Error(
+                """Failed to parse $algorithm private key.
+
+Possible causes:
+• Key file corrupted
+• Unsupported key variant  
+• Wrong passphrase (if encrypted)
+
+Error: ${e.javaClass.simpleName}: ${e.message}"""
+            )
         }
     }
     

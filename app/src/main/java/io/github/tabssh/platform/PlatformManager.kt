@@ -47,8 +47,7 @@ class PlatformManager(private val context: Context) {
      */
     private fun isAndroidTV(): Boolean {
         val packageManager = context.packageManager
-        return packageManager.hasSystemFeature(PackageManager.FEATURE_TELEVISION) ||
-               packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+        return packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
     }
     
     /**

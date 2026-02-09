@@ -5,32 +5,236 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
+import android.widget.ArrayAdapter
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.textfield.TextInputEditText
 import io.github.tabssh.R
+import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.ssh.auth.AuthType
+import io.github.tabssh.storage.database.entities.Identity
 import io.github.tabssh.ui.activities.KeyManagementActivity
+import io.github.tabssh.ui.adapters.IdentityAdapter
+import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
- * Fragment for managing users and SSH keys (identities)
+ * Fragment for managing users (identities) and SSH keys
+ * 
+ * Identities are reusable credential sets (username + auth method) that can be
+ * shared across multiple connections, similar to JuiceSSH's "Identities" feature.
  */
 class IdentitiesFragment : Fragment() {
-
+    
+    private lateinit var app: TabSSHApplication
+    private lateinit var identityAdapter: IdentityAdapter
+    
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
-    ): View? {
+    ): View {
         return inflater.inflate(R.layout.fragment_identities, container, false)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         
-        view.findViewById<Button>(R.id.btn_manage_keys)?.setOnClickListener {
+        app = requireActivity().application as TabSSHApplication
+        
+        setupIdentitiesSection(view)
+        setupKeysSection(view)
+        loadData()
+    }
+    
+    private fun setupIdentitiesSection(view: View) {
+        // Setup identities RecyclerView
+        identityAdapter = IdentityAdapter(
+            onEdit = { identity -> showEditDialog(identity) },
+            onDelete = { identity -> showDeleteConfirmation(identity) }
+        )
+        
+        val recyclerView = view.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.recycler_users)
+        recyclerView.layoutManager = LinearLayoutManager(requireContext())
+        recyclerView.adapter = identityAdapter
+        
+        // FAB to add identity
+        view.findViewById<com.google.android.material.floatingactionbutton.FloatingActionButton>(R.id.fab_add_identity).setOnClickListener {
+            showCreateDialog()
+        }
+    }
+    
+    private fun setupKeysSection(view: View) {
+        // "Manage Keys" button opens KeyManagementActivity
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_manage_keys).setOnClickListener {
             startActivity(Intent(requireContext(), KeyManagementActivity::class.java))
         }
     }
-
+    
+    private fun loadData() {
+        // Load identities
+        lifecycleScope.launch {
+            app.database.identityDao().getAllIdentities().collect { identities ->
+                identityAdapter.submitList(identities)
+                Logger.d("IdentitiesFragment", "Loaded ${identities.size} identities")
+            }
+        }
+        
+        // Load SSH keys count (for display)
+        lifecycleScope.launch {
+            val keysCount = app.database.keyDao().getKeyCount()
+            Logger.d("IdentitiesFragment", "Found $keysCount SSH keys")
+        }
+    }
+    
+    private fun showCreateDialog() {
+        val dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_edit_identity, null)
+        
+        val nameInput = dialogView.findViewById<TextInputEditText>(R.id.edit_name)
+        val usernameInput = dialogView.findViewById<TextInputEditText>(R.id.edit_username)
+        val descriptionInput = dialogView.findViewById<TextInputEditText>(R.id.edit_description)
+        val authTypeSpinner = dialogView.findViewById<android.widget.Spinner>(R.id.spinner_auth_type)
+        
+        // Setup auth type spinner
+        val authTypes = listOf("Password", "SSH Key", "Keyboard Interactive")
+        authTypeSpinner.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, authTypes).apply {
+            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        }
+        
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Create Identity")
+            .setView(dialogView)
+            .setPositiveButton("Create") { _, _ ->
+                val name = nameInput.text.toString()
+                val username = usernameInput.text.toString()
+                val description = descriptionInput.text.toString()
+                val authType = when (authTypeSpinner.selectedItemPosition) {
+                    0 -> AuthType.PASSWORD
+                    1 -> AuthType.PUBLIC_KEY
+                    2 -> AuthType.KEYBOARD_INTERACTIVE
+                    else -> AuthType.PASSWORD
+                }
+                
+                if (name.isNotBlank() && username.isNotBlank()) {
+                    createIdentity(name, username, authType, description.ifBlank { null })
+                } else {
+                    android.widget.Toast.makeText(requireContext(), "Name and username are required", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+    
+    private fun showEditDialog(identity: Identity) {
+        val dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_edit_identity, null)
+        
+        val nameInput = dialogView.findViewById<TextInputEditText>(R.id.edit_name)
+        val usernameInput = dialogView.findViewById<TextInputEditText>(R.id.edit_username)
+        val descriptionInput = dialogView.findViewById<TextInputEditText>(R.id.edit_description)
+        val authTypeSpinner = dialogView.findViewById<android.widget.Spinner>(R.id.spinner_auth_type)
+        
+        // Pre-fill values
+        nameInput.setText(identity.name)
+        usernameInput.setText(identity.username)
+        descriptionInput.setText(identity.description ?: "")
+        
+        // Setup auth type spinner
+        val authTypes = listOf("Password", "SSH Key", "Keyboard Interactive")
+        authTypeSpinner.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, authTypes).apply {
+            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        }
+        authTypeSpinner.setSelection(when (identity.authType) {
+            AuthType.PASSWORD -> 0
+            AuthType.PUBLIC_KEY -> 1
+            AuthType.KEYBOARD_INTERACTIVE -> 2
+            AuthType.GSSAPI -> 1
+        })
+        
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Edit Identity")
+            .setView(dialogView)
+            .setPositiveButton("Save") { _, _ ->
+                val name = nameInput.text.toString()
+                val username = usernameInput.text.toString()
+                val description = descriptionInput.text.toString()
+                val authType = when (authTypeSpinner.selectedItemPosition) {
+                    0 -> AuthType.PASSWORD
+                    1 -> AuthType.PUBLIC_KEY
+                    2 -> AuthType.KEYBOARD_INTERACTIVE
+                    else -> AuthType.PASSWORD
+                }
+                
+                if (name.isNotBlank() && username.isNotBlank()) {
+                    updateIdentity(identity.copy(
+                        name = name,
+                        username = username,
+                        authType = authType,
+                        description = description.ifBlank { null },
+                        modifiedAt = System.currentTimeMillis()
+                    ))
+                } else {
+                    android.widget.Toast.makeText(requireContext(), "Name and username are required", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+    
+    private fun showDeleteConfirmation(identity: Identity) {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Delete Identity")
+            .setMessage("Delete identity \"${identity.name}\"? Connections using this identity will need to be reconfigured.")
+            .setPositiveButton("Delete") { _, _ ->
+                deleteIdentity(identity)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+    
+    private fun createIdentity(name: String, username: String, authType: AuthType, description: String?) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val identity = Identity(
+                name = name,
+                username = username,
+                authType = authType,
+                description = description
+            )
+            app.database.identityDao().insert(identity)
+            
+            withContext(Dispatchers.Main) {
+                android.widget.Toast.makeText(requireContext(), "Identity \"$name\" created", android.widget.Toast.LENGTH_SHORT).show()
+                Logger.d("IdentitiesFragment", "Created identity: $name")
+            }
+        }
+    }
+    
+    private fun updateIdentity(identity: Identity) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            app.database.identityDao().update(identity)
+            
+            withContext(Dispatchers.Main) {
+                android.widget.Toast.makeText(requireContext(), "Identity updated", android.widget.Toast.LENGTH_SHORT).show()
+                Logger.d("IdentitiesFragment", "Updated identity: ${identity.name}")
+            }
+        }
+    }
+    
+    private fun deleteIdentity(identity: Identity) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            app.database.identityDao().delete(identity)
+            
+            withContext(Dispatchers.Main) {
+                android.widget.Toast.makeText(requireContext(), "Identity deleted", android.widget.Toast.LENGTH_SHORT).show()
+                Logger.d("IdentitiesFragment", "Deleted identity: ${identity.name}")
+            }
+        }
+    }
+    
     companion object {
         fun newInstance() = IdentitiesFragment()
     }

@@ -334,6 +334,7 @@ class ConnectionEditActivity : AppCompatActivity() {
         binding.switchCompression.isChecked = profile.compression
         binding.switchKeepAlive.isChecked = profile.keepAlive
         binding.switchX11Forwarding.isChecked = profile.x11Forwarding
+        binding.switchUseMosh.isChecked = profile.useMosh
 
         // Group
         selectedGroupId = profile.groupId
@@ -454,6 +455,7 @@ class ConnectionEditActivity : AppCompatActivity() {
         val compression = binding.switchCompression.isChecked
         val keepAlive = binding.switchKeepAlive.isChecked
         val x11Forwarding = binding.switchX11Forwarding.isChecked
+        val useMosh = binding.switchUseMosh.isChecked
 
         // Proxy/Jump Host settings
         val proxyTypeDisplay = binding.spinnerProxyType.text.toString()
@@ -499,6 +501,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             compression = compression,
             keepAlive = keepAlive,
             x11Forwarding = x11Forwarding,
+            useMosh = useMosh,
             groupId = selectedGroupId,
             proxyType = proxyType,
             proxyHost = proxyHost,
@@ -517,6 +520,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             compression = compression,
             keepAlive = keepAlive,
             x11Forwarding = x11Forwarding,
+            useMosh = useMosh,
             groupId = selectedGroupId,
             proxyType = proxyType,
             proxyHost = proxyHost,
@@ -1020,11 +1024,27 @@ class ConnectionEditActivity : AppCompatActivity() {
     }
     
     private fun showKeyImportErrorDialog(errorMessage: String) {
+        // Create TextView with selectable text for copyable error messages
+        val messageView = android.widget.TextView(this).apply {
+            text = errorMessage
+            setTextIsSelectable(true)
+            setPadding(50, 40, 50, 10)
+            textSize = 16f
+            setTextColor(android.graphics.Color.parseColor("#D32F2F")) // Error red
+        }
+        
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Key Import Failed")
-            .setMessage(errorMessage)
+            .setTitle("❌ SSH Key Import Failed")
+            .setView(messageView)
             .setPositiveButton("OK", null)
-            .setNeutralButton("Help") { _, _ ->
+            .setNeutralButton("Copy Error") { _, _ ->
+                // Copy error to clipboard
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                val clip = android.content.ClipData.newPlainText("SSH Key Import Error", errorMessage)
+                clipboard.setPrimaryClip(clip)
+                showToast("Error message copied to clipboard")
+            }
+            .setNegativeButton("Help") { _, _ ->
                 showKeyImportHelpDialog()
             }
             .show()
@@ -1032,33 +1052,57 @@ class ConnectionEditActivity : AppCompatActivity() {
     
     private fun showKeyImportHelpDialog() {
         val helpText = """
-            SSH Key Import Help:
-            
-            Supported Formats:
-            • PKCS#8 (recommended)
-            • Traditional RSA/DSA/ECDSA
-            • OpenSSH format (with conversion)
-            
-            Common Solutions:
-            
-            1. Convert OpenSSH to PKCS#8:
-               ssh-keygen -p -m pkcs8 -f your_key
-            
-            2. Convert PuTTY (.ppk) to OpenSSH:
-               puttygen key.ppk -O private-openssh -o key
-            
-            3. Generate compatible key:
-               ssh-keygen -t ed25519 -m pkcs8 -f new_key
-            
-            4. For encrypted keys, ensure correct passphrase
-            
-            Need help? Visit our documentation.
+SSH Key Import - Supported Formats:
+
+✅ FULLY SUPPORTED (No Conversion Needed):
+• OpenSSH Private Key (-----BEGIN OPENSSH PRIVATE KEY-----)
+• RSA Private Key (-----BEGIN RSA PRIVATE KEY-----)
+• DSA Private Key (-----BEGIN DSA PRIVATE KEY-----)
+• EC Private Key (-----BEGIN EC PRIVATE KEY-----)
+• PKCS#8 (-----BEGIN PRIVATE KEY-----)
+• PKCS#8 Encrypted (-----BEGIN ENCRYPTED PRIVATE KEY-----)
+• PuTTY v2/v3 (.ppk files)
+
+✅ KEY TYPES SUPPORTED:
+• RSA (2048, 3072, 4096-bit)
+• ECDSA (P-256, P-384, P-521)
+• Ed25519
+• DSA
+
+✅ ENCRYPTED KEYS:
+• Passphrase-protected keys fully supported
+• AES-128, AES-256, 3DES encryption
+
+❌ If Import Still Fails:
+
+1. Check key file is complete (not truncated)
+2. Verify passphrase is correct (case-sensitive)
+3. Try without extra whitespace/newlines
+4. Convert PuTTY to OpenSSH:
+   puttygen key.ppk -O private-openssh -o key
+
+5. Re-export key:
+   ssh-keygen -p -m PEM -f your_key
+
+📋 The error message above can be copied by tapping "Copy Error"
         """.trimIndent()
         
+        // Create scrollable TextView with selectable text
+        val textView = android.widget.TextView(this).apply {
+            text = helpText
+            setTextIsSelectable(true)
+            setPadding(50, 40, 50, 10)
+            textSize = 14f
+        }
+        
+        val scrollView = android.widget.ScrollView(this).apply {
+            addView(textView)
+        }
+        
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("SSH Key Import Help")
-            .setMessage(helpText)
-            .setPositiveButton("OK", null)
+            .setTitle("🔑 SSH Key Import Help")
+            .setView(scrollView)
+            .setPositiveButton("Got It", null)
             .show()
     }
 

@@ -31,7 +31,8 @@ class VMwareApiClient(
         val name: String,
         val powerState: String,
         val cpuCount: Int,
-        val memoryMB: Long
+        val memoryMB: Long,
+        val ipAddress: String? = null // IP from guest info
     )
 
     init {

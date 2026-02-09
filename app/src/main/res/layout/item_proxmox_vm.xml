@@ -50,12 +50,32 @@
             android:textColor="?android:attr/textColorSecondary"
             android:text="Node: pve | CPU: 25% | RAM: 2048MB" />
 
+        <!-- IP Address -->
+        <TextView
+            android:id="@+id/vm_ip_address"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textSize="12sp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:text="IP: 192.168.1.100"
+            android:visibility="gone" />
+
         <!-- Control Buttons -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:layout_marginTop="8dp">
+
+            <Button
+                android:id="@+id/console_button"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Console"
+                android:layout_marginEnd="4dp"
+                style="@style/Widget.Material3.Button.OutlinedButton" />
 
             <Button
                 android:id="@+id/start_button"

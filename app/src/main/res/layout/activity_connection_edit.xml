@@ -118,6 +118,7 @@
                                 android:id="@+id/edit_username"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
+                                android:text="root"
                                 android:inputType="textPersonName" />
 
                         </com.google.android.material.textfield.TextInputLayout>
@@ -312,6 +313,16 @@
                         android:textColor="#212121"
                         android:checked="false"
                         android:tooltipText="Forward X11 display to run graphical apps" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/switch_use_mosh"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_sm"
+                        android:text="Use Mosh (Mobile Shell)"
+                        android:textColor="#212121"
+                        android:checked="false"
+                        android:tooltipText="Mobile-optimized protocol with roaming support for unstable connections" />
 
                     <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/switch_port_knock"

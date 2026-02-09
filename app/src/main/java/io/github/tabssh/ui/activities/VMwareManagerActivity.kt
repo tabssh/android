@@ -156,6 +156,14 @@ class VMwareManagerActivity : AppCompatActivity() {
             try {
                 progressBar.visibility = View.VISIBLE
                 
+                when (action) {
+                    "console" -> {
+                        openVMConsole(vm)
+                        progressBar.visibility = View.GONE
+                        return@launch
+                    }
+                }
+                
                 val success = when (action) {
                     "start" -> currentClient?.startVM(vm.vm) ?: false
                     "stop" -> currentClient?.stopVM(vm.vm) ?: false
@@ -174,6 +182,61 @@ class VMwareManagerActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e("VMwareManager", "VM action failed", e)
                 progressBar.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun openVMConsole(vm: VMwareApiClient.VMwareVM) {
+        if (vm.ipAddress == null) {
+            Toast.makeText(this, "VM IP address not available", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        lifecycleScope.launch {
+            try {
+                // Get or create connection profile for VM
+                val connectionName = "${vm.name}-console"
+                var connection = app.database.connectionDao().getAllConnections()
+                    .let { flow -> 
+                        var result: io.github.tabssh.storage.database.entities.ConnectionProfile? = null
+                        flow.collect { connections ->
+                            result = connections.firstOrNull { it.name == connectionName }
+                        }
+                        result
+                    }
+
+                if (connection == null) {
+                    // Create new connection profile
+                    connection = io.github.tabssh.storage.database.entities.ConnectionProfile(
+                        id = java.util.UUID.randomUUID().toString(),
+                        name = connectionName,
+                        host = vm.ipAddress!!,
+                        port = 22,
+                        username = "root",
+                        authType = io.github.tabssh.ssh.auth.AuthType.PASSWORD.name,
+                        createdAt = System.currentTimeMillis(),
+                        modifiedAt = System.currentTimeMillis()
+                    )
+                    app.database.connectionDao().insertConnection(connection)
+                    Logger.i("VMwareManager", "Created connection profile for VM: ${vm.name}")
+                } else {
+                    // Update existing connection with latest IP
+                    connection = connection.copy(
+                        host = vm.ipAddress!!,
+                        modifiedAt = System.currentTimeMillis()
+                    )
+                    app.database.connectionDao().updateConnection(connection)
+                    Logger.i("VMwareManager", "Updated connection profile for VM: ${vm.name}")
+                }
+
+                // Launch terminal activity
+                val intent = TabTerminalActivity.createIntent(this@VMwareManagerActivity, connection, autoConnect = false)
+                startActivity(intent)
+                
+                Toast.makeText(this@VMwareManagerActivity, "Opening console for ${vm.name}", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Logger.e("VMwareManager", "Failed to open VM console", e)
+                Toast.makeText(this@VMwareManagerActivity, "Failed to open console: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
