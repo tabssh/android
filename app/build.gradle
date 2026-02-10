@@ -146,6 +146,8 @@ android {
                 excludes = ['jdk.internal.*']
             }
         }
+        // Disable APK splits for unit tests (they expect single APK)
+        unitTests.returnDefaultValues = true
     }
 
     // Custom APK naming: tabssh-{arch}.apk
@@ -369,4 +371,14 @@ tasks.register('jacocoTestCoverageVerification', JacocoCoverageVerification) {
         'outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec',
         'jacoco/testDebugUnitTest.exec'
     ]))
+}
+
+
+// Disable unit test tasks for fdroidRelease build variant (incompatible with APK splits)
+afterEvaluate {
+    tasks.findAll { task ->
+        task.name.contains('FdroidRelease') && task.name.contains('UnitTest')
+    }.each { task ->
+        task.enabled = false
+    }
 }
