@@ -165,3 +165,4 @@ gen-external-apklibs
 
 
 .android-keystore/
+keystore.jks

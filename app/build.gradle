@@ -52,11 +52,15 @@ android {
 
     buildTypes {
         debug {
-            applicationIdSuffix ".debug"
+            // Remove debug suffix so updates work
+            // applicationIdSuffix ".debug"
             debuggable true
             minifyEnabled false
             buildConfigField "boolean", "DEBUG_MODE", "true"
             buildConfigField "String", "BUILD_TYPE", '"debug"'
+            
+            // Use the same keystore as release for consistent signing
+            signingConfig signingConfigs.release
         }
         
         release {

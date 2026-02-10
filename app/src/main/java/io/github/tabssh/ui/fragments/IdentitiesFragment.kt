@@ -48,7 +48,6 @@ class IdentitiesFragment : Fragment() {
         app = requireActivity().application as TabSSHApplication
         
         setupIdentitiesSection(view)
-        setupKeysSection(view)
         loadData()
     }
     
@@ -66,13 +65,6 @@ class IdentitiesFragment : Fragment() {
         // FAB to add identity
         view.findViewById<com.google.android.material.floatingactionbutton.FloatingActionButton>(R.id.fab_add_identity).setOnClickListener {
             showCreateDialog()
-        }
-    }
-    
-    private fun setupKeysSection(view: View) {
-        // "Manage Keys" button opens KeyManagementActivity
-        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_manage_keys).setOnClickListener {
-            startActivity(Intent(requireContext(), KeyManagementActivity::class.java))
         }
     }
     
@@ -98,13 +90,52 @@ class IdentitiesFragment : Fragment() {
         val nameInput = dialogView.findViewById<TextInputEditText>(R.id.edit_name)
         val usernameInput = dialogView.findViewById<TextInputEditText>(R.id.edit_username)
         val descriptionInput = dialogView.findViewById<TextInputEditText>(R.id.edit_description)
-        val authTypeSpinner = dialogView.findViewById<android.widget.Spinner>(R.id.spinner_auth_type)
+        val authTypeSpinner = dialogView.findViewById<android.widget.AutoCompleteTextView>(R.id.spinner_auth_type)
+        val passwordLayout = dialogView.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.layout_password)
+        val passwordInput = dialogView.findViewById<TextInputEditText>(R.id.edit_password)
+        val sshKeyLayout = dialogView.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.layout_ssh_key)
+        val sshKeySpinner = dialogView.findViewById<android.widget.AutoCompleteTextView>(R.id.spinner_ssh_key)
         
         // Setup auth type spinner
         val authTypes = listOf("Password", "SSH Key", "Keyboard Interactive")
-        authTypeSpinner.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, authTypes).apply {
-            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        val authAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, authTypes)
+        authTypeSpinner.setAdapter(authAdapter)
+        authTypeSpinner.setText(authTypes[0], false)
+        
+        // Load SSH keys for selector
+        lifecycleScope.launch {
+            val keys = app.database.keyDao().getAllKeysList()
+            val keyNames = listOf("No Key") + keys.map { it.getDisplayName() }
+            val keyAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, keyNames)
+            withContext(Dispatchers.Main) {
+                sshKeySpinner.setAdapter(keyAdapter)
+                if (keyNames.isNotEmpty()) {
+                    sshKeySpinner.setText(keyNames[0], false)
+                }
+            }
         }
+        
+        // Show/hide fields based on auth type
+        authTypeSpinner.setOnItemClickListener { _, _, position, _ ->
+            when (position) {
+                0 -> { // Password
+                    passwordLayout.visibility = View.VISIBLE
+                    sshKeyLayout.visibility = View.GONE
+                }
+                1 -> { // SSH Key
+                    passwordLayout.visibility = View.GONE
+                    sshKeyLayout.visibility = View.VISIBLE
+                }
+                2 -> { // Keyboard Interactive
+                    passwordLayout.visibility = View.GONE
+                    sshKeyLayout.visibility = View.GONE
+                }
+            }
+        }
+        
+        // Default: show password field
+        passwordLayout.visibility = View.VISIBLE
+        sshKeyLayout.visibility = View.GONE
         
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Create Identity")
@@ -113,7 +144,9 @@ class IdentitiesFragment : Fragment() {
                 val name = nameInput.text.toString()
                 val username = usernameInput.text.toString()
                 val description = descriptionInput.text.toString()
-                val authType = when (authTypeSpinner.selectedItemPosition) {
+                val password = passwordInput.text.toString()
+                val authTypePosition = authTypes.indexOf(authTypeSpinner.text.toString())
+                val authType = when (authTypePosition) {
                     0 -> AuthType.PASSWORD
                     1 -> AuthType.PUBLIC_KEY
                     2 -> AuthType.KEYBOARD_INTERACTIVE
@@ -121,6 +154,7 @@ class IdentitiesFragment : Fragment() {
                 }
                 
                 if (name.isNotBlank() && username.isNotBlank()) {
+                    // TODO: Store password and SSH key ID in Identity entity
                     createIdentity(name, username, authType, description.ifBlank { null })
                 } else {
                     android.widget.Toast.makeText(requireContext(), "Name and username are required", android.widget.Toast.LENGTH_SHORT).show()
@@ -136,7 +170,11 @@ class IdentitiesFragment : Fragment() {
         val nameInput = dialogView.findViewById<TextInputEditText>(R.id.edit_name)
         val usernameInput = dialogView.findViewById<TextInputEditText>(R.id.edit_username)
         val descriptionInput = dialogView.findViewById<TextInputEditText>(R.id.edit_description)
-        val authTypeSpinner = dialogView.findViewById<android.widget.Spinner>(R.id.spinner_auth_type)
+        val authTypeSpinner = dialogView.findViewById<android.widget.AutoCompleteTextView>(R.id.spinner_auth_type)
+        val passwordLayout = dialogView.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.layout_password)
+        val passwordInput = dialogView.findViewById<TextInputEditText>(R.id.edit_password)
+        val sshKeyLayout = dialogView.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.layout_ssh_key)
+        val sshKeySpinner = dialogView.findViewById<android.widget.AutoCompleteTextView>(R.id.spinner_ssh_key)
         
         // Pre-fill values
         nameInput.setText(identity.name)
@@ -145,15 +183,62 @@ class IdentitiesFragment : Fragment() {
         
         // Setup auth type spinner
         val authTypes = listOf("Password", "SSH Key", "Keyboard Interactive")
-        authTypeSpinner.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, authTypes).apply {
-            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        }
-        authTypeSpinner.setSelection(when (identity.authType) {
+        val authAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, authTypes)
+        authTypeSpinner.setAdapter(authAdapter)
+        val authTypeIndex = when (identity.authType) {
             AuthType.PASSWORD -> 0
             AuthType.PUBLIC_KEY -> 1
             AuthType.KEYBOARD_INTERACTIVE -> 2
             AuthType.GSSAPI -> 1
-        })
+        }
+        authTypeSpinner.setText(authTypes[authTypeIndex], false)
+        
+        // Load SSH keys
+        lifecycleScope.launch {
+            val keys = app.database.keyDao().getAllKeysList()
+            val keyNames = listOf("No Key") + keys.map { it.getDisplayName() }
+            val keyAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, keyNames)
+            withContext(Dispatchers.Main) {
+                sshKeySpinner.setAdapter(keyAdapter)
+                if (keyNames.isNotEmpty()) {
+                    sshKeySpinner.setText(keyNames[0], false)
+                }
+            }
+        }
+        
+        // Show/hide fields based on auth type
+        authTypeSpinner.setOnItemClickListener { _, _, position, _ ->
+            when (position) {
+                0 -> { // Password
+                    passwordLayout.visibility = View.VISIBLE
+                    sshKeyLayout.visibility = View.GONE
+                }
+                1 -> { // SSH Key
+                    passwordLayout.visibility = View.GONE
+                    sshKeyLayout.visibility = View.VISIBLE
+                }
+                2 -> { // Keyboard Interactive
+                    passwordLayout.visibility = View.GONE
+                    sshKeyLayout.visibility = View.GONE
+                }
+            }
+        }
+        
+        // Set initial visibility based on current auth type
+        when (authTypeIndex) {
+            0 -> {
+                passwordLayout.visibility = View.VISIBLE
+                sshKeyLayout.visibility = View.GONE
+            }
+            1 -> {
+                passwordLayout.visibility = View.GONE
+                sshKeyLayout.visibility = View.VISIBLE
+            }
+            2 -> {
+                passwordLayout.visibility = View.GONE
+                sshKeyLayout.visibility = View.GONE
+            }
+        }
         
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Edit Identity")
@@ -162,7 +247,8 @@ class IdentitiesFragment : Fragment() {
                 val name = nameInput.text.toString()
                 val username = usernameInput.text.toString()
                 val description = descriptionInput.text.toString()
-                val authType = when (authTypeSpinner.selectedItemPosition) {
+                val authTypePosition = authTypes.indexOf(authTypeSpinner.text.toString())
+                val authType = when (authTypePosition) {
                     0 -> AuthType.PASSWORD
                     1 -> AuthType.PUBLIC_KEY
                     2 -> AuthType.KEYBOARD_INTERACTIVE
