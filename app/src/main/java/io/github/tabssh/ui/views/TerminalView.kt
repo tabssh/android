@@ -326,17 +326,29 @@ class TerminalView @JvmOverloads constructor(
     
     /**
      * Enable custom gesture support for terminal multiplexers
-     * @param multiplexerType The multiplexer type (tmux, screen, or none)
+     * @param multiplexerType The multiplexer type (tmux, screen, zellij, or none)
+     * @param customPrefix Optional custom prefix notation (e.g., "C-a", "C-Space")
      */
-    fun enableGestureSupport(multiplexerType: io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType) {
+    fun enableGestureSupport(
+        multiplexerType: io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType,
+        customPrefix: String? = null
+    ) {
         if (multiplexerType == io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.NONE) {
             terminalGestureHandler = null
             Logger.d("TerminalView", "Gesture support disabled")
         } else {
             terminalGestureHandler = io.github.tabssh.terminal.gestures.TerminalGestureHandler(context) { gestureType ->
-                // Get command for gesture
-                val command = io.github.tabssh.terminal.gestures.GestureCommandMapper.getCommand(gestureType, multiplexerType)
-                val description = io.github.tabssh.terminal.gestures.GestureCommandMapper.getDescription(gestureType, multiplexerType)
+                // Get command for gesture with custom prefix
+                val command = io.github.tabssh.terminal.gestures.GestureCommandMapper.getCommand(
+                    gestureType, 
+                    multiplexerType,
+                    customPrefix
+                )
+                val description = io.github.tabssh.terminal.gestures.GestureCommandMapper.getDescription(
+                    gestureType, 
+                    multiplexerType,
+                    customPrefix
+                )
                 
                 command?.let {
                     // Send command via callback
@@ -344,7 +356,13 @@ class TerminalView @JvmOverloads constructor(
                     Logger.d("TerminalView", "Gesture detected: $description")
                 }
             }
-            Logger.d("TerminalView", "Gesture support enabled for $multiplexerType")
+            
+            val prefixInfo = if (!customPrefix.isNullOrEmpty()) {
+                " with custom prefix: ${io.github.tabssh.terminal.gestures.PrefixParser.getDescription(customPrefix)}"
+            } else {
+                ""
+            }
+            Logger.d("TerminalView", "Gesture support enabled for $multiplexerType$prefixInfo")
         }
     }
 
