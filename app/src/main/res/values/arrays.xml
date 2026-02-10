@@ -140,10 +140,12 @@
     <string-array name="multiplexer_type_entries">
         <item>tmux (Ctrl+B)</item>
         <item>screen (Ctrl+A)</item>
+        <item>zellij (Ctrl+G)</item>
     </string-array>
     <string-array name="multiplexer_type_values">
         <item>tmux</item>
         <item>screen</item>
+        <item>zellij</item>
     </string-array>
     
     <!-- Log level options -->

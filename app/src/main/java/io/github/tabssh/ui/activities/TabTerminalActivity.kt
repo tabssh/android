@@ -211,10 +211,12 @@ class TabTerminalActivity : AppCompatActivity() {
                     val multiplexerType = when (multiplexerTypeStr) {
                         "tmux" -> io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.TMUX
                         "screen" -> io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.SCREEN
+                        "zellij" -> io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.ZELLIJ
                         else -> io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.TMUX
                     }
                     
-                    enableGestureSupport(multiplexerType)
+                    val customPrefix = app.preferencesManager.getString("multiplexer_custom_prefix", "")
+                    enableGestureSupport(multiplexerType, customPrefix)
                     
                     // Set up command callback
                     onCommandSent = { command ->
@@ -699,8 +701,10 @@ class TabTerminalActivity : AppCompatActivity() {
         val multiplexerType = when (multiplexerTypeStr) {
             "tmux" -> io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.TMUX
             "screen" -> io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.SCREEN
+            "zellij" -> io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.ZELLIJ
             else -> io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.TMUX
         }
+        val customPrefix = app.preferencesManager.getString("multiplexer_custom_prefix", "")
         
         // Create command send callback for gestures
         val commandCallback: ((ByteArray) -> Unit)? = if (gesturesEnabled) {
@@ -726,6 +730,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 urlDetectionCallback, 
                 gesturesEnabled, 
                 multiplexerType, 
+                customPrefix,
                 commandCallback
             )
             viewPager?.adapter = pagerAdapter
@@ -754,6 +759,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 urlDetectionCallback, 
                 gesturesEnabled, 
                 multiplexerType, 
+                customPrefix,
                 commandCallback
             )
             viewPager?.adapter = pagerAdapter

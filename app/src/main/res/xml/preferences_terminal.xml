@@ -95,12 +95,21 @@
         <ListPreference
             android:key="gesture_multiplexer_type"
             android:title="Multiplexer Type"
-            android:summary="Select tmux or screen for gesture commands"
+            android:summary="Select tmux, screen, or zellij for gesture commands"
             android:entries="@array/multiplexer_type_entries"
             android:entryValues="@array/multiplexer_type_values"
             android:defaultValue="tmux"
             android:dependency="enable_custom_gestures"
             app:useSimpleSummaryProvider="true" />
+        
+        <EditTextPreference
+            android:key="multiplexer_custom_prefix"
+            android:title="Custom Prefix Key"
+            android:summary="Override default prefix (e.g., C-a, C-Space, ` - leave empty for default)"
+            android:dialogMessage="Enter custom prefix key notation:\n\nExamples:\n• C-a or ^a → Ctrl+A\n• C-b or ^b → Ctrl+B\n• C-Space → Ctrl+Space\n• ` → Backtick\n• M-b → Alt+B\n• 0x02 → Hex value\n\nLeave empty to use multiplexer default."
+            android:defaultValue=""
+            android:dependency="enable_custom_gestures"
+            android:inputType="text" />
         
         <SwitchPreferenceCompat
             android:key="auto_record_sessions"

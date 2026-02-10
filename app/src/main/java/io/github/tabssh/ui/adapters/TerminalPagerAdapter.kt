@@ -16,6 +16,7 @@ class TerminalPagerAdapter(
     private val onUrlDetected: ((String) -> Unit)? = null,
     private val gesturesEnabled: Boolean = false,
     private val multiplexerType: io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType = io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.NONE,
+    private val customPrefix: String? = null,
     private val onCommandSent: ((ByteArray) -> Unit)? = null
 ) : RecyclerView.Adapter<TerminalPagerAdapter.TerminalViewHolder>() {
 
@@ -25,7 +26,15 @@ class TerminalPagerAdapter(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         )
-        return TerminalViewHolder(terminalView, fontSize, onUrlDetected, gesturesEnabled, multiplexerType, onCommandSent)
+        return TerminalViewHolder(
+            terminalView, 
+            fontSize, 
+            onUrlDetected, 
+            gesturesEnabled, 
+            multiplexerType, 
+            customPrefix,
+            onCommandSent
+        )
     }
 
     override fun onBindViewHolder(holder: TerminalViewHolder, position: Int) {
@@ -46,6 +55,7 @@ class TerminalPagerAdapter(
         private val onUrlDetected: ((String) -> Unit)?,
         private val gesturesEnabled: Boolean,
         private val multiplexerType: io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType,
+        private val customPrefix: String?,
         private val onCommandSent: ((ByteArray) -> Unit)?
     ) : RecyclerView.ViewHolder(terminalView) {
 
@@ -63,7 +73,7 @@ class TerminalPagerAdapter(
             
             // Set up gesture support
             if (gesturesEnabled) {
-                terminalView.enableGestureSupport(multiplexerType)
+                terminalView.enableGestureSupport(multiplexerType, customPrefix)
                 terminalView.onCommandSent = onCommandSent
             }
 
