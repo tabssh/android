@@ -194,7 +194,7 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
     private fun saveLayout() {
         // Save layout as comma-separated key IDs
         val layoutString = currentLayout.joinToString(",") { it.id }
-        app.preferencesManager.putString("custom_keyboard_layout", layoutString)
+        app.preferencesManager.setString("custom_keyboard_layout", layoutString)
         
         Toast.makeText(this, "Keyboard layout saved", Toast.LENGTH_SHORT).show()
         Logger.i("KeyboardCustomization", "Saved layout: $layoutString")

@@ -2,7 +2,7 @@ package io.github.tabssh.protocols.mosh
 
 import android.content.Context
 import io.github.tabssh.storage.database.entities.ConnectionProfile
-import io.github.tabssh.storage.preferences.PreferencesManager
+import io.github.tabssh.storage.preferences.PreferenceManager
 import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.ssh.connection.ConnectionState
 import io.github.tabssh.utils.logging.Logger
@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class MoshConnection(
     private val profile: ConnectionProfile,
     private val context: Context,
-    private val preferencesManager: PreferencesManager
+    private val preferencesManager: PreferenceManager
 ) {
     
     // Mosh connection state

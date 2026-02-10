@@ -51,10 +51,11 @@ class KeyboardKeyAdapter(
         holder.label.text = key.label
         holder.description.text = when (key.category) {
             KeyboardKey.KeyCategory.MODIFIER -> "Modifier"
-            KeyboardKey.KeyCategory.NAVIGATION -> "Navigation"
+            KeyboardKey.KeyCategory.ARROW -> "Navigation"
             KeyboardKey.KeyCategory.FUNCTION -> "Function"
             KeyboardKey.KeyCategory.SPECIAL -> "Special"
             KeyboardKey.KeyCategory.ACTION -> "Action"
+            KeyboardKey.KeyCategory.SYMBOL -> "Symbol"
             else -> ""
         }
     }
