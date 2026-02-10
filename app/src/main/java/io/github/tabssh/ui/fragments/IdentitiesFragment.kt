@@ -103,9 +103,16 @@ class IdentitiesFragment : Fragment() {
         authTypeSpinner.setText(authTypes[0], false)
         
         // Load SSH keys for selector
-        lifecycleScope.launch {
-            val keys = app.database.keyDao().getAllKeysList()
-            val keyNames = listOf("No Key") + keys.map { it.getDisplayName() }
+        lifecycleScope.launch(Dispatchers.IO) {
+            val keys = app.database.keyDao().getKeyCount()
+            val allKeys = if (keys > 0) {
+                // Get all keys from database
+                app.database.keyDao().getRecentlyUsedKeys(100)
+            } else {
+                emptyList()
+            }
+            
+            val keyNames = listOf("No Key") + allKeys.map { "${it.name} (${it.keyType})" }
             val keyAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, keyNames)
             withContext(Dispatchers.Main) {
                 sshKeySpinner.setAdapter(keyAdapter)
@@ -194,9 +201,15 @@ class IdentitiesFragment : Fragment() {
         authTypeSpinner.setText(authTypes[authTypeIndex], false)
         
         // Load SSH keys
-        lifecycleScope.launch {
-            val keys = app.database.keyDao().getAllKeysList()
-            val keyNames = listOf("No Key") + keys.map { it.getDisplayName() }
+        lifecycleScope.launch(Dispatchers.IO) {
+            val keysCount = app.database.keyDao().getKeyCount()
+            val allKeys = if (keysCount > 0) {
+                app.database.keyDao().getRecentlyUsedKeys(100)
+            } else {
+                emptyList()
+            }
+            
+            val keyNames = listOf("No Key") + allKeys.map { "${it.name} (${it.keyType})" }
             val keyAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, keyNames)
             withContext(Dispatchers.Main) {
                 sshKeySpinner.setAdapter(keyAdapter)

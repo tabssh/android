@@ -678,7 +678,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         try {
             val logEntries = Logger.getRecentLogs()
             if (logEntries.isEmpty()) {
-                io.github.tabssh.utils.DialogUtils.showInfoDialog(
+                io.github.tabssh.ui.utils.DialogUtils.showSuccessDialog(
                     this,
                     "Application Logs",
                     "No logs available. Logs are generated during app usage."
@@ -689,17 +689,17 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                     "${entry.timestamp} [${entry.level}] ${entry.tag}: ${entry.message}"
                 }
                 
-                io.github.tabssh.utils.DialogUtils.showLogDialog(
+                io.github.tabssh.ui.utils.DialogUtils.showCopyableDialog(
                     this,
                     "Application Logs (Last 500 entries)",
                     logs
                 )
             }
         } catch (e: Exception) {
-            io.github.tabssh.utils.DialogUtils.showErrorDialog(
+            io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(
                 this,
                 "Error Loading Logs",
-                e
+                "Failed to load logs: ${e.message}"
             )
         }
     }

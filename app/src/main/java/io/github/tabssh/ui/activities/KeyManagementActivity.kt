@@ -261,7 +261,6 @@ class KeyManagementActivity : AppCompatActivity() {
             title = "Key Import Failed",
             message = "Failed to import SSH key:\n\n$errorMessage"
         )
-            .show()
     }
 
     private fun extractKeyNameFromFilename(filename: String): String {

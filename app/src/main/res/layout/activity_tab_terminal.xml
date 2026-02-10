@@ -62,7 +62,7 @@
             app:showScrollbar="true"
             app:scrollbackLines="1000" />
 
-        <!-- Menu FAB (Top-Left Corner) -->
+        <!-- Menu FAB (Hidden by default, shows on edge tap) -->
         <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:id="@+id/fab_menu"
             android:layout_width="wrap_content"
@@ -75,7 +75,8 @@
             app:fabSize="mini"
             app:backgroundTint="?attr/colorSecondaryContainer"
             app:tint="?attr/colorOnSecondaryContainer"
-            app:elevation="6dp" />
+            app:elevation="6dp"
+            android:visibility="gone" />
 
         </FrameLayout>
 
@@ -185,14 +186,16 @@
 
         </HorizontalScrollView>
 
-        <!-- Bottom action bar -->
+        <!-- Bottom action bar (hidden by default - tap bottom edge to show) -->
         <LinearLayout
+            android:id="@+id/bottom_action_bar"
             android:layout_width="match_parent"
             android:layout_height="@dimen/bottom_bar_height"
             android:orientation="horizontal"
             android:background="?attr/colorSurface"
             android:gravity="center_vertical"
-            android:paddingHorizontal="@dimen/space_md">
+            android:paddingHorizontal="@dimen/space_md"
+            android:visibility="gone">
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_keyboard"
