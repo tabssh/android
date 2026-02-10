@@ -1,8 +1,11 @@
-# F-Droid Submission - TabSSH v1.0.0
+# F-Droid Submission Guide - TabSSH
 
-**Date:** 2025-12-18
-**Version:** 1.0.0 (versionCode 1)
+**Last Updated:** 2026-02-10
+**Current Version:** Dynamic (auto-detected from git tags)
 **Status:** Ready for Submission
+
+> **Note:** F-Droid automatically detects new versions from git tags.
+> You don't need to update this file for new releases!
 
 ---
 
@@ -29,7 +32,7 @@
 - [x] Fastlane metadata structure created
 - [x] Short description (under 80 chars)
 - [x] Full description with feature list
-- [x] Changelog for v1.0.0
+- [x] Changelog for current version
 - [x] Category specified (System, Internet, Security)
 - [x] License specified (MIT)
 
@@ -46,8 +49,8 @@
 
 **Package Name:** `io.github.tabssh`
 **App Name:** TabSSH
-**Version:** 1.0.0
-**Version Code:** 1
+**Version:** Dynamic (read from `app/build.gradle` during build)
+**Version Code:** Auto-incremented per release
 
 **Minimum SDK:** 21 (Android 5.0 - Lollipop)
 **Target SDK:** 34 (Android 14)
@@ -129,7 +132,8 @@ cd android
 ### 2. Checkout Release Tag
 
 ```bash
-git checkout v1.0.0
+# Or checkout specific version tag
+git checkout <version-tag>  # e.g., v1.0.1, v2.0.0, etc.
 ```
 
 ### 3. Build APK
@@ -183,7 +187,9 @@ TabSSH is specifically designed to work perfectly on F-Droid and degoogled devic
 
 ---
 
-## What's New in v1.0.0
+## Release Features
+
+See [CHANGELOG.md](../CHANGELOG.md) for complete feature list and version history.
 
 ### 🔑 Universal SSH Key Support
 
@@ -368,7 +374,7 @@ BUILD SUCCESSFUL in Xm XXs
 APK Location: app/build/outputs/apk/fdroidRelease/
 APK Size: ~7-8 MB (optimized with R8)
 Package: io.github.tabssh
-Version: 1.0.0 (1)
+Version: Dynamic (auto-detected)
 ```
 
 ### Verification Commands
@@ -438,7 +444,7 @@ jarsigner -verify -verbose app-fdroidRelease.apk
 
 ---
 
-**TabSSH v1.0.0 is ready for F-Droid submission!**
+**TabSSH is ready for F-Droid submission with automatic version detection!**
 
 All requirements met, all features complete, zero compromises.
 Perfect for privacy-conscious users and degoogled devices.
