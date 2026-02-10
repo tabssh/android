@@ -894,7 +894,6 @@ class ConnectionEditActivity : AppCompatActivity() {
                 // User can manually retry via the Generate button
             }
         )
-            .show()
     }
 
 

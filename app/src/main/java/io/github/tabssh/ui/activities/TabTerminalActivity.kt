@@ -83,11 +83,13 @@ class TabTerminalActivity : AppCompatActivity() {
         setupTabManager()
         setupTabLayout()
         setupTerminalView()
+        setupTerminalGestures()  // NEW: Edge tap gestures for menu/toolbar
         setupFunctionKeys()
         setupCustomKeyboard()
         setupPerformanceOverlay()
         setupBackPressHandler()
         setupMenuFab()
+        setupBottomActionBar()  // NEW: Bottom toolbar setup
         
         // Handle intent
         handleIntent(intent)
@@ -158,6 +160,97 @@ class TabTerminalActivity : AppCompatActivity() {
         binding.fabMenu.setOnClickListener {
             showTerminalMenu()
         }
+    }
+    
+    /**
+     * Setup bottom action bar with slide-up functionality
+     */
+    private fun setupBottomActionBar() {
+        // Setup button click listeners
+        binding.btnKeyboard.setOnClickListener {
+            toggleKeyboard()
+            hideBottomActionBar()
+        }
+        
+        binding.btnSnippets.setOnClickListener {
+            showSnippetsDialog()
+            hideBottomActionBar()
+        }
+        
+        binding.btnFiles.setOnClickListener {
+            openFileManager()
+            hideBottomActionBar()
+        }
+        
+        binding.btnPaste.setOnClickListener {
+            pasteFromClipboard()
+            hideBottomActionBar()
+        }
+        
+        binding.btnMenu.setOnClickListener {
+            showTerminalMenu()
+            hideBottomActionBar()
+        }
+    }
+    
+    /**
+     * Setup edge tap gestures for showing UI elements
+     */
+    private fun setupTerminalGestures() {
+        // Get the root view
+        val rootView = binding.root
+        
+        rootView.setOnTouchListener { _, event ->
+            if (event.action == android.view.MotionEvent.ACTION_DOWN) {
+                val x = event.x
+                val y = event.y
+                val width = rootView.width
+                val height = rootView.height
+                
+                // Tap on left edge (first 10%) shows menu FAB temporarily
+                if (x < width * 0.1f && y < height * 0.5f) {
+                    showMenuFabTemporarily()
+                    return@setOnTouchListener true
+                }
+                
+                // Tap on bottom edge (last 10%) shows bottom action bar
+                if (y > height * 0.9f) {
+                    toggleBottomActionBar()
+                    return@setOnTouchListener true
+                }
+            }
+            false
+        }
+    }
+    
+    private fun showMenuFabTemporarily() {
+        binding.fabMenu.visibility = View.VISIBLE
+        
+        // Auto-hide after 3 seconds
+        Handler(Looper.getMainLooper()).postDelayed({
+            binding.fabMenu.visibility = View.GONE
+        }, 3000)
+    }
+    
+    private fun toggleBottomActionBar() {
+        if (binding.bottomActionBar.visibility == View.VISIBLE) {
+            hideBottomActionBar()
+        } else {
+            showBottomActionBar()
+        }
+    }
+    
+    private fun showBottomActionBar() {
+        binding.bottomActionBar.visibility = View.VISIBLE
+        
+        // Auto-hide after 5 seconds
+        Handler(Looper.getMainLooper()).postDelayed({
+            hideBottomActionBar()
+        }, 5000)
+    }
+    
+    private fun hideBottomActionBar() {
+        binding.bottomActionBar.visibility = View.GONE
     }
     
     private fun showTerminalMenu() {
