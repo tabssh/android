@@ -61,6 +61,12 @@
     </item>
 
     <item
+        android:id="@+id/action_view_logs"
+        android:title="View Logs"
+        android:icon="@android:drawable/ic_menu_info_details"
+        app:showAsAction="never" />
+    
+    <item
         android:id="@+id/action_settings"
         android:title="Settings"
         android:icon="@android:drawable/ic_menu_preferences"

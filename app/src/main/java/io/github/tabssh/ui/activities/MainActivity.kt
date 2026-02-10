@@ -205,6 +205,10 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                 viewPager.currentItem = 1
                 true
             }
+            R.id.action_view_logs -> {
+                showLogsDialog()
+                true
+            }
             R.id.action_settings -> {
                 startActivity(Intent(this, SettingsActivity::class.java))
                 true
@@ -668,5 +672,35 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         startActivity(intent)
         
         Logger.i("MainActivity", "Quick connecting to $username@$hostname:$port")
+    }
+    
+    private fun showLogsDialog() {
+        try {
+            val logEntries = Logger.getRecentLogs()
+            if (logEntries.isEmpty()) {
+                io.github.tabssh.utils.DialogUtils.showInfoDialog(
+                    this,
+                    "Application Logs",
+                    "No logs available. Logs are generated during app usage."
+                )
+            } else {
+                // Convert LogEntry list to formatted string
+                val logs = logEntries.joinToString("\n") { entry ->
+                    "${entry.timestamp} [${entry.level}] ${entry.tag}: ${entry.message}"
+                }
+                
+                io.github.tabssh.utils.DialogUtils.showLogDialog(
+                    this,
+                    "Application Logs (Last 500 entries)",
+                    logs
+                )
+            }
+        } catch (e: Exception) {
+            io.github.tabssh.utils.DialogUtils.showErrorDialog(
+                this,
+                "Error Loading Logs",
+                e
+            )
+        }
     }
 }

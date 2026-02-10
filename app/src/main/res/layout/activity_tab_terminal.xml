@@ -11,7 +11,8 @@
         android:id="@+id/app_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar">
+        android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar"
+        android:visibility="gone">
 
         <androidx.appcompat.widget.Toolbar
             android:id="@+id/toolbar"
@@ -35,29 +36,48 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical"
-        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+        android:orientation="vertical">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
 
         <!-- Terminal display area with ViewPager2 for swipe support -->
         <androidx.viewpager2.widget.ViewPager2
             android:id="@+id/view_pager"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
+            android:layout_height="match_parent"
             android:background="@color/terminal_background" />
 
         <!-- Single terminal view (used when swipe is disabled) -->
         <io.github.tabssh.ui.views.TerminalView
             android:id="@+id/terminal_view"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
+            android:layout_height="match_parent"
             android:background="@color/terminal_background"
             android:visibility="gone"
             app:terminalFontSize="@dimen/terminal_text_size_default"
             app:terminalFontFamily="monospace"
             app:showScrollbar="true"
             app:scrollbackLines="1000" />
+
+        <!-- Menu FAB (Top-Left Corner) -->
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/fab_menu"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|start"
+            android:layout_marginStart="8dp"
+            android:layout_marginTop="8dp"
+            android:src="@drawable/ic_menu"
+            android:contentDescription="Open menu and tabs"
+            app:fabSize="mini"
+            app:backgroundTint="?attr/colorSecondaryContainer"
+            app:tint="?attr/colorOnSecondaryContainer"
+            app:elevation="6dp" />
+
+        </FrameLayout>
 
         <!-- Custom Keyboard Bar -->
         <io.github.tabssh.ui.keyboard.CustomKeyboardView

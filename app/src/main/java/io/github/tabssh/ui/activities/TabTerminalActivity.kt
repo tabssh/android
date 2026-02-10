@@ -87,6 +87,7 @@ class TabTerminalActivity : AppCompatActivity() {
         setupCustomKeyboard()
         setupPerformanceOverlay()
         setupBackPressHandler()
+        setupMenuFab()
         
         // Handle intent
         handleIntent(intent)
@@ -151,6 +152,67 @@ class TabTerminalActivity : AppCompatActivity() {
                 }
             }
         })
+    }
+    
+    private fun setupMenuFab() {
+        binding.fabMenu.setOnClickListener {
+            showTerminalMenu()
+        }
+    }
+    
+    private fun showTerminalMenu() {
+        val bottomSheet = com.google.android.material.bottomsheet.BottomSheetDialog(this)
+        val view = layoutInflater.inflate(R.layout.bottom_sheet_terminal_menu, null)
+        
+        // Tab list
+        val tabsRecyclerView = view.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.tabs_recycler_view)
+        tabsRecyclerView.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
+        
+        val tabs = tabManager.getAllTabs()
+        val tabAdapter = object : androidx.recyclerview.widget.RecyclerView.Adapter<androidx.recyclerview.widget.RecyclerView.ViewHolder>() {
+            inner class TabViewHolder(val button: com.google.android.material.button.MaterialButton) : 
+                androidx.recyclerview.widget.RecyclerView.ViewHolder(button)
+            
+            override fun onCreateViewHolder(parent: android.view.ViewGroup, viewType: Int): androidx.recyclerview.widget.RecyclerView.ViewHolder {
+                val button = com.google.android.material.button.MaterialButton(parent.context).apply {
+                    layoutParams = android.view.ViewGroup.LayoutParams(
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                        android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                    )
+                    setTextAlignment(android.view.View.TEXT_ALIGNMENT_VIEW_START)
+                }
+                return TabViewHolder(button)
+            }
+            
+            override fun onBindViewHolder(holder: androidx.recyclerview.widget.RecyclerView.ViewHolder, position: Int) {
+                val tab = tabs[position]
+                val viewHolder = holder as TabViewHolder
+                viewHolder.button.text = tab.profile.getDisplayName()
+                viewHolder.button.setOnClickListener {
+                    tabManager.setActiveTab(position)
+                    switchToTab(position)
+                    bottomSheet.dismiss()
+                }
+            }
+            
+            override fun getItemCount() = tabs.size
+        }
+        tabsRecyclerView.adapter = tabAdapter
+        
+        // Menu buttons
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_new_tab)?.setOnClickListener {
+            // Quick connect
+            bottomSheet.dismiss()
+            showConnectionSelector()
+        }
+        
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_disconnect_all)?.setOnClickListener {
+            bottomSheet.dismiss()
+            disconnectAllTabs()
+        }
+        
+        bottomSheet.setContentView(view)
+        bottomSheet.show()
     }
     
     private fun setupTabLayout() {

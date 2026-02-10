@@ -16,6 +16,7 @@ import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.crypto.keys.KeyType
 import io.github.tabssh.crypto.keys.GenerateResult
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Dispatchers
 
 /**
@@ -58,6 +59,8 @@ class ConnectionEditActivity : AppCompatActivity() {
         setupToolbar()
         setupAuthTypeSpinner()
         setupKeySpinner()
+        setupGroupSpinner()
+        setupIdentitySpinner()
         setupProxyTypeSpinner()
         setupValidation()
         setupButtons()
@@ -185,6 +188,66 @@ class ConnectionEditActivity : AppCompatActivity() {
             )
 
             binding.spinnerProxySshKey.setAdapter(keyAdapter)
+        }
+    }
+
+    private fun setupGroupSpinner() {
+        lifecycleScope.launch {
+            // Get one-time snapshot from Flow
+            val groups = app.database.connectionGroupDao().getAllGroups().first()
+            val groupsList = mutableListOf("No Group")
+            groups.forEach { group -> groupsList.add(group.name) }
+            
+            val adapter = ArrayAdapter(
+                this@ConnectionEditActivity,
+                android.R.layout.simple_dropdown_item_1line,
+                groupsList
+            )
+            binding.spinnerGroup.setAdapter(adapter)
+            
+            binding.spinnerGroup.setOnItemClickListener { _, _, position, _ ->
+                selectedGroupId = if (position == 0) null else groups[position - 1].id
+                selectedGroupName = groupsList[position]
+            }
+            
+            // Set current group
+            existingProfile?.groupId?.let { groupId ->
+                val index = groups.indexOfFirst { it.id == groupId }
+                if (index >= 0) {
+                    binding.spinnerGroup.setText(groups[index].name, false)
+                    selectedGroupId = groupId
+                    selectedGroupName = groups[index].name
+                }
+            } ?: run {
+                binding.spinnerGroup.setText("No Group", false)
+            }
+        }
+    }
+    
+    private fun setupIdentitySpinner() {
+        lifecycleScope.launch {
+            // Use the List version directly
+            val identities = app.database.identityDao().getAllIdentitiesList()
+            val identityList = mutableListOf("No Identity")
+            identities.forEach { identity -> identityList.add(identity.name) }
+            
+            val adapter = ArrayAdapter(
+                this@ConnectionEditActivity,
+                android.R.layout.simple_dropdown_item_1line,
+                identityList
+            )
+            binding.spinnerIdentity.setAdapter(adapter)
+            
+            binding.spinnerIdentity.setOnItemClickListener { _, _, position, _ ->
+                if (position > 0) {
+                    val identity = identities[position - 1]
+                    // Apply identity to connection
+                    binding.editUsername.setText(identity.username)
+                    // TODO: Apply key or password from identity
+                }
+            }
+            
+            binding.spinnerIdentity.setText("No Identity", false)
         }
     }
 
