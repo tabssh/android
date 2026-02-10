@@ -414,16 +414,6 @@ Added intelligent tooltips for better UX:
 │   ├── notify-release.sh
 │   ├── prepare-fdroid-submission.sh
 │   └── validate-implementation.sh
-├── docs/                         # Documentation
-│   ├── BUILD_STATUS.md           # Build progress & status
-│   ├── CHANGELOG.md              # Release history
-│   ├── TODO.md                   # Development tasks
-│   ├── UI_UX_GUIDE.md            # Design guidelines
-│   ├── LIBRARY_COMPARISON.md     # Technical decisions
-│   ├── CLEANUP_PLAN.md
-│   ├── FINAL_STATUS.md
-│   └── [other documentation]
-├── fdroid-submission/            # F-Droid metadata
 ├── metadata/                     # App metadata
 ├── /tmp/tabssh-android/          # Temporary files (all temp files go here)
 ├── Makefile                      # Simplified build automation
@@ -816,7 +806,9 @@ make release
 - **SPEC.md** - Complete technical specification (98KB, 3000+ lines)
 - **INSTALL.md** - Detailed installation guide
 - **CLAUDE.md** - This file (project tracker)
-- **docs/** - Additional documentation (10+ files)
+- **TODO.md** - Development tasks and roadmap
+- **CHANGELOG.md** - Version history (symlink to fdroid-submission/)
+- **scripts/README.md** - Build scripts documentation
 
 ---
 

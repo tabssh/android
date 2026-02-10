@@ -585,7 +585,12 @@ Use the [Feature Request template](.github/ISSUE_TEMPLATE/feature_request.yml) a
 
 ### Getting Help
 
-- **Documentation:** Check README, SPEC.md, and docs/
+### Resources
+
+- **[SPEC.md](../SPEC.md)** - Complete technical specification
+- **[CLAUDE.md](../CLAUDE.md)** - Project tracker
+- **[TODO.md](../TODO.md)** - Development roadmap
+- **[scripts/README.md](../scripts/README.md)** - Build scripts documentation
 - **Search issues:** Someone may have asked before
 - **Ask in discussions:** Community members are helpful
 - **Be specific:** Provide details, versions, logs
