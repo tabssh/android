@@ -1,4 +1,4 @@
-name: Development Builds
+name: Development Build
 
 on:
   push:
@@ -6,6 +6,7 @@ on:
 
 jobs:
   build-devel:
+    name: Build Development APKs
     runs-on: ubuntu-latest
 
     steps:

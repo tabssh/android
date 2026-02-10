@@ -1,4 +1,4 @@
-name: Android CI
+name: Validation Tests
 
 on:
   push:
@@ -8,6 +8,7 @@ on:
 
 jobs:
   validate:
+    name: Code Validation & Tests
     runs-on: ubuntu-latest
     
     steps:
