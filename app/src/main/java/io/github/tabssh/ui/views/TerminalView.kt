@@ -192,8 +192,11 @@ class TerminalView @JvmOverloads constructor(
         val listener = object : TerminalListener {
             override fun onDataReceived(data: ByteArray) {
                 // Redraw terminal when data arrives
-                post { invalidate() }
-                Logger.d("TerminalView", "Terminal data received, invalidating view")
+                Logger.d("TerminalView", "Terminal data received: ${data.size} bytes")
+                post { 
+                    Logger.d("TerminalView", "Calling invalidate() from onDataReceived")
+                    invalidate() 
+                }
             }
 
             override fun onDataSent(data: ByteArray) {
@@ -433,9 +436,14 @@ class TerminalView @JvmOverloads constructor(
         // Draw terminal content
         terminalRenderer?.let { renderer ->
             terminalBuffer?.let { buffer ->
+                Logger.d("TerminalView", "Rendering terminal: ${buffer.getRows()}x${buffer.getCols()}, scroll=$scrollY")
                 renderer.render(canvas, buffer, paddingLeft.toFloat(), paddingTop.toFloat(),
                     cellWidth, cellHeight, scrollY)
+            } ?: run {
+                Logger.w("TerminalView", "Terminal buffer is null in onDraw")
             }
+        } ?: run {
+            Logger.w("TerminalView", "Terminal renderer is null in onDraw")
         }
     }
 

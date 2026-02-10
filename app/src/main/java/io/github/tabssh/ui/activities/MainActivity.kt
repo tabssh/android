@@ -245,6 +245,18 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                 showAboutDialog()
                 true
             }
+            R.id.action_proxmox -> {
+                startActivity(Intent(this, ProxmoxManagerActivity::class.java))
+                true
+            }
+            R.id.action_xcpng -> {
+                startActivity(Intent(this, XCPngManagerActivity::class.java))
+                true
+            }
+            R.id.action_vmware -> {
+                startActivity(Intent(this, VMwareManagerActivity::class.java))
+                true
+            }
             else -> super.onOptionsItemSelected(item)
         }
     }
@@ -365,11 +377,11 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     private fun showAboutDialog() {
         val aboutText = """
         TabSSH
-        Version 1.1.0 (Build 3)
+        Version 1.0.0 (Build 1)
         
         A modern, open-source SSH client for Android with browser-style tabs, Material Design 3, and comprehensive security features.
         
-        © 2024-2025 TabSSH Project
+        © 2024-2026 TabSSH Project
         Licensed under MIT License
         
         Built with:
