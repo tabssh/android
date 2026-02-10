@@ -6,7 +6,7 @@ import androidx.room.PrimaryKey
 
 /**
  * Hypervisor connection profile
- * Supports: Proxmox, XCP-ng, VMware
+ * Supports: Proxmox, XCP-ng, VMware, Xen Orchestra
  */
 @Entity(tableName = "hypervisors")
 data class HypervisorProfile(
@@ -37,6 +37,9 @@ data class HypervisorProfile(
     
     @ColumnInfo(name = "verify_ssl")
     val verifySsl: Boolean = false,
+    
+    @ColumnInfo(name = "is_xen_orchestra")
+    val isXenOrchestra: Boolean = false, // For XCP-ng: true = XO REST API, false = XML-RPC direct
     
     @ColumnInfo(name = "notes")
     val notes: String? = null,

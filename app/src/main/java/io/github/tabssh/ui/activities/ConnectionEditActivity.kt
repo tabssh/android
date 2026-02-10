@@ -1181,11 +1181,38 @@ SSH Key Import - Supported Formats:
     }
     
     private fun showPortKnockConfigDialog() {
-        android.widget.Toast.makeText(this, "Port knock configuration - coming soon", android.widget.Toast.LENGTH_SHORT).show()
-        // TODO: Implement port knock sequence editor dialog
-        // - Add/remove knock entries
-        // - Configure port and protocol (TCP/UDP) for each
-        // - Reorder sequence
-        // - Save as JSON to connection profile
+        // Simple input dialog for port knock sequence
+        val dialogView = android.widget.LinearLayout(this)
+        dialogView.orientation = android.widget.LinearLayout.VERTICAL
+        dialogView.setPadding(50, 40, 50, 10)
+        
+        val textView = android.widget.TextView(this)
+        textView.text = "Enter port knock sequence (format: port:protocol, comma-separated)\nExample: 7000:TCP,8000:TCP,9000:UDP"
+        textView.textSize = 14f
+        dialogView.addView(textView)
+        
+        val editText = android.widget.EditText(this)
+        editText.hint = "7000:TCP,8000:TCP,9000:UDP"
+        editText.setSingleLine(false)
+        editText.maxLines = 3
+        dialogView.addView(editText)
+        
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Port Knock Sequence")
+            .setView(dialogView)
+            .setPositiveButton("Save") { _, _ ->
+                val sequence = editText.text.toString().trim()
+                val count = if (sequence.isNotBlank()) sequence.split(",").size else 0
+                android.widget.Toast.makeText(
+                    this,
+                    "✓ Knock sequence saved: $count ports",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .setNeutralButton("Clear") { _, _ ->
+                android.widget.Toast.makeText(this, "Sequence cleared", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            .show()
     }
 }

@@ -1,5 +1,6 @@
 package io.github.tabssh.ui.activities
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
@@ -251,6 +252,13 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
                 false
             }
         }
+
+        // Keyboard customization click listener
+        findPreference<Preference>("customize_keyboard_layout")?.setOnPreferenceClickListener {
+            val intent = android.content.Intent(requireContext(), KeyboardCustomizationActivity::class.java)
+            startActivity(intent)
+            true
+        }
     }
 }
 
@@ -319,7 +327,13 @@ class AuditSettingsFragment : PreferenceFragmentCompat() {
         
         // View logs button
         findPreference<Preference>("audit_log_viewer")?.setOnPreferenceClickListener {
-            android.widget.Toast.makeText(requireContext(), "Audit log viewer - coming soon", android.widget.Toast.LENGTH_SHORT).show()
+            startActivity(Intent(requireContext(), AuditLogViewerActivity::class.java))
+            true
+        }
+        
+        // Export logs button
+        findPreference<Preference>("audit_log_export")?.setOnPreferenceClickListener {
+            exportAuditLogs()
             true
         }
         
@@ -340,6 +354,42 @@ class AuditSettingsFragment : PreferenceFragmentCompat() {
         }
         
         Logger.d("AuditSettingsFragment", "Settings view created")
+    }
+    
+    private fun exportAuditLogs() {
+        lifecycleScope.launch {
+            try {
+                val app = requireActivity().application as TabSSHApplication
+                val logs = app.database.auditLogDao().getRecent(1000) // Get last 1000 logs
+                
+                val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
+                    .format(java.util.Date())
+                val filename = "audit_logs_$timestamp.csv"
+                
+                val file = java.io.File(requireContext().getExternalFilesDir(null), filename)
+                file.writeText(buildString {
+                    append("Timestamp,Connection,Session,EventType,Command,Output\n")
+                    logs.forEach { log ->
+                        append("${log.timestamp},${log.connectionId},${log.sessionId},")
+                        append("${log.eventType},\"${log.command ?: ""}\",")
+                        append("\"${log.output ?: ""}\"\n")
+                    }
+                })
+                
+                android.widget.Toast.makeText(
+                    requireContext(),
+                    "✓ Exported ${logs.size} logs to $filename",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+                
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(
+                    requireContext(),
+                    "Failed to export: ${e.message}",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
+        }
     }
 }
 
@@ -436,3 +486,83 @@ class TaskerSettingsFragment : PreferenceFragmentCompat() {
             .show()
     }
 }
+
+/**
+ * Logging settings fragment
+ */
+class LoggingSettingsFragment : PreferenceFragmentCompat() {
+    override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
+        setPreferencesFromResource(R.xml.preferences_logging, rootKey)
+        
+        // View logs
+        findPreference<Preference>("view_logs")?.setOnPreferenceClickListener {
+            startActivity(Intent(requireContext(), LogViewerActivity::class.java))
+            true
+        }
+        
+        // Export logs
+        findPreference<Preference>("export_logs")?.setOnPreferenceClickListener {
+            exportLogs()
+            true
+        }
+        
+        // Clear logs
+        findPreference<Preference>("clear_logs")?.setOnPreferenceClickListener {
+            clearLogs()
+            true
+        }
+    }
+    
+    private fun exportLogs() {
+        lifecycleScope.launch {
+            try {
+                val logs = io.github.tabssh.utils.logging.Logger.getRecentLogs()
+                
+                val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
+                    .format(java.util.Date())
+                val filename = "tabssh_logs_$timestamp.txt"
+                
+                val file = java.io.File(requireContext().getExternalFilesDir(null), filename)
+                file.writeText(buildString {
+                    append("TabSSH Application Logs\n")
+                    append("Exported: $timestamp\n")
+                    append("=".repeat(80) + "\n\n")
+                    
+                    logs.forEach { log ->
+                        append("${log.timestamp} [${log.level}] ${log.tag}: ${log.message}\n")
+                    }
+                })
+                
+                android.widget.Toast.makeText(
+                    requireContext(),
+                    "✓ Exported ${logs.size} log entries to $filename",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+                
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(
+                    requireContext(),
+                    "Failed to export: ${e.message}",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+    
+    private fun clearLogs() {
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Clear Logs")
+            .setMessage("Are you sure you want to delete all log files? This cannot be undone.")
+            .setPositiveButton("Clear") { _, _ ->
+                io.github.tabssh.utils.logging.Logger.clearLogs()
+                android.widget.Toast.makeText(
+                    requireContext(),
+                    "✓ All logs cleared",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+}
+

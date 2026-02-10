@@ -31,8 +31,8 @@
 
     <Preference
         android:key="sync_settings"
-        android:title="Google Drive Sync"
-        android:summary="Sync data across devices"
+        android:title="Sync"
+        android:summary="Sync data across devices (Google Drive, WebDAV, Nextcloud)"
         android:icon="@android:drawable/ic_menu_rotate"
         android:fragment="io.github.tabssh.ui.fragments.SyncSettingsFragment" />
     

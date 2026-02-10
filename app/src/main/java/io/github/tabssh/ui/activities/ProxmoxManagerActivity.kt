@@ -296,8 +296,8 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                     Logger.i("ProxmoxManager", "Updated connection profile for VM: ${vm.name}")
                 }
 
-                // Launch terminal activity
-                val intent = TabTerminalActivity.createIntent(this@ProxmoxManagerActivity, connection, autoConnect = false)
+                // Launch terminal activity with auto-connect
+                val intent = TabTerminalActivity.createIntent(this@ProxmoxManagerActivity, connection, autoConnect = true)
                 startActivity(intent)
                 
                 Toast.makeText(this@ProxmoxManagerActivity, "Opening console for ${vm.name}", Toast.LENGTH_SHORT).show()

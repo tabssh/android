@@ -102,6 +102,19 @@
                 android:layout_weight="1"
                 android:text="Reboot"
                 style="@style/Widget.Material3.Button.TonalButton" />
+            
+            <!-- Snapshots Button (XO only) -->
+            <Button
+                android:id="@+id/snapshots_button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:text="📸"
+                android:minWidth="0dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:visibility="gone"
+                style="@style/Widget.Material3.Button.TonalButton" />
 
         </LinearLayout>
 

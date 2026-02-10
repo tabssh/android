@@ -15,7 +15,9 @@ import io.github.tabssh.sync.GoogleDriveSyncManager
 import io.github.tabssh.sync.auth.DriveAuthenticationManager
 import io.github.tabssh.sync.worker.SyncWorkScheduler
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Fragment for Google Drive sync settings
@@ -67,9 +69,24 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
      * Update preferences visibility based on backend
      */
     private fun updatePreferencesVisibility(backend: String? = null) {
-        val selectedBackend = backend ?: prefManager.getString("sync_backend", "google_drive")
-        val isGoogleDrive = selectedBackend == "google_drive"
-        val isWebDAV = selectedBackend == "webdav"
+        val selectedBackend = backend ?: prefManager.getString("sync_backend", "auto")
+        
+        // Detect actual backend for "auto" mode
+        val actualBackend = if (selectedBackend == "auto") {
+            val hasGooglePlay = try {
+                val packageManager = requireContext().packageManager
+                packageManager.getPackageInfo("com.google.android.gms", 0)
+                true
+            } catch (e: Exception) {
+                false
+            }
+            if (hasGooglePlay) "google_drive" else "webdav"
+        } else {
+            selectedBackend
+        }
+        
+        val isGoogleDrive = actualBackend == "google_drive"
+        val isWebDAV = actualBackend == "webdav"
         
         // Google Drive preferences
         findPreference<Preference>("sync_account")?.isVisible = isGoogleDrive
@@ -109,9 +126,59 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
                     return@launch
                 }
                 
-                // TODO: Implement actual WebDAV test
-                showToast("WebDAV connection test - Coming soon")
-                Logger.d(TAG, "Testing WebDAV connection to: $url")
+                // Show progress
+                showToast("Testing WebDAV connection...")
+                
+                // Test connection in background
+                withContext(Dispatchers.IO) {
+                    val sardine = com.thegrizzlylabs.sardineandroid.impl.OkHttpSardine()
+                    sardine.setCredentials(username, password)
+                    
+                    // Try to list root directory
+                    try {
+                        val resources = sardine.list(url)
+                        
+                        // Show success dialog with details
+                        withContext(Dispatchers.Main) {
+                            androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                                .setTitle("✓ WebDAV Connection Successful")
+                                .setMessage(buildString {
+                                    append("Server: $url\n\n")
+                                    append("Found ${resources.size} items:\n\n")
+                                    resources.take(10).forEach { resource ->
+                                        val icon = if (resource.isDirectory) "📁" else "📄"
+                                        append("$icon ${resource.name}\n")
+                                    }
+                                    if (resources.size > 10) {
+                                        append("... and ${resources.size - 10} more")
+                                    }
+                                })
+                                .setPositiveButton("OK", null)
+                                .show()
+                        }
+                        
+                        Logger.i(TAG, "WebDAV test successful: $url")
+                        
+                    } catch (e: Exception) {
+                        withContext(Dispatchers.Main) {
+                            androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                                .setTitle("❌ WebDAV Connection Failed")
+                                .setMessage(buildString {
+                                    append("Could not connect to WebDAV server\n\n")
+                                    append("Error: ${e.message}\n\n")
+                                    append("Please check:\n")
+                                    append("• URL is correct and accessible\n")
+                                    append("• Username and password are valid\n")
+                                    append("• Server supports WebDAV\n")
+                                    append("• Firewall is not blocking connection")
+                                })
+                                .setPositiveButton("OK", null)
+                                .show()
+                        }
+                        
+                        Logger.e(TAG, "WebDAV test failed", e)
+                    }
+                }
                 
             } catch (e: Exception) {
                 Logger.e(TAG, "WebDAV test failed", e)
@@ -136,6 +203,46 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
                     val backend = prefManager.getSyncBackend()
                     
                     when (backend) {
+                        "auto" -> {
+                            // Auto-detect: Check for Google Play Services
+                            val hasGooglePlay = try {
+                                val packageManager = requireContext().packageManager
+                                packageManager.getPackageInfo("com.google.android.gms", 0)
+                                true
+                            } catch (e: Exception) {
+                                false
+                            }
+                            
+                            if (hasGooglePlay) {
+                                // Use Google Drive if available
+                                if (!syncManager.getAuthManager().isAuthenticated()) {
+                                    showAuthenticationDialog()
+                                    false
+                                } else if (!androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext()).getBoolean("sync_password_set", false)) {
+                                    showPasswordSetupDialog()
+                                    false
+                                } else {
+                                    enableSync()
+                                    true
+                                }
+                            } else {
+                                // Fall back to WebDAV
+                                val url = prefManager.getWebDAVServerUrl()
+                                val username = prefManager.getWebDAVUsername()
+                                val password = prefManager.getWebDAVPassword()
+                                
+                                if (url.isNullOrEmpty() || username.isNullOrEmpty() || password.isNullOrEmpty()) {
+                                    showToast("Google Play Services not available. Please configure WebDAV settings.")
+                                    false
+                                } else if (!androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext()).getBoolean("sync_password_set", false)) {
+                                    showPasswordSetupDialog()
+                                    false
+                                } else {
+                                    enableSync()
+                                    true
+                                }
+                            }
+                        }
                         "google_drive" -> {
                             // Google Drive requires authentication and password
                             if (!syncManager.getAuthManager().isAuthenticated()) {

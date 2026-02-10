@@ -110,4 +110,28 @@
 
     </PreferenceCategory>
 
+    <PreferenceCategory
+        android:title="Custom Keyboard"
+        android:key="category_custom_keyboard">
+
+        <Preference
+            android:key="customize_keyboard_layout"
+            android:title="Customize Keyboard Layout"
+            android:summary="Add, remove, or reorder keyboard keys"
+            android:icon="@drawable/ic_keyboard" />
+
+        <SwitchPreferenceCompat
+            android:key="show_arrow_keys"
+            android:title="Show Arrow Keys"
+            android:summary="Display arrow navigation keys in keyboard"
+            android:defaultValue="false" />
+
+        <SwitchPreferenceCompat
+            android:key="show_function_keys_row"
+            android:title="Show Function Keys Row"
+            android:summary="Display F1-F12 keys in second row"
+            android:defaultValue="false" />
+
+    </PreferenceCategory>
+
 </PreferenceScreen>

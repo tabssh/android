@@ -53,7 +53,13 @@
         <Preference
             android:key="audit_log_viewer"
             android:title="View Audit Logs"
-            android:summary="Browse audit log entries"
+            android:summary="Browse audit log history"
+            android:dependency="audit_log_enabled" />
+
+        <Preference
+            android:key="audit_log_export"
+            android:title="Export Audit Logs"
+            android:summary="Save logs to file"
             android:dependency="audit_log_enabled" />
 
         <Preference

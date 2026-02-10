@@ -143,14 +143,14 @@
 
         <Preference
             android:key="view_logs"
-            android:title="View Logs"
-            android:summary="Browse and view log files"
+            android:title="View Application Logs"
+            android:summary="Browse debug and error logs"
             android:icon="@android:drawable/ic_menu_view" />
 
         <Preference
             android:key="export_logs"
             android:title="Export Logs"
-            android:summary="Export all logs as ZIP file"
+            android:summary="Save logs to file for debugging"
             android:icon="@android:drawable/ic_menu_save" />
 
         <Preference
