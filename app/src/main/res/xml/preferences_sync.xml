@@ -16,13 +16,20 @@
             android:summary="%s"
             android:entries="@array/sync_backend_entries"
             android:entryValues="@array/sync_backend_values"
-            android:defaultValue="google_drive"
+            android:defaultValue="auto"
             android:dependency="sync_enabled" />
 
         <Preference
             android:key="sync_account"
             android:title="Google account"
             android:summary="Not connected"
+            android:dependency="sync_enabled" />
+
+        <EditTextPreference
+            android:key="google_drive_sync_folder"
+            android:title="Google Drive folder"
+            android:summary="Folder name in appDataFolder (default: tabssh)"
+            android:defaultValue="tabssh"
             android:dependency="sync_enabled" />
 
         <EditTextPreference
@@ -46,9 +53,9 @@
 
         <EditTextPreference
             android:key="webdav_sync_folder"
-            android:title="WebDAV sync folder"
-            android:summary="Remote folder path"
-            android:defaultValue="/TabSSH"
+            android:title="Sync folder path"
+            android:summary="Remote folder for sync data (default: /tabssh)"
+            android:defaultValue="/tabssh"
             android:dependency="sync_enabled" />
 
         <Preference

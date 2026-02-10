@@ -101,4 +101,45 @@ object Logger {
     }
     
     fun isDebugMode(): Boolean = debugMode
+    
+    /**
+     * Get recent logs from memory (for log viewer)
+     */
+    fun getRecentLogs(): List<io.github.tabssh.ui.activities.LogViewerActivity.LogEntry> {
+        val logs = mutableListOf<io.github.tabssh.ui.activities.LogViewerActivity.LogEntry>()
+        
+        logFile?.let { file ->
+            if (file.exists()) {
+                try {
+                    file.readLines().takeLast(500).forEach { line ->
+                        // Parse: 2025-12-19 12:34:56.123 [I] TAG: Message
+                        val timestampEnd = line.indexOf(" [")
+                        val levelEnd = line.indexOf("] ", timestampEnd)
+                        val tagEnd = line.indexOf(": ", levelEnd)
+                        
+                        if (timestampEnd > 0 && levelEnd > 0 && tagEnd > 0) {
+                            val timestamp = line.substring(0, timestampEnd)
+                            val level = when (line.substring(timestampEnd + 2, levelEnd)) {
+                                "D" -> "DEBUG"
+                                "I" -> "INFO"
+                                "W" -> "WARN"
+                                "E" -> "ERROR"
+                                else -> "UNKNOWN"
+                            }
+                            val tag = line.substring(levelEnd + 2, tagEnd)
+                            val message = line.substring(tagEnd + 2)
+                            
+                            logs.add(io.github.tabssh.ui.activities.LogViewerActivity.LogEntry(
+                                timestamp, level, tag, message
+                            ))
+                        }
+                    }
+                } catch (e: Exception) {
+                    e("Logger", "Failed to read logs", e)
+                }
+            }
+        }
+        
+        return logs
+    }
 }

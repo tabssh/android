@@ -63,6 +63,16 @@
             android:text="Refresh VMs"
             android:layout_marginTop="8dp"
             style="@style/Widget.Material3.Button" />
+        
+        <!-- Backup Jobs Button (XO only) -->
+        <Button
+            android:id="@+id/backup_jobs_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="📦 Backup Jobs"
+            android:layout_marginTop="8dp"
+            android:visibility="gone"
+            style="@style/Widget.Material3.Button.TonalButton" />
 
         <!-- Progress Bar -->
         <ProgressBar
@@ -82,6 +92,33 @@
             android:text="No server selected"
             android:textAlignment="center"
             android:padding="8dp" />
+        
+        <!-- Live indicator for WebSocket connection -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingVertical="4dp"
+            android:gravity="center">
+            
+            <View
+                android:id="@+id/live_indicator"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:background="@android:color/holo_green_light"
+                android:visibility="gone" />
+            
+            <TextView
+                android:id="@+id/live_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⚡ Live Updates"
+                android:textSize="12sp"
+                android:textColor="?android:textColorSecondary"
+                android:layout_marginStart="8dp"
+                android:visibility="gone" />
+        
+        </LinearLayout>
 
     </LinearLayout>
 

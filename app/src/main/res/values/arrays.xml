@@ -104,10 +104,12 @@
 
     <!-- Sync backend options -->
     <string-array name="sync_backend_entries">
+        <item>Auto-detect (Recommended)</item>
         <item>Google Drive</item>
         <item>WebDAV (Nextcloud/ownCloud)</item>
     </string-array>
     <string-array name="sync_backend_values">
+        <item>auto</item>
         <item>google_drive</item>
         <item>webdav</item>
     </string-array>

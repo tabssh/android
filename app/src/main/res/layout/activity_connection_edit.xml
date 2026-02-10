@@ -51,7 +51,7 @@
                         android:text="Connection Details"
                         android:textStyle="bold"
                         android:textSize="@dimen/text_size_subtitle"
-                        android:textColor="#212121"
+                        android:textColor="?android:attr/textColorPrimary"
                         android:layout_marginBottom="@dimen/space_md" />
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -148,7 +148,7 @@
                         android:text="Authentication"
                         android:textStyle="bold"
                         android:textSize="@dimen/text_size_subtitle"
-                        android:textColor="#212121"
+                        android:textColor="?android:attr/textColorPrimary"
                         android:layout_marginBottom="@dimen/space_md" />
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -201,7 +201,7 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:text="Save password securely"
-                                android:textColor="#212121"
+                                android:textColor="?android:attr/textColorPrimary"
                                 android:tooltipText="Encrypted with hardware-backed keystore" />
 
                         </LinearLayout>
@@ -265,7 +265,7 @@
                         android:text="Advanced Settings"
                         android:textStyle="bold"
                         android:textSize="@dimen/text_size_subtitle"
-                        android:textColor="#212121"
+                        android:textColor="?android:attr/textColorPrimary"
                         android:layout_marginBottom="@dimen/space_md" />
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -290,7 +290,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_md"
                         android:text="Enable Compression"
-                        android:textColor="#212121"
+                        android:textColor="?android:attr/textColorPrimary"
                         android:checked="true"
                         android:tooltipText="Reduce bandwidth usage on slow connections" />
 
@@ -300,7 +300,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_sm"
                         android:text="Keep Alive"
-                        android:textColor="#212121"
+                        android:textColor="?android:attr/textColorPrimary"
                         android:checked="true"
                         android:tooltipText="Prevents connection timeout on idle" />
 
@@ -310,7 +310,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_sm"
                         android:text="X11 Forwarding (Run GUI apps)"
-                        android:textColor="#212121"
+                        android:textColor="?android:attr/textColorPrimary"
                         android:checked="false"
                         android:tooltipText="Forward X11 display to run graphical apps" />
 
@@ -320,7 +320,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_sm"
                         android:text="Use Mosh (Mobile Shell)"
-                        android:textColor="#212121"
+                        android:textColor="?android:attr/textColorPrimary"
                         android:checked="false"
                         android:tooltipText="Mobile-optimized protocol with roaming support for unstable connections" />
 
@@ -330,7 +330,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_sm"
                         android:text="Port Knocking"
-                        android:textColor="#212121"
+                        android:textColor="?android:attr/textColorPrimary"
                         android:checked="false" />
 
                     <com.google.android.material.button.MaterialButton
@@ -339,8 +339,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_sm"
-                        android:text="Configure Knock Sequence"
-                        android:visibility="gone" />
+                        android:text="Configure Knock Sequence" />
 
                 </LinearLayout>
 
@@ -365,7 +364,7 @@
                         android:text="Proxy / Jump Host"
                         android:textStyle="bold"
                         android:textSize="@dimen/text_size_subtitle"
-                        android:textColor="#212121"
+                        android:textColor="?android:attr/textColorPrimary"
                         android:layout_marginBottom="@dimen/space_md" />
 
                     <com.google.android.material.textfield.TextInputLayout

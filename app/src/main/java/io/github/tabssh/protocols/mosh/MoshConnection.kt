@@ -2,6 +2,7 @@ package io.github.tabssh.protocols.mosh
 
 import android.content.Context
 import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.storage.preferences.PreferencesManager
 import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.ssh.connection.ConnectionState
 import io.github.tabssh.utils.logging.Logger
@@ -18,7 +19,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 class MoshConnection(
     private val profile: ConnectionProfile,
-    private val context: Context
+    private val context: Context,
+    private val preferencesManager: PreferencesManager
 ) {
     
     // Mosh connection state
@@ -208,18 +210,29 @@ class MoshConnection(
     }
     
     private fun buildMoshServerCommand(): String {
-        // Build mosh-server command with appropriate options
+        // Get custom mosh command from preferences or use default
+        val customCommand = preferencesManager.getString(
+            "mosh_server_command",
+            "mosh-server new -s -l LANG=en_US.UTF-8"
+        )
+        
+        // If user provided custom command, use it as-is
+        if (customCommand.isNotBlank() && customCommand != "mosh-server new -s -l LANG=en_US.UTF-8") {
+            Logger.d("MoshConnection", "Using custom mosh command: $customCommand")
+            return customCommand
+        }
+        
+        // Otherwise build default command with port
         val command = buildString {
-            append("mosh-server")
+            append("mosh-server new -s")
             
-            // Specify port range
-            append(" -p $serverPort")
+            // Specify port if not default
+            if (serverPort != 60001) {
+                append(" -p $serverPort")
+            }
             
             // Set locale
-            append(" -- env LANG=en_US.UTF-8")
-            
-            // Start shell
-            append(" /bin/bash")
+            append(" -l LANG=en_US.UTF-8")
         }
         
         Logger.d("MoshConnection", "Mosh server command: $command")

@@ -72,11 +72,32 @@
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- Audit Log Viewer activity -->
+        <activity
+            android:name=".ui.activities.AuditLogViewerActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.activities.SettingsActivity"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- Log Viewer activity -->
+        <activity
+            android:name=".ui.activities.LogViewerActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.activities.SettingsActivity"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- SSH Key Management activity -->
         <activity
             android:name=".ui.activities.KeyManagementActivity"
             android:exported="false"
             android:parentActivityName=".ui.activities.MainActivity"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- Keyboard Customization activity -->
+        <activity
+            android:name=".ui.activities.KeyboardCustomizationActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.activities.SettingsActivity"
             android:windowSoftInputMode="adjustResize" />
 
         <!-- Group Management activity -->

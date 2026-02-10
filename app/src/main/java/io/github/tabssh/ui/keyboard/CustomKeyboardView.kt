@@ -25,6 +25,7 @@ class CustomKeyboardView @JvmOverloads constructor(
     private var onToggleClickListener: (() -> Unit)? = null
     private var currentModifier: String? = null
     private var fnMode = false
+    private var normalKeys: List<KeyboardKey> = emptyList()
     
     init {
         // Inflate layout
@@ -40,6 +41,7 @@ class CustomKeyboardView @JvmOverloads constructor(
      * Set keyboard layout
      */
     fun setLayout(keys: List<KeyboardKey>) {
+        normalKeys = keys // Save for restoration
         keyContainer.removeAllViews()
         
         keys.forEach { key ->
@@ -191,23 +193,38 @@ class CustomKeyboardView @JvmOverloads constructor(
             keyContainer.addView(button)
         }
         
-        // Add back button
+        // Add back button to exit function key mode
         val backButton = MaterialButton(context, null, com.google.android.material.R.attr.materialButtonOutlinedStyle)
-        backButton.text = "←"
+        val backParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.MATCH_PARENT
+        )
+        backParams.marginEnd = 8
+        backButton.layoutParams = backParams
+        backButton.text = "← Back"
+        backButton.minWidth = 0
+        backButton.minimumWidth = 0
+        backButton.setPadding(32, 16, 32, 16)
+        backButton.textSize = 12f
         backButton.setOnClickListener {
             fnMode = false
             restoreNormalKeys()
         }
-        keyContainer.addView(backButton)
+        keyContainer.addView(backButton, 0) // Add at start for easy access
     }
     
     /**
      * Restore normal keys layout
      */
     private fun restoreNormalKeys() {
-        // This should be called by parent to restore saved layout
-        // For now, just log
-        Logger.d("CustomKeyboardView", "Restore normal keys requested")
+        keyContainer.removeAllViews()
+        
+        normalKeys.forEach { key ->
+            val button = createKeyButton(key)
+            keyContainer.addView(button)
+        }
+        
+        Logger.d("CustomKeyboardView", "Normal keys restored (${normalKeys.size} keys)")
     }
     
     /**

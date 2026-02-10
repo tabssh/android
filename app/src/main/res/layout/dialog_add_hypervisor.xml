@@ -97,6 +97,25 @@
                 android:inputType="text" />
 
         </com.google.android.material.textfield.TextInputLayout>
+        
+        <!-- Xen Orchestra Toggle -->
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/xen_orchestra_switch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Is this Xen Orchestra?"
+            android:visibility="gone" />
+        
+        <TextView
+            android:id="@+id/xen_orchestra_hint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Enable if connecting to Xen Orchestra server (uses REST API). Disable for direct XCP-ng/XenServer connection (uses XML-RPC)."
+            android:textSize="12sp"
+            android:textColor="?android:textColorSecondary"
+            android:visibility="gone" />
 
     </LinearLayout>
 

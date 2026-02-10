@@ -64,4 +64,17 @@
 
     </PreferenceCategory>
 
+    <PreferenceCategory
+        android:title="Mosh Configuration"
+        android:key="category_mosh">
+
+        <EditTextPreference
+            android:key="mosh_server_command"
+            android:title="Mosh Server Command"
+            android:summary="Custom command for mosh-server"
+            android:defaultValue="mosh-server new -s -l LANG=en_US.UTF-8"
+            app:useSimpleSummaryProvider="true" />
+
+    </PreferenceCategory>
+
 </PreferenceScreen>

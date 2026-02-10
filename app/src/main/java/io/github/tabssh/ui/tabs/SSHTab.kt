@@ -133,7 +133,15 @@ class SSHTab(
             // Connect terminal to SSH streams
             val shellChannel = sshConnection.openShellChannel()
             if (shellChannel != null) {
-                terminal.connect(shellChannel.inputStream, shellChannel.outputStream)
+                val inputStream = shellChannel.inputStream
+                val outputStream = shellChannel.outputStream
+                
+                if (inputStream == null || outputStream == null) {
+                    Logger.e("SSHTab", "Shell channel streams are null for ${profile.getDisplayName()}")
+                    return@withContext false
+                }
+                
+                terminal.connect(inputStream, outputStream)
                 Logger.i("SSHTab", "Connected tab ${profile.getDisplayName()} to SSH")
                 true
             } else {
