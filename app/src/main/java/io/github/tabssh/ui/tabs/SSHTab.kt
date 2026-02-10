@@ -5,9 +5,14 @@ import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.ssh.connection.ConnectionState
 import io.github.tabssh.terminal.emulator.TerminalEmulator
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import java.util.UUID
 
 /**
@@ -19,6 +24,9 @@ class SSHTab(
     val terminal: TerminalEmulator
 ) {
     val tabId: String = UUID.randomUUID().toString()
+    
+    // Coroutine scope for managing tab lifecycle
+    private val connectionScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
     // Connection (public for gesture command sending)
     var connection: SSHConnection? = null
@@ -344,6 +352,7 @@ class SSHTab(
 
         disconnect()
         terminal.cleanup()
+        connectionScope.cancel() // Cancel all coroutines
     }
     
     override fun equals(other: Any?): Boolean {
