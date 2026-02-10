@@ -223,7 +223,10 @@ android/
 │   ├── workflows/                # CI/CD pipelines
 │   ├── ISSUE_TEMPLATE/           # Issue templates
 │   └── CONTRIBUTING.md           # Contribution guidelines
-├── docs/                         # Documentation
+├── scripts/                      # Build & automation scripts
+├── metadata/                     # App metadata
+├── fdroid-submission/            # F-Droid submission files
+├── .github/                      # GitHub Actions workflows
 ├── scripts/                      # Build & utility scripts
 ├── fdroid-submission/            # F-Droid metadata
 ├── Makefile                      # Build automation
@@ -387,7 +390,7 @@ furnished to do so, subject to the following conditions:
 - 💡 **Feature Requests:** [GitHub Issues](https://github.com/tabssh/android/issues)
 - 💬 **Discussions:** [GitHub Discussions](https://github.com/tabssh/android/discussions)
 - 📧 **Email:** git-admin+support@casjaysdev.pro
-- 📖 **Documentation:** [docs/](docs/)
+- 📖 **Documentation:** [SPEC.md](SPEC.md), [CHANGELOG.md](CHANGELOG.md), [scripts/README.md](scripts/README.md)
 
 ### Social
 
@@ -458,7 +461,7 @@ TabSSH is built on the shoulders of giants:
 - [ ] Performance optimizations
 - [ ] Enhanced accessibility features
 
-See [docs/TODO.md](docs/TODO.md) for detailed roadmap.
+See [TODO.md](TODO.md) for detailed roadmap.
 
 ---
 
