@@ -122,11 +122,13 @@ class SSHTab(
         return try {
             connection = sshConnection
             
-            // Update connection state based on SSH connection state
-            sshConnection.connectionState.collect { state ->
-                _connectionState.value = state
-                if (state == ConnectionState.ERROR) {
-                    _hasError.value = true
+            // Launch coroutine to observe connection state
+            connectionScope.launch {
+                sshConnection.connectionState.collect { state ->
+                    _connectionState.value = state
+                    if (state == ConnectionState.ERROR) {
+                        _hasError.value = true
+                    }
                 }
             }
             
@@ -138,7 +140,7 @@ class SSHTab(
                 
                 if (inputStream == null || outputStream == null) {
                     Logger.e("SSHTab", "Shell channel streams are null for ${profile.getDisplayName()}")
-                    return@withContext false
+                    return false
                 }
                 
                 terminal.connect(inputStream, outputStream)
