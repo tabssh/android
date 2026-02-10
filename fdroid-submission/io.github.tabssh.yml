@@ -41,14 +41,13 @@ Description: |
     * Dedicated key management UI - view, import, generate, delete keys
     * Export keys in PEM or OpenSSH format
 
-    ☁️ SYNC & BACKUP (NEW v1.0.0):
-    * Google Drive sync with AES-256-GCM encryption
-    * WebDAV sync for degoogled devices (Nextcloud/ownCloud compatible)
-    * Automatic backend fallback on devices without Google Play Services
+    ☁️ SYNC & BACKUP (v1.0.0):
+    * WebDAV sync for self-hosted servers (Nextcloud/ownCloud compatible)
     * Multi-device synchronization with intelligent conflict resolution
     * Import/Export connections as encrypted ZIP backups
-    * Password-based encryption for all synced data
-    * Zero-configuration sync on degoogled ROMs (LineageOS, CalyxOS, GrapheneOS)
+    * Password-based AES-256-GCM encryption for all synced data
+    * Perfect for degoogled ROMs (LineageOS, CalyxOS, GrapheneOS)
+    * NOTE: F-Droid build uses WebDAV only (no Google Drive dependency)
 
     🎨 THEMES & CUSTOMIZATION:
     * 12 beautiful built-in themes (Dracula, Solarized, Nord, Monokai, One Dark, etc.)
@@ -118,14 +117,15 @@ Builds:
   - versionName: '1.0.0'
     versionCode: 1
     commit: v1.0.0
-    subdir: android
+    subdir: .
     gradle:
       - fdroidRelease
     prebuild:
       - echo "sdk.dir=$$SDK$$" > local.properties
       - echo "ndk.dir=$$NDK$$" >> local.properties
+      - echo "org.gradle.project.fdroidBuild=true" >> gradle.properties
 
-AutoUpdateMode: Version v%v
-UpdateCheckMode: Tags
+AutoUpdateMode: Version
+UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$
 CurrentVersion: '1.0.0'
 CurrentVersionCode: 1
