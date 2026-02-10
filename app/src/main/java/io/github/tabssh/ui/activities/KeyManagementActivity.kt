@@ -256,10 +256,11 @@ class KeyManagementActivity : AppCompatActivity() {
     }
 
     private fun showImportErrorDialog(errorMessage: String) {
-        AlertDialog.Builder(this)
-            .setTitle("Key Import Failed")
-            .setMessage("Failed to import SSH key:\n\n$errorMessage")
-            .setPositiveButton("OK", null)
+        io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(
+            context = this,
+            title = "Key Import Failed",
+            message = "Failed to import SSH key:\n\n$errorMessage"
+        )
             .show()
     }
 

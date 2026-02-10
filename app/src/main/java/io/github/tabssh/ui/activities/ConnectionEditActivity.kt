@@ -886,13 +886,14 @@ class ConnectionEditActivity : AppCompatActivity() {
     }
 
     private fun showKeyGenerationError(errorMessage: String) {
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("❌ Key Generation Failed")
-            .setMessage("Failed to generate SSH key:\n\n$errorMessage\n\nPlease try again or contact support if the problem persists.")
-            .setPositiveButton("OK", null)
-            .setNeutralButton("Try Again") { _, _ ->
-                generateNewKey()
+        io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(
+            context = this,
+            title = "❌ Key Generation Failed",
+            message = "Failed to generate SSH key:\n\n$errorMessage\n\nPlease try again or contact support if the problem persists.",
+            onDismiss = {
+                // User can manually retry via the Generate button
             }
+        )
             .show()
     }
 
@@ -1087,30 +1088,14 @@ class ConnectionEditActivity : AppCompatActivity() {
     }
     
     private fun showKeyImportErrorDialog(errorMessage: String) {
-        // Create TextView with selectable text for copyable error messages
-        val messageView = android.widget.TextView(this).apply {
-            text = errorMessage
-            setTextIsSelectable(true)
-            setPadding(50, 40, 50, 10)
-            textSize = 16f
-            setTextColor(android.graphics.Color.parseColor("#D32F2F")) // Error red
-        }
-        
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("❌ SSH Key Import Failed")
-            .setView(messageView)
-            .setPositiveButton("OK", null)
-            .setNeutralButton("Copy Error") { _, _ ->
-                // Copy error to clipboard
-                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                val clip = android.content.ClipData.newPlainText("SSH Key Import Error", errorMessage)
-                clipboard.setPrimaryClip(clip)
-                showToast("Error message copied to clipboard")
+        io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(
+            context = this,
+            title = "❌ SSH Key Import Failed",
+            message = errorMessage,
+            onDismiss = {
+                // User can try importing again
             }
-            .setNegativeButton("Help") { _, _ ->
-                showKeyImportHelpDialog()
-            }
-            .show()
+        )
     }
     
     private fun showKeyImportHelpDialog() {

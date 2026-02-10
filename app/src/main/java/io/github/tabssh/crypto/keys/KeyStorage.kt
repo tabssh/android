@@ -30,6 +30,7 @@ import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter
 import org.bouncycastle.openssl.jcajce.JcePEMDecryptorProviderBuilder
 import org.bouncycastle.pkcs.PKCS8EncryptedPrivateKeyInfo
 import org.bouncycastle.pkcs.jcajce.JcePKCSPBEInputDecryptorProviderBuilder
+import io.github.tabssh.crypto.SSHKeyParser
 
 /**
  * Manages SSH private key storage with hardware-backed encryption
@@ -528,93 +529,36 @@ class KeyStorage(private val context: Context) {
     
     private fun parseOpenSSHKey(keyContent: String, passphrase: String?): ParseResult {
         return try {
-            Logger.d("KeyStorage", "Parsing OpenSSH private key format")
+            Logger.d("KeyStorage", "Parsing OpenSSH private key format using SSHKeyParser")
             
-            // Try parsing with BouncyCastle first
-            val pemParser = PEMParser(StringReader(keyContent))
-            val pemObject = pemParser.readObject()
-            pemParser.close()
+            // Use SSHKeyParser which properly handles openssh-key-v1 format
+            // It correctly detects encrypted vs unencrypted keys
+            val parsedKey = SSHKeyParser.parse(keyContent, passphrase)
             
-            // Check if BouncyCastle can handle this OpenSSH format
-            val converter = JcaPEMKeyConverter().setProvider("BC")
-            
-            val keyPair = when (pemObject) {
-                is PEMKeyPair -> {
-                    Logger.d("KeyStorage", "Parsing as unencrypted OpenSSH key")
-                    converter.getKeyPair(pemObject)
-                }
-                is PEMEncryptedKeyPair -> {
-                    if (passphrase == null) {
-                        return ParseResult.Error("Key is encrypted but no passphrase provided")
-                    }
-                    Logger.d("KeyStorage", "Parsing as encrypted OpenSSH key")
-                    val decryptorProvider = JcePEMDecryptorProviderBuilder().build(passphrase.toCharArray())
-                    val decryptedKeyPair = pemObject.decryptKeyPair(decryptorProvider)
-                    converter.getKeyPair(decryptedKeyPair)
-                }
-                is PrivateKeyInfo -> {
-                    Logger.d("KeyStorage", "Parsing as PKCS#8 format within OpenSSH container")
-                    val privateKey = converter.getPrivateKey(pemObject)
-                    val publicKey = getPublicKeyFromPrivate(privateKey)
-                    KeyPair(publicKey, privateKey)
-                }
-                else -> {
-                    // Fallback: try manual OpenSSH format parsing
-                    return parseOpenSSHFormatManually(keyContent, passphrase)
-                }
+            // Convert to KeyPair for consistency with other parsers
+            val keyPair = if (parsedKey.privateKey != null) {
+                KeyPair(parsedKey.publicKey, parsedKey.privateKey)
+            } else {
+                // Public key only
+                throw IllegalArgumentException("Public key import not supported via this method")
             }
             
-            val comment = extractCommentFromPEM(keyContent)
-            Logger.i("KeyStorage", "Successfully parsed OpenSSH key")
-            ParseResult.Success(keyPair, comment)
+            Logger.i("KeyStorage", "Successfully parsed OpenSSH key with SSHKeyParser")
+            ParseResult.Success(keyPair, parsedKey.comment)
             
+        } catch (e: IllegalArgumentException) {
+            // SSHKeyParser throws clear error messages
+            Logger.e("KeyStorage", "Failed to parse OpenSSH key: ${e.message}", e)
+            
+            // Check if it's the "Passphrase required" error
+            if (e.message?.contains("Passphrase required") == true) {
+                ParseResult.Error("Key is encrypted but no passphrase provided")
+            } else {
+                ParseResult.Error(e.message ?: "Failed to parse OpenSSH key")
+            }
         } catch (e: Exception) {
-            Logger.e("KeyStorage", "Failed to parse OpenSSH key with BouncyCastle", e)
-            // Fallback to manual parsing
-            parseOpenSSHFormatManually(keyContent, passphrase)
-        }
-    }
-    
-    private fun parseOpenSSHFormatManually(keyContent: String, passphrase: String?): ParseResult {
-        return try {
-            Logger.d("KeyStorage", "Attempting manual OpenSSH format parsing")
-            
-            // Extract base64 data between headers
-            val keyData = keyContent
-                .replace("-----BEGIN OPENSSH PRIVATE KEY-----", "")
-                .replace("-----END OPENSSH PRIVATE KEY-----", "")
-                .replace("\\s".toRegex(), "")
-
-            val keyBytes = android.util.Base64.decode(keyData, android.util.Base64.DEFAULT)
-            
-            // OpenSSH format has complex binary structure
-            // If we reach here, BouncyCastle couldn't handle it
-            ParseResult.Error(
-                """OpenSSH format detected but couldn't be parsed.
-
-TabSSH DOES support OpenSSH format! This is unexpected.
-
-Please try:
-1. Re-export key: ssh-keygen -p -m PEM -f your_key
-2. Verify key file is complete (not truncated)
-3. If encrypted, check passphrase
-
-If this continues, please report as a bug with the error message below (tap Copy Error button).
-
-Technical: OpenSSH binary parsing fallback failed"""
-            )
-        } catch (e: Exception) {
-            Logger.e("KeyStorage", "Manual OpenSSH parsing failed", e)
-            ParseResult.Error(
-                """Failed to parse OpenSSH key after multiple attempts.
-
-This should work! TabSSH supports OpenSSH format.
-
-Quick fix:
-ssh-keygen -p -m PEM -f your_key
-
-Error: ${e.javaClass.simpleName}: ${e.message}"""
-            )
+            Logger.e("KeyStorage", "Failed to parse OpenSSH key", e)
+            ParseResult.Error("Failed to parse OpenSSH key: ${e.message}")
         }
     }
     
