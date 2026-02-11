@@ -128,12 +128,14 @@ class SSHTab(
      */
     suspend fun connect(sshConnection: SSHConnection): Boolean {
         return try {
+            Logger.i("SSHTab", "🔗 Connecting tab terminal for ${profile.getDisplayName()}")
             connection = sshConnection
             
             // Launch coroutine to observe connection state
             connectionScope.launch {
                 sshConnection.connectionState.collect { state ->
                     _connectionState.value = state
+                    Logger.d("SSHTab", "Connection state changed to: $state")
                     if (state == ConnectionState.ERROR) {
                         _hasError.value = true
                     }
@@ -141,26 +143,33 @@ class SSHTab(
             }
             
             // Connect terminal to SSH streams
+            Logger.i("SSHTab", "🔌 Opening shell channel...")
             val shellChannel = sshConnection.openShellChannel()
             if (shellChannel != null) {
+                Logger.i("SSHTab", "✅ Shell channel opened successfully")
+                
                 val inputStream = shellChannel.inputStream
                 val outputStream = shellChannel.outputStream
                 
+                Logger.d("SSHTab", "Input stream: ${if (inputStream != null) "OK" else "NULL"}")
+                Logger.d("SSHTab", "Output stream: ${if (outputStream != null) "OK" else "NULL"}")
+                
                 if (inputStream == null || outputStream == null) {
-                    Logger.e("SSHTab", "Shell channel streams are null for ${profile.getDisplayName()}")
+                    Logger.e("SSHTab", "❌ Shell channel streams are null for ${profile.getDisplayName()}")
                     return false
                 }
                 
+                Logger.i("SSHTab", "🔌 Wiring terminal to SSH streams...")
                 terminal.connect(inputStream, outputStream)
-                Logger.i("SSHTab", "Connected tab ${profile.getDisplayName()} to SSH")
+                Logger.i("SSHTab", "✅✅✅ Terminal WIRED to SSH successfully for ${profile.getDisplayName()}")
                 true
             } else {
-                Logger.e("SSHTab", "Failed to open shell channel for ${profile.getDisplayName()}")
+                Logger.e("SSHTab", "❌ Failed to open shell channel for ${profile.getDisplayName()}")
                 false
             }
             
         } catch (e: Exception) {
-            Logger.e("SSHTab", "Error connecting tab ${profile.getDisplayName()}", e)
+            Logger.e("SSHTab", "❌ Error connecting tab ${profile.getDisplayName()}", e)
             _hasError.value = true
             false
         }

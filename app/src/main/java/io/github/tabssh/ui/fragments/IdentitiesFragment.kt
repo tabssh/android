@@ -62,10 +62,58 @@ class IdentitiesFragment : Fragment() {
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
         recyclerView.adapter = identityAdapter
         
-        // FAB to add identity
+        // Show/hide empty state
+        identityAdapter.registerAdapterDataObserver(object : androidx.recyclerview.widget.RecyclerView.AdapterDataObserver() {
+            override fun onChanged() {
+                updateEmptyState(view)
+            }
+            override fun onItemRangeInserted(positionStart: Int, itemCount: Int) {
+                updateEmptyState(view)
+            }
+            override fun onItemRangeRemoved(positionStart: Int, itemCount: Int) {
+                updateEmptyState(view)
+            }
+        })
+        
+        // FAB shows menu with options
         view.findViewById<com.google.android.material.floatingactionbutton.FloatingActionButton>(R.id.fab_add_identity).setOnClickListener {
-            showCreateDialog()
+            showAddOptionsMenu()
         }
+    }
+    
+    private fun updateEmptyState(view: View) {
+        val isEmpty = identityAdapter.itemCount == 0
+        view.findViewById<View>(R.id.text_identities_empty).visibility = if (isEmpty) View.VISIBLE else View.GONE
+        view.findViewById<View>(R.id.recycler_users).visibility = if (isEmpty) View.GONE else View.VISIBLE
+    }
+    
+    private fun showAddOptionsMenu() {
+        val options = arrayOf(
+            "➕ Add Identity",
+            "📥 Import SSH Key",
+            "🔐 Generate SSH Key"
+        )
+        
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Create New")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> showCreateDialog()
+                    1 -> navigateToKeyManagement(importMode = true)
+                    2 -> navigateToKeyManagement(generateMode = true)
+                }
+            }
+            .show()
+    }
+    
+    private fun navigateToKeyManagement(importMode: Boolean = false, generateMode: Boolean = false) {
+        val intent = Intent(requireContext(), KeyManagementActivity::class.java)
+        if (importMode) {
+            intent.putExtra("action", "import")
+        } else if (generateMode) {
+            intent.putExtra("action", "generate")
+        }
+        startActivity(intent)
     }
     
     private fun loadData() {
