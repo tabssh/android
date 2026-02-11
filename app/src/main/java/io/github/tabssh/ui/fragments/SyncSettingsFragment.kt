@@ -18,6 +18,7 @@ import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.showError
 
 /**
  * Fragment for Google Drive sync settings
@@ -182,7 +183,7 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
                 
             } catch (e: Exception) {
                 Logger.e(TAG, "WebDAV test failed", e)
-                showToast("WebDAV test failed: ${e.message}")
+                showError("WebDAV test failed: ${e.message}", "Error")
             }
         }
     }

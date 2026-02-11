@@ -22,6 +22,7 @@ import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.Snippet
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.launch
+import io.github.tabssh.utils.showError
 
 /**
  * Activity for managing command snippets
@@ -156,7 +157,7 @@ class SnippetManagerActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e("SnippetManagerActivity", "Failed to load snippets", e)
                 runOnUiThread {
-                    Toast.makeText(this@SnippetManagerActivity, "Failed to load snippets", Toast.LENGTH_SHORT).show()
+                    showError("Failed to load snippets", "Error")
                 }
             }
         }
@@ -196,11 +197,11 @@ class SnippetManagerActivity : AppCompatActivity() {
                 val category = categoryInput.text.toString().trim().ifBlank { "General" }
 
                 if (name.isBlank()) {
-                    Toast.makeText(this, "Snippet name cannot be empty", Toast.LENGTH_SHORT).show()
+                    showError("Snippet name cannot be empty", "Error")
                     return@setPositiveButton
                 }
                 if (command.isBlank()) {
-                    Toast.makeText(this, "Command cannot be empty", Toast.LENGTH_SHORT).show()
+                    showError("Command cannot be empty", "Error")
                     return@setPositiveButton
                 }
 
@@ -240,7 +241,7 @@ class SnippetManagerActivity : AppCompatActivity() {
                 val category = categoryInput.text.toString().trim().ifBlank { "General" }
 
                 if (name.isBlank() || command.isBlank()) {
-                    Toast.makeText(this, "Name and command cannot be empty", Toast.LENGTH_SHORT).show()
+                    showError("Name and command cannot be empty", "Error")
                     return@setPositiveButton
                 }
 
@@ -275,7 +276,7 @@ class SnippetManagerActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e("SnippetManagerActivity", "Failed to create snippet", e)
                 runOnUiThread {
-                    Toast.makeText(this@SnippetManagerActivity, "Failed to create snippet", Toast.LENGTH_SHORT).show()
+                    showError("Failed to create snippet", "Error")
                 }
             }
         }
@@ -302,7 +303,7 @@ class SnippetManagerActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e("SnippetManagerActivity", "Failed to update snippet", e)
                 runOnUiThread {
-                    Toast.makeText(this@SnippetManagerActivity, "Failed to update snippet", Toast.LENGTH_SHORT).show()
+                    showError("Failed to update snippet", "Error")
                 }
             }
         }
@@ -332,7 +333,7 @@ class SnippetManagerActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e("SnippetManagerActivity", "Failed to delete snippet", e)
                 runOnUiThread {
-                    Toast.makeText(this@SnippetManagerActivity, "Failed to delete snippet", Toast.LENGTH_SHORT).show()
+                    showError("Failed to delete snippet", "Error")
                 }
             }
         }

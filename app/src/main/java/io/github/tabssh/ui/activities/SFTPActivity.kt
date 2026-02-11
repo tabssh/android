@@ -20,6 +20,7 @@ import io.github.tabssh.ui.adapters.TransferAdapter
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.launch
 import java.io.File
+import io.github.tabssh.utils.showError
 
 /**
  * SFTP file browser activity with dual-pane interface
@@ -110,13 +111,13 @@ class SFTPActivity : AppCompatActivity() {
                     loadRemoteDirectory(currentRemotePath)
                 } else {
                     Logger.e("SFTPActivity", "Failed to connect SFTP")
-                    showToast("Failed to connect SFTP")
+                    showError("Failed to connect SFTP", "Error")
                     finish()
                 }
                 
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Error setting up SFTP", e)
-                showToast("SFTP setup error: ${e.message}")
+                showError("SFTP setup error: ${e.message}", "Error")
                 finish()
             }
         }
@@ -215,7 +216,7 @@ class SFTPActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Failed to load local directory: $path", e)
-                showToast("Failed to load local directory")
+                showError("Failed to load local directory", "Error")
             }
         }
     }
@@ -240,7 +241,7 @@ class SFTPActivity : AppCompatActivity() {
                 
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Failed to load remote directory: $path", e)
-                showToast("Failed to load remote directory")
+                showError("Failed to load remote directory", "Error")
             }
         }
     }
@@ -306,7 +307,7 @@ class SFTPActivity : AppCompatActivity() {
                 loadRemoteDirectory(currentRemotePath)
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Upload failed", e)
-                showToast("❌ Upload failed: ${e.message}")
+                showError("❌ Upload failed: ${e.message}", "Error")
             }
         }
     }
@@ -339,7 +340,7 @@ class SFTPActivity : AppCompatActivity() {
                 loadLocalDirectory(currentLocalPath)
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Download failed", e)
-                showToast("❌ Download failed: ${e.message}")
+                showError("❌ Download failed: ${e.message}", "Error")
             }
         }
     }
@@ -373,12 +374,12 @@ class SFTPActivity : AppCompatActivity() {
                     showToast("Folder created: $folderName")
                     loadRemoteDirectory(currentRemotePath) // Refresh
                 } else {
-                    showToast("Failed to create folder")
+                    showError("Failed to create folder", "Error")
                 }
                 
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Error creating folder", e)
-                showToast("Error creating folder: ${e.message}")
+                showError("Error creating folder: ${e.message}", "Error")
             }
         }
     }
@@ -519,7 +520,7 @@ class SFTPActivity : AppCompatActivity() {
                 
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Failed to start upload", e)
-                showToast("Upload failed: ${e.message}")
+                showError("Upload failed: ${e.message}", "Error")
             }
         }
     }
@@ -591,7 +592,7 @@ class SFTPActivity : AppCompatActivity() {
                 
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Failed to start download", e)
-                showToast("Download failed: ${e.message}")
+                showError("Download failed: ${e.message}", "Error")
             }
         }
     }
@@ -609,7 +610,7 @@ class SFTPActivity : AppCompatActivity() {
                 showToast("Transfer completed: ${transfer.getDisplayName()}")
             }
             is io.github.tabssh.sftp.TransferResult.Error -> {
-                showToast("Transfer failed: ${result.message}")
+                showError("Transfer failed: ${result.message}", "Error")
             }
             is io.github.tabssh.sftp.TransferResult.Cancelled -> {
                 showToast("Transfer cancelled")
@@ -666,12 +667,12 @@ class SFTPActivity : AppCompatActivity() {
                     showToast("Renamed to $newName")
                     loadRemoteDirectory(currentRemotePath) // Refresh
                 } else {
-                    showToast("Failed to rename file")
+                    showError("Failed to rename file", "Error")
                 }
                 
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Error renaming file", e)
-                showToast("Rename error: ${e.message}")
+                showError("Rename error: ${e.message}", "Error")
             }
         }
     }
@@ -696,12 +697,12 @@ class SFTPActivity : AppCompatActivity() {
                     showToast("Deleted ${file.name}")
                     loadRemoteDirectory(currentRemotePath) // Refresh
                 } else {
-                    showToast("Failed to delete ${file.name}")
+                    showError("Failed to delete ${file.name}", "Error")
                 }
                 
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Error deleting file", e)
-                showToast("Delete error: ${e.message}")
+                showError("Delete error: ${e.message}", "Error")
             }
         }
     }
@@ -715,7 +716,7 @@ class SFTPActivity : AppCompatActivity() {
                     showToast("Deleted ${file.name}")
                     loadLocalDirectory(currentLocalPath) // Refresh
                 } else {
-                    showToast("Failed to delete ${file.name}")
+                    showError("Failed to delete ${file.name}", "Error")
                 }
             }
             .setNegativeButton("Cancel", null)
@@ -738,7 +739,7 @@ class SFTPActivity : AppCompatActivity() {
             
         } catch (e: Exception) {
             Logger.e("SFTPActivity", "Error sharing file", e)
-            showToast("Failed to share file")
+            showError("Failed to share file", "Error")
         }
     }
     

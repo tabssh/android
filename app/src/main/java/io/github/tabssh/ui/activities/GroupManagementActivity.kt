@@ -19,6 +19,7 @@ import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.ConnectionGroup
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.launch
+import io.github.tabssh.utils.showError
 
 /**
  * Activity for managing connection groups/folders
@@ -125,7 +126,7 @@ class GroupManagementActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e("GroupManagementActivity", "Failed to load groups", e)
                 runOnUiThread {
-                    Toast.makeText(this@GroupManagementActivity, "Failed to load groups", Toast.LENGTH_SHORT).show()
+                    showError("Failed to load groups", "Error")
                 }
             }
         }
@@ -153,7 +154,7 @@ class GroupManagementActivity : AppCompatActivity() {
             .setPositiveButton("Create") { _, _ ->
                 val name = nameInput.text.toString().trim()
                 if (name.isBlank()) {
-                    Toast.makeText(this, "Group name cannot be empty", Toast.LENGTH_SHORT).show()
+                    showError("Group name cannot be empty", "Error")
                     return@setPositiveButton
                 }
 
@@ -183,7 +184,7 @@ class GroupManagementActivity : AppCompatActivity() {
             .setPositiveButton("Save") { _, _ ->
                 val name = nameInput.text.toString().trim()
                 if (name.isBlank()) {
-                    Toast.makeText(this, "Group name cannot be empty", Toast.LENGTH_SHORT).show()
+                    showError("Group name cannot be empty", "Error")
                     return@setPositiveButton
                 }
 
@@ -221,7 +222,7 @@ class GroupManagementActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e("GroupManagementActivity", "Failed to create group", e)
                 runOnUiThread {
-                    Toast.makeText(this@GroupManagementActivity, "Failed to create group", Toast.LENGTH_SHORT).show()
+                    showError("Failed to create group", "Error")
                 }
             }
         }
@@ -247,7 +248,7 @@ class GroupManagementActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e("GroupManagementActivity", "Failed to update group", e)
                 runOnUiThread {
-                    Toast.makeText(this@GroupManagementActivity, "Failed to update group", Toast.LENGTH_SHORT).show()
+                    showError("Failed to update group", "Error")
                 }
             }
         }
@@ -300,7 +301,7 @@ class GroupManagementActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e("GroupManagementActivity", "Failed to delete group", e)
                 runOnUiThread {
-                    Toast.makeText(this@GroupManagementActivity, "Failed to delete group", Toast.LENGTH_SHORT).show()
+                    showError("Failed to delete group", "Error")
                 }
             }
         }

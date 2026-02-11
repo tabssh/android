@@ -15,6 +15,7 @@ import io.github.tabssh.hypervisor.proxmox.ProxmoxApiClient
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.HypervisorType
 import kotlinx.coroutines.launch
+import io.github.tabssh.utils.showError
 
 class ProxmoxManagerActivity : AppCompatActivity() {
 
@@ -120,14 +121,14 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                 } else {
                     statusText.text = "Authentication failed"
                     progressBar.visibility = View.GONE
-                    Toast.makeText(this@ProxmoxManagerActivity, "Failed to authenticate", Toast.LENGTH_SHORT).show()
+                    showError("Failed to authenticate", "Error")
                 }
                 
             } catch (e: Exception) {
                 Logger.e("ProxmoxManager", "Connection failed", e)
                 statusText.text = "Connection error: ${e.message}"
                 progressBar.visibility = View.GONE
-                Toast.makeText(this@ProxmoxManagerActivity, "Connection failed", Toast.LENGTH_SHORT).show()
+                showError("Connection failed", "Error")
             }
         }
     }
@@ -172,7 +173,7 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                 Logger.e("ProxmoxManager", "Failed to load VMs", e)
                 statusText.text = "Error loading VMs"
                 progressBar.visibility = View.GONE
-                Toast.makeText(this@ProxmoxManagerActivity, "Failed to load VMs", Toast.LENGTH_SHORT).show()
+                showError("Failed to load VMs", "Error")
             }
         }
     }
@@ -204,13 +205,13 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                     kotlinx.coroutines.delay(2000)
                     refreshVMs()
                 } else {
-                    Toast.makeText(this@ProxmoxManagerActivity, "VM $action failed", Toast.LENGTH_SHORT).show()
+                    showError("VM $action failed", "Error")
                     progressBar.visibility = View.GONE
                 }
                 
             } catch (e: Exception) {
                 Logger.e("ProxmoxManager", "VM action failed", e)
-                Toast.makeText(this@ProxmoxManagerActivity, "Action failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                showError("Action failed: ${e.message}", "Error")
                 progressBar.visibility = View.GONE
             }
         }
@@ -303,7 +304,7 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                 Toast.makeText(this@ProxmoxManagerActivity, "Opening console for ${vm.name}", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Logger.e("ProxmoxManager", "Failed to open VM console", e)
-                Toast.makeText(this@ProxmoxManagerActivity, "Failed to open console: ${e.message}", Toast.LENGTH_SHORT).show()
+                showError("Failed to open console: ${e.message}", "Error")
             }
         }
     }

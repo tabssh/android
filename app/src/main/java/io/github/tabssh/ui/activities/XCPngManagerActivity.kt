@@ -16,6 +16,7 @@ import io.github.tabssh.hypervisor.xcpng.XenOrchestraApiClient
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.HypervisorType
 import kotlinx.coroutines.launch
+import io.github.tabssh.utils.showError
 
 class XCPngManagerActivity : AppCompatActivity() {
     
@@ -166,16 +167,14 @@ class XCPngManagerActivity : AppCompatActivity() {
                 } else {
                     statusText.text = "Authentication failed - check credentials and network"
                     val apiType = if (profile.isXenOrchestra) "Xen Orchestra REST API" else "XCP-ng XML-RPC API"
-                    Toast.makeText(this@XCPngManagerActivity, 
-                        "Failed to authenticate with $apiType. Check:\n• Username/password\n• Host/port (${profile.host}:${profile.port})\n• Network connectivity\n• SSL certificate (verify SSL: ${profile.verifySsl})", 
-                        Toast.LENGTH_LONG).show()
+                    showError("Failed to authenticate with $apiType. Check:\n• Username/password\n• Host/port (${profile.host}:${profile.port})\n• Network connectivity\n• SSL certificate (verify SSL: ${profile.verifySsl})", "Error")
                     progressBar.visibility = View.GONE
                 }
                 
             } catch (e: java.net.UnknownHostException) {
                 Logger.e("XCPngManager", "Unknown host: ${profile.host}", e)
                 statusText.text = "Error: Host not found (${profile.host})"
-                Toast.makeText(this@XCPngManagerActivity, "Cannot resolve hostname: ${profile.host}", Toast.LENGTH_LONG).show()
+                showError("Cannot resolve hostname: ${profile.host}", "Error")
                 progressBar.visibility = View.GONE
             } catch (e: java.net.ConnectException) {
                 Logger.e("XCPngManager", "Connection refused", e)
@@ -186,12 +185,12 @@ class XCPngManagerActivity : AppCompatActivity() {
             } catch (e: javax.net.ssl.SSLHandshakeException) {
                 Logger.e("XCPngManager", "SSL handshake failed", e)
                 statusText.text = "Error: SSL certificate issue"
-                Toast.makeText(this@XCPngManagerActivity, "SSL certificate verification failed. Try disabling 'Verify SSL' in hypervisor settings.", Toast.LENGTH_LONG).show()
+                showError("SSL certificate verification failed. Try disabling 'Verify SSL' in hypervisor settings.", "Error")
                 progressBar.visibility = View.GONE
             } catch (e: Exception) {
                 Logger.e("XCPngManager", "Connection failed", e)
                 statusText.text = "Connection error: ${e.message}"
-                Toast.makeText(this@XCPngManagerActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                showError("Error: ${e.message}", "Error")
                 progressBar.visibility = View.GONE
             }
         }
@@ -342,7 +341,7 @@ class XCPngManagerActivity : AppCompatActivity() {
                 Toast.makeText(this@XCPngManagerActivity, "Opening console for ${vm.name}", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Logger.e("XCPngManager", "Failed to open VM console", e)
-                Toast.makeText(this@XCPngManagerActivity, "Failed to open console: ${e.message}", Toast.LENGTH_SHORT).show()
+                showError("Failed to open console: ${e.message}", "Error")
             }
         }
     }
@@ -544,11 +543,11 @@ class XCPngManagerActivity : AppCompatActivity() {
                             parentDialog.dismiss()
                             showSnapshotDialog(vm) // Refresh
                         } else {
-                            Toast.makeText(this@XCPngManagerActivity, "Failed to create snapshot", Toast.LENGTH_LONG).show()
+                            showError("Failed to create snapshot", "Error")
                         }
                     } catch (e: Exception) {
                         Logger.e("XCPngManager", "Snapshot creation error: ${e.message}", e)
-                        Toast.makeText(this@XCPngManagerActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                        showError("Error: ${e.message}", "Error")
                     }
                 }
             }
@@ -573,11 +572,11 @@ class XCPngManagerActivity : AppCompatActivity() {
                                     Toast.makeText(this@XCPngManagerActivity, "VM reverted to snapshot", Toast.LENGTH_SHORT).show()
                                     parentDialog.dismiss()
                                 } else {
-                                    Toast.makeText(this@XCPngManagerActivity, "Failed to revert", Toast.LENGTH_LONG).show()
+                                    showError("Failed to revert", "Error")
                                 }
                             } catch (e: Exception) {
                                 Logger.e("XCPngManager", "Revert error: ${e.message}", e)
-                                Toast.makeText(this@XCPngManagerActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                                showError("Error: ${e.message}", "Error")
                             }
                         }
                     }
@@ -597,11 +596,11 @@ class XCPngManagerActivity : AppCompatActivity() {
                                     parentDialog.dismiss()
                                     showSnapshotDialog(vm) // Refresh
                                 } else {
-                                    Toast.makeText(this@XCPngManagerActivity, "Failed to delete snapshot", Toast.LENGTH_LONG).show()
+                                    showError("Failed to delete snapshot", "Error")
                                 }
                             } catch (e: Exception) {
                                 Logger.e("XCPngManager", "Delete error: ${e.message}", e)
-                                Toast.makeText(this@XCPngManagerActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                                showError("Error: ${e.message}", "Error")
                             }
                         }
                     }
@@ -721,11 +720,11 @@ class XCPngManagerActivity : AppCompatActivity() {
                                 if (success) {
                                     Toast.makeText(this@XCPngManagerActivity, "Backup triggered", Toast.LENGTH_SHORT).show()
                                 } else {
-                                    Toast.makeText(this@XCPngManagerActivity, "Failed to trigger backup", Toast.LENGTH_LONG).show()
+                                    showError("Failed to trigger backup", "Error")
                                 }
                             } catch (e: Exception) {
                                 Logger.e("XCPngManager", "Trigger backup error: ${e.message}", e)
-                                Toast.makeText(this@XCPngManagerActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                                showError("Error: ${e.message}", "Error")
                             }
                         }
                     }

@@ -18,6 +18,7 @@ import io.github.tabssh.crypto.keys.GenerateResult
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Dispatchers
+import io.github.tabssh.utils.showError
 
 /**
  * Activity for creating and editing SSH connection profiles
@@ -139,7 +140,7 @@ class ConnectionEditActivity : AppCompatActivity() {
 
             } catch (e: Exception) {
                 Logger.e("ConnectionEditActivity", "Failed to load SSH keys", e)
-                showToast("Failed to load SSH keys")
+                showError("Failed to load SSH keys", "Error")
             }
         }
     }
@@ -359,7 +360,7 @@ class ConnectionEditActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 Logger.e("ConnectionEditActivity", "Failed to load connection", e)
-                showToast("Failed to load connection")
+                showError("Failed to load connection", "Error")
                 finish()
             }
         }
@@ -496,7 +497,7 @@ class ConnectionEditActivity : AppCompatActivity() {
                 
             } catch (e: Exception) {
                 Logger.e("ConnectionEditActivity", "Failed to save connection", e)
-                showToast("Failed to save connection: ${e.message}")
+                showError("Failed to save connection: ${e.message}", "Error")
             }
         }
     }
@@ -688,12 +689,12 @@ class ConnectionEditActivity : AppCompatActivity() {
                     showToast("✅ Connection test successful!")
                     connection.disconnect() // Close test connection
                 } else {
-                    showToast("❌ Connection test failed")
+                    showError("❌ Connection test failed", "Error")
                 }
                 
             } catch (e: Exception) {
                 Logger.e("ConnectionEditActivity", "Connection test failed", e)
-                showToast("Connection test error: ${e.message}")
+                showError("Connection test error: ${e.message}", "Error")
             } finally {
                 binding.btnTest.isEnabled = true
                 binding.btnTest.text = "Test Connection"
@@ -936,7 +937,7 @@ class ConnectionEditActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 Logger.e("ConnectionEditActivity", "Failed to import key", e)
-                showToast("❌ Import failed: ${e.message}")
+                showError("❌ Import failed: ${e.message}", "Error")
             }
         }
     }
@@ -1006,7 +1007,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             
         } catch (e: Exception) {
             Logger.e("ConnectionEditActivity", "Key import failed", e)
-            showToast("❌ Key import failed: ${e.message}")
+            showError("❌ Key import failed: ${e.message}", "Error")
         }
     }
     
@@ -1081,7 +1082,7 @@ class ConnectionEditActivity : AppCompatActivity() {
                 
             } catch (e: Exception) {
                 Logger.e("ConnectionEditActivity", "Encrypted key import failed", e)
-                showToast("❌ Encrypted key import failed: ${e.message}")
+                showError("❌ Encrypted key import failed: ${e.message}", "Error")
             }
         }
     }
@@ -1167,7 +1168,7 @@ SSH Key Import - Supported Formats:
                     }
                 } catch (e: Exception) {
                     Logger.e("ConnectionEditActivity", "Failed to read key file", e)
-                    showToast("Failed to read key file: ${e.message}")
+                    showError("Failed to read key file: ${e.message}", "Error")
                 }
             }
         }
