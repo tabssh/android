@@ -15,6 +15,7 @@ import io.github.tabssh.hypervisor.vmware.VMwareApiClient
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.HypervisorType
 import kotlinx.coroutines.launch
+import io.github.tabssh.utils.showError
 
 class VMwareManagerActivity : AppCompatActivity() {
 
@@ -236,7 +237,7 @@ class VMwareManagerActivity : AppCompatActivity() {
                 Toast.makeText(this@VMwareManagerActivity, "Opening console for ${vm.name}", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Logger.e("VMwareManager", "Failed to open VM console", e)
-                Toast.makeText(this@VMwareManagerActivity, "Failed to open console: ${e.message}", Toast.LENGTH_SHORT).show()
+                showError("Failed to open console: ${e.message}", "Error")
             }
         }
     }

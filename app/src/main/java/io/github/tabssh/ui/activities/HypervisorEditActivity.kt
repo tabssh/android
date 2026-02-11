@@ -16,6 +16,7 @@ import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.HypervisorType
 import io.github.tabssh.hypervisor.proxmox.ProxmoxApiClient
 import kotlinx.coroutines.launch
+import io.github.tabssh.utils.showError
 
 class HypervisorEditActivity : AppCompatActivity() {
 
@@ -143,7 +144,7 @@ class HypervisorEditActivity : AppCompatActivity() {
                     editNotes.setText(hypervisor.notes ?: "")
                 }
             } catch (e: Exception) {
-                Toast.makeText(this@HypervisorEditActivity, "Failed to load hypervisor", Toast.LENGTH_SHORT).show()
+                showError("Failed to load hypervisor", "Error")
                 finish()
             }
         }
@@ -183,10 +184,10 @@ class HypervisorEditActivity : AppCompatActivity() {
                 if (success) {
                     Toast.makeText(this@HypervisorEditActivity, "✓ Connection successful", Toast.LENGTH_LONG).show()
                 } else {
-                    Toast.makeText(this@HypervisorEditActivity, "✗ Connection failed", Toast.LENGTH_LONG).show()
+                    showError("✗ Connection failed", "Error")
                 }
             } catch (e: Exception) {
-                Toast.makeText(this@HypervisorEditActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                showError("Error: ${e.message}", "Error")
             } finally {
                 buttonTestConnection.isEnabled = true
                 buttonTestConnection.text = "Test Connection"
@@ -225,7 +226,7 @@ class HypervisorEditActivity : AppCompatActivity() {
                 
                 finish()
             } catch (e: Exception) {
-                Toast.makeText(this@HypervisorEditActivity, "Failed to save: ${e.message}", Toast.LENGTH_SHORT).show()
+                showError("Failed to save: ${e.message}", "Error")
             }
         }
     }

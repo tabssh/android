@@ -30,6 +30,7 @@ import io.github.tabssh.ui.tabs.TabManager
 import io.github.tabssh.ui.tabs.TabManagerListener
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.launch
+import io.github.tabssh.utils.showError
 
 /**
  * Main terminal activity with tabbed SSH sessions
@@ -421,7 +422,7 @@ class TabTerminalActivity : AppCompatActivity() {
             Logger.d("TabTerminalActivity", "Opening URL: $url")
         } catch (e: Exception) {
             Logger.e("TabTerminalActivity", "Failed to open URL: $url", e)
-            Toast.makeText(this, "Failed to open URL", Toast.LENGTH_SHORT).show()
+            showError("Failed to open URL", "Error")
         }
     }
 
@@ -511,7 +512,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                 val clip = android.content.ClipData.newPlainText("SSH Error", fullError)
                 clipboard.setPrimaryClip(clip)
-                Toast.makeText(this, "Error details copied to clipboard", Toast.LENGTH_SHORT).show()
+                showError("Error details copied to clipboard", "Error")
             }
         
         // Edit Connection button
@@ -721,7 +722,7 @@ class TabTerminalActivity : AppCompatActivity() {
                         )
                     } else {
                         Logger.e("TabTerminalActivity", "Failed to connect terminal to SSH for ${profile.getDisplayName()}")
-                        showToast("Failed to connect terminal")
+                        showError("Failed to connect terminal", "Error")
                         
                         // Check for detailed error info
                         val errorInfo = sshConnection.detailedError.value
@@ -740,7 +741,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     }
                 } else {
                     Logger.e("TabTerminalActivity", "Failed to create tab for ${profile.getDisplayName()}")
-                    showToast("Failed to create terminal tab")
+                    showError("Failed to create terminal tab", "Error")
                 }
             } else {
                 // Connection failed - try to get detailed error from last connection attempt
@@ -763,7 +764,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     )
                 } else {
                     // Fallback to simple toast if no detailed error available
-                    showToast("Connection failed: ${profile.getDisplayName()}")
+                    showError("Connection failed: ${profile.getDisplayName()}", "Error")
                     
                     // Show generic error notification
                     io.github.tabssh.utils.NotificationHelper.showConnectionError(
@@ -1268,7 +1269,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 Logger.e("TabTerminalActivity", "Failed to load snippets", e)
-                showToast("Failed to load snippets")
+                showError("Failed to load snippets", "Error")
             }
         }
     }
@@ -1295,7 +1296,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 Logger.e("TabTerminalActivity", "Failed to insert snippet", e)
-                showToast("Failed to insert snippet")
+                showError("Failed to insert snippet", "Error")
             }
         }
     }

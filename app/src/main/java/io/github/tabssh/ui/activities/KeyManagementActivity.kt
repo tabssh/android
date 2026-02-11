@@ -23,6 +23,7 @@ import io.github.tabssh.crypto.keys.ImportResult
 import io.github.tabssh.crypto.keys.KeyType
 import io.github.tabssh.storage.database.entities.StoredKey
 import io.github.tabssh.utils.logging.Logger
+import io.github.tabssh.utils.showError
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -144,7 +145,7 @@ class KeyManagementActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e("KeyManagementActivity", "Failed to read key file", e)
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@KeyManagementActivity, "Failed to read key file: ${e.message}", Toast.LENGTH_SHORT).show()
+                    showError("Failed to read key file: ${e.message}", "Import Error")
                 }
             }
         }
@@ -200,7 +201,7 @@ class KeyManagementActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e("KeyManagementActivity", "Key import failed", e)
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@KeyManagementActivity, "Key import failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                    showError("Key import failed: ${e.message}", "Import Error")
                 }
             }
         }
@@ -249,7 +250,7 @@ class KeyManagementActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e("KeyManagementActivity", "Encrypted key import failed", e)
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@KeyManagementActivity, "Encrypted key import failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                    showError("Encrypted key import failed: ${e.message}", "Import Error")
                 }
             }
         }
@@ -335,7 +336,7 @@ class KeyManagementActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e("KeyManagementActivity", "Key generation failed", e)
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@KeyManagementActivity, "Key generation failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                    showError("Key generation failed: ${e.message}", "Error")
                 }
             }
         }
@@ -368,7 +369,7 @@ class KeyManagementActivity : AppCompatActivity() {
                         Toast.makeText(this@KeyManagementActivity, "Key deleted", Toast.LENGTH_SHORT).show()
                     } catch (e: Exception) {
                         Logger.e("KeyManagementActivity", "Failed to delete key", e)
-                        Toast.makeText(this@KeyManagementActivity, "Failed to delete key", Toast.LENGTH_SHORT).show()
+                        showError("Failed to delete key: ${e.message}", "Delete Error")
                     }
                 }
             }

@@ -3,8 +3,10 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Platform-Android-green.svg" alt="Platform">
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License">
-  <img src="https://img.shields.io/badge/Version-1.1.0-orange.svg" alt="Version">
+  <img src="https://img.shields.io/github/v/release/tabssh/android?label=Version" alt="Version">
   <img src="https://img.shields.io/badge/Min%20SDK-21-brightgreen.svg" alt="Min SDK">
+  <img src="https://github.com/tabssh/android/actions/workflows/android-ci.yml/badge.svg" alt="Build Status">
+  <img src="https://img.shields.io/github/downloads/tabssh/android/total?label=Downloads" alt="Downloads">
 </p>
 
 <p align="center">
@@ -228,11 +230,11 @@ android/
 ├── fdroid-submission/            # F-Droid submission files
 ├── .github/                      # GitHub Actions workflows
 ├── scripts/                      # Build & utility scripts
-├── fdroid-submission/            # F-Droid metadata
 ├── Makefile                      # Build automation
 ├── build.gradle                  # Project-level build config
-├── CLAUDE.md                     # Development tracker
-├── SPEC.md                       # Technical specification
+├── CLAUDE.md                     # Development tracker (103KB)
+├── CHANGELOG.md                  # Version history
+├── LICENSE.md                    # MIT license
 └── README.md                     # This file
 ```
 
@@ -329,12 +331,11 @@ Example theme structure:
 
 ## 📚 Documentation
 
-- **[SPEC.md](SPEC.md)** - Complete technical specification (98KB, 3000+ lines)
-- **[CLAUDE.md](CLAUDE.md)** - Development tracker and project status
-- **[docs/CHANGELOG.md](docs/CHANGELOG.md)** - Version history
-- **[docs/UI_UX_GUIDE.md](docs/UI_UX_GUIDE.md)** - Design guidelines
-- **[docs/LIBRARY_COMPARISON.md](docs/LIBRARY_COMPARISON.md)** - Technical decisions
+- **[CHANGELOG.md](CHANGELOG.md)** - Version history and release notes
+- **[CLAUDE.md](CLAUDE.md)** - Development tracker and project status  
+- **[LICENSE.md](LICENSE.md)** - MIT license details
 - **[.github/CONTRIBUTING.md](.github/CONTRIBUTING.md)** - How to contribute
+- **[scripts/README.md](scripts/README.md)** - Build scripts documentation
 
 ---
 
@@ -390,7 +391,7 @@ furnished to do so, subject to the following conditions:
 - 💡 **Feature Requests:** [GitHub Issues](https://github.com/tabssh/android/issues)
 - 💬 **Discussions:** [GitHub Discussions](https://github.com/tabssh/android/discussions)
 - 📧 **Email:** git-admin+support@casjaysdev.pro
-- 📖 **Documentation:** [SPEC.md](SPEC.md), [CHANGELOG.md](CHANGELOG.md), [scripts/README.md](scripts/README.md)
+- 📖 **Documentation:** [CLAUDE.md](CLAUDE.md), [CHANGELOG.md](CHANGELOG.md), [scripts/README.md](scripts/README.md)
 
 ### Social
 
@@ -422,11 +423,18 @@ A: Yes! Settings → Google Drive Sync (or WebDAV Sync for degoogled devices).
 
 ## 🙏 Acknowledgments
 
+## 🙏 Acknowledgments
+
 TabSSH is built on the shoulders of giants:
 
-- **[JSch](https://github.com/mwiede/jsch)** (v2.27.7) - Modern SSH implementation with OpenSSH 8.8+ support
+- **[JSch](https://github.com/mwiede/jsch)** - Modern SSH implementation (v2.27.7)
+  - Full OpenSSH 8.8+ algorithm support
+  - Modern ciphers: chacha20-poly1305, aes256-gcm, aes128-gcm
+  - Modern KEX: curve25519-sha256, ecdh-sha2-nistp256/384/521
+  - Modern host keys: ssh-ed25519, ecdsa-sha2-nistp256/384/521
 - **[Material Design Components](https://material.io/)** - Beautiful UI framework
 - **[AndroidX Libraries](https://developer.android.com/jetpack/androidx)** - Modern Android development
+- **[BouncyCastle](https://www.bouncycastle.org/)** - Comprehensive cryptography
 - **All contributors** - Thank you for making TabSSH better!
 
 ### Special Thanks
@@ -439,29 +447,33 @@ TabSSH is built on the shoulders of giants:
 
 ## 📊 Stats
 
-- **130+ Kotlin files** - ~25,000 lines of code
+- **95+ Kotlin files** - ~22,000 lines of code
 - **100+ XML resources** - Layouts, themes, strings, translations
 - **10+ built-in themes** - Professional color schemes
 - **4 languages** - English, Spanish, French, German
 - **100% open source** - MIT licensed
 - **0 trackers** - Complete privacy
+- **5 APK variants** - Universal + 4 architecture-specific builds
 
 ---
 
 ## 🗺️ Roadmap
 
-### Version 0.9 (Q1 2025)
-- [ ] Tmux integration
-- [ ] Bluetooth keyboard enhancements
-- [ ] Script automation
-- [ ] Macro recording and playback
-- [ ] Advanced terminal customization
-- [ ] Cloud backup improvements
-- [ ] Complete UI redesign with Material You
-- [ ] Performance optimizations
-- [ ] Enhanced accessibility features
+### Current Focus (v1.1.x)
+- [x] Terminal output rendering fixes
+- [x] Copy button on all error messages  
+- [x] Full-screen terminal with edge gestures
+- [x] CI/CD keystore handling
+- [ ] Complete testing and bug fixes
 
-See [TODO.md](TODO.md) for detailed roadmap.
+### Future Versions
+- [ ] Tmux/Screen integration
+- [ ] Bluetooth keyboard enhancements
+- [ ] Script automation and macros
+- [ ] Advanced terminal customization
+- [ ] Performance optimizations
+
+See [GitHub Issues](https://github.com/tabssh/android/issues) and [CLAUDE.md](CLAUDE.md) for detailed roadmap.
 
 ---
 
@@ -484,60 +496,64 @@ If you find TabSSH useful, please consider starring the repository! It helps oth
   <a href=".github/CONTRIBUTING.md">Contribute</a>
 </p>
 
-## 🎊 v1.1.0 Release Highlights
+## 🎊 Latest Updates
 
-### What's New in v1.1.0
-- ✅ **Cloud Sync Fully Functional** - Google Drive and WebDAV sync now 100% working
-- ✅ **Multi-Language Support** - Added Spanish, French, and German translations (156 strings each)
-- ✅ **Force Upload/Download** - Manual sync controls for full control
-- ✅ **Enhanced UI** - Improved sync dialogs with proper confirmations
+### Recent Improvements
+- ✅ **Copy Button on All Errors** - 72 error messages now have copy buttons for easy debugging
+- ✅ **Full-Screen Terminal** - Menu and toolbars hidden by default, accessible via edge taps
+- ✅ **CI/CD Signing Fixed** - Consistent APK signing across all build sources
+- ✅ **Cloud Sync** - Google Drive and WebDAV sync with encryption
+- ✅ **SSH Key Management** - Universal parser for all key formats (OpenSSH, PEM, PKCS#8, PuTTY)
+- ✅ **Mobile UX** - Swipe between tabs, volume keys font control, URL detection
 
-### What Was Already There (But Undocumented!)
-We discovered TabSSH already had 12+ bonus features not mentioned in docs:
+### v1.0.0 Core Features
 - 📁 **Connection Groups/Folders** - Organize servers efficiently
 - 📝 **Snippets Library** - Quick access to common commands
 - 🆔 **Identity Abstraction** - Reusable credential profiles
-- 🔊 **Volume Keys Font Control** - Adjust terminal font size with volume buttons
-- 👆 **Swipe Between Tabs** - Mobile-first tab navigation
-- 🔗 **Click URLs to Open** - Long-press URLs in terminal to open in browser
-- 🔍 **Search Connections** - Real-time connection filtering
-- 🔄 **Sort Connections** - 8 sorting options (name, host, usage, date)
-- 📊 **3-Section Layout** - Frequent/Groups/Ungrouped organization
-- ⚡ **Performance Monitor** - Built-in system monitoring
-- 📜 **SSH Transcripts** - Session recording and playback
-- 📱 **Android Widget** - Home screen quick connect
-
-**Result:** TabSSH has **43+ features** - more than JuiceSSH or Termius!
+- 🔍 **Search & Sort** - Real-time filtering with 8 sort options
+- 🌐 **Hypervisor Management** - Proxmox VE, VMware vSphere, XCP-ng support
+- 📊 **Comprehensive Logging** - 4 logging types with rotation
 
 ---
 
 
 ---
 
-## 🎯 Complete Feature List
+## 🎯 Feature Highlights
 
-### 155 Features Across 155 Kotlin Files
+### What Makes TabSSH Special
 
-**Core Categories:**
-1. **SSH Connectivity** (20+ features) - All auth methods, port forwarding, X11, Mosh, proxy support
-2. **Security** (15+ features) - Hardware encryption, biometric, host key verification, MITM detection
-3. **Terminal** (15+ features) - Full VT100/ANSI, custom keyboard, gestures, 256 colors
-4. **File Transfer** (10+ features) - Integrated SFTP browser with progress tracking
-5. **Cloud Sync** (15+ features) - Google Drive + WebDAV with encryption and conflict resolution
-6. **Theming** (10+ features) - 10+ built-in themes, custom themes, 8 fonts, transparency
-7. **Mobile UX** (15+ features) - Groups, search, sort, swipe tabs, volume keys, URL detection
-8. **Hypervisor** (10+ features) - Proxmox/XCP-ng/VMware VM management with console access
-9. **Key Management** (10+ features) - Universal parser, all formats, in-app generation
-10. **Accessibility** (10+ features) - TalkBack, high contrast, large text, keyboard navigation
-11. **Logging** (8+ features) - 4 logging types with configurable size and rotation
-12. **Automation** (8+ features) - Tasker, intents, widgets, shortcuts
-13. **Identity** (5+ features) - Reusable credentials, one-click apply
-14. **Backup** (6+ features) - Export/import, validation, SSH config import
-15. **Performance** (8+ features) - Background sessions, connection pooling, coroutines
+**🚀 Fast & Efficient**
+- Hardware-accelerated rendering
+- Optimized for mobile networks
+- Background session persistence
+- Connection pooling
 
-**Total:** 155+ implemented features  
-**Status:** 100% complete, 0 errors, 0 warnings  
-**Build:** Production ready
+**🔒 Security First**
+- Hardware-backed encryption (Android Keystore)
+- No data collection or telemetry
+- Host key verification with MITM detection
+- Biometric authentication support
 
-See [FEATURES.md](FEATURES.md) for complete list.
+**📱 Mobile-Optimized**
+- Full-screen terminal with edge gestures
+- Volume keys adjust font size
+- Swipe between tabs
+- Click URLs to open in browser
+- Custom SSH keyboard
+
+**♿ Accessible**
+- TalkBack screen reader support
+- High contrast modes
+- Adjustable fonts (8-32pt)
+- Keyboard navigation
+- Multi-language support
+
+**🎨 Beautiful Design**
+- Material Design 3
+- 10+ professional themes
+- Custom theme support
+- Smooth animations
+
+See [CHANGELOG.md](CHANGELOG.md) for complete version history.
 
