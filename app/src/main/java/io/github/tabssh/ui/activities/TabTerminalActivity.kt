@@ -689,18 +689,27 @@ class TabTerminalActivity : AppCompatActivity() {
     
     private suspend fun connectToProfile(profile: ConnectionProfile) {
         try {
-            Logger.d("TabTerminalActivity", "Connecting to ${profile.getDisplayName()}")
+            Logger.i("TabTerminalActivity", "🚀 Starting connection to ${profile.getDisplayName()}")
+            runOnUiThread {
+                android.widget.Toast.makeText(this, "Connecting to ${profile.name}...", android.widget.Toast.LENGTH_SHORT).show()
+            }
             
             // Create SSH connection
+            Logger.d("TabTerminalActivity", "Creating SSH connection via SSHSessionManager")
             val sshConnection = app.sshSessionManager.connectToServer(profile)
             
             if (sshConnection != null) {
+                Logger.i("TabTerminalActivity", "✅ SSH connection established, creating tab")
+                
                 // Create new tab with the connection
                 val tab = tabManager.createTab(profile)
 
                 if (tab != null) {
+                    Logger.d("TabTerminalActivity", "Tab created successfully: ${tab.tabId}")
+                    
                     // Auto-start recording if enabled
                     if (app.preferencesManager.getBoolean("auto_record_sessions", false)) {
+                        Logger.d("TabTerminalActivity", "Starting session recording")
                         tab.sessionRecorder = io.github.tabssh.terminal.recording.SessionRecorder(
                             this,
                             profile.getDisplayName()
@@ -709,9 +718,10 @@ class TabTerminalActivity : AppCompatActivity() {
                     }
                     
                     // Connect the tab's terminal to SSH streams
+                    Logger.i("TabTerminalActivity", "🔌 Connecting terminal to SSH streams...")
                     val connected = tab.connect(sshConnection)
                     if (connected) {
-                        Logger.i("TabTerminalActivity", "Connected to ${profile.getDisplayName()}")
+                        Logger.i("TabTerminalActivity", "✅✅✅ TERMINAL CONNECTED SUCCESSFULLY to ${profile.getDisplayName()}")
                         showToast("Connected to ${profile.getDisplayName()}")
                         
                         // Show connection success notification
@@ -721,12 +731,13 @@ class TabTerminalActivity : AppCompatActivity() {
                             profile.username
                         )
                     } else {
-                        Logger.e("TabTerminalActivity", "Failed to connect terminal to SSH for ${profile.getDisplayName()}")
+                        Logger.e("TabTerminalActivity", "❌❌❌ Failed to connect terminal to SSH for ${profile.getDisplayName()}")
                         showError("Failed to connect terminal", "Error")
                         
                         // Check for detailed error info
                         val errorInfo = sshConnection.detailedError.value
                         if (errorInfo != null) {
+                            Logger.e("TabTerminalActivity", "Error details: ${errorInfo.userMessage}")
                             runOnUiThread {
                                 showSSHConnectionErrorDialog(profile, errorInfo)
                             }
@@ -740,12 +751,12 @@ class TabTerminalActivity : AppCompatActivity() {
                         }
                     }
                 } else {
-                    Logger.e("TabTerminalActivity", "Failed to create tab for ${profile.getDisplayName()}")
+                    Logger.e("TabTerminalActivity", "❌ Failed to create tab for ${profile.getDisplayName()}")
                     showError("Failed to create terminal tab", "Error")
                 }
             } else {
                 // Connection failed - try to get detailed error from last connection attempt
-                Logger.e("TabTerminalActivity", "Failed to connect to ${profile.getDisplayName()}")
+                Logger.e("TabTerminalActivity", "❌❌❌ SSH connection returned NULL for ${profile.getDisplayName()}")
                 
                 // Get the connection that failed (it may still exist even though connect() returned null)
                 val failedConnection = app.sshSessionManager.getConnection(profile.id)

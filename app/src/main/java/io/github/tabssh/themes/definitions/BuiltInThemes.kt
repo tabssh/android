@@ -1,7 +1,7 @@
 package io.github.tabssh.themes.definitions
 
 /**
- * All 12 built-in themes for TabSSH
+ * All 23 built-in themes for TabSSH
  * Includes popular terminal themes with proper color accessibility
  */
 object BuiltInThemes {
@@ -11,6 +11,11 @@ object BuiltInThemes {
      */
     fun getAllThemes(): List<Theme> {
         return listOf(
+            // System themes (3)
+            systemDefault(),
+            systemDark(),
+            systemLight(),
+            // Classic themes (12)
             dracula(),
             solarizedDark(),
             solarizedLight(),
@@ -22,7 +27,16 @@ object BuiltInThemes {
             tomorrowNight(),
             githubLight(),
             atomOneDark(),
-            materialDark()
+            materialDark(),
+            // New popular themes (8)
+            tokyoNight(),
+            tokyoNightLight(),
+            catppuccin(),
+            rosePine(),
+            everforest(),
+            kanagawa(),
+            nightOwl(),
+            cobalt2()
         )
     }
     
@@ -47,7 +61,34 @@ object BuiltInThemes {
         return getAllThemes().filter { !it.isDark }
     }
     
-    // Theme definitions
+    // System-aware themes
+    
+    fun systemDefault(): Theme {
+        val isDark = android.content.res.Resources.getSystem().configuration.uiMode and 
+                     android.content.res.Configuration.UI_MODE_NIGHT_MASK == 
+                     android.content.res.Configuration.UI_MODE_NIGHT_YES
+        return if (isDark) systemDark() else systemLight()
+    }
+    
+    fun systemDark(): Theme {
+        return dracula().copy(
+            id = "system_dark",
+            name = "System Dark",
+            author = "TabSSH",
+            isBuiltIn = true
+        )
+    }
+    
+    fun systemLight(): Theme {
+        return githubLight().copy(
+            id = "system_light",
+            name = "System Light",
+            author = "TabSSH",
+            isBuiltIn = true
+        )
+    }
+    
+    // Classic themes
     
     fun dracula(): Theme {
         return Theme(
@@ -440,6 +481,272 @@ object BuiltInThemes {
                 0xFF42A5F5.toInt(), // Bright Blue
                 0xFFAB47BC.toInt(), // Bright Magenta
                 0xFF26C6DA.toInt(), // Bright Cyan
+                0xFFFFFFFF.toInt()  // Bright White
+            )
+        )
+    }
+    
+    // New popular themes (2024)
+    
+    fun tokyoNight(): Theme {
+        return Theme(
+            id = "tokyo_night",
+            name = "Tokyo Night",
+            author = "enkia",
+            isDark = true,
+            isBuiltIn = true,
+            background = 0xFF1A1B26.toInt(),
+            foreground = 0xFFA9B1D6.toInt(),
+            cursor = 0xFFA9B1D6.toInt(),
+            selection = 0x44283457.toInt(),
+            highlight = 0xFF7AA2F7.toInt(),
+            ansiColors = intArrayOf(
+                0xFF1A1B26.toInt(), // Black
+                0xFFF7768E.toInt(), // Red
+                0xFF9ECE6A.toInt(), // Green
+                0xFFE0AF68.toInt(), // Yellow
+                0xFF7AA2F7.toInt(), // Blue
+                0xFFBB9AF7.toInt(), // Magenta
+                0xFF7DCFFF.toInt(), // Cyan
+                0xFFA9B1D6.toInt(), // White
+                0xFF414868.toInt(), // Bright Black
+                0xFFF7768E.toInt(), // Bright Red
+                0xFF9ECE6A.toInt(), // Bright Green
+                0xFFE0AF68.toInt(), // Bright Yellow
+                0xFF7AA2F7.toInt(), // Bright Blue
+                0xFFBB9AF7.toInt(), // Bright Magenta
+                0xFF7DCFFF.toInt(), // Bright Cyan
+                0xFFC0CAF5.toInt()  // Bright White
+            )
+        )
+    }
+    
+    fun tokyoNightLight(): Theme {
+        return Theme(
+            id = "tokyo_night_light",
+            name = "Tokyo Night Light",
+            author = "enkia",
+            isDark = false,
+            isBuiltIn = true,
+            background = 0xFFD5D6DB.toInt(),
+            foreground = 0xFF565A6E.toInt(),
+            cursor = 0xFF565A6E.toInt(),
+            selection = 0x44C4C8DA.toInt(),
+            highlight = 0xFF2E7DE9.toInt(),
+            ansiColors = intArrayOf(
+                0xFFD5D6DB.toInt(), // Black
+                0xFFF52A65.toInt(), // Red
+                0xFF587539.toInt(), // Green
+                0xFF8C6C3E.toInt(), // Yellow
+                0xFF2E7DE9.toInt(), // Blue
+                0xFF9854F1.toInt(), // Magenta
+                0xFF007197.toInt(), // Cyan
+                0xFF565A6E.toInt(), // White
+                0xFF9699A3.toInt(), // Bright Black
+                0xFFF52A65.toInt(), // Bright Red
+                0xFF587539.toInt(), // Bright Green
+                0xFF8C6C3E.toInt(), // Bright Yellow
+                0xFF2E7DE9.toInt(), // Bright Blue
+                0xFF9854F1.toInt(), // Bright Magenta
+                0xFF007197.toInt(), // Bright Cyan
+                0xFF343B59.toInt()  // Bright White
+            )
+        )
+    }
+    
+    fun catppuccin(): Theme {
+        return Theme(
+            id = "catppuccin",
+            name = "Catppuccin Mocha",
+            author = "Catppuccin",
+            isDark = true,
+            isBuiltIn = true,
+            background = 0xFF1E1E2E.toInt(),
+            foreground = 0xFFCDD6F4.toInt(),
+            cursor = 0xFFF5E0DC.toInt(),
+            selection = 0x44585B70.toInt(),
+            highlight = 0xFFF5C2E7.toInt(),
+            ansiColors = intArrayOf(
+                0xFF45475A.toInt(), // Black
+                0xFFF38BA8.toInt(), // Red
+                0xFFA6E3A1.toInt(), // Green
+                0xFFF9E2AF.toInt(), // Yellow
+                0xFF89B4FA.toInt(), // Blue
+                0xFFF5C2E7.toInt(), // Magenta
+                0xFF94E2D5.toInt(), // Cyan
+                0xFFBAC2DE.toInt(), // White
+                0xFF585B70.toInt(), // Bright Black
+                0xFFF38BA8.toInt(), // Bright Red
+                0xFFA6E3A1.toInt(), // Bright Green
+                0xFFF9E2AF.toInt(), // Bright Yellow
+                0xFF89B4FA.toInt(), // Bright Blue
+                0xFFF5C2E7.toInt(), // Bright Magenta
+                0xFF94E2D5.toInt(), // Bright Cyan
+                0xFFA6ADC8.toInt()  // Bright White
+            )
+        )
+    }
+    
+    fun rosePine(): Theme {
+        return Theme(
+            id = "rose_pine",
+            name = "Rosé Pine",
+            author = "Rosé Pine",
+            isDark = true,
+            isBuiltIn = true,
+            background = 0xFF191724.toInt(),
+            foreground = 0xFFE0DEF4.toInt(),
+            cursor = 0xFF524F67.toInt(),
+            selection = 0x442A2837.toInt(),
+            highlight = 0xFFEBBCBA.toInt(),
+            ansiColors = intArrayOf(
+                0xFF26233A.toInt(), // Black
+                0xFFEB6F92.toInt(), // Red
+                0xFF9CCFD8.toInt(), // Green
+                0xFFF6C177.toInt(), // Yellow
+                0xFF31748F.toInt(), // Blue
+                0xFFC4A7E7.toInt(), // Magenta
+                0xFFEBBCBA.toInt(), // Cyan
+                0xFFE0DEF4.toInt(), // White
+                0xFF6E6A86.toInt(), // Bright Black
+                0xFFEB6F92.toInt(), // Bright Red
+                0xFF9CCFD8.toInt(), // Bright Green
+                0xFFF6C177.toInt(), // Bright Yellow
+                0xFF31748F.toInt(), // Bright Blue
+                0xFFC4A7E7.toInt(), // Bright Magenta
+                0xFFEBBCBA.toInt(), // Bright Cyan
+                0xFFE0DEF4.toInt()  // Bright White
+            )
+        )
+    }
+    
+    fun everforest(): Theme {
+        return Theme(
+            id = "everforest",
+            name = "Everforest",
+            author = "sainnhe",
+            isDark = true,
+            isBuiltIn = true,
+            background = 0xFF2D353B.toInt(),
+            foreground = 0xFFD3C6AA.toInt(),
+            cursor = 0xFFD3C6AA.toInt(),
+            selection = 0x44475258.toInt(),
+            highlight = 0xFFA7C080.toInt(),
+            ansiColors = intArrayOf(
+                0xFF475258.toInt(), // Black
+                0xFFE67E80.toInt(), // Red
+                0xFFA7C080.toInt(), // Green
+                0xFFDBBC7F.toInt(), // Yellow
+                0xFF7FBBB3.toInt(), // Blue
+                0xFFD699B6.toInt(), // Magenta
+                0xFF83C092.toInt(), // Cyan
+                0xFFD3C6AA.toInt(), // White
+                0xFF859289.toInt(), // Bright Black
+                0xFFE67E80.toInt(), // Bright Red
+                0xFFA7C080.toInt(), // Bright Green
+                0xFFDBBC7F.toInt(), // Bright Yellow
+                0xFF7FBBB3.toInt(), // Bright Blue
+                0xFFD699B6.toInt(), // Bright Magenta
+                0xFF83C092.toInt(), // Bright Cyan
+                0xFFD3C6AA.toInt()  // Bright White
+            )
+        )
+    }
+    
+    fun kanagawa(): Theme {
+        return Theme(
+            id = "kanagawa",
+            name = "Kanagawa",
+            author = "rebelot",
+            isDark = true,
+            isBuiltIn = true,
+            background = 0xFF1F1F28.toInt(),
+            foreground = 0xFFDCD7BA.toInt(),
+            cursor = 0xFFC8C093.toInt(),
+            selection = 0x44223249.toInt(),
+            highlight = 0xFF7E9CD8.toInt(),
+            ansiColors = intArrayOf(
+                0xFF090618.toInt(), // Black
+                0xFFC34043.toInt(), // Red
+                0xFF76946A.toInt(), // Green
+                0xFFDCA561.toInt(), // Yellow
+                0xFF7E9CD8.toInt(), // Blue
+                0xFF957FB8.toInt(), // Magenta
+                0xFF6A9589.toInt(), // Cyan
+                0xFFC8C093.toInt(), // White
+                0xFF727169.toInt(), // Bright Black
+                0xFFE82424.toInt(), // Bright Red
+                0xFF98BB6C.toInt(), // Bright Green
+                0xFFE6C384.toInt(), // Bright Yellow
+                0xFF7FB4CA.toInt(), // Bright Blue
+                0xFF938AA9.toInt(), // Bright Magenta
+                0xFF7AA89F.toInt(), // Bright Cyan
+                0xFFDCD7BA.toInt()  // Bright White
+            )
+        )
+    }
+    
+    fun nightOwl(): Theme {
+        return Theme(
+            id = "night_owl",
+            name = "Night Owl",
+            author = "Sarah Drasner",
+            isDark = true,
+            isBuiltIn = true,
+            background = 0xFF011627.toInt(),
+            foreground = 0xFFD6DEEB.toInt(),
+            cursor = 0xFF80A4C2.toInt(),
+            selection = 0x441D3B53.toInt(),
+            highlight = 0xFF7FDBCA.toInt(),
+            ansiColors = intArrayOf(
+                0xFF011627.toInt(), // Black
+                0xFFEF5350.toInt(), // Red
+                0xFF22DA6E.toInt(), // Green
+                0xFFADDB67.toInt(), // Yellow
+                0xFF82AAFF.toInt(), // Blue
+                0xFFC792EA.toInt(), // Magenta
+                0xFF7FDBCA.toInt(), // Cyan
+                0xFFFFFFFF.toInt(), // White
+                0xFF575656.toInt(), // Bright Black
+                0xFFEF5350.toInt(), // Bright Red
+                0xFF22DA6E.toInt(), // Bright Green
+                0xFFFFEB95.toInt(), // Bright Yellow
+                0xFF82AAFF.toInt(), // Bright Blue
+                0xFFC792EA.toInt(), // Bright Magenta
+                0xFF7FDBCA.toInt(), // Bright Cyan
+                0xFFFFFFFF.toInt()  // Bright White
+            )
+        )
+    }
+    
+    fun cobalt2(): Theme {
+        return Theme(
+            id = "cobalt2",
+            name = "Cobalt2",
+            author = "Wes Bos",
+            isDark = true,
+            isBuiltIn = true,
+            background = 0xFF193549.toInt(),
+            foreground = 0xFFFFFFFF.toInt(),
+            cursor = 0xFFF0CB09.toInt(),
+            selection = 0x440D3A58.toInt(),
+            highlight = 0xFFFFC600.toInt(),
+            ansiColors = intArrayOf(
+                0xFF000000.toInt(), // Black
+                0xFFFF0000.toInt(), // Red
+                0xFF38DE21.toInt(), // Green
+                0xFFFFC600.toInt(), // Yellow
+                0xFF0088FF.toInt(), // Blue
+                0xFFFF628C.toInt(), // Magenta
+                0xFF80FCFF.toInt(), // Cyan
+                0xFFFFFFFF.toInt(), // White
+                0xFF555555.toInt(), // Bright Black
+                0xFFFF0000.toInt(), // Bright Red
+                0xFF38DE21.toInt(), // Bright Green
+                0xFFFFC600.toInt(), // Bright Yellow
+                0xFF0088FF.toInt(), // Bright Blue
+                0xFFFF628C.toInt(), // Bright Magenta
+                0xFF80FCFF.toInt(), // Bright Cyan
                 0xFFFFFFFF.toInt()  // Bright White
             )
         )

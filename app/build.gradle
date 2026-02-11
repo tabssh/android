@@ -212,6 +212,11 @@ dependencies {
     // Coroutines
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
 
+    // Terminal Emulator - Termux (MIT licensed, full emoji/256-color support)
+    // Using official Termux terminal emulator for battle-tested VT100/xterm-256color
+    implementation 'com.termux:termux-view:0.118.0'
+    implementation 'com.termux:terminal-emulator:0.118.0'
+
     // Google Play Services - for Google Drive sync (OPTIONAL - excluded from F-Droid builds)
     // F-Droid builds use WebDAV sync only
     if (!project.hasProperty('fdroidBuild')) {

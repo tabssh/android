@@ -85,6 +85,12 @@ class KeyManagementActivity : AppCompatActivity() {
 
         // Load keys
         loadKeys()
+        
+        // Handle intent extras (from Identities screen)
+        when (intent.getStringExtra("action")) {
+            "import" -> importKeyFromFilePicker()
+            "generate" -> showGenerateKeyDialog()
+        }
     }
 
     private fun loadKeys() {

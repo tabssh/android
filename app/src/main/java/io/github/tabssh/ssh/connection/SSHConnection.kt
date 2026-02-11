@@ -85,61 +85,78 @@ class SSHConnection(
                 _errorMessage.value = null
                 notifyListeners { onConnecting(id) }
                 
-                Logger.i("SSHConnection", "Connecting to ${profile.host}:${profile.port}")
+                Logger.i("SSHConnection", "🔌 STEP 1: Starting connection to ${profile.host}:${profile.port} as ${profile.username}")
+                showDebugToast("Connecting to ${profile.host}...")
 
                 // Execute port knock sequence if enabled
+                Logger.d("SSHConnection", "🔌 STEP 2: Checking port knock configuration")
                 executePortKnockIfEnabled()
 
                 // Create JSch session with host key verification
+                Logger.d("SSHConnection", "🔌 STEP 3: Creating JSch session")
                 val jsch = JSch()
 
                 // Set custom host key repository for database-backed verification
+                Logger.d("SSHConnection", "🔌 STEP 4: Setting up host key verifier")
                 jsch.hostKeyRepository = hostKeyVerifier
 
                 // Configure host key changed callback
                 hostKeyVerifier.setHostKeyChangedCallback { info ->
+                    Logger.w("SSHConnection", "⚠️ Host key verification triggered for ${info.hostname}")
                     hostKeyChangedCallback?.invoke(info) ?: HostKeyAction.REJECT_CONNECTION
                 }
 
                 // Setup jump host if configured
+                Logger.d("SSHConnection", "🔌 STEP 5: Checking jump host configuration")
                 val jumpHostPort = setupJumpHost(jsch)
 
                 // Create main session - connect through jump host if configured
+                Logger.d("SSHConnection", "🔌 STEP 6: Creating SSH session")
                 val newSession = if (jumpHostPort != null) {
                     Logger.i("SSHConnection", "Connecting to target through jump host on localhost:$jumpHostPort")
                     jsch.getSession(profile.username, "localhost", jumpHostPort)
                 } else {
+                    Logger.i("SSHConnection", "Direct connection to ${profile.host}:${profile.port}")
                     jsch.getSession(profile.username, profile.host, profile.port)
                 }
 
                 // Setup HTTP/SOCKS proxy if configured
+                Logger.d("SSHConnection", "🔌 STEP 7: Checking proxy configuration")
                 setupHttpSocksProxy(newSession)
 
                 // Configure session
+                Logger.d("SSHConnection", "🔌 STEP 8: Configuring SSH session")
                 configureSession(newSession)
 
                 // Set timeout
                 newSession.timeout = profile.connectTimeout * 1000
+                Logger.d("SSHConnection", "Connection timeout set to ${profile.connectTimeout} seconds")
 
                 // Setup authentication BEFORE connecting
+                Logger.i("SSHConnection", "🔑 STEP 9: Setting up authentication")
                 _connectionState.value = ConnectionState.AUTHENTICATING
                 notifyListeners { onAuthenticating(id) }
+                showDebugToast("Authenticating...")
 
                 setupAuthentication(jsch, newSession)
 
                 // Connect (this performs both connection AND authentication in one step)
+                Logger.i("SSHConnection", "🔌 STEP 10: Calling session.connect() - THIS IS WHERE HOST KEY VERIFICATION HAPPENS")
                 newSession.connect()
                 session = newSession
 
-                Logger.i("SSHConnection", "Successfully connected and authenticated to ${profile.host}")
+                Logger.i("SSHConnection", "✅ Successfully connected and authenticated to ${profile.host}")
+                showDebugToast("Connected!")
                 
                 _connectionState.value = ConnectionState.CONNECTED
                 reconnectAttempts = 0
                 notifyListeners { onConnected(id) }
                 
-                Logger.i("SSHConnection", "Successfully connected to ${profile.host}")
+                Logger.i("SSHConnection", "✅ Connection complete to ${profile.host}")
                 
             } catch (e: Exception) {
+                Logger.e("SSHConnection", "❌ Connection failed at some step", e)
+                showDebugToast("Connection failed: ${e.message}")
                 handleConnectionError(e)
                 return@launch
             }
@@ -147,6 +164,13 @@ class SSHConnection(
         
         connectJob?.join()
         return@withContext _connectionState.value == ConnectionState.CONNECTED
+    }
+    
+    private fun showDebugToast(message: String) {
+        // Show toast on UI thread for debugging
+        scope.launch(Dispatchers.Main) {
+            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+        }
     }
     
     private fun configureSession(session: Session) {

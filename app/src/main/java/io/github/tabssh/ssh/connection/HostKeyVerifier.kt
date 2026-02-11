@@ -37,29 +37,34 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
      */
     override fun check(host: String, key: ByteArray): Int {
         return try {
+            Logger.i("HostKeyVerifier", "🔐 HOST KEY CHECK CALLED for: $host")
+            
             val (hostname, port) = parseHostPort(host)
+            Logger.d("HostKeyVerifier", "Parsed: hostname=$hostname, port=$port")
 
             // Generate fingerprint
             val fingerprint = generateFingerprint(key)
             val keyType = detectKeyType(key)
             val publicKeyBase64 = Base64.getEncoder().encodeToString(key)
 
-            Logger.d("HostKeyVerifier", "Checking host key for $hostname:$port ($keyType)")
-            Logger.d("HostKeyVerifier", "Fingerprint: $fingerprint")
+            Logger.i("HostKeyVerifier", "🔐 Checking host key for $hostname:$port ($keyType)")
+            Logger.i("HostKeyVerifier", "🔐 Fingerprint: $fingerprint")
 
             // Verify against database
+            Logger.d("HostKeyVerifier", "Querying database for existing host key...")
             val result = runBlocking {
                 hostKeyDao.verifyHostKey(hostname, port, publicKeyBase64, fingerprint)
             }
+            Logger.i("HostKeyVerifier", "🔐 Database verification result: $result")
 
             when (result) {
                 HostKeyVerificationResult.ACCEPTED -> {
-                    Logger.i("HostKeyVerifier", "Host key verified: $hostname:$port")
+                    Logger.i("HostKeyVerifier", "✅ Host key verified: $hostname:$port")
                     HostKeyRepository.OK
                 }
 
                 HostKeyVerificationResult.NEW_HOST -> {
-                    Logger.i("HostKeyVerifier", "New host: $hostname:$port")
+                    Logger.i("HostKeyVerifier", "🆕 NEW HOST: $hostname:$port - Auto-accepting and storing")
                     // Automatically accept new hosts and store them
                     runBlocking {
                         val hostKeyEntry = HostKeyEntry(
@@ -72,13 +77,13 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
                             trustLevel = "ACCEPTED"
                         )
                         hostKeyDao.insertOrUpdateHostKey(hostKeyEntry)
-                        Logger.i("HostKeyVerifier", "Stored new host key for $hostname:$port")
+                        Logger.i("HostKeyVerifier", "✅ Stored new host key for $hostname:$port")
                     }
                     HostKeyRepository.OK
                 }
 
                 HostKeyVerificationResult.CHANGED_KEY -> {
-                    Logger.w("HostKeyVerifier", "⚠️ HOST KEY HAS CHANGED for $hostname:$port")
+                    Logger.w("HostKeyVerifier", "⚠️⚠️⚠️ HOST KEY HAS CHANGED for $hostname:$port ⚠️⚠️⚠️")
 
                     // Get existing key for comparison
                     val existingKey = runBlocking {
@@ -86,6 +91,9 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
                     }
 
                     if (existingKey != null) {
+                        Logger.w("HostKeyVerifier", "Old fingerprint: ${existingKey.fingerprint}")
+                        Logger.w("HostKeyVerifier", "New fingerprint: $fingerprint")
+                        
                         val info = HostKeyChangedInfo(
                             hostname = hostname,
                             port = port,
@@ -101,7 +109,9 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
 
                         // ALWAYS ask user what to do - never fail silently
                         if (hostKeyChangedCallback != null) {
+                            Logger.i("HostKeyVerifier", "Invoking host key changed callback...")
                             val action = hostKeyChangedCallback!!.invoke(info)
+                            Logger.i("HostKeyVerifier", "User action: $action")
 
                             return when (action) {
                                 HostKeyAction.ACCEPT_NEW_KEY -> {
@@ -117,18 +127,18 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
                                             trustLevel = "ACCEPTED"
                                         )
                                         hostKeyDao.insertOrUpdateHostKey(updatedEntry)
-                                        Logger.i("HostKeyVerifier", "User accepted new host key for $hostname:$port")
+                                        Logger.i("HostKeyVerifier", "✅ User accepted new host key for $hostname:$port")
                                     }
                                     HostKeyRepository.OK
                                 }
 
                                 HostKeyAction.REJECT_CONNECTION -> {
-                                    Logger.w("HostKeyVerifier", "User rejected changed host key for $hostname:$port")
+                                    Logger.w("HostKeyVerifier", "❌ User rejected changed host key for $hostname:$port")
                                     HostKeyRepository.NOT_INCLUDED
                                 }
 
                                 HostKeyAction.ACCEPT_ONCE -> {
-                                    Logger.i("HostKeyVerifier", "User accepted host key once for $hostname:$port")
+                                    Logger.i("HostKeyVerifier", "✅ User accepted host key ONCE for $hostname:$port")
                                     // Don't store, just allow this connection
                                     HostKeyRepository.OK
                                 }
@@ -153,7 +163,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
                 }
 
                 HostKeyVerificationResult.INVALID_KEY -> {
-                    Logger.e("HostKeyVerifier", "Invalid host key for $hostname:$port")
+                    Logger.e("HostKeyVerifier", "❌ Invalid host key for $hostname:$port")
                     HostKeyRepository.NOT_INCLUDED
                 }
             }

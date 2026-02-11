@@ -6,96 +6,75 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <androidx.core.widget.NestedScrollView
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
+        <!--Header-->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="@dimen/space_md">
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="@dimen/space_md"
+            android:background="?attr/colorSurfaceVariant">
 
-            <!--Header-->
-            <LinearLayout
-                android:layout_width="match_parent"
+            <TextView
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingBottom="@dimen/space_md">
+                android:text="👤"
+                android:textSize="24sp"
+                android:layout_marginEnd="@dimen/space_sm" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="👤"
-                    android:textSize="24sp"
-                    android:layout_marginEnd="@dimen/space_sm" />
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
                     android:text="Identities"
                     android:textSize="20sp"
                     android:textStyle="bold"
                     android:textColor="?attr/colorOnSurface" />
 
-            </LinearLayout>
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Reusable credential sets that can be shared across multiple connections"
-                android:textSize="14sp"
-                android:textColor="?attr/colorOnSurfaceVariant"
-                android:paddingBottom="@dimen/space_md" />
-
-            <!--IdentitiesSection-->
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="@dimen/space_md"
-                app:cardElevation="@dimen/card_elevation"
-                app:cardCornerRadius="@dimen/card_corner_radius">
-
-                <LinearLayout
+                <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="@dimen/space_md">
+                    android:text="Reusable credential sets that can be shared across multiple connections"
+                    android:textSize="12sp"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
 
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="Identities"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
-                        android:textColor="?attr/colorOnSurface"
-                        android:paddingBottom="@dimen/space_sm" />
-
-                    <androidx.recyclerview.widget.RecyclerView
-                        android:id="@+id/recycler_users"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content" />
-                    
-                    <!-- Empty state -->
-                    <TextView
-                        android:id="@+id/text_identities_empty"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="No identities yet. Tap + to create one."
-                        android:textColor="?attr/colorOnSurfaceVariant"
-                        android:textAlignment="center"
-                        android:padding="@dimen/space_lg"
-                        android:visibility="gone" />
-
-                </LinearLayout>
-
-            </com.google.android.material.card.MaterialCardView>
+            </LinearLayout>
 
         </LinearLayout>
 
-    </androidx.core.widget.NestedScrollView>
+        <!-- Identities RecyclerView (no card wrapper) -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recycler_users"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:clipToPadding="false"
+            android:padding="@dimen/space_sm" />
+
+        <!-- Empty state -->
+        <TextView
+            android:id="@+id/text_identities_empty"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:text="No identities yet.\nTap + to create one."
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:textAlignment="center"
+            android:gravity="center"
+            android:padding="@dimen/space_lg"
+            android:visibility="gone" />
+
+    </LinearLayout>
     
     <!-- FAB for adding identities -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
