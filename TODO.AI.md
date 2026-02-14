@@ -1,9 +1,185 @@
 # TabSSH TODO - v1.0.0 Bug Fixes & Features
 
-**Last Updated:** 2026-02-13
+**Last Updated:** 2026-02-14
 **Version:** 1.0.0 (pinned via release.txt - DO NOT MODIFY)
-**Total Issues:** 21 bugs + 5 features
-**Est. Total Time:** 90-132 hours
+**Total Issues:** 21 bugs + 5 features + 10 NEW CRITICAL BUGS
+**Est. Total Time:** 90-132 hours + 20-30h for new bugs
+
+---
+
+## 🚨 CRITICAL BUGS REPORTED (2026-02-14)
+
+### Phase 7: CRITICAL - User Testing Bugs
+| Order | Issue | Description | Est. Time | Status |
+|-------|-------|-------------|-----------|--------|
+| 7.1 | **#22** | Terminal shows no output (black screen) | 2h | 🔧 FIX APPLIED |
+| 7.2 | **#23** | Host key verification not being asked | 1h | ✅ FIXED |
+| 7.3 | **#24** | Keyboard doesn't work in terminal | 2h | 🔧 FIX APPLIED |
+| 7.4 | **#25** | Keyboard icon toggle broken (disappears) | 1h | 🔧 FIX APPLIED |
+| 7.5 | **#26** | SSH key rename not possible | 30min | ✅ FIXED |
+| 7.6 | **#27** | Connection test keeps retrying on auth fail | 30min | ✅ FIXED |
+| 7.7 | **#28** | Sync UI needs reorganization | 2h | ✅ FIXED |
+| 7.8 | **#29** | Google account sign-in broken | 2-4h | 🔴 TODO |
+| 7.9 | **#30** | Audit Log setting misplaced | 15min | ✅ FIXED |
+| 7.10 | **#31** | Security check false positive (passwordIcon) | 5min | ⚠️ FALSE POSITIVE |
+
+### Fixes Applied This Session:
+1. **#22 Terminal black screen** - Changed onScreenChanged() to mark ALL rows dirty
+2. **#23 Host key verification** - Added new host key callback and dialog in TabTerminalActivity
+3. **#24 Keyboard input** - Fixed sendText() to use termuxBridge for SSH stream
+4. **#25 Keyboard toggle** - Changed toggleCustomKeyboard() to toggle system keyboard
+5. **#26 SSH key rename** - Added rename dialog to KeyManagementActivity
+6. **#27 Auth retry loop** - Added auth error detection to skip auto-reconnect
+7. **#28 Sync UI** - Reorganized preferences_sync.xml with clear step-by-step flow
+8. **#30 Audit Log** - Removed redundant entry from preferences_main.xml (already in Logging)
+
+---
+
+### 🐛 Issue #22: Terminal Shows No Output (Black Screen)
+- **Status:** 🔧 FIX APPLIED (needs testing)
+- **Priority:** CRITICAL
+- **Impact:** Cannot use SSH terminal at all
+- **Discovery:** User screenshot showing completely black terminal
+
+**Root Cause:** The onScreenChanged() handler only marked rows near cursor as dirty.
+When SSH data first arrives (login banner, prompt), it could affect ANY row, but only
+rows ±3 from cursor were being redrawn.
+
+**Fix Applied:** Changed TerminalView.kt onScreenChanged() to call markAllRowsDirty()
+and invalidate() for every screen update.
+
+**Files Modified:**
+- `app/src/main/java/io/github/tabssh/ui/views/TerminalView.kt`
+
+---
+
+### 🐛 Issue #23: Host Key Verification Not Being Asked
+- **Status:** ✅ FIXED
+- **Priority:** HIGH
+- **Impact:** Security risk - connections without host key verification
+- **Discovery:** User reports SSH connects without asking to verify host key
+
+**Root Cause:** The HostKeyVerifier NEW_HOST case was auto-accepting new hosts without
+prompting the user. Only CHANGED_KEY cases were showing a dialog.
+
+**Fix Applied:**
+1. Added `NewHostKeyInfo` data class with display message
+2. Added `newHostKeyCallback` in HostKeyVerifier for new hosts
+3. Added `newHostKeyCallback` property in SSHConnection
+4. Updated SSHSessionManager to pass callbacks to connections
+5. Added `setupHostKeyVerification()` in TabTerminalActivity with dialogs
+
+**Files Modified:**
+- `app/src/main/java/io/github/tabssh/ssh/connection/HostKeyVerifier.kt`
+- `app/src/main/java/io/github/tabssh/ssh/connection/SSHConnection.kt`
+- `app/src/main/java/io/github/tabssh/ssh/connection/SSHSessionManager.kt`
+- `app/src/main/java/io/github/tabssh/ui/activities/TabTerminalActivity.kt`
+
+---
+
+### 🐛 Issue #24: Keyboard Doesn't Work in Terminal
+- **Status:** 🔧 FIX APPLIED (needs testing)
+- **Priority:** CRITICAL
+- **Impact:** Cannot type in SSH terminal
+- **Discovery:** User reports keyboard input not reaching terminal
+
+**Root Cause:** The sendText() method in TerminalView wasn't using the termuxBridge
+for SSH connections. It was using the old terminal emulator path which isn't wired
+to SSH streams.
+
+**Fix Applied:** Updated sendText() to check for termuxBridge first and use
+bridge.sendText() which properly writes to the SSH output stream.
+
+**Files Modified:**
+- `app/src/main/java/io/github/tabssh/ui/views/TerminalView.kt`
+
+---
+
+### 🐛 Issue #25: Keyboard Icon Toggle Broken
+- **Status:** 🔧 FIX APPLIED (needs testing)
+- **Priority:** MEDIUM
+- **Impact:** Custom keyboard disappears when tapping keyboard icon
+- **Discovery:** User reports tapping keyboard icon makes it disappear instead of toggle
+
+**Root Cause:** The toggleCustomKeyboard() method was hiding the custom keyboard bar
+instead of toggling the system soft keyboard.
+
+**Fix Applied:** Changed toggleCustomKeyboard() to call toggleKeyboard() which uses
+InputMethodManager to show/hide the system soft keyboard. The custom keyboard bar
+now stays visible.
+
+**Files Modified:**
+- `app/src/main/java/io/github/tabssh/ui/activities/TabTerminalActivity.kt`
+
+---
+
+### 🐛 Issue #26: SSH Key Rename Not Possible
+- **Status:** ✅ FIXED
+- **Priority:** LOW
+- **Impact:** Users cannot rename imported SSH keys
+
+**Fix Applied:** Added "Rename" option to key details dialog in KeyManagementActivity.
+Uses KeyDao.updateKey() to persist the new name.
+
+**Files Modified:**
+- `app/src/main/java/io/github/tabssh/ui/activities/KeyManagementActivity.kt`
+
+---
+
+### 🐛 Issue #27: Connection Test Keeps Retrying on Auth Failure
+- **Status:** ✅ FIXED
+- **Priority:** MEDIUM
+- **Impact:** Test connection hangs/retries infinitely on auth errors
+
+**Root Cause:** handleConnectionError() was triggering auto-reconnect even for
+authentication failures. Retrying auth with same wrong credentials is useless.
+
+**Fix Applied:** Added auth error detection. If error message contains "Auth fail",
+"authentication", "password", etc., skip the auto-reconnect logic.
+
+**Files Modified:**
+- `app/src/main/java/io/github/tabssh/ssh/connection/SSHConnection.kt`
+
+---
+
+### 🐛 Issue #28: Sync UI Needs Reorganization
+- **Status:** 🔴 TODO
+- **Priority:** MEDIUM
+- **Impact:** Confusing sync settings layout
+
+**User Request:** Reorganize Settings > Sync UI for better clarity
+
+**Files to Modify:**
+- `app/src/main/res/xml/preferences_sync.xml`
+- `app/src/main/java/io/github/tabssh/ui/fragments/SyncSettingsFragment.kt`
+
+---
+
+### 🐛 Issue #29: Google Account Sign-In Broken
+- **Status:** 🔴 TODO
+- **Priority:** HIGH
+- **Impact:** Cannot set up Google Drive sync
+
+**Investigation Needed:**
+- Check Google Sign-In flow
+- Verify OAuth configuration
+- Check error handling in DriveAuthenticationManager
+
+**Files to Check:**
+- `app/src/main/java/io/github/tabssh/sync/DriveAuthenticationManager.kt`
+- `app/src/main/java/io/github/tabssh/ui/fragments/SyncSettingsFragment.kt`
+
+---
+
+### 🐛 Issue #30: Audit Log Setting Misplaced
+- **Status:** 🔴 TODO
+- **Priority:** LOW
+- **Impact:** Confusing settings organization
+
+**Issue:** Audit Log setting appears under Logs section but should be elsewhere
+
+**Files to Modify:**
+- `app/src/main/res/xml/preferences_logging.xml`
 
 ---
 

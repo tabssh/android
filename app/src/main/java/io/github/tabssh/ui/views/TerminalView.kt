@@ -228,13 +228,13 @@ class TerminalView @JvmOverloads constructor(
             }
 
             override fun onScreenChanged() {
-                // Update buffer reference and redraw (performance: use dirty tracking)
+                // Update buffer reference and redraw
                 termuxBuffer = bridge.getBuffer()
                 post {
-                    // Mark cursor area dirty (most screen changes affect cursor line)
-                    val cursorRow = bridge.getCursorRow()
-                    markRowsDirty(maxOf(0, cursorRow - 3), minOf(terminalRows - 1, cursorRow + 3))
-                    invalidateDirtyRows()
+                    // Mark ALL rows dirty - SSH data can affect any row
+                    // (banner text, prompts, command output, etc.)
+                    markAllRowsDirty()
+                    invalidate()
                 }
             }
 
@@ -414,6 +414,13 @@ class TerminalView @JvmOverloads constructor(
      * Send text input to remote terminal
      */
     fun sendText(text: String) {
+        // Try Termux bridge first (preferred for SSH connections)
+        termuxBridge?.let { bridge ->
+            bridge.sendText(text)
+            return
+        }
+
+        // Fall back to old terminal emulator
         terminalEmulator?.sendText(text) ?: run {
             outputStream?.let { stream ->
                 try {
@@ -422,7 +429,7 @@ class TerminalView @JvmOverloads constructor(
                 } catch (e: Exception) {
                     Logger.e("TerminalView", "Error sending text: ${e.message}")
                 }
-            } ?: Logger.w("TerminalView", "Unable to send text - no output stream attached")
+            } ?: Logger.w("TerminalView", "Unable to send text - no output stream or bridge attached")
         }
     }
 
@@ -636,12 +643,18 @@ class TerminalView @JvmOverloads constructor(
      * Performance optimized: uses dirty region tracking for partial redraws
      */
     private fun renderTermuxBuffer(canvas: Canvas, buffer: com.termux.terminal.TerminalBuffer) {
-        val bridge = termuxBridge ?: return
+        val bridge = termuxBridge ?: run {
+            Logger.w("TerminalView", "renderTermuxBuffer: bridge is null")
+            return
+        }
         val rows = bridge.getRows()
         val cols = bridge.getCols()
         val cursorRow = bridge.getCursorRow()
         val cursorCol = bridge.getCursorCol()
         val cursorVisible = bridge.isCursorVisible()
+
+        // Debug: log rendering state
+        Logger.d("TerminalView", "Rendering: ${rows}x${cols}, cursor at ($cursorRow,$cursorCol), visible=$cursorVisible")
 
         val startX = paddingLeft.toFloat()
         val startY = paddingTop.toFloat()

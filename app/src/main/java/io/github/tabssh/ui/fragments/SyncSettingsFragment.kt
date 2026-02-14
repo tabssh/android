@@ -3,6 +3,8 @@ package io.github.tabssh.ui.fragments
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
@@ -13,6 +15,7 @@ import io.github.tabssh.R
 import io.github.tabssh.storage.preferences.PreferenceManager
 import io.github.tabssh.sync.GoogleDriveSyncManager
 import io.github.tabssh.sync.auth.DriveAuthenticationManager
+import io.github.tabssh.sync.auth.SignInResult
 import io.github.tabssh.sync.worker.SyncWorkScheduler
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +35,48 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
     private lateinit var prefManager: io.github.tabssh.storage.preferences.PreferenceManager
     private lateinit var syncManager: GoogleDriveSyncManager
     private lateinit var workScheduler: SyncWorkScheduler
+
+    // Activity Result Launcher for Google Sign-In
+    private lateinit var signInLauncher: ActivityResultLauncher<Intent>
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        // Register the sign-in launcher BEFORE onCreatePreferences
+        signInLauncher = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                lifecycleScope.launch {
+                    try {
+                        val signInResult = syncManager.getAuthManager().handleSignInResult(result.data)
+                        when (signInResult) {
+                            is SignInResult.Success -> {
+                                Logger.i(TAG, "Google Sign-In successful: ${signInResult.account.email}")
+                                showToast("Signed in as ${signInResult.account.email}")
+                                updateAccountSummary()
+                                updateSyncStatus()
+                            }
+                            is SignInResult.Error -> {
+                                Logger.e(TAG, "Google Sign-In failed: ${signInResult.message}")
+                                showSignInError(signInResult.message)
+                            }
+                            is SignInResult.Cancelled -> {
+                                Logger.i(TAG, "Google Sign-In cancelled")
+                                showToast("Sign-in cancelled")
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Logger.e(TAG, "Error handling sign-in result", e)
+                        showSignInError("Error: ${e.message}")
+                    }
+                }
+            } else {
+                Logger.w(TAG, "Sign-in result not OK: ${result.resultCode}")
+                showToast("Sign-in cancelled or failed")
+            }
+        }
+    }
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences_sync, rootKey)
@@ -544,7 +589,32 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
      * Sign in to Google Drive
      */
     private fun signIn() {
-        syncManager.getAuthManager().signIn(requireActivity())
+        try {
+            val signInIntent = syncManager.getAuthManager().getSignInIntent()
+            if (signInIntent != null) {
+                signInLauncher.launch(signInIntent)
+                Logger.d(TAG, "Launched Google Sign-In intent")
+            } else {
+                showSignInError("Failed to create sign-in intent. Please check Google Play Services.")
+            }
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to start sign-in", e)
+            showSignInError("Failed to start sign-in: ${e.message}")
+        }
+    }
+
+    /**
+     * Show sign-in error dialog
+     */
+    private fun showSignInError(message: String) {
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Sign-In Failed")
+            .setMessage("$message\n\nPlease ensure:\n• Google Play Services is installed and updated\n• You have an active internet connection\n• Your Google account is properly configured")
+            .setPositiveButton("OK", null)
+            .setNeutralButton("Retry") { _, _ ->
+                signIn()
+            }
+            .show()
     }
 
     /**
@@ -624,19 +694,13 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
      */
     private fun showAuthenticationDialog() {
         Logger.d(TAG, "Show authentication dialog")
-        
+
         val backend = prefManager.getSyncBackend()
-        
+
         when (backend) {
             "google_drive" -> {
-                // Launch Google Sign-In flow
-                try {
-                    val authManager = syncManager.getAuthManager()
-                    authManager.signIn(requireActivity())
-                } catch (e: Exception) {
-                    Logger.e(TAG, "Failed to start Google Sign-In", e)
-                    android.widget.Toast.makeText(requireContext(), "Failed to start Google Sign-In: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
-                }
+                // Launch Google Sign-In flow using Activity Result API
+                signIn()
             }
             "webdav" -> {
                 // WebDAV uses username/password from preferences, no separate auth dialog needed
@@ -866,19 +930,5 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
             .show()
     }
 
-    @Deprecated("Deprecated in Java")
-    @Suppress("DEPRECATION")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-
-        if (requestCode == DriveAuthenticationManager.REQUEST_CODE_SIGN_IN) {
-            if (resultCode == Activity.RESULT_OK) {
-                lifecycleScope.launch {
-                    val result = syncManager.getAuthManager().handleSignInResult(data)
-                    updateAccountSummary()
-                    updateSyncStatus()  // Update status after sign-in
-                }
-            }
-        }
-    }
+    // Note: onActivityResult removed - using Activity Result API (signInLauncher) instead
 }

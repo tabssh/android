@@ -26,8 +26,12 @@ class SSHSessionManager(private val context: Context) {
     val connectionStates: StateFlow<Map<String, ConnectionState>> = _connectionStates.asStateFlow()
     
     private val listeners = mutableListOf<SessionManagerListener>()
-    
+
     private var isInitialized = false
+
+    // Host key verification callbacks
+    var hostKeyChangedCallback: ((HostKeyChangedInfo) -> HostKeyAction)? = null
+    var newHostKeyCallback: ((NewHostKeyInfo) -> HostKeyAction)? = null
     
     fun initialize() {
         if (isInitialized) return
@@ -74,7 +78,11 @@ class SSHSessionManager(private val context: Context) {
         
         // Create new connection
         val connection = SSHConnection(profile, scope, context)
-        
+
+        // Set host key verification callbacks
+        connection.hostKeyChangedCallback = hostKeyChangedCallback
+        connection.newHostKeyCallback = newHostKeyCallback
+
         // Add connection listener to track state changes
         connection.addConnectionListener(object : ConnectionListener {
             override fun onConnecting(connectionId: String) {

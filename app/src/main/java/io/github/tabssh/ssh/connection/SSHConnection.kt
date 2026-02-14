@@ -61,6 +61,7 @@ class SSHConnection(
     // Host key verification
     private val hostKeyVerifier = HostKeyVerifier(context)
     var hostKeyChangedCallback: ((HostKeyChangedInfo) -> HostKeyAction)? = null
+    var newHostKeyCallback: ((NewHostKeyInfo) -> HostKeyAction)? = null
 
     val id: String = profile.id
     val displayName: String = profile.getDisplayName()
@@ -102,8 +103,14 @@ class SSHConnection(
 
                 // Configure host key changed callback
                 hostKeyVerifier.setHostKeyChangedCallback { info ->
-                    Logger.w("SSHConnection", "⚠️ Host key verification triggered for ${info.hostname}")
+                    Logger.w("SSHConnection", "⚠️ Host key CHANGED verification triggered for ${info.hostname}")
                     hostKeyChangedCallback?.invoke(info) ?: HostKeyAction.REJECT_CONNECTION
+                }
+
+                // Configure new host key callback
+                hostKeyVerifier.setNewHostKeyCallback { info ->
+                    Logger.i("SSHConnection", "🆕 New host key verification triggered for ${info.hostname}")
+                    newHostKeyCallback?.invoke(info) ?: HostKeyAction.REJECT_CONNECTION
                 }
 
                 // Setup jump host if configured
@@ -670,23 +677,35 @@ class SSHConnection(
     private fun handleConnectionError(error: Exception) {
         // Build detailed error information
         val errorInfo = buildDetailedErrorInfo(error)
-        
+
         Logger.e("SSHConnection", "Connection failed: ${errorInfo.userMessage}", error)
-        
+
         _connectionState.value = ConnectionState.ERROR
         _errorMessage.value = errorInfo.userMessage
         _detailedError.value = errorInfo
         notifyListeners { onError(id, error) }
-        
-        // Auto-reconnect logic
-        if (reconnectAttempts < maxReconnectAttempts) {
+
+        // Check if this is an auth error - don't retry on auth failures
+        val isAuthError = error.message?.let { msg ->
+            msg.contains("Auth fail", ignoreCase = true) ||
+            msg.contains("authentication", ignoreCase = true) ||
+            msg.contains("password", ignoreCase = true) ||
+            msg.contains("publickey", ignoreCase = true) ||
+            msg.contains("Permission denied", ignoreCase = true) ||
+            msg.contains("Too many authentication failures", ignoreCase = true)
+        } ?: false
+
+        // Auto-reconnect logic - only for network errors, not auth failures
+        if (!isAuthError && reconnectAttempts < maxReconnectAttempts) {
             reconnectAttempts++
             Logger.i("SSHConnection", "Attempting reconnect $reconnectAttempts/$maxReconnectAttempts")
-            
+
             scope.launch {
                 delay(5000) // Wait 5 seconds before retry
                 connect()
             }
+        } else if (isAuthError) {
+            Logger.i("SSHConnection", "Auth error detected - not retrying")
         }
     }
     

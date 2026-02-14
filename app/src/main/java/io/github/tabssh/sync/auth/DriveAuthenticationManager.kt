@@ -59,12 +59,24 @@ class DriveAuthenticationManager(private val context: Context) {
     }
 
     /**
-     * Start sign-in flow
+     * Start sign-in flow (deprecated - use getSignInIntent() with Activity Result API)
      */
+    @Deprecated("Use getSignInIntent() with Activity Result API instead")
     fun signIn(activity: Activity) {
         val signInIntent = googleSignInClient?.signInIntent
         activity.startActivityForResult(signInIntent, REQUEST_CODE_SIGN_IN)
-        Logger.d(TAG, "Starting Google Sign-In flow")
+        Logger.d(TAG, "Starting Google Sign-In flow (legacy)")
+    }
+
+    /**
+     * Get sign-in intent for use with Activity Result API
+     */
+    fun getSignInIntent(): Intent? {
+        // Initialize if not already done
+        if (googleSignInClient == null) {
+            initialize()
+        }
+        return googleSignInClient?.signInIntent
     }
 
     /**
