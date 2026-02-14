@@ -19,7 +19,7 @@
 | 7.5 | **#26** | SSH key rename not possible | 30min | ✅ FIXED |
 | 7.6 | **#27** | Connection test keeps retrying on auth fail | 30min | ✅ FIXED |
 | 7.7 | **#28** | Sync UI needs reorganization | 2h | ✅ FIXED |
-| 7.8 | **#29** | Google account sign-in broken | 2-4h | 🔴 TODO |
+| 7.8 | **#29** | Google account sign-in broken | 2-4h | 🔧 FIX APPLIED |
 | 7.9 | **#30** | Audit Log setting misplaced | 15min | ✅ FIXED |
 | 7.10 | **#31** | Security check false positive (passwordIcon) | 5min | ⚠️ FALSE POSITIVE |
 
@@ -32,6 +32,8 @@
 6. **#27 Auth retry loop** - Added auth error detection to skip auto-reconnect
 7. **#28 Sync UI** - Reorganized preferences_sync.xml with clear step-by-step flow
 8. **#30 Audit Log** - Removed redundant entry from preferences_main.xml (already in Logging)
+9. **#29 Google Sign-In** - Migrated to Activity Result API, added signInLauncher and getSignInIntent()
+10. **#23 Host key (additional fix)** - Added setupUserInfo() to SSHConnection.kt for JSch UserInfo.promptYesNo() handling
 
 ---
 
@@ -156,30 +158,37 @@ authentication failures. Retrying auth with same wrong credentials is useless.
 ---
 
 ### 🐛 Issue #29: Google Account Sign-In Broken
-- **Status:** 🔴 TODO
+- **Status:** 🔧 FIX APPLIED (needs testing)
 - **Priority:** HIGH
 - **Impact:** Cannot set up Google Drive sync
 
-**Investigation Needed:**
-- Check Google Sign-In flow
-- Verify OAuth configuration
-- Check error handling in DriveAuthenticationManager
+**Root Cause:** Using deprecated `startActivityForResult()` which doesn't work properly
+with newer Android versions and Fragment lifecycle.
 
-**Files to Check:**
-- `app/src/main/java/io/github/tabssh/sync/DriveAuthenticationManager.kt`
+**Fix Applied:**
+1. Added `signInLauncher: ActivityResultLauncher<Intent>` to SyncSettingsFragment
+2. Registered launcher in `onCreate()` using `registerForActivityResult()`
+3. Updated `signIn()` method to use `signInLauncher.launch(intent)`
+4. Added `getSignInIntent()` method to DriveAuthenticationManager
+
+**Files Modified:**
+- `app/src/main/java/io/github/tabssh/sync/auth/DriveAuthenticationManager.kt`
 - `app/src/main/java/io/github/tabssh/ui/fragments/SyncSettingsFragment.kt`
 
 ---
 
 ### 🐛 Issue #30: Audit Log Setting Misplaced
-- **Status:** 🔴 TODO
+- **Status:** ✅ FIXED
 - **Priority:** LOW
 - **Impact:** Confusing settings organization
 
-**Issue:** Audit Log setting appears under Logs section but should be elsewhere
+**Issue:** Audit Log setting appeared as a duplicate entry in main preferences
 
-**Files to Modify:**
-- `app/src/main/res/xml/preferences_logging.xml`
+**Fix Applied:** Removed the redundant "Audit Log" entry from preferences_main.xml since
+it's already included in the Logging settings section.
+
+**Files Modified:**
+- `app/src/main/res/xml/preferences_main.xml`
 
 ---
 

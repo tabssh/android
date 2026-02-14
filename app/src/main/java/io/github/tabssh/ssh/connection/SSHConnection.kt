@@ -139,6 +139,10 @@ class SSHConnection(
                 newSession.timeout = profile.connectTimeout * 1000
                 Logger.d("SSHConnection", "Connection timeout set to ${profile.connectTimeout} seconds")
 
+                // Setup UserInfo for host key verification prompts
+                Logger.d("SSHConnection", "🔐 STEP 8.5: Setting up UserInfo for host key prompts")
+                setupUserInfo(newSession)
+
                 // Setup authentication BEFORE connecting
                 Logger.i("SSHConnection", "🔑 STEP 9: Setting up authentication")
                 _connectionState.value = ConnectionState.AUTHENTICATING
@@ -210,7 +214,72 @@ class SSHConnection(
         
         Logger.d("SSHConnection", "Session configured with compression=${profile.compression}, keep-alive=${profile.keepAlive}")
     }
-    
+
+    /**
+     * Setup UserInfo for handling host key verification prompts
+     * This is required for JSch to work with StrictHostKeyChecking="ask"
+     */
+    private fun setupUserInfo(session: Session) {
+        session.setUserInfo(object : com.jcraft.jsch.UserInfo {
+            override fun getPassword(): String? = null
+
+            override fun promptYesNo(message: String): Boolean {
+                Logger.i("SSHConnection", "🔐 UserInfo.promptYesNo called: $message")
+
+                // This is called by JSch for host key verification when StrictHostKeyChecking="ask"
+                // Our HostKeyRepository.check() should handle this, but JSch may still call this
+                // for certain edge cases
+
+                // Check if this is a host key prompt
+                if (message.contains("authenticity", ignoreCase = true) ||
+                    message.contains("fingerprint", ignoreCase = true) ||
+                    message.contains("RSA key", ignoreCase = true) ||
+                    message.contains("ECDSA key", ignoreCase = true) ||
+                    message.contains("ED25519", ignoreCase = true)) {
+
+                    Logger.w("SSHConnection", "⚠️ Host key prompt detected in UserInfo - this should be handled by HostKeyVerifier")
+
+                    // If we have a newHostKeyCallback, use it
+                    if (newHostKeyCallback != null) {
+                        // Extract hostname from message if possible
+                        val hostname = profile.host
+                        val port = profile.port
+
+                        // Create a basic NewHostKeyInfo
+                        val info = NewHostKeyInfo(
+                            hostname = hostname,
+                            port = port,
+                            keyType = "unknown",
+                            fingerprint = message, // Use the message as fingerprint info
+                            publicKey = ""
+                        )
+
+                        val action = newHostKeyCallback!!.invoke(info)
+                        return action == HostKeyAction.ACCEPT_NEW_KEY || action == HostKeyAction.ACCEPT_ONCE
+                    }
+
+                    // No callback - reject for safety
+                    Logger.w("SSHConnection", "No host key callback available - rejecting")
+                    return false
+                }
+
+                // For other prompts, accept if they seem like continuation prompts
+                val shouldAccept = message.contains("continue connecting", ignoreCase = true)
+                Logger.d("SSHConnection", "Non-host-key prompt, accepting: $shouldAccept")
+                return shouldAccept
+            }
+
+            override fun getPassphrase(): String? = null
+            override fun promptPassphrase(message: String): Boolean = false
+            override fun promptPassword(message: String): Boolean = false
+            override fun showMessage(message: String) {
+                Logger.i("SSHConnection", "Server message: $message")
+            }
+        })
+
+        Logger.d("SSHConnection", "UserInfo configured for host key prompts")
+    }
+
     /**
      * Execute port knock sequence if enabled
      */
