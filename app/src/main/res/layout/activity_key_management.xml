@@ -9,7 +9,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:clipToPadding="false"
-        android:padding="8dp" />
+        android:padding="16dp" />
 
     <!-- Empty state with action buttons -->
     <LinearLayout
@@ -24,20 +24,26 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:text="🔑"
+            android:textSize="64sp"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
             android:text="No SSH Keys"
-            android:textSize="24sp"
-            android:textStyle="bold"
-            android:textColor="?android:attr/textColorPrimary"
+            android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall"
             android:layout_marginBottom="8dp" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Get started by creating or importing an SSH key"
-            android:textAlignment="center"
-            android:textSize="16sp"
+            android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
             android:textColor="?android:attr/textColorSecondary"
-            android:layout_marginBottom="32dp" />
+            android:textAlignment="center"
+            android:gravity="center"
+            android:layout_marginBottom="24dp" />
 
         <!-- Action buttons -->
         <com.google.android.material.button.MaterialButton

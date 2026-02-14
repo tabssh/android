@@ -10,7 +10,7 @@
         android:id="@+id/recycler_view_groups"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:padding="8dp"
+        android:padding="16dp"
         android:clipToPadding="false" />
 
     <!-- Empty state -->

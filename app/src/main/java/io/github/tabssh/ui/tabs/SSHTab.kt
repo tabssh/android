@@ -3,7 +3,8 @@ package io.github.tabssh.ui.tabs
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.ssh.connection.ConnectionState
-import io.github.tabssh.terminal.emulator.TerminalEmulator
+import io.github.tabssh.terminal.TermuxBridge
+import io.github.tabssh.terminal.TermuxBridgeListener
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -16,121 +17,156 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 
 /**
- * Represents a single SSH tab with its connection, terminal, and UI state
- * This is the core of TabSSH's tabbed interface innovation
+ * Represents a single SSH tab with its connection, terminal, and UI state.
+ * This is the core of TabSSH's tabbed interface innovation.
+ *
+ * Uses Termux terminal emulator for proper VT100/ANSI/xterm-256color support.
  */
 class SSHTab(
     val profile: ConnectionProfile,
-    val terminal: TerminalEmulator
+    val termuxBridge: TermuxBridge
 ) {
     val tabId: String = UUID.randomUUID().toString()
-    
+
     // Coroutine scope for managing tab lifecycle
     private val connectionScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    
+
     // Connection (public for gesture command sending)
     var connection: SSHConnection? = null
-    
+
     // Tab state
     private val _title = MutableStateFlow(profile.name)
     val title: StateFlow<String> = _title.asStateFlow()
-    
+
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
-    
+
     private val _isActive = MutableStateFlow(false)
     val isActive: StateFlow<Boolean> = _isActive.asStateFlow()
-    
+
     private val _hasUnreadOutput = MutableStateFlow(false)
     val hasUnreadOutput: StateFlow<Boolean> = _hasUnreadOutput.asStateFlow()
-    
+
     private val _lastActivity = MutableStateFlow(System.currentTimeMillis())
     val lastActivity: StateFlow<Long> = _lastActivity.asStateFlow()
-    
+
     // Tab visual state
     private val _hasError = MutableStateFlow(false)
     val hasError: StateFlow<Boolean> = _hasError.asStateFlow()
-    
+
     private val _unreadLines = MutableStateFlow(0)
     val unreadLines: StateFlow<Int> = _unreadLines.asStateFlow()
-    
+
     // Tab position and ordering
     var tabIndex: Int = 0
         internal set
-    
+
     // Session statistics
     private var sessionStartTime: Long = 0
     private var bytesReceived: Long = 0
     private var bytesSent: Long = 0
-    
+
     // Session recording
     var sessionRecorder: io.github.tabssh.terminal.recording.SessionRecorder? = null
-    
+
+    // Screen change listener for UI updates
+    private var onScreenChangedListener: (() -> Unit)? = null
+
     init {
         Logger.d("SSHTab", "Created tab ${profile.getDisplayName()}")
 
         // Set up terminal listener to track activity
         setupTerminalListener()
 
-        // Title will be updated via onTitleChanged listener
+        // Initialize the Termux emulator
+        termuxBridge.initialize()
     }
-    
+
     private fun setupTerminalListener() {
-        terminal.addListener(object : io.github.tabssh.terminal.emulator.TerminalListener {
-            override fun onDataReceived(data: ByteArray) {
+        termuxBridge.addListener(object : TermuxBridgeListener {
+            override fun onConnected() {
+                sessionStartTime = System.currentTimeMillis()
+                _connectionState.value = ConnectionState.CONNECTED
+                _hasError.value = false
+                Logger.i("SSHTab", "Terminal connected for ${profile.getDisplayName()}")
+            }
+
+            override fun onDisconnected() {
+                _connectionState.value = ConnectionState.DISCONNECTED
+                Logger.i("SSHTab", "Terminal disconnected for ${profile.getDisplayName()}")
+            }
+
+            override fun onScreenChanged() {
                 updateActivity()
-                bytesReceived += data.size
-                
-                // Record to transcript if enabled
-                sessionRecorder?.recordOutput(String(data, Charsets.UTF_8))
+                bytesReceived++ // Approximate - actual bytes tracked in bridge
 
                 // Mark as having unread output if tab is not active
                 if (!_isActive.value) {
                     _hasUnreadOutput.value = true
                     _unreadLines.value += 1
                 }
+
+                // Notify UI to redraw
+                onScreenChangedListener?.invoke()
             }
 
-            override fun onDataSent(data: ByteArray) {
-                updateActivity()
-                bytesSent += data.size
-            }
-
-            override fun onTitleChanged(newTitle: String) {
+            override fun onTitleChanged(title: String) {
                 // Update tab title from terminal (e.g., from OSC sequences)
-                if (newTitle.isNotBlank()) {
-                    _title.value = newTitle
+                if (title.isNotBlank()) {
+                    _title.value = title
                 } else {
                     _title.value = profile.getDisplayName()
                 }
-                Logger.d("SSHTab", "Tab title changed to: $newTitle")
+                Logger.d("SSHTab", "Tab title changed to: $title")
             }
 
-            override fun onTerminalError(error: Exception) {
+            override fun onBell() {
+                // Terminal bell - could vibrate or play sound
+                Logger.d("SSHTab", "Terminal bell")
+            }
+
+            override fun onColorsChanged() {
+                // Colors changed - redraw
+                onScreenChangedListener?.invoke()
+            }
+
+            override fun onCursorStateChanged(visible: Boolean) {
+                // Cursor visibility changed - redraw
+                onScreenChangedListener?.invoke()
+            }
+
+            override fun onCopyToClipboard(text: String) {
+                // Handle clipboard copy request
+                Logger.d("SSHTab", "Copy to clipboard: ${text.take(50)}...")
+            }
+
+            override fun onPasteFromClipboard() {
+                // Handle clipboard paste request
+                Logger.d("SSHTab", "Paste from clipboard requested")
+            }
+
+            override fun onError(e: Exception) {
                 _hasError.value = true
-                Logger.e("SSHTab", "Terminal error in tab ${profile.getDisplayName()}", error)
-            }
-
-            override fun onTerminalConnected() {
-                sessionStartTime = System.currentTimeMillis()
-                _connectionState.value = ConnectionState.CONNECTED
-                _hasError.value = false
-            }
-
-            override fun onTerminalDisconnected() {
-                _connectionState.value = ConnectionState.DISCONNECTED
+                Logger.e("SSHTab", "Terminal error in tab ${profile.getDisplayName()}", e)
             }
         })
     }
-    
+
+    /**
+     * Set listener for screen changes (for UI redraw)
+     */
+    fun setOnScreenChangedListener(listener: (() -> Unit)?) {
+        onScreenChangedListener = listener
+    }
+
     /**
      * Connect this tab's terminal to the SSH connection
      */
     suspend fun connect(sshConnection: SSHConnection): Boolean {
         return try {
-            Logger.i("SSHTab", "🔗 Connecting tab terminal for ${profile.getDisplayName()}")
+            Logger.i("SSHTab", "Connecting tab terminal for ${profile.getDisplayName()}")
             connection = sshConnection
-            
+
             // Launch coroutine to observe connection state
             connectionScope.launch {
                 sshConnection.connectionState.collect { state ->
@@ -141,51 +177,51 @@ class SSHTab(
                     }
                 }
             }
-            
+
             // Connect terminal to SSH streams
-            Logger.i("SSHTab", "🔌 Opening shell channel...")
+            Logger.i("SSHTab", "Opening shell channel...")
             val shellChannel = sshConnection.openShellChannel()
             if (shellChannel != null) {
-                Logger.i("SSHTab", "✅ Shell channel opened successfully")
-                
+                Logger.i("SSHTab", "Shell channel opened successfully")
+
                 val inputStream = shellChannel.inputStream
                 val outputStream = shellChannel.outputStream
-                
+
                 Logger.d("SSHTab", "Input stream: ${if (inputStream != null) "OK" else "NULL"}")
                 Logger.d("SSHTab", "Output stream: ${if (outputStream != null) "OK" else "NULL"}")
-                
+
                 if (inputStream == null || outputStream == null) {
-                    Logger.e("SSHTab", "❌ Shell channel streams are null for ${profile.getDisplayName()}")
+                    Logger.e("SSHTab", "Shell channel streams are null for ${profile.getDisplayName()}")
                     return false
                 }
-                
-                Logger.i("SSHTab", "🔌 Wiring terminal to SSH streams...")
-                terminal.connect(inputStream, outputStream)
-                Logger.i("SSHTab", "✅✅✅ Terminal WIRED to SSH successfully for ${profile.getDisplayName()}")
+
+                Logger.i("SSHTab", "Wiring Termux terminal to SSH streams...")
+                termuxBridge.connect(inputStream, outputStream)
+                Logger.i("SSHTab", "Terminal WIRED to SSH successfully for ${profile.getDisplayName()}")
                 true
             } else {
-                Logger.e("SSHTab", "❌ Failed to open shell channel for ${profile.getDisplayName()}")
+                Logger.e("SSHTab", "Failed to open shell channel for ${profile.getDisplayName()}")
                 false
             }
-            
+
         } catch (e: Exception) {
-            Logger.e("SSHTab", "❌ Error connecting tab ${profile.getDisplayName()}", e)
+            Logger.e("SSHTab", "Error connecting tab ${profile.getDisplayName()}", e)
             _hasError.value = true
             false
         }
     }
-    
+
     /**
      * Disconnect this tab
      */
     fun disconnect() {
         Logger.d("SSHTab", "Disconnecting tab ${profile.getDisplayName()}")
-        
-        terminal.disconnect()
+
+        termuxBridge.disconnect()
         connection = null
         _connectionState.value = ConnectionState.DISCONNECTED
     }
-    
+
     /**
      * Activate this tab (mark as current/visible)
      */
@@ -194,10 +230,10 @@ class SSHTab(
         _hasUnreadOutput.value = false
         _unreadLines.value = 0
         updateActivity()
-        
+
         Logger.d("SSHTab", "Activated tab ${profile.getDisplayName()}")
     }
-    
+
     /**
      * Deactivate this tab (mark as background)
      */
@@ -205,14 +241,14 @@ class SSHTab(
         _isActive.value = false
         Logger.d("SSHTab", "Deactivated tab ${profile.getDisplayName()}")
     }
-    
+
     /**
      * Update last activity timestamp
      */
     private fun updateActivity() {
         _lastActivity.value = System.currentTimeMillis()
     }
-    
+
     /**
      * Get display title for tab bar
      */
@@ -222,7 +258,7 @@ class SSHTab(
             else -> profile.getDisplayName()
         }
     }
-    
+
     /**
      * Get short title for narrow tabs
      */
@@ -244,15 +280,15 @@ class SSHTab(
             }
         }
     }
-    
+
     /**
      * Check if tab can be closed safely
      */
     fun canClose(): Boolean {
-        return _connectionState.value == ConnectionState.DISCONNECTED || 
+        return _connectionState.value == ConnectionState.DISCONNECTED ||
                _connectionState.value == ConnectionState.ERROR
     }
-    
+
     /**
      * Get connection statistics
      */
@@ -260,7 +296,7 @@ class SSHTab(
         val duration = if (sessionStartTime > 0) {
             System.currentTimeMillis() - sessionStartTime
         } else 0
-        
+
         return TabStats(
             connectionProfile = profile,
             connectionState = _connectionState.value,
@@ -270,64 +306,65 @@ class SSHTab(
             sessionDuration = duration,
             bytesReceived = bytesReceived,
             bytesSent = bytesSent,
-            terminalRows = terminal.getRows(),
-            terminalCols = terminal.getCols(),
+            terminalRows = termuxBridge.getRows(),
+            terminalCols = termuxBridge.getColumns(),
             lastActivity = _lastActivity.value
         )
     }
-    
+
     /**
      * Send text to this tab's terminal
      */
     fun sendText(text: String) {
-        terminal.sendText(text)
+        termuxBridge.sendText(text)
+        bytesSent += text.length
         updateActivity()
     }
-    
+
     /**
      * Send key press to this tab's terminal
      */
     fun sendKeyPress(keyCode: Int, isCtrl: Boolean = false, isAlt: Boolean = false, isShift: Boolean = false) {
-        terminal.sendKeyPress(keyCode, isCtrl, isAlt, isShift)
+        termuxBridge.sendKeyPress(keyCode, isCtrl, isAlt, isShift)
         updateActivity()
     }
-    
+
     /**
      * Resize this tab's terminal
      */
     fun resize(rows: Int, cols: Int) {
-        terminal.resize(rows, cols)
+        termuxBridge.resize(cols, rows)
         Logger.d("SSHTab", "Resized tab ${profile.getDisplayName()} terminal to ${cols}x${rows}")
     }
-    
+
     /**
      * Clear terminal screen
      */
     fun clearScreen() {
-        terminal.clearScreen()
+        termuxBridge.clearScreen()
     }
-    
+
     /**
      * Get terminal content for sharing/copying
      */
     fun getTerminalContent(): String {
-        return terminal.getScreenContent()
+        return termuxBridge.getScreenContent()
     }
-    
+
     /**
      * Get scrollback content
      */
     fun getScrollbackContent(): String {
-        return terminal.getScrollbackContent()
+        return termuxBridge.getScrollbackContent()
     }
-    
+
     /**
      * Check if tab is connected
      */
     fun isConnected(): Boolean {
-        return _connectionState.value == ConnectionState.CONNECTED && terminal.isActive.value
+        return _connectionState.value == ConnectionState.CONNECTED && termuxBridge.isConnected.value
     }
-    
+
     /**
      * Set custom title (user-defined)
      */
@@ -337,7 +374,7 @@ class SSHTab(
             Logger.d("SSHTab", "Set custom title for tab: $newTitle")
         }
     }
-    
+
     /**
      * Reset title to default (connection name)
      */
@@ -354,29 +391,53 @@ class SSHTab(
     }
 
     /**
+     * Get the Termux screen buffer for rendering
+     */
+    fun getScreen() = termuxBridge.getScreen()
+
+    /**
+     * Get cursor row
+     */
+    fun getCursorRow() = termuxBridge.getCursorRow()
+
+    /**
+     * Get cursor column
+     */
+    fun getCursorCol() = termuxBridge.getCursorCol()
+
+    /**
+     * Check if cursor is visible
+     */
+    fun isCursorVisible() = termuxBridge.isCursorVisible()
+
+    /**
      * Cleanup tab resources
      */
     fun cleanup() {
         Logger.d("SSHTab", "Cleaning up tab ${profile.getDisplayName()}")
 
         disconnect()
-        terminal.cleanup()
+        termuxBridge.cleanup()
         connectionScope.cancel() // Cancel all coroutines
     }
-    
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is SSHTab) return false
         return tabId == other.tabId
     }
-    
+
     override fun hashCode(): Int {
         return tabId.hashCode()
     }
-    
+
     override fun toString(): String {
         return "SSHTab(id=$tabId, profile=${profile.getDisplayName()}, state=${_connectionState.value})"
     }
+
+    // Legacy compatibility - provide terminal property that aliases to termuxBridge
+    @Deprecated("Use termuxBridge directly", ReplaceWith("termuxBridge"))
+    val terminal: TermuxBridge get() = termuxBridge
 }
 
 /**

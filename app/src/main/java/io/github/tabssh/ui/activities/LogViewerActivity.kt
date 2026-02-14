@@ -65,6 +65,10 @@ class LogViewerActivity : AppCompatActivity() {
                 finish()
                 true
             }
+            R.id.action_copy -> {
+                copyLogsToClipboard()
+                true
+            }
             R.id.action_filter -> {
                 showFilterDialog()
                 true
@@ -79,6 +83,40 @@ class LogViewerActivity : AppCompatActivity() {
             }
             else -> super.onOptionsItemSelected(item)
         }
+    }
+
+    /**
+     * Copy all logs to clipboard
+     */
+    private fun copyLogsToClipboard() {
+        if (logEntries.isEmpty()) {
+            android.widget.Toast.makeText(
+                this,
+                "No logs to copy",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+
+        val logsText = buildString {
+            append("TabSSH Application Logs\n")
+            append("Copied: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())}\n")
+            append("=".repeat(60) + "\n\n")
+
+            logEntries.forEach { log ->
+                append("${log.timestamp} [${log.level}] ${log.tag}: ${log.message}\n")
+            }
+        }
+
+        val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        val clip = android.content.ClipData.newPlainText("TabSSH Logs", logsText)
+        clipboard.setPrimaryClip(clip)
+
+        android.widget.Toast.makeText(
+            this,
+            "✓ Copied ${logEntries.size} log entries to clipboard",
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
     }
     
     /**
@@ -167,19 +205,26 @@ class LogViewerActivity : AppCompatActivity() {
      * Apply filter to logs
      */
     private fun applyFilter(filterIndex: Int) {
-        val filtered = when (filterIndex) {
-            0 -> Logger.getRecentLogs()
-            1 -> Logger.getRecentLogs().filter { it.level == "ERROR" }
-            2 -> Logger.getRecentLogs().filter { it.level == "WARN" }
-            3 -> Logger.getRecentLogs().filter { it.level == "INFO" }
-            4 -> Logger.getRecentLogs().filter { it.level == "DEBUG" }
-            else -> Logger.getRecentLogs()
+        val (filtered, filterName) = when (filterIndex) {
+            0 -> Pair(Logger.getRecentLogs(), "All")
+            1 -> Pair(Logger.getRecentLogs().filter { it.level == "ERROR" }, "ERROR")
+            2 -> Pair(Logger.getRecentLogs().filter { it.level == "WARN" }, "WARN")
+            3 -> Pair(Logger.getRecentLogs().filter { it.level == "INFO" }, "INFO")
+            4 -> Pair(Logger.getRecentLogs().filter { it.level == "DEBUG" }, "DEBUG")
+            else -> Pair(Logger.getRecentLogs(), "All")
         }
-        
+
         logEntries.clear()
         logEntries.addAll(filtered)
         adapter.notifyDataSetChanged()
-        
+
+        // Update title to show current filter
+        supportActionBar?.title = if (filterIndex == 0) {
+            "Application Logs"
+        } else {
+            "Application Logs - $filterName"
+        }
+
         if (logEntries.isEmpty()) {
             recyclerView.visibility = View.GONE
             emptyView.visibility = View.VISIBLE

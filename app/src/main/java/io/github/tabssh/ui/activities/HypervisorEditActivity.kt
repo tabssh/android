@@ -15,6 +15,8 @@ import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.HypervisorType
 import io.github.tabssh.hypervisor.proxmox.ProxmoxApiClient
+import io.github.tabssh.hypervisor.xcpng.XCPngApiClient
+import io.github.tabssh.hypervisor.vmware.VMwareApiClient
 import kotlinx.coroutines.launch
 import io.github.tabssh.utils.showError
 
@@ -172,12 +174,14 @@ class HypervisorEditActivity : AppCompatActivity() {
                         client.authenticate()
                     }
                     HypervisorType.XCPNG -> {
-                        // TODO: Implement XCP-ng test
-                        false
+                        // XCP-ng uses XML-RPC API
+                        val client = XCPngApiClient(host, port, username, password, verifySsl)
+                        client.authenticate()
                     }
                     HypervisorType.VMWARE -> {
-                        // TODO: Implement VMware test
-                        false
+                        // VMware uses REST API
+                        val client = VMwareApiClient(host, username, password, verifySsl)
+                        client.authenticate()
                     }
                 }
                 

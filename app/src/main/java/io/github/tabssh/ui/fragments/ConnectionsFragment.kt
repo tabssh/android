@@ -27,6 +27,7 @@ import io.github.tabssh.ui.adapters.ConnectionAdapter
 import io.github.tabssh.ui.adapters.GroupedConnectionAdapter
 import io.github.tabssh.ui.models.ConnectionListItem
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 /**
@@ -235,21 +236,24 @@ class ConnectionsFragment : Fragment() {
     private fun loadAllConnections() {
         lifecycleScope.launch {
             try {
-                // Load both connections and groups
-                app.database.connectionDao().getAllConnections().collect { connections: List<ConnectionProfile> ->
+                // Use combine() to merge both Flows - fixes nested collect() blocking issue
+                // Both connections AND groups will trigger UI updates when changed
+                combine(
+                    app.database.connectionDao().getAllConnections(),
+                    app.database.connectionGroupDao().getAllGroups()
+                ) { connections, groups ->
+                    Pair(connections, groups)
+                }.collect { (connections, groups) ->
                     allConnections = connections
-                    
-                    // Load groups if using grouped view
+                    allGroups = groups
+
                     if (useGroupedView) {
-                        app.database.connectionGroupDao().getAllGroups().collect { groups: List<ConnectionGroup> ->
-                            allGroups = groups
-                            applyGroupedView()
-                        }
+                        applyGroupedView()
                     } else {
                         applySortAndFilter()
                     }
-                    
-                    Logger.d("ConnectionsFragment", "Loaded ${connections.size} connections")
+
+                    Logger.d("ConnectionsFragment", "Loaded ${connections.size} connections, ${groups.size} groups")
                 }
             } catch (e: Exception) {
                 Logger.e("ConnectionsFragment", "Failed to load connections", e)
@@ -285,8 +289,12 @@ class ConnectionsFragment : Fragment() {
             }
         }
         
-        // Add ungrouped connections
-        val ungroupedConnections = allConnections.filter { it.groupId == null }
+        // Add ungrouped connections (null groupId OR groupId that doesn't exist in allGroups)
+        // This ensures imported connections with non-existent groupId still appear
+        val existingGroupIds = allGroups.map { it.id }.toSet()
+        val ungroupedConnections = allConnections.filter {
+            it.groupId == null || it.groupId !in existingGroupIds
+        }
         if (ungroupedConnections.isNotEmpty()) {
             items.add(ConnectionListItem.UngroupedHeader(
                 connectionCount = ungroupedConnections.size,

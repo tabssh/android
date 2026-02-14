@@ -60,6 +60,10 @@ class AuditLogViewerActivity : AppCompatActivity() {
                 finish()
                 true
             }
+            R.id.action_copy -> {
+                copyLogsToClipboard()
+                true
+            }
             R.id.action_filter -> {
                 showFilterDialog()
                 true
@@ -73,6 +77,57 @@ class AuditLogViewerActivity : AppCompatActivity() {
                 true
             }
             else -> super.onOptionsItemSelected(item)
+        }
+    }
+
+    /**
+     * Copy all audit logs to clipboard
+     */
+    private fun copyLogsToClipboard() {
+        lifecycleScope.launch {
+            try {
+                val logs = app.database.auditLogDao().getRecent(1000)
+
+                if (logs.isEmpty()) {
+                    android.widget.Toast.makeText(
+                        this@AuditLogViewerActivity,
+                        "No logs to copy",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                    return@launch
+                }
+
+                val logsText = buildString {
+                    append("TabSSH Audit Logs\n")
+                    append("Copied: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())}\n")
+                    append("=".repeat(60) + "\n\n")
+
+                    logs.forEach { log ->
+                        append("${log.timestamp} [${log.eventType}] ${log.connectionId ?: "N/A"}: ${log.command ?: ""}\n")
+                        if (!log.output.isNullOrEmpty()) {
+                            append("  Output: ${log.output}\n")
+                        }
+                    }
+                }
+
+                val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                val clip = android.content.ClipData.newPlainText("TabSSH Audit Logs", logsText)
+                clipboard.setPrimaryClip(clip)
+
+                android.widget.Toast.makeText(
+                    this@AuditLogViewerActivity,
+                    "✓ Copied ${logs.size} audit log entries to clipboard",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+
+            } catch (e: Exception) {
+                Logger.e("AuditLogViewer", "Failed to copy logs", e)
+                android.widget.Toast.makeText(
+                    this@AuditLogViewerActivity,
+                    "Failed to copy logs: ${e.message}",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
         }
     }
     
@@ -132,18 +187,25 @@ class AuditLogViewerActivity : AppCompatActivity() {
     private fun applyFilter(filterIndex: Int) {
         lifecycleScope.launch {
             try {
-                val logs = when (filterIndex) {
-                    0 -> app.database.auditLogDao().getRecent(1000)
-                    1 -> app.database.auditLogDao().getByEventType("AUTH%")
-                    2 -> app.database.auditLogDao().getByEventType("CONNECT%")
-                    3 -> app.database.auditLogDao().getByEventType("SFTP%")
-                    4 -> app.database.auditLogDao().getByEventType("CONFIG%")
-                    5 -> app.database.auditLogDao().getByEventType("ERROR%")
-                    else -> app.database.auditLogDao().getRecent(1000)
+                val (logs, filterName) = when (filterIndex) {
+                    0 -> Pair(app.database.auditLogDao().getRecent(1000), "All")
+                    1 -> Pair(app.database.auditLogDao().getByEventType("AUTH%"), "Authentication")
+                    2 -> Pair(app.database.auditLogDao().getByEventType("CONNECT%"), "Connections")
+                    3 -> Pair(app.database.auditLogDao().getByEventType("SFTP%"), "File Transfers")
+                    4 -> Pair(app.database.auditLogDao().getByEventType("CONFIG%"), "Config Changes")
+                    5 -> Pair(app.database.auditLogDao().getByEventType("ERROR%"), "Errors")
+                    else -> Pair(app.database.auditLogDao().getRecent(1000), "All")
                 }
-                
+
                 adapter.updateLogs(logs)
-                
+
+                // Update title to show current filter
+                supportActionBar?.title = if (filterIndex == 0) {
+                    "Audit Logs"
+                } else {
+                    "Audit Logs - $filterName"
+                }
+
             } catch (e: Exception) {
                 Logger.e("AuditLogViewer", "Failed to filter logs", e)
             }

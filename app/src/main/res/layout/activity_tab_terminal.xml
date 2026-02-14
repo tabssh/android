@@ -78,6 +78,26 @@
             app:elevation="6dp"
             android:visibility="gone" />
 
+        <!-- Multiplexer Status Indicator -->
+        <com.google.android.material.chip.Chip
+            android:id="@+id/chip_multiplexer_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="8dp"
+            android:text="tmux"
+            android:textSize="11sp"
+            app:chipBackgroundColor="@color/terminal_green"
+            app:chipMinHeight="24dp"
+            app:chipIcon="@drawable/ic_terminal"
+            app:chipIconSize="14dp"
+            app:chipIconTint="@android:color/white"
+            android:textColor="@android:color/white"
+            android:visibility="gone"
+            android:clickable="true"
+            android:focusable="true" />
+
         </FrameLayout>
 
         <!-- Custom Keyboard Bar -->

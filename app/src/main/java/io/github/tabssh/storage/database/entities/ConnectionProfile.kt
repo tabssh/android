@@ -52,7 +52,13 @@ data class ConnectionProfile(
     
     @ColumnInfo(name = "use_mosh")
     val useMosh: Boolean = false,
-    
+
+    @ColumnInfo(name = "multiplexer_mode")
+    val multiplexerMode: String = "OFF", // OFF, AUTO_ATTACH, CREATE_NEW, ASK
+
+    @ColumnInfo(name = "multiplexer_session_name")
+    val multiplexerSessionName: String? = null, // Custom session name (e.g., "main", "dev")
+
     @ColumnInfo(name = "port_knock_enabled")
     val portKnockEnabled: Boolean? = null, // null = use global default, true/false = override
     
@@ -91,7 +97,13 @@ data class ConnectionProfile(
     
     @ColumnInfo(name = "theme")
     val theme: String = "dracula",
-    
+
+    @ColumnInfo(name = "post_connect_script")
+    val postConnectScript: String? = null, // Commands to run after connection (one per line)
+
+    @ColumnInfo(name = "font_size_override")
+    val fontSizeOverride: Int? = null, // null = use global default, otherwise override
+
     @ColumnInfo(name = "group_id")
     val groupId: String? = null,
     

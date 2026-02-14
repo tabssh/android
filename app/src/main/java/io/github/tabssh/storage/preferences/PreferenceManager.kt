@@ -54,7 +54,14 @@ class PreferenceManager(private val context: Context) {
         private const val KEY_KEEP_SCREEN_ON = "ui_keep_screen_on"
         private const val KEY_APP_THEME = "ui_app_theme"
         private const val KEY_DYNAMIC_COLORS = "ui_dynamic_colors"
-        
+
+        // Notification preferences
+        private const val KEY_NOTIFICATIONS_ENABLED = "notifications_enabled"
+        private const val KEY_SHOW_CONNECTION_NOTIFICATIONS = "show_connection_notifications"
+        private const val KEY_SHOW_ERROR_NOTIFICATIONS = "show_error_notifications"
+        private const val KEY_SHOW_FILE_TRANSFER_NOTIFICATIONS = "show_file_transfer_notifications"
+        private const val KEY_NOTIFICATION_VIBRATE = "notification_vibrate"
+
         // Connection preferences
         private const val KEY_DEFAULT_USERNAME = "connection_default_username"
         private const val KEY_DEFAULT_PORT = "connection_default_port"
@@ -67,8 +74,16 @@ class PreferenceManager(private val context: Context) {
         private const val KEY_HIGH_CONTRAST = "accessibility_high_contrast"
         private const val KEY_LARGE_TOUCH_TARGETS = "accessibility_large_touch_targets"
         private const val KEY_SCREEN_READER_ENABLED = "accessibility_screen_reader"
-        
+
+        // Multiplexer prefix preferences (per-type)
+        private const val KEY_MULTIPLEXER_PREFIX_TMUX = "multiplexer_custom_prefix_tmux"
+        private const val KEY_MULTIPLEXER_PREFIX_SCREEN = "multiplexer_custom_prefix_screen"
+        private const val KEY_MULTIPLEXER_PREFIX_ZELLIJ = "multiplexer_custom_prefix_zellij"
+
         // Defaults
+        const val DEFAULT_PREFIX_TMUX = "C-b"     // tmux default
+        const val DEFAULT_PREFIX_SCREEN = "C-a"   // screen default
+        const val DEFAULT_PREFIX_ZELLIJ = "C-g"   // zellij default
         const val DEFAULT_STARTUP_BEHAVIOR = "last_session"
         const val DEFAULT_PASSWORD_STORAGE_LEVEL = "encrypted"
         const val DEFAULT_THEME = "dracula"
@@ -140,7 +155,23 @@ class PreferenceManager(private val context: Context) {
     
     fun isBellNotificationEnabled(): Boolean = getBoolean(KEY_BELL_NOTIFICATION, true)
     fun setBellNotificationEnabled(enabled: Boolean) = setBoolean(KEY_BELL_NOTIFICATION, enabled)
-    
+
+    // Notification preferences
+    fun areNotificationsEnabled(): Boolean = getBoolean(KEY_NOTIFICATIONS_ENABLED, true)
+    fun setNotificationsEnabled(enabled: Boolean) = setBoolean(KEY_NOTIFICATIONS_ENABLED, enabled)
+
+    fun showConnectionNotifications(): Boolean =
+        areNotificationsEnabled() && getBoolean(KEY_SHOW_CONNECTION_NOTIFICATIONS, true)
+
+    fun showErrorNotifications(): Boolean =
+        areNotificationsEnabled() && getBoolean(KEY_SHOW_ERROR_NOTIFICATIONS, true)
+
+    fun showFileTransferNotifications(): Boolean =
+        areNotificationsEnabled() && getBoolean(KEY_SHOW_FILE_TRANSFER_NOTIFICATIONS, true)
+
+    fun isNotificationVibrateEnabled(): Boolean =
+        areNotificationsEnabled() && getBoolean(KEY_NOTIFICATION_VIBRATE, true)
+
     // UI preferences
     fun getMaxTabs(): Int = getInt(KEY_MAX_TABS, 10)
     fun setMaxTabs(maxTabs: Int) = setInt(KEY_MAX_TABS, maxTabs)
@@ -179,6 +210,24 @@ class PreferenceManager(private val context: Context) {
     fun isCompressionEnabled(): Boolean = getBoolean(KEY_COMPRESSION, true)
     fun setCompressionEnabled(enabled: Boolean) = setBoolean(KEY_COMPRESSION, enabled)
     
+    // Multiplexer prefix preferences (per-type)
+    fun getMultiplexerPrefix(type: String): String {
+        return when (type) {
+            "tmux" -> getString(KEY_MULTIPLEXER_PREFIX_TMUX, DEFAULT_PREFIX_TMUX)
+            "screen" -> getString(KEY_MULTIPLEXER_PREFIX_SCREEN, DEFAULT_PREFIX_SCREEN)
+            "zellij" -> getString(KEY_MULTIPLEXER_PREFIX_ZELLIJ, DEFAULT_PREFIX_ZELLIJ)
+            else -> DEFAULT_PREFIX_TMUX
+        }
+    }
+
+    fun setMultiplexerPrefix(type: String, prefix: String) {
+        when (type) {
+            "tmux" -> setString(KEY_MULTIPLEXER_PREFIX_TMUX, prefix)
+            "screen" -> setString(KEY_MULTIPLEXER_PREFIX_SCREEN, prefix)
+            "zellij" -> setString(KEY_MULTIPLEXER_PREFIX_ZELLIJ, prefix)
+        }
+    }
+
     // Accessibility preferences
     fun isHighContrastMode(): Boolean = getBoolean(KEY_HIGH_CONTRAST, false)
     fun setHighContrastMode(enabled: Boolean) = setBoolean(KEY_HIGH_CONTRAST, enabled)

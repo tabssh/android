@@ -480,20 +480,20 @@ class XenOrchestraApiClient(
     }
     
     /**
-     * Reboot a VM
-     * 
+     * Reboot a VM (graceful restart)
+     *
      * POST /rest/v0/vms/:id/restart
      */
     suspend fun rebootVM(vmId: String): Boolean = withContext(Dispatchers.IO) {
         try {
             Logger.d(TAG, "Rebooting VM: $vmId")
-            
+
             val request = buildAuthenticatedRequest(
                 "$baseUrl$API_PREFIX/vms/$vmId/restart",
                 "POST"
             )
             val response = executeRequest(request)
-            
+
             if (response.isSuccessful) {
                 Logger.i(TAG, "VM $vmId restart command sent successfully")
                 true
@@ -506,7 +506,36 @@ class XenOrchestraApiClient(
             false
         }
     }
-    
+
+    /**
+     * Hard reset a VM (immediate power cycle)
+     * Unlike reboot, this does not wait for graceful shutdown.
+     *
+     * POST /rest/v0/vms/:id/restart?force=true
+     */
+    suspend fun resetVM(vmId: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            Logger.d(TAG, "Resetting VM (hard): $vmId")
+
+            val request = buildAuthenticatedRequest(
+                "$baseUrl$API_PREFIX/vms/$vmId/restart?force=true",
+                "POST"
+            )
+            val response = executeRequest(request)
+
+            if (response.isSuccessful) {
+                Logger.i(TAG, "VM $vmId reset command sent successfully")
+                true
+            } else {
+                handleApiError(response)
+                false
+            }
+        } catch (e: Exception) {
+            Logger.e(TAG, "Error resetting VM $vmId: ${e.message}", e)
+            false
+        }
+    }
+
     /**
      * Suspend a VM
      * 
@@ -1355,4 +1384,57 @@ class XenOrchestraApiClient(
      * Check if WebSocket is connected
      */
     fun isWebSocketConnected(): Boolean = isWebSocketConnected
+
+    /**
+     * Get current auth token for external use (e.g., console connections)
+     */
+    fun getAuthToken(): String? = authToken
+
+    /**
+     * Get WebSocket URL for VM console
+     * Xen Orchestra provides console access via WebSocket
+     *
+     * @param vmId VM UUID
+     * @return WebSocket URL for console, or null on failure
+     */
+    suspend fun getConsoleWebSocketUrl(vmId: String): String? = withContext(Dispatchers.IO) {
+        try {
+            Logger.d(TAG, "Getting console URL for VM: $vmId")
+
+            // XO console URL format: wss://host:port/api/console/{vmId}
+            // Or via REST API: GET /rest/v0/vms/{vmId}/console which returns console info
+
+            // Try REST API first to get console details
+            try {
+                val request = buildAuthenticatedRequest("$baseUrl$API_PREFIX/vms/$vmId/console")
+                val response = executeRequest(request)
+
+                if (response.isSuccessful) {
+                    val body = response.body?.string()
+                    if (body != null) {
+                        val json = JSONObject(body)
+                        val consoleUrl = json.optString("url")
+
+                        if (consoleUrl.isNotEmpty()) {
+                            Logger.i(TAG, "Got console URL from API: $consoleUrl")
+                            return@withContext consoleUrl
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Logger.d(TAG, "Console API endpoint not available: ${e.message}")
+            }
+
+            // Fallback: construct WebSocket URL directly
+            val wsUrl = "wss://$host:$port/api/console/$vmId"
+            Logger.i(TAG, "Using constructed console URL: $wsUrl")
+            wsUrl
+        } catch (e: Exception) {
+            // API endpoint might not exist, use fallback
+            Logger.d(TAG, "Console API not available, using fallback URL")
+            val wsUrl = "wss://$host:$port/api/console/$vmId"
+            Logger.i(TAG, "Fallback console URL: $wsUrl")
+            wsUrl
+        }
+    }
 }

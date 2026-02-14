@@ -168,7 +168,8 @@ class VMwareManagerActivity : AppCompatActivity() {
                 val success = when (action) {
                     "start" -> currentClient?.startVM(vm.vm) ?: false
                     "stop" -> currentClient?.stopVM(vm.vm) ?: false
-                    "reboot" -> currentClient?.resetVM(vm.vm) ?: false
+                    "reboot" -> currentClient?.resetVM(vm.vm) ?: false // VMware uses reset for reboot
+                    "reset" -> currentClient?.resetVM(vm.vm) ?: false  // Hard reset
                     else -> false
                 }
                 
@@ -291,9 +292,11 @@ class VMwareManagerActivity : AppCompatActivity() {
             val name: TextView = view.findViewById(R.id.vm_name)
             val status: TextView = view.findViewById(R.id.vm_status)
             val info: TextView = view.findViewById(R.id.vm_info)
+            val consoleButton: Button = view.findViewById(R.id.console_button)
             val startButton: Button = view.findViewById(R.id.start_button)
             val stopButton: Button = view.findViewById(R.id.stop_button)
             val rebootButton: Button = view.findViewById(R.id.reboot_button)
+            val resetButton: Button = view.findViewById(R.id.reset_button)
         }
 
         override fun onCreateViewHolder(parent: android.view.ViewGroup, viewType: Int): ViewHolder {
@@ -304,11 +307,11 @@ class VMwareManagerActivity : AppCompatActivity() {
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val vm = vms[position]
-            
+
             holder.name.text = vm.name
             holder.status.text = vm.powerState.uppercase()
             holder.info.text = "CPUs: ${vm.cpuCount} | RAM: ${vm.memoryMB}MB"
-            
+
             holder.status.setTextColor(
                 when (vm.powerState.uppercase()) {
                     "POWERED_ON" -> 0xFF4CAF50.toInt()
@@ -316,14 +319,41 @@ class VMwareManagerActivity : AppCompatActivity() {
                     else -> 0xFFFF9800.toInt()
                 }
             )
-            
-            holder.startButton.isEnabled = vm.powerState.uppercase() != "POWERED_ON"
-            holder.stopButton.isEnabled = vm.powerState.uppercase() == "POWERED_ON"
-            holder.rebootButton.isEnabled = vm.powerState.uppercase() == "POWERED_ON"
-            
+
+            // Show/hide buttons based on VM status (better UX than disabled)
+            when (vm.powerState.uppercase()) {
+                "POWERED_ON" -> {
+                    // VM is running - show power controls, hide start
+                    // Note: VMware console requires IP (SSH-based)
+                    holder.consoleButton.visibility = if (vm.ipAddress != null) android.view.View.VISIBLE else android.view.View.GONE
+                    holder.startButton.visibility = android.view.View.GONE
+                    holder.stopButton.visibility = android.view.View.VISIBLE
+                    holder.rebootButton.visibility = android.view.View.VISIBLE
+                    holder.resetButton.visibility = android.view.View.VISIBLE
+                }
+                "POWERED_OFF" -> {
+                    // VM is stopped - only show start
+                    holder.consoleButton.visibility = android.view.View.GONE
+                    holder.startButton.visibility = android.view.View.VISIBLE
+                    holder.stopButton.visibility = android.view.View.GONE
+                    holder.rebootButton.visibility = android.view.View.GONE
+                    holder.resetButton.visibility = android.view.View.GONE
+                }
+                else -> {
+                    // Suspended, etc - show start/stop only
+                    holder.consoleButton.visibility = android.view.View.GONE
+                    holder.startButton.visibility = android.view.View.VISIBLE
+                    holder.stopButton.visibility = android.view.View.VISIBLE
+                    holder.rebootButton.visibility = android.view.View.GONE
+                    holder.resetButton.visibility = android.view.View.GONE
+                }
+            }
+
+            holder.consoleButton.setOnClickListener { onAction(vm, "console") }
             holder.startButton.setOnClickListener { onAction(vm, "start") }
             holder.stopButton.setOnClickListener { onAction(vm, "stop") }
             holder.rebootButton.setOnClickListener { onAction(vm, "reboot") }
+            holder.resetButton.setOnClickListener { onAction(vm, "reset") }
         }
 
         override fun getItemCount() = vms.size

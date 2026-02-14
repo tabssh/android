@@ -19,12 +19,16 @@ import java.nio.charset.Charset
 /**
  * VT100/ANSI Terminal Emulator
  * Processes terminal escape sequences and maintains terminal state
+ * Uses ANSIParser for full ANSI/VT100 escape sequence handling
  */
 class TerminalEmulator(private val buffer: TerminalBuffer) {
 
     companion object {
         private const val READ_BUFFER_SIZE = 4096
     }
+
+    // ANSI Parser for proper escape sequence handling
+    private val ansiParser = ANSIParser(buffer)
 
     private var currentCharset = Charset.forName("UTF-8")
     private var cursorX = 0
@@ -46,13 +50,15 @@ class TerminalEmulator(private val buffer: TerminalBuffer) {
 
     /**
      * Process input data from SSH connection
+     * Uses ANSIParser for full ANSI/VT100 escape sequence handling
      */
     fun processInput(data: ByteArray) {
-        val text = String(data, currentCharset)
-        for (char in text) {
-            processChar(char)
-        }
-        buffer.setCursorPosition(cursorX, cursorY)
+        // Use ANSIParser for proper escape sequence handling
+        ansiParser.processInput(data)
+
+        // Update cursor position from buffer (ANSIParser updates it)
+        cursorX = buffer.getCursorCol()
+        cursorY = buffer.getCursorRow()
     }
 
     /**

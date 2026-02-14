@@ -263,6 +263,7 @@ class XCPngManagerActivity : AppCompatActivity() {
                         "stop" -> currentXoClient?.stopVM(vm.uuid, force = true) ?: false
                         "shutdown" -> currentXoClient?.stopVM(vm.uuid, force = false) ?: false
                         "reboot" -> currentXoClient?.rebootVM(vm.uuid) ?: false
+                        "reset" -> currentXoClient?.resetVM(vm.uuid) ?: false
                         else -> false
                     }
                 } else {
@@ -272,6 +273,7 @@ class XCPngManagerActivity : AppCompatActivity() {
                         "stop" -> currentClient?.hardShutdownVM(vm.uuid) ?: false
                         "shutdown" -> currentClient?.shutdownVM(vm.uuid) ?: false
                         "reboot" -> currentClient?.rebootVM(vm.uuid) ?: false
+                        "reset" -> currentClient?.hardRebootVM(vm.uuid) ?: false
                         else -> false
                     }
                 }
@@ -292,58 +294,38 @@ class XCPngManagerActivity : AppCompatActivity() {
     }
 
     private fun openVMConsole(vm: XCPngApiClient.XenVM) {
-        if (vm.ipAddress == null) {
-            Toast.makeText(this, "VM IP address not available", Toast.LENGTH_SHORT).show()
+        // Get current hypervisor profile for credentials
+        val position = serverSpinner.selectedItemPosition
+        if (position < 0 || position >= hypervisors.size) {
+            Toast.makeText(this, "No hypervisor selected", Toast.LENGTH_SHORT).show()
             return
         }
+        val profile = hypervisors[position]
 
-        lifecycleScope.launch {
-            try {
-                // Get or create connection profile for VM
-                val connectionName = "${vm.name}-console"
-                var connection = app.database.connectionDao().getAllConnections()
-                    .let { flow -> 
-                        var result: io.github.tabssh.storage.database.entities.ConnectionProfile? = null
-                        flow.collect { connections ->
-                            result = connections.firstOrNull { it.name == connectionName }
-                        }
-                        result
-                    }
-
-                if (connection == null) {
-                    // Create new connection profile
-                    connection = io.github.tabssh.storage.database.entities.ConnectionProfile(
-                        id = java.util.UUID.randomUUID().toString(),
-                        name = connectionName,
-                        host = vm.ipAddress!!,
-                        port = 22,
-                        username = "root",
-                        authType = io.github.tabssh.ssh.auth.AuthType.PASSWORD.name,
-                        createdAt = System.currentTimeMillis(),
-                        modifiedAt = System.currentTimeMillis()
-                    )
-                    app.database.connectionDao().insertConnection(connection)
-                    Logger.i("XCPngManager", "Created connection profile for VM: ${vm.name}")
-                } else {
-                    // Update existing connection with latest IP
-                    connection = connection.copy(
-                        host = vm.ipAddress!!,
-                        modifiedAt = System.currentTimeMillis()
-                    )
-                    app.database.connectionDao().updateConnection(connection)
-                    Logger.i("XCPngManager", "Updated connection profile for VM: ${vm.name}")
-                }
-
-                // Launch terminal activity with auto-connect
-                val intent = TabTerminalActivity.createIntent(this@XCPngManagerActivity, connection, autoConnect = true)
-                startActivity(intent)
-                
-                Toast.makeText(this@XCPngManagerActivity, "Opening console for ${vm.name}", Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                Logger.e("XCPngManager", "Failed to open VM console", e)
-                showError("Failed to open console: ${e.message}", "Error")
-            }
+        // Determine hypervisor type (Xen Orchestra or direct XCP-ng)
+        val hypervisorType = if (isXenOrchestra) {
+            VMConsoleActivity.TYPE_XEN_ORCHESTRA
+        } else {
+            VMConsoleActivity.TYPE_XCPNG
         }
+
+        // Launch VMConsoleActivity for serial console (works without VM network)
+        val intent = android.content.Intent(this, VMConsoleActivity::class.java).apply {
+            putExtra(VMConsoleActivity.EXTRA_HYPERVISOR_TYPE, hypervisorType)
+            putExtra(VMConsoleActivity.EXTRA_VM_ID, vm.uuid)
+            putExtra(VMConsoleActivity.EXTRA_VM_NAME, vm.name)
+            putExtra(VMConsoleActivity.EXTRA_VM_REF, vm.uuid) // XCP-ng uses uuid as reference
+            putExtra(VMConsoleActivity.EXTRA_HOST, profile.host)
+            putExtra(VMConsoleActivity.EXTRA_PORT, profile.port)
+            putExtra(VMConsoleActivity.EXTRA_USERNAME, profile.username)
+            putExtra(VMConsoleActivity.EXTRA_PASSWORD, profile.password)
+            putExtra(VMConsoleActivity.EXTRA_IS_XEN_ORCHESTRA, isXenOrchestra)
+        }
+        startActivity(intent)
+
+        val consoleType = if (isXenOrchestra) "Xen Orchestra" else "XCP-ng"
+        Toast.makeText(this, "Opening serial console for ${vm.name}", Toast.LENGTH_SHORT).show()
+        Logger.i("XCPngManager", "Launching $consoleType serial console for VM: ${vm.name} (uuid=${vm.uuid})")
     }
 
     private fun showAddServerDialog() {
@@ -413,9 +395,11 @@ class XCPngManagerActivity : AppCompatActivity() {
             val name: TextView = view.findViewById(R.id.vm_name)
             val status: TextView = view.findViewById(R.id.vm_status)
             val info: TextView = view.findViewById(R.id.vm_info)
+            val consoleButton: Button = view.findViewById(R.id.console_button)
             val startButton: Button = view.findViewById(R.id.start_button)
             val stopButton: Button = view.findViewById(R.id.stop_button)
             val rebootButton: Button = view.findViewById(R.id.reboot_button)
+            val resetButton: Button = view.findViewById(R.id.reset_button)
             val snapshotsButton: Button = view.findViewById(R.id.snapshots_button)
         }
 
@@ -427,11 +411,11 @@ class XCPngManagerActivity : AppCompatActivity() {
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val vm = vms[position]
-            
+
             holder.name.text = vm.name
             holder.status.text = vm.powerState.uppercase()
             holder.info.text = "CPUs: ${vm.vcpus} | RAM: ${vm.memory / 1024 / 1024}MB"
-            
+
             holder.status.setTextColor(
                 when (vm.powerState.lowercase()) {
                     "running" -> 0xFF4CAF50.toInt()
@@ -439,24 +423,50 @@ class XCPngManagerActivity : AppCompatActivity() {
                     else -> 0xFFFF9800.toInt()
                 }
             )
-            
-            holder.startButton.isEnabled = vm.powerState.lowercase() != "running"
-            holder.stopButton.isEnabled = vm.powerState.lowercase() == "running"
-            holder.rebootButton.isEnabled = vm.powerState.lowercase() == "running"
-            
+
+            // Show/hide buttons based on VM status (better UX than disabled)
+            when (vm.powerState.lowercase()) {
+                "running" -> {
+                    // VM is running - show power controls, hide start
+                    holder.consoleButton.visibility = View.VISIBLE
+                    holder.startButton.visibility = View.GONE
+                    holder.stopButton.visibility = View.VISIBLE
+                    holder.rebootButton.visibility = View.VISIBLE
+                    holder.resetButton.visibility = View.VISIBLE
+                }
+                "halted", "stopped" -> {
+                    // VM is stopped - only show start
+                    holder.consoleButton.visibility = View.GONE
+                    holder.startButton.visibility = View.VISIBLE
+                    holder.stopButton.visibility = View.GONE
+                    holder.rebootButton.visibility = View.GONE
+                    holder.resetButton.visibility = View.GONE
+                }
+                else -> {
+                    // Paused, suspended, etc - show start/stop only
+                    holder.consoleButton.visibility = View.GONE
+                    holder.startButton.visibility = View.VISIBLE
+                    holder.stopButton.visibility = View.VISIBLE
+                    holder.rebootButton.visibility = View.GONE
+                    holder.resetButton.visibility = View.GONE
+                }
+            }
+
             // Show snapshots button only for XO connections
             if (isXenOrchestra) {
                 holder.snapshotsButton.visibility = View.VISIBLE
-                holder.snapshotsButton.setOnClickListener { 
+                holder.snapshotsButton.setOnClickListener {
                     showSnapshotDialog(vm)
                 }
             } else {
                 holder.snapshotsButton.visibility = View.GONE
             }
-            
+
+            holder.consoleButton.setOnClickListener { onAction(vm, "console") }
             holder.startButton.setOnClickListener { onAction(vm, "start") }
             holder.stopButton.setOnClickListener { onAction(vm, "stop") }
             holder.rebootButton.setOnClickListener { onAction(vm, "reboot") }
+            holder.resetButton.setOnClickListener { onAction(vm, "reset") }
         }
 
         override fun getItemCount() = vms.size

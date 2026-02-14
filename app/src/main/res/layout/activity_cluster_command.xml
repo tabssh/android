@@ -1,28 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:layout_height="match_parent">
 
     <com.google.android.material.appbar.AppBarLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
 
-        <androidx.appcompat.widget.Toolbar
+        <com.google.android.material.appbar.MaterialToolbar
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
-            android:background="?attr/colorPrimary"
-            android:elevation="4dp"
-            app:popupTheme="@style/ThemeOverlay.AppCompat.Light"
-            app:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar" />
+            style="@style/Widget.Material3.Toolbar" />
 
     </com.google.android.material.appbar.AppBarLayout>
 
-    <ScrollView
+    <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
+        android:layout_height="match_parent"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -31,48 +28,153 @@
             android:padding="16dp">
 
             <!-- Connection Selection -->
-            <TextView
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Select Connections"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:paddingBottom="8dp" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingBottom="8dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Select Connections"
+                    android:textAppearance="@style/TextAppearance.Material3.TitleMedium" />
+
+                <TextView
+                    android:id="@+id/selected_count"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0 selected"
+                    android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+                    android:textColor="?attr/colorPrimary" />
+
+            </LinearLayout>
+
+            <!-- Search connections -->
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="🔍 Filter connections..."
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_marginBottom="8dp">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/search_connections"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="text"
+                    android:imeOptions="actionSearch"
+                    android:maxLines="1" />
+
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- Quick selection buttons -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="8dp">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/button_select_all"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Select All"
+                    android:layout_marginEnd="4dp"
+                    style="@style/Widget.Material3.Button.TonalButton" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/button_select_none"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Select None"
+                    android:layout_marginStart="4dp"
+                    style="@style/Widget.Material3.Button.OutlinedButton" />
+
+            </LinearLayout>
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/connection_list"
                 android:layout_width="match_parent"
-                android:layout_height="200dp"
+                android:layout_height="wrap_content"
+                android:minHeight="100dp"
+                android:maxHeight="300dp"
                 android:background="?attr/colorSurfaceVariant"
-                android:padding="8dp" />
+                android:padding="8dp"
+                android:nestedScrollingEnabled="true" />
 
             <!-- Command Input -->
-            <TextView
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Command"
-                android:textSize="18sp"
-                android:textStyle="bold"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
                 android:paddingTop="16dp"
-                android:paddingBottom="8dp" />
+                android:paddingBottom="8dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Command"
+                    android:textAppearance="@style/TextAppearance.Material3.TitleMedium" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/button_from_snippet"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="From Snippet"
+                    app:icon="@drawable/ic_code"
+                    style="@style/Widget.Material3.Button.TextButton" />
+
+            </LinearLayout>
+
+            <!-- Command history chips -->
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none"
+                android:layout_marginBottom="8dp">
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/command_history_chips"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:singleLine="true"
+                    app:chipSpacingHorizontal="8dp">
+
+                    <!-- Chips will be added programmatically -->
+
+                </com.google.android.material.chip.ChipGroup>
+
+            </HorizontalScrollView>
 
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="Enter command to execute"
-                style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
+                android:hint="Enter command (multi-line supported)"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                app:counterEnabled="true"
+                app:counterMaxLength="1000">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/command_input"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:inputType="text"
-                    android:maxLines="1" />
+                    android:inputType="textMultiLine"
+                    android:minLines="2"
+                    android:maxLines="6"
+                    android:gravity="top"
+                    android:fontFamily="monospace" />
 
             </com.google.android.material.textfield.TextInputLayout>
 
             <!-- Execute Button -->
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/execute_button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -81,7 +183,7 @@
                 style="@style/Widget.Material3.Button" />
 
             <!-- Cancel Button -->
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/cancel_button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -90,12 +192,12 @@
                 style="@style/Widget.Material3.Button.TonalButton" />
 
             <!-- Progress -->
-            <ProgressBar
+            <com.google.android.material.progressindicator.LinearProgressIndicator
                 android:id="@+id/progress_bar"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                style="@style/Widget.AppCompat.ProgressBar.Horizontal" />
+                android:indeterminate="false" />
 
             <TextView
                 android:id="@+id/progress_text"
@@ -103,6 +205,7 @@
                 android:layout_height="wrap_content"
                 android:text="0/0 completed (0 success, 0 failed)"
                 android:textAlignment="center"
+                android:textAppearance="@style/TextAppearance.Material3.BodySmall"
                 android:paddingTop="8dp" />
 
             <!-- Results -->
@@ -110,8 +213,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="Results"
-                android:textSize="18sp"
-                android:textStyle="bold"
+                android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
                 android:paddingTop="24dp"
                 android:paddingBottom="8dp" />
 
@@ -120,10 +222,54 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:background="?attr/colorSurfaceVariant"
-                android:padding="8dp" />
+                android:padding="16dp"
+                android:nestedScrollingEnabled="false" />
 
         </LinearLayout>
 
-    </ScrollView>
+    </androidx.core.widget.NestedScrollView>
 
-</LinearLayout>
+    <!-- Empty state - shown when no connections available -->
+    <LinearLayout
+        android:id="@+id/layout_empty_state"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="32dp"
+        android:visibility="gone"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🖥️"
+            android:textSize="64sp"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="No Connections"
+            android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Create a connection first to run\ncluster commands on multiple servers"
+            android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+            android:textColor="?android:attr/textColorSecondary"
+            android:gravity="center"
+            android:layout_marginBottom="24dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/button_add_connection"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Add Connection"
+            style="@style/Widget.Material3.Button.TonalButton" />
+
+    </LinearLayout>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

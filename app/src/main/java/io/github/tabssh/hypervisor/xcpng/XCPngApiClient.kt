@@ -198,6 +198,21 @@ class XCPngApiClient(
         }
     }
 
+    /**
+     * Hard reboot a VM (immediate power cycle, like pressing reset button)
+     * Unlike clean_reboot, this does not wait for graceful shutdown.
+     */
+    suspend fun hardRebootVM(uuid: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            xmlRpcCall(buildXmlRequest("VM.hard_reboot", listOf(uuid)))
+            Logger.i("XCPngAPI", "Hard reboot VM $uuid")
+            true
+        } catch (e: Exception) {
+            Logger.e("XCPngAPI", "Failed to hard reboot VM", e)
+            false
+        }
+    }
+
     private fun buildXmlRequest(method: String, params: List<String>): String {
         val paramsXml = params.joinToString("") { param ->
             "<param><value>$param</value></param>"
@@ -258,18 +273,90 @@ class XCPngApiClient(
     private fun parseArrayResponse(xml: String): List<String> {
         val values = mutableListOf<String>()
         var index = 0
-        
+
         while (true) {
             val start = xml.indexOf("<value>", index)
             if (start == -1) break
-            
+
             val end = xml.indexOf("</value>", start)
             if (end == -1) break
-            
+
             values.add(xml.substring(start + 7, end))
             index = end + 8
         }
-        
+
         return values
+    }
+
+    /**
+     * Get console URL for VM.
+     * Uses XenAPI to get console reference and location.
+     *
+     * @param vmRef VM reference (OpaqueRef:...)
+     * @return WebSocket URL for console, or null on failure
+     */
+    suspend fun getConsoleUrl(vmRef: String): String? = withContext(Dispatchers.IO) {
+        try {
+            Logger.d("XCPngAPI", "Getting console for VM: $vmRef")
+
+            // Get console references for this VM
+            val consolesResponse = xmlRpcCall(buildXmlRequest("VM.get_consoles", listOf(vmRef)))
+            val consoleRefs = parseArrayResponse(consolesResponse)
+
+            if (consoleRefs.isEmpty()) {
+                Logger.w("XCPngAPI", "No consoles found for VM")
+                return@withContext null
+            }
+
+            // Get the first console (typically VNC or text console)
+            val consoleRef = consoleRefs.firstOrNull { it.startsWith("OpaqueRef:") }
+            if (consoleRef == null) {
+                Logger.w("XCPngAPI", "No valid console reference found")
+                return@withContext null
+            }
+
+            Logger.d("XCPngAPI", "Found console ref: $consoleRef")
+
+            // Get console location (URL)
+            val locationResponse = xmlRpcCall(buildXmlRequest("console.get_location", listOf(consoleRef)))
+            val location = parseStringResponse(locationResponse)
+
+            if (location.isNotEmpty()) {
+                // The location might be HTTP, convert to WebSocket if needed
+                val wsUrl = if (location.startsWith("http://")) {
+                    location.replace("http://", "ws://")
+                } else if (location.startsWith("https://")) {
+                    location.replace("https://", "wss://")
+                } else {
+                    // Assume it's already a proper URL, construct WebSocket URL
+                    "wss://$host/console?ref=$consoleRef&session_id=$sessionId"
+                }
+
+                Logger.i("XCPngAPI", "Console URL: $wsUrl")
+                wsUrl
+            } else {
+                // Fallback: construct console URL manually
+                val fallbackUrl = "wss://$host/console?ref=$consoleRef&session_id=$sessionId"
+                Logger.i("XCPngAPI", "Using fallback console URL: $fallbackUrl")
+                fallbackUrl
+            }
+        } catch (e: Exception) {
+            Logger.e("XCPngAPI", "Failed to get console URL", e)
+            null
+        }
+    }
+
+    /**
+     * Get VM reference by UUID
+     */
+    suspend fun getVMRefByUUID(uuid: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val response = xmlRpcCall(buildXmlRequest("VM.get_by_uuid", listOf(uuid)))
+            val ref = parseStringResponse(response)
+            if (ref.startsWith("OpaqueRef:")) ref else null
+        } catch (e: Exception) {
+            Logger.e("XCPngAPI", "Failed to get VM ref for UUID $uuid", e)
+            null
+        }
     }
 }

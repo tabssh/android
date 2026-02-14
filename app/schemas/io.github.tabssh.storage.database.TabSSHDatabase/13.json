@@ -1,0 +1,1521 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 13,
+    "identityHash": "ea85e9f2f65bb3fc8667c441a5f2994f",
+    "entities": [
+      {
+        "tableName": "connections",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `host` TEXT NOT NULL, `port` INTEGER NOT NULL, `username` TEXT NOT NULL, `auth_type` TEXT NOT NULL, `key_id` TEXT, `save_password` INTEGER NOT NULL, `terminal_type` TEXT NOT NULL, `encoding` TEXT NOT NULL, `compression` INTEGER NOT NULL, `keep_alive` INTEGER NOT NULL, `x11_forwarding` INTEGER NOT NULL, `use_mosh` INTEGER NOT NULL, `multiplexer_mode` TEXT NOT NULL, `multiplexer_session_name` TEXT, `port_knock_enabled` INTEGER, `port_knock_sequence` TEXT, `port_knock_delay_ms` INTEGER NOT NULL, `connect_timeout` INTEGER NOT NULL, `read_timeout` INTEGER NOT NULL, `proxy_host` TEXT, `proxy_port` INTEGER, `proxy_type` TEXT, `proxy_username` TEXT, `proxy_auth_type` TEXT, `proxy_key_id` TEXT, `identity_id` TEXT, `theme` TEXT NOT NULL, `group_id` TEXT, `sort_order` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `last_connected` INTEGER NOT NULL, `connection_count` INTEGER NOT NULL, `advanced_settings` TEXT, `last_synced_at` INTEGER NOT NULL, `sync_version` INTEGER NOT NULL, `modified_at` INTEGER NOT NULL, `sync_device_id` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "host",
+            "columnName": "host",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "port",
+            "columnName": "port",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "username",
+            "columnName": "username",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "authType",
+            "columnName": "auth_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "keyId",
+            "columnName": "key_id",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "savePassword",
+            "columnName": "save_password",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "terminalType",
+            "columnName": "terminal_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "encoding",
+            "columnName": "encoding",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "compression",
+            "columnName": "compression",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "keepAlive",
+            "columnName": "keep_alive",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "x11Forwarding",
+            "columnName": "x11_forwarding",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "useMosh",
+            "columnName": "use_mosh",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "multiplexerMode",
+            "columnName": "multiplexer_mode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "multiplexerSessionName",
+            "columnName": "multiplexer_session_name",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "portKnockEnabled",
+            "columnName": "port_knock_enabled",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "portKnockSequence",
+            "columnName": "port_knock_sequence",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "portKnockDelayMs",
+            "columnName": "port_knock_delay_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "connectTimeout",
+            "columnName": "connect_timeout",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "readTimeout",
+            "columnName": "read_timeout",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "proxyHost",
+            "columnName": "proxy_host",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "proxyPort",
+            "columnName": "proxy_port",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "proxyType",
+            "columnName": "proxy_type",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "proxyUsername",
+            "columnName": "proxy_username",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "proxyAuthType",
+            "columnName": "proxy_auth_type",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "proxyKeyId",
+            "columnName": "proxy_key_id",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "identityId",
+            "columnName": "identity_id",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "theme",
+            "columnName": "theme",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "groupId",
+            "columnName": "group_id",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "sortOrder",
+            "columnName": "sort_order",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastConnected",
+            "columnName": "last_connected",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "connectionCount",
+            "columnName": "connection_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "advancedSettings",
+            "columnName": "advanced_settings",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "last_synced_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncVersion",
+            "columnName": "sync_version",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "modifiedAt",
+            "columnName": "modified_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncDeviceId",
+            "columnName": "sync_device_id",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "stored_keys",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`keyId` TEXT NOT NULL, `name` TEXT NOT NULL, `key_type` TEXT NOT NULL, `comment` TEXT, `fingerprint` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `last_used` INTEGER NOT NULL, `requires_passphrase` INTEGER NOT NULL, `key_size` INTEGER, `last_synced_at` INTEGER NOT NULL, `sync_version` INTEGER NOT NULL, `modified_at` INTEGER NOT NULL, `sync_device_id` TEXT NOT NULL, PRIMARY KEY(`keyId`))",
+        "fields": [
+          {
+            "fieldPath": "keyId",
+            "columnName": "keyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "keyType",
+            "columnName": "key_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "comment",
+            "columnName": "comment",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "fingerprint",
+            "columnName": "fingerprint",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastUsed",
+            "columnName": "last_used",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requiresPassphrase",
+            "columnName": "requires_passphrase",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "keySize",
+            "columnName": "key_size",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "last_synced_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncVersion",
+            "columnName": "sync_version",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "modifiedAt",
+            "columnName": "modified_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncDeviceId",
+            "columnName": "sync_device_id",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "keyId"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "host_keys",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `hostname` TEXT NOT NULL, `port` INTEGER NOT NULL, `key_type` TEXT NOT NULL, `public_key` TEXT NOT NULL, `fingerprint` TEXT NOT NULL, `first_seen` INTEGER NOT NULL, `last_verified` INTEGER NOT NULL, `trust_level` TEXT NOT NULL, `last_synced_at` INTEGER NOT NULL, `sync_version` INTEGER NOT NULL, `modified_at` INTEGER NOT NULL, `sync_device_id` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hostname",
+            "columnName": "hostname",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "port",
+            "columnName": "port",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "keyType",
+            "columnName": "key_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "publicKey",
+            "columnName": "public_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fingerprint",
+            "columnName": "fingerprint",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "firstSeen",
+            "columnName": "first_seen",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastVerified",
+            "columnName": "last_verified",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "trustLevel",
+            "columnName": "trust_level",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "last_synced_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncVersion",
+            "columnName": "sync_version",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "modifiedAt",
+            "columnName": "modified_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncDeviceId",
+            "columnName": "sync_device_id",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "tab_sessions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`session_id` TEXT NOT NULL, `tab_id` TEXT NOT NULL, `connection_id` TEXT NOT NULL, `title` TEXT NOT NULL, `is_active` INTEGER NOT NULL, `terminal_content` TEXT NOT NULL, `cursor_row` INTEGER NOT NULL, `cursor_col` INTEGER NOT NULL, `scroll_position` INTEGER NOT NULL, `working_directory` TEXT NOT NULL, `environment_vars` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `last_activity` INTEGER NOT NULL, `session_state` TEXT NOT NULL, `terminal_rows` INTEGER NOT NULL, `terminal_cols` INTEGER NOT NULL, `font_size` REAL NOT NULL, `connection_state` TEXT NOT NULL, `last_error` TEXT, `has_unread_output` INTEGER NOT NULL, `unread_lines` INTEGER NOT NULL, `tab_order` INTEGER NOT NULL, PRIMARY KEY(`session_id`), FOREIGN KEY(`connection_id`) REFERENCES `connections`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "sessionId",
+            "columnName": "session_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tabId",
+            "columnName": "tab_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "connectionId",
+            "columnName": "connection_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isActive",
+            "columnName": "is_active",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "terminalContent",
+            "columnName": "terminal_content",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cursorRow",
+            "columnName": "cursor_row",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cursorCol",
+            "columnName": "cursor_col",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "scrollPosition",
+            "columnName": "scroll_position",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "workingDirectory",
+            "columnName": "working_directory",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "environmentVars",
+            "columnName": "environment_vars",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastActivity",
+            "columnName": "last_activity",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sessionState",
+            "columnName": "session_state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "terminalRows",
+            "columnName": "terminal_rows",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "terminalCols",
+            "columnName": "terminal_cols",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fontSize",
+            "columnName": "font_size",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "connectionState",
+            "columnName": "connection_state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastError",
+            "columnName": "last_error",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "hasUnreadOutput",
+            "columnName": "has_unread_output",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unreadLines",
+            "columnName": "unread_lines",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tabOrder",
+            "columnName": "tab_order",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "session_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_tab_sessions_connection_id",
+            "unique": false,
+            "columnNames": [
+              "connection_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tab_sessions_connection_id` ON `${TABLE_NAME}` (`connection_id`)"
+          },
+          {
+            "name": "index_tab_sessions_tab_id",
+            "unique": true,
+            "columnNames": [
+              "tab_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_tab_sessions_tab_id` ON `${TABLE_NAME}` (`tab_id`)"
+          },
+          {
+            "name": "index_tab_sessions_is_active",
+            "unique": false,
+            "columnNames": [
+              "is_active"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tab_sessions_is_active` ON `${TABLE_NAME}` (`is_active`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "connections",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "connection_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "themes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`themeId` TEXT NOT NULL, `name` TEXT NOT NULL, `author` TEXT, `version` TEXT NOT NULL, `is_dark` INTEGER NOT NULL, `is_built_in` INTEGER NOT NULL, `background_color` INTEGER NOT NULL, `foreground_color` INTEGER NOT NULL, `cursor_color` INTEGER NOT NULL, `selection_color` INTEGER NOT NULL, `ansi_colors` TEXT NOT NULL, `ui_colors` TEXT, `created_at` INTEGER NOT NULL, `last_modified` INTEGER NOT NULL, `usage_count` INTEGER NOT NULL, `last_synced_at` INTEGER NOT NULL, `sync_version` INTEGER NOT NULL, `modified_at` INTEGER NOT NULL, `sync_device_id` TEXT NOT NULL, PRIMARY KEY(`themeId`))",
+        "fields": [
+          {
+            "fieldPath": "themeId",
+            "columnName": "themeId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "author",
+            "columnName": "author",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "version",
+            "columnName": "version",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isDark",
+            "columnName": "is_dark",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isBuiltIn",
+            "columnName": "is_built_in",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "backgroundColor",
+            "columnName": "background_color",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "foregroundColor",
+            "columnName": "foreground_color",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cursorColor",
+            "columnName": "cursor_color",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "selectionColor",
+            "columnName": "selection_color",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ansiColors",
+            "columnName": "ansi_colors",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "uiColors",
+            "columnName": "ui_colors",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastModified",
+            "columnName": "last_modified",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "usageCount",
+            "columnName": "usage_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "last_synced_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncVersion",
+            "columnName": "sync_version",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "modifiedAt",
+            "columnName": "modified_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncDeviceId",
+            "columnName": "sync_device_id",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "themeId"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "trusted_certificates",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `hostname` TEXT NOT NULL, `port` INTEGER NOT NULL, `fingerprint` TEXT NOT NULL, `algorithm` TEXT NOT NULL, `certificate_data` TEXT NOT NULL, `subject` TEXT NOT NULL, `issuer` TEXT NOT NULL, `serial_number` TEXT NOT NULL, `not_before` INTEGER NOT NULL, `not_after` INTEGER NOT NULL, `expires_at` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `last_used` INTEGER NOT NULL, `trust_level` TEXT NOT NULL, `is_self_signed` INTEGER NOT NULL, `is_ca_signed` INTEGER NOT NULL, `key_usage` TEXT, `extended_key_usage` TEXT, `subject_alternative_names` TEXT, `verification_status` TEXT NOT NULL, `notes` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hostname",
+            "columnName": "hostname",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "port",
+            "columnName": "port",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fingerprint",
+            "columnName": "fingerprint",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "algorithm",
+            "columnName": "algorithm",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "certificateData",
+            "columnName": "certificate_data",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "subject",
+            "columnName": "subject",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "issuer",
+            "columnName": "issuer",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "serialNumber",
+            "columnName": "serial_number",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notBefore",
+            "columnName": "not_before",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notAfter",
+            "columnName": "not_after",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expiresAt",
+            "columnName": "expires_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastUsed",
+            "columnName": "last_used",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "trustLevel",
+            "columnName": "trust_level",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isSelfSigned",
+            "columnName": "is_self_signed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isCaSigned",
+            "columnName": "is_ca_signed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "keyUsage",
+            "columnName": "key_usage",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "extendedKeyUsage",
+            "columnName": "extended_key_usage",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "subjectAlternativeNames",
+            "columnName": "subject_alternative_names",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "verificationStatus",
+            "columnName": "verification_status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": false
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_trusted_certificates_hostname",
+            "unique": false,
+            "columnNames": [
+              "hostname"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_trusted_certificates_hostname` ON `${TABLE_NAME}` (`hostname`)"
+          },
+          {
+            "name": "index_trusted_certificates_fingerprint",
+            "unique": true,
+            "columnNames": [
+              "fingerprint"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_trusted_certificates_fingerprint` ON `${TABLE_NAME}` (`fingerprint`)"
+          },
+          {
+            "name": "index_trusted_certificates_hostname_port",
+            "unique": true,
+            "columnNames": [
+              "hostname",
+              "port"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_trusted_certificates_hostname_port` ON `${TABLE_NAME}` (`hostname`, `port`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "sync_state",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `entity_type` TEXT NOT NULL, `entity_id` TEXT NOT NULL, `last_synced_at` INTEGER NOT NULL, `sync_version` INTEGER NOT NULL, `device_id` TEXT NOT NULL, `sync_hash` TEXT NOT NULL, `conflict_status` TEXT, `created_at` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "entityType",
+            "columnName": "entity_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "entityId",
+            "columnName": "entity_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "last_synced_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncVersion",
+            "columnName": "sync_version",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deviceId",
+            "columnName": "device_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncHash",
+            "columnName": "sync_hash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "conflictStatus",
+            "columnName": "conflict_status",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_sync_state_entity_type_entity_id",
+            "unique": true,
+            "columnNames": [
+              "entity_type",
+              "entity_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_sync_state_entity_type_entity_id` ON `${TABLE_NAME}` (`entity_type`, `entity_id`)"
+          },
+          {
+            "name": "index_sync_state_entity_type_last_synced_at",
+            "unique": false,
+            "columnNames": [
+              "entity_type",
+              "last_synced_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_sync_state_entity_type_last_synced_at` ON `${TABLE_NAME}` (`entity_type`, `last_synced_at`)"
+          },
+          {
+            "name": "index_sync_state_conflict_status",
+            "unique": false,
+            "columnNames": [
+              "conflict_status"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_sync_state_conflict_status` ON `${TABLE_NAME}` (`conflict_status`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "connection_groups",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `parent_id` TEXT, `icon` TEXT, `color` TEXT, `sort_order` INTEGER NOT NULL, `is_collapsed` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `modified_at` INTEGER NOT NULL, `last_synced_at` INTEGER NOT NULL, `sync_version` INTEGER NOT NULL, `sync_device_id` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "parentId",
+            "columnName": "parent_id",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "icon",
+            "columnName": "icon",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "color",
+            "columnName": "color",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "sortOrder",
+            "columnName": "sort_order",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isCollapsed",
+            "columnName": "is_collapsed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "modifiedAt",
+            "columnName": "modified_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "last_synced_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncVersion",
+            "columnName": "sync_version",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncDeviceId",
+            "columnName": "sync_device_id",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "snippets",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `command` TEXT NOT NULL, `description` TEXT NOT NULL, `category` TEXT NOT NULL, `tags` TEXT NOT NULL, `usage_count` INTEGER NOT NULL, `is_favorite` INTEGER NOT NULL, `sort_order` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `modified_at` INTEGER NOT NULL, `last_synced_at` INTEGER NOT NULL, `sync_version` INTEGER NOT NULL, `sync_device_id` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "command",
+            "columnName": "command",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "category",
+            "columnName": "category",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tags",
+            "columnName": "tags",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "usageCount",
+            "columnName": "usage_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isFavorite",
+            "columnName": "is_favorite",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sortOrder",
+            "columnName": "sort_order",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "modifiedAt",
+            "columnName": "modified_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "last_synced_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncVersion",
+            "columnName": "sync_version",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncDeviceId",
+            "columnName": "sync_device_id",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "identities",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `username` TEXT NOT NULL, `auth_type` TEXT NOT NULL, `key_id` TEXT, `description` TEXT, `created_at` INTEGER NOT NULL, `modified_at` INTEGER NOT NULL, `last_synced_at` INTEGER, `sync_version` INTEGER NOT NULL, `sync_device_id` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "username",
+            "columnName": "username",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "authType",
+            "columnName": "auth_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "keyId",
+            "columnName": "key_id",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "modifiedAt",
+            "columnName": "modified_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "last_synced_at",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "syncVersion",
+            "columnName": "sync_version",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncDeviceId",
+            "columnName": "sync_device_id",
+            "affinity": "TEXT",
+            "notNull": false
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "audit_log",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `connection_id` TEXT NOT NULL, `session_id` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `event_type` TEXT NOT NULL, `command` TEXT, `output` TEXT, `exit_code` INTEGER, `user` TEXT NOT NULL, `host` TEXT NOT NULL, `port` INTEGER NOT NULL, `size_bytes` INTEGER NOT NULL, `metadata` TEXT, PRIMARY KEY(`id`), FOREIGN KEY(`connection_id`) REFERENCES `connections`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "connectionId",
+            "columnName": "connection_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sessionId",
+            "columnName": "session_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timestamp",
+            "columnName": "timestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "eventType",
+            "columnName": "event_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "command",
+            "columnName": "command",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "output",
+            "columnName": "output",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "exitCode",
+            "columnName": "exit_code",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "user",
+            "columnName": "user",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "host",
+            "columnName": "host",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "port",
+            "columnName": "port",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sizeBytes",
+            "columnName": "size_bytes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "metadata",
+            "columnName": "metadata",
+            "affinity": "TEXT",
+            "notNull": false
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_audit_log_connection_id",
+            "unique": false,
+            "columnNames": [
+              "connection_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_audit_log_connection_id` ON `${TABLE_NAME}` (`connection_id`)"
+          },
+          {
+            "name": "index_audit_log_timestamp",
+            "unique": false,
+            "columnNames": [
+              "timestamp"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_audit_log_timestamp` ON `${TABLE_NAME}` (`timestamp`)"
+          },
+          {
+            "name": "index_audit_log_session_id",
+            "unique": false,
+            "columnNames": [
+              "session_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_audit_log_session_id` ON `${TABLE_NAME}` (`session_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "connections",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "connection_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "hypervisors",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `type` TEXT NOT NULL, `host` TEXT NOT NULL, `port` INTEGER NOT NULL, `username` TEXT NOT NULL, `password` TEXT NOT NULL, `realm` TEXT, `verify_ssl` INTEGER NOT NULL, `is_xen_orchestra` INTEGER NOT NULL, `notes` TEXT, `last_connected` INTEGER NOT NULL, `created_at` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "host",
+            "columnName": "host",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "port",
+            "columnName": "port",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "username",
+            "columnName": "username",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "password",
+            "columnName": "password",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "realm",
+            "columnName": "realm",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "verifySsl",
+            "columnName": "verify_ssl",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isXenOrchestra",
+            "columnName": "is_xen_orchestra",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "lastConnected",
+            "columnName": "last_connected",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      }
+    ],
+    "views": [],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'ea85e9f2f65bb3fc8667c441a5f2994f')"
+    ]
+  }
+}

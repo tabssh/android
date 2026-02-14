@@ -4,65 +4,71 @@
 
     <PreferenceCategory android:title="Sync Configuration">
 
-        <SwitchPreferenceCompat
-            android:key="sync_enabled"
-            android:title="Enable sync"
-            android:summary="Synchronize data across devices"
-            android:defaultValue="false" />
-
         <ListPreference
             android:key="sync_backend"
             android:title="Sync backend"
             android:summary="%s"
             android:entries="@array/sync_backend_entries"
             android:entryValues="@array/sync_backend_values"
-            android:defaultValue="auto"
-            android:dependency="sync_enabled" />
+            android:defaultValue="auto" />
+
+        <Preference
+            android:key="sync_status"
+            android:title="Sync Status"
+            android:summary="Not configured - tap to setup"
+            android:selectable="true" />
+
+        <SwitchPreferenceCompat
+            android:key="sync_enabled"
+            android:title="Enable sync"
+            android:summary="Configure settings below first, then enable"
+            android:defaultValue="false" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="Google Drive Settings">
 
         <Preference
             android:key="sync_account"
             android:title="Google account"
-            android:summary="Not connected"
-            android:dependency="sync_enabled" />
+            android:summary="Not connected - tap to sign in" />
 
         <EditTextPreference
             android:key="google_drive_sync_folder"
             android:title="Google Drive folder"
             android:summary="Folder name in appDataFolder (default: tabssh)"
-            android:defaultValue="tabssh"
-            android:dependency="sync_enabled" />
+            android:defaultValue="tabssh" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="WebDAV Settings">
 
         <EditTextPreference
             android:key="webdav_server_url"
             android:title="WebDAV server URL"
-            android:summary="https://cloud.example.com/remote.php/dav/files/username"
-            android:dependency="sync_enabled" />
+            android:summary="https://cloud.example.com/remote.php/dav/files/username" />
 
         <EditTextPreference
             android:key="webdav_username"
             android:title="WebDAV username"
-            android:summary="Username for WebDAV authentication"
-            android:dependency="sync_enabled" />
+            android:summary="Username for WebDAV authentication" />
 
         <EditTextPreference
             android:key="webdav_password"
             android:title="WebDAV password"
             android:summary="App-specific password (recommended)"
-            android:inputType="textPassword"
-            android:dependency="sync_enabled" />
+            android:inputType="textPassword" />
 
         <EditTextPreference
             android:key="webdav_sync_folder"
             android:title="Sync folder path"
             android:summary="Remote folder for sync data (default: /tabssh)"
-            android:defaultValue="/tabssh"
-            android:dependency="sync_enabled" />
+            android:defaultValue="/tabssh" />
 
         <Preference
             android:key="webdav_test_connection"
             android:title="Test WebDAV connection"
-            android:summary="Verify server connectivity"
-            android:dependency="sync_enabled" />
+            android:summary="Verify server connectivity" />
 
     </PreferenceCategory>
 
@@ -71,8 +77,7 @@
         <Preference
             android:key="sync_password"
             android:title="Sync encryption password"
-            android:summary="Set encryption password for synced data (required)"
-            android:dependency="sync_enabled" />
+            android:summary="Set encryption password for synced data (required)" />
 
         <Preference
             android:key="sync_manual_trigger"

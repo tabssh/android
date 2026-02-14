@@ -15,6 +15,16 @@
             android:defaultValue="dracula"
             app:useSimpleSummaryProvider="true" />
 
+        <Preference
+            android:key="import_custom_theme"
+            android:title="Import Custom Theme"
+            android:summary="Load a JSON theme file" />
+
+        <Preference
+            android:key="export_current_theme"
+            android:title="Export Current Theme"
+            android:summary="Save current theme as JSON" />
+
         <ListPreference
             android:key="terminal_font"
             android:title="Font"
@@ -67,6 +77,13 @@
             android:title="Terminal Bell"
             android:summary="Audible bell on BEL character"
             android:defaultValue="true" />
+
+        <SwitchPreferenceCompat
+            android:key="terminal_bell_vibrate"
+            android:title="Vibrate on Bell"
+            android:summary="Vibrate device when BEL character received"
+            android:defaultValue="true"
+            android:dependency="terminal_bell" />
 
         <SwitchPreferenceCompat
             android:key="volume_keys_font_size"

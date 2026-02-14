@@ -71,6 +71,7 @@
     <color name="terminal_foreground">#FFFFFFFF</color>
     <color name="terminal_cursor">#FFFFFFFF</color>
     <color name="terminal_selection">#FF0066FF</color>
+    <color name="terminal_green">#FF4CAF50</color>
     
     <!-- UI specific colors -->
     <color name="tab_background">#FF2C2C2C</color>

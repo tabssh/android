@@ -50,4 +50,49 @@
 
     </PreferenceCategory>
 
+    <PreferenceCategory
+        android:title="Notifications"
+        android:key="category_notifications">
+
+        <SwitchPreferenceCompat
+            android:key="notifications_enabled"
+            android:title="Enable Notifications"
+            android:summary="Show notifications for connections, errors, and file transfers"
+            android:defaultValue="true" />
+
+        <SwitchPreferenceCompat
+            android:key="show_connection_notifications"
+            android:title="Connection Notifications"
+            android:summary="Show when connecting/disconnecting"
+            android:defaultValue="true"
+            android:dependency="notifications_enabled" />
+
+        <SwitchPreferenceCompat
+            android:key="show_error_notifications"
+            android:title="Error Notifications"
+            android:summary="Show connection errors"
+            android:defaultValue="true"
+            android:dependency="notifications_enabled" />
+
+        <SwitchPreferenceCompat
+            android:key="show_file_transfer_notifications"
+            android:title="File Transfer Notifications"
+            android:summary="Show SFTP upload/download progress"
+            android:defaultValue="true"
+            android:dependency="notifications_enabled" />
+
+        <SwitchPreferenceCompat
+            android:key="notification_vibrate"
+            android:title="Vibrate"
+            android:summary="Vibrate for connection and error notifications"
+            android:defaultValue="true"
+            android:dependency="notifications_enabled" />
+
+        <Preference
+            android:key="open_system_notification_settings"
+            android:title="System Notification Settings"
+            android:summary="Configure channels, sounds, and priority in Android settings" />
+
+    </PreferenceCategory>
+
 </PreferenceScreen>

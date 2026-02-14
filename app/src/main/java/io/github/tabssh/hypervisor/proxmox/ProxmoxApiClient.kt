@@ -263,6 +263,132 @@ class ProxmoxApiClient(
         }
     }
 
+    /**
+     * Hard reset a VM (immediate power cycle, like pressing reset button)
+     * Unlike reboot, this does not wait for graceful shutdown.
+     */
+    suspend fun resetVM(node: String, vmid: Int, type: String = "qemu"): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val endpoint = if (type == "lxc") "/nodes/$node/lxc/$vmid/status/reset" else "/nodes/$node/qemu/$vmid/status/reset"
+            apiPost(endpoint)
+            Logger.i("ProxmoxAPI", "Reset VM $vmid (hard reset)")
+            true
+        } catch (e: Exception) {
+            Logger.e("ProxmoxAPI", "Failed to reset VM", e)
+            false
+        }
+    }
+
+    /**
+     * Terminal proxy result containing ticket and WebSocket URL
+     */
+    data class TermProxyResult(
+        val ticket: String,
+        val port: Int,
+        val websocketUrl: String
+    )
+
+    /**
+     * Get terminal proxy for VM console access.
+     * This provides serial console access that works even without VM network.
+     *
+     * @param node Proxmox node name
+     * @param vmid VM ID
+     * @param type VM type: "qemu" or "lxc"
+     * @return TermProxyResult with ticket and WebSocket URL, or null on failure
+     */
+    suspend fun getTermProxy(node: String, vmid: Int, type: String = "qemu"): TermProxyResult? = withContext(Dispatchers.IO) {
+        try {
+            // Use termproxy for serial console (text-based, mobile-friendly)
+            val endpoint = if (type == "lxc") {
+                "/nodes/$node/lxc/$vmid/termproxy"
+            } else {
+                "/nodes/$node/qemu/$vmid/termproxy"
+            }
+
+            val json = apiPost(endpoint)
+            val data = json.optJSONObject("data")
+
+            if (data != null) {
+                val ticket = data.getString("ticket")
+                val port = data.getInt("port")
+
+                // Build WebSocket URL for terminal proxy
+                // Format: wss://host:port/api2/json/nodes/{node}/{type}/{vmid}/vncwebsocket?port={port}&vncticket={ticket}
+                val encodedTicket = java.net.URLEncoder.encode(ticket, "UTF-8")
+                val wsEndpoint = if (type == "lxc") {
+                    "/nodes/$node/lxc/$vmid/vncwebsocket"
+                } else {
+                    "/nodes/$node/qemu/$vmid/vncwebsocket"
+                }
+                val websocketUrl = "wss://$host:$port/api2/json$wsEndpoint?port=$port&vncticket=$encodedTicket"
+
+                Logger.i("ProxmoxAPI", "Got termproxy ticket for VM $vmid on port $port")
+
+                TermProxyResult(
+                    ticket = authTicket ?: "",
+                    port = port,
+                    websocketUrl = websocketUrl
+                )
+            } else {
+                Logger.e("ProxmoxAPI", "No data in termproxy response")
+                null
+            }
+        } catch (e: Exception) {
+            Logger.e("ProxmoxAPI", "Failed to get termproxy", e)
+            null
+        }
+    }
+
+    /**
+     * Get VNC proxy for VM console access (alternative to termproxy).
+     * VNC provides graphical console but is less mobile-friendly.
+     *
+     * @param node Proxmox node name
+     * @param vmid VM ID
+     * @param type VM type: "qemu" or "lxc"
+     * @return TermProxyResult with ticket and WebSocket URL, or null on failure
+     */
+    suspend fun getVNCProxy(node: String, vmid: Int, type: String = "qemu"): TermProxyResult? = withContext(Dispatchers.IO) {
+        try {
+            val endpoint = if (type == "lxc") {
+                "/nodes/$node/lxc/$vmid/vncproxy"
+            } else {
+                "/nodes/$node/qemu/$vmid/vncproxy"
+            }
+
+            val json = apiPost(endpoint)
+            val data = json.optJSONObject("data")
+
+            if (data != null) {
+                val ticket = data.getString("ticket")
+                val port = data.getInt("port")
+
+                val encodedTicket = java.net.URLEncoder.encode(ticket, "UTF-8")
+                val wsEndpoint = if (type == "lxc") {
+                    "/nodes/$node/lxc/$vmid/vncwebsocket"
+                } else {
+                    "/nodes/$node/qemu/$vmid/vncwebsocket"
+                }
+                val websocketUrl = "wss://$host:$port/api2/json$wsEndpoint?port=$port&vncticket=$encodedTicket"
+
+                Logger.i("ProxmoxAPI", "Got vncproxy ticket for VM $vmid on port $port")
+
+                TermProxyResult(
+                    ticket = authTicket ?: "",
+                    port = port,
+                    websocketUrl = websocketUrl
+                )
+            } else {
+                Logger.e("ProxmoxAPI", "No data in vncproxy response")
+                null
+            }
+        } catch (e: Exception) {
+            Logger.e("ProxmoxAPI", "Failed to get vncproxy", e)
+            null
+        }
+    }
+
     private fun apiGet(endpoint: String): JSONObject {
         val request = Request.Builder()
             .url("$baseUrl$endpoint")
