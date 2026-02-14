@@ -18,6 +18,8 @@ import com.google.android.material.tabs.TabLayoutMediator
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.storage.database.entities.HypervisorProfile
+import io.github.tabssh.storage.database.entities.HypervisorType
 import io.github.tabssh.ui.adapters.MainPagerAdapter
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.launch
@@ -289,17 +291,13 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                 viewPager.currentItem = 4 // Switch to Hypervisors tab
             }
             R.id.nav_proxmox -> {
-                // Open Proxmox manager directly
-                // TODO: Get first Proxmox hypervisor and open manager
-                android.widget.Toast.makeText(this, "Proxmox Manager - Select hypervisor first", android.widget.Toast.LENGTH_SHORT).show()
+                openHypervisorManagerByType(HypervisorType.PROXMOX)
             }
             R.id.nav_xcpng -> {
-                // Open XCP-ng manager directly
-                android.widget.Toast.makeText(this, "XCP-ng Manager - Select hypervisor first", android.widget.Toast.LENGTH_SHORT).show()
+                openHypervisorManagerByType(HypervisorType.XCPNG)
             }
             R.id.nav_vmware -> {
-                // Open VMware manager directly
-                android.widget.Toast.makeText(this, "VMware Manager - Select hypervisor first", android.widget.Toast.LENGTH_SHORT).show()
+                openHypervisorManagerByType(HypervisorType.VMWARE)
             }
             
             // Tools
@@ -414,7 +412,80 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             }
             .show()
     }
-    
+
+    /**
+     * Open hypervisor manager by type
+     * Queries database for hypervisors of the given type and opens the appropriate manager
+     */
+    private fun openHypervisorManagerByType(type: HypervisorType) {
+        lifecycleScope.launch {
+            try {
+                val hypervisors = app.database.hypervisorDao().getByType(type)
+
+                when {
+                    hypervisors.isEmpty() -> {
+                        // No hypervisors of this type, show helpful message
+                        val typeName = when (type) {
+                            HypervisorType.PROXMOX -> "Proxmox"
+                            HypervisorType.XCPNG -> "XCP-ng"
+                            HypervisorType.VMWARE -> "VMware"
+                        }
+                        android.widget.Toast.makeText(
+                            this@MainActivity,
+                            "No $typeName hosts configured. Go to Hypervisors tab to add one.",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                        // Switch to Hypervisors tab
+                        viewPager.currentItem = 4
+                    }
+                    hypervisors.size == 1 -> {
+                        // Only one hypervisor, open it directly
+                        openHypervisorManager(hypervisors[0])
+                    }
+                    else -> {
+                        // Multiple hypervisors, show selection dialog
+                        showHypervisorSelectionDialog(hypervisors)
+                    }
+                }
+            } catch (e: Exception) {
+                Logger.e("MainActivity", "Failed to get hypervisors by type", e)
+                android.widget.Toast.makeText(
+                    this@MainActivity,
+                    "Failed to load hypervisors: ${e.message}",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
+    /**
+     * Open the appropriate hypervisor manager activity
+     */
+    private fun openHypervisorManager(hypervisor: HypervisorProfile) {
+        val intent = when (hypervisor.type) {
+            HypervisorType.PROXMOX -> Intent(this, ProxmoxManagerActivity::class.java)
+            HypervisorType.XCPNG -> Intent(this, XCPngManagerActivity::class.java)
+            HypervisorType.VMWARE -> Intent(this, VMwareManagerActivity::class.java)
+        }
+        intent.putExtra("hypervisor_id", hypervisor.id)
+        startActivity(intent)
+    }
+
+    /**
+     * Show dialog to select from multiple hypervisors
+     */
+    private fun showHypervisorSelectionDialog(hypervisors: List<HypervisorProfile>) {
+        val names = hypervisors.map { "${it.name} (${it.host})" }.toTypedArray()
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Select Hypervisor")
+            .setItems(names) { _, which ->
+                openHypervisorManager(hypervisors[which])
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     /**
      * Import connections backup from URI
      */

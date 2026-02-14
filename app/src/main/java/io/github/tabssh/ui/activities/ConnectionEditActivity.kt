@@ -63,6 +63,9 @@ class ConnectionEditActivity : AppCompatActivity() {
         setupGroupSpinner()
         setupIdentitySpinner()
         setupProxyTypeSpinner()
+        setupTerminalTypeSpinner()
+        setupMultiplexerSpinner()
+        setupConnectionThemeSpinner()
         setupValidation()
         setupButtons()
         setupPortKnockUI()
@@ -231,23 +234,27 @@ class ConnectionEditActivity : AppCompatActivity() {
             val identities = app.database.identityDao().getAllIdentitiesList()
             val identityList = mutableListOf("No Identity")
             identities.forEach { identity -> identityList.add(identity.name) }
-            
+
             val adapter = ArrayAdapter(
                 this@ConnectionEditActivity,
                 android.R.layout.simple_dropdown_item_1line,
                 identityList
             )
             binding.spinnerIdentity.setAdapter(adapter)
-            
+
             binding.spinnerIdentity.setOnItemClickListener { _, _, position, _ ->
                 if (position > 0) {
+                    // Identity selected - hide manual auth config
                     val identity = identities[position - 1]
-                    // Apply identity to connection
                     binding.editUsername.setText(identity.username)
-                    // TODO: Apply key or password from identity
+                    // Hide authentication card since identity provides auth
+                    binding.cardAuthentication.visibility = android.view.View.GONE
+                } else {
+                    // "No Identity" selected - show manual auth config
+                    binding.cardAuthentication.visibility = android.view.View.VISIBLE
                 }
             }
-            
+
             binding.spinnerIdentity.setText("No Identity", false)
         }
     }
@@ -357,6 +364,8 @@ class ConnectionEditActivity : AppCompatActivity() {
                 existingProfile = app.database.connectionDao().getConnectionById(connectionId)
                 existingProfile?.let { profile ->
                     populateFields(profile)
+                    // Update toolbar with actual connection name
+                    supportActionBar?.title = "Edit ${profile.name}"
                 }
             } catch (e: Exception) {
                 Logger.e("ConnectionEditActivity", "Failed to load connection", e)
@@ -394,17 +403,52 @@ class ConnectionEditActivity : AppCompatActivity() {
         }
         
         // Advanced settings
-        binding.editTerminalType.setText(profile.terminalType)
+        binding.spinnerTerminalType.setText(profile.terminalType, false)
         binding.switchCompression.isChecked = profile.compression
         binding.switchKeepAlive.isChecked = profile.keepAlive
         binding.switchX11Forwarding.isChecked = profile.x11Forwarding
         binding.switchUseMosh.isChecked = profile.useMosh
+
+        // Multiplexer settings
+        val modeEntries = resources.getStringArray(R.array.multiplexer_mode_entries)
+        val modeValues = resources.getStringArray(R.array.multiplexer_mode_values)
+        val modeIndex = modeValues.indexOf(profile.multiplexerMode)
+        if (modeIndex >= 0) {
+            binding.spinnerMultiplexerMode.setText(modeEntries[modeIndex], false)
+            // Show session name field if not OFF
+            binding.layoutMultiplexerSessionName.visibility = if (profile.multiplexerMode != "OFF") {
+                android.view.View.VISIBLE
+            } else {
+                android.view.View.GONE
+            }
+        }
+        profile.multiplexerSessionName?.let { binding.editMultiplexerSessionName.setText(it) }
 
         // Group
         selectedGroupId = profile.groupId
         selectedGroupName = profile.groupId ?: "No Group"
         if (selectedGroupId != null) {
             supportActionBar?.subtitle = selectedGroupName
+        }
+
+        // Appearance & Scripts settings
+        val themeEntries = resources.getStringArray(R.array.terminal_theme_entries)
+        val themeValues = resources.getStringArray(R.array.terminal_theme_values)
+        val themeIndex = themeValues.indexOf(profile.theme)
+        if (themeIndex >= 0) {
+            // +1 to account for "Use Global Default" at index 0
+            val displayEntries = listOf("Use Global Default") + themeEntries.toList()
+            binding.spinnerConnectionTheme.setText(displayEntries[themeIndex + 1], false)
+        } else {
+            binding.spinnerConnectionTheme.setText("Use Global Default", false)
+        }
+
+        profile.fontSizeOverride?.let { fontSize ->
+            binding.editFontSizeOverride.setText(fontSize.toString())
+        }
+
+        profile.postConnectScript?.let { script ->
+            binding.editPostConnectScript.setText(script)
         }
 
         // Proxy/Jump Host settings
@@ -515,11 +559,33 @@ class ConnectionEditActivity : AppCompatActivity() {
             } else null
         } else null
         
-        val terminalType = binding.editTerminalType.text.toString().takeIf { it.isNotBlank() } ?: "xterm-256color"
+        val terminalType = binding.spinnerTerminalType.text.toString().takeIf { it.isNotBlank() } ?: "xterm-256color"
         val compression = binding.switchCompression.isChecked
         val keepAlive = binding.switchKeepAlive.isChecked
         val x11Forwarding = binding.switchX11Forwarding.isChecked
         val useMosh = binding.switchUseMosh.isChecked
+
+        // Multiplexer settings
+        val modeEntries = resources.getStringArray(R.array.multiplexer_mode_entries)
+        val modeValues = resources.getStringArray(R.array.multiplexer_mode_values)
+        val multiplexerModeText = binding.spinnerMultiplexerMode.text.toString()
+        val modeIndex = modeEntries.indexOf(multiplexerModeText)
+        val multiplexerMode = if (modeIndex >= 0) modeValues[modeIndex] else "OFF"
+        val multiplexerSessionName = binding.editMultiplexerSessionName.text.toString().takeIf { it.isNotBlank() }
+
+        // Appearance & Scripts settings
+        val themeEntries = resources.getStringArray(R.array.terminal_theme_entries)
+        val themeValues = resources.getStringArray(R.array.terminal_theme_values)
+        val selectedThemeText = binding.spinnerConnectionTheme.text.toString()
+        val theme = if (selectedThemeText == "Use Global Default") {
+            "dracula" // Default theme
+        } else {
+            val themeIndex = themeEntries.indexOf(selectedThemeText)
+            if (themeIndex >= 0) themeValues[themeIndex] else "dracula"
+        }
+
+        val fontSizeOverride = binding.editFontSizeOverride.text.toString().toIntOrNull()?.takeIf { it in 8..32 }
+        val postConnectScript = binding.editPostConnectScript.text.toString().takeIf { it.isNotBlank() }
 
         // Proxy/Jump Host settings
         val proxyTypeDisplay = binding.spinnerProxyType.text.toString()
@@ -566,6 +632,11 @@ class ConnectionEditActivity : AppCompatActivity() {
             keepAlive = keepAlive,
             x11Forwarding = x11Forwarding,
             useMosh = useMosh,
+            multiplexerMode = multiplexerMode,
+            multiplexerSessionName = multiplexerSessionName,
+            theme = theme,
+            fontSizeOverride = fontSizeOverride,
+            postConnectScript = postConnectScript,
             groupId = selectedGroupId,
             proxyType = proxyType,
             proxyHost = proxyHost,
@@ -585,6 +656,11 @@ class ConnectionEditActivity : AppCompatActivity() {
             keepAlive = keepAlive,
             x11Forwarding = x11Forwarding,
             useMosh = useMosh,
+            multiplexerMode = multiplexerMode,
+            multiplexerSessionName = multiplexerSessionName,
+            theme = theme,
+            fontSizeOverride = fontSizeOverride,
+            postConnectScript = postConnectScript,
             groupId = selectedGroupId,
             proxyType = proxyType,
             proxyHost = proxyHost,
@@ -697,7 +773,7 @@ class ConnectionEditActivity : AppCompatActivity() {
                 showError("Connection test error: ${e.message}", "Error")
             } finally {
                 binding.btnTest.isEnabled = true
-                binding.btnTest.text = "Test Connection"
+                binding.btnTest.text = "Test"
             }
         }
     }
@@ -1212,6 +1288,41 @@ SSH Key Import - Supported Formats:
         return true
     }
     
+    private fun setupTerminalTypeSpinner() {
+        val terminalTypes = resources.getStringArray(R.array.terminal_types)
+        val adapter = android.widget.ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, terminalTypes)
+        binding.spinnerTerminalType.setAdapter(adapter)
+        binding.spinnerTerminalType.setText("xterm-256color", false) // Default value
+    }
+
+    private fun setupMultiplexerSpinner() {
+        val modeEntries = resources.getStringArray(R.array.multiplexer_mode_entries)
+        val modeValues = resources.getStringArray(R.array.multiplexer_mode_values)
+        val adapter = android.widget.ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, modeEntries)
+        binding.spinnerMultiplexerMode.setAdapter(adapter)
+        binding.spinnerMultiplexerMode.setText(modeEntries[0], false) // Default: Disabled
+
+        binding.spinnerMultiplexerMode.setOnItemClickListener { _, _, position, _ ->
+            // Show session name field when not "OFF"
+            val showSessionName = modeValues[position] != "OFF"
+            binding.layoutMultiplexerSessionName.visibility = if (showSessionName) {
+                android.view.View.VISIBLE
+            } else {
+                android.view.View.GONE
+            }
+        }
+    }
+
+    private fun setupConnectionThemeSpinner() {
+        val themeEntries = resources.getStringArray(R.array.terminal_theme_entries)
+        val themeValues = resources.getStringArray(R.array.terminal_theme_values)
+        // Add "Use Global Default" as first option
+        val entries = listOf("Use Global Default") + themeEntries.toList()
+        val adapter = android.widget.ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, entries)
+        binding.spinnerConnectionTheme.setAdapter(adapter)
+        binding.spinnerConnectionTheme.setText(entries[0], false) // Default: Use Global
+    }
+
     private fun setupPortKnockUI() {
         // Toggle configure button visibility based on switch
         binding.switchPortKnock.setOnCheckedChangeListener { _, isChecked ->

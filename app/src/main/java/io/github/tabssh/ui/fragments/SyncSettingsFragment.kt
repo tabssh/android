@@ -41,6 +41,7 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
         workScheduler = SyncWorkScheduler(requireContext())
 
         setupBackendPreference()
+        setupSyncStatus()
         setupSyncToggle()
         setupAccountPreference()
         setupPasswordPreference()
@@ -49,9 +50,162 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
         setupFrequencyPreference()
         setupAdvancedOptions()
         setupWebDAVPreferences()
-        
+
         // Initial visibility update
         updatePreferencesVisibility()
+        updateSyncStatus()
+    }
+
+    /**
+     * Setup sync status preference that shows what's configured/missing
+     */
+    private fun setupSyncStatus() {
+        findPreference<Preference>("sync_status")?.apply {
+            setOnPreferenceClickListener {
+                showSyncSetupDialog()
+                true
+            }
+        }
+    }
+
+    /**
+     * Update sync status summary to show what's configured
+     */
+    private fun updateSyncStatus() {
+        val backend = prefManager.getString("sync_backend", "auto")
+        val hasGooglePlay = try {
+            requireContext().packageManager.getPackageInfo("com.google.android.gms", 0)
+            true
+        } catch (e: Exception) {
+            false
+        }
+
+        val actualBackend = if (backend == "auto") {
+            if (hasGooglePlay) "google_drive" else "webdav"
+        } else {
+            backend
+        }
+
+        val isGoogleDrive = actualBackend == "google_drive"
+        val isAuthenticated = syncManager.getAuthManager().isAuthenticated()
+        val hasPassword = androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
+            .getBoolean("sync_password_set", false)
+        val webdavUrl = prefManager.getString("webdav_server_url", "")
+        val webdavUsername = prefManager.getString("webdav_username", "")
+        val webdavPassword = prefManager.getString("webdav_password", "")
+        val hasWebDAV = !webdavUrl.isNullOrEmpty() && !webdavUsername.isNullOrEmpty() && !webdavPassword.isNullOrEmpty()
+
+        findPreference<Preference>("sync_status")?.apply {
+            val statusParts = mutableListOf<String>()
+            val missingParts = mutableListOf<String>()
+
+            // Check backend status
+            if (isGoogleDrive) {
+                if (isAuthenticated) {
+                    statusParts.add("✓ Google account connected")
+                } else {
+                    missingParts.add("Google account not connected")
+                }
+            } else {
+                if (hasWebDAV) {
+                    statusParts.add("✓ WebDAV configured")
+                } else {
+                    missingParts.add("WebDAV not configured")
+                }
+            }
+
+            // Check encryption password
+            if (hasPassword) {
+                statusParts.add("✓ Encryption password set")
+            } else {
+                missingParts.add("Encryption password not set")
+            }
+
+            summary = if (missingParts.isEmpty()) {
+                "✓ Ready to enable sync"
+            } else {
+                "✗ Missing: ${missingParts.joinToString(", ")}"
+            }
+        }
+
+        // Also update the toggle summary
+        findPreference<SwitchPreferenceCompat>("sync_enabled")?.summary = if (
+            (isGoogleDrive && isAuthenticated && hasPassword) ||
+            (!isGoogleDrive && hasWebDAV && hasPassword)
+        ) {
+            "Synchronize data across devices"
+        } else {
+            "Configure settings above first"
+        }
+    }
+
+    /**
+     * Show sync setup dialog with requirements checklist
+     */
+    private fun showSyncSetupDialog() {
+        val backend = prefManager.getString("sync_backend", "auto")
+        val hasGooglePlay = try {
+            requireContext().packageManager.getPackageInfo("com.google.android.gms", 0)
+            true
+        } catch (e: Exception) {
+            false
+        }
+
+        val actualBackend = if (backend == "auto") {
+            if (hasGooglePlay) "google_drive" else "webdav"
+        } else {
+            backend
+        }
+
+        val isGoogleDrive = actualBackend == "google_drive"
+        val isAuthenticated = syncManager.getAuthManager().isAuthenticated()
+        val hasPassword = androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
+            .getBoolean("sync_password_set", false)
+        val webdavUrl = prefManager.getString("webdav_server_url", "")
+        val webdavUsername = prefManager.getString("webdav_username", "")
+        val webdavPassword = prefManager.getString("webdav_password", "")
+        val hasWebDAV = !webdavUrl.isNullOrEmpty() && !webdavUsername.isNullOrEmpty() && !webdavPassword.isNullOrEmpty()
+
+        val message = buildString {
+            append("Setup Requirements:\n\n")
+
+            if (isGoogleDrive) {
+                append("Backend: Google Drive\n\n")
+                val accountIcon = if (isAuthenticated) "✓" else "✗"
+                append("$accountIcon Google Account: ${if (isAuthenticated) "Connected" else "Not connected"}\n")
+                if (!isAuthenticated) {
+                    append("   → Tap 'Google account' below to sign in\n")
+                }
+            } else {
+                append("Backend: WebDAV")
+                if (backend == "auto") append(" (auto-detected, no Google Play)")
+                append("\n\n")
+                val webdavIcon = if (hasWebDAV) "✓" else "✗"
+                append("$webdavIcon WebDAV Server: ${if (hasWebDAV) "Configured" else "Not configured"}\n")
+                if (!hasWebDAV) {
+                    append("   → Fill in WebDAV settings below\n")
+                }
+            }
+
+            val passwordIcon = if (hasPassword) "✓" else "✗"
+            append("\n$passwordIcon Encryption Password: ${if (hasPassword) "Set" else "Not set"}\n")
+            if (!hasPassword) {
+                append("   → Tap 'Sync encryption password' below\n")
+            }
+
+            append("\n")
+            if ((isGoogleDrive && isAuthenticated && hasPassword) || (!isGoogleDrive && hasWebDAV && hasPassword)) {
+                append("✓ All requirements met! You can now enable sync.")
+            } else {
+                append("Complete the items above to enable sync.")
+            }
+        }
+
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Sync Setup")
+            .setMessage(message)
+            .setPositiveButton("OK", null)
+            .show()
     }
     
     /**
@@ -71,7 +225,7 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
      */
     private fun updatePreferencesVisibility(backend: String? = null) {
         val selectedBackend = backend ?: prefManager.getString("sync_backend", "auto")
-        
+
         // Detect actual backend for "auto" mode
         val actualBackend = if (selectedBackend == "auto") {
             val hasGooglePlay = try {
@@ -85,19 +239,23 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
         } else {
             selectedBackend
         }
-        
+
         val isGoogleDrive = actualBackend == "google_drive"
         val isWebDAV = actualBackend == "webdav"
-        
-        // Google Drive preferences
+
+        // Google Drive preferences - show when using Google Drive
         findPreference<Preference>("sync_account")?.isVisible = isGoogleDrive
-        
-        // WebDAV preferences
+        findPreference<EditTextPreference>("google_drive_sync_folder")?.isVisible = isGoogleDrive
+
+        // WebDAV preferences - show when using WebDAV
         findPreference<EditTextPreference>("webdav_server_url")?.isVisible = isWebDAV
         findPreference<EditTextPreference>("webdav_username")?.isVisible = isWebDAV
         findPreference<EditTextPreference>("webdav_password")?.isVisible = isWebDAV
         findPreference<EditTextPreference>("webdav_sync_folder")?.isVisible = isWebDAV
         findPreference<Preference>("webdav_test_connection")?.isVisible = isWebDAV
+
+        // Update status after visibility changes
+        updateSyncStatus()
     }
     
     /**
@@ -202,58 +360,37 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
 
                 if (enabled) {
                     val backend = prefManager.getSyncBackend()
-                    
-                    when (backend) {
-                        "auto" -> {
-                            // Auto-detect: Check for Google Play Services
-                            val hasGooglePlay = try {
-                                val packageManager = requireContext().packageManager
-                                packageManager.getPackageInfo("com.google.android.gms", 0)
-                                true
-                            } catch (e: Exception) {
-                                false
-                            }
-                            
-                            if (hasGooglePlay) {
-                                // Use Google Drive if available
-                                if (!syncManager.getAuthManager().isAuthenticated()) {
-                                    showAuthenticationDialog()
-                                    false
-                                } else if (!androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext()).getBoolean("sync_password_set", false)) {
-                                    showPasswordSetupDialog()
-                                    false
-                                } else {
-                                    enableSync()
-                                    true
-                                }
-                            } else {
-                                // Fall back to WebDAV
-                                val url = prefManager.getWebDAVServerUrl()
-                                val username = prefManager.getWebDAVUsername()
-                                val password = prefManager.getWebDAVPassword()
-                                
-                                if (url.isNullOrEmpty() || username.isNullOrEmpty() || password.isNullOrEmpty()) {
-                                    showToast("Google Play Services not available. Please configure WebDAV settings.")
-                                    false
-                                } else if (!androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext()).getBoolean("sync_password_set", false)) {
-                                    showPasswordSetupDialog()
-                                    false
-                                } else {
-                                    enableSync()
-                                    true
-                                }
-                            }
-                        }
+
+                    // Detect actual backend for "auto" mode
+                    val hasGooglePlay = try {
+                        requireContext().packageManager.getPackageInfo("com.google.android.gms", 0)
+                        true
+                    } catch (e: Exception) {
+                        false
+                    }
+
+                    val actualBackend = if (backend == "auto") {
+                        if (hasGooglePlay) "google_drive" else "webdav"
+                    } else {
+                        backend
+                    }
+
+                    val hasPassword = androidx.preference.PreferenceManager
+                        .getDefaultSharedPreferences(requireContext())
+                        .getBoolean("sync_password_set", false)
+
+                    when (actualBackend) {
                         "google_drive" -> {
                             // Google Drive requires authentication and password
                             if (!syncManager.getAuthManager().isAuthenticated()) {
-                                showAuthenticationDialog()
+                                showSyncSetupError("Google account not connected", "Please tap 'Google account' above to sign in first.")
                                 false
-                            } else if (!androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext()).getBoolean("sync_password_set", false)) {
-                                showPasswordSetupDialog()
+                            } else if (!hasPassword) {
+                                showSyncSetupError("Encryption password not set", "Please tap 'Sync encryption password' below to set a password.")
                                 false
                             } else {
                                 enableSync()
+                                updateSyncStatus()
                                 true
                             }
                         }
@@ -262,15 +399,16 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
                             val url = prefManager.getWebDAVServerUrl()
                             val username = prefManager.getWebDAVUsername()
                             val password = prefManager.getWebDAVPassword()
-                            
+
                             if (url.isNullOrEmpty() || username.isNullOrEmpty() || password.isNullOrEmpty()) {
-                                showToast("Please configure WebDAV settings first")
+                                showSyncSetupError("WebDAV not configured", "Please fill in the WebDAV settings above:\n• Server URL\n• Username\n• Password")
                                 false
-                            } else if (!androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext()).getBoolean("sync_password_set", false)) {
-                                showPasswordSetupDialog()
+                            } else if (!hasPassword) {
+                                showSyncSetupError("Encryption password not set", "Please tap 'Sync encryption password' below to set a password.")
                                 false
                             } else {
                                 enableSync()
+                                updateSyncStatus()
                                 true
                             }
                         }
@@ -281,10 +419,25 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
                     }
                 } else {
                     disableSync()
+                    updateSyncStatus()
                     true
                 }
             }
         }
+    }
+
+    /**
+     * Show sync setup error dialog with clear instructions
+     */
+    private fun showSyncSetupError(title: String, message: String) {
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Cannot Enable Sync")
+            .setMessage("$title\n\n$message")
+            .setPositiveButton("OK", null)
+            .setNeutralButton("Show Setup") { _, _ ->
+                showSyncSetupDialog()
+            }
+            .show()
     }
 
     /**
@@ -501,58 +654,80 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
      */
     private fun showPasswordSetupDialog() {
         Logger.d(TAG, "Show password setup dialog")
-        
+
+        // Create error text view for inline error messages
+        val errorText = android.widget.TextView(requireContext()).apply {
+            setTextColor(android.graphics.Color.RED)
+            setPadding(0, 8, 0, 0)
+            visibility = android.view.View.GONE
+        }
+
         val editText = android.widget.EditText(requireContext()).apply {
-            hint = "Enter encryption password"
+            hint = "Enter encryption password (min 8 chars)"
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
-        
+
         val confirmEditText = android.widget.EditText(requireContext()).apply {
             hint = "Confirm password"
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
-        
+
         val layout = android.widget.LinearLayout(requireContext()).apply {
             orientation = android.widget.LinearLayout.VERTICAL
             setPadding(64, 32, 64, 32)
             addView(editText)
             addView(confirmEditText)
+            addView(errorText)
         }
-        
-        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(requireContext())
             .setTitle("Set Encryption Password")
             .setMessage("This password will be used to encrypt your synced data. Keep it safe!")
             .setView(layout)
-            .setPositiveButton("Set Password") { _, _ ->
-                val password = editText.text.toString()
-                val confirm = confirmEditText.text.toString()
-                
-                when {
-                    password.isBlank() -> {
-                        android.widget.Toast.makeText(requireContext(), "Password cannot be empty", android.widget.Toast.LENGTH_SHORT).show()
-                    }
-                    password.length < 8 -> {
-                        android.widget.Toast.makeText(requireContext(), "Password must be at least 8 characters", android.widget.Toast.LENGTH_SHORT).show()
-                    }
-                    password != confirm -> {
-                        android.widget.Toast.makeText(requireContext(), "Passwords do not match", android.widget.Toast.LENGTH_SHORT).show()
-                    }
-                    else -> {
-                        // Save password
-                        syncManager.setSyncPassword(password)
-                        androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
-                            .edit()
-                            .putBoolean("sync_password_set", true)
-                            .apply()
-                        
-                        android.widget.Toast.makeText(requireContext(), "Encryption password set successfully", android.widget.Toast.LENGTH_SHORT).show()
-                        findPreference<Preference>("sync_password")?.summary = "Password set (tap to change)"
-                        Logger.i(TAG, "Sync encryption password set")
-                    }
+            .setPositiveButton("Set Password", null)  // Set null to override default dismiss behavior
+            .setNegativeButton("Cancel", null)
+            .create()
+
+        dialog.show()
+
+        // Override positive button to prevent auto-dismiss on validation error
+        dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val password = editText.text.toString()
+            val confirm = confirmEditText.text.toString()
+
+            // Validate and show inline errors
+            when {
+                password.isBlank() -> {
+                    errorText.text = "✗ Password cannot be empty"
+                    errorText.visibility = android.view.View.VISIBLE
+                    editText.requestFocus()
+                }
+                password.length < 8 -> {
+                    errorText.text = "✗ Password must be at least 8 characters (currently ${password.length})"
+                    errorText.visibility = android.view.View.VISIBLE
+                    editText.requestFocus()
+                }
+                password != confirm -> {
+                    errorText.text = "✗ Passwords do not match"
+                    errorText.visibility = android.view.View.VISIBLE
+                    confirmEditText.requestFocus()
+                }
+                else -> {
+                    // Save password and dismiss dialog
+                    syncManager.setSyncPassword(password)
+                    androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
+                        .edit()
+                        .putBoolean("sync_password_set", true)
+                        .apply()
+
+                    android.widget.Toast.makeText(requireContext(), "✓ Encryption password set successfully", android.widget.Toast.LENGTH_SHORT).show()
+                    findPreference<Preference>("sync_password")?.summary = "Password configured (tap to change)"
+                    updateSyncStatus()  // Update status after password set
+                    Logger.i(TAG, "Sync encryption password set")
+                    dialog.dismiss()
                 }
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+        }
     }
 
     /**
@@ -701,6 +876,7 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
                 lifecycleScope.launch {
                     val result = syncManager.getAuthManager().handleSignInResult(data)
                     updateAccountSummary()
+                    updateSyncStatus()  // Update status after sign-in
                 }
             }
         }

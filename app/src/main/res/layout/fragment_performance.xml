@@ -127,11 +127,14 @@
 
                         <TextView
                             android:id="@+id/text_memory_details"
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:text="0 MB / 0 MB"
                             android:textSize="12sp"
-                            android:textColor="?attr/colorOnSurfaceVariant" />
+                            android:textColor="?attr/colorOnSurfaceVariant"
+                            android:gravity="center"
+                            android:maxLines="1"
+                            android:ellipsize="end" />
 
                     </LinearLayout>
 
@@ -173,11 +176,14 @@
 
                         <TextView
                             android:id="@+id/text_disk_details"
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:text="0 GB / 0 GB"
                             android:textSize="12sp"
-                            android:textColor="?attr/colorOnSurfaceVariant" />
+                            android:textColor="?attr/colorOnSurfaceVariant"
+                            android:gravity="center"
+                            android:maxLines="1"
+                            android:ellipsize="end" />
 
                     </LinearLayout>
 
@@ -238,12 +244,15 @@
 
                         <TextView
                             android:id="@+id/text_network_total"
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:text="Total: 0 MB"
                             android:textSize="12sp"
                             android:textColor="?attr/colorOnSurfaceVariant"
-                            android:layout_marginTop="@dimen/space_xs" />
+                            android:layout_marginTop="@dimen/space_xs"
+                            android:gravity="center"
+                            android:maxLines="1"
+                            android:ellipsize="end" />
 
                     </LinearLayout>
 
@@ -302,12 +311,15 @@
 
                         <TextView
                             android:id="@+id/text_load_processes"
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:text="0/0 processes"
                             android:textSize="12sp"
                             android:textColor="?attr/colorOnSurfaceVariant"
-                            android:layout_marginTop="@dimen/space_xs" />
+                            android:layout_marginTop="@dimen/space_xs"
+                            android:gravity="center"
+                            android:maxLines="1"
+                            android:ellipsize="end" />
 
                     </LinearLayout>
 

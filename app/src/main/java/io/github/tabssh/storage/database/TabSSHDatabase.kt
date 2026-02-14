@@ -26,7 +26,7 @@ import io.github.tabssh.utils.logging.Logger
         AuditLogEntry::class,
         HypervisorProfile::class
     ],
-    version = 12,
+    version = 14,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -284,7 +284,9 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     MIGRATION_8_9,
                     MIGRATION_9_10,
                     MIGRATION_10_11,
-                    MIGRATION_11_12
+                    MIGRATION_11_12,
+                    MIGRATION_12_13,
+                    MIGRATION_13_14
                 )
                 .build()
                 INSTANCE = instance
@@ -413,5 +415,23 @@ data class DatabaseStats(
                 // Add is_xen_orchestra column to hypervisors table
                 database.execSQL("ALTER TABLE hypervisors ADD COLUMN is_xen_orchestra INTEGER NOT NULL DEFAULT 0")
                 Logger.i("Database", "Migration 11->12: Added is_xen_orchestra field to hypervisors")
+            }
+        }
+
+        val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Add multiplexer support fields to connections table
+                database.execSQL("ALTER TABLE connections ADD COLUMN multiplexer_mode TEXT NOT NULL DEFAULT 'OFF'")
+                database.execSQL("ALTER TABLE connections ADD COLUMN multiplexer_session_name TEXT")
+                Logger.i("Database", "Migration 12->13: Added multiplexer_mode and multiplexer_session_name fields to connections")
+            }
+        }
+
+        val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Add post-connect script and font size override fields
+                database.execSQL("ALTER TABLE connections ADD COLUMN post_connect_script TEXT")
+                database.execSQL("ALTER TABLE connections ADD COLUMN font_size_override INTEGER")
+                Logger.i("Database", "Migration 13->14: Added post_connect_script and font_size_override fields to connections")
             }
         }

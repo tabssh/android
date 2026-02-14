@@ -3,6 +3,12 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <item
+        android:id="@+id/action_copy"
+        android:title="Copy All"
+        android:icon="@android:drawable/ic_menu_edit"
+        app:showAsAction="ifRoom" />
+
+    <item
         android:id="@+id/action_filter"
         android:title="Filter"
         android:icon="@android:drawable/ic_menu_search"
@@ -12,7 +18,7 @@
         android:id="@+id/action_export"
         android:title="Export"
         android:icon="@android:drawable/ic_menu_save"
-        app:showAsAction="ifRoom" />
+        app:showAsAction="never" />
 
     <item
         android:id="@+id/action_refresh"

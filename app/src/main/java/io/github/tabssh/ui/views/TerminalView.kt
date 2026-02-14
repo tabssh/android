@@ -14,6 +14,8 @@ import io.github.tabssh.terminal.emulator.TerminalEmulator
 import io.github.tabssh.terminal.emulator.TerminalBuffer
 import io.github.tabssh.terminal.emulator.TerminalListener
 import io.github.tabssh.terminal.renderer.TerminalRenderer
+import io.github.tabssh.terminal.TermuxBridge
+import io.github.tabssh.terminal.TermuxBridgeListener
 import io.github.tabssh.themes.definitions.Theme
 import io.github.tabssh.utils.logging.Logger
 import java.io.OutputStream
@@ -39,6 +41,10 @@ class TerminalView @JvmOverloads constructor(
     private var terminalBuffer: TerminalBuffer? = null
     private var terminalRenderer: TerminalRenderer? = null
     private var terminalListener: TerminalListener? = null
+
+    // Termux bridge for proper VT100/ANSI emulation
+    private var termuxBridge: TermuxBridge? = null
+    private var termuxBuffer: com.termux.terminal.TerminalBuffer? = null
 
     // Output stream for sending data
     private var outputStream: OutputStream? = null
@@ -90,7 +96,19 @@ class TerminalView @JvmOverloads constructor(
         RegexOption.IGNORE_CASE
     )
     var onUrlDetected: ((String) -> Unit)? = null
-    
+
+    // Performance optimization: dirty region tracking
+    private var dirtyRows = java.util.BitSet(256) // Track which rows need redrawing
+    private var fullRedrawNeeded = true // Force full redraw on first draw or after resize
+    private var lastRenderedRows = 0 // Track row count changes
+    private var lastRenderedCols = 0 // Track column count changes
+    private var lastCursorRow = -1 // Track cursor position changes
+    private var lastCursorCol = -1
+
+    // Performance: text drawing cache
+    private val rowTextBuilder = StringBuilder(256) // Reusable StringBuilder
+    private val clipRect = RectF() // Reusable clip rect
+
     // Context menu callback for long press on text
     var onContextMenuRequested: ((x: Float, y: Float) -> Unit)? = null
     
@@ -181,6 +199,95 @@ class TerminalView @JvmOverloads constructor(
     }
 
     /**
+     * Attach Termux bridge for proper VT100/ANSI terminal emulation
+     * This is the preferred method for SSH connections
+     */
+    fun attachTerminalEmulator(bridge: TermuxBridge) {
+        // Clear old emulator references
+        terminalListener?.let { listener ->
+            terminalEmulator?.removeListener(listener)
+        }
+        terminalListener = null
+        terminalEmulator = null
+        terminalBuffer = null
+
+        // Set up Termux bridge
+        termuxBridge = bridge
+        termuxBuffer = bridge.getBuffer()
+        terminalRows = bridge.getRows()
+        terminalCols = bridge.getCols()
+
+        // Set up listener for screen changes
+        bridge.addListener(object : TermuxBridgeListener {
+            override fun onConnected() {
+                Logger.d("TerminalView", "Termux bridge connected")
+            }
+
+            override fun onDisconnected() {
+                Logger.d("TerminalView", "Termux bridge disconnected")
+            }
+
+            override fun onScreenChanged() {
+                // Update buffer reference and redraw (performance: use dirty tracking)
+                termuxBuffer = bridge.getBuffer()
+                post {
+                    // Mark cursor area dirty (most screen changes affect cursor line)
+                    val cursorRow = bridge.getCursorRow()
+                    markRowsDirty(maxOf(0, cursorRow - 3), minOf(terminalRows - 1, cursorRow + 3))
+                    invalidateDirtyRows()
+                }
+            }
+
+            override fun onTitleChanged(title: String) {
+                Logger.d("TerminalView", "Terminal title: $title")
+            }
+
+            override fun onBell() {
+                // Could play a sound or vibrate
+                Logger.d("TerminalView", "Terminal bell")
+            }
+
+            override fun onColorsChanged() {
+                // Color scheme changed - full redraw needed
+                post {
+                    markAllRowsDirty()
+                    invalidate()
+                }
+            }
+
+            override fun onCursorStateChanged(visible: Boolean) {
+                // Just cursor visibility changed - mark cursor row dirty
+                post {
+                    val cursorRow = bridge.getCursorRow()
+                    if (cursorRow in 0 until terminalRows) {
+                        dirtyRows.set(cursorRow)
+                    }
+                    invalidateDirtyRows()
+                }
+            }
+
+            override fun onCopyToClipboard(text: String) {
+                // Handle clipboard copy
+                Logger.d("TerminalView", "Copy to clipboard: ${text.take(50)}...")
+            }
+
+            override fun onPasteFromClipboard() {
+                // Handle paste request
+                Logger.d("TerminalView", "Paste from clipboard requested")
+            }
+
+            override fun onError(e: Exception) {
+                Logger.e("TerminalView", "Termux bridge error", e)
+            }
+        })
+
+        calculateCellDimensions()
+        invalidate()
+
+        Logger.d("TerminalView", "Attached Termux bridge: ${terminalRows}x${terminalCols}")
+    }
+
+    /**
      * Set up terminal listener to handle data updates
      */
     private fun setupTerminalListener() {
@@ -191,11 +298,18 @@ class TerminalView @JvmOverloads constructor(
 
         val listener = object : TerminalListener {
             override fun onDataReceived(data: ByteArray) {
-                // Redraw terminal when data arrives
+                // Performance: Mark current cursor row dirty (most data updates cursor line)
                 Logger.d("TerminalView", "Terminal data received: ${data.size} bytes")
-                post { 
-                    Logger.d("TerminalView", "Calling invalidate() from onDataReceived")
-                    invalidate() 
+                post {
+                    // Mark cursor row and a few surrounding rows dirty (new lines, scrolling)
+                    val bridge = termuxBridge
+                    if (bridge != null) {
+                        val cursorRow = bridge.getCursorRow()
+                        markRowsDirty(maxOf(0, cursorRow - 2), minOf(terminalRows - 1, cursorRow + 2))
+                    } else {
+                        markAllRowsDirty()
+                    }
+                    invalidateDirtyRows()
                 }
             }
 
@@ -214,12 +328,18 @@ class TerminalView @JvmOverloads constructor(
 
             override fun onTerminalConnected() {
                 Logger.i("TerminalView", "Terminal connected")
-                post { invalidate() }
+                post {
+                    markAllRowsDirty()
+                    invalidate()
+                }
             }
 
             override fun onTerminalDisconnected() {
                 Logger.i("TerminalView", "Terminal disconnected")
-                post { invalidate() }
+                post {
+                    markAllRowsDirty()
+                    invalidate()
+                }
             }
         }
 
@@ -234,6 +354,43 @@ class TerminalView @JvmOverloads constructor(
         outputStream = stream
         terminalEmulator?.attachOutputStream(stream)
         Logger.d("TerminalView", "Output stream set for terminal view")
+    }
+
+    /**
+     * Performance optimization: Mark specific rows as dirty for partial redraw
+     */
+    private fun markRowsDirty(startRow: Int, endRow: Int) {
+        for (row in startRow..minOf(endRow, terminalRows - 1)) {
+            dirtyRows.set(row)
+        }
+    }
+
+    /**
+     * Performance optimization: Mark all rows dirty (full redraw)
+     */
+    private fun markAllRowsDirty() {
+        fullRedrawNeeded = true
+        dirtyRows.set(0, terminalRows)
+    }
+
+    /**
+     * Performance optimization: Invalidate only dirty regions
+     * Uses partial invalidation when possible to reduce GPU work
+     */
+    private fun invalidateDirtyRows() {
+        if (fullRedrawNeeded || dirtyRows.cardinality() > terminalRows / 2) {
+            // More than half dirty - just do full redraw
+            invalidate()
+        } else {
+            // Partial invalidation - find bounding rect of dirty rows
+            val firstDirty = dirtyRows.nextSetBit(0)
+            if (firstDirty >= 0) {
+                val lastDirty = dirtyRows.length() - 1
+                val top = (paddingTop + firstDirty * cellHeight).toInt()
+                val bottom = (paddingTop + (lastDirty + 1) * cellHeight).toInt()
+                invalidate(0, top, width, bottom)
+            }
+        }
     }
 
     /**
@@ -438,6 +595,8 @@ class TerminalView @JvmOverloads constructor(
                 terminalCols = newCols.coerceAtLeast(40)
                 terminalRows = newRows.coerceAtLeast(10)
 
+                // Resize the appropriate emulator
+                termuxBridge?.resize(terminalCols, terminalRows)
                 terminalBuffer?.resize(terminalRows, terminalCols)
 
                 Logger.d("TerminalView", "Terminal resized: ${terminalRows}x${terminalCols}")
@@ -451,7 +610,13 @@ class TerminalView @JvmOverloads constructor(
         // Draw background
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), backgroundPaint)
 
-        // Draw terminal content
+        // Prefer Termux buffer rendering if available
+        termuxBuffer?.let { buffer ->
+            renderTermuxBuffer(canvas, buffer)
+            return
+        }
+
+        // Fall back to old emulator rendering
         terminalRenderer?.let { renderer ->
             terminalBuffer?.let { buffer ->
                 Logger.d("TerminalView", "Rendering terminal: ${buffer.getRows()}x${buffer.getCols()}, scroll=$scrollY")
@@ -462,6 +627,150 @@ class TerminalView @JvmOverloads constructor(
             }
         } ?: run {
             Logger.w("TerminalView", "Terminal renderer is null in onDraw")
+        }
+    }
+
+    /**
+     * Render terminal content from Termux buffer
+     * Draws characters with proper colors and attributes
+     * Performance optimized: uses dirty region tracking for partial redraws
+     */
+    private fun renderTermuxBuffer(canvas: Canvas, buffer: com.termux.terminal.TerminalBuffer) {
+        val bridge = termuxBridge ?: return
+        val rows = bridge.getRows()
+        val cols = bridge.getCols()
+        val cursorRow = bridge.getCursorRow()
+        val cursorCol = bridge.getCursorCol()
+        val cursorVisible = bridge.isCursorVisible()
+
+        val startX = paddingLeft.toFloat()
+        val startY = paddingTop.toFloat()
+
+        // Check if terminal dimensions changed - force full redraw
+        val needsFullRedraw = fullRedrawNeeded || rows != lastRenderedRows || cols != lastRenderedCols
+        if (needsFullRedraw) {
+            dirtyRows.set(0, rows) // Mark all rows dirty
+            lastRenderedRows = rows
+            lastRenderedCols = cols
+            fullRedrawNeeded = false
+        }
+
+        // Track cursor movement - mark old and new cursor rows dirty
+        if (lastCursorRow != cursorRow) {
+            if (lastCursorRow in 0 until rows) dirtyRows.set(lastCursorRow)
+            if (cursorRow in 0 until rows) dirtyRows.set(cursorRow)
+        }
+        if (lastCursorCol != cursorCol && cursorRow in 0 until rows) {
+            dirtyRows.set(cursorRow)
+        }
+        lastCursorRow = cursorRow
+        lastCursorCol = cursorCol
+
+        // Draw only dirty rows
+        for (row in 0 until rows) {
+            // Skip rows that aren't dirty (performance optimization)
+            if (!dirtyRows.get(row)) continue
+
+            val rowTop = startY + row * cellHeight
+            val rowBottom = startY + (row + 1) * cellHeight
+            val y = rowBottom - textPaint.descent()
+
+            // Clear row background before redrawing
+            canvas.drawRect(startX, rowTop, width.toFloat(), rowBottom, backgroundPaint)
+
+            // Get the row text using getSelectedText (single row extraction)
+            val rowText = try {
+                buffer.getSelectedText(0, row, cols, row) ?: ""
+            } catch (e: Exception) {
+                ""
+            }
+
+            // Draw each character with its style
+            var col = 0
+            var charIndex = 0
+            while (col < cols && charIndex < rowText.length) {
+                val x = startX + col * cellWidth
+
+                // Get cell style from Termux buffer
+                val style = buffer.getStyleAt(row, col)
+
+                // Extract foreground and background colors from style
+                val fg = com.termux.terminal.TextStyle.decodeForeColor(style)
+                val bg = com.termux.terminal.TextStyle.decodeBackColor(style)
+                val effect = com.termux.terminal.TextStyle.decodeEffect(style)
+
+                // Draw background if not default
+                if (bg != com.termux.terminal.TextStyle.COLOR_INDEX_BACKGROUND) {
+                    backgroundPaint.color = termuxColorToAndroid(bg)
+                    canvas.drawRect(x, rowTop, x + cellWidth, rowBottom, backgroundPaint)
+                    backgroundPaint.color = Color.BLACK // Reset
+                }
+
+                // Get character at this position
+                val codePoint = rowText.codePointAt(charIndex)
+                val charCount = Character.charCount(codePoint)
+
+                // Draw character if visible (not space or null)
+                if (codePoint != 0 && codePoint != ' '.code) {
+                    textPaint.color = termuxColorToAndroid(fg)
+
+                    // Apply text effects
+                    textPaint.isFakeBoldText = (effect and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_BOLD) != 0
+                    textPaint.textSkewX = if ((effect and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0) -0.25f else 0f
+                    textPaint.isUnderlineText = (effect and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE) != 0
+
+                    val charStr = String(Character.toChars(codePoint))
+                    canvas.drawText(charStr, x, y, textPaint)
+
+                    // Reset effects
+                    textPaint.isFakeBoldText = false
+                    textPaint.textSkewX = 0f
+                    textPaint.isUnderlineText = false
+                }
+
+                col++
+                charIndex += charCount
+            }
+        }
+
+        // Draw cursor (always drawn if visible, regardless of dirty state)
+        if (cursorVisible && cursorRow in 0 until rows && cursorCol in 0 until cols) {
+            val cursorX = startX + cursorCol * cellWidth
+            val cursorY = startY + cursorRow * cellHeight
+            cursorPaint.color = Color.WHITE
+            cursorPaint.alpha = 128
+            canvas.drawRect(cursorX, cursorY, cursorX + cellWidth, cursorY + cellHeight, cursorPaint)
+        }
+
+        // Clear dirty flags after rendering
+        dirtyRows.clear()
+    }
+
+    /**
+     * Convert Termux color index to Android Color
+     */
+    private fun termuxColorToAndroid(colorIndex: Int): Int {
+        return when {
+            colorIndex == com.termux.terminal.TextStyle.COLOR_INDEX_FOREGROUND -> Color.WHITE
+            colorIndex == com.termux.terminal.TextStyle.COLOR_INDEX_BACKGROUND -> Color.BLACK
+            colorIndex == com.termux.terminal.TextStyle.COLOR_INDEX_CURSOR -> Color.WHITE
+            colorIndex < 16 -> defaultColors[colorIndex]
+            colorIndex < 256 -> {
+                // 256-color palette
+                if (colorIndex < 232) {
+                    // Color cube (6x6x6): indices 16-231
+                    val idx = colorIndex - 16
+                    val r = (idx / 36) * 51
+                    val g = ((idx / 6) % 6) * 51
+                    val b = (idx % 6) * 51
+                    Color.rgb(r, g, b)
+                } else {
+                    // Grayscale: indices 232-255
+                    val gray = (colorIndex - 232) * 10 + 8
+                    Color.rgb(gray, gray, gray)
+                }
+            }
+            else -> Color.WHITE
         }
     }
 
@@ -479,6 +788,17 @@ class TerminalView @JvmOverloads constructor(
             return null
         }
 
+        // Try Termux buffer first - use getSelectedText for row text
+        termuxBuffer?.let { buffer ->
+            val lineText = try {
+                buffer.getSelectedText(0, row, terminalCols, row) ?: ""
+            } catch (e: Exception) {
+                ""
+            }
+            return Pair(row, lineText)
+        }
+
+        // Fall back to old buffer
         terminalBuffer?.let { buffer ->
             val lineChars = buffer.getLine(row)
             val lineText = lineChars?.map { it.char }?.joinToString("") ?: ""
@@ -541,7 +861,30 @@ class TerminalView @JvmOverloads constructor(
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        val isCtrl = event.isCtrlPressed
+        val isAlt = event.isAltPressed
+        val isShift = event.isShiftPressed
+
+        // Handle Ctrl+letter combinations (send control codes)
+        if (isCtrl && !isAlt) {
+            val ctrlCode = getCtrlCode(keyCode)
+            if (ctrlCode != null) {
+                sendText(ctrlCode)
+                return true
+            }
+        }
+
+        // Handle Alt+letter combinations (send ESC + letter)
+        if (isAlt && !isCtrl) {
+            val char = event.unicodeChar.toChar()
+            if (char.isLetterOrDigit() || char in "!@#$%^&*()") {
+                sendKeySequence("\u001b$char")
+                return true
+            }
+        }
+
         when (keyCode) {
+            // Basic keys
             KeyEvent.KEYCODE_ENTER -> {
                 sendText("\r")
                 return true
@@ -550,10 +893,20 @@ class TerminalView @JvmOverloads constructor(
                 sendText("\b")
                 return true
             }
+            KeyEvent.KEYCODE_FORWARD_DEL -> {
+                sendKeySequence("\u001b[3~")
+                return true
+            }
             KeyEvent.KEYCODE_TAB -> {
                 sendText("\t")
                 return true
             }
+            KeyEvent.KEYCODE_ESCAPE -> {
+                sendText("\u001b")
+                return true
+            }
+
+            // Arrow keys
             KeyEvent.KEYCODE_DPAD_UP -> {
                 sendKeySequence("\u001b[A")
                 return true
@@ -570,6 +923,78 @@ class TerminalView @JvmOverloads constructor(
                 sendKeySequence("\u001b[D")
                 return true
             }
+
+            // Navigation keys
+            KeyEvent.KEYCODE_MOVE_HOME -> {
+                sendKeySequence("\u001b[H")
+                return true
+            }
+            KeyEvent.KEYCODE_MOVE_END -> {
+                sendKeySequence("\u001b[F")
+                return true
+            }
+            KeyEvent.KEYCODE_PAGE_UP -> {
+                sendKeySequence("\u001b[5~")
+                return true
+            }
+            KeyEvent.KEYCODE_PAGE_DOWN -> {
+                sendKeySequence("\u001b[6~")
+                return true
+            }
+            KeyEvent.KEYCODE_INSERT -> {
+                sendKeySequence("\u001b[2~")
+                return true
+            }
+
+            // Function keys F1-F12
+            KeyEvent.KEYCODE_F1 -> {
+                sendKeySequence("\u001bOP")
+                return true
+            }
+            KeyEvent.KEYCODE_F2 -> {
+                sendKeySequence("\u001bOQ")
+                return true
+            }
+            KeyEvent.KEYCODE_F3 -> {
+                sendKeySequence("\u001bOR")
+                return true
+            }
+            KeyEvent.KEYCODE_F4 -> {
+                sendKeySequence("\u001bOS")
+                return true
+            }
+            KeyEvent.KEYCODE_F5 -> {
+                sendKeySequence("\u001b[15~")
+                return true
+            }
+            KeyEvent.KEYCODE_F6 -> {
+                sendKeySequence("\u001b[17~")
+                return true
+            }
+            KeyEvent.KEYCODE_F7 -> {
+                sendKeySequence("\u001b[18~")
+                return true
+            }
+            KeyEvent.KEYCODE_F8 -> {
+                sendKeySequence("\u001b[19~")
+                return true
+            }
+            KeyEvent.KEYCODE_F9 -> {
+                sendKeySequence("\u001b[20~")
+                return true
+            }
+            KeyEvent.KEYCODE_F10 -> {
+                sendKeySequence("\u001b[21~")
+                return true
+            }
+            KeyEvent.KEYCODE_F11 -> {
+                sendKeySequence("\u001b[23~")
+                return true
+            }
+            KeyEvent.KEYCODE_F12 -> {
+                sendKeySequence("\u001b[24~")
+                return true
+            }
         }
 
         // Handle text input
@@ -580,6 +1005,46 @@ class TerminalView @JvmOverloads constructor(
         }
 
         return super.onKeyDown(keyCode, event)
+    }
+
+    /**
+     * Get control code for Ctrl+letter combination
+     * Ctrl+A = 0x01, Ctrl+B = 0x02, ..., Ctrl+Z = 0x1A
+     */
+    private fun getCtrlCode(keyCode: Int): String? {
+        return when (keyCode) {
+            KeyEvent.KEYCODE_A -> "\u0001"
+            KeyEvent.KEYCODE_B -> "\u0002"
+            KeyEvent.KEYCODE_C -> "\u0003"
+            KeyEvent.KEYCODE_D -> "\u0004"
+            KeyEvent.KEYCODE_E -> "\u0005"
+            KeyEvent.KEYCODE_F -> "\u0006"
+            KeyEvent.KEYCODE_G -> "\u0007"
+            KeyEvent.KEYCODE_H -> "\u0008"
+            KeyEvent.KEYCODE_I -> "\u0009"
+            KeyEvent.KEYCODE_J -> "\u000A"
+            KeyEvent.KEYCODE_K -> "\u000B"
+            KeyEvent.KEYCODE_L -> "\u000C"
+            KeyEvent.KEYCODE_M -> "\u000D"
+            KeyEvent.KEYCODE_N -> "\u000E"
+            KeyEvent.KEYCODE_O -> "\u000F"
+            KeyEvent.KEYCODE_P -> "\u0010"
+            KeyEvent.KEYCODE_Q -> "\u0011"
+            KeyEvent.KEYCODE_R -> "\u0012"
+            KeyEvent.KEYCODE_S -> "\u0013"
+            KeyEvent.KEYCODE_T -> "\u0014"
+            KeyEvent.KEYCODE_U -> "\u0015"
+            KeyEvent.KEYCODE_V -> "\u0016"
+            KeyEvent.KEYCODE_W -> "\u0017"
+            KeyEvent.KEYCODE_X -> "\u0018"
+            KeyEvent.KEYCODE_Y -> "\u0019"
+            KeyEvent.KEYCODE_Z -> "\u001A"
+            KeyEvent.KEYCODE_SPACE -> "\u0000"  // Ctrl+Space = NUL
+            KeyEvent.KEYCODE_LEFT_BRACKET -> "\u001B"  // Ctrl+[ = ESC
+            KeyEvent.KEYCODE_BACKSLASH -> "\u001C"  // Ctrl+\
+            KeyEvent.KEYCODE_RIGHT_BRACKET -> "\u001D"  // Ctrl+]
+            else -> null
+        }
     }
 
     override fun onCreateInputConnection(editorInfo: EditorInfo): InputConnection {

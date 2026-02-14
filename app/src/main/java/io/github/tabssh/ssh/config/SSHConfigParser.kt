@@ -226,7 +226,7 @@ class SSHConfigParser {
             username = username,
             authType = authType,
             keyId = host.identityFileStr?.hashCode()?.toString(), // Will need to be resolved separately if identityFileStr is present
-            groupId = host.groupName ?: "imported",
+            groupId = host.groupName,  // null = appears in "Ungrouped" section
             theme = "dracula",
             createdAt = System.currentTimeMillis(),
             lastConnected = 0,

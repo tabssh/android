@@ -2,8 +2,7 @@ package io.github.tabssh.ui.tabs
 
 import android.view.KeyEvent
 import io.github.tabssh.storage.database.entities.ConnectionProfile
-import io.github.tabssh.terminal.emulator.TerminalBuffer
-import io.github.tabssh.terminal.emulator.TerminalEmulator
+import io.github.tabssh.terminal.TermuxBridge
 import io.github.tabssh.ui.views.TerminalView
 import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.utils.logging.Logger
@@ -32,13 +31,16 @@ class TabManager(private val maxTabs: Int = 10) {
             return null
         }
 
-        // Create terminal emulator for the new tab
-        val terminalBuffer = TerminalBuffer(24, 80)
-        val terminal = TerminalEmulator(terminalBuffer)
+        // Create Termux terminal emulator bridge for the new tab
+        val termuxBridge = TermuxBridge(
+            columns = 80,
+            rows = 24,
+            transcriptRows = 2000
+        )
 
         val tab = SSHTab(
             profile = profile,
-            terminal = terminal
+            termuxBridge = termuxBridge
         )
 
         tabs.add(tab)

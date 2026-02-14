@@ -46,6 +46,27 @@
                 android:paddingEnd="0dp"
                 android:text="1234ms" />
 
+            <ImageButton
+                android:id="@+id/button_copy_output"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginStart="8dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Copy output"
+                android:src="@drawable/ic_copy"
+                android:tooltipText="Copy output to clipboard"
+                app:tint="?android:attr/textColorSecondary" />
+
+            <ImageButton
+                android:id="@+id/button_toggle_output"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Toggle output"
+                android:src="@drawable/ic_expand_more"
+                android:tooltipText="Expand/collapse output"
+                app:tint="?android:attr/textColorSecondary" />
+
         </LinearLayout>
 
         <TextView
@@ -59,6 +80,7 @@
             android:padding="8dp"
             android:maxLines="10"
             android:scrollbars="vertical"
+            android:visibility="gone"
             android:text="Command output will appear here" />
 
     </LinearLayout>

@@ -196,6 +196,7 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                     "stop" -> currentClient?.stopVM(vm.node, vm.vmid, vm.type) ?: false
                     "shutdown" -> currentClient?.shutdownVM(vm.node, vm.vmid, vm.type) ?: false
                     "reboot" -> currentClient?.rebootVM(vm.node, vm.vmid, vm.type) ?: false
+                    "reset" -> currentClient?.resetVM(vm.node, vm.vmid, vm.type) ?: false
                     else -> false
                 }
                 
@@ -255,58 +256,31 @@ class ProxmoxManagerActivity : AppCompatActivity() {
     }
 
     private fun openVMConsole(vm: ProxmoxApiClient.ProxmoxVM) {
-        if (vm.ipAddress == null) {
-            Toast.makeText(this, "VM IP address not available", Toast.LENGTH_SHORT).show()
+        // Get current hypervisor profile for credentials
+        val position = serverSpinner.selectedItemPosition
+        if (position < 0 || position >= hypervisors.size) {
+            Toast.makeText(this, "No hypervisor selected", Toast.LENGTH_SHORT).show()
             return
         }
+        val profile = hypervisors[position]
 
-        lifecycleScope.launch {
-            try {
-                // Get or create connection profile for VM
-                val connectionName = "${vm.name}-console"
-                var connection = app.database.connectionDao().getAllConnections()
-                    .let { flow -> 
-                        var result: io.github.tabssh.storage.database.entities.ConnectionProfile? = null
-                        flow.collect { connections ->
-                            result = connections.firstOrNull { it.name == connectionName }
-                        }
-                        result
-                    }
-
-                if (connection == null) {
-                    // Create new connection profile
-                    connection = io.github.tabssh.storage.database.entities.ConnectionProfile(
-                        id = java.util.UUID.randomUUID().toString(),
-                        name = connectionName,
-                        host = vm.ipAddress!!,
-                        port = 22,
-                        username = "root",
-                        authType = io.github.tabssh.ssh.auth.AuthType.PASSWORD.name,
-                        createdAt = System.currentTimeMillis(),
-                        modifiedAt = System.currentTimeMillis()
-                    )
-                    app.database.connectionDao().insertConnection(connection)
-                    Logger.i("ProxmoxManager", "Created connection profile for VM: ${vm.name}")
-                } else {
-                    // Update existing connection with latest IP
-                    connection = connection.copy(
-                        host = vm.ipAddress!!,
-                        modifiedAt = System.currentTimeMillis()
-                    )
-                    app.database.connectionDao().updateConnection(connection)
-                    Logger.i("ProxmoxManager", "Updated connection profile for VM: ${vm.name}")
-                }
-
-                // Launch terminal activity with auto-connect
-                val intent = TabTerminalActivity.createIntent(this@ProxmoxManagerActivity, connection, autoConnect = true)
-                startActivity(intent)
-                
-                Toast.makeText(this@ProxmoxManagerActivity, "Opening console for ${vm.name}", Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                Logger.e("ProxmoxManager", "Failed to open VM console", e)
-                showError("Failed to open console: ${e.message}", "Error")
-            }
+        // Launch VMConsoleActivity for serial console (works without VM network)
+        val intent = android.content.Intent(this, VMConsoleActivity::class.java).apply {
+            putExtra(VMConsoleActivity.EXTRA_HYPERVISOR_TYPE, VMConsoleActivity.TYPE_PROXMOX)
+            putExtra(VMConsoleActivity.EXTRA_VM_ID, vm.vmid.toString())
+            putExtra(VMConsoleActivity.EXTRA_VM_NAME, vm.name)
+            putExtra(VMConsoleActivity.EXTRA_VM_NODE, vm.node)
+            putExtra(VMConsoleActivity.EXTRA_VM_TYPE, vm.type)
+            putExtra(VMConsoleActivity.EXTRA_HOST, profile.host)
+            putExtra(VMConsoleActivity.EXTRA_PORT, profile.port)
+            putExtra(VMConsoleActivity.EXTRA_USERNAME, profile.username)
+            putExtra(VMConsoleActivity.EXTRA_PASSWORD, profile.password)
+            putExtra(VMConsoleActivity.EXTRA_REALM, profile.realm ?: "pam")
         }
+        startActivity(intent)
+
+        Toast.makeText(this, "Opening serial console for ${vm.name}", Toast.LENGTH_SHORT).show()
+        Logger.i("ProxmoxManager", "Launching serial console for VM: ${vm.name} (vmid=${vm.vmid})")
     }
 
     override fun onSupportNavigateUp(): Boolean {
@@ -330,6 +304,7 @@ class ProxmoxManagerActivity : AppCompatActivity() {
             val startButton: Button = view.findViewById(R.id.start_button)
             val stopButton: Button = view.findViewById(R.id.stop_button)
             val rebootButton: Button = view.findViewById(R.id.reboot_button)
+            val resetButton: Button = view.findViewById(R.id.reset_button)
         }
 
         override fun onCreateViewHolder(parent: android.view.ViewGroup, viewType: Int): ViewHolder {
@@ -362,16 +337,39 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                 }
             )
             
-            // Enable/disable buttons based on status
-            holder.consoleButton.isEnabled = vm.status == "running" && vm.ipAddress != null
-            holder.startButton.isEnabled = vm.status != "running"
-            holder.stopButton.isEnabled = vm.status == "running"
-            holder.rebootButton.isEnabled = vm.status == "running"
-            
+            // Show/hide buttons based on VM status (better UX than disabled)
+            when (vm.status.lowercase()) {
+                "running" -> {
+                    // VM is running - show power controls, hide start
+                    holder.consoleButton.visibility = android.view.View.VISIBLE
+                    holder.startButton.visibility = android.view.View.GONE
+                    holder.stopButton.visibility = android.view.View.VISIBLE
+                    holder.rebootButton.visibility = android.view.View.VISIBLE
+                    holder.resetButton.visibility = android.view.View.VISIBLE
+                }
+                "stopped" -> {
+                    // VM is stopped - only show start
+                    holder.consoleButton.visibility = android.view.View.GONE
+                    holder.startButton.visibility = android.view.View.VISIBLE
+                    holder.stopButton.visibility = android.view.View.GONE
+                    holder.rebootButton.visibility = android.view.View.GONE
+                    holder.resetButton.visibility = android.view.View.GONE
+                }
+                else -> {
+                    // Paused, suspended, etc - show start/stop only
+                    holder.consoleButton.visibility = android.view.View.GONE
+                    holder.startButton.visibility = android.view.View.VISIBLE
+                    holder.stopButton.visibility = android.view.View.VISIBLE
+                    holder.rebootButton.visibility = android.view.View.GONE
+                    holder.resetButton.visibility = android.view.View.GONE
+                }
+            }
+
             holder.consoleButton.setOnClickListener { onAction(vm, "console") }
             holder.startButton.setOnClickListener { onAction(vm, "start") }
             holder.stopButton.setOnClickListener { onAction(vm, "stop") }
             holder.rebootButton.setOnClickListener { onAction(vm, "reboot") }
+            holder.resetButton.setOnClickListener { onAction(vm, "reset") }
         }
 
         override fun getItemCount() = vms.size

@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(for dir in /root/Projects/github/tabssh/android/app/src/main/java/io/github/tabssh/*/)",
+      "Bash(done)",
+      "Bash(xargs:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:mvnrepository.com)",
+      "Bash(./build.sh:*)",
+      "Bash(tee:*)",
+      "Bash(./gradlew compileDebugKotlin:*)"
+    ]
+  }
+}

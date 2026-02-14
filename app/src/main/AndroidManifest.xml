@@ -24,6 +24,10 @@
     <!-- Post notifications (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Override Termux library minSdk requirement (24) to maintain our minSdk (21) -->
+    <!-- Termux terminal-emulator may use some API 24 features, test on older devices -->
+    <uses-sdk tools:overrideLibrary="com.termux.terminal,com.termux.view" />
+
     <application
         android:name=".TabSSHApplication"
         android:allowBackup="false"
@@ -144,6 +148,14 @@
             android:exported="false"
             android:label="VMware Manager"
             android:parentActivityName=".ui.activities.MainActivity"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- VM Console activity (serial console via hypervisor API) -->
+        <activity
+            android:name=".ui.activities.VMConsoleActivity"
+            android:exported="false"
+            android:label="VM Console"
+            android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar"
             android:windowSoftInputMode="adjustResize" />
 
         <!-- Hypervisor Edit activity -->

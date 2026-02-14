@@ -246,13 +246,12 @@ class SessionPersistenceManager(
     
     private suspend fun saveTabSession(tab: SSHTab, tabIndex: Int, immediate: Boolean) {
         try {
-            val terminal = tab.terminal
-            val buffer = terminal.getBuffer()
+            val terminal = tab.termuxBridge
             val stats = tab.getConnectionStats()
 
-            // Compress terminal content for storage
+            // Compress terminal content for storage (get scrollback from bridge)
             val scrollbackContent = if (immediate || stats.isActive) {
-                compressTerminalContent(buffer.getScrollbackContent())
+                compressTerminalContent(terminal.getScrollbackContent())
             } else null
 
             val tabSession = TabSession(
@@ -262,16 +261,16 @@ class SessionPersistenceManager(
                 title = tab.getDisplayTitle(),
                 isActive = stats.isActive,
                 terminalContent = scrollbackContent ?: "",
-                cursorRow = buffer.getCursorRow(),
-                cursorCol = buffer.getCursorCol(),
+                cursorRow = terminal.getCursorRow(),
+                cursorCol = terminal.getCursorCol(),
                 scrollPosition = 0,
                 workingDirectory = "/",
                 environmentVars = "{}",
                 createdAt = System.currentTimeMillis(),
                 lastActivity = stats.lastActivity,
                 sessionState = if (stats.isActive) TabSession.STATE_CONNECTED else TabSession.STATE_DISCONNECTED,
-                terminalRows = buffer.getRows(),
-                terminalCols = buffer.getCols(),
+                terminalRows = terminal.getRows(),
+                terminalCols = terminal.getCols(),
                 fontSize = 14f,
                 connectionState = if (stats.isActive) "CONNECTED" else "DISCONNECTED",
                 lastError = null,

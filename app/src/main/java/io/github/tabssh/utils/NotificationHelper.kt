@@ -9,6 +9,7 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import io.github.tabssh.R
+import io.github.tabssh.storage.preferences.PreferenceManager
 import io.github.tabssh.ui.activities.MainActivity
 import io.github.tabssh.utils.logging.Logger
 
@@ -104,15 +105,22 @@ object NotificationHelper {
      * Show connection success notification
      */
     fun showConnectionSuccess(context: Context, serverName: String, username: String) {
+        // Check if connection notifications are enabled
+        val prefManager = PreferenceManager(context)
+        if (!prefManager.showConnectionNotifications()) {
+            Logger.d("NotificationHelper", "Connection notifications disabled, skipping")
+            return
+        }
+
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        
+
         val pendingIntent = PendingIntent.getActivity(
             context,
             0,
             Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        
+
         val notification = NotificationCompat.Builder(context, CHANNEL_CONNECTION)
             .setContentTitle("Connected to $serverName")
             .setContentText("Logged in as $username")
@@ -122,7 +130,7 @@ object NotificationHelper {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .build()
-        
+
         notificationManager.notify(NOTIFICATION_ID_CONNECTION, notification)
         Logger.d("NotificationHelper", "Showed connection success notification")
     }
@@ -131,15 +139,22 @@ object NotificationHelper {
      * Show connection error notification
      */
     fun showConnectionError(context: Context, serverName: String, errorMessage: String) {
+        // Check if error notifications are enabled
+        val prefManager = PreferenceManager(context)
+        if (!prefManager.showErrorNotifications()) {
+            Logger.d("NotificationHelper", "Error notifications disabled, skipping")
+            return
+        }
+
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        
+
         val pendingIntent = PendingIntent.getActivity(
             context,
             0,
             Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        
+
         val notification = NotificationCompat.Builder(context, CHANNEL_ERROR)
             .setContentTitle("Failed to connect to $serverName")
             .setContentText(errorMessage)
@@ -150,7 +165,7 @@ object NotificationHelper {
             .setCategory(NotificationCompat.CATEGORY_ERROR)
             .setStyle(NotificationCompat.BigTextStyle().bigText(errorMessage))
             .build()
-        
+
         notificationManager.notify(NOTIFICATION_ID_ERROR, notification)
         Logger.d("NotificationHelper", "Showed connection error notification")
     }
@@ -159,21 +174,28 @@ object NotificationHelper {
      * Show disconnection notification
      */
     fun showDisconnected(context: Context, serverName: String, reason: String? = null) {
+        // Check if connection notifications are enabled
+        val prefManager = PreferenceManager(context)
+        if (!prefManager.showConnectionNotifications()) {
+            Logger.d("NotificationHelper", "Connection notifications disabled, skipping")
+            return
+        }
+
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        
+
         val pendingIntent = PendingIntent.getActivity(
             context,
             0,
             Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        
+
         val contentText = if (reason != null) {
             "Disconnected: $reason"
         } else {
             "Disconnected"
         }
-        
+
         val notification = NotificationCompat.Builder(context, CHANNEL_CONNECTION)
             .setContentTitle("Disconnected from $serverName")
             .setContentText(contentText)
@@ -183,7 +205,7 @@ object NotificationHelper {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .build()
-        
+
         notificationManager.notify(NOTIFICATION_ID_CONNECTION, notification)
         Logger.d("NotificationHelper", "Showed disconnection notification")
     }
@@ -198,12 +220,19 @@ object NotificationHelper {
         bytesTransferred: Long,
         totalBytes: Long,
         isUpload: Boolean = true
-    ): Notification {
+    ): Notification? {
+        // Check if file transfer notifications are enabled
+        val prefManager = PreferenceManager(context)
+        if (!prefManager.showFileTransferNotifications()) {
+            Logger.d("NotificationHelper", "File transfer notifications disabled, skipping")
+            return null
+        }
+
         val action = if (isUpload) "Uploading" else "Downloading"
         val progress = if (totalBytes > 0) {
             ((bytesTransferred * 100) / totalBytes).toInt().coerceIn(0, 100)
         } else 0
-        
+
         val notification = NotificationCompat.Builder(context, CHANNEL_FILE_TRANSFER)
             .setContentTitle("$action $fileName")
             .setContentText("$progress% complete (${formatBytes(bytesTransferred)} / ${formatBytes(totalBytes)})")
@@ -214,10 +243,10 @@ object NotificationHelper {
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setAutoCancel(false)
             .build()
-        
+
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.notify(notificationId, notification)
-        
+
         return notification
     }
     
@@ -243,15 +272,22 @@ object NotificationHelper {
         isUpload: Boolean = true,
         success: Boolean = true
     ) {
+        // Check if file transfer notifications are enabled
+        val prefManager = PreferenceManager(context)
+        if (!prefManager.showFileTransferNotifications()) {
+            Logger.d("NotificationHelper", "File transfer notifications disabled, skipping")
+            return
+        }
+
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        
+
         val action = if (isUpload) "Upload" else "Download"
         val title = if (success) {
             "$action complete"
         } else {
             "$action failed"
         }
-        
+
         val notification = NotificationCompat.Builder(context, CHANNEL_FILE_TRANSFER)
             .setContentTitle(title)
             .setContentText(fileName)
@@ -260,7 +296,7 @@ object NotificationHelper {
             .setPriority(if (success) NotificationCompat.PRIORITY_LOW else NotificationCompat.PRIORITY_HIGH)
             .setCategory(if (success) NotificationCompat.CATEGORY_STATUS else NotificationCompat.CATEGORY_ERROR)
             .build()
-        
+
         notificationManager.notify(notificationId, notification)
         Logger.d("NotificationHelper", "Showed file transfer complete notification: $fileName")
     }

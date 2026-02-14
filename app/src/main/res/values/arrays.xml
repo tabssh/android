@@ -46,26 +46,79 @@
         <item>3600</item>
     </string-array>
 
-    <!-- Terminal themes -->
+    <!-- Terminal types for SSH connections -->
+    <string-array name="terminal_types">
+        <item>xterm-256color</item>
+        <item>xterm</item>
+        <item>screen-256color</item>
+        <item>screen</item>
+        <item>tmux-256color</item>
+        <item>tmux</item>
+        <item>vt100</item>
+        <item>vt220</item>
+        <item>linux</item>
+        <item>dumb</item>
+        <item>ansi</item>
+    </string-array>
+
+    <!-- Terminal themes (23 total - all from BuiltInThemes.kt) -->
     <string-array name="terminal_theme_entries">
+        <!-- System themes -->
+        <item>System Default</item>
+        <item>System Dark</item>
+        <item>System Light</item>
+        <!-- Classic dark themes -->
         <item>Dracula</item>
-        <item>Monokai</item>
         <item>Solarized Dark</item>
-        <item>Solarized Light</item>
-        <item>Gruvbox</item>
         <item>Nord</item>
         <item>One Dark</item>
+        <item>Monokai</item>
+        <item>Gruvbox Dark</item>
+        <item>Tomorrow Night</item>
+        <item>Atom One Dark</item>
+        <item>Material Dark</item>
+        <!-- Classic light themes -->
+        <item>Solarized Light</item>
+        <item>Gruvbox Light</item>
+        <item>GitHub Light</item>
+        <!-- New popular themes -->
         <item>Tokyo Night</item>
+        <item>Tokyo Night Light</item>
+        <item>Catppuccin Mocha</item>
+        <item>Rose Pine</item>
+        <item>Everforest</item>
+        <item>Kanagawa</item>
+        <item>Night Owl</item>
+        <item>Cobalt2</item>
     </string-array>
     <string-array name="terminal_theme_values">
+        <!-- System themes -->
+        <item>system_default</item>
+        <item>system_dark</item>
+        <item>system_light</item>
+        <!-- Classic dark themes -->
         <item>dracula</item>
-        <item>monokai</item>
         <item>solarized_dark</item>
-        <item>solarized_light</item>
-        <item>gruvbox</item>
         <item>nord</item>
         <item>one_dark</item>
+        <item>monokai</item>
+        <item>gruvbox_dark</item>
+        <item>tomorrow_night</item>
+        <item>atom_one_dark</item>
+        <item>material_dark</item>
+        <!-- Classic light themes -->
+        <item>solarized_light</item>
+        <item>gruvbox_light</item>
+        <item>github_light</item>
+        <!-- New popular themes -->
         <item>tokyo_night</item>
+        <item>tokyo_night_light</item>
+        <item>catppuccin</item>
+        <item>rose_pine</item>
+        <item>everforest</item>
+        <item>kanagawa</item>
+        <item>night_owl</item>
+        <item>cobalt2</item>
     </string-array>
 
     <!-- Terminal fonts -->
@@ -147,7 +200,21 @@
         <item>screen</item>
         <item>zellij</item>
     </string-array>
-    
+
+    <!-- Multiplexer mode options (per-connection) -->
+    <string-array name="multiplexer_mode_entries">
+        <item>Disabled</item>
+        <item>Auto-attach to existing session</item>
+        <item>Create new session</item>
+        <item>Ask on connect</item>
+    </string-array>
+    <string-array name="multiplexer_mode_values">
+        <item>OFF</item>
+        <item>AUTO_ATTACH</item>
+        <item>CREATE_NEW</item>
+        <item>ASK</item>
+    </string-array>
+
     <!-- Log level options -->
     <string-array name="log_levels">
         <item>Verbose</item>

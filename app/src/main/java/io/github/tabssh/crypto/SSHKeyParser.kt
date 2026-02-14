@@ -4,6 +4,10 @@ import android.util.Base64
 import io.github.tabssh.utils.logging.Logger
 import org.bouncycastle.asn1.pkcs.PrivateKeyInfo
 import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo
+import org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters
+import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters
+import org.bouncycastle.jcajce.provider.asymmetric.edec.BCEdDSAPrivateKey
+import org.bouncycastle.jcajce.provider.asymmetric.edec.BCEdDSAPublicKey
 import org.bouncycastle.openssl.PEMKeyPair
 import org.bouncycastle.openssl.PEMParser
 import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter
@@ -242,8 +246,16 @@ object SSHKeyParser {
             }
             keyTypeName.startsWith("ssh-ed25519") -> {
                 val publicKeyBytes = readString(buffer)
+                // Raw Ed25519 public key is 32 bytes - need to wrap in SubjectPublicKeyInfo
+                // X509EncodedKeySpec expects ASN.1/DER format, not raw bytes
+                val publicKeyInfo = SubjectPublicKeyInfo(
+                    org.bouncycastle.asn1.x509.AlgorithmIdentifier(
+                        org.bouncycastle.asn1.edec.EdECObjectIdentifiers.id_Ed25519
+                    ),
+                    publicKeyBytes
+                )
                 val keyFactory = KeyFactory.getInstance("Ed25519", "BC")
-                val pubSpec = X509EncodedKeySpec(publicKeyBytes)
+                val pubSpec = X509EncodedKeySpec(publicKeyInfo.encoded)
                 Pair(keyFactory.generatePublic(pubSpec), KeyType.ED25519)
             }
             keyTypeName.startsWith("ssh-dss") -> {
@@ -381,12 +393,36 @@ object SSHKeyParser {
     }
 
     private fun parseOpenSSHEd25519Key(publicBuffer: ByteBuffer, privateBuffer: ByteBuffer): ParsedKey {
+        // OpenSSH Ed25519 format:
+        // - Public key: 32 bytes raw
+        // - Private key: 64 bytes (32 bytes seed + 32 bytes public key copy)
         val publicKeyBytes = readString(publicBuffer)
         val privateKeyBytes = readString(privateBuffer)
 
+        // Use BouncyCastle Ed25519 parameters to handle raw bytes
+        // (X509EncodedKeySpec/PKCS8EncodedKeySpec expect ASN.1/DER format, not raw)
+        val bcPublicKey = Ed25519PublicKeyParameters(publicKeyBytes, 0)
+        val bcPrivateKey = Ed25519PrivateKeyParameters(privateKeyBytes, 0)
+
+        // Convert BouncyCastle keys to Java KeyPair format
         val keyFactory = KeyFactory.getInstance("Ed25519", "BC")
-        val publicKey = keyFactory.generatePublic(X509EncodedKeySpec(publicKeyBytes))
-        val privateKey = keyFactory.generatePrivate(PKCS8EncodedKeySpec(privateKeyBytes))
+
+        // Build proper ASN.1 encoded specs from BouncyCastle parameters
+        val publicKeyInfo = SubjectPublicKeyInfo(
+            org.bouncycastle.asn1.x509.AlgorithmIdentifier(
+                org.bouncycastle.asn1.edec.EdECObjectIdentifiers.id_Ed25519
+            ),
+            publicKeyBytes
+        )
+        val privateKeyInfo = PrivateKeyInfo(
+            org.bouncycastle.asn1.x509.AlgorithmIdentifier(
+                org.bouncycastle.asn1.edec.EdECObjectIdentifiers.id_Ed25519
+            ),
+            org.bouncycastle.asn1.DEROctetString(privateKeyBytes.copyOfRange(0, 32))
+        )
+
+        val publicKey = keyFactory.generatePublic(X509EncodedKeySpec(publicKeyInfo.encoded))
+        val privateKey = keyFactory.generatePrivate(PKCS8EncodedKeySpec(privateKeyInfo.encoded))
 
         return ParsedKey(
             privateKey = privateKey,

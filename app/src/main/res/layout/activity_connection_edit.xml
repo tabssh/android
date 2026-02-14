@@ -187,8 +187,9 @@
 
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Authentication Settings -->
+            <!-- Authentication Settings (hidden when Identity selected) -->
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_authentication"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="@dimen/space_md"
@@ -330,13 +331,13 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:hint="Terminal Type"
-                        style="@style/Widget.TabSSH.TextInputLayout">
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/edit_terminal_type"
+                        <AutoCompleteTextView
+                            android:id="@+id/spinner_terminal_type"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:inputType="text"
+                            android:inputType="none"
                             android:text="xterm-256color"
                             android:tooltipText="xterm-256color for best compatibility" />
 
@@ -397,7 +398,154 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_sm"
-                        android:text="Configure Knock Sequence" />
+                        android:text="Configure Knock Sequence"
+                        android:visibility="gone" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Multiplexer Settings (tmux/screen/zellij) -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/space_md"
+                app:cardCornerRadius="@dimen/card_corner_radius">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="@dimen/space_md">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Terminal Multiplexer"
+                        android:textStyle="bold"
+                        android:textSize="@dimen/text_size_subtitle"
+                        android:textColor="?android:attr/textColorPrimary"
+                        android:layout_marginBottom="@dimen/space_sm" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Auto-attach to tmux, screen, or zellij sessions"
+                        android:textSize="12sp"
+                        android:textColor="?android:attr/textColorSecondary"
+                        android:layout_marginBottom="@dimen/space_md" />
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="Multiplexer Mode"
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
+
+                        <AutoCompleteTextView
+                            android:id="@+id/spinner_multiplexer_mode"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="none"
+                            android:tooltipText="Choose how to handle multiplexer sessions on connect" />
+
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/layout_multiplexer_session_name"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="Session Name (optional)"
+                        android:layout_marginTop="@dimen/space_sm"
+                        android:visibility="gone"
+                        style="@style/Widget.TabSSH.TextInputLayout">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/edit_multiplexer_session_name"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="text"
+                            android:tooltipText="Custom session name (e.g., main, dev). Leave empty to use default." />
+
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Appearance & Scripts -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/space_md"
+                app:cardCornerRadius="@dimen/card_corner_radius">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="@dimen/space_md">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Appearance &amp; Scripts"
+                        android:textStyle="bold"
+                        android:textSize="@dimen/text_size_subtitle"
+                        android:textColor="?android:attr/textColorPrimary"
+                        android:layout_marginBottom="@dimen/space_md" />
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="Terminal Theme (Override)"
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
+
+                        <AutoCompleteTextView
+                            android:id="@+id/spinner_connection_theme"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="none"
+                            android:tooltipText="Override global theme for this connection" />
+
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="Font Size Override"
+                        android:layout_marginTop="@dimen/space_sm"
+                        app:helperText="Leave empty to use global setting"
+                        style="@style/Widget.TabSSH.TextInputLayout">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/edit_font_size_override"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="number"
+                            android:tooltipText="Font size in sp (8-32). Leave empty for default." />
+
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="Post-Connect Script"
+                        android:layout_marginTop="@dimen/space_sm"
+                        app:helperText="Commands to run after connecting (one per line)"
+                        style="@style/Widget.TabSSH.TextInputLayout">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/edit_post_connect_script"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="textMultiLine"
+                            android:minLines="2"
+                            android:maxLines="5"
+                            android:gravity="top"
+                            android:fontFamily="monospace"
+                            android:tooltipText="Shell commands to execute after SSH connection is established" />
+
+                    </com.google.android.material.textfield.TextInputLayout>
 
                 </LinearLayout>
 
@@ -542,35 +690,38 @@
 
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Action Buttons -->
+            <!-- Action Buttons: Cancel | Test | Save (equal width to prevent overflow) -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
-                android:gravity="end">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_test"
-                    style="@style/Widget.TabSSH.Button.Outlined"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginEnd="@dimen/space_sm"
-                    android:text="Test Connection" />
+                android:layout_marginTop="@dimen/space_md">
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_cancel"
                     style="@style/Widget.TabSSH.Button.Outlined"
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:layout_weight="1"
                     android:layout_marginEnd="@dimen/space_sm"
                     android:text="@string/cancel" />
 
                 <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_test"
+                    style="@style/Widget.TabSSH.Button.Outlined"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="@dimen/space_sm"
+                    android:text="Test" />
+
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_save"
                     style="@style/Widget.TabSSH.Button"
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:text="@string/save_connection" />
+                    android:layout_weight="1"
+                    android:text="Save" />
 
             </LinearLayout>
 
