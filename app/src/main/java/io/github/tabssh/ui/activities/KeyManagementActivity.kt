@@ -358,10 +358,46 @@ class KeyManagementActivity : AppCompatActivity() {
                 ${if (!key.comment.isNullOrEmpty()) "Comment: ${key.comment}\n" else ""}
             """.trimIndent())
             .setPositiveButton("OK", null)
+            .setNeutralButton("Rename") { _, _ ->
+                showRenameKeyDialog(key)
+            }
             .setNegativeButton("Delete") { _, _ ->
                 deleteKey(key)
             }
             .show()
+    }
+
+    private fun showRenameKeyDialog(key: StoredKey) {
+        val editText = android.widget.EditText(this).apply {
+            setText(key.name)
+            hint = "Enter new name"
+            selectAll()
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Rename SSH Key")
+            .setView(editText)
+            .setPositiveButton("Rename") { _, _ ->
+                val newName = editText.text.toString().trim()
+                if (newName.isNotBlank() && newName != key.name) {
+                    renameKey(key, newName)
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun renameKey(key: StoredKey, newName: String) {
+        lifecycleScope.launch {
+            try {
+                val updatedKey = key.copy(name = newName)
+                app.database.keyDao().updateKey(updatedKey)
+                Toast.makeText(this@KeyManagementActivity, "Key renamed to '$newName'", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Logger.e("KeyManagementActivity", "Failed to rename key", e)
+                showError("Failed to rename key: ${e.message}", "Rename Error")
+            }
+        }
     }
 
     private fun deleteKey(key: StoredKey) {

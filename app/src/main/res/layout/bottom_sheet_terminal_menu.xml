@@ -31,23 +31,40 @@
         android:id="@+id/tabs_recycler_view"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:maxHeight="300dp"
-        android:paddingBottom="16dp" />
+        android:maxHeight="200dp"
+        android:paddingBottom="8dp" />
 
     <com.google.android.material.divider.MaterialDivider
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="16dp" />
+        android:layout_marginBottom="8dp" />
 
-    <!-- Actions -->
+    <!-- Tab Actions -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Tab Actions"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textColor="?android:attr/textColorSecondary"
+        android:paddingBottom="8dp" />
+
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btn_new_tab"
         style="@style/Widget.Material3.Button.TextButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Quick Connect"
-        android:contentDescription="Quick connect to new SSH server"
+        android:text="New Tab"
         app:icon="@drawable/ic_add"
+        app:iconGravity="start" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_close_tab"
+        style="@style/Widget.Material3.Button.TextButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Close Current Tab"
+        app:icon="@drawable/ic_close"
         app:iconGravity="start" />
 
     <com.google.android.material.button.MaterialButton
@@ -56,8 +73,75 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Disconnect All"
-        android:contentDescription="Disconnect all SSH tabs"
-        app:icon="@drawable/ic_close"
+        app:icon="@drawable/ic_disconnect"
+        app:iconGravity="start" />
+
+    <com.google.android.material.divider.MaterialDivider
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp" />
+
+    <!-- Clipboard -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Clipboard"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textColor="?android:attr/textColorSecondary"
+        android:paddingBottom="8dp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_copy"
+        style="@style/Widget.Material3.Button.TextButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Copy"
+        app:icon="@drawable/ic_copy"
+        app:iconGravity="start" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_paste"
+        style="@style/Widget.Material3.Button.TextButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Paste"
+        app:icon="@drawable/ic_paste"
+        app:iconGravity="start" />
+
+    <com.google.android.material.divider.MaterialDivider
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp" />
+
+    <!-- More Options -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="More"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textColor="?android:attr/textColorSecondary"
+        android:paddingBottom="8dp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_port_forwarding"
+        style="@style/Widget.Material3.Button.TextButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Port Forwarding"
+        app:icon="@drawable/ic_interface"
+        app:iconGravity="start" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_settings"
+        style="@style/Widget.Material3.Button.TextButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Settings"
+        app:icon="@drawable/ic_settings_general"
         app:iconGravity="start" />
 
 </LinearLayout>

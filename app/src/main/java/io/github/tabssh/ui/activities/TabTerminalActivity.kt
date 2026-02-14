@@ -91,7 +91,8 @@ class TabTerminalActivity : AppCompatActivity() {
         setupBackPressHandler()
         setupMenuFab()
         setupBottomActionBar()  // NEW: Bottom toolbar setup
-        
+        setupHostKeyVerification()  // Setup host key verification dialogs
+
         // Handle intent
         handleIntent(intent)
         
@@ -193,7 +194,89 @@ class TabTerminalActivity : AppCompatActivity() {
             hideBottomActionBar()
         }
     }
-    
+
+    /**
+     * Setup host key verification callbacks for SSH connections
+     */
+    private fun setupHostKeyVerification() {
+        // Setup callback for new (unknown) host keys
+        app.sshSessionManager.newHostKeyCallback = { info ->
+            Logger.i("TabTerminalActivity", "New host key callback invoked for ${info.hostname}")
+
+            var userAction: io.github.tabssh.ssh.connection.HostKeyAction? = null
+            val latch = java.util.concurrent.CountDownLatch(1)
+
+            runOnUiThread {
+                androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("New Host Key")
+                    .setMessage(info.getDisplayMessage())
+                    .setPositiveButton("Accept & Save") { _, _ ->
+                        userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_NEW_KEY
+                        latch.countDown()
+                    }
+                    .setNeutralButton("Accept Once") { _, _ ->
+                        userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_ONCE
+                        latch.countDown()
+                    }
+                    .setNegativeButton("Reject") { _, _ ->
+                        userAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
+                        latch.countDown()
+                    }
+                    .setCancelable(false)
+                    .show()
+            }
+
+            // Wait for user response
+            try {
+                latch.await()
+            } catch (e: InterruptedException) {
+                Logger.e("TabTerminalActivity", "Interrupted waiting for host key response", e)
+            }
+
+            userAction ?: io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
+        }
+
+        // Setup callback for changed host keys (MITM warning)
+        app.sshSessionManager.hostKeyChangedCallback = { info ->
+            Logger.w("TabTerminalActivity", "Host key CHANGED callback invoked for ${info.hostname}")
+
+            var userAction: io.github.tabssh.ssh.connection.HostKeyAction? = null
+            val latch = java.util.concurrent.CountDownLatch(1)
+
+            runOnUiThread {
+                androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("WARNING: Host Key Changed!")
+                    .setMessage(info.getDisplayMessage())
+                    .setIcon(android.R.drawable.ic_dialog_alert)
+                    .setPositiveButton("Accept New Key") { _, _ ->
+                        userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_NEW_KEY
+                        latch.countDown()
+                    }
+                    .setNeutralButton("Accept Once") { _, _ ->
+                        userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_ONCE
+                        latch.countDown()
+                    }
+                    .setNegativeButton("Reject (Recommended)") { _, _ ->
+                        userAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
+                        latch.countDown()
+                    }
+                    .setCancelable(false)
+                    .show()
+            }
+
+            // Wait for user response
+            try {
+                latch.await()
+            } catch (e: InterruptedException) {
+                Logger.e("TabTerminalActivity", "Interrupted waiting for host key response", e)
+            }
+
+            userAction ?: io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
+        }
+
+        Logger.i("TabTerminalActivity", "Host key verification callbacks set up")
+    }
+
     /**
      * Setup edge tap gestures for showing UI elements
      */
@@ -300,11 +383,36 @@ class TabTerminalActivity : AppCompatActivity() {
             showConnectionSelector()
         }
         
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_close_tab)?.setOnClickListener {
+            bottomSheet.dismiss()
+            closeCurrentTab()
+        }
+
         view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_disconnect_all)?.setOnClickListener {
             bottomSheet.dismiss()
             disconnectAllTabs()
         }
-        
+
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_copy)?.setOnClickListener {
+            bottomSheet.dismiss()
+            copyTerminalText()
+        }
+
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_paste)?.setOnClickListener {
+            bottomSheet.dismiss()
+            pasteFromClipboard()
+        }
+
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_port_forwarding)?.setOnClickListener {
+            bottomSheet.dismiss()
+            openPortForwarding()
+        }
+
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_settings)?.setOnClickListener {
+            bottomSheet.dismiss()
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
+
         bottomSheet.setContentView(view)
         bottomSheet.show()
     }
@@ -1016,10 +1124,11 @@ class TabTerminalActivity : AppCompatActivity() {
         }
     }
     
-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.terminal_menu, menu)
-        return true
-    }
+    // Toolbar options menu removed - using bottom sheet menu instead
+    // override fun onCreateOptionsMenu(menu: Menu): Boolean {
+    //     menuInflater.inflate(R.menu.terminal_menu, menu)
+    //     return true
+    // }
     
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
@@ -1603,11 +1712,18 @@ class TabTerminalActivity : AppCompatActivity() {
     }
     
     private fun toggleCustomKeyboard() {
-        customKeyboardVisible = !customKeyboardVisible
-        binding.customKeyboard.visibility = if (customKeyboardVisible) {
-            android.view.View.VISIBLE
-        } else {
-            android.view.View.GONE
-        }
+        // Toggle the system soft keyboard when user taps keyboard icon
+        // This lets users show/hide the main keyboard while keeping custom bar visible
+        toggleKeyboard()
+    }
+
+    private fun hideCustomKeyboardBar() {
+        customKeyboardVisible = false
+        binding.customKeyboard.visibility = android.view.View.GONE
+    }
+
+    private fun showCustomKeyboardBar() {
+        customKeyboardVisible = true
+        binding.customKeyboard.visibility = android.view.View.VISIBLE
     }
 }

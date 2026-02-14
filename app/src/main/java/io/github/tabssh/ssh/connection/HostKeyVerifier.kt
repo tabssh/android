@@ -23,12 +23,20 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
     private val hostKeyDao = database.hostKeyDao()
 
     private var hostKeyChangedCallback: ((HostKeyChangedInfo) -> HostKeyAction)? = null
+    private var newHostKeyCallback: ((NewHostKeyInfo) -> HostKeyAction)? = null
 
     /**
      * Set callback for when host key changes are detected
      */
     fun setHostKeyChangedCallback(callback: (HostKeyChangedInfo) -> HostKeyAction) {
         hostKeyChangedCallback = callback
+    }
+
+    /**
+     * Set callback for when connecting to a new (unknown) host
+     */
+    fun setNewHostKeyCallback(callback: (NewHostKeyInfo) -> HostKeyAction) {
+        newHostKeyCallback = callback
     }
 
     /**
@@ -64,22 +72,69 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
                 }
 
                 HostKeyVerificationResult.NEW_HOST -> {
-                    Logger.i("HostKeyVerifier", "🆕 NEW HOST: $hostname:$port - Auto-accepting and storing")
-                    // Automatically accept new hosts and store them
-                    runBlocking {
-                        val hostKeyEntry = HostKeyEntry(
-                            id = HostKeyEntry.createId(hostname, port),
-                            hostname = hostname,
-                            port = port,
-                            keyType = keyType,
-                            publicKey = publicKeyBase64,
-                            fingerprint = fingerprint,
-                            trustLevel = "ACCEPTED"
-                        )
-                        hostKeyDao.insertOrUpdateHostKey(hostKeyEntry)
-                        Logger.i("HostKeyVerifier", "✅ Stored new host key for $hostname:$port")
+                    Logger.i("HostKeyVerifier", "🆕 NEW HOST: $hostname:$port - Asking user for confirmation")
+
+                    val info = NewHostKeyInfo(
+                        hostname = hostname,
+                        port = port,
+                        keyType = keyType,
+                        fingerprint = fingerprint,
+                        publicKey = publicKeyBase64
+                    )
+
+                    // Ask user what to do with this new host
+                    if (newHostKeyCallback != null) {
+                        Logger.i("HostKeyVerifier", "Invoking new host key callback...")
+                        val action = newHostKeyCallback!!.invoke(info)
+                        Logger.i("HostKeyVerifier", "User action for new host: $action")
+
+                        return when (action) {
+                            HostKeyAction.ACCEPT_NEW_KEY -> {
+                                runBlocking {
+                                    val hostKeyEntry = HostKeyEntry(
+                                        id = HostKeyEntry.createId(hostname, port),
+                                        hostname = hostname,
+                                        port = port,
+                                        keyType = keyType,
+                                        publicKey = publicKeyBase64,
+                                        fingerprint = fingerprint,
+                                        trustLevel = "ACCEPTED"
+                                    )
+                                    hostKeyDao.insertOrUpdateHostKey(hostKeyEntry)
+                                    Logger.i("HostKeyVerifier", "✅ User accepted and stored new host key for $hostname:$port")
+                                }
+                                HostKeyRepository.OK
+                            }
+
+                            HostKeyAction.REJECT_CONNECTION -> {
+                                Logger.w("HostKeyVerifier", "❌ User rejected new host key for $hostname:$port")
+                                HostKeyRepository.NOT_INCLUDED
+                            }
+
+                            HostKeyAction.ACCEPT_ONCE -> {
+                                Logger.i("HostKeyVerifier", "✅ User accepted host key ONCE for $hostname:$port (not stored)")
+                                HostKeyRepository.OK
+                            }
+                        }
+                    } else {
+                        // No callback available - fall back to auto-accept (legacy behavior)
+                        // This ensures backward compatibility
+                        Logger.w("HostKeyVerifier", "⚠️ No new host callback - auto-accepting (legacy mode)")
+                        runBlocking {
+                            val hostKeyEntry = HostKeyEntry(
+                                id = HostKeyEntry.createId(hostname, port),
+                                hostname = hostname,
+                                port = port,
+                                keyType = keyType,
+                                publicKey = publicKeyBase64,
+                                fingerprint = fingerprint,
+                                trustLevel = "ACCEPTED"
+                            )
+                            hostKeyDao.insertOrUpdateHostKey(hostKeyEntry)
+                            Logger.i("HostKeyVerifier", "✅ Stored new host key for $hostname:$port")
+                        }
+                        HostKeyRepository.OK
                     }
-                    HostKeyRepository.OK
                 }
 
                 HostKeyVerificationResult.CHANGED_KEY -> {
@@ -413,4 +468,32 @@ enum class HostKeyAction {
     ACCEPT_NEW_KEY,      // Replace old key with new key and continue
     REJECT_CONNECTION,   // Abort connection for security
     ACCEPT_ONCE          // Accept for this connection only, don't store
+}
+
+/**
+ * Information about a new (unknown) host key
+ */
+data class NewHostKeyInfo(
+    val hostname: String,
+    val port: Int,
+    val keyType: String,
+    val fingerprint: String,
+    val publicKey: String
+) {
+    fun getDisplayMessage(): String = buildString {
+        appendLine("🔐 NEW HOST KEY")
+        appendLine()
+        appendLine("🌐 Server: $hostname:$port")
+        appendLine()
+        appendLine("The authenticity of this host can't be established.")
+        appendLine("This is the first time you're connecting to this server.")
+        appendLine()
+        appendLine("🔑 Key Type: $keyType")
+        appendLine()
+        appendLine("📜 Fingerprint:")
+        appendLine("   $fingerprint")
+        appendLine()
+        appendLine("⚠️ Please verify this fingerprint matches the server.")
+        appendLine("If you're unsure, contact your server administrator.")
+    }
 }
