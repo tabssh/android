@@ -27,13 +27,14 @@
 1. **#22 Terminal black screen** - Changed onScreenChanged() to mark ALL rows dirty
 2. **#23 Host key verification** - Added new host key callback and dialog in TabTerminalActivity
 3. **#24 Keyboard input** - Fixed sendText() to use termuxBridge for SSH stream
-4. **#25 Keyboard toggle** - Changed toggleCustomKeyboard() to toggle system keyboard
+4. **#25 Keyboard toggle** - Changed toggleKeyboard() to use toggleSoftInput() for reliable toggle
 5. **#26 SSH key rename** - Added rename dialog to KeyManagementActivity
 6. **#27 Auth retry loop** - Added auth error detection to skip auto-reconnect
 7. **#28 Sync UI** - Reorganized preferences_sync.xml with clear step-by-step flow
 8. **#30 Audit Log** - Removed redundant entry from preferences_main.xml (already in Logging)
-9. **#29 Google Sign-In** - Migrated to Activity Result API, added signInLauncher and getSignInIntent()
+9. **#29 Google Sign-In** - Migrated to Activity Result API, added Google Play Services check, better error handling
 10. **#23 Host key (additional fix)** - Added setupUserInfo() to SSHConnection.kt for JSch UserInfo.promptYesNo() handling
+11. **SSH Config Import** - Auto-creates groups from `[group-name]` comments in SSH config (e.g., `## description [sf]`)
 
 ---
 

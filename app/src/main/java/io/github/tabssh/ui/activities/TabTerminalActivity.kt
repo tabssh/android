@@ -1315,12 +1315,14 @@ class TabTerminalActivity : AppCompatActivity() {
         val terminalView = getActiveTerminalView()
         if (terminalView != null) {
             val inputMethodManager = getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
-            if (inputMethodManager.isActive(terminalView)) {
-                inputMethodManager.hideSoftInputFromWindow(terminalView.windowToken, 0)
-            } else {
-                terminalView.requestFocus()
-                inputMethodManager.showSoftInput(terminalView, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
-            }
+            // Make sure terminal has focus first
+            terminalView.requestFocus()
+            // Use toggleSoftInput which reliably toggles the keyboard state
+            inputMethodManager.toggleSoftInput(
+                android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT,
+                0
+            )
+            Logger.d("TabTerminalActivity", "Toggled keyboard for terminal")
         }
     }
 
