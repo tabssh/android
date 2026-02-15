@@ -136,20 +136,51 @@
 
     </PreferenceCategory>
 
+    <!-- Log Viewers -->
+    <PreferenceCategory
+        android:title="View Logs"
+        android:icon="@android:drawable/ic_menu_view">
+
+        <Preference
+            android:key="view_debug_log"
+            android:title="View Debug Log"
+            android:summary="Application debug messages"
+            android:icon="@android:drawable/ic_menu_info_details" />
+
+        <Preference
+            android:key="view_host_logs"
+            android:title="View Host Logs"
+            android:summary="Session logs per connection"
+            android:icon="@android:drawable/ic_menu_edit" />
+
+        <Preference
+            android:key="view_error_log"
+            android:title="View Error Log"
+            android:summary="Application errors and exceptions"
+            android:icon="@drawable/ic_error" />
+
+        <Preference
+            android:key="view_audit_log"
+            android:title="View Audit Log"
+            android:summary="Security events and user actions"
+            android:icon="@android:drawable/ic_lock_lock" />
+
+        <Preference
+            android:key="view_app_log"
+            android:title="View Application Log"
+            android:summary="General application log"
+            android:icon="@android:drawable/ic_menu_view" />
+
+    </PreferenceCategory>
+
     <!-- Log Management -->
     <PreferenceCategory
         android:title="Log Management"
         android:icon="@android:drawable/ic_menu_manage">
 
         <Preference
-            android:key="view_logs"
-            android:title="View Application Logs"
-            android:summary="Browse debug and error logs"
-            android:icon="@android:drawable/ic_menu_view" />
-
-        <Preference
             android:key="export_logs"
-            android:title="Export Logs"
+            android:title="Export All Logs"
             android:summary="Save logs to file for debugging"
             android:icon="@android:drawable/ic_menu_save" />
 

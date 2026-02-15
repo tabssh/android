@@ -73,7 +73,25 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
                 }
             } else {
                 Logger.w(TAG, "Sign-in result not OK: ${result.resultCode}")
-                showToast("Sign-in cancelled or failed")
+                // Try to get more details from the data
+                val errorMessage = when (result.resultCode) {
+                    Activity.RESULT_CANCELED -> "Sign-in was cancelled"
+                    else -> {
+                        // Try to extract error from intent data
+                        try {
+                            val task = com.google.android.gms.auth.api.signin.GoogleSignIn
+                                .getSignedInAccountFromIntent(result.data)
+                            if (!task.isSuccessful && task.exception != null) {
+                                "Sign-in failed: ${task.exception?.message}"
+                            } else {
+                                "Sign-in failed (code: ${result.resultCode})"
+                            }
+                        } catch (e: Exception) {
+                            "Sign-in failed: ${e.message}"
+                        }
+                    }
+                }
+                showSignInError(errorMessage)
             }
         }
     }
@@ -590,6 +608,20 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
      */
     private fun signIn() {
         try {
+            // Check if Google Play Services is available first
+            val googleApiAvailability = com.google.android.gms.common.GoogleApiAvailability.getInstance()
+            val resultCode = googleApiAvailability.isGooglePlayServicesAvailable(requireContext())
+
+            if (resultCode != com.google.android.gms.common.ConnectionResult.SUCCESS) {
+                // Show appropriate error based on availability
+                if (googleApiAvailability.isUserResolvableError(resultCode)) {
+                    googleApiAvailability.getErrorDialog(requireActivity(), resultCode, 9000)?.show()
+                } else {
+                    showSignInError("Google Play Services is not available on this device.\n\nPlease use WebDAV sync instead.")
+                }
+                return
+            }
+
             val signInIntent = syncManager.getAuthManager().getSignInIntent()
             if (signInIntent != null) {
                 signInLauncher.launch(signInIntent)

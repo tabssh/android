@@ -564,19 +564,48 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
      * Show SSH config import dialog with results
      */
     private fun showSSHConfigImportDialog(profiles: List<io.github.tabssh.storage.database.entities.ConnectionProfile>) {
+        // Collect unique groups (groupId contains group name from parser)
+        val groups = profiles.mapNotNull { it.groupId }.filter { it.isNotBlank() }.toSet()
+
         val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Import SSH Config")
             .setMessage(buildString {
-                append("Found ${profiles.size} host(s)\n\n")
-                
+                append("Found ${profiles.size} host(s)")
+                if (groups.isNotEmpty()) {
+                    append(" in ${groups.size} group(s)")
+                }
+                append("\n\n")
+
+                // Show groups
+                if (groups.isNotEmpty()) {
+                    append("Groups to create:\n")
+                    groups.sorted().forEach { group ->
+                        val count = profiles.count { it.groupId == group }
+                        append("  [$group] ($count hosts)\n")
+                    }
+                    append("\n")
+                }
+
+                // Show hosts by group
                 if (profiles.isNotEmpty()) {
                     append("Hosts:\n")
-                    profiles.take(10).forEach { profile ->
-                        append("• ${profile.name}\n")
-                        append("  ${profile.username}@${profile.host}:${profile.port}\n")
+                    // Group by groupId and show
+                    val grouped = profiles.groupBy { it.groupId ?: "Ungrouped" }
+                    var shown = 0
+                    grouped.forEach { (group, groupProfiles) ->
+                        if (shown < 15) {
+                            append("[$group]\n")
+                            groupProfiles.take(5).forEach { profile ->
+                                append("  • ${profile.name}\n")
+                                shown++
+                            }
+                            if (groupProfiles.size > 5) {
+                                append("    ... and ${groupProfiles.size - 5} more\n")
+                            }
+                        }
                     }
-                    if (profiles.size > 10) {
-                        append("  ... and ${profiles.size - 10} more\n")
+                    if (profiles.size > 15) {
+                        append("\n... and more hosts\n")
                     }
                 }
             })
@@ -585,7 +614,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             }
             .setNegativeButton("Cancel", null)
             .create()
-        
+
         dialog.show()
     }
     
@@ -595,21 +624,65 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     private fun importSSHConfigProfiles(profiles: List<io.github.tabssh.storage.database.entities.ConnectionProfile>) {
         lifecycleScope.launch {
             try {
-                // Insert into database
-                profiles.forEach { profile ->
-                    app.database.connectionDao().insertConnection(profile)
+                val groupDao = app.database.connectionGroupDao()
+
+                // Step 1: Collect unique group names from profiles (groupId contains group name from parser)
+                val groupNames = profiles.mapNotNull { it.groupId }.filter { it.isNotBlank() }.toSet()
+                Logger.d("MainActivity", "Found ${groupNames.size} unique groups: $groupNames")
+
+                // Step 2: Create groups that don't exist and build name-to-ID map
+                val groupNameToId = mutableMapOf<String, String>()
+                var groupsCreated = 0
+
+                for (groupName in groupNames) {
+                    // Check if group already exists
+                    val existingGroup = groupDao.getGroupByName(groupName)
+                    if (existingGroup != null) {
+                        groupNameToId[groupName] = existingGroup.id
+                        Logger.d("MainActivity", "Group '$groupName' already exists with ID: ${existingGroup.id}")
+                    } else {
+                        // Create new group
+                        val newGroup = io.github.tabssh.storage.database.entities.ConnectionGroup(
+                            name = groupName,
+                            icon = "folder",
+                            sortOrder = groupsCreated
+                        )
+                        groupDao.insertGroup(newGroup)
+                        groupNameToId[groupName] = newGroup.id
+                        groupsCreated++
+                        Logger.d("MainActivity", "Created new group '$groupName' with ID: ${newGroup.id}")
+                    }
                 }
-                
-                // Show success
+
+                // Step 3: Update profiles with actual group IDs and insert
+                var connectionsImported = 0
+                profiles.forEach { profile ->
+                    // Replace group name with group ID
+                    val updatedProfile = if (profile.groupId != null && groupNameToId.containsKey(profile.groupId)) {
+                        profile.copy(groupId = groupNameToId[profile.groupId])
+                    } else {
+                        profile
+                    }
+                    app.database.connectionDao().insertConnection(updatedProfile)
+                    connectionsImported++
+                }
+
+                // Show success with details
+                val message = buildString {
+                    append("✓ Imported $connectionsImported connection(s)")
+                    if (groupsCreated > 0) {
+                        append("\n✓ Created $groupsCreated new group(s)")
+                    }
+                }
                 android.widget.Toast.makeText(
                     this@MainActivity,
-                    "✓ Imported ${profiles.size} connection(s)",
-                    android.widget.Toast.LENGTH_SHORT
+                    message,
+                    android.widget.Toast.LENGTH_LONG
                 ).show()
-                
+
                 // Refresh connections list
                 viewPager.currentItem = 1 // Switch to Connections tab
-                
+
             } catch (e: Exception) {
                 Logger.e("MainActivity", "Failed to save imported connections", e)
                 android.widget.Toast.makeText(

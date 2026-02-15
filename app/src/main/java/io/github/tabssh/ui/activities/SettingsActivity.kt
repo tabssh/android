@@ -92,6 +92,41 @@ class GeneralSettingsFragment : PreferenceFragmentCompat() {
             }
             true
         }
+
+        // Open system notification settings
+        findPreference<Preference>("open_system_notification_settings")?.setOnPreferenceClickListener {
+            openSystemNotificationSettings()
+            true
+        }
+    }
+
+    private fun openSystemNotificationSettings() {
+        try {
+            val intent = Intent().apply {
+                when {
+                    android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O -> {
+                        action = android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS
+                        putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, requireContext().packageName)
+                    }
+                    else -> {
+                        action = "android.settings.APP_NOTIFICATION_SETTINGS"
+                        putExtra("app_package", requireContext().packageName)
+                        putExtra("app_uid", requireContext().applicationInfo.uid)
+                    }
+                }
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            // Fallback to app details settings
+            try {
+                val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = android.net.Uri.parse("package:${requireContext().packageName}")
+                }
+                startActivity(intent)
+            } catch (e2: Exception) {
+                android.widget.Toast.makeText(requireContext(), "Unable to open notification settings", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 }
 
@@ -543,23 +578,150 @@ class TaskerSettingsFragment : PreferenceFragmentCompat() {
 class LoggingSettingsFragment : PreferenceFragmentCompat() {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences_logging, rootKey)
-        
-        // View logs
-        findPreference<Preference>("view_logs")?.setOnPreferenceClickListener {
-            startActivity(Intent(requireContext(), LogViewerActivity::class.java))
+
+        // View Debug Log
+        findPreference<Preference>("view_debug_log")?.setOnPreferenceClickListener {
+            showLogViewer("Debug Log", "debug")
             true
         }
-        
+
+        // View Host Logs
+        findPreference<Preference>("view_host_logs")?.setOnPreferenceClickListener {
+            showHostLogsSelector()
+            true
+        }
+
+        // View Error Log
+        findPreference<Preference>("view_error_log")?.setOnPreferenceClickListener {
+            showLogViewer("Error Log", "error")
+            true
+        }
+
+        // View Audit Log
+        findPreference<Preference>("view_audit_log")?.setOnPreferenceClickListener {
+            showLogViewer("Audit Log", "audit")
+            true
+        }
+
+        // View Application Log
+        findPreference<Preference>("view_app_log")?.setOnPreferenceClickListener {
+            showLogViewer("Application Log", "app")
+            true
+        }
+
         // Export logs
         findPreference<Preference>("export_logs")?.setOnPreferenceClickListener {
             exportLogs()
             true
         }
-        
+
         // Clear logs
         findPreference<Preference>("clear_logs")?.setOnPreferenceClickListener {
             clearLogs()
             true
+        }
+    }
+
+    private fun showLogViewer(title: String, logType: String) {
+        lifecycleScope.launch {
+            try {
+                val logContent = when (logType) {
+                    "debug" -> io.github.tabssh.utils.logging.Logger.getDebugLogs()
+                    "error" -> io.github.tabssh.utils.logging.Logger.getErrorLogs()
+                    "audit" -> io.github.tabssh.utils.logging.Logger.getAuditLogs()
+                    "app" -> io.github.tabssh.utils.logging.Logger.getRecentLogs()
+                        .joinToString("\n") { "${it.timestamp} [${it.level}] ${it.tag}: ${it.message}" }
+                    else -> "No logs available"
+                }
+
+                val displayContent = if (logContent.isBlank()) "No logs found" else logContent
+
+                // Create scrollable text view
+                val scrollView = android.widget.ScrollView(requireContext())
+                val textView = android.widget.TextView(requireContext()).apply {
+                    text = displayContent
+                    setPadding(32, 16, 32, 16)
+                    textSize = 12f
+                    typeface = android.graphics.Typeface.MONOSPACE
+                    setTextIsSelectable(true)
+                }
+                scrollView.addView(textView)
+
+                androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                    .setTitle(title)
+                    .setView(scrollView)
+                    .setPositiveButton("Close", null)
+                    .setNeutralButton("Copy") { _, _ ->
+                        val clipboard = requireContext().getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        val clip = android.content.ClipData.newPlainText(title, displayContent)
+                        clipboard.setPrimaryClip(clip)
+                        android.widget.Toast.makeText(requireContext(), "Log copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    .show()
+
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(requireContext(), "Error loading logs: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun showHostLogsSelector() {
+        lifecycleScope.launch {
+            try {
+                val hostLogs = io.github.tabssh.utils.logging.Logger.getHostLogFiles()
+
+                if (hostLogs.isEmpty()) {
+                    android.widget.Toast.makeText(requireContext(), "No host logs found", android.widget.Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+
+                val hostNames = hostLogs.map { it.name }.toTypedArray()
+
+                androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                    .setTitle("Select Host Log")
+                    .setItems(hostNames) { _, which ->
+                        showHostLogContent(hostLogs[which])
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(requireContext(), "Error loading host logs: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun showHostLogContent(logFile: java.io.File) {
+        lifecycleScope.launch {
+            try {
+                val content = logFile.readText()
+                val displayContent = if (content.isBlank()) "No content" else content
+
+                val scrollView = android.widget.ScrollView(requireContext())
+                val textView = android.widget.TextView(requireContext()).apply {
+                    text = displayContent
+                    setPadding(32, 16, 32, 16)
+                    textSize = 12f
+                    typeface = android.graphics.Typeface.MONOSPACE
+                    setTextIsSelectable(true)
+                }
+                scrollView.addView(textView)
+
+                androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                    .setTitle(logFile.name)
+                    .setView(scrollView)
+                    .setPositiveButton("Close", null)
+                    .setNeutralButton("Copy") { _, _ ->
+                        val clipboard = requireContext().getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        val clip = android.content.ClipData.newPlainText(logFile.name, displayContent)
+                        clipboard.setPrimaryClip(clip)
+                        android.widget.Toast.makeText(requireContext(), "Log copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    .show()
+
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(requireContext(), "Error reading log: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+            }
         }
     }
     

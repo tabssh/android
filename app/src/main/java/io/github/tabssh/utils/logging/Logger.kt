@@ -101,7 +101,71 @@ object Logger {
     }
     
     fun isDebugMode(): Boolean = debugMode
-    
+
+    private var appContext: Context? = null
+
+    fun setContext(context: Context) {
+        appContext = context.applicationContext
+    }
+
+    /**
+     * Get debug logs as string
+     */
+    fun getDebugLogs(): String {
+        val debugLog = appContext?.let { File(it.filesDir, "debug.log") }
+        return if (debugLog?.exists() == true) {
+            debugLog.readText()
+        } else {
+            // Fall back to main log, filtered by debug level
+            logFile?.let { file ->
+                if (file.exists()) {
+                    file.readLines().filter { it.contains(" D/") || it.contains("[D]") }.takeLast(200).joinToString("\n")
+                } else ""
+            } ?: "Debug logging not enabled"
+        }
+    }
+
+    /**
+     * Get error logs as string
+     */
+    fun getErrorLogs(): String {
+        val errorLog = appContext?.let { File(it.filesDir, "error.log") }
+        return if (errorLog?.exists() == true) {
+            errorLog.readText()
+        } else {
+            // Fall back to main log, filtered by error level
+            logFile?.let { file ->
+                if (file.exists()) {
+                    file.readLines().filter { it.contains(" E/") || it.contains("[E]") || it.contains("WTF/") }.takeLast(200).joinToString("\n")
+                } else ""
+            } ?: "No error logs found"
+        }
+    }
+
+    /**
+     * Get audit logs as string
+     */
+    fun getAuditLogs(): String {
+        val auditLog = appContext?.let { File(it.filesDir, "audit.log") }
+        return if (auditLog?.exists() == true) {
+            auditLog.readText()
+        } else {
+            "Audit logging not enabled or no audit events recorded"
+        }
+    }
+
+    /**
+     * Get list of host log files
+     */
+    fun getHostLogFiles(): List<File> {
+        val logsDir = appContext?.let { File(it.filesDir, "host_logs") }
+        return if (logsDir?.exists() == true && logsDir.isDirectory) {
+            logsDir.listFiles()?.filter { it.isFile && it.extension == "log" }?.sortedByDescending { it.lastModified() } ?: emptyList()
+        } else {
+            emptyList()
+        }
+    }
+
     /**
      * Get recent logs from memory (for log viewer)
      */
