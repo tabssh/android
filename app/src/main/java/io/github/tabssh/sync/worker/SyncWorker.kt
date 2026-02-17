@@ -3,12 +3,13 @@ package io.github.tabssh.sync.worker
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import io.github.tabssh.sync.GoogleDriveSyncManager
-import io.github.tabssh.sync.models.SyncTrigger
+import io.github.tabssh.sync.SAFSyncManager
+import io.github.tabssh.sync.SyncFileStatus
+import io.github.tabssh.sync.data.SyncDataCollector
 import io.github.tabssh.utils.logging.Logger
 
 /**
- * WorkManager worker for background sync operations
+ * WorkManager worker for background sync operations using Storage Access Framework
  */
 class SyncWorker(
     context: Context,
@@ -25,27 +26,34 @@ class SyncWorker(
         Logger.d(TAG, "Starting background sync")
 
         return try {
-            val syncManager = GoogleDriveSyncManager(applicationContext)
+            val syncManager = SAFSyncManager(applicationContext)
 
-            if (!syncManager.isSyncEnabled()) {
-                Logger.d(TAG, "Sync is disabled, skipping")
+            // Check if sync is configured
+            if (!syncManager.isConfigured()) {
+                Logger.d(TAG, "Sync is not configured, skipping")
                 return Result.success()
             }
 
-            val result = syncManager.performSync(SyncTrigger.SCHEDULED)
+            // Check if sync file is accessible
+            val fileStatus = syncManager.checkSyncFile()
+            if (fileStatus != SyncFileStatus.OK) {
+                Logger.w(TAG, "Sync file not accessible: $fileStatus")
+                return Result.failure()
+            }
 
-            if (result.success) {
+            // Collect local data
+            val collector = SyncDataCollector(applicationContext)
+            val payload = collector.collectAll()
+
+            // Upload
+            val success = syncManager.upload(payload)
+
+            if (success) {
                 Logger.d(TAG, "Background sync completed successfully")
                 Result.success()
             } else {
-                Logger.e(TAG, "Background sync failed: ${result.message}")
-
-                if (result.conflicts.isNotEmpty()) {
-                    Logger.d(TAG, "Sync has ${result.conflicts.size} conflicts")
-                    Result.success()
-                } else {
-                    Result.retry()
-                }
+                Logger.e(TAG, "Background sync failed")
+                Result.retry()
             }
         } catch (e: Exception) {
             Logger.e(TAG, "Background sync error", e)

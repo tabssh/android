@@ -3,28 +3,36 @@ package io.github.tabssh.ui.fragments
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import android.view.View
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
-import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.SwitchPreferenceCompat
 import io.github.tabssh.R
-import io.github.tabssh.storage.preferences.PreferenceManager
-import io.github.tabssh.sync.GoogleDriveSyncManager
-import io.github.tabssh.sync.auth.DriveAuthenticationManager
-import io.github.tabssh.sync.auth.SignInResult
+import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.sync.SAFSyncManager
+import io.github.tabssh.sync.SyncFileStatus
+import io.github.tabssh.sync.data.SyncDataCollector
+import io.github.tabssh.sync.data.SyncDataApplier
 import io.github.tabssh.sync.worker.SyncWorkScheduler
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import io.github.tabssh.utils.showError
 
 /**
- * Fragment for Google Drive sync settings
+ * Fragment for sync settings using Storage Access Framework (SAF)
+ *
+ * Supports syncing to any cloud storage provider:
+ * - Google Drive app
+ * - Dropbox
+ * - OneDrive
+ * - Nextcloud
+ * - Local storage
+ * - Any DocumentsProvider
  */
 class SyncSettingsFragment : PreferenceFragmentCompat() {
 
@@ -32,66 +40,47 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
         private const val TAG = "SyncSettingsFragment"
     }
 
-    private lateinit var prefManager: io.github.tabssh.storage.preferences.PreferenceManager
-    private lateinit var syncManager: GoogleDriveSyncManager
+    private lateinit var syncManager: SAFSyncManager
     private lateinit var workScheduler: SyncWorkScheduler
+    private lateinit var app: TabSSHApplication
 
-    // Activity Result Launcher for Google Sign-In
-    private lateinit var signInLauncher: ActivityResultLauncher<Intent>
+    // Activity Result Launchers
+    private lateinit var createFileLauncher: ActivityResultLauncher<Intent>
+    private lateinit var openFileLauncher: ActivityResultLauncher<Intent>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Register the sign-in launcher BEFORE onCreatePreferences
-        signInLauncher = registerForActivityResult(
+        // Register file picker launchers BEFORE onCreatePreferences
+        createFileLauncher = registerForActivityResult(
             ActivityResultContracts.StartActivityForResult()
         ) { result ->
             if (result.resultCode == Activity.RESULT_OK) {
-                lifecycleScope.launch {
-                    try {
-                        val signInResult = syncManager.getAuthManager().handleSignInResult(result.data)
-                        when (signInResult) {
-                            is SignInResult.Success -> {
-                                Logger.i(TAG, "Google Sign-In successful: ${signInResult.account.email}")
-                                showToast("Signed in as ${signInResult.account.email}")
-                                updateAccountSummary()
-                                updateSyncStatus()
-                            }
-                            is SignInResult.Error -> {
-                                Logger.e(TAG, "Google Sign-In failed: ${signInResult.message}")
-                                showSignInError(signInResult.message)
-                            }
-                            is SignInResult.Cancelled -> {
-                                Logger.i(TAG, "Google Sign-In cancelled")
-                                showToast("Sign-in cancelled")
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Logger.e(TAG, "Error handling sign-in result", e)
-                        showSignInError("Error: ${e.message}")
-                    }
+                result.data?.data?.let { uri ->
+                    Logger.i(TAG, "Created sync file: $uri")
+                    syncManager.saveSyncUri(uri)
+                    updateLocationSummary()
+                    updateSyncStatus()
+                    showToast("Sync location configured")
                 }
             } else {
-                Logger.w(TAG, "Sign-in result not OK: ${result.resultCode}")
-                // Try to get more details from the data
-                val errorMessage = when (result.resultCode) {
-                    Activity.RESULT_CANCELED -> "Sign-in was cancelled"
-                    else -> {
-                        // Try to extract error from intent data
-                        try {
-                            val task = com.google.android.gms.auth.api.signin.GoogleSignIn
-                                .getSignedInAccountFromIntent(result.data)
-                            if (!task.isSuccessful && task.exception != null) {
-                                "Sign-in failed: ${task.exception?.message}"
-                            } else {
-                                "Sign-in failed (code: ${result.resultCode})"
-                            }
-                        } catch (e: Exception) {
-                            "Sign-in failed: ${e.message}"
-                        }
-                    }
+                Logger.d(TAG, "Create file cancelled")
+            }
+        }
+
+        openFileLauncher = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                result.data?.data?.let { uri ->
+                    Logger.i(TAG, "Opened sync file: $uri")
+                    syncManager.saveSyncUri(uri)
+                    updateLocationSummary()
+                    updateSyncStatus()
+                    showToast("Sync location configured")
                 }
-                showSignInError(errorMessage)
+            } else {
+                Logger.d(TAG, "Open file cancelled")
             }
         }
     }
@@ -99,318 +88,170 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences_sync, rootKey)
 
-        prefManager = io.github.tabssh.storage.preferences.PreferenceManager(requireContext())
-        syncManager = GoogleDriveSyncManager(requireContext())
+        app = requireActivity().application as TabSSHApplication
+        syncManager = SAFSyncManager(requireContext())
         workScheduler = SyncWorkScheduler(requireContext())
 
-        setupBackendPreference()
-        setupSyncStatus()
-        setupSyncToggle()
-        setupAccountPreference()
+        setupLocationPreference()
         setupPasswordPreference()
-        setupManualSync()
-        setupLastSyncTime()
+        setupSyncToggle()
         setupFrequencyPreference()
+        setupManualSync()
         setupAdvancedOptions()
-        setupWebDAVPreferences()
 
-        // Initial visibility update
-        updatePreferencesVisibility()
+        updateLocationSummary()
         updateSyncStatus()
+        updateLastSyncTime()
     }
 
     /**
-     * Setup sync status preference that shows what's configured/missing
+     * Setup sync location preference (file picker)
      */
-    private fun setupSyncStatus() {
-        findPreference<Preference>("sync_status")?.apply {
+    private fun setupLocationPreference() {
+        findPreference<Preference>("sync_location")?.apply {
             setOnPreferenceClickListener {
-                showSyncSetupDialog()
+                showLocationOptions()
                 true
             }
         }
     }
 
     /**
-     * Update sync status summary to show what's configured
+     * Show location options dialog
      */
-    private fun updateSyncStatus() {
-        val backend = prefManager.getString("sync_backend", "auto")
-        val hasGooglePlay = try {
-            requireContext().packageManager.getPackageInfo("com.google.android.gms", 0)
-            true
-        } catch (e: Exception) {
-            false
-        }
+    private fun showLocationOptions() {
+        val hasExisting = syncManager.getSyncUri() != null
 
-        val actualBackend = if (backend == "auto") {
-            if (hasGooglePlay) "google_drive" else "webdav"
+        val options = if (hasExisting) {
+            arrayOf(
+                "Create new sync file",
+                "Open existing sync file",
+                "Clear current location"
+            )
         } else {
-            backend
-        }
-
-        val isGoogleDrive = actualBackend == "google_drive"
-        val isAuthenticated = syncManager.getAuthManager().isAuthenticated()
-        val hasPassword = androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
-            .getBoolean("sync_password_set", false)
-        val webdavUrl = prefManager.getString("webdav_server_url", "")
-        val webdavUsername = prefManager.getString("webdav_username", "")
-        val webdavPassword = prefManager.getString("webdav_password", "")
-        val hasWebDAV = !webdavUrl.isNullOrEmpty() && !webdavUsername.isNullOrEmpty() && !webdavPassword.isNullOrEmpty()
-
-        findPreference<Preference>("sync_status")?.apply {
-            val statusParts = mutableListOf<String>()
-            val missingParts = mutableListOf<String>()
-
-            // Check backend status
-            if (isGoogleDrive) {
-                if (isAuthenticated) {
-                    statusParts.add("✓ Google account connected")
-                } else {
-                    missingParts.add("Google account not connected")
-                }
-            } else {
-                if (hasWebDAV) {
-                    statusParts.add("✓ WebDAV configured")
-                } else {
-                    missingParts.add("WebDAV not configured")
-                }
-            }
-
-            // Check encryption password
-            if (hasPassword) {
-                statusParts.add("✓ Encryption password set")
-            } else {
-                missingParts.add("Encryption password not set")
-            }
-
-            summary = if (missingParts.isEmpty()) {
-                "✓ Ready to enable sync"
-            } else {
-                "✗ Missing: ${missingParts.joinToString(", ")}"
-            }
-        }
-
-        // Also update the toggle summary
-        findPreference<SwitchPreferenceCompat>("sync_enabled")?.summary = if (
-            (isGoogleDrive && isAuthenticated && hasPassword) ||
-            (!isGoogleDrive && hasWebDAV && hasPassword)
-        ) {
-            "Synchronize data across devices"
-        } else {
-            "Configure settings above first"
-        }
-    }
-
-    /**
-     * Show sync setup dialog with requirements checklist
-     */
-    private fun showSyncSetupDialog() {
-        val backend = prefManager.getString("sync_backend", "auto")
-        val hasGooglePlay = try {
-            requireContext().packageManager.getPackageInfo("com.google.android.gms", 0)
-            true
-        } catch (e: Exception) {
-            false
-        }
-
-        val actualBackend = if (backend == "auto") {
-            if (hasGooglePlay) "google_drive" else "webdav"
-        } else {
-            backend
-        }
-
-        val isGoogleDrive = actualBackend == "google_drive"
-        val isAuthenticated = syncManager.getAuthManager().isAuthenticated()
-        val hasPassword = androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
-            .getBoolean("sync_password_set", false)
-        val webdavUrl = prefManager.getString("webdav_server_url", "")
-        val webdavUsername = prefManager.getString("webdav_username", "")
-        val webdavPassword = prefManager.getString("webdav_password", "")
-        val hasWebDAV = !webdavUrl.isNullOrEmpty() && !webdavUsername.isNullOrEmpty() && !webdavPassword.isNullOrEmpty()
-
-        val message = buildString {
-            append("Setup Requirements:\n\n")
-
-            if (isGoogleDrive) {
-                append("Backend: Google Drive\n\n")
-                val accountIcon = if (isAuthenticated) "✓" else "✗"
-                append("$accountIcon Google Account: ${if (isAuthenticated) "Connected" else "Not connected"}\n")
-                if (!isAuthenticated) {
-                    append("   → Tap 'Google account' below to sign in\n")
-                }
-            } else {
-                append("Backend: WebDAV")
-                if (backend == "auto") append(" (auto-detected, no Google Play)")
-                append("\n\n")
-                val webdavIcon = if (hasWebDAV) "✓" else "✗"
-                append("$webdavIcon WebDAV Server: ${if (hasWebDAV) "Configured" else "Not configured"}\n")
-                if (!hasWebDAV) {
-                    append("   → Fill in WebDAV settings below\n")
-                }
-            }
-
-            val passwordIcon = if (hasPassword) "✓" else "✗"
-            append("\n$passwordIcon Encryption Password: ${if (hasPassword) "Set" else "Not set"}\n")
-            if (!hasPassword) {
-                append("   → Tap 'Sync encryption password' below\n")
-            }
-
-            append("\n")
-            if ((isGoogleDrive && isAuthenticated && hasPassword) || (!isGoogleDrive && hasWebDAV && hasPassword)) {
-                append("✓ All requirements met! You can now enable sync.")
-            } else {
-                append("Complete the items above to enable sync.")
-            }
+            arrayOf(
+                "Create new sync file",
+                "Open existing sync file"
+            )
         }
 
         androidx.appcompat.app.AlertDialog.Builder(requireContext())
-            .setTitle("Sync Setup")
-            .setMessage(message)
-            .setPositiveButton("OK", null)
-            .show()
-    }
-    
-    /**
-     * Setup backend selection
-     */
-    private fun setupBackendPreference() {
-        findPreference<ListPreference>("sync_backend")?.apply {
-            setOnPreferenceChangeListener { _, newValue ->
-                updatePreferencesVisibility(newValue as String)
-                true
-            }
-        }
-    }
-    
-    /**
-     * Update preferences visibility based on backend
-     */
-    private fun updatePreferencesVisibility(backend: String? = null) {
-        val selectedBackend = backend ?: prefManager.getString("sync_backend", "auto")
-
-        // Detect actual backend for "auto" mode
-        val actualBackend = if (selectedBackend == "auto") {
-            val hasGooglePlay = try {
-                val packageManager = requireContext().packageManager
-                packageManager.getPackageInfo("com.google.android.gms", 0)
-                true
-            } catch (e: Exception) {
-                false
-            }
-            if (hasGooglePlay) "google_drive" else "webdav"
-        } else {
-            selectedBackend
-        }
-
-        val isGoogleDrive = actualBackend == "google_drive"
-        val isWebDAV = actualBackend == "webdav"
-
-        // Google Drive preferences - show when using Google Drive
-        findPreference<Preference>("sync_account")?.isVisible = isGoogleDrive
-        findPreference<EditTextPreference>("google_drive_sync_folder")?.isVisible = isGoogleDrive
-
-        // WebDAV preferences - show when using WebDAV
-        findPreference<EditTextPreference>("webdav_server_url")?.isVisible = isWebDAV
-        findPreference<EditTextPreference>("webdav_username")?.isVisible = isWebDAV
-        findPreference<EditTextPreference>("webdav_password")?.isVisible = isWebDAV
-        findPreference<EditTextPreference>("webdav_sync_folder")?.isVisible = isWebDAV
-        findPreference<Preference>("webdav_test_connection")?.isVisible = isWebDAV
-
-        // Update status after visibility changes
-        updateSyncStatus()
-    }
-    
-    /**
-     * Setup WebDAV preferences
-     */
-    private fun setupWebDAVPreferences() {
-        findPreference<Preference>("webdav_test_connection")?.apply {
-            setOnPreferenceClickListener {
-                testWebDAVConnection()
-                true
-            }
-        }
-    }
-    
-    /**
-     * Test WebDAV connection
-     */
-    private fun testWebDAVConnection() {
-        lifecycleScope.launch {
-            try {
-                val url = prefManager.getString("webdav_server_url", "")
-                val username = prefManager.getString("webdav_username", "")
-                val password = prefManager.getString("webdav_password", "")
-                
-                if (url.isNullOrEmpty() || username.isNullOrEmpty() || password.isNullOrEmpty()) {
-                    showToast("Please fill in all WebDAV settings")
-                    return@launch
-                }
-                
-                // Show progress
-                showToast("Testing WebDAV connection...")
-                
-                // Test connection in background
-                withContext(Dispatchers.IO) {
-                    val sardine = com.thegrizzlylabs.sardineandroid.impl.OkHttpSardine()
-                    sardine.setCredentials(username, password)
-                    
-                    // Try to list root directory
-                    try {
-                        val resources = sardine.list(url)
-                        
-                        // Show success dialog with details
-                        withContext(Dispatchers.Main) {
-                            androidx.appcompat.app.AlertDialog.Builder(requireContext())
-                                .setTitle("✓ WebDAV Connection Successful")
-                                .setMessage(buildString {
-                                    append("Server: $url\n\n")
-                                    append("Found ${resources.size} items:\n\n")
-                                    resources.take(10).forEach { resource ->
-                                        val icon = if (resource.isDirectory) "📁" else "📄"
-                                        append("$icon ${resource.name}\n")
-                                    }
-                                    if (resources.size > 10) {
-                                        append("... and ${resources.size - 10} more")
-                                    }
-                                })
-                                .setPositiveButton("OK", null)
-                                .show()
-                        }
-                        
-                        Logger.i(TAG, "WebDAV test successful: $url")
-                        
-                    } catch (e: Exception) {
-                        withContext(Dispatchers.Main) {
-                            androidx.appcompat.app.AlertDialog.Builder(requireContext())
-                                .setTitle("❌ WebDAV Connection Failed")
-                                .setMessage(buildString {
-                                    append("Could not connect to WebDAV server\n\n")
-                                    append("Error: ${e.message}\n\n")
-                                    append("Please check:\n")
-                                    append("• URL is correct and accessible\n")
-                                    append("• Username and password are valid\n")
-                                    append("• Server supports WebDAV\n")
-                                    append("• Firewall is not blocking connection")
-                                })
-                                .setPositiveButton("OK", null)
-                                .show()
-                        }
-                        
-                        Logger.e(TAG, "WebDAV test failed", e)
+            .setTitle("Sync Location")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> createFileLauncher.launch(syncManager.getCreateFileIntent())
+                    1 -> openFileLauncher.launch(syncManager.getOpenFileIntent())
+                    2 -> {
+                        syncManager.clearConfiguration()
+                        findPreference<SwitchPreferenceCompat>("sync_enabled")?.isChecked = false
+                        updateLocationSummary()
+                        updateSyncStatus()
+                        showToast("Sync location cleared")
                     }
                 }
-                
-            } catch (e: Exception) {
-                Logger.e(TAG, "WebDAV test failed", e)
-                showError("WebDAV test failed: ${e.message}", "Error")
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Update location summary to show current sync location
+     */
+    private fun updateLocationSummary() {
+        findPreference<Preference>("sync_location")?.apply {
+            val locationName = syncManager.getSyncLocationName()
+            summary = locationName ?: "Not configured - tap to choose"
+        }
+    }
+
+    /**
+     * Setup sync password preference
+     */
+    private fun setupPasswordPreference() {
+        findPreference<Preference>("sync_password")?.apply {
+            setOnPreferenceClickListener {
+                showPasswordDialog()
+                true
+            }
+            updatePasswordSummary()
+        }
+    }
+
+    /**
+     * Update password summary
+     */
+    private fun updatePasswordSummary() {
+        findPreference<Preference>("sync_password")?.apply {
+            summary = if (syncManager.hasPassword()) {
+                "Password set (tap to change)"
+            } else {
+                "Required - tap to set password"
             }
         }
     }
-    
-    private fun showToast(message: String) {
-        android.widget.Toast.makeText(requireContext(), message, android.widget.Toast.LENGTH_SHORT).show()
+
+    /**
+     * Show password setup dialog
+     */
+    private fun showPasswordDialog() {
+        val errorText = android.widget.TextView(requireContext()).apply {
+            setTextColor(android.graphics.Color.RED)
+            setPadding(0, 16, 0, 0)
+            visibility = View.GONE
+        }
+
+        val passwordInput = android.widget.EditText(requireContext()).apply {
+            hint = "Enter encryption password (min 8 chars)"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                    android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+
+        val confirmInput = android.widget.EditText(requireContext()).apply {
+            hint = "Confirm password"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                    android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+
+        val layout = android.widget.LinearLayout(requireContext()).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(64, 32, 64, 16)
+            addView(passwordInput)
+            addView(confirmInput)
+            addView(errorText)
+        }
+
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Set Encryption Password")
+            .setMessage("This password encrypts your synced data. Use the same password on all devices.")
+            .setView(layout)
+            .setPositiveButton("Set Password", null)
+            .setNegativeButton("Cancel", null)
+            .create()
+
+        dialog.show()
+
+        dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val password = passwordInput.text.toString()
+            val confirm = confirmInput.text.toString()
+
+            when {
+                password.length < 8 -> {
+                    errorText.text = "Password must be at least 8 characters"
+                    errorText.visibility = View.VISIBLE
+                }
+                password != confirm -> {
+                    errorText.text = "Passwords do not match"
+                    errorText.visibility = View.VISIBLE
+                }
+                else -> {
+                    syncManager.setSyncPassword(password)
+                    updatePasswordSummary()
+                    updateSyncStatus()
+                    showToast("Encryption password set")
+                    dialog.dismiss()
+                }
+            }
+        }
     }
 
     /**
@@ -422,66 +263,44 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
                 val enabled = newValue as Boolean
 
                 if (enabled) {
-                    val backend = prefManager.getSyncBackend()
-
-                    // Detect actual backend for "auto" mode
-                    val hasGooglePlay = try {
-                        requireContext().packageManager.getPackageInfo("com.google.android.gms", 0)
-                        true
-                    } catch (e: Exception) {
-                        false
+                    // Check requirements
+                    if (syncManager.getSyncUri() == null) {
+                        showSetupError("Sync location not set", "Please choose a sync location first.")
+                        return@setOnPreferenceChangeListener false
+                    }
+                    if (!syncManager.hasPassword()) {
+                        showSetupError("Password not set", "Please set an encryption password first.")
+                        return@setOnPreferenceChangeListener false
                     }
 
-                    val actualBackend = if (backend == "auto") {
-                        if (hasGooglePlay) "google_drive" else "webdav"
-                    } else {
-                        backend
-                    }
-
-                    val hasPassword = androidx.preference.PreferenceManager
-                        .getDefaultSharedPreferences(requireContext())
-                        .getBoolean("sync_password_set", false)
-
-                    when (actualBackend) {
-                        "google_drive" -> {
-                            // Google Drive requires authentication and password
-                            if (!syncManager.getAuthManager().isAuthenticated()) {
-                                showSyncSetupError("Google account not connected", "Please tap 'Google account' above to sign in first.")
-                                false
-                            } else if (!hasPassword) {
-                                showSyncSetupError("Encryption password not set", "Please tap 'Sync encryption password' below to set a password.")
-                                false
-                            } else {
-                                enableSync()
-                                updateSyncStatus()
-                                true
+                    // Verify file is accessible
+                    lifecycleScope.launch {
+                        val status = syncManager.checkSyncFile()
+                        withContext(Dispatchers.Main) {
+                            when (status) {
+                                SyncFileStatus.OK -> {
+                                    workScheduler.schedulePeriodicSync()
+                                    updateSyncStatus()
+                                    showToast("Sync enabled")
+                                }
+                                SyncFileStatus.FILE_NOT_FOUND -> {
+                                    showSetupError("File not found", "The sync file no longer exists. Please reconfigure.")
+                                    isChecked = false
+                                }
+                                SyncFileStatus.NO_PERMISSION -> {
+                                    showSetupError("Permission denied", "Cannot access sync file. Please reconfigure.")
+                                    isChecked = false
+                                }
+                                else -> {
+                                    showSetupError("Error", "Could not verify sync file: $status")
+                                    isChecked = false
+                                }
                             }
                         }
-                        "webdav" -> {
-                            // WebDAV requires server settings and password
-                            val url = prefManager.getWebDAVServerUrl()
-                            val username = prefManager.getWebDAVUsername()
-                            val password = prefManager.getWebDAVPassword()
-
-                            if (url.isNullOrEmpty() || username.isNullOrEmpty() || password.isNullOrEmpty()) {
-                                showSyncSetupError("WebDAV not configured", "Please fill in the WebDAV settings above:\n• Server URL\n• Username\n• Password")
-                                false
-                            } else if (!hasPassword) {
-                                showSyncSetupError("Encryption password not set", "Please tap 'Sync encryption password' below to set a password.")
-                                false
-                            } else {
-                                enableSync()
-                                updateSyncStatus()
-                                true
-                            }
-                        }
-                        else -> {
-                            showToast("Unknown sync backend: $backend")
-                            false
-                        }
                     }
+                    true
                 } else {
-                    disableSync()
+                    workScheduler.cancelPeriodicSync()
                     updateSyncStatus()
                     true
                 }
@@ -490,51 +309,75 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
     }
 
     /**
-     * Show sync setup error dialog with clear instructions
+     * Update sync status display
      */
-    private fun showSyncSetupError(title: String, message: String) {
-        androidx.appcompat.app.AlertDialog.Builder(requireContext())
-            .setTitle("Cannot Enable Sync")
-            .setMessage("$title\n\n$message")
-            .setPositiveButton("OK", null)
-            .setNeutralButton("Show Setup") { _, _ ->
-                showSyncSetupDialog()
-            }
-            .show()
-    }
+    private fun updateSyncStatus() {
+        findPreference<Preference>("sync_status")?.apply {
+            val hasLocation = syncManager.getSyncUri() != null
+            val hasPassword = syncManager.hasPassword()
+            val isEnabled = findPreference<SwitchPreferenceCompat>("sync_enabled")?.isChecked == true
 
-    /**
-     * Setup Google account preference
-     */
-    private fun setupAccountPreference() {
-        findPreference<Preference>("sync_account")?.apply {
+            summary = when {
+                !hasLocation && !hasPassword -> "Setup required: Choose location and set password"
+                !hasLocation -> "Setup required: Choose sync location"
+                !hasPassword -> "Setup required: Set encryption password"
+                isEnabled -> "Sync is active"
+                else -> "Ready to enable sync"
+            }
+
             setOnPreferenceClickListener {
-                if (syncManager.getAuthManager().isAuthenticated()) {
-                    showAccountOptions()
-                } else {
-                    signIn()
-                }
+                showStatusDialog()
                 true
             }
+        }
 
-            updateAccountSummary()
+        // Update toggle summary
+        findPreference<SwitchPreferenceCompat>("sync_enabled")?.apply {
+            summary = if (syncManager.isConfigured()) {
+                "Synchronize data across devices"
+            } else {
+                "Complete setup above first"
+            }
         }
     }
 
     /**
-     * Setup sync password preference
+     * Show status dialog with details
      */
-    private fun setupPasswordPreference() {
-        findPreference<Preference>("sync_password")?.apply {
-            setOnPreferenceClickListener {
-                showPasswordSetupDialog()
-                true
+    private fun showStatusDialog() {
+        lifecycleScope.launch {
+            val fileStatus = syncManager.checkSyncFile()
+            val locationName = syncManager.getSyncLocationName() ?: "Not configured"
+            val hasPassword = syncManager.hasPassword()
+            val lastSync = syncManager.getLastSyncTime()
+            val isEnabled = findPreference<SwitchPreferenceCompat>("sync_enabled")?.isChecked == true
+
+            val message = buildString {
+                append("Location: $locationName\n")
+                append("Password: ${if (hasPassword) "Set" else "Not set"}\n")
+                append("File status: $fileStatus\n")
+                append("Sync enabled: ${if (isEnabled) "Yes" else "No"}\n")
+                append("Last sync: ${formatLastSync(lastSync)}\n")
             }
 
-            summary = if (androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext()).getBoolean("sync_password_set", false)) {
-                "Password configured"
-            } else {
-                "Not configured"
+            withContext(Dispatchers.Main) {
+                androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                    .setTitle("Sync Status")
+                    .setMessage(message)
+                    .setPositiveButton("OK", null)
+                    .show()
+            }
+        }
+    }
+
+    /**
+     * Setup sync frequency preference
+     */
+    private fun setupFrequencyPreference() {
+        findPreference<ListPreference>("sync_frequency")?.apply {
+            setOnPreferenceChangeListener { _, _ ->
+                workScheduler.schedulePeriodicSync()
+                true
             }
         }
     }
@@ -545,34 +388,45 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
     private fun setupManualSync() {
         findPreference<Preference>("sync_manual_trigger")?.apply {
             setOnPreferenceClickListener {
-                triggerManualSync()
+                performSync()
                 true
             }
         }
     }
 
     /**
-     * Setup last sync time display
+     * Perform manual sync
      */
-    private fun setupLastSyncTime() {
-        findPreference<Preference>("sync_last_time")?.apply {
-            updateLastSyncSummary()
+    private fun performSync() {
+        if (!syncManager.isConfigured()) {
+            showToast("Sync not configured")
+            return
         }
-    }
 
-    /**
-     * Setup sync frequency preference
-     */
-    private fun setupFrequencyPreference() {
-        findPreference<ListPreference>("sync_frequency")?.apply {
-            setOnPreferenceChangeListener { _, newValue ->
-                val frequency = newValue as String
-                androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
-                    .edit()
-                    .putString("sync_frequency", frequency)
-                    .apply()
-                workScheduler.schedulePeriodicSync()
-                true
+        showToast("Syncing...")
+
+        lifecycleScope.launch {
+            try {
+                // Collect local data
+                val collector = SyncDataCollector(requireContext())
+                val payload = collector.collectAll()
+
+                // Upload
+                val success = syncManager.upload(payload)
+
+                withContext(Dispatchers.Main) {
+                    if (success) {
+                        showToast("Sync completed")
+                        updateLastSyncTime()
+                    } else {
+                        showToast("Sync failed")
+                    }
+                }
+            } catch (e: Exception) {
+                Logger.e(TAG, "Sync failed", e)
+                withContext(Dispatchers.Main) {
+                    showToast("Sync failed: ${e.message}")
+                }
             }
         }
     }
@@ -581,358 +435,31 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
      * Setup advanced options
      */
     private fun setupAdvancedOptions() {
-        findPreference<Preference>("sync_clear_data")?.apply {
-            setOnPreferenceClickListener {
-                showClearDataConfirmation()
-                true
-            }
+        findPreference<Preference>("sync_force_upload")?.setOnPreferenceClickListener {
+            showForceUploadDialog()
+            true
         }
 
-        findPreference<Preference>("sync_force_upload")?.apply {
-            setOnPreferenceClickListener {
-                showForceUploadConfirmation()
-                true
-            }
+        findPreference<Preference>("sync_force_download")?.setOnPreferenceClickListener {
+            showForceDownloadDialog()
+            true
         }
 
-        findPreference<Preference>("sync_force_download")?.apply {
-            setOnPreferenceClickListener {
-                showForceDownloadConfirmation()
-                true
-            }
+        findPreference<Preference>("sync_clear_config")?.setOnPreferenceClickListener {
+            showClearConfigDialog()
+            true
         }
-    }
-
-    /**
-     * Sign in to Google Drive
-     */
-    private fun signIn() {
-        try {
-            // Check if Google Play Services is available first
-            val googleApiAvailability = com.google.android.gms.common.GoogleApiAvailability.getInstance()
-            val resultCode = googleApiAvailability.isGooglePlayServicesAvailable(requireContext())
-
-            if (resultCode != com.google.android.gms.common.ConnectionResult.SUCCESS) {
-                // Show appropriate error based on availability
-                if (googleApiAvailability.isUserResolvableError(resultCode)) {
-                    googleApiAvailability.getErrorDialog(requireActivity(), resultCode, 9000)?.show()
-                } else {
-                    showSignInError("Google Play Services is not available on this device.\n\nPlease use WebDAV sync instead.")
-                }
-                return
-            }
-
-            val signInIntent = syncManager.getAuthManager().getSignInIntent()
-            if (signInIntent != null) {
-                signInLauncher.launch(signInIntent)
-                Logger.d(TAG, "Launched Google Sign-In intent")
-            } else {
-                showSignInError("Failed to create sign-in intent. Please check Google Play Services.")
-            }
-        } catch (e: Exception) {
-            Logger.e(TAG, "Failed to start sign-in", e)
-            showSignInError("Failed to start sign-in: ${e.message}")
-        }
-    }
-
-    /**
-     * Show sign-in error dialog
-     */
-    private fun showSignInError(message: String) {
-        androidx.appcompat.app.AlertDialog.Builder(requireContext())
-            .setTitle("Sign-In Failed")
-            .setMessage("$message\n\nPlease ensure:\n• Google Play Services is installed and updated\n• You have an active internet connection\n• Your Google account is properly configured")
-            .setPositiveButton("OK", null)
-            .setNeutralButton("Retry") { _, _ ->
-                signIn()
-            }
-            .show()
-    }
-
-    /**
-     * Enable sync
-     */
-    private fun enableSync() {
-        lifecycleScope.launch {
-            try {
-                workScheduler.schedulePeriodicSync()
-                Logger.d(TAG, "Sync enabled")
-            } catch (e: Exception) {
-                Logger.e(TAG, "Failed to enable sync", e)
-            }
-        }
-    }
-
-    /**
-     * Disable sync
-     */
-    private fun disableSync() {
-        lifecycleScope.launch {
-            try {
-                syncManager.disableSync()
-                workScheduler.cancelPeriodicSync()
-                Logger.d(TAG, "Sync disabled")
-            } catch (e: Exception) {
-                Logger.e(TAG, "Failed to disable sync", e)
-            }
-        }
-    }
-
-    /**
-     * Trigger manual sync
-     */
-    private fun triggerManualSync() {
-        lifecycleScope.launch {
-            try {
-                workScheduler.scheduleImmediateSync()
-                Logger.d(TAG, "Manual sync triggered")
-            } catch (e: Exception) {
-                Logger.e(TAG, "Failed to trigger manual sync", e)
-            }
-        }
-    }
-
-    /**
-     * Update account summary
-     */
-    private fun updateAccountSummary() {
-        findPreference<Preference>("sync_account")?.apply {
-            summary = syncManager.getAuthManager().getAccountEmail() ?: "Not connected"
-        }
-    }
-
-    /**
-     * Update last sync time summary
-     */
-    private fun updateLastSyncSummary() {
-        findPreference<Preference>("sync_last_time")?.apply {
-            val lastSync = androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext()).getLong("sync_last_time", 0L)
-            summary = if (lastSync == 0L) {
-                "Never synced"
-            } else {
-                val timeDiff = System.currentTimeMillis() - lastSync
-                when {
-                    timeDiff < 60_000L -> "Just now"
-                    timeDiff < 3600_000L -> "${timeDiff / 60_000} minutes ago"
-                    timeDiff < 86400_000L -> "${timeDiff / 3600_000} hours ago"
-                    else -> "${timeDiff / 86400_000} days ago"
-                }
-            }
-        }
-    }
-
-    /**
-     * Show authentication dialog
-     */
-    private fun showAuthenticationDialog() {
-        Logger.d(TAG, "Show authentication dialog")
-
-        val backend = prefManager.getSyncBackend()
-
-        when (backend) {
-            "google_drive" -> {
-                // Launch Google Sign-In flow using Activity Result API
-                signIn()
-            }
-            "webdav" -> {
-                // WebDAV uses username/password from preferences, no separate auth dialog needed
-                android.widget.Toast.makeText(requireContext(), "WebDAV authentication uses server credentials from settings", android.widget.Toast.LENGTH_SHORT).show()
-                updateAccountSummary()
-            }
-            else -> {
-                Logger.w(TAG, "Unknown sync backend: $backend")
-            }
-        }
-    }
-
-    /**
-     * Show password setup dialog
-     */
-    private fun showPasswordSetupDialog() {
-        Logger.d(TAG, "Show password setup dialog")
-
-        // Create error text view for inline error messages
-        val errorText = android.widget.TextView(requireContext()).apply {
-            setTextColor(android.graphics.Color.RED)
-            setPadding(0, 8, 0, 0)
-            visibility = android.view.View.GONE
-        }
-
-        val editText = android.widget.EditText(requireContext()).apply {
-            hint = "Enter encryption password (min 8 chars)"
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-        }
-
-        val confirmEditText = android.widget.EditText(requireContext()).apply {
-            hint = "Confirm password"
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-        }
-
-        val layout = android.widget.LinearLayout(requireContext()).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(64, 32, 64, 32)
-            addView(editText)
-            addView(confirmEditText)
-            addView(errorText)
-        }
-
-        val dialog = androidx.appcompat.app.AlertDialog.Builder(requireContext())
-            .setTitle("Set Encryption Password")
-            .setMessage("This password will be used to encrypt your synced data. Keep it safe!")
-            .setView(layout)
-            .setPositiveButton("Set Password", null)  // Set null to override default dismiss behavior
-            .setNegativeButton("Cancel", null)
-            .create()
-
-        dialog.show()
-
-        // Override positive button to prevent auto-dismiss on validation error
-        dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-            val password = editText.text.toString()
-            val confirm = confirmEditText.text.toString()
-
-            // Validate and show inline errors
-            when {
-                password.isBlank() -> {
-                    errorText.text = "✗ Password cannot be empty"
-                    errorText.visibility = android.view.View.VISIBLE
-                    editText.requestFocus()
-                }
-                password.length < 8 -> {
-                    errorText.text = "✗ Password must be at least 8 characters (currently ${password.length})"
-                    errorText.visibility = android.view.View.VISIBLE
-                    editText.requestFocus()
-                }
-                password != confirm -> {
-                    errorText.text = "✗ Passwords do not match"
-                    errorText.visibility = android.view.View.VISIBLE
-                    confirmEditText.requestFocus()
-                }
-                else -> {
-                    // Save password and dismiss dialog
-                    syncManager.setSyncPassword(password)
-                    androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
-                        .edit()
-                        .putBoolean("sync_password_set", true)
-                        .apply()
-
-                    android.widget.Toast.makeText(requireContext(), "✓ Encryption password set successfully", android.widget.Toast.LENGTH_SHORT).show()
-                    findPreference<Preference>("sync_password")?.summary = "Password configured (tap to change)"
-                    updateSyncStatus()  // Update status after password set
-                    Logger.i(TAG, "Sync encryption password set")
-                    dialog.dismiss()
-                }
-            }
-        }
-    }
-
-    /**
-     * Show account options dialog
-     */
-    private fun showAccountOptions() {
-        Logger.d(TAG, "Show account options dialog")
-        
-        val options = arrayOf("Sign out", "Re-authenticate", "Account info")
-        
-        androidx.appcompat.app.AlertDialog.Builder(requireContext())
-            .setTitle("Account Options")
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> {
-                        // Sign out
-                        androidx.appcompat.app.AlertDialog.Builder(requireContext())
-                            .setTitle("Sign Out")
-                            .setMessage("Are you sure you want to sign out? You will need to authenticate again to use sync.")
-                            .setPositiveButton("Sign Out") { _, _ ->
-                                lifecycleScope.launch {
-                                    try {
-                                        syncManager.getAuthManager().signOut()
-                                        android.widget.Toast.makeText(requireContext(), "Signed out successfully", android.widget.Toast.LENGTH_SHORT).show()
-                                        updateAccountSummary()
-                                        Logger.i(TAG, "User signed out from sync")
-                                    } catch (e: Exception) {
-                                        Logger.e(TAG, "Failed to sign out", e)
-                                        android.widget.Toast.makeText(requireContext(), "Error signing out: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            }
-                            .setNegativeButton("Cancel", null)
-                            .show()
-                    }
-                    1 -> {
-                        // Re-authenticate
-                        showAuthenticationDialog()
-                    }
-                    2 -> {
-                        // Account info
-                        lifecycleScope.launch {
-                            val account = syncManager.getAuthManager().getCurrentAccount()
-                            val info = if (account != null) {
-                                """
-                                Email: ${account.email}
-                                Display Name: ${account.displayName ?: "N/A"}
-                                Backend: ${prefManager.getSyncBackend()}
-                                """.trimIndent()
-                            } else {
-                                "No account connected"
-                            }
-                            
-                            androidx.appcompat.app.AlertDialog.Builder(requireContext())
-                                .setTitle("Account Information")
-                                .setMessage(info)
-                                .setPositiveButton("OK", null)
-                                .show()
-                        }
-                    }
-                }
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    /**
-     * Show clear data confirmation
-     */
-    private fun showClearDataConfirmation() {
-        Logger.d(TAG, "Show clear data confirmation")
-        
-        androidx.appcompat.app.AlertDialog.Builder(requireContext())
-            .setTitle("Clear Remote Data")
-            .setMessage("This will permanently delete all sync data from Google Drive. Your local data will not be affected.\n\nAre you sure?")
-            .setPositiveButton("Clear") { _, _ ->
-                lifecycleScope.launch {
-                    try {
-                        syncManager.clearRemoteData()
-                        android.widget.Toast.makeText(requireContext(), "Remote data cleared", android.widget.Toast.LENGTH_SHORT).show()
-                    } catch (e: Exception) {
-                        Logger.e(TAG, "Failed to clear remote data", e)
-                        android.widget.Toast.makeText(requireContext(), "Failed: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
-                    }
-                }
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
     }
 
     /**
      * Show force upload confirmation
      */
-    private fun showForceUploadConfirmation() {
-        Logger.d(TAG, "Show force upload confirmation")
-        
+    private fun showForceUploadDialog() {
         androidx.appcompat.app.AlertDialog.Builder(requireContext())
             .setTitle("Force Upload")
-            .setMessage("This will upload your local data to Google Drive, overwriting any existing remote data.\n\nContinue?")
+            .setMessage("This will upload your local data to the sync file, overwriting any existing data.\n\nContinue?")
             .setPositiveButton("Upload") { _, _ ->
-                lifecycleScope.launch {
-                    val success = syncManager.forceUpload()
-                    if (success) {
-                        android.widget.Toast.makeText(requireContext(), "Upload successful", android.widget.Toast.LENGTH_SHORT).show()
-                        setupLastSyncTime()
-                    } else {
-                        android.widget.Toast.makeText(requireContext(), "Upload failed", android.widget.Toast.LENGTH_LONG).show()
-                    }
-                }
+                performSync()
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -941,26 +468,111 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
     /**
      * Show force download confirmation
      */
-    private fun showForceDownloadConfirmation() {
-        Logger.d(TAG, "Show force download confirmation")
-        
+    private fun showForceDownloadDialog() {
         androidx.appcompat.app.AlertDialog.Builder(requireContext())
             .setTitle("Force Download")
-            .setMessage("This will download remote data from Google Drive and overwrite your local data.\n\n⚠️ WARNING: All local changes will be lost!\n\nContinue?")
+            .setMessage("This will download data from the sync file and overwrite your local data.\n\nWARNING: All local changes will be lost!\n\nContinue?")
             .setPositiveButton("Download") { _, _ ->
-                lifecycleScope.launch {
-                    val success = syncManager.forceDownload()
-                    if (success) {
-                        android.widget.Toast.makeText(requireContext(), "Download successful", android.widget.Toast.LENGTH_SHORT).show()
-                        setupLastSyncTime()
-                    } else {
-                        android.widget.Toast.makeText(requireContext(), "Download failed", android.widget.Toast.LENGTH_LONG).show()
-                    }
-                }
+                performDownload()
             }
             .setNegativeButton("Cancel", null)
             .show()
     }
 
-    // Note: onActivityResult removed - using Activity Result API (signInLauncher) instead
+    /**
+     * Perform download
+     */
+    private fun performDownload() {
+        if (!syncManager.isConfigured()) {
+            showToast("Sync not configured")
+            return
+        }
+
+        showToast("Downloading...")
+
+        lifecycleScope.launch {
+            try {
+                val payload = syncManager.download()
+
+                if (payload != null) {
+                    val applier = SyncDataApplier(requireContext())
+                    applier.applyAll(payload)
+
+                    withContext(Dispatchers.Main) {
+                        showToast("Download completed")
+                        updateLastSyncTime()
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        showToast("Download failed or file is empty")
+                    }
+                }
+            } catch (e: Exception) {
+                Logger.e(TAG, "Download failed", e)
+                withContext(Dispatchers.Main) {
+                    showToast("Download failed: ${e.message}")
+                }
+            }
+        }
+    }
+
+    /**
+     * Show clear config confirmation
+     */
+    private fun showClearConfigDialog() {
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Clear Sync Configuration")
+            .setMessage("This will remove your sync configuration. You will need to set up sync again.\n\nYour local data will NOT be affected.")
+            .setPositiveButton("Clear") { _, _ ->
+                syncManager.clearConfiguration()
+                findPreference<SwitchPreferenceCompat>("sync_enabled")?.isChecked = false
+                workScheduler.cancelPeriodicSync()
+                updateLocationSummary()
+                updatePasswordSummary()
+                updateSyncStatus()
+                updateLastSyncTime()
+                showToast("Sync configuration cleared")
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Update last sync time display
+     */
+    private fun updateLastSyncTime() {
+        findPreference<Preference>("sync_last_time")?.apply {
+            summary = formatLastSync(syncManager.getLastSyncTime())
+        }
+    }
+
+    /**
+     * Format last sync time
+     */
+    private fun formatLastSync(timestamp: Long): String {
+        if (timestamp == 0L) return "Never"
+
+        val diff = System.currentTimeMillis() - timestamp
+        return when {
+            diff < 60_000 -> "Just now"
+            diff < 3600_000 -> "${diff / 60_000} minutes ago"
+            diff < 86400_000 -> "${diff / 3600_000} hours ago"
+            else -> "${diff / 86400_000} days ago"
+        }
+    }
+
+    /**
+     * Show setup error dialog
+     */
+    private fun showSetupError(title: String, message: String) {
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
+    private fun showToast(message: String) {
+        android.widget.Toast.makeText(requireContext(), message, android.widget.Toast.LENGTH_SHORT).show()
+    }
 }
