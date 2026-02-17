@@ -203,26 +203,9 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
     }
     
     private fun getDefaultLayout(): List<KeyboardKey> {
-        // Default layout: ESC, Tab, Ctrl, Alt, arrows if enabled
-        val keys = mutableListOf<KeyboardKey>()
-        val allKeys = KeyboardKey.getAllAvailableKeys()
-        
-        // Essential keys
-        keys.add(allKeys.find { it.id == "ESC" } ?: allKeys[0])
-        keys.add(allKeys.find { it.id == "TAB" } ?: allKeys[1])
-        keys.add(allKeys.find { it.id == "CTL" } ?: allKeys[2])
-        keys.add(allKeys.find { it.id == "ALT" } ?: allKeys[3])
-        keys.add(allKeys.find { it.id == "FN" } ?: allKeys[4])
-        
-        // Add arrows if preference enabled
-        if (app.preferencesManager.getBoolean("show_arrow_keys", false)) {
-            keys.add(allKeys.find { it.id == "UP" } ?: allKeys[5])
-            keys.add(allKeys.find { it.id == "DOWN" } ?: allKeys[6])
-            keys.add(allKeys.find { it.id == "LEFT" } ?: allKeys[7])
-            keys.add(allKeys.find { it.id == "RIGHT" } ?: allKeys[8])
-        }
-        
-        return keys
+        // Use the same default keys as KeyboardKey.getDefaultKeys()
+        // This ensures consistency between the customization UI and actual default
+        return KeyboardKey.getDefaultKeys()
     }
     
     override fun onSupportNavigateUp(): Boolean {

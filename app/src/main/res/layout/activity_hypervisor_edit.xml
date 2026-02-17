@@ -28,6 +28,17 @@
             android:orientation="vertical"
             android:padding="@dimen/space_lg">
 
+            <!-- Import from Existing Host Button -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/button_import_host"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/space_md"
+                android:text="Import from Existing Host"
+                app:icon="@drawable/ic_import_export"
+                app:iconGravity="start"
+                style="@style/Widget.Material3.Button.TonalButton" />
+
             <!-- Name -->
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"

@@ -40,7 +40,10 @@ data class HypervisorProfile(
     
     @ColumnInfo(name = "is_xen_orchestra")
     val isXenOrchestra: Boolean = false, // For XCP-ng: true = XO REST API, false = XML-RPC direct
-    
+
+    @ColumnInfo(name = "linked_connection_id")
+    val linkedConnectionId: String? = null, // Reference to existing SSH connection (ConnectionProfile.id)
+
     @ColumnInfo(name = "notes")
     val notes: String? = null,
     

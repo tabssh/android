@@ -26,7 +26,7 @@ import io.github.tabssh.utils.logging.Logger
         AuditLogEntry::class,
         HypervisorProfile::class
     ],
-    version = 14,
+    version = 16,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -286,7 +286,9 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     MIGRATION_10_11,
                     MIGRATION_11_12,
                     MIGRATION_12_13,
-                    MIGRATION_13_14
+                    MIGRATION_13_14,
+                    MIGRATION_14_15,
+                    MIGRATION_15_16
                 )
                 .build()
                 INSTANCE = instance
@@ -433,5 +435,21 @@ data class DatabaseStats(
                 database.execSQL("ALTER TABLE connections ADD COLUMN post_connect_script TEXT")
                 database.execSQL("ALTER TABLE connections ADD COLUMN font_size_override INTEGER")
                 Logger.i("Database", "Migration 13->14: Added post_connect_script and font_size_override fields to connections")
+            }
+        }
+
+        val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Add linked_connection_id field to hypervisors table for importing existing hosts
+                database.execSQL("ALTER TABLE hypervisors ADD COLUMN linked_connection_id TEXT")
+                Logger.i("Database", "Migration 14->15: Added linked_connection_id field to hypervisors")
+            }
+        }
+
+        val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Add password field to identities table for storing credentials
+                database.execSQL("ALTER TABLE identities ADD COLUMN password TEXT")
+                Logger.i("Database", "Migration 15->16: Added password field to identities")
             }
         }

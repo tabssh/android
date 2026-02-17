@@ -34,6 +34,9 @@ interface ConnectionDao {
     
     @Query("SELECT * FROM connections WHERE name LIKE :query OR host LIKE :query ORDER BY name")
     suspend fun searchConnections(query: String): List<ConnectionProfile>
+
+    @Query("SELECT * FROM connections ORDER BY name")
+    suspend fun getAllConnectionsList(): List<ConnectionProfile>
     
     @Query("SELECT * FROM connections ORDER BY last_connected DESC LIMIT :limit")
     suspend fun getRecentConnections(limit: Int = 10): List<ConnectionProfile>
