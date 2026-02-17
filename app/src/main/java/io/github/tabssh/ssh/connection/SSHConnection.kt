@@ -449,14 +449,40 @@ class SSHConnection(
      * Setup authentication credentials BEFORE connecting
      * JSch requires credentials to be configured before calling session.connect()
      *
-     * Auto-matching: If an identity exists with the same name as the username,
-     * use that identity's credentials instead of the connection profile's.
+     * Authentication priority:
+     * 1. If identity is explicitly linked (identityId set) → use identity's credentials
+     * 2. Else if identity exists matching username → use that identity (SSH config import convenience)
+     * 3. Else if connection has its own credentials → use those
+     * 4. Else let SSH negotiate (publickey agent, keyboard-interactive, etc.)
      */
     private suspend fun setupAuthentication(jsch: JSch, session: Session) = withContext(Dispatchers.IO) {
-        // Check for identity auto-matching: if identity.name matches username, use identity's credentials
-        val matchedIdentity = try {
-            val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
-            val identity = app?.database?.identityDao()?.getIdentityByName(profile.username)
+        val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
+
+        // PRIORITY 1: Check for explicitly linked identity
+        val linkedIdentity = try {
+            if (profile.identityId != null) {
+                val identity = app?.database?.identityDao()?.getIdentityById(profile.identityId!!)
+                if (identity != null) {
+                    Logger.i("SSHConnection", "🔑 Using linked identity '${identity.name}' (${identity.authType})")
+                }
+                identity
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            Logger.w("SSHConnection", "Error loading linked identity", e)
+            null
+        }
+
+        if (linkedIdentity != null) {
+            Logger.d("SSHConnection", "Auth: Using explicitly linked identity '${linkedIdentity.name}'")
+            setupAuthFromIdentity(jsch, session, linkedIdentity)
+            return@withContext
+        }
+
+        // PRIORITY 2: Auto-match identity by username (for SSH config import convenience)
+        val autoMatchedIdentity = try {
+            val identity = app?.database?.identityDao()?.getIdentityByUsername(profile.username)
             if (identity != null) {
                 Logger.i("SSHConnection", "🔑 Auto-matched identity '${identity.name}' for username '${profile.username}'")
             }
@@ -466,51 +492,63 @@ class SSHConnection(
             null
         }
 
-        // Determine which auth type and credentials to use
-        val effectiveAuthType = matchedIdentity?.authType ?: profile.getAuthTypeEnum()
-        val effectiveKeyId = matchedIdentity?.keyId ?: profile.keyId
+        if (autoMatchedIdentity != null) {
+            Logger.d("SSHConnection", "Auth: Using auto-matched identity '${autoMatchedIdentity.name}'")
+            setupAuthFromIdentity(jsch, session, autoMatchedIdentity)
+            return@withContext
+        }
 
-        Logger.d("SSHConnection", "Using auth type: $effectiveAuthType (matched identity: ${matchedIdentity != null})")
+        // PRIORITY 3: Use connection's own credentials if set
+        val connectionPassword = getPasswordForAuthentication()
+        val connectionKeyId = profile.keyId
+        val connectionAuthType = profile.getAuthTypeEnum()
 
-        when (effectiveAuthType) {
+        if (connectionPassword != null || connectionKeyId != null) {
+            Logger.d("SSHConnection", "Auth: Using connection credentials (type: $connectionAuthType)")
+            setupAuthFromConnection(jsch, session, connectionAuthType, connectionPassword, connectionKeyId)
+            return@withContext
+        }
+
+        // PRIORITY 4: No credentials - let SSH negotiate
+        Logger.i("SSHConnection", "Auth: No credentials set, letting SSH negotiate authentication")
+        // JSch will try: publickey (if agent available), keyboard-interactive, password prompt
+        // The PreferredAuthentications config already sets the order
+    }
+
+    /**
+     * Setup authentication from a linked Identity
+     */
+    private suspend fun setupAuthFromIdentity(jsch: JSch, session: Session, identity: io.github.tabssh.storage.database.entities.Identity) {
+        when (identity.authType) {
             AuthType.PASSWORD -> {
-                Logger.d("SSHConnection", "Setting up password authentication for ${profile.host}")
-                val password = getPasswordForAuthentication()
-                if (password != null) {
-                    session.setPassword(password)
+                if (identity.password != null) {
+                    session.setPassword(identity.password)
+                    Logger.d("SSHConnection", "Password set from identity '${identity.name}'")
                 } else {
-                    throw SSHException("No password available for authentication")
+                    throw SSHException("Identity '${identity.name}' has no password set")
                 }
             }
 
             AuthType.PUBLIC_KEY -> {
-                Logger.d("SSHConnection", "Setting up public key authentication")
-                val keyIdToUse = effectiveKeyId
-                if (keyIdToUse == null) {
-                    throw SSHException("No SSH key specified for public key authentication")
-                }
-
-                val privateKey = getPrivateKeyForAuthentication(keyIdToUse)
-                if (privateKey != null) {
-                    jsch.addIdentity(keyIdToUse, privateKey.encoded, null, null)
-                    Logger.d("SSHConnection", "Added SSH key identity: $keyIdToUse${if (matchedIdentity != null) " (from matched identity)" else ""}")
+                if (identity.keyId != null) {
+                    val privateKey = getPrivateKeyForAuthentication(identity.keyId!!)
+                    if (privateKey != null) {
+                        jsch.addIdentity(identity.keyId!!, privateKey.encoded, null, null)
+                        Logger.d("SSHConnection", "SSH key set from identity '${identity.name}'")
+                    } else {
+                        throw SSHException("Could not retrieve SSH key for identity '${identity.name}'")
+                    }
                 } else {
-                    throw SSHException("Could not retrieve private key for authentication")
+                    throw SSHException("Identity '${identity.name}' has no SSH key set")
                 }
             }
 
             AuthType.KEYBOARD_INTERACTIVE -> {
-                Logger.d("SSHConnection", "Setting up keyboard interactive authentication")
-                val password = getPasswordForAuthentication()
-
+                Logger.d("SSHConnection", "Keyboard interactive from identity '${identity.name}'")
+                val password = identity.password
                 session.setUserInfo(object : com.jcraft.jsch.UserInfo {
                     override fun getPassword(): String? = password
-
-                    override fun promptYesNo(str: String): Boolean {
-                        Logger.d("SSHConnection", "Keyboard interactive prompt: $str")
-                        return str.contains("continue", ignoreCase = true)
-                    }
-
+                    override fun promptYesNo(str: String): Boolean = str.contains("continue", ignoreCase = true)
                     override fun getPassphrase(): String? = null
                     override fun promptPassphrase(message: String): Boolean = false
                     override fun promptPassword(message: String): Boolean = true
@@ -521,11 +559,61 @@ class SSHConnection(
             }
 
             AuthType.GSSAPI -> {
-                // GSSAPI authentication is rarely used on Android and requires enterprise Kerberos
-                // infrastructure. Most SSH servers don't require it, so we gracefully skip it.
-                Logger.w("SSHConnection", "GSSAPI authentication not supported (rarely needed on Android)")
-                // Don't throw exception - let JSch try other available methods
-                // JSch will automatically fallback to password/keyboard-interactive if available
+                Logger.w("SSHConnection", "GSSAPI not supported on Android")
+            }
+        }
+    }
+
+    /**
+     * Setup authentication from connection's own credentials
+     */
+    private suspend fun setupAuthFromConnection(
+        jsch: JSch,
+        session: Session,
+        authType: AuthType,
+        password: String?,
+        keyId: String?
+    ) {
+        when (authType) {
+            AuthType.PASSWORD -> {
+                if (password != null) {
+                    session.setPassword(password)
+                    Logger.d("SSHConnection", "Password set from connection")
+                } else {
+                    throw SSHException("No password available for authentication")
+                }
+            }
+
+            AuthType.PUBLIC_KEY -> {
+                if (keyId != null) {
+                    val privateKey = getPrivateKeyForAuthentication(keyId)
+                    if (privateKey != null) {
+                        jsch.addIdentity(keyId, privateKey.encoded, null, null)
+                        Logger.d("SSHConnection", "SSH key set from connection")
+                    } else {
+                        throw SSHException("Could not retrieve private key for authentication")
+                    }
+                } else {
+                    throw SSHException("No SSH key specified for public key authentication")
+                }
+            }
+
+            AuthType.KEYBOARD_INTERACTIVE -> {
+                Logger.d("SSHConnection", "Keyboard interactive authentication")
+                session.setUserInfo(object : com.jcraft.jsch.UserInfo {
+                    override fun getPassword(): String? = password
+                    override fun promptYesNo(str: String): Boolean = str.contains("continue", ignoreCase = true)
+                    override fun getPassphrase(): String? = null
+                    override fun promptPassphrase(message: String): Boolean = false
+                    override fun promptPassword(message: String): Boolean = true
+                    override fun showMessage(message: String) {
+                        Logger.i("SSHConnection", "Server message: $message")
+                    }
+                })
+            }
+
+            AuthType.GSSAPI -> {
+                Logger.w("SSHConnection", "GSSAPI not supported on Android")
             }
         }
     }
