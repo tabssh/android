@@ -2,7 +2,6 @@ package io.github.tabssh.ui.activities
 
 import android.content.Intent
 import android.os.Bundle
-import android.view.Menu
 import android.view.MenuItem
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.ActionBarDrawerToggle
@@ -124,8 +123,9 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
                 super.onPageSelected(position)
-                // Show FAB only on Connections and Identities tabs
-                fab.visibility = if (position == 1 || position == 2) {
+                // Show FAB only on Connections tab (position 1)
+                // Identities tab (position 2) has its own FAB in the fragment
+                fab.visibility = if (position == 1) {
                     android.view.View.VISIBLE
                 } else {
                     android.view.View.GONE
@@ -133,8 +133,8 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             }
         })
 
-        // Set initial FAB visibility
-        fab.visibility = android.view.View.VISIBLE
+        // Set initial FAB visibility (hidden until Connections tab selected)
+        fab.visibility = android.view.View.GONE
 
         // Handle back press for drawer
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -190,82 +190,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         }
     }
 
-    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
-        menuInflater.inflate(R.menu.main_menu, menu)
-        return true
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        return when (item.itemId) {
-            R.id.action_quick_connect -> {
-                showQuickConnectDialog()
-                true
-            }
-            R.id.action_search -> true // Handled by SearchView
-            R.id.action_sort -> {
-                android.widget.Toast.makeText(this, "Sort options - Switch to Connections tab", android.widget.Toast.LENGTH_SHORT).show()
-                viewPager.currentItem = 1
-                true
-            }
-            R.id.action_view_logs -> {
-                showLogsDialog()
-                true
-            }
-            R.id.action_settings -> {
-                startActivity(Intent(this, SettingsActivity::class.java))
-                true
-            }
-            R.id.action_manage_keys -> {
-                startActivity(Intent(this, KeyManagementActivity::class.java))
-                true
-            }
-            R.id.action_manage_identities -> {
-                startActivity(Intent(this, IdentityManagementActivity::class.java))
-                true
-            }
-            R.id.action_manage_snippets -> {
-                startActivity(Intent(this, SnippetManagerActivity::class.java))
-                true
-            }
-            R.id.action_create_group -> {
-                startActivity(Intent(this, GroupManagementActivity::class.java))
-                true
-            }
-            R.id.action_cluster_commands -> {
-                startActivity(Intent(this, ClusterCommandActivity::class.java))
-                true
-            }
-            R.id.action_import_connections -> {
-                importConnectionsLauncher.launch(arrayOf("application/zip", "application/json"))
-                true
-            }
-            R.id.action_export_connections -> {
-                exportConnectionsLauncher.launch("tabssh_connections_${System.currentTimeMillis()}.zip")
-                true
-            }
-            R.id.action_import_ssh_config -> {
-                importSSHConfig()
-                true
-            }
-            R.id.action_about -> {
-                showAboutDialog()
-                true
-            }
-            R.id.action_proxmox -> {
-                startActivity(Intent(this, ProxmoxManagerActivity::class.java))
-                true
-            }
-            R.id.action_xcpng -> {
-                startActivity(Intent(this, XCPngManagerActivity::class.java))
-                true
-            }
-            R.id.action_vmware -> {
-                startActivity(Intent(this, VMwareManagerActivity::class.java))
-                true
-            }
-            else -> super.onOptionsItemSelected(item)
-        }
-    }
+    // Toolbar menu removed - using drawer navigation only
 
     override fun onNavigationItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
@@ -490,37 +415,112 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
      * Import connections backup from URI
      */
     private fun importBackupFromUri(uri: android.net.Uri) {
+        // First try without password
         lifecycleScope.launch {
             try {
-                // Ask for password (optional)
-                val password = null // TODO: Add password dialog
-                
-                val result = backupManager.restoreBackup(uri, password, overwriteExisting = false)
-                
+                val result = backupManager.restoreBackup(uri, password = null, overwriteExisting = false)
+
                 if (result.success) {
-                    // Show success dialog
-                    val message = "Import successful!\n\nImported: ${result.restoredItems["connections"] ?: 0} connections"
-                    
-                    androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
-                        .setTitle("Backup Imported")
-                        .setMessage(message)
-                        .setPositiveButton("OK", null)
-                        .show()
-                        
+                    showImportSuccessDialog(result)
                     Logger.i("MainActivity", "Imported backup successfully")
                 } else {
                     throw Exception("Import failed")
                 }
-                
+
             } catch (e: Exception) {
-                Logger.e("MainActivity", "Failed to import backup", e)
+                // If it failed, might need password - ask user
+                if (e.message?.contains("encrypted", ignoreCase = true) == true ||
+                    e.message?.contains("password", ignoreCase = true) == true ||
+                    e.message?.contains("decrypt", ignoreCase = true) == true) {
+                    showImportPasswordDialog(uri)
+                } else {
+                    Logger.e("MainActivity", "Failed to import backup", e)
+                    androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+                        .setTitle("Import Failed")
+                        .setMessage("Failed to import backup:\n${e.message}")
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
+            }
+        }
+    }
+
+    /**
+     * Show password dialog for encrypted backup import
+     */
+    private fun showImportPasswordDialog(uri: android.net.Uri) {
+        val passwordInput = com.google.android.material.textfield.TextInputEditText(this).apply {
+            hint = "Enter backup password"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+
+        val layout = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(64, 32, 64, 0)
+            addView(passwordInput)
+        }
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Encrypted Backup")
+            .setMessage("This backup is encrypted. Enter the password to decrypt it.")
+            .setView(layout)
+            .setPositiveButton("Import") { _, _ ->
+                val password = passwordInput.text.toString()
+                if (password.isNotBlank()) {
+                    importBackupWithPassword(uri, password)
+                } else {
+                    android.widget.Toast.makeText(this, "Password required", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Import backup with password
+     */
+    private fun importBackupWithPassword(uri: android.net.Uri, password: String) {
+        lifecycleScope.launch {
+            try {
+                val result = backupManager.restoreBackup(uri, password, overwriteExisting = false)
+
+                if (result.success) {
+                    showImportSuccessDialog(result)
+                    Logger.i("MainActivity", "Imported encrypted backup successfully")
+                } else {
+                    throw Exception("Import failed")
+                }
+
+            } catch (e: Exception) {
+                Logger.e("MainActivity", "Failed to import backup with password", e)
                 androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
                     .setTitle("Import Failed")
-                    .setMessage("Failed to import backup:\n${e.message}")
+                    .setMessage("Failed to import backup:\n${e.message}\n\nThe password may be incorrect.")
                     .setPositiveButton("OK", null)
                     .show()
             }
         }
+    }
+
+    /**
+     * Show import success dialog
+     */
+    private fun showImportSuccessDialog(result: io.github.tabssh.backup.BackupManager.RestoreResult) {
+        val message = buildString {
+            append("Import successful!\n\n")
+            append("Imported:\n")
+            result.restoredItems.forEach { (type, count) ->
+                if (count > 0) {
+                    append("  • $count $type\n")
+                }
+            }
+        }
+
+        androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+            .setTitle("Backup Imported")
+            .setMessage(message)
+            .setPositiveButton("OK", null)
+            .show()
     }
     
     /**
@@ -698,30 +698,138 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
      * Export connections backup to URI
      */
     private fun exportBackupToUri(uri: android.net.Uri) {
+        // Show options dialog for export
+        showExportOptionsDialog(uri)
+    }
+
+    /**
+     * Show export options dialog
+     */
+    private fun showExportOptionsDialog(uri: android.net.Uri) {
+        val options = arrayOf(
+            "Export without encryption",
+            "Export with password protection"
+        )
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Export Options")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> performExport(uri, includePasswords = false, password = null)
+                    1 -> showExportPasswordDialog(uri)
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Show password dialog for encrypted export
+     */
+    private fun showExportPasswordDialog(uri: android.net.Uri) {
+        val passwordInput = com.google.android.material.textfield.TextInputEditText(this).apply {
+            hint = "Enter password"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+
+        val confirmInput = com.google.android.material.textfield.TextInputEditText(this).apply {
+            hint = "Confirm password"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+
+        val includePasswordsCheckbox = android.widget.CheckBox(this).apply {
+            text = "Include saved passwords (encrypted)"
+            isChecked = false
+        }
+
+        val layout = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(64, 32, 64, 0)
+            addView(passwordInput)
+            addView(confirmInput.apply {
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = 16 }
+            })
+            addView(includePasswordsCheckbox.apply {
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = 16 }
+            })
+        }
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Encrypt Backup")
+            .setMessage("Enter a password to encrypt your backup.")
+            .setView(layout)
+            .setPositiveButton("Export") { _, _ ->
+                val password = passwordInput.text.toString()
+                val confirm = confirmInput.text.toString()
+                val includePasswords = includePasswordsCheckbox.isChecked
+
+                when {
+                    password.isBlank() -> {
+                        android.widget.Toast.makeText(this, "Password required", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    password != confirm -> {
+                        android.widget.Toast.makeText(this, "Passwords do not match", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    password.length < 4 -> {
+                        android.widget.Toast.makeText(this, "Password too short (minimum 4 characters)", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    else -> {
+                        performExport(uri, includePasswords, password)
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Perform the actual export
+     */
+    private fun performExport(uri: android.net.Uri, includePasswords: Boolean, password: String?) {
         lifecycleScope.launch {
             try {
-                // Ask for password (optional)
-                val password = null // TODO: Add password dialog
-                
                 val result = backupManager.createBackup(
                     outputUri = uri,
-                    includePasswords = false,
+                    includePasswords = includePasswords,
                     encryptBackup = password != null,
                     password = password
                 )
-                
+
                 if (result.success) {
-                    android.widget.Toast.makeText(
-                        this@MainActivity,
-                        "Backup exported successfully",
-                        android.widget.Toast.LENGTH_SHORT
-                    ).show()
-                    
+                    val message = buildString {
+                        append("Backup exported successfully!")
+                        if (password != null) {
+                            append("\n\n🔐 Encrypted with password")
+                        }
+                        result.metadata?.itemCounts?.let { items ->
+                            if (items.isNotEmpty()) {
+                                append("\n\nExported:\n")
+                                items.forEach { (type, count) ->
+                                    if (count > 0) {
+                                        append("  • $count $type\n")
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+                        .setTitle("Export Complete")
+                        .setMessage(message)
+                        .setPositiveButton("OK", null)
+                        .show()
+
                     Logger.i("MainActivity", "Exported backup successfully")
                 } else {
                     throw Exception("Export failed")
                 }
-                
+
             } catch (e: Exception) {
                 Logger.e("MainActivity", "Failed to export backup", e)
                 androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)

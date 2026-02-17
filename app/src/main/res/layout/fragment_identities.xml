@@ -62,17 +62,47 @@
             android:padding="@dimen/space_sm" />
 
         <!-- Empty state -->
-        <TextView
-            android:id="@+id/text_identities_empty"
+        <LinearLayout
+            android:id="@+id/layout_empty_state"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:text="No identities yet.\nTap + to create one."
-            android:textColor="?attr/colorOnSurfaceVariant"
-            android:textAlignment="center"
+            android:orientation="vertical"
             android:gravity="center"
             android:padding="@dimen/space_lg"
-            android:visibility="gone" />
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="👤"
+                android:textSize="64sp"
+                android:layout_marginBottom="16dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="No Identities"
+                android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Create reusable credential sets that\ncan be shared across multiple connections"
+                android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+                android:textColor="?android:attr/textColorSecondary"
+                android:gravity="center"
+                android:layout_marginBottom="24dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/button_add_identity"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Create Identity"
+                style="@style/Widget.Material3.Button.TonalButton" />
+
+        </LinearLayout>
 
     </LinearLayout>
     
@@ -83,7 +113,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
         android:layout_margin="@dimen/space_lg"
-        android:src="@drawable/ic_add"
+        android:src="@android:drawable/ic_input_add"
         android:contentDescription="Add identity"
         app:layout_behavior="com.google.android.material.behavior.HideBottomViewOnScrollBehavior" />
 

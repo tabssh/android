@@ -420,6 +420,7 @@ class SFTPActivity : AppCompatActivity() {
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle(file.name)
             .setItems(items) { _, which ->
+                if (which < 0 || which >= items.size) return@setItems
                 when (items[which]) {
                     "Open" -> handleLocalFileClick(file)
                     "Upload", "Upload Folder" -> uploadFile(file)
@@ -429,17 +430,18 @@ class SFTPActivity : AppCompatActivity() {
             }
             .show()
     }
-    
+
     private fun showRemoteFileMenu(file: RemoteFileInfo) {
         val items = if (file.isDirectory) {
             arrayOf("Open", "Download Folder", "Rename", "Delete")
         } else {
             arrayOf("Download", "Rename", "Delete", "Properties")
         }
-        
+
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle(file.name)
             .setItems(items) { _, which ->
+                if (which < 0 || which >= items.size) return@setItems
                 when (items[which]) {
                     "Open" -> handleRemoteFileClick(file)
                     "Download", "Download Folder" -> downloadFile(file)

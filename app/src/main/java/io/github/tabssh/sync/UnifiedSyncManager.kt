@@ -154,12 +154,10 @@ class UnifiedSyncManager(private val context: Context) {
         withContext(Dispatchers.IO) {
             Logger.d(TAG, "Starting sync: trigger=$trigger, backend=${getSelectedBackend()}")
 
-            if (syncPassword == null) {
-                return@withContext SyncResult(
-                    success = false,
-                    message = "Sync password not configured"
-                )
-            }
+            val password = syncPassword ?: return@withContext SyncResult(
+                success = false,
+                message = "Sync password not configured"
+            )
 
             // Initialize backend
             val initResult = initializeBackend()
@@ -174,8 +172,8 @@ class UnifiedSyncManager(private val context: Context) {
 
             try {
                 when (getSelectedBackend()) {
-                    BACKEND_GOOGLE_DRIVE -> performGoogleDriveSync()
-                    BACKEND_WEBDAV -> performWebDAVSync()
+                    BACKEND_GOOGLE_DRIVE -> performGoogleDriveSync(password)
+                    BACKEND_WEBDAV -> performWebDAVSync(password)
                     else -> SyncResult(success = false, message = "Unknown backend")
                 }
             } catch (e: Exception) {
@@ -194,18 +192,18 @@ class UnifiedSyncManager(private val context: Context) {
     /**
      * Perform Google Drive sync
      */
-    private suspend fun performGoogleDriveSync(): SyncResult {
+    private suspend fun performGoogleDriveSync(password: String): SyncResult {
         val manager = googleDriveSyncManager
             ?: return SyncResult(success = false, message = "Google Drive not initialized")
 
-        manager.setSyncPassword(syncPassword!!)
+        manager.setSyncPassword(password)
         return manager.performSync()
     }
 
     /**
      * Perform WebDAV sync
      */
-    private suspend fun performWebDAVSync(): SyncResult {
+    private suspend fun performWebDAVSync(password: String): SyncResult {
         val executor = webdavExecutor
             ?: return SyncResult(success = false, message = "WebDAV not initialized")
 
@@ -213,7 +211,7 @@ class UnifiedSyncManager(private val context: Context) {
 
         updateProgress(SyncStage.ENCRYPTING, 1, 6, "Encrypting data...")
 
-        val encryptedLocal = encryptSyncData(localData, syncPassword!!)
+        val encryptedLocal = encryptSyncData(localData, password)
 
         updateProgress(SyncStage.UPLOADING, 2, 6, "Uploading to WebDAV server...")
 
@@ -246,7 +244,7 @@ class UnifiedSyncManager(private val context: Context) {
 
         updateProgress(SyncStage.MERGING, 4, 6, "Merging data...")
 
-        val mergeResult = mergeAllData(localData, remoteFiles)
+        val mergeResult = mergeAllData(localData, remoteFiles, password)
 
         if (mergeResult.hasConflicts()) {
             val autoResolved = conflictResolver.autoResolveConflicts(mergeResult.conflicts)
@@ -326,7 +324,8 @@ class UnifiedSyncManager(private val context: Context) {
      */
     private suspend fun mergeAllData(
         localData: SyncDataPackage,
-        remoteFiles: Map<String, ByteArray>
+        remoteFiles: Map<String, ByteArray>,
+        password: String
     ): CompleteMergeResult {
         val allConnections = mutableListOf(localData.connections)
         val allKeys = mutableListOf(localData.keys)
@@ -336,7 +335,7 @@ class UnifiedSyncManager(private val context: Context) {
 
         for ((deviceId, encryptedData) in remoteFiles) {
             try {
-                val decrypted = decryptSyncData(encryptedData, syncPassword!!)
+                val decrypted = decryptSyncData(encryptedData, password)
                 val remoteData = deserializeSyncData(decrypted)
 
                 allConnections.add(remoteData.connections)

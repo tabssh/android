@@ -61,7 +61,7 @@
 - ☁️ **Cloud Sync** - Google Drive + WebDAV (self-hosted) with encryption & 3-way merge
 - 📝 **Custom Fonts** - 8 monospace fonts: Cascadia Code, Fira Code, JetBrains Mono, and more
 - 🏠 **Home Screen Widgets** - Quick connect from home screen
-- 🌐 **Hypervisor Management** - Proxmox VE, VMware vSphere, XCP-ng, **Xen Orchestra** (NEW v1.2.0)
+- 🌐 **Hypervisor Management** - Proxmox VE, VMware vSphere, XCP-ng, **Xen Orchestra** (NEW v1.0.0)
   - **Xen Orchestra** - Full REST API + WebSocket ⚡ real-time updates
   - Toggle between XO and direct XCP-ng connections
   - VM management with live state changes

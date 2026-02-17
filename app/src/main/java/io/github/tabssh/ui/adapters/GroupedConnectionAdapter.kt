@@ -33,6 +33,7 @@ class GroupedConnectionAdapter(
     }
 
     override fun getItemViewType(position: Int): Int {
+        if (position < 0 || position >= items.size) return VIEW_TYPE_CONNECTION
         return when (items[position]) {
             is ConnectionListItem.GroupHeader -> VIEW_TYPE_GROUP_HEADER
             is ConnectionListItem.Connection -> VIEW_TYPE_CONNECTION
@@ -60,15 +61,16 @@ class GroupedConnectionAdapter(
     }
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+        if (position < 0 || position >= items.size) return
         when (val item = items[position]) {
             is ConnectionListItem.GroupHeader -> {
-                (holder as GroupHeaderViewHolder).bind(item)
+                (holder as? GroupHeaderViewHolder)?.bind(item)
             }
             is ConnectionListItem.UngroupedHeader -> {
-                (holder as UngroupedHeaderViewHolder).bind(item)
+                (holder as? UngroupedHeaderViewHolder)?.bind(item)
             }
             is ConnectionListItem.Connection -> {
-                (holder as ConnectionViewHolder).bind(item.profile, item.indentLevel)
+                (holder as? ConnectionViewHolder)?.bind(item.profile, item.indentLevel)
             }
         }
     }
