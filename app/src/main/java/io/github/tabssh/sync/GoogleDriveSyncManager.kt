@@ -73,12 +73,10 @@ class GoogleDriveSyncManager(private val context: Context) {
                 )
             }
 
-            if (syncPassword == null) {
-                return@withContext SyncResult(
-                    success = false,
-                    message = "Sync password not configured"
-                )
-            }
+            val password = syncPassword ?: return@withContext SyncResult(
+                success = false,
+                message = "Sync password not configured"
+            )
 
             updateProgress(SyncStage.COLLECTING_DATA, 0, 6, "Collecting local data...")
 
@@ -87,7 +85,7 @@ class GoogleDriveSyncManager(private val context: Context) {
 
                 updateProgress(SyncStage.ENCRYPTING, 1, 6, "Encrypting data...")
 
-                val encryptedLocal = encryptSyncData(localData, syncPassword!!)
+                val encryptedLocal = encryptSyncData(localData, password)
 
                 updateProgress(SyncStage.UPLOADING, 2, 6, "Uploading to Google Drive...")
 
@@ -99,7 +97,7 @@ class GoogleDriveSyncManager(private val context: Context) {
 
                 updateProgress(SyncStage.MERGING, 4, 6, "Merging data...")
 
-                val mergeResult = mergeAllData(localData, remoteFiles)
+                val mergeResult = mergeAllData(localData, remoteFiles, password)
 
                 if (mergeResult.hasConflicts()) {
                     val autoResolved = conflictResolver.autoResolveConflicts(mergeResult.conflicts)
@@ -159,7 +157,8 @@ class GoogleDriveSyncManager(private val context: Context) {
      */
     private suspend fun mergeAllData(
         localData: SyncDataPackage,
-        remoteFiles: Map<String, ByteArray>
+        remoteFiles: Map<String, ByteArray>,
+        password: String
     ): CompleteMergeResult {
         val allConnections = mutableListOf(localData.connections)
         val allKeys = mutableListOf(localData.keys)
@@ -169,7 +168,7 @@ class GoogleDriveSyncManager(private val context: Context) {
 
         for ((deviceId, encryptedData) in remoteFiles) {
             try {
-                val decrypted = decryptSyncData(encryptedData, syncPassword!!)
+                val decrypted = decryptSyncData(encryptedData, password)
                 val remoteData = deserializeSyncData(decrypted)
 
                 allConnections.add(remoteData.connections)
@@ -406,19 +405,19 @@ class GoogleDriveSyncManager(private val context: Context) {
             return@withContext false
         }
         
-        if (syncPassword == null) {
+        val password = syncPassword ?: run {
             Logger.e(TAG, "Cannot force upload: sync password not set")
             return@withContext false
         }
-        
+
         try {
             updateProgress(SyncStage.COLLECTING_DATA, 0, 3, "Collecting local data...")
-            
+
             val localData = dataCollector.collectAllSyncData()
-            
+
             updateProgress(SyncStage.ENCRYPTING, 1, 3, "Encrypting data...")
-            
-            val encryptedData = encryptSyncData(localData, syncPassword!!)
+
+            val encryptedData = encryptSyncData(localData, password)
             
             updateProgress(SyncStage.UPLOADING, 2, 3, "Uploading to Google Drive...")
             
@@ -449,26 +448,26 @@ class GoogleDriveSyncManager(private val context: Context) {
             return@withContext false
         }
         
-        if (syncPassword == null) {
+        val password = syncPassword ?: run {
             Logger.e(TAG, "Cannot force download: sync password not set")
             return@withContext false
         }
-        
+
         try {
             updateProgress(SyncStage.DOWNLOADING, 0, 3, "Downloading from Google Drive...")
-            
+
             val deviceId = metadataManager.getDeviceId()
             val encryptedData = syncExecutor.downloadSyncFile(deviceId)
-            
+
             if (encryptedData == null) {
                 Logger.w(TAG, "No remote data found for this device")
                 updateProgress(SyncStage.ERROR, 0, 0, "No remote data found")
                 return@withContext false
             }
-            
+
             updateProgress(SyncStage.DECRYPTING, 1, 3, "Decrypting data...")
-            
-            val decryptedData = decryptSyncData(encryptedData, syncPassword!!)
+
+            val decryptedData = decryptSyncData(encryptedData, password)
             val remoteData = deserializeSyncData(decryptedData)
             
             updateProgress(SyncStage.APPLYING, 2, 3, "Applying remote data...")

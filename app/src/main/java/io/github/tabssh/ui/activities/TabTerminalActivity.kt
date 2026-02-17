@@ -782,7 +782,7 @@ class TabTerminalActivity : AppCompatActivity() {
         }
 
         // Handle normal connection intent
-        val connectionProfileId = intent.getStringExtra(EXTRA_CONNECTION_PROFILE)
+        val connectionProfileId = intent.getStringExtra(EXTRA_CONNECTION_PROFILE_ID)
         val autoConnect = intent.getBooleanExtra(EXTRA_AUTO_CONNECT, true)
 
         if (connectionProfileId != null) {

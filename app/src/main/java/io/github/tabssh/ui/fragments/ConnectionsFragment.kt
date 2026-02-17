@@ -131,11 +131,7 @@ class ConnectionsFragment : Fragment() {
     private fun loadSortPreference() {
         val prefName = requireContext().getSharedPreferences("TabSSH", android.content.Context.MODE_PRIVATE)
             .getString("connections_sort", SortOption.NAME_ASC.name)
-        currentSortOption = try {
-            SortOption.valueOf(prefName!!)
-        } catch (e: Exception) {
-            SortOption.NAME_ASC
-        }
+        currentSortOption = SortOption.entries.find { it.name == prefName } ?: SortOption.NAME_ASC
     }
 
     private fun setupSearchView() {

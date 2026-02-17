@@ -87,7 +87,6 @@ class SSHConnection(
                 notifyListeners { onConnecting(id) }
                 
                 Logger.i("SSHConnection", "🔌 STEP 1: Starting connection to ${profile.host}:${profile.port} as ${profile.username}")
-                showDebugToast("Connecting to ${profile.host}...")
 
                 // Execute port knock sequence if enabled
                 Logger.d("SSHConnection", "🔌 STEP 2: Checking port knock configuration")
@@ -147,7 +146,6 @@ class SSHConnection(
                 Logger.i("SSHConnection", "🔑 STEP 9: Setting up authentication")
                 _connectionState.value = ConnectionState.AUTHENTICATING
                 notifyListeners { onAuthenticating(id) }
-                showDebugToast("Authenticating...")
 
                 setupAuthentication(jsch, newSession)
 
@@ -157,7 +155,6 @@ class SSHConnection(
                 session = newSession
 
                 Logger.i("SSHConnection", "✅ Successfully connected and authenticated to ${profile.host}")
-                showDebugToast("Connected!")
                 
                 _connectionState.value = ConnectionState.CONNECTED
                 reconnectAttempts = 0
@@ -167,7 +164,6 @@ class SSHConnection(
                 
             } catch (e: Exception) {
                 Logger.e("SSHConnection", "❌ Connection failed at some step", e)
-                showDebugToast("Connection failed: ${e.message}")
                 handleConnectionError(e)
                 return@launch
             }
@@ -176,14 +172,7 @@ class SSHConnection(
         connectJob?.join()
         return@withContext _connectionState.value == ConnectionState.CONNECTED
     }
-    
-    private fun showDebugToast(message: String) {
-        // Show toast on UI thread for debugging
-        scope.launch(Dispatchers.Main) {
-            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
-        }
-    }
-    
+
     private fun configureSession(session: Session) {
         // Configure SSH session properties
         val config = java.util.Properties()

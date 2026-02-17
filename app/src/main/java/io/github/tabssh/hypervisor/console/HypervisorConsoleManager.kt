@@ -86,7 +86,12 @@ class HypervisorConsoleManager {
                 "Cookie" to "PVEAuthCookie=${termProxy.ticket}"
             )
 
-            val connected = webSocketClient!!.connect(wsUrl, headers, object : ConsoleConnectionListener {
+            val client = webSocketClient ?: run {
+                Logger.e(TAG, "WebSocket client not initialized")
+                listener?.onError("WebSocket client initialization failed")
+                return@withContext null
+            }
+            val connected = client.connect(wsUrl, headers, object : ConsoleConnectionListener {
                 override fun onConnected() {
                     Logger.i(TAG, "Proxmox console connected")
                     listener?.onConnected(vmName)
@@ -112,8 +117,8 @@ class HypervisorConsoleManager {
             // Wait a moment for connection to establish
             Thread.sleep(500)
 
-            val inputStream = webSocketClient!!.getInputStream()
-            val outputStream = webSocketClient!!.getOutputStream()
+            val inputStream = client.getInputStream()
+            val outputStream = client.getOutputStream()
 
             if (inputStream == null || outputStream == null) {
                 Logger.e(TAG, "Failed to get streams")
@@ -160,9 +165,14 @@ class HypervisorConsoleManager {
 
             // Create WebSocket client
             webSocketClient = ConsoleWebSocketClient(verifySsl = false)
+            val xcpClient = webSocketClient ?: run {
+                Logger.e(TAG, "WebSocket client not initialized")
+                listener?.onError("WebSocket client initialization failed")
+                return@withContext null
+            }
 
             // Connect
-            val connected = webSocketClient!!.connect(consoleUrl, emptyMap(), object : ConsoleConnectionListener {
+            val connected = xcpClient.connect(consoleUrl, emptyMap(), object : ConsoleConnectionListener {
                 override fun onConnected() {
                     Logger.i(TAG, "XCP-ng console connected")
                     listener?.onConnected(vmName)
@@ -186,8 +196,8 @@ class HypervisorConsoleManager {
 
             Thread.sleep(500)
 
-            val inputStream = webSocketClient!!.getInputStream()
-            val outputStream = webSocketClient!!.getOutputStream()
+            val inputStream = xcpClient.getInputStream()
+            val outputStream = xcpClient.getOutputStream()
 
             if (inputStream == null || outputStream == null) {
                 listener?.onError("Failed to establish console streams")
@@ -233,13 +243,18 @@ class HypervisorConsoleManager {
 
             // Create WebSocket client
             webSocketClient = ConsoleWebSocketClient(verifySsl = false)
+            val xoClient = webSocketClient ?: run {
+                Logger.e(TAG, "WebSocket client not initialized")
+                listener?.onError("WebSocket client initialization failed")
+                return@withContext null
+            }
 
             // Connect with auth token
             val headers = mapOf(
                 "Authorization" to "Bearer ${client.getAuthToken()}"
             )
 
-            val connected = webSocketClient!!.connect(consoleUrl, headers, object : ConsoleConnectionListener {
+            val connected = xoClient.connect(consoleUrl, headers, object : ConsoleConnectionListener {
                 override fun onConnected() {
                     Logger.i(TAG, "Xen Orchestra console connected")
                     listener?.onConnected(vmName)
@@ -263,8 +278,8 @@ class HypervisorConsoleManager {
 
             Thread.sleep(500)
 
-            val inputStream = webSocketClient!!.getInputStream()
-            val outputStream = webSocketClient!!.getOutputStream()
+            val inputStream = xoClient.getInputStream()
+            val outputStream = xoClient.getOutputStream()
 
             if (inputStream == null || outputStream == null) {
                 listener?.onError("Failed to establish console streams")

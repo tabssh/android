@@ -79,11 +79,16 @@ class IdentitiesFragment : Fragment() {
         view.findViewById<com.google.android.material.floatingactionbutton.FloatingActionButton>(R.id.fab_add_identity).setOnClickListener {
             showAddOptionsMenu()
         }
+
+        // Empty state button
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.button_add_identity).setOnClickListener {
+            showCreateDialog()
+        }
     }
     
     private fun updateEmptyState(view: View) {
         val isEmpty = identityAdapter.itemCount == 0
-        view.findViewById<View>(R.id.text_identities_empty).visibility = if (isEmpty) View.VISIBLE else View.GONE
+        view.findViewById<View>(R.id.layout_empty_state).visibility = if (isEmpty) View.VISIBLE else View.GONE
         view.findViewById<View>(R.id.recycler_users).visibility = if (isEmpty) View.GONE else View.VISIBLE
     }
     

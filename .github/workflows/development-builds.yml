@@ -49,20 +49,18 @@ jobs:
       run: |
         # Extract version from app/build.gradle
         VERSION_NAME=$(grep 'versionName' app/build.gradle | head -1 | sed 's/.*"\(.*\)".*/\1/')
-        VERSION_CODE=$(grep 'versionCode' app/build.gradle | head -1 | sed 's/[^0-9]*//g')
 
         # Get git commit short hash
         COMMIT_HASH=$(git rev-parse --short HEAD)
 
-        # Build development version string (for display only)
-        DEV_VERSION="${VERSION_NAME}-dev.${VERSION_CODE}+${COMMIT_HASH}"
+        # Simple release title: version-commit
+        RELEASE_TITLE="${VERSION_NAME}-${COMMIT_HASH}"
 
         echo "VERSION_NAME=${VERSION_NAME}" >> $GITHUB_OUTPUT
-        echo "VERSION_CODE=${VERSION_CODE}" >> $GITHUB_OUTPUT
-        echo "DEV_VERSION=${DEV_VERSION}" >> $GITHUB_OUTPUT
         echo "COMMIT_HASH=${COMMIT_HASH}" >> $GITHUB_OUTPUT
+        echo "RELEASE_TITLE=${RELEASE_TITLE}" >> $GITHUB_OUTPUT
 
-        echo "📦 Building version: ${DEV_VERSION}"
+        echo "📦 Building version: ${RELEASE_TITLE}"
 
     - name: Build debug APKs
       run: ./gradlew assembleDebug --no-daemon
@@ -99,19 +97,19 @@ jobs:
 
     - name: Generate release notes
       run: |
-        cat > RELEASE_NOTES_DEV.md << 'EOF'
+        BUILD_DATE=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+
+        cat > RELEASE_NOTES_DEV.md << EOF
         # TabSSH Development Build
 
         **⚠️ This is a development/testing build - Not for production use**
 
         ## Build Information
 
-        - **Version:** ${{ steps.version.outputs.DEV_VERSION }}
-        - **Base Version:** ${{ steps.version.outputs.VERSION_NAME }}
-        - **Build Number:** ${{ steps.version.outputs.VERSION_CODE }}
+        - **Version:** ${{ steps.version.outputs.VERSION_NAME }}
         - **Commit:** ${{ steps.version.outputs.COMMIT_HASH }}
         - **Branch:** ${{ github.ref_name }}
-        - **Built:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+        - **Built:** ${BUILD_DATE}
 
         ## Downloads
 
@@ -123,7 +121,7 @@ jobs:
 
         ## What's New in This Build
 
-        Latest changes from the `${{ github.ref_name }}` branch:
+        Latest changes from the \`${{ github.ref_name }}\` branch:
 
         EOF
 
@@ -189,7 +187,7 @@ jobs:
     - name: Create development release
       uses: softprops/action-gh-release@v1
       with:
-        name: "Development Build (${{ steps.version.outputs.DEV_VERSION }})"
+        name: "${{ steps.version.outputs.RELEASE_TITLE }}"
         tag_name: development
         files: |
           app/build/outputs/apk/debug/tabssh-universal-dev.apk
@@ -209,7 +207,7 @@ jobs:
       run: |
         echo "## 🎉 Development Build Complete!" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Version:** ${{ steps.version.outputs.DEV_VERSION }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Version:** ${{ steps.version.outputs.RELEASE_TITLE }}" >> $GITHUB_STEP_SUMMARY
         echo "**Commit:** ${{ steps.version.outputs.COMMIT_HASH }}" >> $GITHUB_STEP_SUMMARY
         echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
