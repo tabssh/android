@@ -1,7 +1,10 @@
 package io.github.tabssh
 
+import android.app.Activity
 import android.app.Application
+import android.os.Bundle
 import io.github.tabssh.storage.database.TabSSHDatabase
+import java.lang.ref.WeakReference
 import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.crypto.keys.KeyStorage
 import io.github.tabssh.ssh.connection.SSHSessionManager
@@ -28,7 +31,16 @@ class TabSSHApplication : Application() {
     val performanceManager by lazy { PerformanceManager(this) }
     val auditLogManager by lazy { io.github.tabssh.audit.AuditLogManager(this, database, preferencesManager) }
     val tabManager by lazy { io.github.tabssh.ui.tabs.TabManager() }
-    
+
+    // Track the current foreground activity for showing dialogs from background threads
+    private var currentActivityRef: WeakReference<Activity>? = null
+
+    /**
+     * Get the current foreground Activity.
+     * Used for showing dialogs from background threads (like host key verification).
+     */
+    fun getCurrentActivity(): Activity? = currentActivityRef?.get()
+
     override fun onCreate() {
         super.onCreate()
         
@@ -39,6 +51,23 @@ class TabSSHApplication : Application() {
         // Create notification channels
         io.github.tabssh.utils.NotificationHelper.createNotificationChannels(this)
         
+        // Register activity lifecycle callbacks to track foreground activity
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
+            override fun onActivityStarted(activity: Activity) {}
+            override fun onActivityResumed(activity: Activity) {
+                currentActivityRef = WeakReference(activity)
+            }
+            override fun onActivityPaused(activity: Activity) {
+                if (currentActivityRef?.get() == activity) {
+                    currentActivityRef = null
+                }
+            }
+            override fun onActivityStopped(activity: Activity) {}
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
+            override fun onActivityDestroyed(activity: Activity) {}
+        })
+
         // Initialize core components
         initializeCoreComponents()
         
