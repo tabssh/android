@@ -785,13 +785,25 @@ class TabTerminalActivity : AppCompatActivity() {
         val connectionProfileId = intent.getStringExtra(EXTRA_CONNECTION_PROFILE_ID)
         val autoConnect = intent.getBooleanExtra(EXTRA_AUTO_CONNECT, true)
 
+        Logger.d("TabTerminalActivity", "Intent extras: profileId=$connectionProfileId, autoConnect=$autoConnect")
+
         if (connectionProfileId != null) {
-            CoroutineScope(Dispatchers.Main).launch {
-                val profile = app.database.connectionDao().getConnectionById(connectionProfileId)
-                if (profile != null && autoConnect) {
-                    connectToProfile(profile)
+            lifecycleScope.launch {
+                val profile = withContext(Dispatchers.IO) {
+                    app.database.connectionDao().getConnectionById(connectionProfileId)
+                }
+                if (profile != null) {
+                    Logger.d("TabTerminalActivity", "Found profile: ${profile.name}")
+                    if (autoConnect) {
+                        connectToProfile(profile)
+                    }
+                } else {
+                    Logger.e("TabTerminalActivity", "Profile not found for ID: $connectionProfileId")
+                    Toast.makeText(this@TabTerminalActivity, "Connection profile not found", Toast.LENGTH_SHORT).show()
                 }
             }
+        } else {
+            Logger.w("TabTerminalActivity", "No connection profile ID in intent")
         }
     }
     
