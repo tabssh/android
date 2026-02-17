@@ -1,6 +1,7 @@
 package io.github.tabssh.ssh.connection
 
 import android.content.Context
+import io.github.tabssh.services.SSHConnectionService
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
@@ -127,6 +128,8 @@ class SSHSessionManager(private val context: Context) {
             
             if (success) {
                 Logger.i("SSHSessionManager", "Successfully connected to ${profile.getDisplayName()}")
+                // Start foreground service to maintain persistent notification
+                SSHConnectionService.startService(context)
                 notifyListeners { onConnectionEstablished(profile.id) }
                 connection
             } else {

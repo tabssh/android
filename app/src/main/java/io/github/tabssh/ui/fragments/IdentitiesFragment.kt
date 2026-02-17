@@ -209,8 +209,25 @@ class IdentitiesFragment : Fragment() {
                 }
                 
                 if (name.isNotBlank() && username.isNotBlank()) {
-                    // TODO: Store password and SSH key ID in Identity entity
-                    createIdentity(name, username, authType, description.ifBlank { null })
+                    // Get selected SSH key ID if SSH Key auth type
+                    val selectedKeyId: String? = if (authType == AuthType.PUBLIC_KEY) {
+                        val selectedKeyIndex = sshKeySpinner.text.toString().let { text ->
+                            if (text == "No Key") -1 else {
+                                // Extract key from list by matching text
+                                -1 // Will be updated below with actual key ID lookup
+                            }
+                        }
+                        null // TODO: Need async key lookup - for now null
+                    } else null
+
+                    createIdentity(
+                        name = name,
+                        username = username,
+                        authType = authType,
+                        password = if (authType == AuthType.PASSWORD) password.ifBlank { null } else null,
+                        keyId = selectedKeyId,
+                        description = description.ifBlank { null }
+                    )
                 } else {
                     android.widget.Toast.makeText(requireContext(), "Name and username are required", android.widget.Toast.LENGTH_SHORT).show()
                 }
@@ -301,6 +318,9 @@ class IdentitiesFragment : Fragment() {
             }
         }
         
+        // Pre-fill password if exists
+        passwordInput.setText(identity.password ?: "")
+
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Edit Identity")
             .setView(dialogView)
@@ -308,6 +328,7 @@ class IdentitiesFragment : Fragment() {
                 val name = nameInput.text.toString()
                 val username = usernameInput.text.toString()
                 val description = descriptionInput.text.toString()
+                val password = passwordInput.text.toString()
                 val authTypePosition = authTypes.indexOf(authTypeSpinner.text.toString())
                 val authType = when (authTypePosition) {
                     0 -> AuthType.PASSWORD
@@ -315,12 +336,13 @@ class IdentitiesFragment : Fragment() {
                     2 -> AuthType.KEYBOARD_INTERACTIVE
                     else -> AuthType.PASSWORD
                 }
-                
+
                 if (name.isNotBlank() && username.isNotBlank()) {
                     updateIdentity(identity.copy(
                         name = name,
                         username = username,
                         authType = authType,
+                        password = if (authType == AuthType.PASSWORD) password.ifBlank { null } else null,
                         description = description.ifBlank { null },
                         modifiedAt = System.currentTimeMillis()
                     ))
@@ -343,12 +365,14 @@ class IdentitiesFragment : Fragment() {
             .show()
     }
     
-    private fun createIdentity(name: String, username: String, authType: AuthType, description: String?) {
+    private fun createIdentity(name: String, username: String, authType: AuthType, password: String?, keyId: String?, description: String?) {
         lifecycleScope.launch(Dispatchers.IO) {
             val identity = Identity(
                 name = name,
                 username = username,
                 authType = authType,
+                password = password,
+                keyId = keyId,
                 description = description
             )
             app.database.identityDao().insert(identity)

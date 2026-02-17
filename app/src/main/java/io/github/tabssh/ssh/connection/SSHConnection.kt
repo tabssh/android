@@ -459,9 +459,31 @@ class SSHConnection(
     /**
      * Setup authentication credentials BEFORE connecting
      * JSch requires credentials to be configured before calling session.connect()
+     *
+     * Auto-matching: If an identity exists with the same name as the username,
+     * use that identity's credentials instead of the connection profile's.
      */
     private suspend fun setupAuthentication(jsch: JSch, session: Session) = withContext(Dispatchers.IO) {
-        when (profile.getAuthTypeEnum()) {
+        // Check for identity auto-matching: if identity.name matches username, use identity's credentials
+        val matchedIdentity = try {
+            val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
+            val identity = app?.database?.identityDao()?.getIdentityByName(profile.username)
+            if (identity != null) {
+                Logger.i("SSHConnection", "🔑 Auto-matched identity '${identity.name}' for username '${profile.username}'")
+            }
+            identity
+        } catch (e: Exception) {
+            Logger.w("SSHConnection", "Error checking for identity auto-match", e)
+            null
+        }
+
+        // Determine which auth type and credentials to use
+        val effectiveAuthType = matchedIdentity?.authType ?: profile.getAuthTypeEnum()
+        val effectiveKeyId = matchedIdentity?.keyId ?: profile.keyId
+
+        Logger.d("SSHConnection", "Using auth type: $effectiveAuthType (matched identity: ${matchedIdentity != null})")
+
+        when (effectiveAuthType) {
             AuthType.PASSWORD -> {
                 Logger.d("SSHConnection", "Setting up password authentication for ${profile.host}")
                 val password = getPasswordForAuthentication()
@@ -474,14 +496,15 @@ class SSHConnection(
 
             AuthType.PUBLIC_KEY -> {
                 Logger.d("SSHConnection", "Setting up public key authentication")
-                if (profile.keyId == null) {
+                val keyIdToUse = effectiveKeyId
+                if (keyIdToUse == null) {
                     throw SSHException("No SSH key specified for public key authentication")
                 }
 
-                val privateKey = getPrivateKeyForAuthentication(profile.keyId!!)
+                val privateKey = getPrivateKeyForAuthentication(keyIdToUse)
                 if (privateKey != null) {
-                    jsch.addIdentity(profile.keyId!!, privateKey.encoded, null, null)
-                    Logger.d("SSHConnection", "Added SSH key identity: ${profile.keyId}")
+                    jsch.addIdentity(keyIdToUse, privateKey.encoded, null, null)
+                    Logger.d("SSHConnection", "Added SSH key identity: $keyIdToUse${if (matchedIdentity != null) " (from matched identity)" else ""}")
                 } else {
                     throw SSHException("Could not retrieve private key for authentication")
                 }

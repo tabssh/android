@@ -311,23 +311,24 @@ class ProxmoxApiClient(
 
             if (data != null) {
                 val ticket = data.getString("ticket")
-                val port = data.getInt("port")
+                val termProxyPort = data.getInt("port")
 
                 // Build WebSocket URL for terminal proxy
-                // Format: wss://host:port/api2/json/nodes/{node}/{type}/{vmid}/vncwebsocket?port={port}&vncticket={ticket}
+                // Format: wss://host:apiPort/api2/json/nodes/{node}/{type}/{vmid}/vncwebsocket?port={termProxyPort}&vncticket={ticket}
                 val encodedTicket = java.net.URLEncoder.encode(ticket, "UTF-8")
                 val wsEndpoint = if (type == "lxc") {
                     "/nodes/$node/lxc/$vmid/vncwebsocket"
                 } else {
                     "/nodes/$node/qemu/$vmid/vncwebsocket"
                 }
-                val websocketUrl = "wss://$host:$port/api2/json$wsEndpoint?port=$port&vncticket=$encodedTicket"
+                // Use this.port (hypervisor API port, usually 8006) for base URL
+                val websocketUrl = "wss://$host:${this@ProxmoxApiClient.port}/api2/json$wsEndpoint?port=$termProxyPort&vncticket=$encodedTicket"
 
-                Logger.i("ProxmoxAPI", "Got termproxy ticket for VM $vmid on port $port")
+                Logger.i("ProxmoxAPI", "Got termproxy ticket for VM $vmid on port $termProxyPort")
 
                 TermProxyResult(
                     ticket = authTicket ?: "",
-                    port = port,
+                    port = termProxyPort,
                     websocketUrl = websocketUrl
                 )
             } else {

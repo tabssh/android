@@ -30,7 +30,10 @@ data class Identity(
     
     @ColumnInfo(name = "key_id")
     val keyId: String? = null,
-    
+
+    @ColumnInfo(name = "password")
+    val password: String? = null, // Encrypted password for PASSWORD auth type
+
     @ColumnInfo(name = "description")
     val description: String? = null,
     

@@ -37,9 +37,11 @@ class HypervisorEditActivity : AppCompatActivity() {
     private lateinit var buttonTestConnection: MaterialButton
     private lateinit var buttonSave: MaterialButton
     private lateinit var buttonCancel: MaterialButton
-    
+    private lateinit var buttonImportHost: MaterialButton
+
     private var hypervisorId: Long? = null
     private var editingHypervisor: HypervisorProfile? = null
+    private var linkedConnectionId: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -71,6 +73,7 @@ class HypervisorEditActivity : AppCompatActivity() {
         buttonTestConnection = findViewById(R.id.button_test)
         buttonSave = findViewById(R.id.button_save)
         buttonCancel = findViewById(R.id.button_cancel)
+        buttonImportHost = findViewById(R.id.button_import_host)
     }
 
     private fun setupToolbar() {
@@ -100,14 +103,107 @@ class HypervisorEditActivity : AppCompatActivity() {
         buttonTestConnection.setOnClickListener {
             testConnection()
         }
-        
+
         buttonSave.setOnClickListener {
             saveHypervisor()
         }
-        
+
         buttonCancel.setOnClickListener {
             finish()
         }
+
+        buttonImportHost.setOnClickListener {
+            showImportFromExistingHostDialog()
+        }
+    }
+
+    /**
+     * Show dialog to import from an existing SSH connection
+     */
+    private fun showImportFromExistingHostDialog() {
+        lifecycleScope.launch {
+            try {
+                // Get all existing connections
+                val connections = app.database.connectionDao().getAllConnectionsList()
+
+                if (connections.isEmpty()) {
+                    Toast.makeText(
+                        this@HypervisorEditActivity,
+                        "No existing connections found. Create a connection first.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return@launch
+                }
+
+                // Build display list
+                val connectionNames = connections.map { conn: io.github.tabssh.storage.database.entities.ConnectionProfile ->
+                    "${conn.name ?: conn.getDisplayName()} (${conn.host})"
+                }.toTypedArray()
+
+                androidx.appcompat.app.AlertDialog.Builder(this@HypervisorEditActivity)
+                    .setTitle("Import from Existing Host")
+                    .setItems(connectionNames) { _: android.content.DialogInterface, which: Int ->
+                        val selectedConnection = connections[which]
+                        importFromConnection(selectedConnection)
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+
+            } catch (e: Exception) {
+                Toast.makeText(
+                    this@HypervisorEditActivity,
+                    "Error loading connections: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
+    /**
+     * Import host details from an existing SSH connection
+     */
+    private fun importFromConnection(connection: io.github.tabssh.storage.database.entities.ConnectionProfile) {
+        // Set linked connection ID
+        linkedConnectionId = connection.id
+
+        // Pre-fill fields from the connection
+        editName.setText(connection.name ?: connection.getDisplayName())
+        editHost.setText(connection.host)
+        editUsername.setText(connection.username)
+
+        // Try to get password from secure storage
+        lifecycleScope.launch {
+            try {
+                val password = app.securePasswordManager.retrievePassword(connection.id)
+                if (password != null) {
+                    editPassword.setText(password)
+                }
+            } catch (e: Exception) {
+                // Password retrieval failed, user will need to enter it
+            }
+        }
+
+        // Update port based on hypervisor type
+        val currentType = spinnerType.selectedItemPosition
+        when (currentType) {
+            0 -> { // Proxmox
+                editPort.setText("8006")
+                editRealm.setText("pam")
+            }
+            1 -> { // XCP-ng
+                editPort.setText("443")
+            }
+            2 -> { // VMware
+                editPort.setText("443")
+            }
+        }
+
+        // Show confirmation
+        Toast.makeText(
+            this,
+            "Imported from ${connection.host}. Adjust port and credentials as needed.",
+            Toast.LENGTH_LONG
+        ).show()
     }
 
     private fun updateUIForType(typePosition: Int) {
@@ -134,7 +230,8 @@ class HypervisorEditActivity : AppCompatActivity() {
                 val hypervisor = app.database.hypervisorDao().getById(id)
                 if (hypervisor != null) {
                     editingHypervisor = hypervisor
-                    
+                    linkedConnectionId = hypervisor.linkedConnectionId
+
                     editName.setText(hypervisor.name)
                     spinnerType.setSelection(hypervisor.type.ordinal)
                     editHost.setText(hypervisor.host)
@@ -215,6 +312,7 @@ class HypervisorEditActivity : AppCompatActivity() {
                     password = editPassword.text.toString(),
                     realm = if (type == HypervisorType.PROXMOX) editRealm.text.toString() else null,
                     verifySsl = switchVerifySsl.isChecked,
+                    linkedConnectionId = linkedConnectionId,
                     notes = editNotes.text.toString().takeIf { it.isNotBlank() },
                     lastConnected = editingHypervisor?.lastConnected ?: 0,
                     createdAt = editingHypervisor?.createdAt ?: System.currentTimeMillis()

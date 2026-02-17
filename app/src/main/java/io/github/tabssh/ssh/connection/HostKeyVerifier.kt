@@ -83,57 +83,45 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
                     )
 
                     // Ask user what to do with this new host
-                    if (newHostKeyCallback != null) {
-                        Logger.i("HostKeyVerifier", "Invoking new host key callback...")
-                        val action = newHostKeyCallback!!.invoke(info)
-                        Logger.i("HostKeyVerifier", "User action for new host: $action")
+                    Logger.i("HostKeyVerifier", "Invoking new host key callback... (callback is ${if (newHostKeyCallback != null) "SET" else "NULL"})")
 
-                        return when (action) {
-                            HostKeyAction.ACCEPT_NEW_KEY -> {
-                                runBlocking {
-                                    val hostKeyEntry = HostKeyEntry(
-                                        id = HostKeyEntry.createId(hostname, port),
-                                        hostname = hostname,
-                                        port = port,
-                                        keyType = keyType,
-                                        publicKey = publicKeyBase64,
-                                        fingerprint = fingerprint,
-                                        trustLevel = "ACCEPTED"
-                                    )
-                                    hostKeyDao.insertOrUpdateHostKey(hostKeyEntry)
-                                    Logger.i("HostKeyVerifier", "✅ User accepted and stored new host key for $hostname:$port")
-                                }
-                                HostKeyRepository.OK
-                            }
-
-                            HostKeyAction.REJECT_CONNECTION -> {
-                                Logger.w("HostKeyVerifier", "❌ User rejected new host key for $hostname:$port")
-                                HostKeyRepository.NOT_INCLUDED
-                            }
-
-                            HostKeyAction.ACCEPT_ONCE -> {
-                                Logger.i("HostKeyVerifier", "✅ User accepted host key ONCE for $hostname:$port (not stored)")
-                                HostKeyRepository.OK
-                            }
-                        }
+                    val action = if (newHostKeyCallback != null) {
+                        newHostKeyCallback!!.invoke(info)
                     } else {
-                        // No callback available - fall back to auto-accept (legacy behavior)
-                        // This ensures backward compatibility
-                        Logger.w("HostKeyVerifier", "⚠️ No new host callback - auto-accepting (legacy mode)")
-                        runBlocking {
-                            val hostKeyEntry = HostKeyEntry(
-                                id = HostKeyEntry.createId(hostname, port),
-                                hostname = hostname,
-                                port = port,
-                                keyType = keyType,
-                                publicKey = publicKeyBase64,
-                                fingerprint = fingerprint,
-                                trustLevel = "ACCEPTED"
-                            )
-                            hostKeyDao.insertOrUpdateHostKey(hostKeyEntry)
-                            Logger.i("HostKeyVerifier", "✅ Stored new host key for $hostname:$port")
+                        // No callback available - show blocking dialog directly
+                        Logger.w("HostKeyVerifier", "⚠️ No callback available - showing blocking dialog")
+                        showBlockingNewHostDialog(info)
+                    }
+
+                    Logger.i("HostKeyVerifier", "User action for new host: $action")
+
+                    return when (action) {
+                        HostKeyAction.ACCEPT_NEW_KEY -> {
+                            runBlocking {
+                                val hostKeyEntry = HostKeyEntry(
+                                    id = HostKeyEntry.createId(hostname, port),
+                                    hostname = hostname,
+                                    port = port,
+                                    keyType = keyType,
+                                    publicKey = publicKeyBase64,
+                                    fingerprint = fingerprint,
+                                    trustLevel = "ACCEPTED"
+                                )
+                                hostKeyDao.insertOrUpdateHostKey(hostKeyEntry)
+                                Logger.i("HostKeyVerifier", "✅ User accepted and stored new host key for $hostname:$port")
+                            }
+                            HostKeyRepository.OK
                         }
-                        HostKeyRepository.OK
+
+                        HostKeyAction.REJECT_CONNECTION -> {
+                            Logger.w("HostKeyVerifier", "❌ User rejected new host key for $hostname:$port")
+                            HostKeyRepository.NOT_INCLUDED
+                        }
+
+                        HostKeyAction.ACCEPT_ONCE -> {
+                            Logger.i("HostKeyVerifier", "✅ User accepted host key ONCE for $hostname:$port (not stored)")
+                            HostKeyRepository.OK
+                        }
                     }
                 }
 
@@ -163,52 +151,47 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
                         )
 
                         // ALWAYS ask user what to do - never fail silently
-                        if (hostKeyChangedCallback != null) {
-                            Logger.i("HostKeyVerifier", "Invoking host key changed callback...")
-                            val action = hostKeyChangedCallback!!.invoke(info)
-                            Logger.i("HostKeyVerifier", "User action: $action")
+                        Logger.i("HostKeyVerifier", "Invoking host key changed callback... (callback is ${if (hostKeyChangedCallback != null) "SET" else "NULL"})")
 
-                            return when (action) {
-                                HostKeyAction.ACCEPT_NEW_KEY -> {
-                                    runBlocking {
-                                        // Replace old key with new key
-                                        val updatedEntry = HostKeyEntry(
-                                            id = HostKeyEntry.createId(hostname, port),
-                                            hostname = hostname,
-                                            port = port,
-                                            keyType = keyType,
-                                            publicKey = publicKeyBase64,
-                                            fingerprint = fingerprint,
-                                            trustLevel = "ACCEPTED"
-                                        )
-                                        hostKeyDao.insertOrUpdateHostKey(updatedEntry)
-                                        Logger.i("HostKeyVerifier", "✅ User accepted new host key for $hostname:$port")
-                                    }
-                                    HostKeyRepository.OK
-                                }
-
-                                HostKeyAction.REJECT_CONNECTION -> {
-                                    Logger.w("HostKeyVerifier", "❌ User rejected changed host key for $hostname:$port")
-                                    HostKeyRepository.NOT_INCLUDED
-                                }
-
-                                HostKeyAction.ACCEPT_ONCE -> {
-                                    Logger.i("HostKeyVerifier", "✅ User accepted host key ONCE for $hostname:$port")
-                                    // Don't store, just allow this connection
-                                    HostKeyRepository.OK
-                                }
-                            }
+                        val action = if (hostKeyChangedCallback != null) {
+                            hostKeyChangedCallback!!.invoke(info)
                         } else {
-                            // No callback available - we must still ask via blocking mechanism
-                            // Log critical warning but allow JSch to handle via UserInfo prompt
-                            Logger.e("HostKeyVerifier", "⚠️ CRITICAL: Host key changed but no UI callback available")
-                            Logger.e("HostKeyVerifier", "Old fingerprint: ${existingKey.fingerprint}")
-                            Logger.e("HostKeyVerifier", "New fingerprint: $fingerprint")
-                            Logger.w("HostKeyVerifier", "Allowing JSch default prompt - user MUST manually verify!")
+                            // No callback available - show blocking dialog directly
+                            Logger.w("HostKeyVerifier", "⚠️ No callback available - showing blocking dialog for changed key")
+                            showBlockingChangedHostDialog(info)
+                        }
 
-                            // Return CHANGED status to trigger JSch's built-in prompt
-                            // This ensures user is ALWAYS asked, even if our UI isn't available
-                            HostKeyRepository.CHANGED
+                        Logger.i("HostKeyVerifier", "User action: $action")
+
+                        return when (action) {
+                            HostKeyAction.ACCEPT_NEW_KEY -> {
+                                runBlocking {
+                                    // Replace old key with new key
+                                    val updatedEntry = HostKeyEntry(
+                                        id = HostKeyEntry.createId(hostname, port),
+                                        hostname = hostname,
+                                        port = port,
+                                        keyType = keyType,
+                                        publicKey = publicKeyBase64,
+                                        fingerprint = fingerprint,
+                                        trustLevel = "ACCEPTED"
+                                    )
+                                    hostKeyDao.insertOrUpdateHostKey(updatedEntry)
+                                    Logger.i("HostKeyVerifier", "✅ User accepted new host key for $hostname:$port")
+                                }
+                                HostKeyRepository.OK
+                            }
+
+                            HostKeyAction.REJECT_CONNECTION -> {
+                                Logger.w("HostKeyVerifier", "❌ User rejected changed host key for $hostname:$port")
+                                HostKeyRepository.NOT_INCLUDED
+                            }
+
+                            HostKeyAction.ACCEPT_ONCE -> {
+                                Logger.i("HostKeyVerifier", "✅ User accepted host key ONCE for $hostname:$port")
+                                // Don't store, just allow this connection
+                                HostKeyRepository.OK
+                            }
                         }
                     } else {
                         // Should never happen, but treat as new host if no existing key found
@@ -413,6 +396,156 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
             "ssh-ed25519" -> 5
             else -> 0 // Default to RSA
         }
+    }
+
+    /**
+     * Show a blocking dialog for new host key verification
+     * Used when no callback is available (fallback mechanism)
+     */
+    private fun showBlockingNewHostDialog(info: NewHostKeyInfo): HostKeyAction {
+        Logger.i("HostKeyVerifier", "Showing blocking dialog for new host: ${info.hostname}:${info.port}")
+
+        var userAction: HostKeyAction = HostKeyAction.REJECT_CONNECTION
+        val latch = java.util.concurrent.CountDownLatch(1)
+
+        // Get the main activity from the context
+        val activity = when (context) {
+            is android.app.Activity -> context as android.app.Activity
+            is android.content.ContextWrapper -> {
+                var ctx = context
+                while (ctx is android.content.ContextWrapper) {
+                    if (ctx is android.app.Activity) break
+                    ctx = ctx.baseContext
+                }
+                ctx as? android.app.Activity
+            }
+            else -> null
+        }
+
+        if (activity == null) {
+            Logger.e("HostKeyVerifier", "Cannot show dialog - no activity context available")
+            // Try to get activity from the application's current activity
+            val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
+            // Fallback: return REJECT for safety
+            return HostKeyAction.REJECT_CONNECTION
+        }
+
+        activity.runOnUiThread {
+            try {
+                androidx.appcompat.app.AlertDialog.Builder(activity)
+                    .setTitle("New Host Key")
+                    .setMessage(info.getDisplayMessage())
+                    .setPositiveButton("Accept & Save") { _, _ ->
+                        userAction = HostKeyAction.ACCEPT_NEW_KEY
+                        latch.countDown()
+                    }
+                    .setNeutralButton("Accept Once") { _, _ ->
+                        userAction = HostKeyAction.ACCEPT_ONCE
+                        latch.countDown()
+                    }
+                    .setNegativeButton("Reject") { _, _ ->
+                        userAction = HostKeyAction.REJECT_CONNECTION
+                        latch.countDown()
+                    }
+                    .setCancelable(false)
+                    .setOnDismissListener {
+                        // Ensure latch is counted down even if dialog is dismissed
+                        latch.countDown()
+                    }
+                    .show()
+            } catch (e: Exception) {
+                Logger.e("HostKeyVerifier", "Error showing new host dialog", e)
+                latch.countDown()
+            }
+        }
+
+        try {
+            // Wait for user response with timeout
+            val responded = latch.await(60, java.util.concurrent.TimeUnit.SECONDS)
+            if (!responded) {
+                Logger.w("HostKeyVerifier", "Dialog timeout - rejecting connection")
+                userAction = HostKeyAction.REJECT_CONNECTION
+            }
+        } catch (e: InterruptedException) {
+            Logger.e("HostKeyVerifier", "Interrupted waiting for dialog response", e)
+            userAction = HostKeyAction.REJECT_CONNECTION
+        }
+
+        Logger.i("HostKeyVerifier", "Blocking dialog result: $userAction")
+        return userAction
+    }
+
+    /**
+     * Show a blocking dialog for changed host key verification
+     * Used when no callback is available (fallback mechanism)
+     */
+    private fun showBlockingChangedHostDialog(info: HostKeyChangedInfo): HostKeyAction {
+        Logger.w("HostKeyVerifier", "Showing blocking dialog for CHANGED host key: ${info.hostname}:${info.port}")
+
+        var userAction: HostKeyAction = HostKeyAction.REJECT_CONNECTION
+        val latch = java.util.concurrent.CountDownLatch(1)
+
+        // Get the main activity from the context
+        val activity = when (context) {
+            is android.app.Activity -> context as android.app.Activity
+            is android.content.ContextWrapper -> {
+                var ctx = context
+                while (ctx is android.content.ContextWrapper) {
+                    if (ctx is android.app.Activity) break
+                    ctx = ctx.baseContext
+                }
+                ctx as? android.app.Activity
+            }
+            else -> null
+        }
+
+        if (activity == null) {
+            Logger.e("HostKeyVerifier", "Cannot show dialog - no activity context available")
+            return HostKeyAction.REJECT_CONNECTION
+        }
+
+        activity.runOnUiThread {
+            try {
+                androidx.appcompat.app.AlertDialog.Builder(activity)
+                    .setTitle("WARNING: Host Key Changed!")
+                    .setMessage(info.getDisplayMessage())
+                    .setIcon(android.R.drawable.ic_dialog_alert)
+                    .setPositiveButton("Accept New Key") { _, _ ->
+                        userAction = HostKeyAction.ACCEPT_NEW_KEY
+                        latch.countDown()
+                    }
+                    .setNeutralButton("Accept Once") { _, _ ->
+                        userAction = HostKeyAction.ACCEPT_ONCE
+                        latch.countDown()
+                    }
+                    .setNegativeButton("Reject (Recommended)") { _, _ ->
+                        userAction = HostKeyAction.REJECT_CONNECTION
+                        latch.countDown()
+                    }
+                    .setCancelable(false)
+                    .setOnDismissListener {
+                        latch.countDown()
+                    }
+                    .show()
+            } catch (e: Exception) {
+                Logger.e("HostKeyVerifier", "Error showing changed host dialog", e)
+                latch.countDown()
+            }
+        }
+
+        try {
+            val responded = latch.await(60, java.util.concurrent.TimeUnit.SECONDS)
+            if (!responded) {
+                Logger.w("HostKeyVerifier", "Dialog timeout - rejecting connection")
+                userAction = HostKeyAction.REJECT_CONNECTION
+            }
+        } catch (e: InterruptedException) {
+            Logger.e("HostKeyVerifier", "Interrupted waiting for dialog response", e)
+            userAction = HostKeyAction.REJECT_CONNECTION
+        }
+
+        Logger.w("HostKeyVerifier", "Blocking dialog result for changed key: $userAction")
+        return userAction
     }
 }
 
