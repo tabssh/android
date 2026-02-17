@@ -9,6 +9,7 @@ import io.github.tabssh.storage.database.entities.ThemeDefinition
 import io.github.tabssh.storage.preferences.PreferenceManager
 import io.github.tabssh.sync.models.MergeResult
 import io.github.tabssh.sync.models.MergeStrategy
+import io.github.tabssh.sync.models.SyncDataPackage
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -16,14 +17,90 @@ import kotlinx.coroutines.withContext
 /**
  * Applies synced data to local database
  */
-class SyncDataApplier(
-    private val context: Context,
-    private val database: TabSSHDatabase,
-    private val preferenceManager: PreferenceManager
-) {
+class SyncDataApplier {
 
     companion object {
         private const val TAG = "SyncDataApplier"
+    }
+
+    private val context: Context
+    private val database: TabSSHDatabase
+    private val preferenceManager: PreferenceManager
+
+    // Simple constructor for SAF sync
+    constructor(context: Context) {
+        this.context = context
+        this.database = TabSSHDatabase.getDatabase(context)
+        this.preferenceManager = PreferenceManager(context)
+    }
+
+    // Full constructor for advanced use
+    constructor(
+        context: Context,
+        database: TabSSHDatabase,
+        preferenceManager: PreferenceManager
+    ) {
+        this.context = context
+        this.database = database
+        this.preferenceManager = preferenceManager
+    }
+
+    /**
+     * Apply all data from a sync package (replaces local data)
+     */
+    suspend fun applyAll(data: SyncDataPackage): ApplyResult = withContext(Dispatchers.IO) {
+        try {
+            var appliedCount = 0
+
+            // Apply connections
+            data.connections.forEach { connection ->
+                try {
+                    database.connectionDao().insertConnection(connection)
+                    appliedCount++
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Failed to apply connection: ${connection.name}", e)
+                }
+            }
+
+            // Apply keys
+            data.keys.forEach { key ->
+                try {
+                    database.keyDao().insertKey(key)
+                    appliedCount++
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Failed to apply key: ${key.name}", e)
+                }
+            }
+
+            // Apply themes
+            data.themes.forEach { theme ->
+                try {
+                    database.themeDao().insertTheme(theme)
+                    appliedCount++
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Failed to apply theme: ${theme.name}", e)
+                }
+            }
+
+            // Apply host keys
+            data.hostKeys.forEach { hostKey ->
+                try {
+                    database.hostKeyDao().insertHostKey(hostKey)
+                    appliedCount++
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Failed to apply host key: ${hostKey.hostname}", e)
+                }
+            }
+
+            // Apply preferences
+            appliedCount += applyPreferences(data.preferences)
+
+            Logger.i(TAG, "Applied $appliedCount items from sync data")
+            ApplyResult.Success(appliedCount)
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to apply sync data", e)
+            ApplyResult.Error("Failed to apply sync data: ${e.message}")
+        }
     }
 
     /**

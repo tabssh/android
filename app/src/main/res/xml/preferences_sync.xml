@@ -2,74 +2,24 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <!-- Step 1: Choose Backend -->
-    <PreferenceCategory android:title="Step 1: Choose Sync Backend">
-
-        <ListPreference
-            android:key="sync_backend"
-            android:title="Sync backend"
-            android:summary="%s"
-            android:entries="@array/sync_backend_entries"
-            android:entryValues="@array/sync_backend_values"
-            android:defaultValue="auto" />
-
-    </PreferenceCategory>
-
-    <!-- Step 2a: Google Drive Settings -->
-    <PreferenceCategory
-        android:key="category_google_drive"
-        android:title="Step 2: Google Drive Settings">
+    <!-- Step 1: Choose Sync Location -->
+    <PreferenceCategory android:title="Step 1: Choose Sync Location">
 
         <Preference
-            android:key="sync_account"
-            android:title="Google account"
-            android:summary="Not connected - tap to sign in" />
-
-        <EditTextPreference
-            android:key="google_drive_sync_folder"
-            android:title="Google Drive folder"
-            android:summary="Folder name in appDataFolder (default: tabssh)"
-            android:defaultValue="tabssh" />
-
-    </PreferenceCategory>
-
-    <!-- Step 2b: WebDAV Settings -->
-    <PreferenceCategory
-        android:key="category_webdav"
-        android:title="Step 2: WebDAV Settings">
-
-        <EditTextPreference
-            android:key="webdav_server_url"
-            android:title="Server URL"
-            android:summary="e.g. https://cloud.example.com/remote.php/dav/files/user"
-            android:inputType="textUri" />
-
-        <EditTextPreference
-            android:key="webdav_username"
-            android:title="Username"
-            android:summary="Your WebDAV username" />
-
-        <EditTextPreference
-            android:key="webdav_password"
-            android:title="Password"
-            android:summary="App-specific password (recommended)"
-            android:inputType="textPassword" />
-
-        <EditTextPreference
-            android:key="webdav_sync_folder"
-            android:title="Sync folder path"
-            android:summary="Remote folder for sync data (default: /tabssh)"
-            android:defaultValue="/tabssh" />
+            android:key="sync_location"
+            android:title="Sync file location"
+            android:summary="Not configured - tap to choose" />
 
         <Preference
-            android:key="webdav_test_connection"
-            android:title="Test connection"
-            android:summary="Verify server connectivity" />
+            android:key="sync_location_info"
+            android:summary="Choose any cloud storage app (Google Drive, Dropbox, OneDrive, Nextcloud) or local storage"
+            android:selectable="false"
+            android:icon="@android:drawable/ic_menu_info_details" />
 
     </PreferenceCategory>
 
-    <!-- Step 3: Security -->
-    <PreferenceCategory android:title="Step 3: Security">
+    <!-- Step 2: Security -->
+    <PreferenceCategory android:title="Step 2: Encryption Password">
 
         <Preference
             android:key="sync_password"
@@ -78,21 +28,20 @@
 
     </PreferenceCategory>
 
-    <!-- Step 4: Enable Sync -->
-    <PreferenceCategory android:title="Step 4: Enable Sync">
-
-        <SwitchPreferenceCompat
-            android:key="sync_enabled"
-            android:title="Enable sync"
-            android:summary="Complete steps 1-3 above first"
-            android:defaultValue="false" />
+    <!-- Step 3: Enable Sync -->
+    <PreferenceCategory android:title="Step 3: Enable Sync">
 
         <Preference
             android:key="sync_status"
             android:title="Status"
             android:summary="Not configured"
-            android:selectable="false"
-            android:dependency="sync_enabled" />
+            android:selectable="true" />
+
+        <SwitchPreferenceCompat
+            android:key="sync_enabled"
+            android:title="Enable sync"
+            android:summary="Complete steps 1-2 above first"
+            android:defaultValue="false" />
 
     </PreferenceCategory>
 
@@ -121,12 +70,6 @@
             android:summary="Automatically sync when data changes"
             android:defaultValue="true" />
 
-        <SwitchPreferenceCompat
-            android:key="sync_auto_resolve"
-            android:title="Auto-resolve conflicts"
-            android:summary="Use timestamps to resolve conflicts"
-            android:defaultValue="true" />
-
     </PreferenceCategory>
 
     <!-- What to Sync -->
@@ -141,15 +84,21 @@
             android:defaultValue="true" />
 
         <SwitchPreferenceCompat
-            android:key="sync_keys"
-            android:title="SSH keys"
-            android:summary="Key metadata (not private keys)"
+            android:key="sync_identities"
+            android:title="Identities"
+            android:summary="Reusable credentials"
             android:defaultValue="true" />
 
         <SwitchPreferenceCompat
-            android:key="sync_settings"
-            android:title="App settings"
-            android:summary="Preferences and settings"
+            android:key="sync_keys"
+            android:title="SSH keys"
+            android:summary="Key metadata (private keys stay local)"
+            android:defaultValue="false" />
+
+        <SwitchPreferenceCompat
+            android:key="sync_snippets"
+            android:title="Snippets"
+            android:summary="Command snippets"
             android:defaultValue="true" />
 
         <SwitchPreferenceCompat
@@ -194,9 +143,9 @@
             android:summary="Download remote data, overwrite local" />
 
         <Preference
-            android:key="sync_clear_data"
-            android:title="Clear remote data"
-            android:summary="Remove all synced data from server" />
+            android:key="sync_clear_config"
+            android:title="Clear sync configuration"
+            android:summary="Remove sync setup and start fresh" />
 
     </PreferenceCategory>
 

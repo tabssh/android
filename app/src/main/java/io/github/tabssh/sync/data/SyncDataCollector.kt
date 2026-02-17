@@ -18,16 +18,42 @@ import kotlinx.coroutines.withContext
 /**
  * Collects data for sync operations
  */
-class SyncDataCollector(
-    private val context: Context,
-    private val database: TabSSHDatabase,
-    private val preferenceManager: PreferenceManager,
-    private val metadataManager: SyncMetadataManager
-) {
+class SyncDataCollector {
 
     companion object {
         private const val TAG = "SyncDataCollector"
     }
+
+    private val context: Context
+    private val database: TabSSHDatabase
+    private val preferenceManager: PreferenceManager
+    private val metadataManager: SyncMetadataManager
+
+    // Simple constructor for SAF sync
+    constructor(context: Context) {
+        this.context = context
+        this.database = TabSSHDatabase.getDatabase(context)
+        this.preferenceManager = PreferenceManager(context)
+        this.metadataManager = SyncMetadataManager(context)
+    }
+
+    // Full constructor for advanced use
+    constructor(
+        context: Context,
+        database: TabSSHDatabase,
+        preferenceManager: PreferenceManager,
+        metadataManager: SyncMetadataManager
+    ) {
+        this.context = context
+        this.database = database
+        this.preferenceManager = preferenceManager
+        this.metadataManager = metadataManager
+    }
+
+    /**
+     * Collect all data for sync (alias for collectAllSyncData)
+     */
+    suspend fun collectAll(): SyncDataPackage = collectAllSyncData()
 
     /**
      * Collect all data for sync
