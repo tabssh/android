@@ -156,25 +156,23 @@ class IdentitiesFragment : Fragment() {
         authTypeSpinner.setText(authTypes[0], false)
         
         // Load SSH keys for selector
+        var allKeysList = listOf<io.github.tabssh.storage.database.entities.StoredKey>()
         lifecycleScope.launch(Dispatchers.IO) {
-            val keys = app.database.keyDao().getKeyCount()
-            val allKeys = if (keys > 0) {
-                // Get all keys from database
+            val keysCount = app.database.keyDao().getKeyCount()
+            allKeysList = if (keysCount > 0) {
                 app.database.keyDao().getRecentlyUsedKeys(100)
             } else {
                 emptyList()
             }
-            
-            val keyNames = listOf("No Key") + allKeys.map { "${it.name} (${it.keyType})" }
+
+            val keyNames = listOf("No Key") + allKeysList.map { "${it.name} (${it.keyType})" }
             val keyAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, keyNames)
             withContext(Dispatchers.Main) {
                 sshKeySpinner.setAdapter(keyAdapter)
-                if (keyNames.isNotEmpty()) {
-                    sshKeySpinner.setText(keyNames[0], false)
-                }
+                sshKeySpinner.setText(keyNames[0], false)
             }
         }
-        
+
         // Show/hide fields based on auth type
         authTypeSpinner.setOnItemClickListener { _, _, position, _ ->
             when (position) {
@@ -192,11 +190,11 @@ class IdentitiesFragment : Fragment() {
                 }
             }
         }
-        
+
         // Default: show password field
         passwordLayout.visibility = View.VISIBLE
         sshKeyLayout.visibility = View.GONE
-        
+
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Create Identity")
             .setView(dialogView)
@@ -212,17 +210,17 @@ class IdentitiesFragment : Fragment() {
                     2 -> AuthType.KEYBOARD_INTERACTIVE
                     else -> AuthType.PASSWORD
                 }
-                
+
                 if (name.isNotBlank() && username.isNotBlank()) {
-                    // Get selected SSH key ID if SSH Key auth type
+                    // Get selected SSH key ID
                     val selectedKeyId: String? = if (authType == AuthType.PUBLIC_KEY) {
-                        val selectedKeyIndex = sshKeySpinner.text.toString().let { text ->
-                            if (text == "No Key") -1 else {
-                                // Extract key from list by matching text
-                                -1 // Will be updated below with actual key ID lookup
-                            }
+                        val selectedText = sshKeySpinner.text.toString()
+                        if (selectedText == "No Key") {
+                            null
+                        } else {
+                            // Find the key by matching display text
+                            allKeysList.find { "${it.name} (${it.keyType})" == selectedText }?.id
                         }
-                        null // TODO: Need async key lookup - for now null
                     } else null
 
                     createIdentity(
@@ -270,25 +268,33 @@ class IdentitiesFragment : Fragment() {
         }
         authTypeSpinner.setText(authTypes[authTypeIndex], false)
         
-        // Load SSH keys
+        // Load SSH keys and select current one if set
+        var allKeysList = listOf<io.github.tabssh.storage.database.entities.StoredKey>()
         lifecycleScope.launch(Dispatchers.IO) {
             val keysCount = app.database.keyDao().getKeyCount()
-            val allKeys = if (keysCount > 0) {
+            allKeysList = if (keysCount > 0) {
                 app.database.keyDao().getRecentlyUsedKeys(100)
             } else {
                 emptyList()
             }
-            
-            val keyNames = listOf("No Key") + allKeys.map { "${it.name} (${it.keyType})" }
+
+            val keyNames = listOf("No Key") + allKeysList.map { "${it.name} (${it.keyType})" }
             val keyAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, keyNames)
+
+            // Find the currently selected key
+            val currentKeyIndex = if (identity.keyId != null) {
+                val keyIndex = allKeysList.indexOfFirst { it.id == identity.keyId }
+                if (keyIndex >= 0) keyIndex + 1 else 0  // +1 because "No Key" is at index 0
+            } else {
+                0
+            }
+
             withContext(Dispatchers.Main) {
                 sshKeySpinner.setAdapter(keyAdapter)
-                if (keyNames.isNotEmpty()) {
-                    sshKeySpinner.setText(keyNames[0], false)
-                }
+                sshKeySpinner.setText(keyNames[currentKeyIndex], false)
             }
         }
-        
+
         // Show/hide fields based on auth type
         authTypeSpinner.setOnItemClickListener { _, _, position, _ ->
             when (position) {
@@ -306,7 +312,7 @@ class IdentitiesFragment : Fragment() {
                 }
             }
         }
-        
+
         // Set initial visibility based on current auth type
         when (authTypeIndex) {
             0 -> {
@@ -322,9 +328,12 @@ class IdentitiesFragment : Fragment() {
                 sshKeyLayout.visibility = View.GONE
             }
         }
-        
-        // Pre-fill password if exists
-        passwordInput.setText(identity.password ?: "")
+
+        // Show password indicator if password is set (don't reveal actual password)
+        if (identity.password != null && identity.password!!.isNotEmpty()) {
+            passwordInput.setText("••••••••")  // Show dots to indicate password is set
+            passwordInput.hint = "Password is set (leave unchanged or enter new)"
+        }
 
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Edit Identity")
@@ -333,7 +342,7 @@ class IdentitiesFragment : Fragment() {
                 val name = nameInput.text.toString()
                 val username = usernameInput.text.toString()
                 val description = descriptionInput.text.toString()
-                val password = passwordInput.text.toString()
+                val passwordText = passwordInput.text.toString()
                 val authTypePosition = authTypes.indexOf(authTypeSpinner.text.toString())
                 val authType = when (authTypePosition) {
                     0 -> AuthType.PASSWORD
@@ -343,11 +352,30 @@ class IdentitiesFragment : Fragment() {
                 }
 
                 if (name.isNotBlank() && username.isNotBlank()) {
+                    // Get selected SSH key ID
+                    val selectedKeyId: String? = if (authType == AuthType.PUBLIC_KEY) {
+                        val selectedText = sshKeySpinner.text.toString()
+                        if (selectedText == "No Key") {
+                            null
+                        } else {
+                            allKeysList.find { "${it.name} (${it.keyType})" == selectedText }?.id
+                        }
+                    } else null
+
+                    // Handle password: keep existing if dots shown and unchanged
+                    val newPassword = when {
+                        authType != AuthType.PASSWORD -> null
+                        passwordText == "••••••••" -> identity.password  // Keep existing
+                        passwordText.isBlank() -> null
+                        else -> passwordText  // Use new password
+                    }
+
                     updateIdentity(identity.copy(
                         name = name,
                         username = username,
                         authType = authType,
-                        password = if (authType == AuthType.PASSWORD) password.ifBlank { null } else null,
+                        password = newPassword,
+                        keyId = selectedKeyId,
                         description = description.ifBlank { null },
                         modifiedAt = System.currentTimeMillis()
                     ))

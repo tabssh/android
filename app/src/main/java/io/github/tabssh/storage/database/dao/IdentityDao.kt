@@ -22,6 +22,9 @@ interface IdentityDao {
     
     @Query("SELECT * FROM identities WHERE name = :name LIMIT 1")
     suspend fun getIdentityByName(name: String): Identity?
+
+    @Query("SELECT * FROM identities WHERE username = :username LIMIT 1")
+    suspend fun getIdentityByUsername(username: String): Identity?
     
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(identity: Identity)
