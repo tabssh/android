@@ -11,7 +11,9 @@
       "Bash(./gradlew compileDebugKotlin:*)",
       "Bash(gh auth status:*)",
       "Bash(gh api:*)",
-      "WebFetch(domain:mb.pste.us)"
+      "WebFetch(domain:mb.pste.us)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)"
     ]
   }
 }

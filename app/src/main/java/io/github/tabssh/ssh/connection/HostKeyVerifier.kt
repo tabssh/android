@@ -422,17 +422,21 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
             else -> null
         }
 
-        if (activity == null) {
-            Logger.e("HostKeyVerifier", "Cannot show dialog - no activity context available")
-            // Try to get activity from the application's current activity
+        val effectiveActivity = activity ?: run {
+            // Try to get activity from the application's activity tracking
             val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
+            app?.getCurrentActivity()
+        }
+
+        if (effectiveActivity == null) {
+            Logger.e("HostKeyVerifier", "Cannot show dialog - no activity context available")
             // Fallback: return REJECT for safety
             return HostKeyAction.REJECT_CONNECTION
         }
 
-        activity.runOnUiThread {
+        effectiveActivity.runOnUiThread {
             try {
-                androidx.appcompat.app.AlertDialog.Builder(activity)
+                androidx.appcompat.app.AlertDialog.Builder(effectiveActivity)
                     .setTitle("New Host Key")
                     .setMessage(info.getDisplayMessage())
                     .setPositiveButton("Accept & Save") { _, _ ->
@@ -499,14 +503,20 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
             else -> null
         }
 
-        if (activity == null) {
+        val effectiveActivity = activity ?: run {
+            // Try to get activity from the application's activity tracking
+            val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
+            app?.getCurrentActivity()
+        }
+
+        if (effectiveActivity == null) {
             Logger.e("HostKeyVerifier", "Cannot show dialog - no activity context available")
             return HostKeyAction.REJECT_CONNECTION
         }
 
-        activity.runOnUiThread {
+        effectiveActivity.runOnUiThread {
             try {
-                androidx.appcompat.app.AlertDialog.Builder(activity)
+                androidx.appcompat.app.AlertDialog.Builder(effectiveActivity)
                     .setTitle("WARNING: Host Key Changed!")
                     .setMessage(info.getDisplayMessage())
                     .setIcon(android.R.drawable.ic_dialog_alert)
