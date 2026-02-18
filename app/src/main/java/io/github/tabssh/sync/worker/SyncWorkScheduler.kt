@@ -148,10 +148,10 @@ class SyncWorkScheduler(private val context: Context) {
 
     /**
      * Check if periodic sync is scheduled
+     * Note: Returns preference state since WorkManager status check requires suspend
      */
     fun isPeriodicSyncScheduled(): Boolean {
-        val workInfos = workManager.getWorkInfosForUniqueWork(SyncWorker.WORK_NAME).get()
-        return workInfos.any { !it.state.isFinished }
+        return preferenceManager.isSyncEnabled()
     }
 
     /**

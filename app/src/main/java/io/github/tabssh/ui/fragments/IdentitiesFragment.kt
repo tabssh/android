@@ -219,7 +219,7 @@ class IdentitiesFragment : Fragment() {
                             null
                         } else {
                             // Find the key by matching display text
-                            allKeysList.find { "${it.name} (${it.keyType})" == selectedText }?.id
+                            allKeysList.find { "${it.name} (${it.keyType})" == selectedText }?.keyId
                         }
                     } else null
 
@@ -283,7 +283,7 @@ class IdentitiesFragment : Fragment() {
 
             // Find the currently selected key
             val currentKeyIndex = if (identity.keyId != null) {
-                val keyIndex = allKeysList.indexOfFirst { it.id == identity.keyId }
+                val keyIndex = allKeysList.indexOfFirst { it.keyId == identity.keyId }
                 if (keyIndex >= 0) keyIndex + 1 else 0  // +1 because "No Key" is at index 0
             } else {
                 0
@@ -358,7 +358,7 @@ class IdentitiesFragment : Fragment() {
                         if (selectedText == "No Key") {
                             null
                         } else {
-                            allKeysList.find { "${it.name} (${it.keyType})" == selectedText }?.id
+                            allKeysList.find { "${it.name} (${it.keyType})" == selectedText }?.keyId
                         }
                     } else null
 
