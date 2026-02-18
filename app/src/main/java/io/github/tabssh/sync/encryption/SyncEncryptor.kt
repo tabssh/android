@@ -35,6 +35,22 @@ class SyncEncryptor {
     private val secureRandom = SecureRandom()
 
     /**
+     * Simple encrypt method - returns serialized encrypted data
+     */
+    fun encrypt(data: ByteArray, password: String): ByteArray {
+        val encrypted = encryptSyncFile(data, password)
+        return serializeEncryptedData(encrypted)
+    }
+
+    /**
+     * Simple decrypt method - takes serialized encrypted data
+     */
+    fun decrypt(data: ByteArray, password: String): ByteArray {
+        val encrypted = deserializeEncryptedData(data)
+        return decryptSyncFile(encrypted, password)
+    }
+
+    /**
      * Encrypt data with password-based encryption
      */
     fun encryptSyncFile(data: ByteArray, password: String): EncryptedData {
