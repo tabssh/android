@@ -4,11 +4,13 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import io.github.tabssh.ssh.auth.AuthType
+import kotlinx.serialization.Serializable
 import java.util.UUID
 
 /**
  * Database entity representing an SSH connection profile
  */
+@Serializable
 @Entity(tableName = "connections")
 data class ConnectionProfile(
     @PrimaryKey

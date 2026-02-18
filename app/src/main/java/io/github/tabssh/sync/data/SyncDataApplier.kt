@@ -13,6 +13,14 @@ import io.github.tabssh.sync.models.SyncDataPackage
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * Applies synced data to local database
@@ -111,7 +119,7 @@ class SyncDataApplier {
         keyResult: MergeResult<StoredKey>,
         themeResult: MergeResult<ThemeDefinition>,
         hostKeyResult: MergeResult<HostKeyEntry>,
-        preferences: Map<String, Any>
+        preferences: Map<String, JsonElement>
     ): ApplyResult = withContext(Dispatchers.IO) {
         try {
             var appliedCount = 0
@@ -288,38 +296,33 @@ class SyncDataApplier {
     }
 
     /**
-     * Apply preferences
+     * Apply preferences from JsonElement map
      */
-    private fun applyPreferences(preferences: Map<String, Any>): Int {
+    private fun applyPreferences(preferences: Map<String, JsonElement>): Int {
         var count = 0
 
         try {
-            @Suppress("UNCHECKED_CAST")
-            val general = preferences["general"] as? Map<String, Any>
+            val general = (preferences["general"] as? JsonObject)?.toAnyMap()
             general?.let {
                 count += applyGeneralPreferences(it)
             }
 
-            @Suppress("UNCHECKED_CAST")
-            val security = preferences["security"] as? Map<String, Any>
+            val security = (preferences["security"] as? JsonObject)?.toAnyMap()
             security?.let {
                 count += applySecurityPreferences(it)
             }
 
-            @Suppress("UNCHECKED_CAST")
-            val terminal = preferences["terminal"] as? Map<String, Any>
+            val terminal = (preferences["terminal"] as? JsonObject)?.toAnyMap()
             terminal?.let {
                 count += applyTerminalPreferences(it)
             }
 
-            @Suppress("UNCHECKED_CAST")
-            val ui = preferences["ui"] as? Map<String, Any>
+            val ui = (preferences["ui"] as? JsonObject)?.toAnyMap()
             ui?.let {
                 count += applyUIPreferences(it)
             }
 
-            @Suppress("UNCHECKED_CAST")
-            val connection = preferences["connection"] as? Map<String, Any>
+            val connection = (preferences["connection"] as? JsonObject)?.toAnyMap()
             connection?.let {
                 count += applyConnectionPreferences(it)
             }
@@ -328,6 +331,21 @@ class SyncDataApplier {
         }
 
         return count
+    }
+
+    /**
+     * Convert JsonObject to Map<String, Any>
+     */
+    private fun JsonObject.toAnyMap(): Map<String, Any> {
+        return this.mapValues { (_, value) ->
+            when (value) {
+                is JsonPrimitive -> {
+                    value.booleanOrNull ?: value.intOrNull ?: value.doubleOrNull ?: value.content
+                }
+                is JsonObject -> value.toAnyMap()
+                else -> value.toString()
+            }
+        }
     }
 
     private fun applyGeneralPreferences(prefs: Map<String, Any>): Int {

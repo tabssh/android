@@ -3,10 +3,12 @@ package io.github.tabssh.storage.database.entities
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import kotlinx.serialization.Serializable
 
 /**
  * Database entity representing a known host key entry
  */
+@Serializable
 @Entity(tableName = "host_keys")
 data class HostKeyEntry(
     @PrimaryKey

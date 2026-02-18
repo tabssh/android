@@ -4,6 +4,8 @@ import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HostKeyEntry
 import io.github.tabssh.storage.database.entities.StoredKey
 import io.github.tabssh.storage.database.entities.ThemeDefinition
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 /**
  * Result of a sync operation
@@ -22,6 +24,7 @@ data class SyncResult(
 /**
  * Counts of synced items
  */
+@Serializable
 data class SyncItemCounts(
     val connections: Int = 0,
     val keys: Int = 0,
@@ -35,6 +38,7 @@ data class SyncItemCounts(
 /**
  * Metadata for a sync operation
  */
+@Serializable
 data class SyncMetadata(
     val deviceId: String,
     val deviceName: String,
@@ -50,12 +54,13 @@ data class SyncMetadata(
 /**
  * Complete sync file data structure
  */
+@Serializable
 data class SyncFileData(
     val metadata: SyncMetadata,
     val connections: List<ConnectionProfile>,
     val keys: List<StoredKey>,
     val themes: List<ThemeDefinition>,
-    val preferences: Map<String, Any>,
+    val preferences: Map<String, JsonElement>,
     val hostKeys: List<HostKeyEntry>,
     val syncBase: SyncBase
 )
@@ -63,6 +68,7 @@ data class SyncFileData(
 /**
  * Base snapshot for 3-way merge
  */
+@Serializable
 data class SyncBase(
     val connectionHashes: Map<String, String> = emptyMap(),
     val keyHashes: Map<String, String> = emptyMap(),
@@ -73,11 +79,12 @@ data class SyncBase(
 /**
  * Package of data to sync
  */
+@Serializable
 data class SyncDataPackage(
     val connections: List<ConnectionProfile> = emptyList(),
     val keys: List<StoredKey> = emptyList(),
     val themes: List<ThemeDefinition> = emptyList(),
-    val preferences: Map<String, Any> = emptyMap(),
+    val preferences: Map<String, JsonElement> = emptyMap(),
     val hostKeys: List<HostKeyEntry> = emptyList(),
     val metadata: SyncMetadata
 )
@@ -260,7 +267,7 @@ data class CompleteMergeResult(
     val keyResult: MergeResult<io.github.tabssh.storage.database.entities.StoredKey>,
     val themeResult: MergeResult<io.github.tabssh.storage.database.entities.ThemeDefinition>,
     val hostKeyResult: MergeResult<io.github.tabssh.storage.database.entities.HostKeyEntry>,
-    val preferences: Map<String, Any>,
+    val preferences: Map<String, JsonElement>,
     val conflicts: List<Conflict>
 ) {
     fun hasConflicts(): Boolean = conflicts.isNotEmpty()
