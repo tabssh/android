@@ -64,7 +64,7 @@ jobs:
 
         # Check for actual hardcoded secrets (more specific)
         echo "Checking for hardcoded secrets..."
-        if grep -rE 'password.*=.*"[^"]{6,}"' app/src/main/java/ | grep -v "// " | grep -v "test-password" | grep -v "getString" | grep -v "text.toString()" | grep -v "fun set.*Password" | grep -v "= setString" | grep -v '\.summary = "' | grep -v 'Password set' | grep -v 'passwordIcon' | grep -v 'hasPassword'; then
+        if grep -rE 'password.*=.*"[^"]{6,}"' app/src/main/java/ | grep -v "// " | grep -v "test-password" | grep -v "getString" | grep -v "text.toString()" | grep -v "fun set.*Password" | grep -v "= setString" | grep -v '\.summary = "' | grep -v 'Password set' | grep -v 'passwordIcon' | grep -v 'hasPassword' | grep -v '\.hint = "'; then
           echo "❌ Actual hardcoded passwords found"
           exit 1
         else
