@@ -1,7 +1,7 @@
 # TabSSH Android App - Complete Technical Specification
 
-**Version**: 1.0  
-**Date**: January 2025  
+**Version**: 1.0
+**Date**: February 2026  
 **Repository**: https://github.com/tabssh/android  
 **Website**: https://tabssh.github.io  
 
@@ -56,7 +56,7 @@ TabSSH is a modern, open-source SSH client for Android that provides a true tabb
 
 ### 2.1 Project Structure
 ```
-app/src/main/java/com/tabssh/
+app/src/main/java/io/github/tabssh/
 ├── ui/                     # User interface components
 │   ├── activities/         # Main activities
 │   ├── fragments/          # Fragments and dialogs
@@ -1223,7 +1223,7 @@ android {
     compileSdk 34
     
     defaultConfig {
-        applicationId "com.tabssh"
+        applicationId "io.github.tabssh"
         minSdk 21  // Android 5.0 (covers 99%+ of devices)
         targetSdk 34
         versionCode 1
@@ -1592,7 +1592,7 @@ jobs:
 
 #### 9.2.1 F-Droid Metadata
 ```yaml
-# metadata/com.tabssh.yml
+# metadata/io.github.tabssh.yml
 Categories:
   - System
   - Internet
@@ -2740,11 +2740,18 @@ public class KeyStorageException extends Exception {
 - [x] Bookmark frequently used directories (framework ready)
 
 ## Backup & Restore
-- [x] Complete configuration backup/restore (framework implemented)
+- [x] Complete configuration backup/restore
 - [x] Connection profile export/import
 - [x] SSH key backup (encrypted)
-- [x] Settings synchronization (framework ready)
-- [x] Automatic backup scheduling (framework ready)
+- [x] Automatic backup scheduling
+
+## Cloud Sync (SAF-based)
+- [x] Storage Access Framework sync - works with any cloud storage app
+- [x] Supports Google Drive, Dropbox, OneDrive, Nextcloud, local storage
+- [x] AES-256-GCM encryption with PBKDF2 key derivation
+- [x] No OAuth or external dependencies - uses Android's built-in file picker
+- [x] Background sync via WorkManager
+- [x] GZIP compression for bandwidth efficiency
 
 ## Performance & Battery Optimization (Core 1.0.0 Requirements)
 - [x] Memory usage optimization and leak prevention
@@ -2795,7 +2802,7 @@ public class KeyStorageException extends Exception {
 - [x] Developer API documentation (code documentation throughout)
 - [x] Accessibility guide (included in documentation)
 - [x] Security best practices guide (included in documentation)
-- [x] F-Droid metadata and submission (metadata/com.tabssh.yml ready)
+- [x] F-Droid metadata and submission (metadata/io.github.tabssh.yml ready)
 - [x] GitHub release automation (CI/CD workflows implemented)
 - [x] Privacy policy and legal documentation (MIT license, privacy commitments)
 
