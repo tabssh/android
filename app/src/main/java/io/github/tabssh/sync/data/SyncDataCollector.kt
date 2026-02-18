@@ -14,6 +14,9 @@ import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.encodeToJsonElement
 
 /**
  * Collects data for sync operations
@@ -183,16 +186,17 @@ class SyncDataCollector {
     /**
      * Collect preferences as map
      */
-    private fun collectPreferences(): Map<String, Any> {
-        val prefs = mutableMapOf<String, Any>()
+    private fun collectPreferences(): Map<String, JsonElement> {
+        val prefs = mutableMapOf<String, JsonElement>()
+        val json = Json { encodeDefaults = true }
 
         try {
-            prefs["general"] = collectGeneralPreferences()
-            prefs["security"] = collectSecurityPreferences()
-            prefs["terminal"] = collectTerminalPreferences()
-            prefs["ui"] = collectUIPreferences()
-            prefs["connection"] = collectConnectionPreferences()
-            prefs["sync"] = collectSyncPreferences()
+            prefs["general"] = json.encodeToJsonElement(collectGeneralPreferences())
+            prefs["security"] = json.encodeToJsonElement(collectSecurityPreferences())
+            prefs["terminal"] = json.encodeToJsonElement(collectTerminalPreferences())
+            prefs["ui"] = json.encodeToJsonElement(collectUIPreferences())
+            prefs["connection"] = json.encodeToJsonElement(collectConnectionPreferences())
+            prefs["sync"] = json.encodeToJsonElement(collectSyncPreferences())
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to collect preferences", e)
         }

@@ -14,7 +14,8 @@
       "WebFetch(domain:mb.pste.us)",
       "Bash(gh run list:*)",
       "Bash(gh run view:*)",
-      "Bash(act:*)"
+      "Bash(act:*)",
+      "Bash(emulator:*)"
     ]
   }
 }

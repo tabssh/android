@@ -3,10 +3,12 @@ package io.github.tabssh.storage.database.entities
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import kotlinx.serialization.Serializable
 
 /**
  * Database entity representing a custom terminal theme
  */
+@Serializable
 @Entity(tableName = "themes")
 data class ThemeDefinition(
     @PrimaryKey
