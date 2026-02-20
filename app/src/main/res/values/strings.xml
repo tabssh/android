@@ -210,5 +210,7 @@
     <string name="widget_4x2_description">Favorite connections list</string>
     <string name="widget_4x4_description">Full connection list</string>
     
+    <string name="sync_password_too_short">Minimum 8 characters</string>
+    <string name="sync_password_mismatch">Passwords do not match</string>
 </resources>
 
