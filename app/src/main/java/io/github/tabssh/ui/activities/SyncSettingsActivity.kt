@@ -339,9 +339,11 @@ class SyncSettingsActivity : AppCompatActivity() {
             val cfm = confirmInput?.text.toString()
             passwordLayout?.error = null
             confirmLayout?.error  = null
+            val errTooShort = getString(R.string.sync_password_too_short)
+            val errMismatch = getString(R.string.sync_password_mismatch)
             when {
-                pw.length < 8    -> passwordLayout?.error = "Minimum 8 characters"
-                pw != cfm        -> confirmLayout?.error  = "Passwords do not match"
+                pw.length < 8    -> passwordLayout?.error = errTooShort
+                pw != cfm        -> confirmLayout?.error  = errMismatch
                 else -> {
                     syncManager.setSyncPassword(pw)
                     refresh()
