@@ -151,9 +151,36 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         // Request notification permission for Android 13+
         requestNotificationPermissionIfNeeded()
 
+        // Show startup error dialog if any component failed to initialize
+        checkStartupErrors()
+
         Logger.i("MainActivity", "MainActivity created successfully")
     }
     
+    /**
+     * If any component failed to initialize, show a dialog so the user can see
+     * the error without needing ADB or a log viewer.
+     */
+    private fun checkStartupErrors() {
+        val prefs = getSharedPreferences(io.github.tabssh.TabSSHApplication.STARTUP_PREFS, MODE_PRIVATE)
+        val error = prefs.getString(io.github.tabssh.TabSSHApplication.KEY_STARTUP_ERROR, null)
+        if (!error.isNullOrBlank()) {
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("⚠️ Startup Warning")
+                .setMessage("Some components failed to initialize. The app may have reduced functionality.\n\n$error")
+                .setPositiveButton("Copy & Dismiss") { _, _ ->
+                    val clipboard = getSystemService(android.content.ClipboardManager::class.java)
+                    clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("TabSSH Error", error))
+                    prefs.edit().remove(io.github.tabssh.TabSSHApplication.KEY_STARTUP_ERROR).apply()
+                }
+                .setNegativeButton("Dismiss") { _, _ ->
+                    prefs.edit().remove(io.github.tabssh.TabSSHApplication.KEY_STARTUP_ERROR).apply()
+                }
+                .setCancelable(false)
+                .show()
+        }
+    }
+
     /**
      * Request notification permission for Android 13+ (API 33+)
      */

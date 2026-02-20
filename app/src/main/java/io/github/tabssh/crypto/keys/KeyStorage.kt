@@ -93,15 +93,16 @@ class KeyStorage(private val context: Context) {
     
     fun initialize() {
         if (isInitialized) return
-        
+
         try {
             keyStore.load(null)
             Logger.d("KeyStorage", "Initialized with Android Keystore")
-            isInitialized = true
         } catch (e: Exception) {
-            Logger.e("KeyStorage", "Failed to initialize keystore", e)
-            throw SecurityException("Failed to initialize key storage", e)
+            // Keystore unavailable — SSH key encryption will be degraded.
+            // Key import/generation will fail gracefully; existing app features remain usable.
+            Logger.e("KeyStorage", "Keystore unavailable, SSH key encryption disabled", e)
         }
+        isInitialized = true
     }
     
     /**

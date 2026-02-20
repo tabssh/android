@@ -19,7 +19,15 @@ import io.github.tabssh.utils.performance.PerformanceManager
  * Handles application-level initialization and dependency injection
  */
 class TabSSHApplication : Application() {
-    
+
+    companion object {
+        const val STARTUP_PREFS = "tabssh_startup"
+        const val KEY_STARTUP_ERROR = "startup_error"
+        const val KEY_LAST_CRASH   = "last_crash"
+        const val KEY_CRASH_THREAD = "crash_thread"
+        const val KEY_CRASH_TIME   = "crash_time"
+    }
+
     // Core components - initialized lazily
     val database by lazy { TabSSHDatabase.getDatabase(this) }
     val preferencesManager by lazy { PreferenceManager(this) }
@@ -43,11 +51,13 @@ class TabSSHApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        
-        // Initialize logging
+
+        // Logger and crash handler must be first — before anything can throw.
         Logger.initialize(this, BuildConfig.DEBUG_MODE)
+        setupExceptionHandler()
+
         Logger.d("TabSSHApplication", "Application starting...")
-        
+
         // Create notification channels
         io.github.tabssh.utils.NotificationHelper.createNotificationChannels(this)
         
@@ -71,51 +81,81 @@ class TabSSHApplication : Application() {
         // Initialize core components
         initializeCoreComponents()
         
-        // Set up uncaught exception handler
-        setupExceptionHandler()
-        
         Logger.i("TabSSHApplication", "Application initialized successfully")
     }
     
     private fun initializeCoreComponents() {
-        // Initialize preferences first as other components may depend on them
-        preferencesManager.initialize()
-        
-        // Initialize theme system
-        themeManager.initialize()
-        
-        // Initialize security components
-        securePasswordManager.initialize()
-        keyStorage.initialize()
-        
-        // Initialize SSH components
-        sshSessionManager.initialize()
-        
-        // Initialize terminal system
-        terminalManager.initialize()
-        
-        // Initialize performance monitoring
-        performanceManager.initialize()
-        
+        // Clear any previous startup errors
+        getSharedPreferences(STARTUP_PREFS, MODE_PRIVATE).edit().remove(KEY_STARTUP_ERROR).apply()
+
+        fun tryInit(name: String, block: () -> Unit) {
+            try {
+                block()
+            } catch (e: Exception) {
+                val msg = "$name: ${e::class.simpleName}: ${e.message}"
+                Logger.e("TabSSHApplication", "Failed to initialize $name", e)
+                // Persist error so MainActivity can surface it on-screen without ADB
+                val prefs = getSharedPreferences(STARTUP_PREFS, MODE_PRIVATE)
+                val existing = prefs.getString(KEY_STARTUP_ERROR, "")
+                prefs.edit().putString(
+                    KEY_STARTUP_ERROR,
+                    if (existing.isNullOrEmpty()) msg else "$existing\n$msg"
+                ).apply()
+            }
+        }
+
+        tryInit("Preferences")  { preferencesManager.initialize() }
+        tryInit("Themes")       { themeManager.initialize() }
+        tryInit("Passwords")    { securePasswordManager.initialize() }
+        tryInit("KeyStorage")   { keyStorage.initialize() }
+        tryInit("SSHSession")   { sshSessionManager.initialize() }
+        tryInit("Terminal")     { terminalManager.initialize() }
+        tryInit("Performance")  { performanceManager.initialize() }
+
         Logger.d("TabSSHApplication", "Core components initialized")
     }
     
     private fun setupExceptionHandler() {
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-            // Write crash synchronously — async executor won't flush before process dies
+            // Write synchronously before the process dies
             Logger.writeCrashSync(thread, throwable)
             Logger.e("TabSSHApplication", "Uncaught exception in thread ${thread.name}", throwable)
-            
+
+            // In debug builds, persist the crash and launch a visual crash screen
+            if (BuildConfig.DEBUG_MODE) {
+                try {
+                    val stackTrace = android.util.Log.getStackTraceString(throwable)
+                    getSharedPreferences(STARTUP_PREFS, MODE_PRIVATE).edit()
+                        .putString(KEY_LAST_CRASH, stackTrace)
+                        .putString(KEY_CRASH_THREAD, thread.name)
+                        .putLong(KEY_CRASH_TIME, System.currentTimeMillis())
+                        .commit() // commit() not apply() — must be synchronous before process dies
+
+                    startActivity(
+                        android.content.Intent(
+                            this,
+                            io.github.tabssh.ui.activities.CrashReportActivity::class.java
+                        ).apply {
+                            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                                    android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK
+                        }
+                    )
+                    // Brief pause to let the activity start before the process is killed
+                    Thread.sleep(300)
+                } catch (e: Exception) {
+                    // If the crash reporter itself fails, fall through to the default handler
+                }
+            }
+
             // Clean up sensitive data on crash
             try {
                 securePasswordManager.clearSensitiveDataOnCrash()
                 sshSessionManager.closeAllConnections()
             } catch (e: Exception) {
-                Logger.e("TabSSHApplication", "Error during crash cleanup", e)
+                // Ignore — we're already crashing
             }
-            
-            // Call original handler
+
             defaultHandler?.uncaughtException(thread, throwable)
         }
     }
