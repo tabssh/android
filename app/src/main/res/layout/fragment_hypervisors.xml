@@ -18,8 +18,7 @@
             android:layout_height="?attr/actionBarSize"
             android:background="?attr/colorSurface"
             android:elevation="4dp"
-            app:title="Hypervisors"
-            app:menu="@menu/menu_hypervisors" />
+            app:title="Hypervisors" />
 
         <!-- Hypervisor List -->
         <androidx.recyclerview.widget.RecyclerView

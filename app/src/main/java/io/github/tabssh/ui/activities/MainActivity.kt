@@ -20,6 +20,7 @@ import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.HypervisorType
 import io.github.tabssh.ui.adapters.MainPagerAdapter
+import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.launch
 
@@ -943,7 +944,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             host = hostname,
             port = port,
             username = username,
-            authType = if (password != null) "PASSWORD" else "KEYBOARD_INTERACTIVE",
+            authType = if (password != null) AuthType.PASSWORD.name else AuthType.KEYBOARD_INTERACTIVE.name,
             keyId = null,
             groupId = null
         )

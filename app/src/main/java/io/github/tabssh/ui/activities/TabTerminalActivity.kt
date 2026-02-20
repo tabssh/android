@@ -47,8 +47,8 @@ class TabTerminalActivity : AppCompatActivity() {
             return Intent(context, TabTerminalActivity::class.java).apply {
                 putExtra(EXTRA_CONNECTION_PROFILE_ID, profile.id)
                 // Also embed the full profile as JSON so unsaved (quick-connect) profiles work
-                putExtra(EXTRA_CONNECTION_PROFILE, kotlinx.serialization.json.Json.encodeToString(
-                    ConnectionProfile.serializer(), profile))
+                putExtra(EXTRA_CONNECTION_PROFILE,
+                    kotlinx.serialization.json.Json.encodeToString(profile))
                 putExtra(EXTRA_AUTO_CONNECT, autoConnect)
             }
         }
@@ -823,8 +823,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 // Try embedded JSON first (works for quick-connect / unsaved profiles)
                 val profile: ConnectionProfile? = if (connectionProfileJson != null) {
                     try {
-                        kotlinx.serialization.json.Json.decodeFromString(
-                            ConnectionProfile.serializer(), connectionProfileJson)
+                        kotlinx.serialization.json.Json.decodeFromString<ConnectionProfile>(connectionProfileJson)
                     } catch (e: Exception) {
                         Logger.w("TabTerminalActivity", "Failed to decode profile JSON, falling back to DB", e)
                         null
