@@ -308,6 +308,12 @@
                 android:resource="@xml/widget_4x4_info" />
         </receiver>
 
+        <!-- Sync settings (custom Material 3 activity) -->
+        <activity
+            android:name=".ui.activities.SyncSettingsActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.activities.SettingsActivity" />
+
         <!-- Crash reporter (debug builds only) -->
         <activity
             android:name=".ui.activities.CrashReportActivity"

@@ -10,6 +10,7 @@ import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.SwitchPreferenceCompat
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.ui.activities.SyncSettingsActivity
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.launch
 
@@ -48,7 +49,11 @@ class SettingsMainFragment : PreferenceFragmentCompat() {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences_main, rootKey)
 
-        // Set version information from BuildConfig with fallback values
+        findPreference<Preference>("sync_settings")?.setOnPreferenceClickListener {
+            startActivity(Intent(requireContext(), SyncSettingsActivity::class.java))
+            true
+        }
+
         findPreference<Preference>("about_version")?.apply {
             try {
                 val versionName = io.github.tabssh.BuildConfig.VERSION_NAME ?: "1.0.0"

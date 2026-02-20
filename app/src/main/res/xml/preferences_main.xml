@@ -33,8 +33,7 @@
         android:key="sync_settings"
         android:title="Sync"
         android:summary="Sync data across devices (Google Drive, WebDAV, Nextcloud)"
-        android:icon="@android:drawable/ic_menu_rotate"
-        android:fragment="io.github.tabssh.ui.fragments.SyncSettingsFragment" />
+        android:icon="@android:drawable/ic_menu_rotate" />
     
     <Preference
         android:key="logging_settings"
