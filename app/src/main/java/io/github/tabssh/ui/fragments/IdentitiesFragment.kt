@@ -404,34 +404,53 @@ class IdentitiesFragment : Fragment() {
                 name = name,
                 username = username,
                 authType = authType,
-                password = password,
+                password = null, // Never store plaintext; keep in SecurePasswordManager
                 keyId = keyId,
                 description = description
             )
             app.database.identityDao().insert(identity)
-            
+
+            // Store password encrypted, outside the DB
+            if (password != null) {
+                app.securePasswordManager.storePassword(
+                    "identity_${identity.id}", password,
+                    io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.ENCRYPTED
+                )
+            }
+
             withContext(Dispatchers.Main) {
                 android.widget.Toast.makeText(requireContext(), "Identity \"$name\" created", android.widget.Toast.LENGTH_SHORT).show()
                 Logger.d("IdentitiesFragment", "Created identity: $name")
             }
         }
     }
-    
+
     private fun updateIdentity(identity: Identity) {
         lifecycleScope.launch(Dispatchers.IO) {
-            app.database.identityDao().update(identity)
-            
+            // Migrate any legacy plaintext password before saving with null
+            val legacyPassword = identity.password
+            val updated = identity.copy(password = null)
+            app.database.identityDao().update(updated)
+
+            if (legacyPassword != null) {
+                app.securePasswordManager.storePassword(
+                    "identity_${identity.id}", legacyPassword,
+                    io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.ENCRYPTED
+                )
+            }
+
             withContext(Dispatchers.Main) {
                 android.widget.Toast.makeText(requireContext(), "Identity updated", android.widget.Toast.LENGTH_SHORT).show()
                 Logger.d("IdentitiesFragment", "Updated identity: ${identity.name}")
             }
         }
     }
-    
+
     private fun deleteIdentity(identity: Identity) {
         lifecycleScope.launch(Dispatchers.IO) {
             app.database.identityDao().delete(identity)
-            
+            app.securePasswordManager.clearPassword("identity_${identity.id}")
+
             withContext(Dispatchers.Main) {
                 android.widget.Toast.makeText(requireContext(), "Identity deleted", android.widget.Toast.LENGTH_SHORT).show()
                 Logger.d("IdentitiesFragment", "Deleted identity: ${identity.name}")

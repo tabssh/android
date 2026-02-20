@@ -886,6 +886,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         val hostInput = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.input_host)
         val hostLayout = view.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.layout_host)
         val portInput = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.input_port)
+        val passwordInput = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.input_password)
 
         val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Quick Connect")
@@ -898,6 +899,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val raw = hostInput.text.toString().trim()
                 val port = portInput.text.toString().toIntOrNull() ?: 22
+                val password = passwordInput.text.toString()
 
                 if (raw.isEmpty()) {
                     hostLayout.error = "Enter a hostname"
@@ -907,7 +909,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
 
                 val (username, hostname) = resolveQuickConnectUser(raw)
                 dialog.dismiss()
-                quickConnect(username, hostname, port)
+                quickConnect(username, hostname, port, password.takeIf { it.isNotEmpty() })
             }
         }
 
@@ -934,22 +936,31 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     /**
      * Quick connect to SSH server without saving profile
      */
-    private fun quickConnect(username: String, hostname: String, port: Int) {
+    private fun quickConnect(username: String, hostname: String, port: Int, password: String? = null) {
         val quickProfile = ConnectionProfile(
             id = "quick_${System.currentTimeMillis()}",
             name = "Quick: $username@$hostname",
             host = hostname,
             port = port,
             username = username,
-            authType = "PASSWORD", // Will prompt for password
+            authType = if (password != null) "PASSWORD" else "KEYBOARD_INTERACTIVE",
             keyId = null,
             groupId = null
         )
-        
-        // Launch terminal activity
+
+        // Store password for this session only — cleared when app restarts
+        if (password != null) {
+            lifecycleScope.launch {
+                app.securePasswordManager.storePassword(
+                    quickProfile.id, password,
+                    io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.SESSION_ONLY
+                )
+            }
+        }
+
         val intent = TabTerminalActivity.createIntent(this, quickProfile, autoConnect = true)
         startActivity(intent)
-        
+
         Logger.i("MainActivity", "Quick connecting to $username@$hostname:$port")
     }
     

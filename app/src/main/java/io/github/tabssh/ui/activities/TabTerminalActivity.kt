@@ -46,7 +46,9 @@ class TabTerminalActivity : AppCompatActivity() {
         fun createIntent(context: Context, profile: ConnectionProfile, autoConnect: Boolean = true): Intent {
             return Intent(context, TabTerminalActivity::class.java).apply {
                 putExtra(EXTRA_CONNECTION_PROFILE_ID, profile.id)
-                // Note: Cannot pass entire profile object - use ID to load from database
+                // Also embed the full profile as JSON so unsaved (quick-connect) profiles work
+                putExtra(EXTRA_CONNECTION_PROFILE, kotlinx.serialization.json.Json.encodeToString(
+                    ConnectionProfile.serializer(), profile))
                 putExtra(EXTRA_AUTO_CONNECT, autoConnect)
             }
         }
@@ -648,7 +650,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                 val clip = android.content.ClipData.newPlainText("SSH Error", fullError)
                 clipboard.setPrimaryClip(clip)
-                showError("Error details copied to clipboard", "Error")
+                Toast.makeText(this, "Error details copied to clipboard", Toast.LENGTH_SHORT).show()
             }
         
         // Edit Connection button
@@ -811,15 +813,27 @@ class TabTerminalActivity : AppCompatActivity() {
 
         // Handle normal connection intent
         val connectionProfileId = intent.getStringExtra(EXTRA_CONNECTION_PROFILE_ID)
+        val connectionProfileJson = intent.getStringExtra(EXTRA_CONNECTION_PROFILE)
         val autoConnect = intent.getBooleanExtra(EXTRA_AUTO_CONNECT, true)
 
         Logger.d("TabTerminalActivity", "Intent extras: profileId=$connectionProfileId, autoConnect=$autoConnect")
 
         if (connectionProfileId != null) {
             lifecycleScope.launch {
-                val profile = withContext(Dispatchers.IO) {
-                    app.database.connectionDao().getConnectionById(connectionProfileId)
-                }
+                // Try embedded JSON first (works for quick-connect / unsaved profiles)
+                val profile: ConnectionProfile? = if (connectionProfileJson != null) {
+                    try {
+                        kotlinx.serialization.json.Json.decodeFromString(
+                            ConnectionProfile.serializer(), connectionProfileJson)
+                    } catch (e: Exception) {
+                        Logger.w("TabTerminalActivity", "Failed to decode profile JSON, falling back to DB", e)
+                        null
+                    }
+                } else null
+                    ?: withContext(Dispatchers.IO) {
+                        app.database.connectionDao().getConnectionById(connectionProfileId)
+                    }
+
                 if (profile != null) {
                     Logger.d("TabTerminalActivity", "Found profile: ${profile.name}")
                     if (autoConnect) {
