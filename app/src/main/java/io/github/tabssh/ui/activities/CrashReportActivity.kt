@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.button.MaterialButton
 import io.github.tabssh.R
@@ -24,6 +25,15 @@ class CrashReportActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_crash_report)
+
+        // Prevent accidentally dismissing the crash screen
+        onBackPressedDispatcher.addCallback(this,
+            object : androidx.activity.OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    // Do nothing — force the user to tap Restart or Share
+                }
+            }
+        )
 
         val prefs = getSharedPreferences(TabSSHApplication.STARTUP_PREFS, MODE_PRIVATE)
         val stackTrace = prefs.getString(TabSSHApplication.KEY_LAST_CRASH, null)

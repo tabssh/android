@@ -221,8 +221,10 @@ dependencies {
         exclude group: 'com.github.termux.termux-app', module: 'terminal-view'
     }
 
-    // Required by Termux to avoid Guava conflicts
-    implementation 'com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava'
+    // Provides ListenableFuture + AbstractResolvableFuture required by profileinstaller and WorkManager.
+    // The empty guava stub (9999.0-empty-to-avoid-conflict-with-guava) has no implementation and
+    // causes NoClassDefFoundError at runtime.
+    implementation 'androidx.concurrent:concurrent-futures:1.2.0'
 
     // Sync uses Android Storage Access Framework (SAF) - no external dependencies needed
     // Works with Google Drive app, Dropbox, OneDrive, Nextcloud, or any DocumentsProvider
