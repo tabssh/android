@@ -203,75 +203,103 @@ class TabTerminalActivity : AppCompatActivity() {
         app.sshSessionManager.newHostKeyCallback = { info ->
             Logger.i("TabTerminalActivity", "New host key callback invoked for ${info.hostname}")
 
-            var userAction: io.github.tabssh.ssh.connection.HostKeyAction? = null
+            var userAction: io.github.tabssh.ssh.connection.HostKeyAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
             val latch = java.util.concurrent.CountDownLatch(1)
 
             runOnUiThread {
-                androidx.appcompat.app.AlertDialog.Builder(this)
-                    .setTitle("New Host Key")
-                    .setMessage(info.getDisplayMessage())
-                    .setPositiveButton("Accept & Save") { _, _ ->
-                        userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_NEW_KEY
-                        latch.countDown()
-                    }
-                    .setNeutralButton("Accept Once") { _, _ ->
-                        userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_ONCE
-                        latch.countDown()
-                    }
-                    .setNegativeButton("Reject") { _, _ ->
-                        userAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
-                        latch.countDown()
-                    }
-                    .setCancelable(false)
-                    .show()
+                if (isFinishing || isDestroyed) {
+                    Logger.w("TabTerminalActivity", "Activity is finishing/destroyed - rejecting new host key")
+                    latch.countDown()
+                    return@runOnUiThread
+                }
+                try {
+                    androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle("New Host Key")
+                        .setMessage(info.getDisplayMessage())
+                        .setPositiveButton("Accept & Save") { _, _ ->
+                            userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_NEW_KEY
+                            latch.countDown()
+                        }
+                        .setNeutralButton("Accept Once") { _, _ ->
+                            userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_ONCE
+                            latch.countDown()
+                        }
+                        .setNegativeButton("Reject") { _, _ ->
+                            userAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
+                            latch.countDown()
+                        }
+                        .setCancelable(false)
+                        .setOnDismissListener { latch.countDown() }
+                        .show()
+                } catch (e: Exception) {
+                    Logger.e("TabTerminalActivity", "Failed to show new host key dialog", e)
+                    latch.countDown()
+                }
             }
 
-            // Wait for user response
+            // Wait for user response (60-second timeout for safety)
             try {
-                latch.await()
+                val responded = latch.await(60, java.util.concurrent.TimeUnit.SECONDS)
+                if (!responded) {
+                    Logger.w("TabTerminalActivity", "Host key dialog timed out - rejecting")
+                }
             } catch (e: InterruptedException) {
                 Logger.e("TabTerminalActivity", "Interrupted waiting for host key response", e)
             }
 
-            userAction ?: io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
+            userAction
         }
 
         // Setup callback for changed host keys (MITM warning)
         app.sshSessionManager.hostKeyChangedCallback = { info ->
             Logger.w("TabTerminalActivity", "Host key CHANGED callback invoked for ${info.hostname}")
 
-            var userAction: io.github.tabssh.ssh.connection.HostKeyAction? = null
+            var userAction: io.github.tabssh.ssh.connection.HostKeyAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
             val latch = java.util.concurrent.CountDownLatch(1)
 
             runOnUiThread {
-                androidx.appcompat.app.AlertDialog.Builder(this)
-                    .setTitle("WARNING: Host Key Changed!")
-                    .setMessage(info.getDisplayMessage())
-                    .setIcon(android.R.drawable.ic_dialog_alert)
-                    .setPositiveButton("Accept New Key") { _, _ ->
-                        userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_NEW_KEY
-                        latch.countDown()
-                    }
-                    .setNeutralButton("Accept Once") { _, _ ->
-                        userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_ONCE
-                        latch.countDown()
-                    }
-                    .setNegativeButton("Reject (Recommended)") { _, _ ->
-                        userAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
-                        latch.countDown()
-                    }
-                    .setCancelable(false)
-                    .show()
+                if (isFinishing || isDestroyed) {
+                    Logger.w("TabTerminalActivity", "Activity is finishing/destroyed - rejecting changed host key")
+                    latch.countDown()
+                    return@runOnUiThread
+                }
+                try {
+                    androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle("WARNING: Host Key Changed!")
+                        .setMessage(info.getDisplayMessage())
+                        .setIcon(android.R.drawable.ic_dialog_alert)
+                        .setPositiveButton("Accept New Key") { _, _ ->
+                            userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_NEW_KEY
+                            latch.countDown()
+                        }
+                        .setNeutralButton("Accept Once") { _, _ ->
+                            userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_ONCE
+                            latch.countDown()
+                        }
+                        .setNegativeButton("Reject (Recommended)") { _, _ ->
+                            userAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
+                            latch.countDown()
+                        }
+                        .setCancelable(false)
+                        .setOnDismissListener { latch.countDown() }
+                        .show()
+                } catch (e: Exception) {
+                    Logger.e("TabTerminalActivity", "Failed to show changed host key dialog", e)
+                    latch.countDown()
+                }
             }
 
-            // Wait for user response
+            // Wait for user response (60-second timeout for safety)
             try {
-                latch.await()
+                val responded = latch.await(60, java.util.concurrent.TimeUnit.SECONDS)
+                if (!responded) {
+                    Logger.w("TabTerminalActivity", "Host key changed dialog timed out - rejecting")
+                }
             } catch (e: InterruptedException) {
                 Logger.e("TabTerminalActivity", "Interrupted waiting for host key response", e)
             }
 
-            userAction ?: io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
+            userAction
         }
 
         Logger.i("TabTerminalActivity", "Host key verification callbacks set up")

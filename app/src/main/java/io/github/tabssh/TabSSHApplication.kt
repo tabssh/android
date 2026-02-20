@@ -103,6 +103,8 @@ class TabSSHApplication : Application() {
     private fun setupExceptionHandler() {
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            // Write crash synchronously — async executor won't flush before process dies
+            Logger.writeCrashSync(thread, throwable)
             Logger.e("TabSSHApplication", "Uncaught exception in thread ${thread.name}", throwable)
             
             // Clean up sensitive data on crash

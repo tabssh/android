@@ -65,7 +65,7 @@ class TabManager(private val maxTabs: Int = 10) {
                 activeTabIndex--
             }
 
-            Logger.d("TabManager", "Closed tab: ${tab.title}")
+            Logger.d("TabManager", "Closed tab: ${tab.title.value}")
             notifyTabClosed(tab, index)
         }
     }
@@ -79,7 +79,7 @@ class TabManager(private val maxTabs: Int = 10) {
             activeTabIndex = index
             val newTab = getActiveTab()
 
-            Logger.d("TabManager", "Switched to tab: ${newTab?.title}")
+            Logger.d("TabManager", "Switched to tab: ${newTab?.title?.value}")
             notifyActiveTabChanged(index)
         }
     }

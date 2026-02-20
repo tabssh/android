@@ -4,8 +4,6 @@ import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.*
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.IOException
 import java.security.cert.X509Certificate
@@ -363,7 +361,7 @@ class ProxmoxApiClient(
 
             if (data != null) {
                 val ticket = data.getString("ticket")
-                val port = data.getInt("port")
+                val vncPort = data.getInt("port")
 
                 val encodedTicket = java.net.URLEncoder.encode(ticket, "UTF-8")
                 val wsEndpoint = if (type == "lxc") {
@@ -371,13 +369,15 @@ class ProxmoxApiClient(
                 } else {
                     "/nodes/$node/qemu/$vmid/vncwebsocket"
                 }
-                val websocketUrl = "wss://$host:$port/api2/json$wsEndpoint?port=$port&vncticket=$encodedTicket"
+                // Use the API port (this.port, e.g. 8006) for the WebSocket outer connection,
+                // not the VNC port from the response (which is an internal Proxmox port)
+                val websocketUrl = "wss://$host:${this@ProxmoxApiClient.port}/api2/json$wsEndpoint?port=$vncPort&vncticket=$encodedTicket"
 
-                Logger.i("ProxmoxAPI", "Got vncproxy ticket for VM $vmid on port $port")
+                Logger.i("ProxmoxAPI", "Got vncproxy ticket for VM $vmid on port $vncPort")
 
                 TermProxyResult(
                     ticket = authTicket ?: "",
-                    port = port,
+                    port = vncPort,
                     websocketUrl = websocketUrl
                 )
             } else {
@@ -407,14 +407,17 @@ class ProxmoxApiClient(
         }
     }
 
-    private fun apiPost(endpoint: String, body: String = ""): JSONObject {
-        val requestBody = body.toRequestBody("application/json".toMediaType())
-        
+    private fun apiPost(endpoint: String, formParams: Map<String, String> = emptyMap()): JSONObject {
+        // Proxmox API expects application/x-www-form-urlencoded, not JSON
+        val formBody = FormBody.Builder().apply {
+            formParams.forEach { (k, v) -> add(k, v) }
+        }.build()
+
         val request = Request.Builder()
             .url("$baseUrl$endpoint")
             .addHeader("Cookie", "PVEAuthCookie=$authTicket")
             .addHeader("CSRFPreventionToken", csrfToken ?: "")
-            .post(requestBody)
+            .post(formBody)
             .build()
 
         val response = client.newCall(request).execute()
@@ -423,7 +426,8 @@ class ProxmoxApiClient(
         if (response.isSuccessful && responseBody != null) {
             return JSONObject(responseBody)
         } else {
-            throw IOException("API request failed: ${response.code}")
+            val errorDetail = responseBody?.take(200) ?: ""
+            throw IOException("API request failed: ${response.code} $errorDetail")
         }
     }
 }
