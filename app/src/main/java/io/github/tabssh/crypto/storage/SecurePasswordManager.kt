@@ -74,15 +74,17 @@ class SecurePasswordManager(private val context: Context) {
     
     fun initialize() {
         if (isInitialized) return
-        
+
         try {
             keyStore.load(null)
             Logger.d("SecurePasswordManager", "Initialized with Android Keystore")
-            isInitialized = true
         } catch (e: Exception) {
-            Logger.e("SecurePasswordManager", "Failed to initialize keystore", e)
-            throw SecurityException("Failed to initialize secure password manager", e)
+            // Keystore unavailable (e.g. corrupted, unsupported ROM) — degrade to session-only.
+            // Passwords will work for the current session but will not be persisted.
+            Logger.e("SecurePasswordManager", "Keystore unavailable, falling back to session-only storage", e)
+            defaultStorageLevel = StorageLevel.SESSION_ONLY
         }
+        isInitialized = true
     }
     
     /**

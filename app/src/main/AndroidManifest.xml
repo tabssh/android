@@ -308,6 +308,13 @@
                 android:resource="@xml/widget_4x4_info" />
         </receiver>
 
+        <!-- Crash reporter (debug builds only) -->
+        <activity
+            android:name=".ui.activities.CrashReportActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.TabSSH" />
+
     </application>
 
 </manifest>
