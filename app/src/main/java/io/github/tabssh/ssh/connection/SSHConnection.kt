@@ -458,43 +458,41 @@ class SSHConnection(
     private suspend fun setupAuthentication(jsch: JSch, session: Session) = withContext(Dispatchers.IO) {
         val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
 
-        // PRIORITY 1: Check for explicitly linked identity
+        // Load linked identity if set
         val linkedIdentity = try {
             if (profile.identityId != null) {
-                val identity = app?.database?.identityDao()?.getIdentityById(profile.identityId!!)
-                if (identity != null) {
-                    Logger.i("SSHConnection", "🔑 Using linked identity '${identity.name}' (${identity.authType})")
-                }
-                identity
-            } else {
-                null
-            }
+                app?.database?.identityDao()?.getIdentityById(profile.identityId!!)
+            } else null
         } catch (e: Exception) {
             Logger.w("SSHConnection", "Error loading linked identity", e)
             null
         }
 
-        if (linkedIdentity != null) {
-            Logger.d("SSHConnection", "Auth: Using explicitly linked identity '${linkedIdentity.name}'")
-            setupAuthFromIdentity(jsch, session, linkedIdentity)
+        // Gather available credentials — identity overrides connection-level values
+        val effectiveKeyId: String? = linkedIdentity?.keyId ?: profile.keyId
+        val effectivePassword: String? = linkedIdentity?.password ?: getPasswordForAuthentication()
+
+        // Priority 1: SSH key (if available and retrievable)
+        if (effectiveKeyId != null) {
+            val jschBytes = getJSchBytes(effectiveKeyId)
+            if (jschBytes != null) {
+                jsch.addIdentity(effectiveKeyId, jschBytes, null, null)
+                Logger.i("SSHConnection", "Auth: SSH key (keyId=$effectiveKeyId)")
+                return@withContext
+            }
+            Logger.w("SSHConnection", "Auth: key not found for keyId=$effectiveKeyId, falling back to password")
+        }
+
+        // Priority 2: Password (if stored)
+        if (effectivePassword != null) {
+            session.setPassword(effectivePassword)
+            Logger.i("SSHConnection", "Auth: password")
             return@withContext
         }
 
-        // PRIORITY 2: Use connection's own credentials if set
-        val connectionPassword = getPasswordForAuthentication()
-        val connectionKeyId = profile.keyId
-        val connectionAuthType = profile.getAuthTypeEnum()
-
-        if (connectionPassword != null || connectionKeyId != null) {
-            Logger.d("SSHConnection", "Auth: Using connection credentials (type: $connectionAuthType)")
-            setupAuthFromConnection(jsch, session, connectionAuthType, connectionPassword, connectionKeyId)
-            return@withContext
-        }
-
-        // PRIORITY 4: No credentials - let SSH negotiate
-        Logger.i("SSHConnection", "Auth: No credentials set, letting SSH negotiate authentication")
-        // JSch will try: publickey (if agent available), keyboard-interactive, password prompt
-        // The PreferredAuthentications config already sets the order
+        // Priority 3: Keyboard-interactive fallback
+        Logger.i("SSHConnection", "Auth: no credentials found, using keyboard-interactive")
+        // JSch will negotiate; host-key UserInfo is already set on the session — don't replace it here
     }
 
     /**

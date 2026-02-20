@@ -259,6 +259,7 @@
                                 android:id="@+id/switch_save_password"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
+                                android:checked="true"
                                 android:text="Save password securely"
                                 android:textColor="?android:attr/textColorPrimary"
                                 android:tooltipText="Encrypted with hardware-backed keystore" />
