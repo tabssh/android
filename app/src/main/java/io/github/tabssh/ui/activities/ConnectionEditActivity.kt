@@ -786,24 +786,54 @@ class ConnectionEditActivity : AppCompatActivity() {
         }
         
         lifecycleScope.launch {
+            binding.btnTest.isEnabled = false
+            binding.btnTest.text = "Testing..."
+
+            var tempProfileId: String? = null
+
             try {
-                binding.btnTest.isEnabled = false
-                binding.btnTest.text = "Testing..."
-                
                 val profile = createConnectionProfile()
-                val connection = app.sshSessionManager.connectToServer(profile)
-                
-                if (connection != null) {
-                    showToast("✅ Connection test successful!")
-                    connection.disconnect() // Close test connection
-                } else {
-                    showError("❌ Connection test failed", "Error")
+
+                // For new (unsaved) connections the password hasn't been stored yet.
+                // Temporarily store it as SESSION_ONLY so auth can find it, then delete it.
+                val authType = getSelectedAuthType()
+                if (!isEditMode &&
+                    (authType == io.github.tabssh.ssh.auth.AuthType.PASSWORD ||
+                     authType == io.github.tabssh.ssh.auth.AuthType.KEYBOARD_INTERACTIVE)) {
+                    val pw = binding.editPassword.text.toString()
+                    if (pw.isNotEmpty()) {
+                        app.securePasswordManager.storePassword(
+                            profile.id, pw,
+                            io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.SESSION_ONLY
+                        )
+                        tempProfileId = profile.id
+                    }
                 }
-                
+
+                // Create a direct SSHConnection — bypass SSHSessionManager to avoid
+                // side-effects (pool entries, foreground service, connection listeners).
+                val connection = io.github.tabssh.ssh.connection.SSHConnection(
+                    profile, lifecycleScope, this@ConnectionEditActivity
+                )
+                connection.hostKeyChangedCallback = app.sshSessionManager.hostKeyChangedCallback
+                connection.newHostKeyCallback = app.sshSessionManager.newHostKeyCallback
+
+                val success = connection.connect()
+                connection.disconnect()
+
+                if (success) {
+                    showToast("✅ Connection test successful!")
+                } else {
+                    val errorMsg = connection.errorMessage.value ?: "Connection test failed"
+                    showError(errorMsg, "Test Failed")
+                }
+
             } catch (e: Exception) {
                 Logger.e("ConnectionEditActivity", "Connection test failed", e)
-                showError("Connection test error: ${e.message}", "Error")
+                showError(e.message ?: "Unknown error", "Test Failed")
             } finally {
+                // Clean up any temp password that was stored only for this test
+                tempProfileId?.let { app.securePasswordManager.clearPassword(it) }
                 binding.btnTest.isEnabled = true
                 binding.btnTest.text = "Test"
             }

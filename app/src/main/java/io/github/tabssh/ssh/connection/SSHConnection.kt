@@ -470,7 +470,13 @@ class SSHConnection(
 
         // Gather available credentials — identity overrides connection-level values
         val effectiveKeyId: String? = linkedIdentity?.keyId ?: profile.keyId
-        val effectivePassword: String? = linkedIdentity?.password ?: getPasswordForAuthentication()
+
+        // Identity password: try SecurePasswordManager first, fall back to legacy plaintext in DB
+        val identityPassword: String? = if (linkedIdentity != null) {
+            app?.securePasswordManager?.retrievePassword("identity_${linkedIdentity.id}")
+                ?: linkedIdentity.password  // legacy plaintext fallback
+        } else null
+        val effectivePassword: String? = identityPassword ?: getPasswordForAuthentication()
 
         // Priority 1: SSH key (if available and retrievable)
         if (effectiveKeyId != null) {
@@ -495,109 +501,6 @@ class SSHConnection(
         // JSch will negotiate; host-key UserInfo is already set on the session — don't replace it here
     }
 
-    /**
-     * Setup authentication from a linked Identity
-     */
-    private suspend fun setupAuthFromIdentity(jsch: JSch, session: Session, identity: io.github.tabssh.storage.database.entities.Identity) {
-        when (identity.authType) {
-            AuthType.PASSWORD -> {
-                if (identity.password != null) {
-                    session.setPassword(identity.password)
-                    Logger.d("SSHConnection", "Password set from identity '${identity.name}'")
-                } else {
-                    throw SSHException("Identity '${identity.name}' has no password set")
-                }
-            }
-
-            AuthType.PUBLIC_KEY -> {
-                if (identity.keyId != null) {
-                    val jschBytes = getJSchBytes(identity.keyId!!)
-                    if (jschBytes != null) {
-                        jsch.addIdentity(identity.keyId!!, jschBytes, null, null)
-                        Logger.d("SSHConnection", "SSH key set from identity '${identity.name}'")
-                    } else {
-                        throw SSHException("Could not retrieve SSH key for identity '${identity.name}'")
-                    }
-                } else {
-                    throw SSHException("Identity '${identity.name}' has no SSH key set")
-                }
-            }
-
-            AuthType.KEYBOARD_INTERACTIVE -> {
-                Logger.d("SSHConnection", "Keyboard interactive from identity '${identity.name}'")
-                val password = identity.password
-                session.setUserInfo(object : com.jcraft.jsch.UserInfo {
-                    override fun getPassword(): String? = password
-                    override fun promptYesNo(str: String): Boolean = str.contains("continue", ignoreCase = true)
-                    override fun getPassphrase(): String? = null
-                    override fun promptPassphrase(message: String): Boolean = false
-                    override fun promptPassword(message: String): Boolean = true
-                    override fun showMessage(message: String) {
-                        Logger.i("SSHConnection", "Server message: $message")
-                    }
-                })
-            }
-
-            AuthType.GSSAPI -> {
-                Logger.w("SSHConnection", "GSSAPI not supported on Android")
-            }
-        }
-    }
-
-    /**
-     * Setup authentication from connection's own credentials
-     */
-    private suspend fun setupAuthFromConnection(
-        jsch: JSch,
-        session: Session,
-        authType: AuthType,
-        password: String?,
-        keyId: String?
-    ) {
-        when (authType) {
-            AuthType.PASSWORD -> {
-                if (password != null) {
-                    session.setPassword(password)
-                    Logger.d("SSHConnection", "Password set from connection")
-                } else {
-                    throw SSHException("No password available for authentication")
-                }
-            }
-
-            AuthType.PUBLIC_KEY -> {
-                if (keyId != null) {
-                    val jschBytes = getJSchBytes(keyId)
-                    if (jschBytes != null) {
-                        jsch.addIdentity(keyId, jschBytes, null, null)
-                        Logger.d("SSHConnection", "SSH key set from connection")
-                    } else {
-                        throw SSHException("Could not retrieve private key for authentication")
-                    }
-                } else {
-                    throw SSHException("No SSH key specified for public key authentication")
-                }
-            }
-
-            AuthType.KEYBOARD_INTERACTIVE -> {
-                Logger.d("SSHConnection", "Keyboard interactive authentication")
-                session.setUserInfo(object : com.jcraft.jsch.UserInfo {
-                    override fun getPassword(): String? = password
-                    override fun promptYesNo(str: String): Boolean = str.contains("continue", ignoreCase = true)
-                    override fun getPassphrase(): String? = null
-                    override fun promptPassphrase(message: String): Boolean = false
-                    override fun promptPassword(message: String): Boolean = true
-                    override fun showMessage(message: String) {
-                        Logger.i("SSHConnection", "Server message: $message")
-                    }
-                })
-            }
-
-            AuthType.GSSAPI -> {
-                Logger.w("SSHConnection", "GSSAPI not supported on Android")
-            }
-        }
-    }
-    
     /**
      * Get password for authentication from secure storage
      */
