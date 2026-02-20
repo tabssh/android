@@ -633,12 +633,8 @@ class SSHConnection(
                 }
             }
             
-            // For demo/testing purposes when no password is stored
-            val testPasswords = listOf("password", "123456", "admin", "root", "")
-            Logger.w("SSHConnection", "No stored password, trying common test passwords")
-            
-            // Return first test password for development/demo
-            testPasswords.firstOrNull()
+            Logger.d("SSHConnection", "No stored password found for ${profile.id}")
+            null
             
         } catch (e: Exception) {
             Logger.e("SSHConnection", "Error retrieving password", e)

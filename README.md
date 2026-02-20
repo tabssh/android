@@ -21,7 +21,7 @@
 - 📑 **Browser-Style Tabs** - Multiple concurrent SSH sessions with intuitive tab management
 - 🔐 **Multiple Authentication Methods** - Password, public key (RSA, ECDSA, Ed25519, DSA), keyboard-interactive
 - 🔑 **Universal SSH Key Support** - OpenSSH, PEM, PKCS#8, PuTTY formats with import/generation
-- 🖥️ **Full Terminal Emulation** - VT100/ANSI with 256 colors, proper escape sequences
+- 🖥️ **Full Terminal Emulation** - Termux TerminalEmulator (VT100/ANSI, 256 colors, vim/htop/tmux fully functional)
 - 📁 **Integrated SFTP Browser** - Beautiful file manager with upload/download progress
 - 🔌 **Port Forwarding** - Local and remote port forwarding support
 - 🖼️ **X11 Forwarding** - Run graphical applications remotely
@@ -61,12 +61,13 @@
 - ☁️ **Cloud Sync** - Google Drive + WebDAV (self-hosted) with encryption & 3-way merge
 - 📝 **Custom Fonts** - 8 monospace fonts: Cascadia Code, Fira Code, JetBrains Mono, and more
 - 🏠 **Home Screen Widgets** - Quick connect from home screen
-- 🌐 **Hypervisor Management** - Proxmox VE, VMware vSphere, XCP-ng, **Xen Orchestra** (NEW v1.0.0)
+- 🌐 **Hypervisor Management** - Proxmox VE, VMware vSphere, XCP-ng, **Xen Orchestra** (REST API + WebSocket)
   - **Xen Orchestra** - Full REST API + WebSocket ⚡ real-time updates
   - Toggle between XO and direct XCP-ng connections
   - VM management with live state changes
   - Snapshot & backup operations
   - Pool and host information
+- 🖥️ **VM Serial Console** - Connect to VMs via hypervisor serial console (no VM network required; works during OS install)
 - 🔗 **Identity Abstraction** - Reusable credentials across multiple connections
 - 📂 **Connection Groups** - Organize connections into folders with expand/collapse
 - 🔍 **Search & Sort** - Real-time search with 8 sort options (name, host, usage, date)
@@ -176,7 +177,7 @@ make logs
 **Option 2: Local Build**
 - Android SDK 34
 - JDK 17 (Temurin or OpenJDK)
-- Gradle 8.1.1+
+- Gradle 8.11.1+
 - 16GB RAM recommended
 
 ### Build Commands
@@ -447,7 +448,7 @@ TabSSH is built on the shoulders of giants:
 
 ## 📊 Stats
 
-- **95+ Kotlin files** - ~22,000 lines of code
+- **164 Kotlin files** - ~49,000 lines of code
 - **100+ XML resources** - Layouts, themes, strings, translations
 - **10+ built-in themes** - Professional color schemes
 - **4 languages** - English, Spanish, French, German

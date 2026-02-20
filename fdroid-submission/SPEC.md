@@ -49,57 +49,59 @@ TabSSH is a modern, open-source SSH client for Android that provides a true tabb
 - All features included (no premium version)
 - Complete open source transparency
 - Enterprise-grade security on mobile
+- Hypervisor management: Proxmox VE, XCP-ng, Xen Orchestra (REST + WebSocket), VMware
+- VM serial console access via hypervisor API (no VM network required)
+- Full terminal emulation via Termux TerminalEmulator (vim, htop, tmux work correctly)
+- Cloud sync: Google Drive + WebDAV with AES-256-GCM encryption and 3-way merge
+- Degoogled device support (WebDAV fallback, zero Google Play dependency)
 
 ---
 
 ## 2. Architecture
 
 ### 2.1 Project Structure
+
+**Language:** Kotlin (not Java). All source files are `.kt`.
+
 ```
 app/src/main/java/io/github/tabssh/
 ├── ui/                     # User interface components
-│   ├── activities/         # Main activities
-│   ├── fragments/          # Fragments and dialogs
-│   ├── adapters/          # RecyclerView adapters
-│   ├── views/             # Custom views
-│   └── utils/             # UI utilities
-├── ssh/                   # SSH connectivity and protocols
-│   ├── connection/        # Connection management
-│   ├── auth/              # Authentication handlers
-│   ├── config/            # SSH config parsing
-│   └── protocols/         # SSH, SFTP, tunneling
-├── terminal/              # Terminal emulation
-│   ├── emulator/          # VT100/ANSI emulation
-│   ├── renderer/          # Text rendering
-│   └── input/             # Input handling
-├── crypto/                # Cryptography and key management
-│   ├── keys/              # SSH key handling
-│   ├── storage/           # Secure storage
-│   └── algorithms/        # Crypto utilities
-├── storage/               # Data persistence
-│   ├── database/          # SQLite database
-│   ├── preferences/       # SharedPreferences wrapper
-│   └── files/             # File management
-├── themes/                # Theme system
-│   ├── definitions/       # Theme definitions
-│   ├── parser/            # Theme parsing
-│   └── validator/         # Accessibility validation
-├── accessibility/         # Accessibility features
-│   ├── talkback/          # Screen reader support
-│   ├── contrast/          # High contrast mode
-│   └── navigation/        # Keyboard navigation
-├── network/               # Network utilities
-│   ├── proxy/             # Proxy support
-│   ├── detection/         # Network state
-│   └── security/          # Certificate handling
-├── backup/                # Backup and restore
-│   ├── export/            # Data export
-│   ├── import/            # Data import
-│   └── validation/        # Backup validation
-└── utils/                 # Common utilities
-    ├── logging/           # Logging system
-    ├── performance/       # Performance monitoring
-    └── helpers/           # Helper classes
+│   ├── activities/         # Activities (MainActivity, TabTerminalActivity, ConnectionEditActivity, etc.)
+│   ├── fragments/          # Fragments (ConnectionsFragment, SyncSettingsFragment, etc.)
+│   ├── adapters/           # RecyclerView adapters
+│   ├── views/              # Custom views (TerminalView, PerformanceOverlayView, etc.)
+│   └── tabs/               # Tab management (TabManager, SSHTab)
+├── ssh/                    # SSH connectivity
+│   ├── connection/         # SSHConnection, SSHSessionManager, HostKeyVerifier
+│   ├── forwarding/         # Port forwarding
+│   └── config/             # SSH config parsing
+├── terminal/               # Terminal emulation
+│   ├── TermuxBridge.kt     # Bridge to Termux TerminalEmulator (SSH streams ↔ emulator)
+│   ├── recording/          # SessionRecorder, TranscriptManager
+│   └── gestures/           # TerminalGestureHandler, GestureCommandMapper
+├── crypto/                 # Cryptography and key management
+│   ├── keys/               # KeyStorage, SSHKeyParser, SSHKeyGenerator
+│   └── storage/            # SecurePasswordManager
+├── storage/                # Data persistence
+│   ├── database/           # Room database (v16), DAOs, entities
+│   └── preferences/        # PreferencesManager
+├── sync/                   # Cloud sync
+│   ├── GoogleDriveSyncManager.kt
+│   ├── WebDAVSyncExecutor.kt
+│   ├── UnifiedSyncManager.kt
+│   └── MergeEngine.kt      # 3-way merge algorithm
+├── hypervisor/             # Hypervisor management
+│   ├── proxmox/            # Proxmox VE REST API client + manager activity
+│   ├── xcpng/              # XCP-ng XML-RPC + Xen Orchestra REST/WebSocket
+│   └── vmware/             # VMware vSphere
+├── sftp/                   # SFTP file browser
+├── themes/                 # Theme system (parser, validator, definitions)
+├── accessibility/          # TalkBack, high contrast, keyboard navigation
+├── network/                # Proxy, network detection, security
+├── backup/                 # Export/import/validation
+├── automation/             # Tasker integration, intent service
+├── widgets/                # Android home screen widgets
+└── utils/                  # Logging, performance, NotificationHelper, etc.
 ```
 
 ### 2.2 Core Architecture Patterns
@@ -351,46 +353,27 @@ public class SSHConfigParser {
 
 ### 4.2 Terminal Emulation
 
-#### 4.2.1 VT100/ANSI Support
-```java
-public class TerminalEmulator {
-    // Terminal capabilities
-    private static final String[] SUPPORTED_SEQUENCES = {
-        // Cursor movement
-        "CSI n A",      // Cursor up
-        "CSI n B",      // Cursor down  
-        "CSI n C",      // Cursor forward
-        "CSI n D",      // Cursor back
-        "CSI n ; m H",  // Cursor position
-        
-        // Text formatting
-        "CSI 0 m",      // Reset
-        "CSI 1 m",      // Bold
-        "CSI 4 m",      // Underline
-        "CSI 7 m",      // Reverse
-        "CSI 30-37 m",  // Foreground colors
-        "CSI 40-47 m",  // Background colors
-        "CSI 90-97 m",  // Bright foreground
-        "CSI 100-107 m", // Bright background
-        
-        // Screen operations
-        "CSI 2 J",      // Clear screen
-        "CSI K",        // Clear line
-        "CSI n L",      // Insert lines
-        "CSI n M",      // Delete lines
-        
-        // Advanced features
-        "OSC 0 ; text ST", // Set window title
-        "CSI ? 25 h/l",    // Show/hide cursor
-        "CSI ? 1049 h/l",  // Alternate screen
-    };
-    
-    // Terminal size
-    public static final int DEFAULT_ROWS = 24;
-    public static final int DEFAULT_COLS = 80;
-    public static final int MAX_SCROLLBACK = 10000;
-}
-```
+#### 4.2.1 Terminal Emulation Engine
+
+**Implementation:** Termux TerminalEmulator (MIT licensed, from termux/termux-app)
+
+TabSSH uses the Termux `TerminalEmulator` engine via `TermuxBridge.kt`. This provides full VT100/ANSI emulation — vim, nano, htop, tmux, and all terminal applications work correctly.
+
+**Architecture:**
+- `TermuxBridge` — bridges SSH I/O streams to the Termux emulator
+  - Implements `TerminalOutput` (user keystrokes → SSH channel)
+  - Implements `TerminalSessionClient` (emulator state changes → TerminalView repaint)
+- `TerminalView` — custom Android View that renders the emulator's `TerminalBuffer`
+  - 256-color support (ANSI + xterm-256color palette)
+  - Variable font size (8–32sp), adjusted via Settings or volume keys
+  - Long-press URL detection (http/https/www)
+
+**Supported Terminal Sequences:**
+- Cursor movement (CSI A/B/C/D/H)
+- SGR formatting: bold, underline, reverse, 8/16/256 colors
+- Screen operations: clear screen (2J), clear line (K), insert/delete lines
+- OSC 0 (window title), alternate screen (1049h/l), show/hide cursor (25h/l)
+- Mouse reporting (xterm protocol), bracketed paste
 
 #### 4.2.2 Text Rendering Engine
 ```java
@@ -1179,220 +1162,232 @@ public class ConnectionPreferences extends BasePreferences {
 
 #### 8.1.1 Core Libraries
 ```gradle
-// build.gradle (app)
+// build.gradle (app) — actual current dependencies
 dependencies {
     // Android Support
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'androidx.core:core-ktx:1.12.0'
-    implementation 'androidx.fragment:fragment:1.6.2'
+    implementation 'androidx.fragment:fragment-ktx:1.6.2'
     implementation 'androidx.recyclerview:recyclerview:1.3.2'
     implementation 'androidx.viewpager2:viewpager2:1.0.0'
-    implementation 'androidx.preference:preference:1.2.1'
-    
+    implementation 'androidx.preference:preference-ktx:1.2.1'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0'
+    implementation 'androidx.lifecycle:lifecycle-livedata-ktx:2.7.0'
+    implementation 'androidx.work:work-runtime-ktx:2.9.0'
+
     // Material Design
     implementation 'com.google.android.material:material:1.11.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
-    
-    // SSH Implementation
-    implementation 'com.jcraft:jsch:0.1.55'
-    
+
+    // SSH Implementation — maintained fork with OpenSSH 8.8+ support
+    // Replaces unmaintained com.jcraft:jsch:0.1.55
+    implementation 'com.github.mwiede:jsch:2.27.7'
+
+    // Cryptography
+    implementation 'org.bouncycastle:bcpkix-jdk18on:1.77'
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.77'
+
     // Security
     implementation 'androidx.biometric:biometric:1.1.0'
     implementation 'androidx.security:security-crypto:1.1.0-alpha06'
-    
-    // Database
+    implementation 'com.google.code.findbugs:jsr305:3.0.2'  // required for Tink/R8
+
+    // Database (Room)
     implementation 'androidx.room:room-runtime:2.6.1'
+    implementation 'androidx.room:room-ktx:2.6.1'
     kapt 'androidx.room:room-compiler:2.6.1'
-    
+
+    // Terminal Emulation — Termux engine (MIT), full VT100/ANSI/256-color
+    implementation('com.github.termux.termux-app:terminal-emulator:v0.118.1')
+
+    // Cloud Sync
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'  // WebDAV HTTP client
+
+    // Charts (performance monitor)
+    implementation 'com.github.PhilJay:MPAndroidChart:v3.1.0'
+
+    // Serialization
+    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0'
+    implementation 'com.google.code.gson:gson:2.10.1'
+
+    // Async
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+
     // File operations
     implementation 'androidx.documentfile:documentfile:1.0.1'
-    
+
     // Testing
     testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.mockito:mockito-core:5.7.0'
+    testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
-    androidTestImplementation 'androidx.test:runner:1.5.2'
-    androidTestImplementation 'androidx.test:rules:1.5.0'
 }
 ```
 
 #### 8.1.2 Build Configuration
 ```gradle
-// build.gradle (app)
+// build.gradle (app) — actual values
 android {
     compileSdk 34
-    
+
     defaultConfig {
         applicationId "io.github.tabssh"
-        minSdk 21  // Android 5.0 (covers 99%+ of devices)
+        minSdk 21       // Android 5.0 (covers 99%+ of devices)
         targetSdk 34
-        versionCode 1
+        versionCode 3
         versionName "1.0.0"
-        
+
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        
-        // Enable vector drawables
         vectorDrawables.useSupportLibrary = true
-        
-        // Proguard configuration
-        proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
     }
-    
+
     buildTypes {
         debug {
-            applicationIdSuffix ".debug"
+            // Note: applicationIdSuffix is intentionally disabled so debug APK
+            // installs over release APK (same package name for consistent signing)
             debuggable true
             minifyEnabled false
+            buildConfigField "boolean", "DEBUG_MODE", "true"
         }
-        
+
         release {
             minifyEnabled true
             shrinkResources true
             debuggable false
-            
-            // Signing config for F-Droid reproducible builds
+            buildConfigField "boolean", "DEBUG_MODE", "false"
             signingConfig signingConfigs.release
         }
     }
-    
+
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_11
-        targetCompatibility JavaVersion.VERSION_11
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
-    
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
     buildFeatures {
         viewBinding true
         buildConfig true
     }
-    
-    // Lint configuration
-    lintOptions {
-        abortOnError false
-        checkReleaseBuilds false
-        disable 'InvalidPackage'
-    }
 }
 ```
+
+**Tool versions:**
+- Kotlin: 2.0.21
+- Android Gradle Plugin: 8.7.3
+- Gradle wrapper: 8.11.1
+- Docker base image: eclipse-temurin:17-jdk
 
 ### 8.2 Database Schema
 
 #### 8.2.1 Room Database
-```java
+```kotlin
+// Actual Kotlin implementation
 @Database(
-    entities = {
-        ConnectionProfile.class,
-        StoredKey.class,
-        HostKeyEntry.class,
-        TabSession.class,
-        ThemeDefinition.class
-    },
-    version = 1,
-    exportSchema = false
+    entities = [
+        ConnectionProfile::class,
+        StoredKey::class,
+        HostKeyEntry::class,
+        TabSession::class,
+        ThemeDefinition::class,
+        TrustedCertificate::class,
+        SyncState::class,
+        ConnectionGroup::class,
+        Snippet::class,
+        Identity::class,
+        AuditLogEntry::class,
+        HypervisorProfile::class
+    ],
+    version = 16,
+    exportSchema = true
 )
-@TypeConverters({Converters.class})
-public abstract class TabSSHDatabase extends RoomDatabase {
-    
-    public abstract ConnectionDao connectionDao();
-    public abstract KeyDao keyDao();
-    public abstract HostKeyDao hostKeyDao();
-    public abstract TabSessionDao tabSessionDao();
-    public abstract ThemeDao themeDao();
-    
-    private static volatile TabSSHDatabase INSTANCE;
-    
-    public static TabSSHDatabase getDatabase(final Context context) {
-        if (INSTANCE == null) {
-            synchronized (TabSSHDatabase.class) {
-                if (INSTANCE == null) {
-                    INSTANCE = Room.databaseBuilder(
-                        context.getApplicationContext(),
-                        TabSSHDatabase.class,
-                        "tabssh_database"
-                    ).build();
-                }
+@TypeConverters(Converters::class)
+abstract class TabSSHDatabase : RoomDatabase() {
+
+    abstract fun connectionDao(): ConnectionDao
+    abstract fun keyDao(): KeyDao
+    abstract fun hostKeyDao(): HostKeyDao
+    abstract fun tabSessionDao(): TabSessionDao
+    abstract fun themeDao(): ThemeDao
+    abstract fun syncStateDao(): SyncStateDao
+    abstract fun connectionGroupDao(): ConnectionGroupDao
+    abstract fun snippetDao(): SnippetDao
+    abstract fun identityDao(): IdentityDao
+    abstract fun auditLogDao(): AuditLogDao
+    abstract fun hypervisorDao(): HypervisorDao
+
+    companion object {
+        @Volatile private var INSTANCE: TabSSHDatabase? = null
+
+        fun getDatabase(context: Context): TabSSHDatabase {
+            return INSTANCE ?: synchronized(this) {
+                Room.databaseBuilder(
+                    context.applicationContext,
+                    TabSSHDatabase::class.java,
+                    "tabssh_database"
+                ).addMigrations(*ALL_MIGRATIONS).build().also { INSTANCE = it }
             }
         }
-        return INSTANCE;
     }
 }
 ```
 
-#### 8.2.2 Entity Definitions
-```java
-@Entity(tableName = "connections")
-public class ConnectionProfile {
-    @PrimaryKey
-    @NonNull
-    public String id;
-    
-    @ColumnInfo(name = "name")
-    public String name;
-    
-    @ColumnInfo(name = "host")
-    public String host;
-    
-    @ColumnInfo(name = "port")
-    public int port;
-    
-    @ColumnInfo(name = "username")
-    public String username;
-    
-    @ColumnInfo(name = "auth_type")
-    public String authType;
-    
-    @ColumnInfo(name = "key_id")
-    public String keyId;
-    
-    @ColumnInfo(name = "group_id")
-    public String groupId;
-    
-    @ColumnInfo(name = "theme")
-    public String theme;
-    
-    @ColumnInfo(name = "created_at")
-    public long createdAt;
-    
-    @ColumnInfo(name = "last_connected")
-    public long lastConnected;
-    
-    @ColumnInfo(name = "connection_count")
-    public int connectionCount;
-    
-    // Advanced settings stored as JSON
-    @ColumnInfo(name = "advanced_settings")
-    public String advancedSettings;
-}
+**Database migration history:** v1 → v2 (sync fields) → … → v16 (current)
 
-@Entity(tableName = "stored_keys")
-public class StoredKey {
-    @PrimaryKey
-    @NonNull
-    public String keyId;
-    
-    @ColumnInfo(name = "name")
-    public String name;
-    
-    @ColumnInfo(name = "key_type")
-    public String keyType;
-    
-    @ColumnInfo(name = "comment")
-    public String comment;
-    
-    @ColumnInfo(name = "fingerprint")
-    public String fingerprint;
-    
-    @ColumnInfo(name = "created_at")
-    public long createdAt;
-    
-    @ColumnInfo(name = "last_used")
-    public long lastUsed;
-    
-    @ColumnInfo(name = "requires_passphrase")
-    public boolean requiresPassphrase;
-    
-    // Encrypted key data stored separately in secure storage
-}
-```
+#### 8.2.2 Entity Definitions (Key Tables)
+
+The following summarises the primary tables. All entities are Kotlin data classes with Room annotations.
+
+**connections** — SSH connection profiles
+- id (PK), name, host, port, username, auth_type, key_id, group_id, theme
+- created_at, last_connected, connection_count
+- terminal_type, compression, keep_alive, x11_forwarding, use_mosh
+- proxy_type, proxy_host, proxy_port, proxy_username, proxy_auth_type, proxy_key_id
+- save_password, identity_id, multiplexer_mode, multiplexer_session_name
+- lastSyncedAt, syncVersion, modifiedAt, syncDeviceId (sync metadata)
+
+**stored_keys** — SSH private keys (encrypted in SharedPreferences via Android Keystore)
+- keyId (PK), name, key_type (RSA/ECDSA/Ed25519/DSA), comment, fingerprint
+- created_at, last_used, requires_passphrase, key_size
+- Private key bytes are AES-256-GCM encrypted in SharedPreferences; keyId is the lookup key
+
+**host_keys** — Known SSH host keys (replaces ~/.ssh/known_hosts)
+- id (PK = "hostname:port"), hostname, port, key_type, public_key (base64), fingerprint (SHA256)
+- first_seen, last_verified, trust_level
+
+**hypervisors** — Hypervisor connection profiles
+- id (PK), name, host, port, username, api_type (PROXMOX/XCPNG/VMWARE)
+- is_xen_orchestra (toggle: use Xen Orchestra REST API vs direct XCP-ng XML-RPC)
+- auth_token, created_at, last_connected
+
+**connection_groups** — Folders for organizing connections
+- id (PK), name, color, icon, is_expanded, sort_order, created_at
+
+**snippets** — Reusable command snippets
+- id (PK), name, command, description, category, tags, usage_count, created_at
+
+**identities** — Reusable credential profiles
+- id (PK), name, username, auth_type, key_id, created_at
+
+**sync_state** — Cloud sync tracking
+- id (PK), device_id, last_sync_time, sync_backend, status
+
+**audit_log** — Security audit trail
+- id (PK), timestamp, event_type, connection_id, details
+
+**tab_sessions** — Tab state persistence for resume-on-restart
+- sessionId (PK), tabId, connectionId, tabOrder, isActive
+- terminalRows, terminalCols, terminalContent, cursorRow, cursorCol
+- title, lastActivity, createdAt, environmentVars, workingDirectory
+
+**themes** — Custom terminal theme definitions
+- id (PK), name, author, version, background, foreground, cursor, 16 ANSI colors
+- is_built_in, is_active, created_at
+
 
 ### 8.3 Performance Optimizations
 

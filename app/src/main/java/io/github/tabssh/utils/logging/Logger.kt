@@ -93,6 +93,27 @@ object Logger {
         }
     }
     
+    /**
+     * Write a crash report synchronously so it is flushed before the process dies.
+     * Must be called from the UncaughtExceptionHandler — do NOT use the executor here.
+     */
+    fun writeCrashSync(thread: Thread, throwable: Throwable) {
+        val file = logFile ?: return
+        try {
+            if (file.exists() && file.length() > MAX_LOG_SIZE) {
+                file.renameTo(File(file.parentFile, "$LOG_FILE_NAME.old"))
+            }
+            FileWriter(file, true).use { writer ->
+                val timestamp = dateFormat.format(Date())
+                writer.append("$timestamp WTF/$TAG_PREFIX:CRASH: Uncaught exception in thread '${thread.name}'\n")
+                writer.append(Log.getStackTraceString(throwable))
+                writer.append("\n")
+            }
+        } catch (e: Exception) {
+            Log.e("$TAG_PREFIX:Logger", "Failed to write crash to log file", e)
+        }
+    }
+
     fun getLogFile(): File? = logFile
     
     fun clearLogs() {
