@@ -31,6 +31,8 @@ import io.github.tabssh.ui.tabs.TabManagerListener
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.launch
 import io.github.tabssh.utils.showError
+import io.github.tabssh.ssh.auth.AuthType
+import io.github.tabssh.crypto.storage.SecurePasswordManager
 
 /**
  * Main terminal activity with tabbed SSH sessions
@@ -854,7 +856,27 @@ class TabTerminalActivity : AppCompatActivity() {
             runOnUiThread {
                 android.widget.Toast.makeText(this, "Connecting to ${profile.name}...", android.widget.Toast.LENGTH_SHORT).show()
             }
-            
+
+            // If no stored credentials and auth is keyboard-interactive, prompt for password first
+            val authType = AuthType.fromString(profile.authType)
+            val hasStoredPassword = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                app.securePasswordManager.retrievePassword(profile.id) != null
+            }
+            if (authType == AuthType.KEYBOARD_INTERACTIVE && !hasStoredPassword && profile.keyId == null) {
+                val enteredPassword = promptForPassword(
+                    "Password required for ${profile.username}@${profile.host}"
+                )
+                if (enteredPassword == null) {
+                    Logger.i("TabTerminalActivity", "User cancelled password prompt")
+                    return
+                }
+                withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    app.securePasswordManager.storePassword(
+                        profile.id, enteredPassword, SecurePasswordManager.StorageLevel.SESSION_ONLY
+                    )
+                }
+            }
+
             // Create SSH connection
             Logger.d("TabTerminalActivity", "Creating SSH connection via SSHSessionManager")
             val sshConnection = app.sshSessionManager.connectToServer(profile)
@@ -1687,6 +1709,38 @@ class TabTerminalActivity : AppCompatActivity() {
     private fun showToast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
+
+    /**
+     * Show a password prompt dialog and suspend until the user responds.
+     * Returns the entered password, or null if the user cancelled.
+     */
+    private suspend fun promptForPassword(message: String): String? =
+        kotlinx.coroutines.suspendCancellableCoroutine { cont ->
+            val editText = android.widget.EditText(this).apply {
+                inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                    android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+                hint = "Password"
+            }
+            val padding = (16 * resources.displayMetrics.density).toInt()
+            val container = android.widget.FrameLayout(this).apply {
+                setPadding(padding, 0, padding, 0)
+                addView(editText)
+            }
+            val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Authentication Required")
+                .setMessage(message)
+                .setView(container)
+                .setPositiveButton("Connect") { _, _ ->
+                    if (cont.isActive) cont.resume(editText.text.toString()) {}
+                }
+                .setNegativeButton("Cancel") { _, _ ->
+                    if (cont.isActive) cont.resume(null) {}
+                }
+                .setCancelable(false)
+                .create()
+            cont.invokeOnCancellation { dialog.dismiss() }
+            dialog.show()
+        }
     
     override fun onResume() {
         super.onResume()
