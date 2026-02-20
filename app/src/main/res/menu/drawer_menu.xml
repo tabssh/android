@@ -3,7 +3,12 @@
     
     <!-- Main Actions -->
     <group android:checkableBehavior="single">
-        
+
+        <item
+            android:id="@+id/nav_quick_connect"
+            android:icon="@android:drawable/ic_menu_send"
+            android:title="Quick Connect" />
+
         <item
             android:id="@+id/nav_connections"
             android:icon="@drawable/ic_computer"

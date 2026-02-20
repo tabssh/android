@@ -22,11 +22,14 @@ import javax.crypto.spec.GCMParameterSpec
 
 // BouncyCastle imports for comprehensive PEM parsing
 import org.bouncycastle.asn1.pkcs.PrivateKeyInfo
+import org.bouncycastle.asn1.ASN1OctetString
+import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.bouncycastle.openssl.PEMParser
 import org.bouncycastle.openssl.PEMKeyPair
 import org.bouncycastle.openssl.PEMEncryptedKeyPair
 import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter
+import org.bouncycastle.openssl.jcajce.JcaPEMWriter
 import org.bouncycastle.openssl.jcajce.JcePEMDecryptorProviderBuilder
 import org.bouncycastle.pkcs.PKCS8EncryptedPrivateKeyInfo
 import org.bouncycastle.pkcs.jcajce.JcePKCSPBEInputDecryptorProviderBuilder
@@ -45,6 +48,9 @@ class KeyStorage(private val context: Context) {
         private const val SHARED_PREFS_NAME = "tabssh_key_storage"
         private const val PREF_ENCRYPTED_KEY_PREFIX = "encrypted_key_"
         private const val PREF_KEY_IV_PREFIX = "key_iv_"
+        // JSch-native representation stored alongside PKCS#8 DER
+        private const val PREF_JSCH_BYTES_PREFIX = "jsch_bytes_"
+        private const val PREF_JSCH_IV_PREFIX = "jsch_iv_"
         
         // Supported key formats for import
         private val OPENSSH_PRIVATE_HEADER = "-----BEGIN OPENSSH PRIVATE KEY-----"
@@ -255,6 +261,13 @@ class KeyStorage(private val context: Context) {
                     )
                     
                     if (keyId != null) {
+                        // Store JSch-native bytes so connect-time has the right format
+                        try {
+                            val jschBytes = toJSchKeyBytes(parseResult.keyPair.private, parseResult.keyPair.public, keyType)
+                            storeJSchBytes(keyId, jschBytes)
+                        } catch (e: Exception) {
+                            Logger.w("KeyStorage", "Could not store JSch bytes for $keyId (non-fatal)", e)
+                        }
                         Logger.i("KeyStorage", "Imported $keyType key: $keyName")
                         ImportResult.Success(keyId, parseResult.keyPair, fingerprint)
                     } else {
@@ -392,7 +405,123 @@ class KeyStorage(private val context: Context) {
     suspend fun listStoredKeys(): List<StoredKey> = withContext(Dispatchers.IO) {
         return@withContext database.keyDao().getAllKeys().first()
     }
-    
+
+    // -------------------------------------------------------------------------
+    // JSch-native byte storage – format that JSch can ALWAYS parse directly
+    // -------------------------------------------------------------------------
+
+    /**
+     * Convert a parsed key pair to bytes in the format JSch accepts for every key type:
+     *   Ed25519  → OpenSSH binary format  (-----BEGIN OPENSSH PRIVATE KEY-----)
+     *   RSA      → PKCS#1 PEM             (-----BEGIN RSA PRIVATE KEY-----)
+     *   ECDSA    → SEC1/EC PEM            (-----BEGIN EC PRIVATE KEY-----)
+     *   DSA      → Traditional DSA PEM    (-----BEGIN DSA PRIVATE KEY-----)
+     *
+     * JSch cannot parse PKCS#8 PEM for Ed25519 (its KeyPair.load() requires
+     * OpenSSH format for that algorithm).  For the others, JcaPEMWriter writes
+     * the canonical traditional PEM that JSch has always supported.
+     */
+    fun toJSchKeyBytes(privateKey: PrivateKey, publicKey: PublicKey, keyType: KeyType): ByteArray {
+        return when (keyType) {
+            KeyType.ED25519 -> {
+                val pkInfo = PrivateKeyInfo.getInstance(privateKey.encoded)
+                val seed   = (pkInfo.parsePrivateKey() as ASN1OctetString).octets // 32 bytes
+                val spki   = SubjectPublicKeyInfo.getInstance(publicKey.encoded)
+                val pubPt  = spki.publicKeyData.bytes // 32 bytes
+                buildOpenSSHEd25519(seed, pubPt)
+            }
+            else -> {
+                // JcaPEMWriter with BouncyCastle writes type-specific PEM:
+                // RSA  → -----BEGIN RSA PRIVATE KEY-----
+                // EC   → -----BEGIN EC PRIVATE KEY-----
+                // DSA  → -----BEGIN DSA PRIVATE KEY-----
+                val sw = StringWriter()
+                JcaPEMWriter(sw).use { it.writeObject(privateKey) }
+                sw.toString().toByteArray(Charsets.US_ASCII)
+            }
+        }
+    }
+
+    /**
+     * Build an unencrypted OpenSSH v1 private key file for an Ed25519 key.
+     * seed   = 32-byte private seed
+     * pubPt  = 32-byte public key point
+     */
+    private fun buildOpenSSHEd25519(seed: ByteArray, pubPt: ByteArray): ByteArray {
+        require(seed.size == 32)  { "Ed25519 seed must be 32 bytes, got ${seed.size}" }
+        require(pubPt.size == 32) { "Ed25519 pub must be 32 bytes, got ${pubPt.size}" }
+
+        fun u32(v: Int) = byteArrayOf(
+            (v ushr 24).toByte(), (v ushr 16).toByte(), (v ushr 8).toByte(), v.toByte()
+        )
+        fun sshStr(s: String): ByteArray { val b = s.toByteArray(Charsets.UTF_8); return u32(b.size) + b }
+        fun sshBytes(b: ByteArray): ByteArray = u32(b.size) + b
+
+        // Public-key blob: ssh-ed25519 || pubPt
+        val pubBlob = sshStr("ssh-ed25519") + sshBytes(pubPt)
+
+        // Private section (no encryption → cipher=none, block_size=8)
+        val checkInt = (System.nanoTime() and 0xFFFFFFFFL).toInt()
+        var priv = u32(checkInt) + u32(checkInt)     // check1 + check2
+        priv += sshStr("ssh-ed25519") + sshBytes(pubPt) + sshBytes(seed + pubPt) + sshStr("")
+        // Padding: 0x01 0x02 … until length % 8 == 0
+        var pad = 1; while (priv.size % 8 != 0) { priv += byteArrayOf(pad++.toByte()) }
+
+        // Assemble the file
+        var out = "openssh-key-v1\u0000".toByteArray(Charsets.US_ASCII)
+        out += sshStr("none") + sshStr("none") + u32(0) // cipher / kdf / kdf_options
+        out += u32(1)                                    // number of keys
+        out += sshBytes(pubBlob)
+        out += sshBytes(priv)
+
+        val b64 = android.util.Base64.encodeToString(out, android.util.Base64.NO_WRAP)
+        val wrapped = b64.chunked(70).joinToString("\n")
+        return "-----BEGIN OPENSSH PRIVATE KEY-----\n$wrapped\n-----END OPENSSH PRIVATE KEY-----"
+            .toByteArray(Charsets.US_ASCII)
+    }
+
+    /**
+     * Encrypt and store JSch-native bytes.  Reuses the same AES-GCM keystore key
+     * already created by storePrivateKey() for this keyId.
+     */
+    internal fun storeJSchBytes(keyId: String, jschBytes: ByteArray) {
+        try {
+            val encKey = keyStore.getKey("$KEY_ENCRYPTION_ALIAS_PREFIX$keyId", null) as? SecretKey
+                ?: run { Logger.w("KeyStorage", "No keystore entry for $keyId – skipping JSch bytes"); return }
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            cipher.init(Cipher.ENCRYPT_MODE, encKey)
+            val encrypted = cipher.doFinal(jschBytes)
+            sharedPrefs.edit()
+                .putString("$PREF_JSCH_BYTES_PREFIX$keyId",
+                    android.util.Base64.encodeToString(encrypted, android.util.Base64.NO_WRAP))
+                .putString("$PREF_JSCH_IV_PREFIX$keyId",
+                    android.util.Base64.encodeToString(cipher.iv, android.util.Base64.NO_WRAP))
+                .apply()
+        } catch (e: Exception) {
+            Logger.e("KeyStorage", "Failed to store JSch bytes for $keyId", e)
+        }
+    }
+
+    /**
+     * Retrieve JSch-native bytes for use with JSch.addIdentity().
+     * Returns null if not yet stored (keys imported before this version).
+     */
+    fun retrieveJSchBytes(keyId: String): ByteArray? {
+        return try {
+            val encData = sharedPrefs.getString("$PREF_JSCH_BYTES_PREFIX$keyId", null) ?: return null
+            val ivData  = sharedPrefs.getString("$PREF_JSCH_IV_PREFIX$keyId",    null) ?: return null
+            val encKey  = keyStore.getKey("$KEY_ENCRYPTION_ALIAS_PREFIX$keyId", null) as? SecretKey ?: return null
+            val cipher  = Cipher.getInstance(TRANSFORMATION)
+            cipher.init(Cipher.DECRYPT_MODE, encKey, GCMParameterSpec(128, android.util.Base64.decode(ivData, android.util.Base64.NO_WRAP)))
+            cipher.doFinal(android.util.Base64.decode(encData, android.util.Base64.NO_WRAP))
+        } catch (e: Exception) {
+            Logger.e("KeyStorage", "Failed to retrieve JSch bytes for $keyId", e)
+            null
+        }
+    }
+
+    // -------------------------------------------------------------------------
+
     /**
      * Delete a stored key
      */
@@ -405,6 +534,8 @@ class KeyStorage(private val context: Context) {
             val editor = sharedPrefs.edit()
             editor.remove("$PREF_ENCRYPTED_KEY_PREFIX$keyId")
             editor.remove("$PREF_KEY_IV_PREFIX$keyId")
+            editor.remove("$PREF_JSCH_BYTES_PREFIX$keyId")
+            editor.remove("$PREF_JSCH_IV_PREFIX$keyId")
             editor.apply()
             
             // Remove encryption key from keystore
@@ -704,7 +835,7 @@ Error: ${e.javaClass.simpleName}: ${e.message}"""
         return keyFactory.generatePrivate(keySpec)
     }
     
-    private fun getPublicKeyFromPrivate(privateKey: PrivateKey): PublicKey {
+    internal fun getPublicKeyFromPrivate(privateKey: PrivateKey): PublicKey {
         return when (privateKey) {
             is RSAPrivateCrtKey -> {
                 val keySpec = RSAPublicKeySpec(privateKey.modulus, privateKey.publicExponent)

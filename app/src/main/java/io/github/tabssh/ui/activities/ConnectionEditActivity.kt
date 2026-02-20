@@ -47,6 +47,8 @@ class ConnectionEditActivity : AppCompatActivity() {
     private var selectedKeyIndex: Int = -1
     private var selectedGroupId: String? = null
     private var selectedGroupName: String = "No Group"
+    private var availableIdentities: List<io.github.tabssh.storage.database.entities.Identity> = emptyList()
+    private var selectedIdentityId: String? = null
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -230,10 +232,9 @@ class ConnectionEditActivity : AppCompatActivity() {
     
     private fun setupIdentitySpinner() {
         lifecycleScope.launch {
-            // Use the List version directly
-            val identities = app.database.identityDao().getAllIdentitiesList()
+            availableIdentities = app.database.identityDao().getAllIdentitiesList()
             val identityList = mutableListOf("No Identity")
-            identities.forEach { identity -> identityList.add(identity.name) }
+            availableIdentities.forEach { identity -> identityList.add(identity.name) }
 
             val adapter = ArrayAdapter(
                 this@ConnectionEditActivity,
@@ -244,19 +245,33 @@ class ConnectionEditActivity : AppCompatActivity() {
 
             binding.spinnerIdentity.setOnItemClickListener { _, _, position, _ ->
                 if (position > 0) {
-                    // Identity selected - hide manual auth config
-                    val identity = identities[position - 1]
+                    val identity = availableIdentities[position - 1]
+                    selectedIdentityId = identity.id
                     binding.editUsername.setText(identity.username)
-                    // Hide authentication card since identity provides auth
                     binding.cardAuthentication.visibility = android.view.View.GONE
                 } else {
-                    // "No Identity" selected - show manual auth config
+                    selectedIdentityId = null
                     binding.cardAuthentication.visibility = android.view.View.VISIBLE
                 }
             }
 
-            binding.spinnerIdentity.setText("No Identity", false)
+            // Restore selection if editing (may be called before or after loadExistingProfile)
+            restoreIdentitySpinner()
         }
+    }
+
+    private fun restoreIdentitySpinner() {
+        val id = selectedIdentityId
+        if (id != null) {
+            val idx = availableIdentities.indexOfFirst { it.id == id }
+            if (idx >= 0) {
+                binding.spinnerIdentity.setText(availableIdentities[idx].name, false)
+                binding.cardAuthentication.visibility = android.view.View.GONE
+                return
+            }
+        }
+        binding.spinnerIdentity.setText("No Identity", false)
+        binding.cardAuthentication.visibility = android.view.View.VISIBLE
     }
 
     private fun updateProxyTypeUI(proxyType: String) {
@@ -380,7 +395,10 @@ class ConnectionEditActivity : AppCompatActivity() {
         binding.editHost.setText(profile.host)
         binding.editPort.setText(profile.port.toString())
         binding.editUsername.setText(profile.username)
-        
+
+        // Restore identity selection — must be set before restoreIdentitySpinner() runs
+        selectedIdentityId = profile.identityId
+        restoreIdentitySpinner()
         // Set auth type
         val authType = profile.getAuthTypeEnum()
         val authTypes = AuthType.getAvailableTypes()
@@ -627,6 +645,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             username = username,
             authType = authType.name,
             keyId = keyId,
+            identityId = selectedIdentityId,
             terminalType = terminalType,
             compression = compression,
             keepAlive = keepAlive,
@@ -651,6 +670,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             username = username,
             authType = authType.name,
             keyId = keyId,
+            identityId = selectedIdentityId,
             terminalType = terminalType,
             compression = compression,
             keepAlive = keepAlive,

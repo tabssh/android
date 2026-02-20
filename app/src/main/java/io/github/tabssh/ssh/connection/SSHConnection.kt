@@ -480,25 +480,7 @@ class SSHConnection(
             return@withContext
         }
 
-        // PRIORITY 2: Auto-match identity by username (for SSH config import convenience)
-        val autoMatchedIdentity = try {
-            val identity = app?.database?.identityDao()?.getIdentityByUsername(profile.username)
-            if (identity != null) {
-                Logger.i("SSHConnection", "🔑 Auto-matched identity '${identity.name}' for username '${profile.username}'")
-            }
-            identity
-        } catch (e: Exception) {
-            Logger.w("SSHConnection", "Error checking for identity auto-match", e)
-            null
-        }
-
-        if (autoMatchedIdentity != null) {
-            Logger.d("SSHConnection", "Auth: Using auto-matched identity '${autoMatchedIdentity.name}'")
-            setupAuthFromIdentity(jsch, session, autoMatchedIdentity)
-            return@withContext
-        }
-
-        // PRIORITY 3: Use connection's own credentials if set
+        // PRIORITY 2: Use connection's own credentials if set
         val connectionPassword = getPasswordForAuthentication()
         val connectionKeyId = profile.keyId
         val connectionAuthType = profile.getAuthTypeEnum()
@@ -531,9 +513,9 @@ class SSHConnection(
 
             AuthType.PUBLIC_KEY -> {
                 if (identity.keyId != null) {
-                    val privateKey = getPrivateKeyForAuthentication(identity.keyId!!)
-                    if (privateKey != null) {
-                        jsch.addIdentity(identity.keyId!!, privateKey.encoded, null, null)
+                    val jschBytes = getJSchBytes(identity.keyId!!)
+                    if (jschBytes != null) {
+                        jsch.addIdentity(identity.keyId!!, jschBytes, null, null)
                         Logger.d("SSHConnection", "SSH key set from identity '${identity.name}'")
                     } else {
                         throw SSHException("Could not retrieve SSH key for identity '${identity.name}'")
@@ -586,9 +568,9 @@ class SSHConnection(
 
             AuthType.PUBLIC_KEY -> {
                 if (keyId != null) {
-                    val privateKey = getPrivateKeyForAuthentication(keyId)
-                    if (privateKey != null) {
-                        jsch.addIdentity(keyId, privateKey.encoded, null, null)
+                    val jschBytes = getJSchBytes(keyId)
+                    if (jschBytes != null) {
+                        jsch.addIdentity(keyId, jschBytes, null, null)
                         Logger.d("SSHConnection", "SSH key set from connection")
                     } else {
                         throw SSHException("Could not retrieve private key for authentication")
@@ -669,6 +651,36 @@ class SSHConnection(
         }
     }
     
+    /**
+     * Retrieve JSch-native bytes for a keyId.
+     * 1. Try the dedicated jsch_bytes_ store (set at import time for all formats).
+     * 2. Fallback: reconstruct from stored PKCS#8 DER + convert via KeyStorage.toJSchKeyBytes().
+     *    This handles keys imported before the jsch_bytes store was introduced.
+     */
+    private suspend fun getJSchBytes(keyId: String): ByteArray? = withContext(Dispatchers.IO) {
+        val app = context.applicationContext as? io.github.tabssh.TabSSHApplication ?: return@withContext null
+
+        // Preferred path — JSch-native bytes stored at import time
+        val stored = app.keyStorage.retrieveJSchBytes(keyId)
+        if (stored != null) return@withContext stored
+
+        // Fallback for legacy stored keys — convert PKCS#8 DER on-the-fly
+        return@withContext try {
+            val privateKey = app.keyStorage.retrievePrivateKey(keyId) ?: return@withContext null
+            val storedKey  = app.database.keyDao().getKeyById(keyId)  ?: return@withContext null
+            val keyType    = io.github.tabssh.crypto.keys.KeyType.valueOf(storedKey.keyType)
+            // Public key is derived from the private key for the fallback
+            val publicKey  = app.keyStorage.getPublicKeyFromPrivate(privateKey)
+            val jschBytes  = app.keyStorage.toJSchKeyBytes(privateKey, publicKey, keyType)
+            // Cache for next time
+            app.keyStorage.storeJSchBytes(keyId, jschBytes)
+            jschBytes
+        } catch (e: Exception) {
+            Logger.e("SSHConnection", "Failed to build JSch bytes for $keyId", e)
+            null
+        }
+    }
+
     /**
      * Open a shell channel for terminal access
      */

@@ -222,6 +222,9 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     override fun onNavigationItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             // Main actions
+            R.id.nav_quick_connect -> {
+                showQuickConnectDialog()
+            }
             R.id.nav_connections -> {
                 viewPager.currentItem = 1 // Switch to Connections tab
             }
@@ -874,63 +877,60 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     }
     
     /**
-     * Show quick connect dialog for fast SSH connections
+     * Show quick connect dialog for fast SSH connections.
+     * If user types only a hostname (no @), resolves username from
+     * Settings > Connection > Default Username, falling back to "root".
      */
     private fun showQuickConnectDialog() {
-        val dialogView = layoutInflater.inflate(android.R.layout.simple_list_item_2, null).apply {
-            // Create custom layout programmatically
-            val layout = android.widget.LinearLayout(this@MainActivity).apply {
-                orientation = android.widget.LinearLayout.VERTICAL
-                setPadding(64, 32, 64, 32)
-            }
-            
-            val usernameEdit = com.google.android.material.textfield.TextInputEditText(this@MainActivity).apply {
-                hint = "user@hostname"
-                inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
-            }
-            val usernameLayout = com.google.android.material.textfield.TextInputLayout(this@MainActivity).apply {
-                addView(usernameEdit)
-            }
-            
-            val portEdit = com.google.android.material.textfield.TextInputEditText(this@MainActivity).apply {
-                hint = "Port (default: 22)"
-                inputType = android.text.InputType.TYPE_CLASS_NUMBER
-                setText("22")
-            }
-            val portLayout = com.google.android.material.textfield.TextInputLayout(this@MainActivity).apply {
-                addView(portEdit)
-            }
-            
-            layout.addView(usernameLayout)
-            layout.addView(portLayout)
-            
-            androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
-                .setTitle("Quick Connect")
-                .setMessage("Connect without saving")
-                .setView(layout)
-                .setPositiveButton("Connect") { _, _ ->
-                    val input = usernameEdit.text.toString().trim()
-                    val port = portEdit.text.toString().toIntOrNull() ?: 22
-                    
-                    if (input.contains("@")) {
-                        val parts = input.split("@")
-                        val username = parts[0]
-                        val hostname = parts[1]
-                        
-                        quickConnect(username, hostname, port)
-                    } else {
-                        android.widget.Toast.makeText(
-                            this@MainActivity,
-                            "Format: user@hostname",
-                            android.widget.Toast.LENGTH_SHORT
-                        ).show()
-                    }
+        val view = layoutInflater.inflate(R.layout.dialog_quick_connect, null)
+        val hostInput = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.input_host)
+        val hostLayout = view.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.layout_host)
+        val portInput = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.input_port)
+
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Quick Connect")
+            .setView(view)
+            .setPositiveButton("Connect", null) // set below to prevent auto-dismiss on error
+            .setNegativeButton("Cancel", null)
+            .create()
+
+        dialog.setOnShowListener {
+            dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val raw = hostInput.text.toString().trim()
+                val port = portInput.text.toString().toIntOrNull() ?: 22
+
+                if (raw.isEmpty()) {
+                    hostLayout.error = "Enter a hostname"
+                    return@setOnClickListener
                 }
-                .setNegativeButton("Cancel", null)
-                .show()
+                hostLayout.error = null
+
+                val (username, hostname) = resolveQuickConnectUser(raw)
+                dialog.dismiss()
+                quickConnect(username, hostname, port)
+            }
+        }
+
+        dialog.show()
+        hostInput.requestFocus()
+    }
+
+    /**
+     * Splits "user@host" or resolves username for plain "host".
+     * Priority: explicit user@ > Settings default username > "root"
+     */
+    private fun resolveQuickConnectUser(input: String): Pair<String, String> {
+        return if (input.contains("@")) {
+            val atIdx = input.indexOf("@")
+            input.substring(0, atIdx) to input.substring(atIdx + 1)
+        } else {
+            val prefs = io.github.tabssh.storage.preferences.PreferenceManager(this)
+            val defaultUser = prefs.getDefaultUsername().trim()
+            val user = if (defaultUser.isNotEmpty()) defaultUser else "root"
+            user to input
         }
     }
-    
+
     /**
      * Quick connect to SSH server without saving profile
      */
