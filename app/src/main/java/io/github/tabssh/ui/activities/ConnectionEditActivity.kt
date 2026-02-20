@@ -16,6 +16,7 @@ import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.crypto.keys.KeyType
 import io.github.tabssh.crypto.keys.GenerateResult
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Dispatchers
 import io.github.tabssh.utils.showError
@@ -390,7 +391,7 @@ class ConnectionEditActivity : AppCompatActivity() {
         }
     }
     
-    private fun populateFields(profile: ConnectionProfile) {
+    private suspend fun populateFields(profile: ConnectionProfile) {
         binding.editName.setText(profile.name)
         binding.editHost.setText(profile.host)
         binding.editPort.setText(profile.port.toString())
@@ -417,6 +418,17 @@ class ConnectionEditActivity : AppCompatActivity() {
                 if (selectedKeyIndex < keyNames.size) {
                     binding.spinnerSshKey.setText(keyNames[selectedKeyIndex], false)
                 }
+            }
+        }
+
+        // Load stored password so user doesn't have to re-enter when editing
+        if (authType == AuthType.PASSWORD || authType == AuthType.KEYBOARD_INTERACTIVE) {
+            val storedPassword = withContext(Dispatchers.IO) {
+                app.securePasswordManager.retrievePassword(profile.id)
+            }
+            if (storedPassword != null) {
+                binding.editPassword.setText(storedPassword)
+                binding.switchSavePassword.isChecked = true
             }
         }
         
