@@ -118,19 +118,17 @@ class TabSSHApplication : Application() {
     private fun setupExceptionHandler() {
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-            // Write synchronously before the process dies
+            // Write synchronously before anything else
             Logger.writeCrashSync(thread, throwable)
             Logger.e("TabSSHApplication", "Uncaught exception in thread ${thread.name}", throwable)
 
-            // In debug builds, persist the crash and launch a visual crash screen
             if (BuildConfig.DEBUG_MODE) {
                 try {
-                    val stackTrace = android.util.Log.getStackTraceString(throwable)
                     getSharedPreferences(STARTUP_PREFS, MODE_PRIVATE).edit()
-                        .putString(KEY_LAST_CRASH, stackTrace)
+                        .putString(KEY_LAST_CRASH, android.util.Log.getStackTraceString(throwable))
                         .putString(KEY_CRASH_THREAD, thread.name)
                         .putLong(KEY_CRASH_TIME, System.currentTimeMillis())
-                        .commit() // commit() not apply() — must be synchronous before process dies
+                        .commit() // must be synchronous
 
                     startActivity(
                         android.content.Intent(
@@ -141,20 +139,21 @@ class TabSSHApplication : Application() {
                                     android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK
                         }
                     )
-                    // Brief pause to let the activity start before the process is killed
-                    Thread.sleep(300)
                 } catch (e: Exception) {
-                    // If the crash reporter itself fails, fall through to the default handler
+                    // Crash reporter itself failed — fall through to default handler below
+                    defaultHandler?.uncaughtException(thread, throwable)
                 }
+                // Do NOT call defaultHandler in debug mode.
+                // Keeping the process alive lets the crash screen stay on screen
+                // so the developer can read the trace and tap Copy/Share.
+                return@setDefaultUncaughtExceptionHandler
             }
 
-            // Clean up sensitive data on crash
+            // Release build: clean up and let Android handle it normally
             try {
                 securePasswordManager.clearSensitiveDataOnCrash()
                 sshSessionManager.closeAllConnections()
-            } catch (e: Exception) {
-                // Ignore — we're already crashing
-            }
+            } catch (_: Exception) {}
 
             defaultHandler?.uncaughtException(thread, throwable)
         }
