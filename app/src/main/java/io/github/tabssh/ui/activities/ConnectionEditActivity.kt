@@ -581,9 +581,22 @@ class ConnectionEditActivity : AppCompatActivity() {
         val host = binding.editHost.text.toString().trim()
         val port = binding.editPort.text.toString().toIntOrNull() ?: 22
         val username = binding.editUsername.text.toString().trim()
-        val authType = getSelectedAuthType()
-        
-        val keyId = if (authType == AuthType.PUBLIC_KEY) {
+
+        // If identity is selected, use identity's auth settings
+        // Otherwise use form values
+        val selectedIdentity = selectedIdentityId?.let { id ->
+            availableIdentities.find { it.id == id }
+        }
+
+        val authType = if (selectedIdentity != null) {
+            selectedIdentity.authType
+        } else {
+            getSelectedAuthType()
+        }
+
+        val keyId = if (selectedIdentity != null && selectedIdentity.authType == AuthType.PUBLIC_KEY) {
+            selectedIdentity.keyId
+        } else if (authType == AuthType.PUBLIC_KEY) {
             if (selectedKeyIndex > 0 && selectedKeyIndex - 1 < availableKeys.size) {
                 availableKeys[selectedKeyIndex - 1].keyId
             } else null
@@ -712,14 +725,18 @@ class ConnectionEditActivity : AppCompatActivity() {
     
     private fun validateAllFields(): Boolean {
         var isValid = true
-        
+
         if (!validateHost()) isValid = false
         if (!validatePort()) isValid = false
         if (!validateUsername()) isValid = false
-        
-        val authType = getSelectedAuthType()
-        if (authType == AuthType.PUBLIC_KEY && !validateKeySelection()) isValid = false
-        
+
+        // Only validate key selection if NO identity is selected
+        // When identity is used, it provides the auth settings
+        if (selectedIdentityId == null) {
+            val authType = getSelectedAuthType()
+            if (authType == AuthType.PUBLIC_KEY && !validateKeySelection()) isValid = false
+        }
+
         return isValid
     }
     
@@ -784,7 +801,7 @@ class ConnectionEditActivity : AppCompatActivity() {
         if (!validateAllFields()) {
             return
         }
-        
+
         lifecycleScope.launch {
             binding.btnTest.isEnabled = false
             binding.btnTest.text = "Testing..."
@@ -815,8 +832,86 @@ class ConnectionEditActivity : AppCompatActivity() {
                 val connection = io.github.tabssh.ssh.connection.SSHConnection(
                     profile, lifecycleScope, this@ConnectionEditActivity
                 )
-                connection.hostKeyChangedCallback = app.sshSessionManager.hostKeyChangedCallback
-                connection.newHostKeyCallback = app.sshSessionManager.newHostKeyCallback
+
+                // Set up host key callbacks for test connection
+                connection.newHostKeyCallback = { info ->
+                    Logger.i("ConnectionEditActivity", "New host key for ${info.hostname}")
+                    var userAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
+                    val latch = java.util.concurrent.CountDownLatch(1)
+
+                    runOnUiThread {
+                        try {
+                            androidx.appcompat.app.AlertDialog.Builder(this@ConnectionEditActivity)
+                                .setTitle("New Host Key")
+                                .setMessage(info.getDisplayMessage())
+                                .setPositiveButton("Accept & Save") { _, _ ->
+                                    userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_NEW_KEY
+                                    latch.countDown()
+                                }
+                                .setNeutralButton("Accept Once") { _, _ ->
+                                    userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_ONCE
+                                    latch.countDown()
+                                }
+                                .setNegativeButton("Reject") { _, _ ->
+                                    userAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
+                                    latch.countDown()
+                                }
+                                .setCancelable(false)
+                                .setOnDismissListener { latch.countDown() }
+                                .show()
+                        } catch (e: Exception) {
+                            Logger.e("ConnectionEditActivity", "Failed to show host key dialog", e)
+                            latch.countDown()
+                        }
+                    }
+
+                    try {
+                        latch.await(60, java.util.concurrent.TimeUnit.SECONDS)
+                    } catch (e: InterruptedException) {
+                        Logger.e("ConnectionEditActivity", "Interrupted waiting for host key response", e)
+                    }
+                    userAction
+                }
+
+                connection.hostKeyChangedCallback = { info ->
+                    Logger.w("ConnectionEditActivity", "Host key CHANGED for ${info.hostname}")
+                    var userAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
+                    val latch = java.util.concurrent.CountDownLatch(1)
+
+                    runOnUiThread {
+                        try {
+                            androidx.appcompat.app.AlertDialog.Builder(this@ConnectionEditActivity)
+                                .setTitle("⚠️ WARNING: Host Key Changed!")
+                                .setMessage(info.getDisplayMessage())
+                                .setIcon(android.R.drawable.ic_dialog_alert)
+                                .setPositiveButton("Accept New Key") { _, _ ->
+                                    userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_NEW_KEY
+                                    latch.countDown()
+                                }
+                                .setNeutralButton("Accept Once") { _, _ ->
+                                    userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_ONCE
+                                    latch.countDown()
+                                }
+                                .setNegativeButton("Reject (Recommended)") { _, _ ->
+                                    userAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
+                                    latch.countDown()
+                                }
+                                .setCancelable(false)
+                                .setOnDismissListener { latch.countDown() }
+                                .show()
+                        } catch (e: Exception) {
+                            Logger.e("ConnectionEditActivity", "Failed to show host key dialog", e)
+                            latch.countDown()
+                        }
+                    }
+
+                    try {
+                        latch.await(60, java.util.concurrent.TimeUnit.SECONDS)
+                    } catch (e: InterruptedException) {
+                        Logger.e("ConnectionEditActivity", "Interrupted waiting for host key response", e)
+                    }
+                    userAction
+                }
 
                 val success = connection.connect()
                 connection.disconnect()

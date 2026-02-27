@@ -376,42 +376,8 @@ class PreferenceManager(private val context: Context) {
     fun isAutoResolveConflictsEnabled(): Boolean = getBoolean("sync_auto_resolve", true)
     fun setAutoResolveConflicts(enabled: Boolean) = setBoolean("sync_auto_resolve", enabled)
 
-    // Sync backend selection
-    fun getSyncBackend(): String {
-        return getString("sync_backend", "google_drive")
-    }
-    fun setSyncBackend(backend: String) {
-        setString("sync_backend", backend)
-    }
-
-    // WebDAV sync preferences
-    fun getWebDAVServerUrl(): String {
-        return getString("webdav_server_url", "")
-    }
-    fun setWebDAVServerUrl(url: String) {
-        setString("webdav_server_url", url)
-    }
-
-    fun getWebDAVUsername(): String {
-        return getString("webdav_username", "")
-    }
-    fun setWebDAVUsername(username: String) {
-        setString("webdav_username", username)
-    }
-
-    fun getWebDAVPassword(): String {
-        return getString("webdav_password", "")
-    }
-    fun setWebDAVPassword(password: String) {
-        setString("webdav_password", password)
-    }
-
-    fun getWebDAVSyncFolder(): String {
-        return getString("webdav_sync_folder", "/TabSSH")
-    }
-    fun setWebDAVSyncFolder(folder: String) {
-        setString("webdav_sync_folder", folder)
-    }
+    // Note: SAF sync settings (file URI, password) are stored in SAFSyncManager's own SharedPreferences
+    // The settings above are used by SyncWorkScheduler for scheduling decisions
 
     fun getPreferencesLastModified(): Long = preferences.getLong("preferences_last_modified", 0)
     fun setPreferencesLastModified(timestamp: Long = System.currentTimeMillis()) =
