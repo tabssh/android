@@ -17,7 +17,10 @@
         <androidx.appcompat.widget.Toolbar
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
-            android:layout_height="?attr/actionBarSize"
+            android:layout_height="40dp"
+            android:minHeight="40dp"
+            app:titleTextAppearance="@style/TextAppearance.TabSSH.Toolbar.Title"
+            app:contentInsetStartWithNavigation="0dp"
             app:popupTheme="@style/ThemeOverlay.AppCompat.Light"
             style="@style/Widget.TabSSH.Toolbar" />
 

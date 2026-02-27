@@ -149,6 +149,26 @@
         <item name="subtitleTextColor">@color/primary_100</item>
         <item name="navigationIconTint">@color/white</item>
     </style>
+
+    <!-- Compact toolbar title -->
+    <style name="TextAppearance.TabSSH.Toolbar.Title" parent="TextAppearance.Material3.TitleMedium">
+        <item name="android:textSize">16sp</item>
+        <item name="android:textColor">@color/white</item>
+    </style>
+
+    <!-- Compact navigation drawer style -->
+    <style name="Widget.TabSSH.NavigationView" parent="Widget.Material3.NavigationView">
+        <item name="itemIconSize">20dp</item>
+        <item name="itemIconPadding">8dp</item>
+        <item name="itemVerticalPadding">4dp</item>
+        <item name="itemHorizontalPadding">12dp</item>
+        <item name="itemTextAppearance">@style/TextAppearance.TabSSH.NavigationItem</item>
+    </style>
+
+    <!-- Compact navigation item text -->
+    <style name="TextAppearance.TabSSH.NavigationItem" parent="TextAppearance.Material3.LabelLarge">
+        <item name="android:textSize">13sp</item>
+    </style>
     
     <!-- FAB styles -->
     <style name="Widget.TabSSH.FloatingActionButton" parent="Widget.Material3.FloatingActionButton.Primary">
