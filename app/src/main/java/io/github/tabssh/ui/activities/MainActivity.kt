@@ -259,6 +259,9 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             }
             
             // Import/Export
+            R.id.nav_import_ssh_config -> {
+                importSSHConfig()
+            }
             R.id.nav_import_connections -> {
                 importConnectionsLauncher.launch(arrayOf("application/zip", "application/json"))
             }
@@ -269,6 +272,9 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             // Settings & Help
             R.id.nav_settings -> {
                 startActivity(Intent(this, SettingsActivity::class.java))
+            }
+            R.id.nav_copy_debug_logs -> {
+                copyDebugLogs()
             }
             R.id.nav_help -> {
                 showHelpDialog()
@@ -353,6 +359,48 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             .setNegativeButton("License") { _, _ ->
                 val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/tabssh/android/blob/main/LICENSE.md"))
                 startActivity(intent)
+            }
+            .show()
+    }
+
+    /**
+     * Copy debug logs to clipboard and offer to share
+     */
+    private fun copyDebugLogs() {
+        // Force enable debug mode to capture future logs
+        Logger.forceEnableDebugMode(this)
+
+        val logs = Logger.getAllLogs()
+
+        if (logs.isBlank() || logs.contains("not found") || logs.contains("not initialized")) {
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Debug Logging")
+                .setMessage("Debug logging is now enabled.\n\nPerform the actions that cause the issue, then come back here to copy the logs.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+
+        // Copy to clipboard
+        val clipboard = getSystemService(android.content.ClipboardManager::class.java)
+        clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("TabSSH Debug Logs", logs))
+
+        // Show dialog with options
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Debug Logs Copied")
+            .setMessage("${logs.length} characters copied to clipboard.\n\nYou can paste this into a message or share it.")
+            .setPositiveButton("OK", null)
+            .setNeutralButton("Share") { _, _ ->
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_SUBJECT, "TabSSH Debug Logs")
+                    putExtra(Intent.EXTRA_TEXT, logs)
+                }
+                startActivity(Intent.createChooser(shareIntent, "Share Debug Logs"))
+            }
+            .setNegativeButton("Clear Logs") { _, _ ->
+                Logger.clearLogs()
+                android.widget.Toast.makeText(this, "Logs cleared", android.widget.Toast.LENGTH_SHORT).show()
             }
             .show()
     }

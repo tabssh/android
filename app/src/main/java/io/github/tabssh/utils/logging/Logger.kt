@@ -130,6 +130,45 @@ object Logger {
     }
 
     /**
+     * Get ALL logs as string (for debugging/support)
+     */
+    fun getAllLogs(): String {
+        return logFile?.let { file ->
+            if (file.exists()) {
+                try {
+                    val logs = file.readText()
+                    buildString {
+                        appendLine("=== TabSSH Debug Log ===")
+                        appendLine("Timestamp: ${dateFormat.format(Date())}")
+                        appendLine("Debug Mode: $debugMode")
+                        appendLine("Log File: ${file.absolutePath}")
+                        appendLine("Log Size: ${file.length()} bytes")
+                        appendLine("========================")
+                        appendLine()
+                        append(logs)
+                    }
+                } catch (e: Exception) {
+                    "Failed to read logs: ${e.message}"
+                }
+            } else {
+                "Log file not found. Enable debug logging in Settings > Logging."
+            }
+        } ?: "Logging not initialized. Please enable debug logging in Settings > Logging."
+    }
+
+    /**
+     * Force enable debug mode (for troubleshooting)
+     */
+    fun forceEnableDebugMode(context: Context) {
+        debugMode = true
+        logToFile = true
+        if (logFile == null) {
+            logFile = File(context.filesDir, LOG_FILE_NAME)
+        }
+        i("Logger", "Debug mode force-enabled for troubleshooting")
+    }
+
+    /**
      * Get debug logs as string
      */
     fun getDebugLogs(): String {
