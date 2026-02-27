@@ -24,6 +24,10 @@
     <!-- Post notifications (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Foreground service permissions (Android 14+) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
     <!-- Override Termux library minSdk requirement (24) to maintain our minSdk (21) -->
     <!-- Termux terminal-emulator may use some API 24 features, test on older devices -->
     <uses-sdk tools:overrideLibrary="com.termux.terminal,com.termux.view" />
