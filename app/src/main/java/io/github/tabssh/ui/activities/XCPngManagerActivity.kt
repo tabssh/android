@@ -117,60 +117,43 @@ class XCPngManagerActivity : AppCompatActivity() {
                 progressBar.visibility = View.VISIBLE
                 statusText.text = "Connecting to ${profile.name}..."
                 statusText.visibility = View.VISIBLE
-                
-                isXenOrchestra = profile.isXenOrchestra
-                
-                Logger.d("XCPngManager", "Connecting to ${profile.host}:${profile.port} as ${profile.username} (XO=${profile.isXenOrchestra})")
-                
-                val authenticated = if (profile.isXenOrchestra) {
-                    // Use Xen Orchestra REST API
-                    currentClient = null
-                    currentXoClient = XenOrchestraApiClient(
-                        host = profile.host,
-                        port = profile.port,
-                        email = profile.username,
-                        password = profile.password,
-                        verifySsl = profile.verifySsl
-                    )
-                    currentXoClient?.authenticate() ?: false
-                } else {
-                    // Use XCP-ng XML-RPC API (direct)
-                    currentXoClient = null
-                    currentClient = XCPngApiClient(
-                        host = profile.host,
-                        port = profile.port,
-                        username = profile.username,
-                        password = profile.password,
-                        verifySsl = profile.verifySsl
-                    )
-                    currentClient?.authenticate() ?: false
-                }
-                
+
+                Logger.d("XCPngManager", "Connecting to ${profile.host}:${profile.port} as ${profile.username}")
+
+                // Auto-detect: Try Xen Orchestra first, then XCP-ng direct
+                val (authenticated, detectedXO) = autoDetectAndConnect(profile)
+                isXenOrchestra = detectedXO
+
                 if (authenticated) {
-                    val modeText = if (profile.isXenOrchestra) "Xen Orchestra" else "XCP-ng Direct"
+                    // Update profile if we auto-detected a different type
+                    if (profile.isXenOrchestra != detectedXO) {
+                        Logger.i("XCPngManager", "Auto-detected API type: ${if (detectedXO) "Xen Orchestra" else "XCP-ng Direct"}")
+                        app.database.hypervisorDao().updateIsXenOrchestra(profile.id, detectedXO)
+                    }
+
+                    val modeText = if (detectedXO) "Xen Orchestra" else "XCP-ng Direct"
                     statusText.text = "Connected to ${profile.name} ($modeText)"
                     app.database.hypervisorDao().updateLastConnected(profile.id, System.currentTimeMillis())
-                    
+
                     // Show backup jobs button for XO
-                    if (profile.isXenOrchestra) {
+                    if (detectedXO) {
                         backupJobsButton.visibility = View.VISIBLE
                     } else {
                         backupJobsButton.visibility = View.GONE
                     }
-                    
+
                     refreshVMs()
-                    
+
                     // Connect WebSocket for Xen Orchestra (real-time updates)
-                    if (profile.isXenOrchestra) {
+                    if (detectedXO) {
                         setupWebSocket()
                     }
                 } else {
-                    statusText.text = "Authentication failed - check credentials and network"
-                    val apiType = if (profile.isXenOrchestra) "Xen Orchestra REST API" else "XCP-ng XML-RPC API"
-                    showError("Failed to authenticate with $apiType. Check:\n• Username/password\n• Host/port (${profile.host}:${profile.port})\n• Network connectivity\n• SSL certificate (verify SSL: ${profile.verifySsl})", "Error")
+                    statusText.text = "Authentication failed - check credentials"
+                    showError("Failed to authenticate. Tried both Xen Orchestra and XCP-ng APIs.\n\nCheck:\n• Username/password\n• Host/port (${profile.host}:${profile.port})\n• Network connectivity\n• SSL certificate (verify SSL: ${profile.verifySsl})", "Connection Error")
                     progressBar.visibility = View.GONE
                 }
-                
+
             } catch (e: java.net.UnknownHostException) {
                 Logger.e("XCPngManager", "Unknown host: ${profile.host}", e)
                 statusText.text = "Error: Host not found (${profile.host})"
@@ -196,12 +179,67 @@ class XCPngManagerActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Auto-detect whether the server is Xen Orchestra or XCP-ng direct.
+     * Tries XO REST API first (more common), then falls back to XCP-ng XML-RPC.
+     * Returns Pair(authenticated, isXenOrchestra)
+     */
+    private suspend fun autoDetectAndConnect(profile: HypervisorProfile): Pair<Boolean, Boolean> {
+        // Try Xen Orchestra REST API first
+        Logger.d("XCPngManager", "Trying Xen Orchestra REST API...")
+        statusText.text = "Trying Xen Orchestra API..."
+
+        try {
+            currentClient = null
+            currentXoClient = XenOrchestraApiClient(
+                host = profile.host,
+                port = profile.port,
+                email = profile.username,
+                password = profile.password,
+                verifySsl = profile.verifySsl
+            )
+
+            if (currentXoClient?.authenticate() == true) {
+                Logger.i("XCPngManager", "Xen Orchestra REST API authentication successful")
+                return Pair(true, true)
+            }
+        } catch (e: Exception) {
+            Logger.d("XCPngManager", "Xen Orchestra API failed: ${e.message}")
+        }
+
+        // Try XCP-ng XML-RPC API
+        Logger.d("XCPngManager", "Trying XCP-ng XML-RPC API...")
+        statusText.text = "Trying XCP-ng Direct API..."
+
+        try {
+            currentXoClient = null
+            currentClient = XCPngApiClient(
+                host = profile.host,
+                port = profile.port,
+                username = profile.username,
+                password = profile.password,
+                verifySsl = profile.verifySsl
+            )
+
+            if (currentClient?.authenticate() == true) {
+                Logger.i("XCPngManager", "XCP-ng XML-RPC API authentication successful")
+                return Pair(true, false)
+            }
+        } catch (e: Exception) {
+            Logger.d("XCPngManager", "XCP-ng API failed: ${e.message}")
+        }
+
+        // Both failed
+        Logger.w("XCPngManager", "Both Xen Orchestra and XCP-ng APIs failed")
+        return Pair(false, false)
+    }
+
     private fun refreshVMs() {
         lifecycleScope.launch {
             try {
                 progressBar.visibility = View.VISIBLE
                 statusText.text = "Loading VMs..."
-                
+
                 val vmList = if (isXenOrchestra) {
                     // Get VMs from Xen Orchestra REST API
                     currentXoClient?.listVMs()?.map { convertXoVMToXenVM(it) } ?: emptyList()
