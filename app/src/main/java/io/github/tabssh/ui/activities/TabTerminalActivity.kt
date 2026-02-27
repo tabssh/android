@@ -857,15 +857,45 @@ class TabTerminalActivity : AppCompatActivity() {
                 android.widget.Toast.makeText(this, "Connecting to ${profile.name}...", android.widget.Toast.LENGTH_SHORT).show()
             }
 
-            // If no stored credentials and auth is keyboard-interactive, prompt for password first
+            // Check authentication requirements and prompt for password if needed
             val authType = AuthType.fromString(profile.authType)
             val hasStoredPassword = withContext(kotlinx.coroutines.Dispatchers.IO) {
                 app.securePasswordManager.retrievePassword(profile.id) != null
             }
-            if (authType == AuthType.KEYBOARD_INTERACTIVE && !hasStoredPassword && profile.keyId == null) {
-                val enteredPassword = promptForPassword(
+
+            // Check if SSH key is available when PUBLIC_KEY auth is configured
+            val keyAvailable = if (profile.keyId != null) {
+                withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val keyExists = app.database.keyDao().getKeyById(profile.keyId!!) != null
+                    val jschBytes = app.keyStorage.retrieveJSchBytes(profile.keyId!!)
+                    val privateKey = if (jschBytes == null) {
+                        app.keyStorage.retrievePrivateKey(profile.keyId!!)
+                    } else null
+                    keyExists && (jschBytes != null || privateKey != null)
+                }
+            } else false
+
+            // Determine if we need to prompt for password:
+            // 1. KEYBOARD_INTERACTIVE with no password and no key
+            // 2. PUBLIC_KEY auth but key is not available (fallback to password)
+            // 3. PASSWORD auth with no stored password
+            val needPasswordPrompt = when {
+                authType == AuthType.KEYBOARD_INTERACTIVE && !hasStoredPassword && !keyAvailable -> true
+                authType == AuthType.PUBLIC_KEY && !keyAvailable && !hasStoredPassword -> {
+                    Logger.w("TabTerminalActivity", "SSH key not available (keyId=${profile.keyId}), falling back to password")
+                    true
+                }
+                authType == AuthType.PASSWORD && !hasStoredPassword -> true
+                else -> false
+            }
+
+            if (needPasswordPrompt) {
+                val promptMessage = if (authType == AuthType.PUBLIC_KEY && !keyAvailable) {
+                    "SSH key not found. Enter password for ${profile.username}@${profile.host}"
+                } else {
                     "Password required for ${profile.username}@${profile.host}"
-                )
+                }
+                val enteredPassword = promptForPassword(promptMessage)
                 if (enteredPassword == null) {
                     Logger.i("TabTerminalActivity", "User cancelled password prompt")
                     return

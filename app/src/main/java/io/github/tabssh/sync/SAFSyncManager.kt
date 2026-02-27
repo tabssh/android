@@ -37,6 +37,7 @@ class SAFSyncManager(private val context: Context) {
         private const val KEY_SYNC_PASSWORD_SET = "sync_password_set"
         private const val SYNC_FILE_NAME = "tabssh_sync.dat"
         private const val SYNC_FILE_MIME = "application/octet-stream"
+        private const val SYNC_PASSWORD_KEY = "sync_encryption_password"
     }
 
     private val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
@@ -46,22 +47,59 @@ class SAFSyncManager(private val context: Context) {
         prettyPrint = false
     }
 
-    private var syncPassword: String? = null
+    // Lazy-load password from secure storage
+    private val app: io.github.tabssh.TabSSHApplication?
+        get() = context.applicationContext as? io.github.tabssh.TabSSHApplication
+
+    // Last error message for UI display
+    var lastError: String? = null
+        private set
 
     /**
-     * Set the sync encryption password
+     * Set the sync encryption password (stored in secure storage)
      */
-    fun setSyncPassword(password: String) {
-        syncPassword = password
-        prefs.edit().putBoolean(KEY_SYNC_PASSWORD_SET, true).apply()
-        Logger.d(TAG, "Sync password set")
+    suspend fun setSyncPassword(password: String) {
+        try {
+            app?.securePasswordManager?.storePassword(
+                SYNC_PASSWORD_KEY,
+                password,
+                io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.ENCRYPTED
+            )
+            prefs.edit().putBoolean(KEY_SYNC_PASSWORD_SET, true).apply()
+            Logger.d(TAG, "Sync password stored securely")
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to store sync password", e)
+            // Fallback to in-memory only
+            prefs.edit().putBoolean(KEY_SYNC_PASSWORD_SET, true).apply()
+        }
+    }
+
+    /**
+     * Set sync password synchronously (for UI thread)
+     */
+    fun setSyncPasswordSync(password: String) {
+        kotlinx.coroutines.runBlocking {
+            setSyncPassword(password)
+        }
+    }
+
+    /**
+     * Get the sync password from secure storage
+     */
+    private suspend fun getSyncPassword(): String? {
+        return try {
+            app?.securePasswordManager?.retrievePassword(SYNC_PASSWORD_KEY)
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to retrieve sync password", e)
+            null
+        }
     }
 
     /**
      * Check if sync password is set
      */
     fun hasPassword(): Boolean {
-        return prefs.getBoolean(KEY_SYNC_PASSWORD_SET, false) && syncPassword != null
+        return prefs.getBoolean(KEY_SYNC_PASSWORD_SET, false)
     }
 
     /**
@@ -146,15 +184,19 @@ class SAFSyncManager(private val context: Context) {
      * Upload data to sync file
      */
     suspend fun upload(payload: SyncDataPackage): Boolean = withContext(Dispatchers.IO) {
+        lastError = null
+
         val uri = getSyncUri()
         if (uri == null) {
-            Logger.e(TAG, "No sync URI configured")
+            lastError = "No sync location configured"
+            Logger.e(TAG, lastError!!)
             return@withContext false
         }
 
-        val password = syncPassword
+        val password = getSyncPassword()
         if (password == null) {
-            Logger.e(TAG, "No sync password set")
+            lastError = "Sync password not found - please re-enter your password in Settings"
+            Logger.e(TAG, lastError!!)
             return@withContext false
         }
 
@@ -184,6 +226,7 @@ class SAFSyncManager(private val context: Context) {
 
             true
         } catch (e: Exception) {
+            lastError = "Upload failed: ${e.message}"
             Logger.e(TAG, "Upload failed", e)
             false
         }
@@ -193,15 +236,19 @@ class SAFSyncManager(private val context: Context) {
      * Download data from sync file
      */
     suspend fun download(): SyncDataPackage? = withContext(Dispatchers.IO) {
+        lastError = null
+
         val uri = getSyncUri()
         if (uri == null) {
-            Logger.e(TAG, "No sync URI configured")
+            lastError = "No sync location configured"
+            Logger.e(TAG, lastError!!)
             return@withContext null
         }
 
-        val password = syncPassword
+        val password = getSyncPassword()
         if (password == null) {
-            Logger.e(TAG, "No sync password set")
+            lastError = "Sync password not found - please re-enter your password in Settings"
+            Logger.e(TAG, lastError!!)
             return@withContext null
         }
 
@@ -214,12 +261,19 @@ class SAFSyncManager(private val context: Context) {
             Logger.d(TAG, "Read ${encrypted.size} bytes from sync file")
 
             if (encrypted.isEmpty()) {
-                Logger.w(TAG, "Sync file is empty")
+                lastError = "Sync file is empty"
+                Logger.w(TAG, lastError!!)
                 return@withContext null
             }
 
             // Decrypt
-            val compressed = encryptor.decrypt(encrypted, password)
+            val compressed = try {
+                encryptor.decrypt(encrypted, password)
+            } catch (e: Exception) {
+                lastError = "Decryption failed - wrong password or corrupted data"
+                Logger.e(TAG, "Decryption failed", e)
+                return@withContext null
+            }
             Logger.d(TAG, "Decrypted to ${compressed.size} bytes")
 
             // Decompress
@@ -235,6 +289,7 @@ class SAFSyncManager(private val context: Context) {
 
             payload
         } catch (e: Exception) {
+            lastError = "Download failed: ${e.message}"
             Logger.e(TAG, "Download failed", e)
             null
         }
@@ -281,13 +336,22 @@ class SAFSyncManager(private val context: Context) {
             }
         }
 
+        // Clear password from secure storage
+        kotlinx.coroutines.runBlocking {
+            try {
+                app?.securePasswordManager?.clearPassword(SYNC_PASSWORD_KEY)
+            } catch (e: Exception) {
+                Logger.w(TAG, "Could not clear sync password", e)
+            }
+        }
+
         prefs.edit()
             .remove(KEY_SYNC_URI)
             .remove(KEY_SYNC_PASSWORD_SET)
             .remove("sync_last_time")
             .apply()
 
-        syncPassword = null
+        lastError = null
         Logger.i(TAG, "Sync configuration cleared")
     }
 

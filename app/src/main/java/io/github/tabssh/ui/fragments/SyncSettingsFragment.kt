@@ -244,7 +244,7 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
                     errorText.visibility = View.VISIBLE
                 }
                 else -> {
-                    syncManager.setSyncPassword(password)
+                    syncManager.setSyncPasswordSync(password)
                     updatePasswordSummary()
                     updateSyncStatus()
                     showToast("Encryption password set")
@@ -419,13 +419,14 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
                         showToast("Sync completed")
                         updateLastSyncTime()
                     } else {
-                        showToast("Sync failed")
+                        val error = syncManager.lastError ?: "Unknown error"
+                        showErrorDialog("Sync Failed", error)
                     }
                 }
             } catch (e: Exception) {
                 Logger.e(TAG, "Sync failed", e)
                 withContext(Dispatchers.Main) {
-                    showToast("Sync failed: ${e.message}")
+                    showErrorDialog("Sync Failed", e.message ?: "Unknown error")
                 }
             }
         }
@@ -504,13 +505,14 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
                     }
                 } else {
                     withContext(Dispatchers.Main) {
-                        showToast("Download failed or file is empty")
+                        val error = syncManager.lastError ?: "File is empty or unreadable"
+                        showErrorDialog("Download Failed", error)
                     }
                 }
             } catch (e: Exception) {
                 Logger.e(TAG, "Download failed", e)
                 withContext(Dispatchers.Main) {
-                    showToast("Download failed: ${e.message}")
+                    showErrorDialog("Download Failed", e.message ?: "Unknown error")
                 }
             }
         }
@@ -574,5 +576,18 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
 
     private fun showToast(message: String) {
         android.widget.Toast.makeText(requireContext(), message, android.widget.Toast.LENGTH_SHORT).show()
+    }
+
+    private fun showErrorDialog(title: String, message: String) {
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("OK", null)
+            .setNeutralButton("Copy") { _, _ ->
+                val clipboard = requireContext().getSystemService(android.content.ClipboardManager::class.java)
+                clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("Error", message))
+                showToast("Error copied to clipboard")
+            }
+            .show()
     }
 }
