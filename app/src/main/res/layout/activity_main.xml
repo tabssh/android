@@ -21,9 +21,12 @@
             <androidx.appcompat.widget.Toolbar
                 android:id="@+id/toolbar"
                 android:layout_width="match_parent"
-                android:layout_height="?attr/actionBarSize"
+                android:layout_height="40dp"
+                android:minHeight="40dp"
                 android:background="@color/primary_500"
                 app:titleTextColor="@color/white"
+                app:titleTextAppearance="@style/TextAppearance.TabSSH.Toolbar.Title"
+                app:contentInsetStartWithNavigation="0dp"
                 app:popupTheme="@style/ThemeOverlay.Material3.Light" />
 
             <com.google.android.material.tabs.TabLayout
@@ -64,6 +67,10 @@
         android:layout_width="wrap_content"
         android:layout_height="match_parent"
         android:layout_gravity="start"
+        style="@style/Widget.TabSSH.NavigationView"
+        app:itemIconSize="20dp"
+        app:itemVerticalPadding="4dp"
+        app:itemHorizontalPadding="12dp"
         app:menu="@menu/drawer_menu"
         app:headerLayout="@layout/nav_header" />
 

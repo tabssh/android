@@ -1,33 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="176dp"
+    android:layout_height="56dp"
     android:background="@color/primary_500"
-    android:gravity="bottom"
-    android:orientation="vertical"
-    android:padding="16dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingHorizontal="12dp"
     android:theme="@style/ThemeOverlay.AppCompat.Dark">
 
     <ImageView
-        android:layout_width="64dp"
-        android:layout_height="64dp"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
         android:contentDescription="@string/app_name"
         android:src="@mipmap/ic_launcher" />
 
-    <TextView
-        android:layout_width="match_parent"
+    <LinearLayout
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:paddingTop="8dp"
-        android:text="@string/app_name"
-        android:textAppearance="@style/TextAppearance.Material3.BodyLarge"
-        android:textColor="@color/white"
-        android:textStyle="bold" />
+        android:orientation="vertical"
+        android:paddingStart="10dp">
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Modern SSH Client"
-        android:textAppearance="@style/TextAppearance.Material3.BodySmall"
-        android:textColor="@color/white" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/app_name"
+            android:textColor="@color/white"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Modern SSH Client"
+            android:textColor="@color/white"
+            android:textSize="11sp"
+            android:alpha="0.8" />
+
+    </LinearLayout>
 
 </LinearLayout>

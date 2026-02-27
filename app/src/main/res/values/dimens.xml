@@ -21,11 +21,11 @@
     <dimen name="terminal_text_size_min">8sp</dimen>
     <dimen name="terminal_text_size_max">32sp</dimen>
     
-    <!-- Component dimensions -->
-    <dimen name="tab_height">48dp</dimen>
-    <dimen name="tab_min_width">72dp</dimen>
-    <dimen name="tab_max_width">168dp</dimen>
-    <dimen name="toolbar_height">56dp</dimen>
+    <!-- Component dimensions (compact for more screen space) -->
+    <dimen name="tab_height">36dp</dimen>
+    <dimen name="tab_min_width">64dp</dimen>
+    <dimen name="tab_max_width">140dp</dimen>
+    <dimen name="toolbar_height">40dp</dimen>
     <dimen name="bottom_bar_height">56dp</dimen>
     <dimen name="function_key_height">40dp</dimen>
     <dimen name="function_key_width">64dp</dimen>
@@ -55,10 +55,10 @@
     <dimen name="icon_size_large">32dp</dimen>
     <dimen name="icon_size_xlarge">48dp</dimen>
     
-    <!-- Connection item dimensions -->
-    <dimen name="connection_item_height">72dp</dimen>
-    <dimen name="connection_icon_size">40dp</dimen>
-    <dimen name="connection_status_indicator_size">12dp</dimen>
+    <!-- Connection item dimensions (compact) -->
+    <dimen name="connection_item_height">56dp</dimen>
+    <dimen name="connection_icon_size">32dp</dimen>
+    <dimen name="connection_status_indicator_size">10dp</dimen>
     
     <!-- Terminal specific dimensions -->
     <dimen name="terminal_padding">8dp</dimen>
