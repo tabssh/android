@@ -9,6 +9,7 @@ import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.database.dao.HostKeyVerificationResult
 import io.github.tabssh.storage.database.entities.HostKeyEntry
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.first
 import java.util.Base64
@@ -58,9 +59,9 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
             Logger.i("HostKeyVerifier", "🔐 Checking host key for $hostname:$port ($keyType)")
             Logger.i("HostKeyVerifier", "🔐 Fingerprint: $fingerprint")
 
-            // Verify against database
+            // Verify against database - use Dispatchers.IO to prevent deadlock
             Logger.d("HostKeyVerifier", "Querying database for existing host key...")
-            val result = runBlocking {
+            val result = runBlocking(Dispatchers.IO) {
                 hostKeyDao.verifyHostKey(hostname, port, publicKeyBase64, fingerprint)
             }
             Logger.i("HostKeyVerifier", "🔐 Database verification result: $result")
@@ -97,7 +98,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
 
                     return when (action) {
                         HostKeyAction.ACCEPT_NEW_KEY -> {
-                            runBlocking {
+                            runBlocking(Dispatchers.IO) {
                                 val hostKeyEntry = HostKeyEntry(
                                     id = HostKeyEntry.createId(hostname, port),
                                     hostname = hostname,
@@ -129,7 +130,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
                     Logger.w("HostKeyVerifier", "⚠️⚠️⚠️ HOST KEY HAS CHANGED for $hostname:$port ⚠️⚠️⚠️")
 
                     // Get existing key for comparison
-                    val existingKey = runBlocking {
+                    val existingKey = runBlocking(Dispatchers.IO) {
                         hostKeyDao.getHostKey(hostname, port)
                     }
 
@@ -165,7 +166,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
 
                         return when (action) {
                             HostKeyAction.ACCEPT_NEW_KEY -> {
-                                runBlocking {
+                                runBlocking(Dispatchers.IO) {
                                     // Replace old key with new key
                                     val updatedEntry = HostKeyEntry(
                                         id = HostKeyEntry.createId(hostname, port),
@@ -221,7 +222,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
             // Use our own fingerprint generator since JSch's method signature may vary
             val fingerprint = generateFingerprint(hostkey.key as ByteArray)
 
-            runBlocking {
+            runBlocking(Dispatchers.IO) {
                 val entry = HostKeyEntry(
                     id = HostKeyEntry.createId(hostname, port),
                     hostname = hostname,
@@ -245,7 +246,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
     override fun remove(host: String, type: String?) {
         try {
             val (hostname, port) = parseHostPort(host)
-            runBlocking {
+            runBlocking(Dispatchers.IO) {
                 if (type != null) {
                     // Remove specific key type for host
                     val existing = hostKeyDao.getHostKey(hostname, port)
@@ -281,7 +282,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
      */
     override fun getHostKey(): Array<HostKey> {
         return try {
-            runBlocking {
+            runBlocking(Dispatchers.IO) {
                 val entries = hostKeyDao.getAllHostKeys().first()
                 entries.map { entry ->
                     val hostPort = "${entry.hostname}:${entry.port}"
@@ -305,7 +306,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
 
         return try {
             val (hostname, port) = parseHostPort(host)
-            runBlocking {
+            runBlocking(Dispatchers.IO) {
                 val entry = hostKeyDao.getHostKey(hostname, port)
                 if (entry != null && (type == null || entry.keyType == type)) {
                     val keyBytes = Base64.getDecoder().decode(entry.publicKey)
@@ -326,7 +327,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
      * Clear all host keys from database
      */
     fun clearAllHostKeys() {
-        runBlocking {
+        runBlocking(Dispatchers.IO) {
             hostKeyDao.deleteAllHostKeys()
             Logger.i("HostKeyVerifier", "Cleared all host keys")
         }

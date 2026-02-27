@@ -60,16 +60,20 @@ class PerformanceManager(private val context: Context) {
         val batteryLevel = getBatteryLevel()
         val isPowerSaveMode = powerManager.isPowerSaveMode
         val isBatteryLow = batteryLevel < 20
-        
+
         val optimizationLevel = when {
             isPowerSaveMode || isBatteryLow -> BatteryOptimizationLevel.AGGRESSIVE
-            batteryLevel < 50 -> BatteryOptimizationLevel.CONSERVATIVE  
+            batteryLevel < 50 -> BatteryOptimizationLevel.CONSERVATIVE
             else -> BatteryOptimizationLevel.BALANCED
         }
-        
+
+        // Only log when optimization level changes to reduce log spam
+        val previousLevel = _batteryOptimizationLevel.value
         _batteryOptimizationLevel.value = optimizationLevel
-        
-        Logger.d("PerformanceManager", "Battery state: level=$batteryLevel%, powerSave=$isPowerSaveMode, optimization=$optimizationLevel")
+
+        if (previousLevel != optimizationLevel) {
+            Logger.i("PerformanceManager", "Battery state changed: level=$batteryLevel%, powerSave=$isPowerSaveMode, optimization=$optimizationLevel")
+        }
     }
     
     private fun applyInitialOptimizations() {
