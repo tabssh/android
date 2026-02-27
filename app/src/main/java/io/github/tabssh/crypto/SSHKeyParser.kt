@@ -380,16 +380,34 @@ object SSHKeyParser {
             else -> throw IllegalArgumentException("Unsupported ECDSA curve: $curveName")
         }
 
+        // Map SSH curve name to Java standard curve name
+        val javaName = when (curveName) {
+            "nistp256" -> "secp256r1"
+            "nistp384" -> "secp384r1"
+            "nistp521" -> "secp521r1"
+            else -> throw IllegalArgumentException("Unsupported curve: $curveName")
+        }
+
+        // Parse public key
         val publicKey = parseECPoint(publicPoint, curveName)
-        
-        // Note: EC private key construction requires curve parameters
-        // For maximum compatibility, we parse public key only and derive private key separately if needed
-        return ParsedKey(
-            privateKey = null, // EC private key parsing requires additional curve parameters
-            publicKey = publicKey,
-            type = type,
-            fingerprint = generateFingerprint(publicKey)
-        )
+
+        // Parse private key using BouncyCastle
+        try {
+            val ecSpec = org.bouncycastle.jce.ECNamedCurveTable.getParameterSpec(javaName)
+            val privKeySpec = org.bouncycastle.jce.spec.ECPrivateKeySpec(privateScalar, ecSpec)
+            val keyFactory = KeyFactory.getInstance("EC", "BC")
+            val privateKey = keyFactory.generatePrivate(privKeySpec)
+
+            return ParsedKey(
+                privateKey = privateKey,
+                publicKey = publicKey,
+                type = type,
+                fingerprint = generateFingerprint(publicKey)
+            )
+        } catch (e: Exception) {
+            Logger.e("SSHKeyParser", "Failed to construct EC private key", e)
+            throw IllegalArgumentException("Failed to parse ECDSA private key: ${e.message}", e)
+        }
     }
 
     private fun parseOpenSSHEd25519Key(publicBuffer: ByteBuffer, privateBuffer: ByteBuffer): ParsedKey {

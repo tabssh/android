@@ -16,7 +16,8 @@
       "Bash(gh run view:*)",
       "Bash(act:*)",
       "Bash(emulator:*)",
-      "WebFetch(domain:www.tabnine.com)"
+      "WebFetch(domain:www.tabnine.com)",
+      "Bash(./gradlew clean:*)"
     ]
   }
 }

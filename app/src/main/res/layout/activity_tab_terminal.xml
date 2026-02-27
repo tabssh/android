@@ -103,11 +103,11 @@
 
         </FrameLayout>
 
-        <!-- Custom Keyboard Bar -->
-        <io.github.tabssh.ui.keyboard.CustomKeyboardView
-            android:id="@+id/custom_keyboard"
+        <!-- Multi-Row Custom Keyboard -->
+        <io.github.tabssh.ui.keyboard.MultiRowKeyboardView
+            android:id="@+id/multi_row_keyboard"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="wrap_content"
             android:background="?attr/colorSurfaceVariant"
             android:visibility="visible" />
 

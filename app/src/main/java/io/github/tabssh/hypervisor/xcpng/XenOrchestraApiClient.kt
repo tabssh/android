@@ -13,11 +13,11 @@ import java.security.cert.X509Certificate
 import javax.net.ssl.*
 
 /**
- * Xen Orchestra REST API Client
- * 
- * Supports Xen Orchestra (XO) server connections via REST API
+ * Xen Orchestra REST API Client (v5)
+ *
+ * Supports Xen Orchestra (XO) server connections via REST API v5
  * Provides full VM management, snapshots, backups, and resource pool operations
- * 
+ *
  * API Documentation: https://xen-orchestra.com/docs/rest_api.html
  */
 class XenOrchestraApiClient(
@@ -41,7 +41,7 @@ class XenOrchestraApiClient(
     
     companion object {
         private const val TAG = "XenOrchestraAPI"
-        private const val API_PREFIX = "/rest/v0"
+        private const val API_PREFIX = "/rest/v5"
     }
     
     /**

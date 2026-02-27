@@ -15,6 +15,51 @@ class KeyboardLayoutManager(
     companion object {
         private const val PREF_KEYBOARD_LAYOUT = "custom_keyboard_layout"
         private const val SEPARATOR = ","
+
+        /**
+         * Parse multi-row layout from JSON string
+         * Format: JSON array of arrays of key IDs
+         * Example: [["ESC","TAB","CTL"],["UP","DOWN","LEFT","RIGHT"]]
+         */
+        fun parseLayoutJson(json: String): List<List<KeyboardKey>> {
+            val allKeys = KeyboardKey.getAllAvailableKeys()
+            val result = mutableListOf<List<KeyboardKey>>()
+
+            try {
+                val jsonArray = org.json.JSONArray(json)
+                for (i in 0 until jsonArray.length()) {
+                    val rowArray = jsonArray.getJSONArray(i)
+                    val row = mutableListOf<KeyboardKey>()
+                    for (j in 0 until rowArray.length()) {
+                        val keyId = rowArray.getString(j)
+                        allKeys.find { it.id == keyId }?.let { row.add(it) }
+                    }
+                    if (row.isNotEmpty()) {
+                        result.add(row)
+                    }
+                }
+            } catch (e: Exception) {
+                Logger.e("KeyboardLayoutManager", "Failed to parse layout JSON", e)
+                throw e
+            }
+
+            return result
+        }
+
+        /**
+         * Convert multi-row layout to JSON string for storage
+         */
+        fun layoutToJson(layout: List<List<KeyboardKey>>): String {
+            val jsonArray = org.json.JSONArray()
+            for (row in layout) {
+                val rowArray = org.json.JSONArray()
+                for (key in row) {
+                    rowArray.put(key.id)
+                }
+                jsonArray.put(rowArray)
+            }
+            return jsonArray.toString()
+        }
     }
     
     /**

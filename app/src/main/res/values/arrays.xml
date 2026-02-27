@@ -155,6 +155,22 @@
         <item>bar</item>
     </string-array>
 
+    <!-- Keyboard row count options -->
+    <string-array name="keyboard_row_entries">
+        <item>1 Row (Compact)</item>
+        <item>2 Rows</item>
+        <item>3 Rows (Default)</item>
+        <item>4 Rows</item>
+        <item>5 Rows (Full)</item>
+    </string-array>
+    <string-array name="keyboard_row_values">
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+    </string-array>
+
     <!-- Sync frequency options -->
     <string-array name="sync_frequency_entries">
         <item>Manual only</item>

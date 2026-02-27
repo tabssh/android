@@ -24,8 +24,9 @@ class TabManager(private val maxTabs: Int = 10) {
 
     /**
      * Create new tab with connection profile
+     * @param cursorStyle 0=block, 1=underline, 2=bar (I-beam)
      */
-    fun createTab(profile: ConnectionProfile): SSHTab? {
+    fun createTab(profile: ConnectionProfile, cursorStyle: Int = 2): SSHTab? {
         if (tabs.size >= maxTabs) {
             Logger.w("TabManager", "Maximum tabs reached: $maxTabs")
             return null
@@ -35,7 +36,8 @@ class TabManager(private val maxTabs: Int = 10) {
         val termuxBridge = TermuxBridge(
             columns = 80,
             rows = 24,
-            transcriptRows = 2000
+            transcriptRows = 2000,
+            cursorStyle = cursorStyle
         )
 
         val tab = SSHTab(
