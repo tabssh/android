@@ -285,9 +285,31 @@ class TerminalView @JvmOverloads constructor(
         bridge.addListener(listener)
 
         calculateCellDimensions()
+
+        // Force refresh the buffer reference in case bridge is already connected
+        termuxBuffer = bridge.getBuffer()
+
+        // If bridge is already connected, ensure we redraw with current content
+        if (bridge.isConnected.value) {
+            Logger.i("TerminalView", "Bridge already connected - forcing immediate redraw")
+            // Post multiple redraws to ensure content is visible
+            post {
+                termuxBuffer = bridge.getBuffer()
+                invalidate()
+            }
+            postDelayed({
+                termuxBuffer = bridge.getBuffer()
+                invalidate()
+            }, 100)
+            postDelayed({
+                termuxBuffer = bridge.getBuffer()
+                invalidate()
+            }, 500)
+        }
+
         invalidate()
 
-        Logger.i("TerminalView", "Attached Termux bridge: ${terminalRows}x${terminalCols}, listener added")
+        Logger.i("TerminalView", "Attached Termux bridge: ${terminalRows}x${terminalCols}, listener added, connected=${bridge.isConnected.value}")
     }
 
     /**
@@ -643,7 +665,7 @@ class TerminalView @JvmOverloads constructor(
     /**
      * Render terminal content from Termux buffer
      * Draws characters with proper colors and attributes
-     * Uses direct cell access for reliable rendering
+     * Uses row-by-row rendering for reliable display
      */
     private fun renderTermuxBuffer(canvas: Canvas, buffer: com.termux.terminal.TerminalBuffer) {
         val bridge = termuxBridge ?: run {
@@ -663,9 +685,6 @@ class TerminalView @JvmOverloads constructor(
         val startX = paddingLeft.toFloat()
         val startY = paddingTop.toFloat()
 
-        // Always do full redraw for reliability - SSH output can affect any row
-        // The performance optimization was causing rendering issues
-
         // Draw all rows
         for (row in 0 until rows) {
             val rowTop = startY + row * cellHeight
@@ -675,7 +694,15 @@ class TerminalView @JvmOverloads constructor(
             // Clear row background
             canvas.drawRect(startX, rowTop, width.toFloat(), rowBottom, backgroundPaint)
 
-            // Draw each cell in the row using direct cell access
+            // Get entire row text for more reliable rendering
+            val rowText = try {
+                buffer.getSelectedText(0, row, cols, row) ?: ""
+            } catch (e: Exception) {
+                Logger.w("TerminalView", "Error getting row $row text: ${e.message}")
+                ""
+            }
+
+            // Draw each cell in the row
             for (col in 0 until cols) {
                 val x = startX + col * cellWidth
 
@@ -698,34 +725,29 @@ class TerminalView @JvmOverloads constructor(
                     backgroundPaint.color = Color.BLACK // Reset
                 }
 
-                // Get character at this cell position using getSelectedText for single cell
-                val cellChar = try {
-                    buffer.getSelectedText(col, row, col + 1, row)
-                } catch (e: Exception) {
-                    null
+                // Get character from row text if available
+                val codePoint = if (col < rowText.length) {
+                    rowText.codePointAt(col)
+                } else {
+                    ' '.code // Default to space for empty cells
                 }
 
-                // Draw character if we have content
-                if (cellChar != null && cellChar.isNotEmpty()) {
-                    val codePoint = cellChar.codePointAt(0)
+                // Draw character if visible (not space or null character)
+                if (codePoint != 0 && codePoint != ' '.code) {
+                    textPaint.color = termuxColorToAndroid(fg)
 
-                    // Draw character if visible (not space or null character)
-                    if (codePoint != 0 && codePoint != ' '.code) {
-                        textPaint.color = termuxColorToAndroid(fg)
+                    // Apply text effects
+                    textPaint.isFakeBoldText = (effect and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_BOLD) != 0
+                    textPaint.textSkewX = if ((effect and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0) -0.25f else 0f
+                    textPaint.isUnderlineText = (effect and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE) != 0
 
-                        // Apply text effects
-                        textPaint.isFakeBoldText = (effect and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_BOLD) != 0
-                        textPaint.textSkewX = if ((effect and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0) -0.25f else 0f
-                        textPaint.isUnderlineText = (effect and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE) != 0
+                    val charStr = String(Character.toChars(codePoint))
+                    canvas.drawText(charStr, x, y, textPaint)
 
-                        val charStr = String(Character.toChars(codePoint))
-                        canvas.drawText(charStr, x, y, textPaint)
-
-                        // Reset effects
-                        textPaint.isFakeBoldText = false
-                        textPaint.textSkewX = 0f
-                        textPaint.isUnderlineText = false
-                    }
+                    // Reset effects
+                    textPaint.isFakeBoldText = false
+                    textPaint.textSkewX = 0f
+                    textPaint.isUnderlineText = false
                 }
             }
         }
