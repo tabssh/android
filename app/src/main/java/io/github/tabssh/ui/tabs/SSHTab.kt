@@ -164,7 +164,7 @@ class SSHTab(
      */
     suspend fun connect(sshConnection: SSHConnection): Boolean {
         return try {
-            Logger.i("SSHTab", "Connecting tab terminal for ${profile.getDisplayName()}")
+            Logger.i("SSHTab", "=== CONNECTING TAB TERMINAL for ${profile.getDisplayName()} ===")
             connection = sshConnection
 
             // Launch coroutine to observe connection state
@@ -182,30 +182,30 @@ class SSHTab(
             Logger.i("SSHTab", "Opening shell channel...")
             val shellChannel = sshConnection.openShellChannel()
             if (shellChannel != null) {
-                Logger.i("SSHTab", "Shell channel opened successfully")
+                Logger.i("SSHTab", "Shell channel opened successfully, isConnected=${shellChannel.isConnected}")
 
                 val inputStream = shellChannel.inputStream
                 val outputStream = shellChannel.outputStream
 
-                Logger.d("SSHTab", "Input stream: ${if (inputStream != null) "OK" else "NULL"}")
-                Logger.d("SSHTab", "Output stream: ${if (outputStream != null) "OK" else "NULL"}")
+                Logger.i("SSHTab", "Stream check - Input: ${inputStream?.javaClass?.simpleName ?: "NULL"}, Output: ${outputStream?.javaClass?.simpleName ?: "NULL"}")
 
                 if (inputStream == null || outputStream == null) {
-                    Logger.e("SSHTab", "Shell channel streams are null for ${profile.getDisplayName()}")
+                    Logger.e("SSHTab", "CRITICAL: Shell channel streams are NULL for ${profile.getDisplayName()}")
                     return false
                 }
 
+                Logger.i("SSHTab", "TermuxBridge state before connect: emulator=${termuxBridge.getEmulator() != null}, listeners=${termuxBridge.isConnected.value}")
                 Logger.i("SSHTab", "Wiring Termux terminal to SSH streams...")
                 termuxBridge.connect(inputStream, outputStream)
-                Logger.i("SSHTab", "Terminal WIRED to SSH successfully for ${profile.getDisplayName()}")
+                Logger.i("SSHTab", "=== TERMINAL WIRED TO SSH SUCCESSFULLY for ${profile.getDisplayName()} ===")
                 true
             } else {
-                Logger.e("SSHTab", "Failed to open shell channel for ${profile.getDisplayName()}")
+                Logger.e("SSHTab", "CRITICAL: Failed to open shell channel for ${profile.getDisplayName()}")
                 false
             }
 
         } catch (e: Exception) {
-            Logger.e("SSHTab", "Error connecting tab ${profile.getDisplayName()}", e)
+            Logger.e("SSHTab", "ERROR connecting tab ${profile.getDisplayName()}", e)
             _hasError.value = true
             false
         }

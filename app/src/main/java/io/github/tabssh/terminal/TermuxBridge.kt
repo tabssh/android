@@ -217,12 +217,16 @@ class TermuxBridge(
      * Connect to SSH streams and start processing
      */
     fun connect(sshInputStream: InputStream, sshOutputStream: OutputStream) {
-        Logger.i(TAG, "Connecting to SSH streams")
+        Logger.i(TAG, "=== CONNECTING TO SSH STREAMS ===")
+        Logger.i(TAG, "InputStream: $sshInputStream")
+        Logger.i(TAG, "OutputStream: $sshOutputStream")
 
         // Ensure emulator is initialized
         if (emulator == null) {
+            Logger.i(TAG, "Emulator was null, initializing...")
             initialize()
         }
+        Logger.i(TAG, "Emulator ready: ${emulator != null}, size: ${currentColumns}x${currentRows}")
 
         // Store streams
         this.inputStream = sshInputStream
@@ -230,14 +234,16 @@ class TermuxBridge(
         _isConnected.value = true
 
         // Start read loop
+        Logger.i(TAG, "Starting read loop...")
         startReadLoop()
 
         // Notify listeners
+        Logger.i(TAG, "Notifying ${listeners.size} listeners of connection")
         runOnMain {
             listeners.forEach { it.onConnected() }
         }
 
-        Logger.i(TAG, "Connected to SSH streams")
+        Logger.i(TAG, "=== SSH STREAMS CONNECTED SUCCESSFULLY ===")
     }
 
     /**
@@ -263,14 +269,19 @@ class TermuxBridge(
 
                     if (bytesRead > 0) {
                         // Feed data to Termux emulator
-                        emulator?.append(buffer, bytesRead)
+                        val em = emulator
+                        if (em != null) {
+                            em.append(buffer, bytesRead)
+                            Logger.i(TAG, "Fed $bytesRead bytes to emulator, cursor at (${em.cursorRow},${em.cursorCol})")
+                        } else {
+                            Logger.e(TAG, "EMULATOR IS NULL - cannot process $bytesRead bytes!")
+                        }
 
                         // Notify screen changed (emulator may not call client for every change)
                         runOnMain {
+                            Logger.d(TAG, "Notifying ${listeners.size} listeners of screen change")
                             listeners.forEach { it.onScreenChanged() }
                         }
-
-                        Logger.d(TAG, "Processed $bytesRead bytes from SSH")
                     }
                 }
             } catch (e: Exception) {

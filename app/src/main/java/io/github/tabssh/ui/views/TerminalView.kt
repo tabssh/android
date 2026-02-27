@@ -198,11 +198,16 @@ class TerminalView @JvmOverloads constructor(
         Logger.d("TerminalView", "Attached terminal emulator: ${terminalRows}x${terminalCols}")
     }
 
+    // Store current bridge listener for removal
+    private var currentBridgeListener: TermuxBridgeListener? = null
+
     /**
      * Attach Termux bridge for proper VT100/ANSI terminal emulation
      * This is the preferred method for SSH connections
      */
     fun attachTerminalEmulator(bridge: TermuxBridge) {
+        Logger.i("TerminalView", "attachTerminalEmulator called for bridge: ${bridge.hashCode()}")
+
         // Clear old emulator references
         terminalListener?.let { listener ->
             terminalEmulator?.removeListener(listener)
@@ -211,29 +216,38 @@ class TerminalView @JvmOverloads constructor(
         terminalEmulator = null
         terminalBuffer = null
 
+        // Remove listener from old bridge if different
+        if (termuxBridge != null && termuxBridge != bridge) {
+            currentBridgeListener?.let { listener ->
+                termuxBridge?.removeListener(listener)
+                Logger.d("TerminalView", "Removed listener from old bridge")
+            }
+        }
+
         // Set up Termux bridge
         termuxBridge = bridge
         termuxBuffer = bridge.getBuffer()
         terminalRows = bridge.getRows()
         terminalCols = bridge.getCols()
 
-        // Set up listener for screen changes
-        bridge.addListener(object : TermuxBridgeListener {
+        Logger.d("TerminalView", "Bridge state: buffer=${termuxBuffer != null}, rows=$terminalRows, cols=$terminalCols, emulator=${bridge.getEmulator() != null}")
+
+        // Create and set up listener for screen changes
+        val listener = object : TermuxBridgeListener {
             override fun onConnected() {
-                Logger.d("TerminalView", "Termux bridge connected")
+                Logger.i("TerminalView", "Termux bridge CONNECTED - terminal should start receiving data")
+                post { invalidate() }
             }
 
             override fun onDisconnected() {
-                Logger.d("TerminalView", "Termux bridge disconnected")
+                Logger.i("TerminalView", "Termux bridge disconnected")
             }
 
             override fun onScreenChanged() {
                 // Update buffer reference and redraw
                 termuxBuffer = bridge.getBuffer()
+                Logger.d("TerminalView", "onScreenChanged - scheduling redraw")
                 post {
-                    // Mark ALL rows dirty - SSH data can affect any row
-                    // (banner text, prompts, command output, etc.)
-                    markAllRowsDirty()
                     invalidate()
                 }
             }
@@ -243,48 +257,37 @@ class TerminalView @JvmOverloads constructor(
             }
 
             override fun onBell() {
-                // Could play a sound or vibrate
                 Logger.d("TerminalView", "Terminal bell")
             }
 
             override fun onColorsChanged() {
-                // Color scheme changed - full redraw needed
-                post {
-                    markAllRowsDirty()
-                    invalidate()
-                }
+                post { invalidate() }
             }
 
             override fun onCursorStateChanged(visible: Boolean) {
-                // Just cursor visibility changed - mark cursor row dirty
-                post {
-                    val cursorRow = bridge.getCursorRow()
-                    if (cursorRow in 0 until terminalRows) {
-                        dirtyRows.set(cursorRow)
-                    }
-                    invalidateDirtyRows()
-                }
+                post { invalidate() }
             }
 
             override fun onCopyToClipboard(text: String) {
-                // Handle clipboard copy
                 Logger.d("TerminalView", "Copy to clipboard: ${text.take(50)}...")
             }
 
             override fun onPasteFromClipboard() {
-                // Handle paste request
                 Logger.d("TerminalView", "Paste from clipboard requested")
             }
 
             override fun onError(e: Exception) {
                 Logger.e("TerminalView", "Termux bridge error", e)
             }
-        })
+        }
+
+        currentBridgeListener = listener
+        bridge.addListener(listener)
 
         calculateCellDimensions()
         invalidate()
 
-        Logger.d("TerminalView", "Attached Termux bridge: ${terminalRows}x${terminalCols}")
+        Logger.i("TerminalView", "Attached Termux bridge: ${terminalRows}x${terminalCols}, listener added")
     }
 
     /**
@@ -640,11 +643,15 @@ class TerminalView @JvmOverloads constructor(
     /**
      * Render terminal content from Termux buffer
      * Draws characters with proper colors and attributes
-     * Performance optimized: uses dirty region tracking for partial redraws
+     * Uses direct cell access for reliable rendering
      */
     private fun renderTermuxBuffer(canvas: Canvas, buffer: com.termux.terminal.TerminalBuffer) {
         val bridge = termuxBridge ?: run {
             Logger.w("TerminalView", "renderTermuxBuffer: bridge is null")
+            return
+        }
+        val emulator = bridge.getEmulator() ?: run {
+            Logger.w("TerminalView", "renderTermuxBuffer: emulator is null")
             return
         }
         val rows = bridge.getRows()
@@ -653,59 +660,31 @@ class TerminalView @JvmOverloads constructor(
         val cursorCol = bridge.getCursorCol()
         val cursorVisible = bridge.isCursorVisible()
 
-        // Debug: log rendering state
-        Logger.d("TerminalView", "Rendering: ${rows}x${cols}, cursor at ($cursorRow,$cursorCol), visible=$cursorVisible")
-
         val startX = paddingLeft.toFloat()
         val startY = paddingTop.toFloat()
 
-        // Check if terminal dimensions changed - force full redraw
-        val needsFullRedraw = fullRedrawNeeded || rows != lastRenderedRows || cols != lastRenderedCols
-        if (needsFullRedraw) {
-            dirtyRows.set(0, rows) // Mark all rows dirty
-            lastRenderedRows = rows
-            lastRenderedCols = cols
-            fullRedrawNeeded = false
-        }
+        // Always do full redraw for reliability - SSH output can affect any row
+        // The performance optimization was causing rendering issues
 
-        // Track cursor movement - mark old and new cursor rows dirty
-        if (lastCursorRow != cursorRow) {
-            if (lastCursorRow in 0 until rows) dirtyRows.set(lastCursorRow)
-            if (cursorRow in 0 until rows) dirtyRows.set(cursorRow)
-        }
-        if (lastCursorCol != cursorCol && cursorRow in 0 until rows) {
-            dirtyRows.set(cursorRow)
-        }
-        lastCursorRow = cursorRow
-        lastCursorCol = cursorCol
-
-        // Draw only dirty rows
+        // Draw all rows
         for (row in 0 until rows) {
-            // Skip rows that aren't dirty (performance optimization)
-            if (!dirtyRows.get(row)) continue
-
             val rowTop = startY + row * cellHeight
             val rowBottom = startY + (row + 1) * cellHeight
             val y = rowBottom - textPaint.descent()
 
-            // Clear row background before redrawing
+            // Clear row background
             canvas.drawRect(startX, rowTop, width.toFloat(), rowBottom, backgroundPaint)
 
-            // Get the row text using getSelectedText (single row extraction)
-            val rowText = try {
-                buffer.getSelectedText(0, row, cols, row) ?: ""
-            } catch (e: Exception) {
-                ""
-            }
-
-            // Draw each character with its style
-            var col = 0
-            var charIndex = 0
-            while (col < cols && charIndex < rowText.length) {
+            // Draw each cell in the row using direct cell access
+            for (col in 0 until cols) {
                 val x = startX + col * cellWidth
 
                 // Get cell style from Termux buffer
-                val style = buffer.getStyleAt(row, col)
+                val style = try {
+                    buffer.getStyleAt(row, col)
+                } catch (e: Exception) {
+                    0L // Default style
+                }
 
                 // Extract foreground and background colors from style
                 val fg = com.termux.terminal.TextStyle.decodeForeColor(style)
@@ -719,34 +698,39 @@ class TerminalView @JvmOverloads constructor(
                     backgroundPaint.color = Color.BLACK // Reset
                 }
 
-                // Get character at this position
-                val codePoint = rowText.codePointAt(charIndex)
-                val charCount = Character.charCount(codePoint)
-
-                // Draw character if visible (not space or null)
-                if (codePoint != 0 && codePoint != ' '.code) {
-                    textPaint.color = termuxColorToAndroid(fg)
-
-                    // Apply text effects
-                    textPaint.isFakeBoldText = (effect and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_BOLD) != 0
-                    textPaint.textSkewX = if ((effect and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0) -0.25f else 0f
-                    textPaint.isUnderlineText = (effect and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE) != 0
-
-                    val charStr = String(Character.toChars(codePoint))
-                    canvas.drawText(charStr, x, y, textPaint)
-
-                    // Reset effects
-                    textPaint.isFakeBoldText = false
-                    textPaint.textSkewX = 0f
-                    textPaint.isUnderlineText = false
+                // Get character at this cell position using getSelectedText for single cell
+                val cellChar = try {
+                    buffer.getSelectedText(col, row, col + 1, row)
+                } catch (e: Exception) {
+                    null
                 }
 
-                col++
-                charIndex += charCount
+                // Draw character if we have content
+                if (cellChar != null && cellChar.isNotEmpty()) {
+                    val codePoint = cellChar.codePointAt(0)
+
+                    // Draw character if visible (not space or null character)
+                    if (codePoint != 0 && codePoint != ' '.code) {
+                        textPaint.color = termuxColorToAndroid(fg)
+
+                        // Apply text effects
+                        textPaint.isFakeBoldText = (effect and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_BOLD) != 0
+                        textPaint.textSkewX = if ((effect and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0) -0.25f else 0f
+                        textPaint.isUnderlineText = (effect and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE) != 0
+
+                        val charStr = String(Character.toChars(codePoint))
+                        canvas.drawText(charStr, x, y, textPaint)
+
+                        // Reset effects
+                        textPaint.isFakeBoldText = false
+                        textPaint.textSkewX = 0f
+                        textPaint.isUnderlineText = false
+                    }
+                }
             }
         }
 
-        // Draw cursor (always drawn if visible, regardless of dirty state)
+        // Draw cursor (always drawn if visible)
         if (cursorVisible && cursorRow in 0 until rows && cursorCol in 0 until cols) {
             val cursorX = startX + cursorCol * cellWidth
             val cursorY = startY + cursorRow * cellHeight
@@ -754,9 +738,6 @@ class TerminalView @JvmOverloads constructor(
             cursorPaint.alpha = 128
             canvas.drawRect(cursorX, cursorY, cursorX + cellWidth, cursorY + cellHeight, cursorPaint)
         }
-
-        // Clear dirty flags after rendering
-        dirtyRows.clear()
     }
 
     /**
@@ -1140,10 +1121,18 @@ class TerminalView @JvmOverloads constructor(
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
+        // Clean up old terminal emulator listener
         terminalListener?.let { listener ->
             terminalEmulator?.removeListener(listener)
         }
         terminalListener = null
+
+        // Clean up Termux bridge listener
+        currentBridgeListener?.let { listener ->
+            termuxBridge?.removeListener(listener)
+            Logger.d("TerminalView", "Removed bridge listener on detach")
+        }
+        currentBridgeListener = null
     }
 }
 
