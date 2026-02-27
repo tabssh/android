@@ -1230,6 +1230,9 @@ class TerminalView @JvmOverloads constructor(
         val result = getTextAtPosition(x, y) ?: return
         val text = result.second  // Extract string from Pair<Int, String>
 
+        // Guard against empty text
+        if (text.isEmpty()) return
+
         // Find the word at this position
         val col = ((x - paddingLeft) / cellWidth).toInt().coerceIn(0, text.length - 1)
 
