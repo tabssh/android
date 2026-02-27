@@ -664,8 +664,7 @@ class TerminalView @JvmOverloads constructor(
 
     /**
      * Render terminal content from Termux buffer
-     * Draws characters with proper colors and attributes
-     * Uses row-by-row rendering for reliable display
+     * Uses direct TerminalRow access for proper character rendering
      */
     private fun renderTermuxBuffer(canvas: Canvas, buffer: com.termux.terminal.TerminalBuffer) {
         val bridge = termuxBridge ?: run {
@@ -685,7 +684,7 @@ class TerminalView @JvmOverloads constructor(
         val startX = paddingLeft.toFloat()
         val startY = paddingTop.toFloat()
 
-        // Draw all rows
+        // Draw all rows using direct TerminalRow access
         for (row in 0 until rows) {
             val rowTop = startY + row * cellHeight
             val rowBottom = startY + (row + 1) * cellHeight
@@ -694,26 +693,52 @@ class TerminalView @JvmOverloads constructor(
             // Clear row background
             canvas.drawRect(startX, rowTop, width.toFloat(), rowBottom, backgroundPaint)
 
-            // Get entire row text for more reliable rendering
-            val rowText = try {
-                buffer.getSelectedText(0, row, cols, row) ?: ""
+            // Get the TerminalRow using proper Termux API
+            val internalRow = try {
+                buffer.externalToInternalRow(row)
             } catch (e: Exception) {
-                Logger.w("TerminalView", "Error getting row $row text: ${e.message}")
-                ""
+                continue
             }
 
+            val terminalRow = try {
+                buffer.allocateFullLineIfNecessary(internalRow)
+            } catch (e: Exception) {
+                Logger.w("TerminalView", "Error getting row $row: ${e.message}")
+                continue
+            }
+
+            // Access the character array directly
+            val lineChars = terminalRow.mText
+            val charsUsed = terminalRow.spaceUsed
+
             // Draw each cell in the row
-            for (col in 0 until cols) {
+            var charIndex = 0
+            var col = 0
+            while (col < cols && charIndex < charsUsed) {
                 val x = startX + col * cellWidth
 
-                // Get cell style from Termux buffer
-                val style = try {
-                    buffer.getStyleAt(row, col)
-                } catch (e: Exception) {
-                    0L // Default style
+                // Get character at this position
+                val char = if (charIndex < lineChars.size) lineChars[charIndex] else ' '
+
+                // Handle surrogate pairs for Unicode characters
+                val codePoint: Int
+                val charsConsumed: Int
+                if (Character.isHighSurrogate(char) && charIndex + 1 < lineChars.size) {
+                    codePoint = Character.toCodePoint(char, lineChars[charIndex + 1])
+                    charsConsumed = 2
+                } else {
+                    codePoint = char.code
+                    charsConsumed = 1
                 }
 
-                // Extract foreground and background colors from style
+                // Get style for this column
+                val style = try {
+                    terminalRow.getStyle(col)
+                } catch (e: Exception) {
+                    0L
+                }
+
+                // Extract colors and effects from style
                 val fg = com.termux.terminal.TextStyle.decodeForeColor(style)
                 val bg = com.termux.terminal.TextStyle.decodeBackColor(style)
                 val effect = com.termux.terminal.TextStyle.decodeEffect(style)
@@ -722,17 +747,10 @@ class TerminalView @JvmOverloads constructor(
                 if (bg != com.termux.terminal.TextStyle.COLOR_INDEX_BACKGROUND) {
                     backgroundPaint.color = termuxColorToAndroid(bg)
                     canvas.drawRect(x, rowTop, x + cellWidth, rowBottom, backgroundPaint)
-                    backgroundPaint.color = Color.BLACK // Reset
+                    backgroundPaint.color = Color.BLACK
                 }
 
-                // Get character from row text if available
-                val codePoint = if (col < rowText.length) {
-                    rowText.codePointAt(col)
-                } else {
-                    ' '.code // Default to space for empty cells
-                }
-
-                // Draw character if visible (not space or null character)
+                // Draw character if visible
                 if (codePoint != 0 && codePoint != ' '.code) {
                     textPaint.color = termuxColorToAndroid(fg)
 
@@ -749,10 +767,15 @@ class TerminalView @JvmOverloads constructor(
                     textPaint.textSkewX = 0f
                     textPaint.isUnderlineText = false
                 }
+
+                // Calculate character width (some chars are double-width)
+                val charWidth = com.termux.terminal.WcWidth.width(codePoint)
+                col += if (charWidth > 0) charWidth else 1
+                charIndex += charsConsumed
             }
         }
 
-        // Draw cursor (always drawn if visible)
+        // Draw cursor
         if (cursorVisible && cursorRow in 0 until rows && cursorCol in 0 until cols) {
             val cursorX = startX + cursorCol * cellWidth
             val cursorY = startY + cursorRow * cellHeight
