@@ -157,7 +157,9 @@ class SnippetManagerActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e("SnippetManagerActivity", "Failed to load snippets", e)
                 runOnUiThread {
-                    showError("Failed to load snippets", "Error")
+                    if (!isFinishing && !isDestroyed) {
+                        showError("Failed to load snippets", "Error")
+                    }
                 }
             }
         }
@@ -276,7 +278,9 @@ class SnippetManagerActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e("SnippetManagerActivity", "Failed to create snippet", e)
                 runOnUiThread {
-                    showError("Failed to create snippet", "Error")
+                    if (!isFinishing && !isDestroyed) {
+                        showError("Failed to create snippet", "Error")
+                    }
                 }
             }
         }
@@ -303,7 +307,9 @@ class SnippetManagerActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e("SnippetManagerActivity", "Failed to update snippet", e)
                 runOnUiThread {
-                    showError("Failed to update snippet", "Error")
+                    if (!isFinishing && !isDestroyed) {
+                        showError("Failed to update snippet", "Error")
+                    }
                 }
             }
         }
@@ -333,7 +339,9 @@ class SnippetManagerActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e("SnippetManagerActivity", "Failed to delete snippet", e)
                 runOnUiThread {
-                    showError("Failed to delete snippet", "Error")
+                    if (!isFinishing && !isDestroyed) {
+                        showError("Failed to delete snippet", "Error")
+                    }
                 }
             }
         }

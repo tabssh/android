@@ -172,7 +172,19 @@ class PreferenceManager(private val context: Context) {
     fun setBellNotificationEnabled(enabled: Boolean) = setBoolean(KEY_BELL_NOTIFICATION, enabled)
 
     // Keyboard preferences
-    fun getKeyboardRowCount(): Int = getInt(KEY_KEYBOARD_ROW_COUNT, 3).coerceIn(1, 5)
+    fun getKeyboardRowCount(): Int {
+        // Handle both Int and String storage (ListPreference stores as String)
+        return try {
+            getInt(KEY_KEYBOARD_ROW_COUNT, 3).coerceIn(1, 5)
+        } catch (e: ClassCastException) {
+            // Preference was stored as String (from XML preference)
+            try {
+                getString(KEY_KEYBOARD_ROW_COUNT, "3").toIntOrNull()?.coerceIn(1, 5) ?: 3
+            } catch (e2: Exception) {
+                3 // Default to 3 rows
+            }
+        }
+    }
     fun setKeyboardRowCount(count: Int) = setInt(KEY_KEYBOARD_ROW_COUNT, count.coerceIn(1, 5))
 
     fun getKeyboardLayoutJson(): String? {
