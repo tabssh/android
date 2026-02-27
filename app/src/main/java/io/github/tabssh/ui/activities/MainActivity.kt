@@ -246,15 +246,6 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             R.id.nav_hypervisors -> {
                 viewPager.currentItem = 4 // Switch to Hypervisors tab
             }
-            R.id.nav_proxmox -> {
-                openHypervisorManagerByType(HypervisorType.PROXMOX)
-            }
-            R.id.nav_xcpng -> {
-                openHypervisorManagerByType(HypervisorType.XCPNG)
-            }
-            R.id.nav_vmware -> {
-                openHypervisorManagerByType(HypervisorType.VMWARE)
-            }
             
             // Tools
             R.id.nav_manage_groups -> {
@@ -273,9 +264,6 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             }
             R.id.nav_export_connections -> {
                 exportConnectionsLauncher.launch("tabssh_connections_${System.currentTimeMillis()}.zip")
-            }
-            R.id.nav_import_ssh_config -> {
-                importSSHConfig()
             }
             
             // Settings & Help

@@ -337,8 +337,11 @@ class ConnectionsFragment : Fragment() {
     private fun toggleGroupExpanded(groupHeader: ConnectionListItem.GroupHeader) {
         lifecycleScope.launch {
             try {
-                val newCollapsed = !groupHeader.isExpanded
+                // If currently expanded (isExpanded=true), user wants to collapse → newCollapsed=true
+                // If currently collapsed (isExpanded=false), user wants to expand → newCollapsed=false
+                val newCollapsed = groupHeader.isExpanded
                 app.database.connectionGroupDao().updateGroupCollapsedState(groupHeader.group.id, newCollapsed)
+                Logger.d("ConnectionsFragment", "Toggled group '${groupHeader.group.name}' collapsed=$newCollapsed")
                 // Reload will happen via Flow
             } catch (e: Exception) {
                 Logger.e("ConnectionsFragment", "Failed to toggle group", e)
