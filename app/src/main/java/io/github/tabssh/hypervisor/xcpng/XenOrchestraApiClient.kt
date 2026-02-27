@@ -13,9 +13,10 @@ import java.security.cert.X509Certificate
 import javax.net.ssl.*
 
 /**
- * Xen Orchestra REST API Client (v5)
+ * Xen Orchestra REST API Client (Auto-detecting version)
  *
- * Supports Xen Orchestra (XO) server connections via REST API v5
+ * Supports Xen Orchestra (XO) server connections via REST API
+ * Auto-detects API version (tries v6, then v5, then v0)
  * Provides full VM management, snapshots, backups, and resource pool operations
  *
  * API Documentation: https://xen-orchestra.com/docs/rest_api.html
@@ -27,21 +28,27 @@ class XenOrchestraApiClient(
     private val password: String,
     private val verifySsl: Boolean = false
 ) {
-    
+
     private val baseUrl = "https://$host:$port"
     private val client: OkHttpClient
-    
+
     // Authentication state
     private var authToken: String? = null
     private var userId: String? = null
     private var tokenExpiresAt: Long? = null
-    
+
     // OAuth2 state (if supported by XO)
     private var refreshToken: String? = null
-    
+
+    // API version (auto-detected)
+    private var apiPrefix: String = "/rest/v0"
+    private var detectedApiVersion: String? = null
+
     companion object {
         private const val TAG = "XenOrchestraAPI"
-        private const val API_PREFIX = "/rest/v5"
+
+        // API versions to try in order (newest first)
+        private val API_VERSIONS = listOf("/rest/v6", "/rest/v5", "/rest/v0")
     }
     
     /**
@@ -143,63 +150,95 @@ class XenOrchestraApiClient(
     
     /**
      * Authentication - Basic Auth with email/password
-     * 
-     * POST /rest/v0/users/signin
+     * Auto-detects API version by trying v6, v5, v0 in order
+     *
+     * POST /rest/vX/users/signin
      * Body: {"email": "user@example.com", "password": "..."}
      * Response: {"token": "...", "userId": "..."}
      */
     suspend fun authenticate(): Boolean = withContext(Dispatchers.IO) {
+        // If we already detected a working API version, use it
+        if (detectedApiVersion != null) {
+            return@withContext authenticateWithVersion(apiPrefix)
+        }
+
+        // Try each API version in order until one works
+        Logger.d(TAG, "Auto-detecting API version for $baseUrl")
+
+        for (version in API_VERSIONS) {
+            Logger.d(TAG, "Trying API version: $version")
+            if (authenticateWithVersion(version)) {
+                apiPrefix = version
+                detectedApiVersion = version
+                Logger.i(TAG, "Detected working API version: $version")
+                return@withContext true
+            }
+        }
+
+        Logger.e(TAG, "Authentication failed: No compatible API version found")
+        false
+    }
+
+    /**
+     * Attempt authentication with a specific API version
+     */
+    private suspend fun authenticateWithVersion(version: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            Logger.d(TAG, "Attempting authentication to $baseUrl")
-            
+            Logger.d(TAG, "Attempting authentication to $baseUrl with API $version")
+
             val json = JSONObject().apply {
                 put("email", email)
                 put("password", password)
             }
-            
+
             val body = json.toString().toRequestBody("application/json".toMediaType())
             val request = Request.Builder()
-                .url("$baseUrl$API_PREFIX/users/signin")
+                .url("$baseUrl$version/users/signin")
                 .post(body)
                 .build()
-            
+
             val response = client.newCall(request).execute()
-            
+
             if (response.isSuccessful) {
                 val responseBody = response.body?.string()
                 if (responseBody != null) {
                     val responseJson = JSONObject(responseBody)
-                    
+
                     authToken = responseJson.optString("token")
                     userId = responseJson.optString("userId")
-                    
+
                     // Check if token has expiry (some XO versions may include this)
                     if (responseJson.has("expiresAt")) {
                         tokenExpiresAt = responseJson.getLong("expiresAt")
                     }
-                    
-                    Logger.i(TAG, "Authentication successful, userId: $userId")
+
+                    Logger.i(TAG, "Authentication successful with $version, userId: $userId")
                     Logger.d(TAG, "Auth token: ${authToken?.take(20)}...")
-                    
+
                     true
                 } else {
-                    Logger.e(TAG, "Authentication failed: Empty response body")
+                    Logger.d(TAG, "Authentication with $version failed: Empty response body")
                     false
                 }
             } else {
                 val errorBody = response.body?.string()
-                Logger.e(TAG, "Authentication failed: HTTP ${response.code} - $errorBody")
+                Logger.d(TAG, "Authentication with $version failed: HTTP ${response.code}")
                 false
             }
-            
+
         } catch (e: IOException) {
-            Logger.e(TAG, "Network error during authentication: ${e.message}", e)
+            Logger.d(TAG, "Network error with $version: ${e.message}")
             false
         } catch (e: Exception) {
-            Logger.e(TAG, "Authentication error: ${e.message}", e)
+            Logger.d(TAG, "Error with $version: ${e.message}")
             false
         }
     }
+
+    /**
+     * Get the detected API version (for debugging/display)
+     */
+    fun getDetectedApiVersion(): String? = detectedApiVersion
     
     /**
      * Build authenticated request with authorization header
@@ -324,7 +363,7 @@ class XenOrchestraApiClient(
         try {
             Logger.d(TAG, "Fetching VM list from Xen Orchestra")
             
-            val request = buildAuthenticatedRequest("$baseUrl$API_PREFIX/vms")
+            val request = buildAuthenticatedRequest("$baseUrl$apiPrefix/vms")
             val response = executeRequest(request)
             
             if (response.isSuccessful) {
@@ -386,7 +425,7 @@ class XenOrchestraApiClient(
         try {
             Logger.d(TAG, "Fetching VM details for: $vmId")
             
-            val request = buildAuthenticatedRequest("$baseUrl$API_PREFIX/vms/$vmId")
+            val request = buildAuthenticatedRequest("$baseUrl$apiPrefix/vms/$vmId")
             val response = executeRequest(request)
             
             if (response.isSuccessful) {
@@ -431,7 +470,7 @@ class XenOrchestraApiClient(
             Logger.d(TAG, "Starting VM: $vmId")
             
             val request = buildAuthenticatedRequest(
-                "$baseUrl$API_PREFIX/vms/$vmId/start",
+                "$baseUrl$apiPrefix/vms/$vmId/start",
                 "POST"
             )
             val response = executeRequest(request)
@@ -461,7 +500,7 @@ class XenOrchestraApiClient(
             Logger.d(TAG, "Stopping VM: $vmId (force=$force)")
             
             val request = buildAuthenticatedRequest(
-                "$baseUrl$API_PREFIX/vms/$vmId/$action",
+                "$baseUrl$apiPrefix/vms/$vmId/$action",
                 "POST"
             )
             val response = executeRequest(request)
@@ -489,7 +528,7 @@ class XenOrchestraApiClient(
             Logger.d(TAG, "Rebooting VM: $vmId")
 
             val request = buildAuthenticatedRequest(
-                "$baseUrl$API_PREFIX/vms/$vmId/restart",
+                "$baseUrl$apiPrefix/vms/$vmId/restart",
                 "POST"
             )
             val response = executeRequest(request)
@@ -518,7 +557,7 @@ class XenOrchestraApiClient(
             Logger.d(TAG, "Resetting VM (hard): $vmId")
 
             val request = buildAuthenticatedRequest(
-                "$baseUrl$API_PREFIX/vms/$vmId/restart?force=true",
+                "$baseUrl$apiPrefix/vms/$vmId/restart?force=true",
                 "POST"
             )
             val response = executeRequest(request)
@@ -546,7 +585,7 @@ class XenOrchestraApiClient(
             Logger.d(TAG, "Suspending VM: $vmId")
             
             val request = buildAuthenticatedRequest(
-                "$baseUrl$API_PREFIX/vms/$vmId/suspend",
+                "$baseUrl$apiPrefix/vms/$vmId/suspend",
                 "POST"
             )
             val response = executeRequest(request)
@@ -574,7 +613,7 @@ class XenOrchestraApiClient(
             Logger.d(TAG, "Resuming VM: $vmId")
             
             val request = buildAuthenticatedRequest(
-                "$baseUrl$API_PREFIX/vms/$vmId/resume",
+                "$baseUrl$apiPrefix/vms/$vmId/resume",
                 "POST"
             )
             val response = executeRequest(request)
@@ -642,7 +681,7 @@ class XenOrchestraApiClient(
         try {
             Logger.d(TAG, "Fetching snapshots for VM: $vmId")
             
-            val request = buildAuthenticatedRequest("$baseUrl$API_PREFIX/vms/$vmId/snapshots")
+            val request = buildAuthenticatedRequest("$baseUrl$apiPrefix/vms/$vmId/snapshots")
             val response = executeRequest(request)
             
             if (response.isSuccessful) {
@@ -704,7 +743,7 @@ class XenOrchestraApiClient(
             
             val body = json.toString().toRequestBody("application/json".toMediaType())
             val request = buildAuthenticatedRequest(
-                "$baseUrl$API_PREFIX/vms/$vmId/snapshots",
+                "$baseUrl$apiPrefix/vms/$vmId/snapshots",
                 "POST",
                 body
             )
@@ -733,7 +772,7 @@ class XenOrchestraApiClient(
             Logger.d(TAG, "Deleting snapshot: $snapshotId")
             
             val request = buildAuthenticatedRequest(
-                "$baseUrl$API_PREFIX/vms/$vmId/snapshots/$snapshotId",
+                "$baseUrl$apiPrefix/vms/$vmId/snapshots/$snapshotId",
                 "DELETE"
             )
             val response = executeRequest(request)
@@ -761,7 +800,7 @@ class XenOrchestraApiClient(
             Logger.d(TAG, "Reverting VM $vmId to snapshot: $snapshotId")
             
             val request = buildAuthenticatedRequest(
-                "$baseUrl$API_PREFIX/vms/$vmId/snapshots/$snapshotId/revert",
+                "$baseUrl$apiPrefix/vms/$vmId/snapshots/$snapshotId/revert",
                 "POST"
             )
             val response = executeRequest(request)
@@ -792,7 +831,7 @@ class XenOrchestraApiClient(
         try {
             Logger.d(TAG, "Fetching backup jobs")
             
-            val request = buildAuthenticatedRequest("$baseUrl$API_PREFIX/backup/jobs")
+            val request = buildAuthenticatedRequest("$baseUrl$apiPrefix/backup/jobs")
             val response = executeRequest(request)
             
             if (response.isSuccessful) {
@@ -841,7 +880,7 @@ class XenOrchestraApiClient(
         try {
             Logger.d(TAG, "Fetching backup job details: $jobId")
             
-            val request = buildAuthenticatedRequest("$baseUrl$API_PREFIX/backup/jobs/$jobId")
+            val request = buildAuthenticatedRequest("$baseUrl$apiPrefix/backup/jobs/$jobId")
             val response = executeRequest(request)
             
             if (response.isSuccessful) {
@@ -880,7 +919,7 @@ class XenOrchestraApiClient(
             Logger.d(TAG, "Triggering backup job: $jobId")
             
             val request = buildAuthenticatedRequest(
-                "$baseUrl$API_PREFIX/backup/jobs/$jobId/run",
+                "$baseUrl$apiPrefix/backup/jobs/$jobId/run",
                 "POST"
             )
             val response = executeRequest(request)
@@ -907,7 +946,7 @@ class XenOrchestraApiClient(
         try {
             Logger.d(TAG, "Fetching backup run history for job: $jobId")
             
-            val request = buildAuthenticatedRequest("$baseUrl$API_PREFIX/backup/jobs/$jobId/runs")
+            val request = buildAuthenticatedRequest("$baseUrl$apiPrefix/backup/jobs/$jobId/runs")
             val response = executeRequest(request)
             
             if (response.isSuccessful) {
@@ -960,7 +999,7 @@ class XenOrchestraApiClient(
         try {
             Logger.d(TAG, "Fetching resource pools")
             
-            val request = buildAuthenticatedRequest("$baseUrl$API_PREFIX/pools")
+            val request = buildAuthenticatedRequest("$baseUrl$apiPrefix/pools")
             val response = executeRequest(request)
             
             if (response.isSuccessful) {
@@ -1009,7 +1048,7 @@ class XenOrchestraApiClient(
         try {
             Logger.d(TAG, "Fetching pool details: $poolId")
             
-            val request = buildAuthenticatedRequest("$baseUrl$API_PREFIX/pools/$poolId")
+            val request = buildAuthenticatedRequest("$baseUrl$apiPrefix/pools/$poolId")
             val response = executeRequest(request)
             
             if (response.isSuccessful) {
@@ -1047,7 +1086,7 @@ class XenOrchestraApiClient(
         try {
             Logger.d(TAG, "Fetching hosts" + (poolId?.let { " for pool $it" } ?: ""))
             
-            val request = buildAuthenticatedRequest("$baseUrl$API_PREFIX/hosts")
+            val request = buildAuthenticatedRequest("$baseUrl$apiPrefix/hosts")
             val response = executeRequest(request)
             
             if (response.isSuccessful) {
@@ -1106,7 +1145,7 @@ class XenOrchestraApiClient(
         try {
             Logger.d(TAG, "Fetching host details: $hostId")
             
-            val request = buildAuthenticatedRequest("$baseUrl$API_PREFIX/hosts/$hostId")
+            val request = buildAuthenticatedRequest("$baseUrl$apiPrefix/hosts/$hostId")
             val response = executeRequest(request)
             
             if (response.isSuccessful) {
@@ -1147,7 +1186,7 @@ class XenOrchestraApiClient(
         try {
             Logger.d(TAG, "Fetching host stats: $hostId")
             
-            val request = buildAuthenticatedRequest("$baseUrl$API_PREFIX/hosts/$hostId/stats")
+            val request = buildAuthenticatedRequest("$baseUrl$apiPrefix/hosts/$hostId/stats")
             val response = executeRequest(request)
             
             if (response.isSuccessful) {
@@ -1406,7 +1445,7 @@ class XenOrchestraApiClient(
 
             // Try REST API first to get console details
             try {
-                val request = buildAuthenticatedRequest("$baseUrl$API_PREFIX/vms/$vmId/console")
+                val request = buildAuthenticatedRequest("$baseUrl$apiPrefix/vms/$vmId/console")
                 val response = executeRequest(request)
 
                 if (response.isSuccessful) {
