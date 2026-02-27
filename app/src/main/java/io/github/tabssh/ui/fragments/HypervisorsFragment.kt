@@ -119,14 +119,17 @@ class HypervisorsFragment : Fragment() {
 
     private fun loadHypervisors() {
         progressBar.visibility = View.VISIBLE
-        
+
         lifecycleScope.launch {
             try {
                 app.database.hypervisorDao().getAllHypervisors().collect { list ->
+                    // Check if fragment is still attached before updating UI
+                    if (!isAdded) return@collect
+
                     hypervisors.clear()
                     hypervisors.addAll(list)
                     adapter.updateList(hypervisors)
-                    
+
                     // Update UI visibility
                     if (hypervisors.isEmpty()) {
                         recyclerView.visibility = View.GONE
@@ -135,10 +138,13 @@ class HypervisorsFragment : Fragment() {
                         recyclerView.visibility = View.VISIBLE
                         emptyState.visibility = View.GONE
                     }
-                    
+
                     progressBar.visibility = View.GONE
                 }
             } catch (e: Exception) {
+                // Check if fragment is still attached before showing toast
+                if (!isAdded) return@launch
+
                 progressBar.visibility = View.GONE
                 Toast.makeText(
                     requireContext(),
@@ -150,6 +156,8 @@ class HypervisorsFragment : Fragment() {
     }
 
     private fun openHypervisorManager(hypervisor: HypervisorProfile) {
+        if (!isAdded) return
+
         val intent = when (hypervisor.type) {
             HypervisorType.PROXMOX -> Intent(requireContext(), ProxmoxManagerActivity::class.java)
             HypervisorType.VMWARE -> Intent(requireContext(), VMwareManagerActivity::class.java)
@@ -160,6 +168,8 @@ class HypervisorsFragment : Fragment() {
     }
 
     private fun openHypervisorEdit(hypervisor: HypervisorProfile?) {
+        if (!isAdded) return
+
         val intent = Intent(requireContext(), HypervisorEditActivity::class.java)
         hypervisor?.let {
             intent.putExtra("hypervisor_id", it.id)
@@ -168,8 +178,10 @@ class HypervisorsFragment : Fragment() {
     }
 
     private fun showHypervisorMenu(hypervisor: HypervisorProfile) {
+        if (!isAdded) return
+
         val options = arrayOf("Open", "Edit", "Delete", "Refresh Status")
-        
+
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(hypervisor.name)
             .setItems(options) { _, which ->
@@ -188,6 +200,8 @@ class HypervisorsFragment : Fragment() {
     }
 
     private fun deleteHypervisor(hypervisor: HypervisorProfile) {
+        if (!isAdded) return
+
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Delete Hypervisor")
             .setMessage("Are you sure you want to delete '${hypervisor.name}'?")
@@ -195,12 +209,14 @@ class HypervisorsFragment : Fragment() {
                 lifecycleScope.launch {
                     try {
                         app.database.hypervisorDao().delete(hypervisor)
+                        if (!isAdded) return@launch
                         Toast.makeText(
                             requireContext(),
                             "Deleted ${hypervisor.name}",
                             Toast.LENGTH_SHORT
                         ).show()
                     } catch (e: Exception) {
+                        if (!isAdded) return@launch
                         Toast.makeText(
                             requireContext(),
                             "Failed to delete: ${e.message}",
@@ -221,12 +237,14 @@ class HypervisorsFragment : Fragment() {
                     // Simple ping/connection test would go here
                     // For now, just show that we tried
                 }
+                if (!isAdded) return@launch
                 Toast.makeText(
                     requireContext(),
                     "✓ ${hypervisor.name} connectivity checked",
                     Toast.LENGTH_SHORT
                 ).show()
             } catch (e: Exception) {
+                if (!isAdded) return@launch
                 Toast.makeText(
                     requireContext(),
                     "✗ ${hypervisor.name} not reachable",
