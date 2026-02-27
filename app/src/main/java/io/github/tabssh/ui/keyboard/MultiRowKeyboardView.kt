@@ -183,26 +183,26 @@ class MultiRowKeyboardView @JvmOverloads constructor(
                     )
                 )
                 3 -> listOf(
-                    // Row 1: Modifiers and control
+                    // Row 1: Essential keys and modifiers
                     listOf(
                         KeyboardKey("ESC", "ESC", "\u001B"),
                         KeyboardKey("TAB", "TAB", "\t"),
                         KeyboardKey("CTL", "CTL", "", KeyboardKey.KeyCategory.MODIFIER),
                         KeyboardKey("ALT", "ALT", "", KeyboardKey.KeyCategory.MODIFIER),
                         KeyboardKey("FN", "FN", "", KeyboardKey.KeyCategory.MODIFIER),
-                        KeyboardKey("PASTE", "📋", "", KeyboardKey.KeyCategory.ACTION),
+                        KeyboardKey("ENTER", "ENT", "\n"),
                         KeyboardKey("TOGGLE", "⌨", "", KeyboardKey.KeyCategory.ACTION)
                     ),
-                    // Row 2: Navigation
+                    // Row 2: Navigation keys
                     listOf(
-                        KeyboardKey("UP", "↑", "\u001B[A", KeyboardKey.KeyCategory.ARROW),
-                        KeyboardKey("DOWN", "↓", "\u001B[B", KeyboardKey.KeyCategory.ARROW),
-                        KeyboardKey("LEFT", "←", "\u001B[D", KeyboardKey.KeyCategory.ARROW),
-                        KeyboardKey("RIGHT", "→", "\u001B[C", KeyboardKey.KeyCategory.ARROW),
                         KeyboardKey("HOME", "HOME", "\u001B[H"),
                         KeyboardKey("END", "END", "\u001B[F"),
                         KeyboardKey("PGUP", "PGUP", "\u001B[5~"),
-                        KeyboardKey("PGDN", "PGDN", "\u001B[6~")
+                        KeyboardKey("PGDN", "PGDN", "\u001B[6~"),
+                        KeyboardKey("UP", "↑", "\u001B[A", KeyboardKey.KeyCategory.ARROW),
+                        KeyboardKey("DOWN", "↓", "\u001B[B", KeyboardKey.KeyCategory.ARROW),
+                        KeyboardKey("LEFT", "←", "\u001B[D", KeyboardKey.KeyCategory.ARROW),
+                        KeyboardKey("RIGHT", "→", "\u001B[C", KeyboardKey.KeyCategory.ARROW)
                     ),
                     // Row 3: Symbols
                     listOf(
@@ -212,8 +212,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
                         KeyboardKey("MINUS", "-", "-", KeyboardKey.KeyCategory.SYMBOL),
                         KeyboardKey("UNDERSCORE", "_", "_", KeyboardKey.KeyCategory.SYMBOL),
                         KeyboardKey("TILDE", "~", "~", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("BACKTICK", "`", "`", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("EQUALS", "=", "=", KeyboardKey.KeyCategory.SYMBOL)
+                        KeyboardKey("PASTE", "📋", "", KeyboardKey.KeyCategory.ACTION)
                     )
                 )
                 4 -> listOf(
