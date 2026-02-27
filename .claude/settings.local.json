@@ -15,7 +15,8 @@
       "Bash(gh run list:*)",
       "Bash(gh run view:*)",
       "Bash(act:*)",
-      "Bash(emulator:*)"
+      "Bash(emulator:*)",
+      "WebFetch(domain:www.tabnine.com)"
     ]
   }
 }
