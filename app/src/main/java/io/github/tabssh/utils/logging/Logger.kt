@@ -21,13 +21,22 @@ object Logger {
     private var debugMode = false
     private var logToFile = false
     private var logFile: File? = null
+    private var appLogFile: File? = null  // Always-on sanitized log for bug reports
     private var appContext: Context? = null
     private val executor = Executors.newSingleThreadExecutor()
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault())
 
     private const val TAG_PREFIX = "TabSSH"
     private const val LOG_FILE_NAME = "tabssh_debug.log"
-    private const val MAX_LOG_SIZE = 5 * 1024 * 1024 // 5MB
+    private const val APP_LOG_FILE_NAME = "tabssh_app.log"  // Sanitized for public sharing
+    private const val MAX_LOG_SIZE = 10 * 1024 * 1024 // 10MB
+    private const val MAX_APP_LOG_SIZE = 2 * 1024 * 1024 // 2MB for app log (smaller, recent only)
+
+    // Counters for anonymizing hosts/users in app log
+    private val hostMap = mutableMapOf<String, String>()
+    private val userMap = mutableMapOf<String, String>()
+    private var hostCounter = 0
+    private var userCounter = 0
 
     /**
      * Initialize the logger
@@ -40,6 +49,13 @@ object Logger {
         appContext = context.applicationContext
         this.debugMode = debugMode
         this.logToFile = debugMode
+
+        // Always enable app log (sanitized for public sharing)
+        appLogFile = File(context.filesDir, APP_LOG_FILE_NAME)
+        writeToAppLog("I", "Logger", "=== TabSSH Started ===")
+        writeToAppLog("I", "Logger", "App Version: ${getAppVersion(context)}")
+        writeToAppLog("I", "Logger", "Android: ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
+        writeToAppLog("I", "Logger", "Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
 
         if (debugMode) {
             // Enable file logging
@@ -78,6 +94,7 @@ object Logger {
             Log.d("$TAG_PREFIX:$tag", message, throwable)
             writeToFile("D", tag, message, throwable)
         }
+        // Debug messages NOT written to app log (too verbose, may contain sensitive data)
     }
 
     fun i(tag: String, message: String, throwable: Throwable? = null) {
@@ -85,6 +102,8 @@ object Logger {
         if (logToFile) {
             writeToFile("I", tag, message, throwable)
         }
+        // Write sanitized version to app log
+        writeToAppLog("I", tag, message, throwable)
     }
 
     fun w(tag: String, message: String, throwable: Throwable? = null) {
@@ -92,6 +111,8 @@ object Logger {
         if (logToFile) {
             writeToFile("W", tag, message, throwable)
         }
+        // Write sanitized version to app log
+        writeToAppLog("W", tag, message, throwable)
     }
 
     fun e(tag: String, message: String, throwable: Throwable? = null) {
@@ -99,6 +120,8 @@ object Logger {
         if (logToFile) {
             writeToFile("E", tag, message, throwable)
         }
+        // Write sanitized version to app log
+        writeToAppLog("E", tag, message, throwable)
     }
 
     fun wtf(tag: String, message: String, throwable: Throwable? = null) {
@@ -106,6 +129,8 @@ object Logger {
         if (logToFile) {
             writeToFile("WTF", tag, message, throwable)
         }
+        // Write sanitized version to app log
+        writeToAppLog("WTF", tag, message, throwable)
     }
 
     /**
@@ -151,44 +176,213 @@ object Logger {
     }
 
     /**
+     * Write to app log (sanitized for public sharing)
+     * Always enabled - safe for bug reports, GitHub issues, pastebin
+     */
+    private fun writeToAppLog(level: String, tag: String, message: String, throwable: Throwable? = null) {
+        val file = appLogFile ?: return
+
+        executor.execute {
+            try {
+                // Rotate if file exceeds max size
+                if (file.exists() && file.length() > MAX_APP_LOG_SIZE) {
+                    val backupFile = File(file.parentFile, "$APP_LOG_FILE_NAME.old")
+                    backupFile.delete()
+                    file.renameTo(backupFile)
+                    // Reset anonymization maps on rotation
+                    hostMap.clear()
+                    userMap.clear()
+                    hostCounter = 0
+                    userCounter = 0
+                }
+
+                // Sanitize message for public sharing
+                val sanitizedMessage = sanitizeForPublic(message)
+                val sanitizedThrowable = throwable?.let { sanitizeStackTrace(it) }
+
+                // Append to app log
+                FileWriter(file, true).use { writer ->
+                    val timestamp = dateFormat.format(Date())
+                    val logLine = buildString {
+                        append("$timestamp $level/$TAG_PREFIX:$tag: $sanitizedMessage")
+                        if (sanitizedThrowable != null) {
+                            append("\n")
+                            append(sanitizedThrowable)
+                        }
+                        append("\n")
+                    }
+                    writer.append(logLine)
+                }
+            } catch (e: Exception) {
+                // Silently fail - don't create infinite loop
+            }
+        }
+    }
+
+    /**
+     * Sanitize message for public sharing
+     * Removes/redacts: hostnames, usernames, IPs, passwords, keys
+     */
+    private fun sanitizeForPublic(message: String): String {
+        var sanitized = message
+
+        // Redact passwords (should never be in logs, but just in case)
+        sanitized = sanitized.replace(Regex("password[=:]\\s*\\S+", RegexOption.IGNORE_CASE), "password=[REDACTED]")
+        sanitized = sanitized.replace(Regex("passwd[=:]\\s*\\S+", RegexOption.IGNORE_CASE), "passwd=[REDACTED]")
+
+        // Redact SSH key data
+        sanitized = sanitized.replace(Regex("-----BEGIN[^-]+-----[\\s\\S]*?-----END[^-]+-----"), "[SSH KEY REDACTED]")
+        sanitized = sanitized.replace(Regex("ssh-(rsa|ed25519|ecdsa|dss)\\s+\\S+"), "[SSH PUBLIC KEY]")
+
+        // Anonymize IP addresses (replace with consistent placeholders)
+        sanitized = sanitized.replace(Regex("\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b")) { match ->
+            val ip = match.value
+            hostMap.getOrPut(ip) { "IP${++hostCounter}" }
+        }
+
+        // Anonymize hostnames that look like domains
+        sanitized = sanitized.replace(Regex("\\b[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.([a-zA-Z]{2,}|\\d{1,3})\\b")) { match ->
+            val host = match.value
+            // Skip common safe domains
+            if (host.endsWith(".com") || host.endsWith(".org") || host.endsWith(".net") ||
+                host.contains("android") || host.contains("google") || host.contains("github")) {
+                host
+            } else {
+                hostMap.getOrPut(host) { "server${++hostCounter}" }
+            }
+        }
+
+        // Anonymize user@host patterns
+        sanitized = sanitized.replace(Regex("([a-zA-Z0-9_.-]+)@([a-zA-Z0-9.-]+)")) { match ->
+            val user = match.groupValues[1]
+            val host = match.groupValues[2]
+            val anonUser = userMap.getOrPut(user) { "user${++userCounter}" }
+            val anonHost = hostMap.getOrPut(host) { "server${++hostCounter}" }
+            "$anonUser@$anonHost"
+        }
+
+        // Redact file paths that might contain usernames
+        sanitized = sanitized.replace(Regex("/home/[a-zA-Z0-9_-]+"), "/home/[user]")
+        sanitized = sanitized.replace(Regex("/Users/[a-zA-Z0-9_-]+"), "/Users/[user]")
+
+        return sanitized
+    }
+
+    /**
+     * Sanitize stack trace for public sharing
+     */
+    private fun sanitizeStackTrace(throwable: Throwable): String {
+        val stackTrace = Log.getStackTraceString(throwable)
+        return sanitizeForPublic(stackTrace)
+    }
+
+    /**
      * Write crash report SYNCHRONOUSLY
      * Called from UncaughtExceptionHandler - must complete before process dies
      */
     fun writeCrashSync(thread: Thread, throwable: Throwable) {
-        val file = logFile ?: return
-        try {
-            // Rotate if needed
-            if (file.exists() && file.length() > MAX_LOG_SIZE) {
-                val backupFile = File(file.parentFile, "$LOG_FILE_NAME.old")
-                backupFile.delete()
-                file.renameTo(backupFile)
-            }
+        val timestamp = dateFormat.format(Date())
+        val stackTrace = Log.getStackTraceString(throwable)
 
-            // Write crash synchronously
-            FileWriter(file, true).use { writer ->
-                val timestamp = dateFormat.format(Date())
-                writer.append("\n")
-                writer.append("$timestamp WTF/$TAG_PREFIX:CRASH: ════════════════════════════════════════\n")
-                writer.append("$timestamp WTF/$TAG_PREFIX:CRASH: UNCAUGHT EXCEPTION - APP CRASHED\n")
-                writer.append("$timestamp WTF/$TAG_PREFIX:CRASH: Thread: ${thread.name} (id=${thread.id})\n")
-                writer.append("$timestamp WTF/$TAG_PREFIX:CRASH: Exception: ${throwable.javaClass.name}\n")
-                writer.append("$timestamp WTF/$TAG_PREFIX:CRASH: Message: ${throwable.message}\n")
-                writer.append("$timestamp WTF/$TAG_PREFIX:CRASH: ════════════════════════════════════════\n")
-                writer.append(Log.getStackTraceString(throwable))
-                writer.append("\n$timestamp WTF/$TAG_PREFIX:CRASH: ════════════════════════════════════════\n\n")
-                writer.flush()
-            }
+        // Write to debug log if enabled
+        logFile?.let { file ->
+            try {
+                // Rotate if needed
+                if (file.exists() && file.length() > MAX_LOG_SIZE) {
+                    val backupFile = File(file.parentFile, "$LOG_FILE_NAME.old")
+                    backupFile.delete()
+                    file.renameTo(backupFile)
+                }
 
-            Log.e("$TAG_PREFIX:Logger", "Crash logged to file: ${file.absolutePath}")
-        } catch (e: Exception) {
-            Log.e("$TAG_PREFIX:Logger", "Failed to write crash to log file", e)
+                // Write crash synchronously
+                FileWriter(file, true).use { writer ->
+                    writer.append("\n")
+                    writer.append("$timestamp WTF/$TAG_PREFIX:CRASH: ════════════════════════════════════════\n")
+                    writer.append("$timestamp WTF/$TAG_PREFIX:CRASH: UNCAUGHT EXCEPTION - APP CRASHED\n")
+                    writer.append("$timestamp WTF/$TAG_PREFIX:CRASH: Thread: ${thread.name} (id=${thread.id})\n")
+                    writer.append("$timestamp WTF/$TAG_PREFIX:CRASH: Exception: ${throwable.javaClass.name}\n")
+                    writer.append("$timestamp WTF/$TAG_PREFIX:CRASH: Message: ${throwable.message}\n")
+                    writer.append("$timestamp WTF/$TAG_PREFIX:CRASH: ════════════════════════════════════════\n")
+                    writer.append(stackTrace)
+                    writer.append("\n$timestamp WTF/$TAG_PREFIX:CRASH: ════════════════════════════════════════\n\n")
+                    writer.flush()
+                }
+
+                Log.e("$TAG_PREFIX:Logger", "Crash logged to file: ${file.absolutePath}")
+            } catch (e: Exception) {
+                Log.e("$TAG_PREFIX:Logger", "Failed to write crash to log file", e)
+            }
+        }
+
+        // Always write sanitized crash to app log
+        appLogFile?.let { file ->
+            try {
+                val sanitizedStack = sanitizeForPublic(stackTrace)
+                val sanitizedMessage = sanitizeForPublic(throwable.message ?: "")
+
+                FileWriter(file, true).use { writer ->
+                    writer.append("\n")
+                    writer.append("$timestamp WTF/$TAG_PREFIX:CRASH: ════════════════════════════════════════\n")
+                    writer.append("$timestamp WTF/$TAG_PREFIX:CRASH: APP CRASHED\n")
+                    writer.append("$timestamp WTF/$TAG_PREFIX:CRASH: Thread: ${thread.name}\n")
+                    writer.append("$timestamp WTF/$TAG_PREFIX:CRASH: Exception: ${throwable.javaClass.name}\n")
+                    writer.append("$timestamp WTF/$TAG_PREFIX:CRASH: Message: $sanitizedMessage\n")
+                    writer.append("$timestamp WTF/$TAG_PREFIX:CRASH: ════════════════════════════════════════\n")
+                    writer.append(sanitizedStack)
+                    writer.append("\n$timestamp WTF/$TAG_PREFIX:CRASH: ════════════════════════════════════════\n\n")
+                    writer.flush()
+                }
+            } catch (e: Exception) {
+                // Silently fail
+            }
         }
     }
 
     fun getLogFile(): File? = logFile
+    fun getAppLogFile(): File? = appLogFile
 
     /**
-     * Clear all logs
+     * Get sanitized app log for public sharing (GitHub issues, pastebin, etc.)
+     * Safe to share publicly - no sensitive data
+     */
+    fun getAppLog(): String {
+        val file = appLogFile
+        if (file == null || !file.exists()) {
+            return buildString {
+                appendLine("=== TabSSH Application Log ===")
+                appendLine("Status: No logs recorded yet")
+                appendLine()
+                appendLine("This log is safe to share publicly.")
+                appendLine("All sensitive information (IPs, hostnames, usernames) is anonymized.")
+            }
+        }
+
+        return try {
+            val logs = file.readText()
+            val oldLogs = File(file.parentFile, "$APP_LOG_FILE_NAME.old").let {
+                if (it.exists()) "\n\n=== Previous Session ===\n${it.readText()}" else ""
+            }
+
+            buildString {
+                appendLine("=== TabSSH Application Log ===")
+                appendLine("Generated: ${dateFormat.format(Date())}")
+                appendLine("Log Size: ${file.length()} bytes")
+                appendLine()
+                appendLine("NOTE: This log is SAFE TO SHARE PUBLICLY.")
+                appendLine("All IPs, hostnames, and usernames are anonymized.")
+                appendLine("(e.g., 'server1', 'user1', 'IP1' are placeholders)")
+                appendLine("═══════════════════════════════════════════════════")
+                appendLine()
+                append(logs)
+                append(oldLogs)
+            }
+        } catch (e: Exception) {
+            "Failed to read app log: ${e.message}"
+        }
+    }
+
+    /**
+     * Clear all logs (debug log only, not app log)
      */
     fun clearLogs() {
         logFile?.delete()
@@ -197,8 +391,32 @@ object Logger {
             File(dir, "$LOG_FILE_NAME.old").delete()
         }
         if (logToFile) {
-            i("Logger", "Log file cleared by user")
+            i("Logger", "Debug log cleared by user")
         }
+    }
+
+    /**
+     * Clear app log (the sanitized public log)
+     */
+    fun clearAppLog() {
+        appLogFile?.delete()
+        appLogFile?.parentFile?.let { dir ->
+            File(dir, "$APP_LOG_FILE_NAME.old").delete()
+        }
+        // Reset anonymization maps
+        hostMap.clear()
+        userMap.clear()
+        hostCounter = 0
+        userCounter = 0
+        i("Logger", "App log cleared by user")
+    }
+
+    /**
+     * Clear all logs (both debug and app logs)
+     */
+    fun clearAllLogs() {
+        clearLogs()
+        clearAppLog()
     }
 
     fun isDebugMode(): Boolean = debugMode

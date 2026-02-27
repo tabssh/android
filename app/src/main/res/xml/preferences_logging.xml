@@ -19,7 +19,7 @@
             android:summary="Set verbosity of debug logs"
             android:entries="@array/log_levels"
             android:entryValues="@array/log_level_values"
-            android:defaultValue="info"
+            android:defaultValue="debug"
             android:dependency="debug_logging_enabled" />
 
     </PreferenceCategory>
@@ -164,12 +164,6 @@
             android:title="View Audit Log"
             android:summary="Security events and user actions"
             android:icon="@android:drawable/ic_lock_lock" />
-
-        <Preference
-            android:key="view_app_log"
-            android:title="View Application Log"
-            android:summary="General application log"
-            android:icon="@android:drawable/ic_menu_view" />
 
     </PreferenceCategory>
 
