@@ -205,43 +205,151 @@ class PerformanceFragment : Fragment() {
 
     private fun onConnectionSelected() {
         val connection = selectedConnection ?: return
-        
+
         // Stop current monitoring if any
         stopMonitoring()
-        
+
         // Create new SSH connection
         lifecycleScope.launch {
             try {
                 progressLoading.visibility = View.VISIBLE
-                
+
                 val newConnection = SSHConnection(
                     profile = connection,
                     scope = CoroutineScope(Dispatchers.IO),
                     context = requireContext()
                 )
-                
+
+                // Setup host key verification callbacks (same as TabTerminalActivity)
+                setupHostKeyVerification(newConnection)
+
                 // Connect to server
-                withContext(Dispatchers.IO) {
+                val connected = withContext(Dispatchers.IO) {
                     newConnection.connect()
                 }
-                
+
+                if (!connected) {
+                    progressLoading.visibility = View.GONE
+                    showError("Connection failed")
+                    return@launch
+                }
+
                 sshConnection = newConnection
                 metricsCollector = MetricsCollector(newConnection)
                 metricsHistory.clear()
-                
+
                 progressLoading.visibility = View.GONE
                 layoutEmptyState.visibility = View.GONE
-                
+
                 Logger.d("PerformanceFragment", "Connected to ${connection.name}")
-                
+
                 // Auto-start monitoring
                 startMonitoring()
-                
+
             } catch (e: Exception) {
                 progressLoading.visibility = View.GONE
                 Logger.e("PerformanceFragment", "Failed to connect to ${connection.name}", e)
                 showError("Failed to connect: ${e.message}")
             }
+        }
+    }
+
+    /**
+     * Setup host key verification callbacks
+     */
+    private fun setupHostKeyVerification(conn: SSHConnection) {
+        // Setup callback for new (unknown) host keys
+        conn.newHostKeyCallback = { info ->
+            Logger.i("PerformanceFragment", "New host key callback for ${info.hostname}")
+
+            var userAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
+            val latch = java.util.concurrent.CountDownLatch(1)
+
+            requireActivity().runOnUiThread {
+                if (!isAdded || requireActivity().isFinishing) {
+                    latch.countDown()
+                    return@runOnUiThread
+                }
+                try {
+                    androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                        .setTitle("New Host Key")
+                        .setMessage(info.getDisplayMessage())
+                        .setPositiveButton("Accept & Save") { _, _ ->
+                            userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_NEW_KEY
+                            latch.countDown()
+                        }
+                        .setNeutralButton("Accept Once") { _, _ ->
+                            userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_ONCE
+                            latch.countDown()
+                        }
+                        .setNegativeButton("Reject") { _, _ ->
+                            userAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
+                            latch.countDown()
+                        }
+                        .setCancelable(false)
+                        .setOnDismissListener { latch.countDown() }
+                        .show()
+                } catch (e: Exception) {
+                    Logger.e("PerformanceFragment", "Failed to show host key dialog", e)
+                    latch.countDown()
+                }
+            }
+
+            // Wait for user response
+            try {
+                latch.await(60, java.util.concurrent.TimeUnit.SECONDS)
+            } catch (e: InterruptedException) {
+                Logger.e("PerformanceFragment", "Interrupted waiting for host key response", e)
+            }
+
+            userAction
+        }
+
+        // Setup callback for changed host keys (MITM warning)
+        conn.hostKeyChangedCallback = { info ->
+            Logger.w("PerformanceFragment", "Host key CHANGED for ${info.hostname}")
+
+            var userAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
+            val latch = java.util.concurrent.CountDownLatch(1)
+
+            requireActivity().runOnUiThread {
+                if (!isAdded || requireActivity().isFinishing) {
+                    latch.countDown()
+                    return@runOnUiThread
+                }
+                try {
+                    androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                        .setTitle("⚠️ Warning: Host Key Changed")
+                        .setMessage("The server's host key has changed!\n\n" +
+                            "This could indicate a man-in-the-middle attack, or the server was reinstalled.\n\n" +
+                            "Previous: ${info.oldFingerprint}\n" +
+                            "New: ${info.newFingerprint}\n\n" +
+                            "Do you want to accept the new key?")
+                        .setPositiveButton("Accept New Key") { _, _ ->
+                            userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_NEW_KEY
+                            latch.countDown()
+                        }
+                        .setNegativeButton("Reject") { _, _ ->
+                            userAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
+                            latch.countDown()
+                        }
+                        .setCancelable(false)
+                        .setOnDismissListener { latch.countDown() }
+                        .show()
+                } catch (e: Exception) {
+                    Logger.e("PerformanceFragment", "Failed to show host key changed dialog", e)
+                    latch.countDown()
+                }
+            }
+
+            // Wait for user response
+            try {
+                latch.await(60, java.util.concurrent.TimeUnit.SECONDS)
+            } catch (e: InterruptedException) {
+                Logger.e("PerformanceFragment", "Interrupted waiting for host key response", e)
+            }
+
+            userAction
         }
     }
 

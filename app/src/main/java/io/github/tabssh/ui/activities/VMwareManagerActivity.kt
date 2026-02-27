@@ -252,9 +252,9 @@ class VMwareManagerActivity : AppCompatActivity() {
         val passwordInput = dialogView.findViewById<EditText>(R.id.password_input)
         val realmInput = dialogView.findViewById<EditText>(R.id.realm_input)
         
-        portInput.visibility = View.GONE // VMware uses default HTTPS port
+        portInput.setText("443") // VMware default HTTPS port
         realmInput.visibility = View.GONE
-        
+
         MaterialAlertDialogBuilder(this)
             .setTitle("Add VMware Server")
             .setView(dialogView)
@@ -263,7 +263,7 @@ class VMwareManagerActivity : AppCompatActivity() {
                     name = nameInput.text.toString(),
                     type = HypervisorType.VMWARE,
                     host = hostInput.text.toString(),
-                    port = 443,
+                    port = portInput.text.toString().toIntOrNull() ?: 443,
                     username = usernameInput.text.toString(),
                     password = passwordInput.text.toString(),
                     verifySsl = false
