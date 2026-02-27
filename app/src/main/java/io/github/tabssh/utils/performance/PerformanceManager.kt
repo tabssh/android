@@ -213,14 +213,22 @@ class PerformanceManager(private val context: Context) {
         Logger.w("PerformanceManager", "Applied emergency battery optimizations")
     }
     
+    // Track if /proc access is available (Android 16+ may restrict it)
+    private var procAccessAvailable = true
+
     private fun getCPUUsage(): Float {
-        // Calculate CPU usage by reading /proc/stat and /proc/[pid]/stat
-        // This provides approximate CPU usage percentage for the app
+        // On Android 16+ (API 36+), /proc access may be restricted
+        // Return 0 gracefully if we can't read /proc files
+        if (!procAccessAvailable) return 0.0f
+
         return try {
             val pid = Process.myPid()
             val statFile = java.io.File("/proc/$pid/stat")
 
-            if (!statFile.exists()) return 0.0f
+            if (!statFile.exists() || !statFile.canRead()) {
+                procAccessAvailable = false
+                return 0.0f
+            }
 
             val statContent = statFile.readText()
             val stats = statContent.split(" ")
@@ -232,18 +240,28 @@ class PerformanceManager(private val context: Context) {
             val utime = stats[13].toLongOrNull() ?: 0L // User mode time
             val stime = stats[14].toLongOrNull() ?: 0L // Kernel mode time
 
-            // Get system uptime to calculate percentage
-            val uptimeFile = java.io.File("/proc/uptime")
-            val uptime = uptimeFile.readText().split(" ")[0].toFloatOrNull() ?: 0f
+            // Use SystemClock instead of /proc/uptime (Android 16+ restricts /proc access)
+            val uptimeMs = android.os.SystemClock.elapsedRealtime()
+            val uptime = uptimeMs / 1000.0f // Convert to seconds
 
             // Calculate CPU usage (simplified)
             val processTime = (utime + stime) / 100.0f // Convert clock ticks to seconds
-            val cpuUsage = (processTime / uptime) * 100.0f
+            val cpuUsage = if (uptime > 0) (processTime / uptime) * 100.0f else 0f
 
             cpuUsage.coerceIn(0f, 100f)
 
+        } catch (e: java.io.FileNotFoundException) {
+            // /proc access restricted on this Android version - don't log repeatedly
+            procAccessAvailable = false
+            0.0f
+        } catch (e: SecurityException) {
+            // Permission denied - don't log repeatedly
+            procAccessAvailable = false
+            0.0f
         } catch (e: Exception) {
-            Logger.e("PerformanceManager", "Error calculating CPU usage", e)
+            // Other error - log once then disable
+            Logger.w("PerformanceManager", "CPU usage unavailable: ${e.message}")
+            procAccessAvailable = false
             0.0f
         }
     }
