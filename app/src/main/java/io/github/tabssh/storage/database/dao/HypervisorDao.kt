@@ -30,4 +30,7 @@ interface HypervisorDao {
     
     @Query("UPDATE hypervisors SET last_connected = :timestamp WHERE id = :id")
     suspend fun updateLastConnected(id: Long, timestamp: Long)
+
+    @Query("UPDATE hypervisors SET is_xen_orchestra = :isXO WHERE id = :id")
+    suspend fun updateIsXenOrchestra(id: Long, isXO: Boolean)
 }
