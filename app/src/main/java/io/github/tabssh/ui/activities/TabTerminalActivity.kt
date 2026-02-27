@@ -889,7 +889,7 @@ class TabTerminalActivity : AppCompatActivity() {
 
                 if (tab != null) {
                     Logger.d("TabTerminalActivity", "Tab created successfully: ${tab.tabId}")
-                    
+
                     // Auto-start recording if enabled
                     if (app.preferencesManager.getBoolean("auto_record_sessions", false)) {
                         Logger.d("TabTerminalActivity", "Starting session recording")
@@ -899,7 +899,12 @@ class TabTerminalActivity : AppCompatActivity() {
                         )
                         tab.sessionRecorder?.startRecording()
                     }
-                    
+
+                    // CRITICAL: Wait for UI to be set up before connecting
+                    // The onTabCreated listener posts addTabToUI() to main thread,
+                    // we need to wait for that to complete so TerminalView is attached
+                    kotlinx.coroutines.delay(200) // Give time for UI to attach terminal view
+
                     // Connect the tab's terminal to SSH streams
                     Logger.i("TabTerminalActivity", "🔌 Connecting terminal to SSH streams...")
                     val connected = tab.connect(sshConnection)
