@@ -273,6 +273,9 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             R.id.nav_settings -> {
                 startActivity(Intent(this, SettingsActivity::class.java))
             }
+            R.id.nav_copy_app_log -> {
+                copyAppLog()
+            }
             R.id.nav_copy_debug_logs -> {
                 copyDebugLogs()
             }
@@ -401,6 +404,45 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             .setNegativeButton("Clear Logs") { _, _ ->
                 Logger.clearLogs()
                 android.widget.Toast.makeText(this, "Logs cleared", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            .show()
+    }
+
+    /**
+     * Copy sanitized app log (safe for public sharing)
+     */
+    private fun copyAppLog() {
+        val logs = Logger.getAppLog()
+
+        if (logs.isBlank() || logs.contains("No logs recorded")) {
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Application Log")
+                .setMessage("No logs recorded yet.\n\nUse the app normally, and logs will be captured automatically.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+
+        // Copy to clipboard
+        val clipboard = getSystemService(android.content.ClipboardManager::class.java)
+        clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("TabSSH App Log", logs))
+
+        // Show dialog with options
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("App Log Copied")
+            .setMessage("${logs.length} characters copied to clipboard.\n\n⚠️ This log is SAFE TO SHARE PUBLICLY.\nAll sensitive info (IPs, hostnames, usernames) has been anonymized.")
+            .setPositiveButton("OK", null)
+            .setNeutralButton("Share") { _, _ ->
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_SUBJECT, "TabSSH App Log")
+                    putExtra(Intent.EXTRA_TEXT, logs)
+                }
+                startActivity(Intent.createChooser(shareIntent, "Share App Log"))
+            }
+            .setNegativeButton("Clear") { _, _ ->
+                Logger.clearAppLog()
+                android.widget.Toast.makeText(this, "App log cleared", android.widget.Toast.LENGTH_SHORT).show()
             }
             .show()
     }
