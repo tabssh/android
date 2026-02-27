@@ -345,7 +345,7 @@ class SyncSettingsActivity : AppCompatActivity() {
                 pw.length < 8    -> passwordLayout?.error = errTooShort
                 pw != cfm        -> confirmLayout?.error  = errMismatch
                 else -> {
-                    syncManager.setSyncPassword(pw)
+                    syncManager.setSyncPasswordSync(pw)
                     refresh()
                     toast("Password set")
                     dialog.dismiss()
