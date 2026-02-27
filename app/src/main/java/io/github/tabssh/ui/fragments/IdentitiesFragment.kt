@@ -54,7 +54,7 @@ class IdentitiesFragment : Fragment() {
     private fun setupIdentitiesSection(view: View) {
         // Setup identities RecyclerView
         identityAdapter = IdentityAdapter(
-            onEdit = { identity -> showEditDialog(identity) },
+            onEdit = { identity -> showIdentityOptionsMenu(identity) },
             onDelete = { identity -> showDeleteConfirmation(identity) }
         )
         
@@ -387,6 +387,156 @@ class IdentitiesFragment : Fragment() {
             .show()
     }
     
+    private fun showIdentityOptionsMenu(identity: Identity) {
+        val options = arrayOf(
+            "✏️ Edit Identity",
+            "📋 Apply to Connections",
+            "🔗 View Linked Connections",
+            "🗑️ Delete Identity"
+        )
+
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(identity.getDisplayName())
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> showEditDialog(identity)
+                    1 -> showApplyToConnectionsDialog(identity)
+                    2 -> showLinkedConnections(identity)
+                    3 -> showDeleteConfirmation(identity)
+                }
+            }
+            .show()
+    }
+
+    private fun showApplyToConnectionsDialog(identity: Identity) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val allConnections = app.database.connectionDao().getAllConnectionsList()
+
+            if (allConnections.isEmpty()) {
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(
+                        requireContext(),
+                        "No connections available",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+                return@launch
+            }
+
+            // Get currently linked connections
+            val linkedConnectionIds = app.database.connectionDao()
+                .getConnectionsByIdentity(identity.id)
+                .map { it.id }
+                .toSet()
+
+            val connectionNames = allConnections.map { "${it.name} (${it.username}@${it.host})" }.toTypedArray()
+            val checkedItems = allConnections.map { it.id in linkedConnectionIds }.toBooleanArray()
+
+            withContext(Dispatchers.Main) {
+                MaterialAlertDialogBuilder(requireContext())
+                    .setTitle("Apply \"${identity.name}\" to:")
+                    .setMultiChoiceItems(connectionNames, checkedItems) { _, which, isChecked ->
+                        checkedItems[which] = isChecked
+                    }
+                    .setPositiveButton("Apply") { _, _ ->
+                        val selectedIds = allConnections
+                            .filterIndexed { index, _ -> checkedItems[index] }
+                            .map { it.id }
+
+                        applyIdentityToConnections(identity, selectedIds)
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .setNeutralButton("Select All") { dialog, _ ->
+                        // Select all and re-show dialog
+                        for (i in checkedItems.indices) {
+                            checkedItems[i] = true
+                        }
+                        (dialog as? androidx.appcompat.app.AlertDialog)?.listView?.let { listView ->
+                            for (i in 0 until listView.count) {
+                                listView.setItemChecked(i, true)
+                            }
+                        }
+                    }
+                    .show()
+            }
+        }
+    }
+
+    private fun applyIdentityToConnections(identity: Identity, connectionIds: List<String>) {
+        if (connectionIds.isEmpty()) {
+            android.widget.Toast.makeText(
+                requireContext(),
+                "No connections selected",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                app.database.connectionDao().applyIdentityToConnections(identity.id, connectionIds)
+
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(
+                        requireContext(),
+                        "Applied \"${identity.name}\" to ${connectionIds.size} connection(s)",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                    Logger.d("IdentitiesFragment", "Applied identity ${identity.id} to ${connectionIds.size} connections")
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(
+                        requireContext(),
+                        "Failed to apply identity: ${e.message}",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+                Logger.e("IdentitiesFragment", "Failed to apply identity", e)
+            }
+        }
+    }
+
+    private fun showLinkedConnections(identity: Identity) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val linkedConnections = app.database.connectionDao().getConnectionsByIdentity(identity.id)
+
+            withContext(Dispatchers.Main) {
+                if (linkedConnections.isEmpty()) {
+                    MaterialAlertDialogBuilder(requireContext())
+                        .setTitle("Linked Connections")
+                        .setMessage("No connections are using this identity.\n\nTap \"Apply to Connections\" to link this identity to your hosts.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                } else {
+                    val connectionList = linkedConnections.joinToString("\n") { "• ${it.name} (${it.host})" }
+                    MaterialAlertDialogBuilder(requireContext())
+                        .setTitle("Connections using \"${identity.name}\"")
+                        .setMessage("${linkedConnections.size} connection(s):\n\n$connectionList")
+                        .setPositiveButton("OK", null)
+                        .setNeutralButton("Remove All") { _, _ ->
+                            removeIdentityFromAllConnections(identity)
+                        }
+                        .show()
+                }
+            }
+        }
+    }
+
+    private fun removeIdentityFromAllConnections(identity: Identity) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            app.database.connectionDao().removeIdentityFromAllConnections(identity.id)
+
+            withContext(Dispatchers.Main) {
+                android.widget.Toast.makeText(
+                    requireContext(),
+                    "Removed identity from all connections",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
     private fun showDeleteConfirmation(identity: Identity) {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Delete Identity")

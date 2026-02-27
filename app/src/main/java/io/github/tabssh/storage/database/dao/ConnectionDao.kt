@@ -86,4 +86,23 @@ interface ConnectionDao {
             updateSortOrder(id2, conn1.sortOrder)
         }
     }
+
+    /**
+     * Apply an identity to multiple connections at once
+     * Sets the identity_id field for all specified connection IDs
+     */
+    @Query("UPDATE connections SET identity_id = :identityId WHERE id IN (:connectionIds)")
+    suspend fun applyIdentityToConnections(identityId: String, connectionIds: List<String>)
+
+    /**
+     * Get all connections that use a specific identity
+     */
+    @Query("SELECT * FROM connections WHERE identity_id = :identityId ORDER BY name")
+    suspend fun getConnectionsByIdentity(identityId: String): List<ConnectionProfile>
+
+    /**
+     * Remove identity from all connections (set identity_id to null)
+     */
+    @Query("UPDATE connections SET identity_id = NULL WHERE identity_id = :identityId")
+    suspend fun removeIdentityFromAllConnections(identityId: String)
 }
