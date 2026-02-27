@@ -105,18 +105,18 @@ class SSHConnection(
                 // Use identity username if available, otherwise profile username
                 val effectiveUsername = resolvedIdentity?.username ?: profile.username
 
-                Logger.i("SSHConnection", "🔌 STEP 1: Starting connection to ${profile.host}:${profile.port} as $effectiveUsername")
+                Logger.i("SSHConnection", "STEP 1: Starting connection to ${profile.host}:${profile.port} as $effectiveUsername")
 
                 // Execute port knock sequence if enabled
-                Logger.d("SSHConnection", "🔌 STEP 2: Checking port knock configuration")
+                Logger.d("SSHConnection", "STEP 2: Checking port knock configuration")
                 executePortKnockIfEnabled()
 
                 // Create JSch session with host key verification
-                Logger.d("SSHConnection", "🔌 STEP 3: Creating JSch session")
+                Logger.d("SSHConnection", "STEP 3: Creating JSch session")
                 val jsch = JSch()
 
                 // Set custom host key repository for database-backed verification
-                Logger.d("SSHConnection", "🔌 STEP 4: Setting up host key verifier")
+                Logger.d("SSHConnection", "STEP 4: Setting up host key verifier")
                 jsch.hostKeyRepository = hostKeyVerifier
 
                 // Configure host key changed callback
@@ -132,11 +132,11 @@ class SSHConnection(
                 }
 
                 // Setup jump host if configured
-                Logger.d("SSHConnection", "🔌 STEP 5: Checking jump host configuration")
+                Logger.d("SSHConnection", "STEP 5: Checking jump host configuration")
                 val jumpHostPort = setupJumpHost(jsch)
 
                 // Create main session - connect through jump host if configured
-                Logger.d("SSHConnection", "🔌 STEP 6: Creating SSH session")
+                Logger.d("SSHConnection", "STEP 6: Creating SSH session")
                 val newSession = if (jumpHostPort != null) {
                     Logger.i("SSHConnection", "Connecting to target through jump host on localhost:$jumpHostPort as $effectiveUsername")
                     jsch.getSession(effectiveUsername, "localhost", jumpHostPort)
@@ -146,11 +146,11 @@ class SSHConnection(
                 }
 
                 // Setup HTTP/SOCKS proxy if configured
-                Logger.d("SSHConnection", "🔌 STEP 7: Checking proxy configuration")
+                Logger.d("SSHConnection", "STEP 7: Checking proxy configuration")
                 setupHttpSocksProxy(newSession)
 
                 // Configure session
-                Logger.d("SSHConnection", "🔌 STEP 8: Configuring SSH session")
+                Logger.d("SSHConnection", "STEP 8: Configuring SSH session")
                 configureSession(newSession)
 
                 // Set timeout
@@ -158,31 +158,31 @@ class SSHConnection(
                 Logger.d("SSHConnection", "Connection timeout set to ${profile.connectTimeout} seconds")
 
                 // Setup UserInfo for host key verification prompts
-                Logger.d("SSHConnection", "🔐 STEP 8.5: Setting up UserInfo for host key prompts")
+                Logger.d("SSHConnection", "STEP 8.5: Setting up UserInfo for host key prompts")
                 setupUserInfo(newSession)
 
                 // Setup authentication BEFORE connecting
-                Logger.i("SSHConnection", "🔑 STEP 9: Setting up authentication")
+                Logger.i("SSHConnection", "STEP 9: Setting up authentication")
                 _connectionState.value = ConnectionState.AUTHENTICATING
                 notifyListeners { onAuthenticating(id) }
 
                 setupAuthentication(jsch, newSession)
 
                 // Connect (this performs both connection AND authentication in one step)
-                Logger.i("SSHConnection", "🔌 STEP 10: Calling session.connect() - THIS IS WHERE HOST KEY VERIFICATION HAPPENS")
+                Logger.i("SSHConnection", "STEP 10: Calling session.connect() - THIS IS WHERE HOST KEY VERIFICATION HAPPENS")
                 newSession.connect()
                 session = newSession
 
-                Logger.i("SSHConnection", "✅ Successfully connected and authenticated to ${profile.host}")
+                Logger.i("SSHConnection", "Successfully connected and authenticated to ${profile.host}")
                 
                 _connectionState.value = ConnectionState.CONNECTED
                 reconnectAttempts = 0
                 notifyListeners { onConnected(id) }
                 
-                Logger.i("SSHConnection", "✅ Connection complete to ${profile.host}")
+                Logger.i("SSHConnection", "Connection complete to ${profile.host}")
                 
             } catch (e: Exception) {
-                Logger.e("SSHConnection", "❌ Connection failed at some step", e)
+                Logger.e("SSHConnection", "Connection failed at some step", e)
                 handleConnectionError(e)
                 return@launch
             }
@@ -232,7 +232,7 @@ class SSHConnection(
             override fun getPassword(): String? = null
 
             override fun promptYesNo(message: String): Boolean {
-                Logger.i("SSHConnection", "🔐 UserInfo.promptYesNo called: $message")
+                Logger.i("SSHConnection", "UserInfo.promptYesNo called: $message")
 
                 // This is called by JSch for host key verification when StrictHostKeyChecking="ask"
                 // Our HostKeyRepository.check() should handle this, but JSch may still call this
@@ -492,13 +492,28 @@ class SSHConnection(
 
         // Priority 1: SSH key (if available and retrievable)
         if (effectiveKeyId != null) {
+            Logger.i("SSHConnection", "Auth: Attempting SSH key authentication with keyId=$effectiveKeyId")
             val jschBytes = getJSchBytes(effectiveKeyId)
             if (jschBytes != null) {
-                jsch.addIdentity(effectiveKeyId, jschBytes, null, null)
-                Logger.i("SSHConnection", "Auth: SSH key (keyId=$effectiveKeyId)")
-                return@withContext
+                try {
+                    Logger.d("SSHConnection", "Auth: JSch bytes retrieved, size=${jschBytes.size} bytes")
+                    // Log first line of key for debugging (shows format)
+                    val firstLine = String(jschBytes, Charsets.UTF_8).lines().firstOrNull() ?: ""
+                    Logger.d("SSHConnection", "Auth: Key format indicator: $firstLine")
+
+                    jsch.addIdentity(effectiveKeyId, jschBytes, null, null)
+                    Logger.i("SSHConnection", "Auth: SSH key added to JSch successfully (keyId=$effectiveKeyId)")
+                    return@withContext
+                } catch (e: Exception) {
+                    Logger.e("SSHConnection", "Auth: Failed to add SSH key to JSch", e)
+                    // Fall through to password auth
+                }
+            } else {
+                Logger.w("SSHConnection", "Auth: JSch bytes null for keyId=$effectiveKeyId - key may not be stored properly")
             }
-            Logger.w("SSHConnection", "Auth: key not found for keyId=$effectiveKeyId, falling back to password")
+            Logger.w("SSHConnection", "Auth: SSH key failed, falling back to password")
+        } else {
+            Logger.d("SSHConnection", "Auth: No SSH key ID configured")
         }
 
         // Priority 2: Password (if stored)
@@ -571,25 +586,55 @@ class SSHConnection(
      *    This handles keys imported before the jsch_bytes store was introduced.
      */
     private suspend fun getJSchBytes(keyId: String): ByteArray? = withContext(Dispatchers.IO) {
-        val app = context.applicationContext as? io.github.tabssh.TabSSHApplication ?: return@withContext null
+        val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
+        if (app == null) {
+            Logger.e("SSHConnection", "getJSchBytes: Application context is null")
+            return@withContext null
+        }
+
+        Logger.d("SSHConnection", "getJSchBytes: Looking up key $keyId")
 
         // Preferred path — JSch-native bytes stored at import time
         val stored = app.keyStorage.retrieveJSchBytes(keyId)
-        if (stored != null) return@withContext stored
+        if (stored != null) {
+            Logger.d("SSHConnection", "getJSchBytes: Found cached JSch bytes (${stored.size} bytes)")
+            return@withContext stored
+        }
+
+        Logger.d("SSHConnection", "getJSchBytes: No cached JSch bytes, attempting fallback conversion")
 
         // Fallback for legacy stored keys — convert PKCS#8 DER on-the-fly
         return@withContext try {
-            val privateKey = app.keyStorage.retrievePrivateKey(keyId) ?: return@withContext null
-            val storedKey  = app.database.keyDao().getKeyById(keyId)  ?: return@withContext null
-            val keyType    = io.github.tabssh.crypto.keys.KeyType.valueOf(storedKey.keyType)
+            val privateKey = app.keyStorage.retrievePrivateKey(keyId)
+            if (privateKey == null) {
+                Logger.e("SSHConnection", "getJSchBytes: Private key not found for $keyId")
+                return@withContext null
+            }
+            Logger.d("SSHConnection", "getJSchBytes: Retrieved private key (algorithm=${privateKey.algorithm})")
+
+            val storedKey = app.database.keyDao().getKeyById(keyId)
+            if (storedKey == null) {
+                Logger.e("SSHConnection", "getJSchBytes: StoredKey metadata not found for $keyId")
+                return@withContext null
+            }
+            Logger.d("SSHConnection", "getJSchBytes: Key metadata - type=${storedKey.keyType}, name=${storedKey.name}")
+
+            val keyType = io.github.tabssh.crypto.keys.KeyType.valueOf(storedKey.keyType)
             // Public key is derived from the private key for the fallback
-            val publicKey  = app.keyStorage.getPublicKeyFromPrivate(privateKey)
-            val jschBytes  = app.keyStorage.toJSchKeyBytes(privateKey, publicKey, keyType)
+            Logger.d("SSHConnection", "getJSchBytes: Deriving public key from private key")
+            val publicKey = app.keyStorage.getPublicKeyFromPrivate(privateKey)
+            Logger.d("SSHConnection", "getJSchBytes: Public key derived successfully")
+
+            val jschBytes = app.keyStorage.toJSchKeyBytes(privateKey, publicKey, keyType)
+            Logger.d("SSHConnection", "getJSchBytes: Converted to JSch format (${jschBytes.size} bytes)")
+
             // Cache for next time
             app.keyStorage.storeJSchBytes(keyId, jschBytes)
+            Logger.d("SSHConnection", "getJSchBytes: Cached JSch bytes for future use")
+
             jschBytes
         } catch (e: Exception) {
-            Logger.e("SSHConnection", "Failed to build JSch bytes for $keyId", e)
+            Logger.e("SSHConnection", "getJSchBytes: Failed to build JSch bytes for $keyId", e)
             null
         }
     }

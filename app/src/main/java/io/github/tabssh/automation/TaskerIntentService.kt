@@ -192,7 +192,8 @@ class TaskerIntentService : JobIntentService() {
                 if (tab == null) {
                     val connection = SSHConnection(profile, scope, this@TaskerIntentService)
                     connection.connect()
-                    tab = app.tabManager.createTab(profile)
+                    val cursorStyle = app.preferencesManager.getCursorStyleInt()
+                    tab = app.tabManager.createTab(profile, cursorStyle)
                     tab?.connect(connection)
                 }
                 

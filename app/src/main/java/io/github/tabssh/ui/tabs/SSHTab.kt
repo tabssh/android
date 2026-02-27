@@ -35,8 +35,12 @@ class SSHTab(
     var connection: SSHConnection? = null
 
     // Tab state
-    private val _title = MutableStateFlow(profile.name)
+    // Default title format: user@host (shows connection info)
+    private val _title = MutableStateFlow(generateDefaultTitle())
     val title: StateFlow<String> = _title.asStateFlow()
+
+    // Track if title was set by OSC sequence (should not be overwritten by status)
+    private var titleSetByTerminal = false
 
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
@@ -88,11 +92,13 @@ class SSHTab(
                 sessionStartTime = System.currentTimeMillis()
                 _connectionState.value = ConnectionState.CONNECTED
                 _hasError.value = false
+                updateTitleWithStatus(ConnectionState.CONNECTED)
                 Logger.i("SSHTab", "Terminal connected for ${profile.getDisplayName()}")
             }
 
             override fun onDisconnected() {
                 _connectionState.value = ConnectionState.DISCONNECTED
+                updateTitleWithStatus(ConnectionState.DISCONNECTED)
                 Logger.i("SSHTab", "Terminal disconnected for ${profile.getDisplayName()}")
             }
 
@@ -114,8 +120,10 @@ class SSHTab(
                 // Update tab title from terminal (e.g., from OSC sequences)
                 if (title.isNotBlank()) {
                     _title.value = title
+                    titleSetByTerminal = true  // Mark that terminal set the title
                 } else {
-                    _title.value = profile.getDisplayName()
+                    titleSetByTerminal = false
+                    _title.value = generateDefaultTitle()
                 }
                 Logger.d("SSHTab", "Tab title changed to: $title")
             }
@@ -171,6 +179,7 @@ class SSHTab(
             connectionScope.launch {
                 sshConnection.connectionState.collect { state ->
                     _connectionState.value = state
+                    updateTitleWithStatus(state)  // Update title with status indicator
                     Logger.d("SSHTab", "Connection state changed to: $state")
                     if (state == ConnectionState.ERROR) {
                         _hasError.value = true
@@ -379,7 +388,38 @@ class SSHTab(
      * Reset title to default (connection name)
      */
     fun resetTitle() {
-        _title.value = profile.getDisplayName()
+        titleSetByTerminal = false
+        _title.value = generateDefaultTitle()
+    }
+
+    /**
+     * Generate default title in format: user@host
+     */
+    private fun generateDefaultTitle(): String {
+        val user = profile.username
+        val host = profile.host
+        return if (user.isNotBlank() && host.isNotBlank()) {
+            "$user@$host"
+        } else {
+            profile.getDisplayName()
+        }
+    }
+
+    /**
+     * Update title with connection status prefix
+     */
+    private fun updateTitleWithStatus(state: ConnectionState) {
+        // Don't override terminal-set title (from OSC sequences)
+        if (titleSetByTerminal) return
+
+        val baseTitle = generateDefaultTitle()
+        _title.value = when (state) {
+            ConnectionState.CONNECTING -> "⏳ $baseTitle"
+            ConnectionState.CONNECTED -> baseTitle
+            ConnectionState.DISCONNECTED -> "⏸ $baseTitle"
+            ConnectionState.ERROR -> "❌ $baseTitle"
+            ConnectionState.AUTHENTICATING -> "🔐 $baseTitle"
+        }
     }
 
     /**

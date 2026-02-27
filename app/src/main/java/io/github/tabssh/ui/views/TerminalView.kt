@@ -56,8 +56,14 @@ class TerminalView @JvmOverloads constructor(
 
     // Touch and input handling
     private val gestureDetector: GestureDetector
+    private val scaleGestureDetector: ScaleGestureDetector
     private val scroller: OverScroller
     private var scrollY = 0
+
+    // Pinch-to-zoom state
+    private var isScaling = false
+    private var minFontSize = 8f
+    private var maxFontSize = 32f
 
     // Terminal colors and theme
     private var currentTheme: Theme? = null
@@ -122,9 +128,10 @@ class TerminalView @JvmOverloads constructor(
         isFocusableInTouchMode = true
         setOnTouchListener(this)
 
-        // Configure scroller and gesture detector
+        // Configure scroller and gesture detectors
         scroller = OverScroller(context)
         gestureDetector = GestureDetector(context, TerminalGestureListener())
+        scaleGestureDetector = ScaleGestureDetector(context, PinchZoomListener())
 
         // Setup default text paint
         textPaint.typeface = Typeface.MONOSPACE
@@ -878,14 +885,31 @@ class TerminalView @JvmOverloads constructor(
     }
 
     override fun onTouch(v: View, event: MotionEvent): Boolean {
-        // Handle multi-touch gestures first
+        // Handle pinch-to-zoom first (multi-touch)
+        if (event.pointerCount >= 2) {
+            scaleGestureDetector.onTouchEvent(event)
+            if (isScaling) {
+                return true
+            }
+        }
+
+        // Handle custom multi-touch gestures (tmux/screen shortcuts)
         if (terminalGestureHandler != null && event.pointerCount >= 2) {
             if (terminalGestureHandler?.onTouchEvent(event) == true) {
                 return true
             }
         }
-        
-        gestureDetector.onTouchEvent(event)
+
+        // Handle single-finger gestures (scroll, tap, long press)
+        if (!isScaling) {
+            gestureDetector.onTouchEvent(event)
+        }
+
+        // Reset scaling flag when touch ends
+        if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
+            isScaling = false
+        }
+
         return true
     }
 
@@ -1138,7 +1162,8 @@ class TerminalView @JvmOverloads constructor(
         }
 
         override fun onDoubleTap(e: MotionEvent): Boolean {
-            // Double tap reserved for future use (e.g., select word)
+            // Double tap = select word at position
+            selectWordAtPosition(e.x, e.y)
             return true
         }
 
@@ -1154,6 +1179,88 @@ class TerminalView @JvmOverloads constructor(
                 showCustomContextMenu(e.x, e.y)
                 Logger.d("TerminalView", "Long press - showing context menu")
             }
+        }
+    }
+
+    /**
+     * Listener for pinch-to-zoom gestures (mobile-friendly font size control)
+     */
+    private inner class PinchZoomListener : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+        private var initialFontSize = 0f
+
+        override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+            isScaling = true
+            initialFontSize = textPaint.textSize / resources.displayMetrics.density
+            Logger.d("TerminalView", "Pinch zoom started at font size: $initialFontSize")
+            return true
+        }
+
+        override fun onScale(detector: ScaleGestureDetector): Boolean {
+            val scaleFactor = detector.scaleFactor
+            val newSize = (initialFontSize * scaleFactor).coerceIn(minFontSize, maxFontSize)
+
+            // Update font size
+            textPaint.textSize = newSize * resources.displayMetrics.density
+            calculateCellDimensions()
+            invalidate()
+
+            Logger.d("TerminalView", "Pinch zoom: scale=$scaleFactor, newSize=$newSize")
+            return true
+        }
+
+        override fun onScaleEnd(detector: ScaleGestureDetector) {
+            val finalSize = textPaint.textSize / resources.displayMetrics.density
+            Logger.d("TerminalView", "Pinch zoom ended at font size: $finalSize")
+
+            // Notify listener of font size change
+            onFontSizeChanged?.invoke(finalSize)
+        }
+    }
+
+    /**
+     * Callback for font size changes (from pinch-to-zoom)
+     */
+    var onFontSizeChanged: ((Float) -> Unit)? = null
+
+    /**
+     * Select word at touch position (for double-tap gesture)
+     */
+    private fun selectWordAtPosition(x: Float, y: Float) {
+        // Get text at touch position using existing method
+        val result = getTextAtPosition(x, y) ?: return
+        val text = result.second  // Extract string from Pair<Int, String>
+
+        // Find the word at this position
+        val col = ((x - paddingLeft) / cellWidth).toInt().coerceIn(0, text.length - 1)
+
+        if (text.isBlank() || col >= text.length) return
+
+        // Find word boundaries
+        var wordStart = col
+        var wordEnd = col
+
+        // Expand left to find word start
+        while (wordStart > 0 && !text[wordStart - 1].isWhitespace()) {
+            wordStart--
+        }
+
+        // Expand right to find word end
+        while (wordEnd < text.length - 1 && !text[wordEnd + 1].isWhitespace()) {
+            wordEnd++
+        }
+
+        // Extract the word
+        val word = text.substring(wordStart, wordEnd + 1).trim()
+
+        if (word.isNotBlank()) {
+            // Copy to clipboard
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            val clip = android.content.ClipData.newPlainText("Selected Text", word)
+            clipboard.setPrimaryClip(clip)
+
+            // Show toast
+            android.widget.Toast.makeText(context, "Copied: $word", android.widget.Toast.LENGTH_SHORT).show()
+            Logger.d("TerminalView", "Double-tap selected word: $word")
         }
     }
 

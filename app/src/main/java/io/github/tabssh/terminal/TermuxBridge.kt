@@ -32,7 +32,8 @@ import java.io.OutputStream
 class TermuxBridge(
     private val columns: Int = 80,
     private val rows: Int = 24,
-    private val transcriptRows: Int = 2000
+    private val transcriptRows: Int = 2000,
+    private val cursorStyle: Int = 2 // 0=block, 1=underline, 2=bar (I-beam default)
 ) {
     companion object {
         private const val TAG = "TermuxBridge"
@@ -159,7 +160,7 @@ class TermuxBridge(
         }
 
         override fun getTerminalCursorStyle(): Int {
-            return TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK
+            return cursorStyle // Use configured style (default: I-beam)
         }
 
         // Note: setTerminalShellPid may not exist in all Termux versions

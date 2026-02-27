@@ -96,11 +96,14 @@ class VMConsoleActivity : AppCompatActivity() {
     }
 
     private fun setupTerminal() {
-        // Create TermuxBridge for terminal emulation
+        // Create TermuxBridge for terminal emulation with user's preferred cursor style
+        val app = application as io.github.tabssh.TabSSHApplication
+        val cursorStyle = app.preferencesManager.getCursorStyleInt()
         termuxBridge = TermuxBridge(
             columns = 80,
             rows = 24,
-            transcriptRows = 2000
+            transcriptRows = 2000,
+            cursorStyle = cursorStyle
         )
         termuxBridge?.initialize()
 

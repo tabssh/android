@@ -72,7 +72,6 @@ class TabTerminalActivity : AppCompatActivity() {
     private var performanceUpdateJob: Job? = null
     
     // Custom keyboard
-    private lateinit var keyboardLayoutManager: io.github.tabssh.ui.keyboard.KeyboardLayoutManager
     private var customKeyboardVisible: Boolean = true
     
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -107,14 +106,47 @@ class TabTerminalActivity : AppCompatActivity() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (tabManager.getTabCount() > 0) {
-                    // Ask for confirmation before closing all tabs
-                    showConfirmCloseDialog()
+                    // Show options: go home (keep connections) or close all
+                    showBackOptionsDialog()
                 } else {
                     isEnabled = false
                     onBackPressedDispatcher.onBackPressed()
                 }
             }
         })
+    }
+
+    /**
+     * Show dialog when back button is pressed with active connections
+     * Options: Stay, Go Home (keep connections), Close All
+     */
+    private fun showBackOptionsDialog() {
+        val activeCount = tabManager.getTabCount()
+        val connectedCount = tabManager.getAllTabs().count { it.isConnected() }
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Active Sessions: $activeCount ($connectedCount connected)")
+            .setItems(arrayOf(
+                "📱 Go to Home (keep connections running)",
+                "❌ Close all connections and exit",
+                "↩️ Stay in terminal"
+            )) { _, which ->
+                when (which) {
+                    0 -> {
+                        // Go to home without closing connections
+                        Logger.i("TabTerminalActivity", "User chose to go home, keeping $activeCount connections")
+                        moveTaskToBack(true)
+                    }
+                    1 -> {
+                        // Close all and exit
+                        Logger.i("TabTerminalActivity", "User chose to close all $activeCount connections")
+                        disconnectAllTabs()
+                        finish()
+                    }
+                    // 2 = Stay, just dismiss dialog (do nothing)
+                }
+            }
+            .show()
     }
     
     private fun setupToolbar() {
@@ -935,10 +967,11 @@ class TabTerminalActivity : AppCompatActivity() {
             val sshConnection = app.sshSessionManager.connectToServer(profile)
             
             if (sshConnection != null) {
-                Logger.i("TabTerminalActivity", "✅ SSH connection established, creating tab")
+                Logger.i("TabTerminalActivity", "SSH connection established, creating tab")
                 
-                // Create new tab with the connection
-                val tab = tabManager.createTab(profile)
+                // Create new tab with the connection (using user's preferred cursor style)
+                val cursorStyle = app.preferencesManager.getCursorStyleInt()
+                val tab = tabManager.createTab(profile, cursorStyle)
 
                 if (tab != null) {
                     Logger.d("TabTerminalActivity", "Tab created successfully: ${tab.tabId}")
@@ -962,9 +995,17 @@ class TabTerminalActivity : AppCompatActivity() {
                     Logger.i("TabTerminalActivity", "🔌 Connecting terminal to SSH streams...")
                     val connected = tab.connect(sshConnection)
                     if (connected) {
-                        Logger.i("TabTerminalActivity", "✅✅✅ TERMINAL CONNECTED SUCCESSFULLY to ${profile.getDisplayName()}")
+                        Logger.i("TabTerminalActivity", "TERMINAL CONNECTED SUCCESSFULLY to ${profile.getDisplayName()}")
                         showToast("Connected to ${profile.getDisplayName()}")
-                        
+
+                        // Update connection statistics (count + timestamp)
+                        try {
+                            app.database.connectionDao().updateLastConnected(profile.id)
+                            Logger.d("TabTerminalActivity", "Updated connection count for ${profile.getDisplayName()}")
+                        } catch (e: Exception) {
+                            Logger.e("TabTerminalActivity", "Failed to update connection stats", e)
+                        }
+
                         // Show connection success notification
                         io.github.tabssh.utils.NotificationHelper.showConnectionSuccess(
                             this,
@@ -972,7 +1013,7 @@ class TabTerminalActivity : AppCompatActivity() {
                             profile.username
                         )
                     } else {
-                        Logger.e("TabTerminalActivity", "❌❌❌ Failed to connect terminal to SSH for ${profile.getDisplayName()}")
+                        Logger.e("TabTerminalActivity", "Failed to connect terminal to SSH for ${profile.getDisplayName()}")
                         showError("Failed to connect terminal", "Error")
                         
                         // Check for detailed error info
@@ -992,12 +1033,12 @@ class TabTerminalActivity : AppCompatActivity() {
                         }
                     }
                 } else {
-                    Logger.e("TabTerminalActivity", "❌ Failed to create tab for ${profile.getDisplayName()}")
+                    Logger.e("TabTerminalActivity", "Failed to create tab for ${profile.getDisplayName()}")
                     showError("Failed to create terminal tab", "Error")
                 }
             } else {
                 // Connection failed - try to get detailed error from last connection attempt
-                Logger.e("TabTerminalActivity", "❌❌❌ SSH connection returned NULL for ${profile.getDisplayName()}")
+                Logger.e("TabTerminalActivity", "SSH connection returned NULL for ${profile.getDisplayName()}")
                 
                 // Get the connection that failed (it may still exist even though connect() returned null)
                 val failedConnection = app.sshSessionManager.getConnection(profile.id)
@@ -1835,11 +1876,16 @@ class TabTerminalActivity : AppCompatActivity() {
         tabManager.cleanup()
     }
     
+    /**
+     * Confirm dialog for menu-based "close all" action
+     */
     private fun showConfirmCloseDialog() {
+        val activeCount = tabManager.getTabCount()
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Close All Connections")
-            .setMessage("This will close all SSH connections. Continue?")
+            .setMessage("This will close all $activeCount SSH connections. Continue?")
             .setPositiveButton("Close All") { _, _ ->
+                Logger.i("TabTerminalActivity", "Closing all $activeCount connections")
                 disconnectAllTabs()
                 finish()
             }
@@ -1848,20 +1894,33 @@ class TabTerminalActivity : AppCompatActivity() {
     }
     
     private fun setupCustomKeyboard() {
-        keyboardLayoutManager = io.github.tabssh.ui.keyboard.KeyboardLayoutManager(this, app.preferencesManager)
-        
-        val layout = keyboardLayoutManager.getLayout()
-        binding.customKeyboard.setLayout(layout)
-        
-        binding.customKeyboard.setOnKeyClickListener { key ->
+        // Load keyboard row count from preferences (default 3, max 5)
+        val rowCount = app.preferencesManager.getKeyboardRowCount()
+        binding.multiRowKeyboard.setRowCount(rowCount)
+
+        // Load custom layout from preferences if available
+        val layoutJson = app.preferencesManager.getKeyboardLayoutJson()
+        if (layoutJson != null) {
+            try {
+                // Parse saved layout (JSON array of rows)
+                val savedLayout = io.github.tabssh.ui.keyboard.KeyboardLayoutManager.parseLayoutJson(layoutJson)
+                binding.multiRowKeyboard.setLayout(savedLayout)
+            } catch (e: Exception) {
+                Logger.e("TabTerminalActivity", "Failed to load keyboard layout, using defaults", e)
+                // Reset to default layout
+                binding.multiRowKeyboard.resetToDefault()
+            }
+        }
+
+        binding.multiRowKeyboard.setOnKeyClickListener { key ->
             handleCustomKeyPress(key)
         }
-        
-        binding.customKeyboard.setOnToggleClickListener {
+
+        binding.multiRowKeyboard.setOnToggleClickListener {
             toggleCustomKeyboard()
         }
-        
-        Logger.d("TabTerminalActivity", "Custom keyboard initialized")
+
+        Logger.d("TabTerminalActivity", "Multi-row keyboard initialized with $rowCount rows")
     }
     
     private fun handleCustomKeyPress(key: io.github.tabssh.ui.keyboard.KeyboardKey) {
@@ -1886,11 +1945,11 @@ class TabTerminalActivity : AppCompatActivity() {
 
     private fun hideCustomKeyboardBar() {
         customKeyboardVisible = false
-        binding.customKeyboard.visibility = android.view.View.GONE
+        binding.multiRowKeyboard.visibility = android.view.View.GONE
     }
 
     private fun showCustomKeyboardBar() {
         customKeyboardVisible = true
-        binding.customKeyboard.visibility = android.view.View.VISIBLE
+        binding.multiRowKeyboard.visibility = android.view.View.VISIBLE
     }
 }

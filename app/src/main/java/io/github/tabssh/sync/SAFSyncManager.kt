@@ -51,6 +51,9 @@ class SAFSyncManager(private val context: Context) {
     private val app: io.github.tabssh.TabSSHApplication?
         get() = context.applicationContext as? io.github.tabssh.TabSSHApplication
 
+    // In-memory fallback when secure storage unavailable
+    private var inMemoryPassword: String? = null
+
     // Last error message for UI display
     var lastError: String? = null
         private set
@@ -58,27 +61,45 @@ class SAFSyncManager(private val context: Context) {
     /**
      * Set the sync encryption password (stored in secure storage)
      */
-    suspend fun setSyncPassword(password: String) {
+    suspend fun setSyncPassword(password: String): Boolean {
+        Logger.d(TAG, "Attempting to store sync password")
+
+        // Try secure storage first
         try {
-            app?.securePasswordManager?.storePassword(
-                SYNC_PASSWORD_KEY,
-                password,
-                io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.ENCRYPTED
-            )
-            prefs.edit().putBoolean(KEY_SYNC_PASSWORD_SET, true).apply()
-            Logger.d(TAG, "Sync password stored securely")
+            val secureManager = app?.securePasswordManager
+            if (secureManager != null) {
+                val success = secureManager.storePassword(
+                    SYNC_PASSWORD_KEY,
+                    password,
+                    io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.ENCRYPTED
+                )
+                if (success) {
+                    prefs.edit().putBoolean(KEY_SYNC_PASSWORD_SET, true).apply()
+                    inMemoryPassword = password  // Also keep in memory as backup
+                    Logger.i(TAG, "Sync password stored securely")
+                    return true
+                } else {
+                    Logger.w(TAG, "SecurePasswordManager.storePassword returned false")
+                }
+            } else {
+                Logger.w(TAG, "SecurePasswordManager not available")
+            }
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to store sync password", e)
-            // Fallback to in-memory only
-            prefs.edit().putBoolean(KEY_SYNC_PASSWORD_SET, true).apply()
+            Logger.e(TAG, "Failed to store sync password in secure storage", e)
         }
+
+        // Fallback to in-memory only
+        Logger.w(TAG, "Using in-memory password storage (less secure)")
+        inMemoryPassword = password
+        prefs.edit().putBoolean(KEY_SYNC_PASSWORD_SET, true).apply()
+        return true
     }
 
     /**
      * Set sync password synchronously (for UI thread)
      */
-    fun setSyncPasswordSync(password: String) {
-        kotlinx.coroutines.runBlocking {
+    fun setSyncPasswordSync(password: String): Boolean {
+        return kotlinx.coroutines.runBlocking {
             setSyncPassword(password)
         }
     }
@@ -87,18 +108,39 @@ class SAFSyncManager(private val context: Context) {
      * Get the sync password from secure storage
      */
     private suspend fun getSyncPassword(): String? {
-        return try {
-            app?.securePasswordManager?.retrievePassword(SYNC_PASSWORD_KEY)
-        } catch (e: Exception) {
-            Logger.e(TAG, "Failed to retrieve sync password", e)
-            null
+        // Try in-memory first (fastest)
+        inMemoryPassword?.let {
+            Logger.d(TAG, "Retrieved sync password from memory")
+            return it
         }
+
+        // Try secure storage
+        try {
+            val secureManager = app?.securePasswordManager
+            if (secureManager != null) {
+                val password = secureManager.retrievePassword(SYNC_PASSWORD_KEY)
+                if (password != null) {
+                    inMemoryPassword = password  // Cache for next time
+                    Logger.d(TAG, "Retrieved sync password from secure storage")
+                    return password
+                }
+            }
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to retrieve sync password from secure storage", e)
+        }
+
+        Logger.w(TAG, "Sync password not found in any storage")
+        return null
     }
 
     /**
      * Check if sync password is set
      */
     fun hasPassword(): Boolean {
+        // Check in-memory first
+        if (inMemoryPassword != null) return true
+
+        // Check flag (indicates password was previously set)
         return prefs.getBoolean(KEY_SYNC_PASSWORD_SET, false)
     }
 
@@ -341,9 +383,12 @@ class SAFSyncManager(private val context: Context) {
             try {
                 app?.securePasswordManager?.clearPassword(SYNC_PASSWORD_KEY)
             } catch (e: Exception) {
-                Logger.w(TAG, "Could not clear sync password", e)
+                Logger.w(TAG, "Could not clear sync password from secure storage", e)
             }
         }
+
+        // Clear in-memory password
+        inMemoryPassword = null
 
         prefs.edit()
             .remove(KEY_SYNC_URI)

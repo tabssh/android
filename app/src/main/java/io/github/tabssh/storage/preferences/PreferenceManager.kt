@@ -45,7 +45,11 @@ class PreferenceManager(private val context: Context) {
         private const val KEY_BELL_NOTIFICATION = "terminal_bell_notification"
         private const val KEY_BELL_VIBRATE = "terminal_bell_vibrate"
         private const val KEY_BELL_VISUAL = "terminal_bell_visual"
-        
+
+        // Keyboard preferences
+        private const val KEY_KEYBOARD_ROW_COUNT = "keyboard_row_count"
+        private const val KEY_KEYBOARD_LAYOUT = "keyboard_layout_json"
+
         // UI preferences
         private const val KEY_MAX_TABS = "ui_max_tabs"
         private const val KEY_CONFIRM_TAB_CLOSE = "ui_confirm_tab_close"
@@ -144,8 +148,19 @@ class PreferenceManager(private val context: Context) {
     fun getLineSpacing(): Float = getFloat(KEY_LINE_SPACING, 1.2f)
     fun setLineSpacing(spacing: Float) = setFloat(KEY_LINE_SPACING, spacing)
     
-    fun getCursorStyle(): String = getString(KEY_CURSOR_STYLE, "block")
+    fun getCursorStyle(): String = getString(KEY_CURSOR_STYLE, "bar") // Default to I-beam
     fun setCursorStyle(style: String) = setString(KEY_CURSOR_STYLE, style)
+
+    /**
+     * Get cursor style as Termux TerminalEmulator constant
+     * 0 = BLOCK, 1 = UNDERLINE, 2 = BAR (I-beam)
+     */
+    fun getCursorStyleInt(): Int = when (getCursorStyle()) {
+        "block" -> 0      // TERMINAL_CURSOR_STYLE_BLOCK
+        "underline" -> 1  // TERMINAL_CURSOR_STYLE_UNDERLINE
+        "bar" -> 2        // TERMINAL_CURSOR_STYLE_BAR (I-beam)
+        else -> 2         // Default to I-beam
+    }
     
     fun isCursorBlinkEnabled(): Boolean = getBoolean(KEY_CURSOR_BLINK, true)
     fun setCursorBlinkEnabled(enabled: Boolean) = setBoolean(KEY_CURSOR_BLINK, enabled)
@@ -155,6 +170,22 @@ class PreferenceManager(private val context: Context) {
     
     fun isBellNotificationEnabled(): Boolean = getBoolean(KEY_BELL_NOTIFICATION, true)
     fun setBellNotificationEnabled(enabled: Boolean) = setBoolean(KEY_BELL_NOTIFICATION, enabled)
+
+    // Keyboard preferences
+    fun getKeyboardRowCount(): Int = getInt(KEY_KEYBOARD_ROW_COUNT, 3).coerceIn(1, 5)
+    fun setKeyboardRowCount(count: Int) = setInt(KEY_KEYBOARD_ROW_COUNT, count.coerceIn(1, 5))
+
+    fun getKeyboardLayoutJson(): String? {
+        val json = getString(KEY_KEYBOARD_LAYOUT, "")
+        return if (json.isEmpty()) null else json
+    }
+    fun setKeyboardLayoutJson(json: String?) {
+        if (json != null) {
+            setString(KEY_KEYBOARD_LAYOUT, json)
+        } else {
+            preferences.edit().remove(KEY_KEYBOARD_LAYOUT).apply()
+        }
+    }
 
     // Notification preferences
     fun areNotificationsEnabled(): Boolean = getBoolean(KEY_NOTIFICATIONS_ENABLED, true)

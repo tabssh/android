@@ -307,8 +307,9 @@ class SessionPersistenceManager(
                     val connectionProfile = database.connectionDao().getConnectionById(session.connectionId)
                     
                     if (connectionProfile != null) {
-                        // Create tab without auto-connecting
-                        val tab = tabManager.createTab(connectionProfile)
+                        // Create tab without auto-connecting (using user's preferred cursor style)
+                        val cursorStyle = app.preferencesManager.getCursorStyleInt()
+                        val tab = tabManager.createTab(connectionProfile, cursorStyle)
                         
                         if (tab != null) {
                             // Restore terminal state

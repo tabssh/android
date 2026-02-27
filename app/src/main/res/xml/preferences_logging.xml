@@ -142,6 +142,12 @@
         android:icon="@android:drawable/ic_menu_view">
 
         <Preference
+            android:key="view_app_log"
+            android:title="View Application Log"
+            android:summary="All application logs (debug, info, warnings, errors)"
+            android:icon="@android:drawable/ic_menu_agenda" />
+
+        <Preference
             android:key="view_debug_log"
             android:title="View Debug Log"
             android:summary="Application debug messages"

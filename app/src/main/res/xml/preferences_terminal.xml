@@ -140,23 +140,25 @@
         android:title="Custom Keyboard"
         android:key="category_custom_keyboard">
 
+        <ListPreference
+            android:key="keyboard_row_count"
+            android:title="Keyboard Rows"
+            android:summary="Number of rows in the custom keyboard (1-5)"
+            android:entries="@array/keyboard_row_entries"
+            android:entryValues="@array/keyboard_row_values"
+            android:defaultValue="3"
+            app:useSimpleSummaryProvider="true" />
+
         <Preference
             android:key="customize_keyboard_layout"
             android:title="Customize Keyboard Layout"
             android:summary="Add, remove, or reorder keyboard keys"
             android:icon="@drawable/ic_keyboard" />
 
-        <SwitchPreferenceCompat
-            android:key="show_arrow_keys"
-            android:title="Show Arrow Keys"
-            android:summary="Display arrow navigation keys in keyboard"
-            android:defaultValue="false" />
-
-        <SwitchPreferenceCompat
-            android:key="show_function_keys_row"
-            android:title="Show Function Keys Row"
-            android:summary="Display F1-F12 keys in second row"
-            android:defaultValue="false" />
+        <Preference
+            android:key="reset_keyboard_layout"
+            android:title="Reset Keyboard Layout"
+            android:summary="Restore default keyboard configuration" />
 
     </PreferenceCategory>
 

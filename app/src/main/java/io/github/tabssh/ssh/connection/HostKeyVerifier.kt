@@ -46,7 +46,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
      */
     override fun check(host: String, key: ByteArray): Int {
         return try {
-            Logger.i("HostKeyVerifier", "🔐 HOST KEY CHECK CALLED for: $host")
+            Logger.i("HostKeyVerifier", "HOST KEY CHECK CALLED for: $host")
             
             val (hostname, port) = parseHostPort(host)
             Logger.d("HostKeyVerifier", "Parsed: hostname=$hostname, port=$port")
@@ -56,24 +56,24 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
             val keyType = detectKeyType(key)
             val publicKeyBase64 = Base64.getEncoder().encodeToString(key)
 
-            Logger.i("HostKeyVerifier", "🔐 Checking host key for $hostname:$port ($keyType)")
-            Logger.i("HostKeyVerifier", "🔐 Fingerprint: $fingerprint")
+            Logger.i("HostKeyVerifier", "Checking host key for $hostname:$port ($keyType)")
+            Logger.i("HostKeyVerifier", "Fingerprint: $fingerprint")
 
             // Verify against database - use Dispatchers.IO to prevent deadlock
             Logger.d("HostKeyVerifier", "Querying database for existing host key...")
             val result = runBlocking(Dispatchers.IO) {
                 hostKeyDao.verifyHostKey(hostname, port, publicKeyBase64, fingerprint)
             }
-            Logger.i("HostKeyVerifier", "🔐 Database verification result: $result")
+            Logger.i("HostKeyVerifier", "Database verification result: $result")
 
             when (result) {
                 HostKeyVerificationResult.ACCEPTED -> {
-                    Logger.i("HostKeyVerifier", "✅ Host key verified: $hostname:$port")
+                    Logger.i("HostKeyVerifier", "Host key verified: $hostname:$port")
                     HostKeyRepository.OK
                 }
 
                 HostKeyVerificationResult.NEW_HOST -> {
-                    Logger.i("HostKeyVerifier", "🆕 NEW HOST: $hostname:$port - Asking user for confirmation")
+                    Logger.i("HostKeyVerifier", "NEW HOST: $hostname:$port - Asking user for confirmation")
 
                     val info = NewHostKeyInfo(
                         hostname = hostname,
@@ -90,7 +90,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
                         newHostKeyCallback!!.invoke(info)
                     } else {
                         // No callback available - show blocking dialog directly
-                        Logger.w("HostKeyVerifier", "⚠️ No callback available - showing blocking dialog")
+                        Logger.w("HostKeyVerifier", "No callback available - showing blocking dialog")
                         showBlockingNewHostDialog(info)
                     }
 
@@ -109,25 +109,25 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
                                     trustLevel = "ACCEPTED"
                                 )
                                 hostKeyDao.insertOrUpdateHostKey(hostKeyEntry)
-                                Logger.i("HostKeyVerifier", "✅ User accepted and stored new host key for $hostname:$port")
+                                Logger.i("HostKeyVerifier", "User accepted and stored new host key for $hostname:$port")
                             }
                             HostKeyRepository.OK
                         }
 
                         HostKeyAction.REJECT_CONNECTION -> {
-                            Logger.w("HostKeyVerifier", "❌ User rejected new host key for $hostname:$port")
+                            Logger.w("HostKeyVerifier", "User rejected new host key for $hostname:$port")
                             HostKeyRepository.NOT_INCLUDED
                         }
 
                         HostKeyAction.ACCEPT_ONCE -> {
-                            Logger.i("HostKeyVerifier", "✅ User accepted host key ONCE for $hostname:$port (not stored)")
+                            Logger.i("HostKeyVerifier", "User accepted host key ONCE for $hostname:$port (not stored)")
                             HostKeyRepository.OK
                         }
                     }
                 }
 
                 HostKeyVerificationResult.CHANGED_KEY -> {
-                    Logger.w("HostKeyVerifier", "⚠️⚠️⚠️ HOST KEY HAS CHANGED for $hostname:$port ⚠️⚠️⚠️")
+                    Logger.w("HostKeyVerifier", "WARNING:HOST KEY HAS CHANGED for $hostname:$port")
 
                     // Get existing key for comparison
                     val existingKey = runBlocking(Dispatchers.IO) {
@@ -158,7 +158,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
                             hostKeyChangedCallback!!.invoke(info)
                         } else {
                             // No callback available - show blocking dialog directly
-                            Logger.w("HostKeyVerifier", "⚠️ No callback available - showing blocking dialog for changed key")
+                            Logger.w("HostKeyVerifier", "No callback available - showing blocking dialog for changed key")
                             showBlockingChangedHostDialog(info)
                         }
 
@@ -178,18 +178,18 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
                                         trustLevel = "ACCEPTED"
                                     )
                                     hostKeyDao.insertOrUpdateHostKey(updatedEntry)
-                                    Logger.i("HostKeyVerifier", "✅ User accepted new host key for $hostname:$port")
+                                    Logger.i("HostKeyVerifier", "User accepted new host key for $hostname:$port")
                                 }
                                 HostKeyRepository.OK
                             }
 
                             HostKeyAction.REJECT_CONNECTION -> {
-                                Logger.w("HostKeyVerifier", "❌ User rejected changed host key for $hostname:$port")
+                                Logger.w("HostKeyVerifier", "User rejected changed host key for $hostname:$port")
                                 HostKeyRepository.NOT_INCLUDED
                             }
 
                             HostKeyAction.ACCEPT_ONCE -> {
-                                Logger.i("HostKeyVerifier", "✅ User accepted host key ONCE for $hostname:$port")
+                                Logger.i("HostKeyVerifier", "User accepted host key ONCE for $hostname:$port")
                                 // Don't store, just allow this connection
                                 HostKeyRepository.OK
                             }
@@ -202,7 +202,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
                 }
 
                 HostKeyVerificationResult.INVALID_KEY -> {
-                    Logger.e("HostKeyVerifier", "❌ Invalid host key for $hostname:$port")
+                    Logger.e("HostKeyVerifier", "Invalid host key for $hostname:$port")
                     HostKeyRepository.NOT_INCLUDED
                 }
             }
@@ -576,7 +576,7 @@ data class HostKeyChangedInfo(
     val lastVerified: Long
 ) {
     fun getDisplayMessage(): String = buildString {
-        appendLine("🔐 SERVER KEY CHANGED")
+        appendLine("SERVER KEY CHANGED")
         appendLine()
         appendLine("🌐 Server: $hostname:$port")
         appendLine()
@@ -585,7 +585,7 @@ data class HostKeyChangedInfo(
         appendLine("💭 This could mean:")
         appendLine("  ✓ Server was reinstalled or upgraded")
         appendLine("  ✓ SSH configuration was changed")
-        appendLine("  ⚠️ Man-in-the-middle attack (rare but serious)")
+        appendLine("  Man-in-the-middle attack (rare but serious)")
         appendLine()
         appendLine("📜 Previous Key ($oldKeyType):")
         appendLine("   $oldFingerprint")
@@ -625,7 +625,7 @@ data class NewHostKeyInfo(
     val publicKey: String
 ) {
     fun getDisplayMessage(): String = buildString {
-        appendLine("🔐 NEW HOST KEY")
+        appendLine("NEW HOST KEY")
         appendLine()
         appendLine("🌐 Server: $hostname:$port")
         appendLine()
@@ -637,7 +637,7 @@ data class NewHostKeyInfo(
         appendLine("📜 Fingerprint:")
         appendLine("   $fingerprint")
         appendLine()
-        appendLine("⚠️ Please verify this fingerprint matches the server.")
+        appendLine("Please verify this fingerprint matches the server.")
         appendLine("If you're unsure, contact your server administrator.")
     }
 }

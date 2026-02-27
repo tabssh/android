@@ -851,29 +851,33 @@ Error: ${e.javaClass.simpleName}: ${e.message}"""
             }
             is ECPrivateKey -> {
                 try {
-                    // For EC keys, we'll use a simplified approach since full point multiplication
-                    // requires either BouncyCastle EC classes or complex math
-                    // Most practical cases will have the public key available in the PEM
-                    
-                    Logger.w("KeyStorage", "EC public key derivation is complex - recommend providing public key separately")
-                    
-                    // Attempt basic derivation using Java's built-in crypto
-                    val keyFactory = KeyFactory.getInstance("EC")
-                    
-                    // This is a simplified fallback - real EC derivation is quite complex
-                    // In practice, PEM parsing should extract both public and private parts
-                    throw UnsupportedOperationException(
-                        "EC public key derivation requires the public key to be provided separately. " +
-                        "Most PEM files contain both keys, but this one may be incomplete. " +
-                        "Try: ssh-keygen -y -f your_private_key > your_public_key.pub"
-                    )
-                    
+                    // EC public key derivation using BouncyCastle
+                    Logger.d("KeyStorage", "Deriving EC public key using BouncyCastle")
+
+                    // Get the EC parameters from the private key
+                    val ecParams = privateKey.params
+
+                    // Get curve name - try to determine from field size
+                    val fieldSize = ecParams.curve.field.fieldSize
+                    val curveName = when (fieldSize) {
+                        256 -> "secp256r1"
+                        384 -> "secp384r1"
+                        521 -> "secp521r1"
+                        else -> throw IllegalArgumentException("Unsupported EC curve field size: $fieldSize")
+                    }
+
+                    // Use BouncyCastle for EC point multiplication
+                    val bcSpec = org.bouncycastle.jce.ECNamedCurveTable.getParameterSpec(curveName)
+                    val d = privateKey.s
+                    val q = bcSpec.g.multiply(d)
+                    val pubKeySpec = org.bouncycastle.jce.spec.ECPublicKeySpec(q, bcSpec)
+                    val keyFactory = KeyFactory.getInstance("EC", "BC")
+                    return keyFactory.generatePublic(pubKeySpec)
+
                 } catch (e: Exception) {
                     Logger.e("KeyStorage", "EC public key derivation failed", e)
                     throw UnsupportedOperationException(
-                        "Unable to derive EC public key from private key. " +
-                        "This is a known limitation. Please ensure your PEM file contains the public key, " +
-                        "or generate it using: ssh-keygen -y -f your_private_key"
+                        "Unable to derive EC public key from private key: ${e.message}"
                     )
                 }
             }
@@ -882,26 +886,29 @@ Error: ${e.javaClass.simpleName}: ${e.message}"""
                 when (privateKey.algorithm) {
                     "Ed25519" -> {
                         try {
-                            // Ed25519 public key derivation
-                            val keyFactory = KeyFactory.getInstance("Ed25519", "BC")
-                            
-                            // For Ed25519, the public key can be derived from the private key
-                            // BouncyCastle should handle this automatically
-                            val encoded = privateKey.encoded
-                            val keySpec = PKCS8EncodedKeySpec(encoded)
-                            val regeneratedPrivateKey = keyFactory.generatePrivate(keySpec)
-                            
-                            // Extract public key from Ed25519 private key
-                            // This is algorithm-specific and requires proper implementation
-                            throw UnsupportedOperationException(
-                                "Ed25519 public key derivation not yet implemented. " +
-                                "Please provide the public key separately."
+                            // Ed25519 public key derivation using BouncyCastle
+                            val pkInfo = org.bouncycastle.asn1.pkcs.PrivateKeyInfo.getInstance(privateKey.encoded)
+                            val seed = (pkInfo.parsePrivateKey() as org.bouncycastle.asn1.ASN1OctetString).octets
+
+                            // Generate public key from seed using BouncyCastle
+                            val privateParams = org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters(seed, 0)
+                            val publicParams = privateParams.generatePublicKey()
+                            val publicBytes = publicParams.encoded
+
+                            // Convert to Java PublicKey
+                            val spki = org.bouncycastle.asn1.x509.SubjectPublicKeyInfo(
+                                org.bouncycastle.asn1.x509.AlgorithmIdentifier(
+                                    org.bouncycastle.asn1.edec.EdECObjectIdentifiers.id_Ed25519
+                                ),
+                                publicBytes
                             )
-                            
+                            val keyFactory = KeyFactory.getInstance("Ed25519", "BC")
+                            return keyFactory.generatePublic(X509EncodedKeySpec(spki.encoded))
+
                         } catch (e: Exception) {
                             Logger.e("KeyStorage", "Ed25519 public key derivation failed", e)
                             throw UnsupportedOperationException(
-                                "Ed25519 public key derivation requires the public key to be provided separately."
+                                "Ed25519 public key derivation failed: ${e.message}"
                             )
                         }
                     }
