@@ -63,6 +63,9 @@ class SSHConnection(
     var hostKeyChangedCallback: ((HostKeyChangedInfo) -> HostKeyAction)? = null
     var newHostKeyCallback: ((NewHostKeyInfo) -> HostKeyAction)? = null
 
+    // Cached resolved identity (loaded on connect)
+    private var resolvedIdentity: io.github.tabssh.storage.database.entities.Identity? = null
+
     val id: String = profile.id
     val displayName: String = profile.getDisplayName()
 
@@ -85,8 +88,24 @@ class SSHConnection(
                 _connectionState.value = ConnectionState.CONNECTING
                 _errorMessage.value = null
                 notifyListeners { onConnecting(id) }
-                
-                Logger.i("SSHConnection", "🔌 STEP 1: Starting connection to ${profile.host}:${profile.port} as ${profile.username}")
+
+                // Resolve linked identity if set (for effective username/credentials)
+                val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
+                resolvedIdentity = if (profile.identityId != null) {
+                    try {
+                        app?.database?.identityDao()?.getIdentityById(profile.identityId!!)?.also {
+                            Logger.i("SSHConnection", "Using identity '${it.name}' for connection")
+                        }
+                    } catch (e: Exception) {
+                        Logger.w("SSHConnection", "Error loading linked identity", e)
+                        null
+                    }
+                } else null
+
+                // Use identity username if available, otherwise profile username
+                val effectiveUsername = resolvedIdentity?.username ?: profile.username
+
+                Logger.i("SSHConnection", "🔌 STEP 1: Starting connection to ${profile.host}:${profile.port} as $effectiveUsername")
 
                 // Execute port knock sequence if enabled
                 Logger.d("SSHConnection", "🔌 STEP 2: Checking port knock configuration")
@@ -119,11 +138,11 @@ class SSHConnection(
                 // Create main session - connect through jump host if configured
                 Logger.d("SSHConnection", "🔌 STEP 6: Creating SSH session")
                 val newSession = if (jumpHostPort != null) {
-                    Logger.i("SSHConnection", "Connecting to target through jump host on localhost:$jumpHostPort")
-                    jsch.getSession(profile.username, "localhost", jumpHostPort)
+                    Logger.i("SSHConnection", "Connecting to target through jump host on localhost:$jumpHostPort as $effectiveUsername")
+                    jsch.getSession(effectiveUsername, "localhost", jumpHostPort)
                 } else {
-                    Logger.i("SSHConnection", "Direct connection to ${profile.host}:${profile.port}")
-                    jsch.getSession(profile.username, profile.host, profile.port)
+                    Logger.i("SSHConnection", "Direct connection to ${profile.host}:${profile.port} as $effectiveUsername")
+                    jsch.getSession(effectiveUsername, profile.host, profile.port)
                 }
 
                 // Setup HTTP/SOCKS proxy if configured
@@ -458,15 +477,8 @@ class SSHConnection(
     private suspend fun setupAuthentication(jsch: JSch, session: Session) = withContext(Dispatchers.IO) {
         val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
 
-        // Load linked identity if set
-        val linkedIdentity = try {
-            if (profile.identityId != null) {
-                app?.database?.identityDao()?.getIdentityById(profile.identityId!!)
-            } else null
-        } catch (e: Exception) {
-            Logger.w("SSHConnection", "Error loading linked identity", e)
-            null
-        }
+        // Use already-resolved identity from connect()
+        val linkedIdentity = resolvedIdentity
 
         // Gather available credentials — identity overrides connection-level values
         val effectiveKeyId: String? = linkedIdentity?.keyId ?: profile.keyId

@@ -857,19 +857,41 @@ class TabTerminalActivity : AppCompatActivity() {
                 android.widget.Toast.makeText(this, "Connecting to ${profile.name}...", android.widget.Toast.LENGTH_SHORT).show()
             }
 
+            // Resolve linked identity if set (for effective credentials)
+            val linkedIdentity = if (profile.identityId != null) {
+                withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    try {
+                        app.database.identityDao().getIdentityById(profile.identityId!!)?.also {
+                            Logger.i("TabTerminalActivity", "Using identity '${it.name}' for connection")
+                        }
+                    } catch (e: Exception) {
+                        Logger.w("TabTerminalActivity", "Error loading linked identity", e)
+                        null
+                    }
+                }
+            } else null
+
+            // Use effective credentials: identity overrides profile
+            val effectiveUsername = linkedIdentity?.username ?: profile.username
+            val effectiveAuthType = linkedIdentity?.authType ?: AuthType.fromString(profile.authType)
+            val effectiveKeyId = linkedIdentity?.keyId ?: profile.keyId
+
             // Check authentication requirements and prompt for password if needed
-            val authType = AuthType.fromString(profile.authType)
             val hasStoredPassword = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                app.securePasswordManager.retrievePassword(profile.id) != null
+                // Check identity password first, then profile password
+                val identityPw = linkedIdentity?.let {
+                    app.securePasswordManager.retrievePassword("identity_${it.id}") ?: it.password
+                }
+                identityPw != null || app.securePasswordManager.retrievePassword(profile.id) != null
             }
 
             // Check if SSH key is available when PUBLIC_KEY auth is configured
-            val keyAvailable = if (profile.keyId != null) {
+            val keyAvailable = if (effectiveKeyId != null) {
                 withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    val keyExists = app.database.keyDao().getKeyById(profile.keyId!!) != null
-                    val jschBytes = app.keyStorage.retrieveJSchBytes(profile.keyId!!)
+                    val keyExists = app.database.keyDao().getKeyById(effectiveKeyId) != null
+                    val jschBytes = app.keyStorage.retrieveJSchBytes(effectiveKeyId)
                     val privateKey = if (jschBytes == null) {
-                        app.keyStorage.retrievePrivateKey(profile.keyId!!)
+                        app.keyStorage.retrievePrivateKey(effectiveKeyId)
                     } else null
                     keyExists && (jschBytes != null || privateKey != null)
                 }
@@ -880,20 +902,20 @@ class TabTerminalActivity : AppCompatActivity() {
             // 2. PUBLIC_KEY auth but key is not available (fallback to password)
             // 3. PASSWORD auth with no stored password
             val needPasswordPrompt = when {
-                authType == AuthType.KEYBOARD_INTERACTIVE && !hasStoredPassword && !keyAvailable -> true
-                authType == AuthType.PUBLIC_KEY && !keyAvailable && !hasStoredPassword -> {
-                    Logger.w("TabTerminalActivity", "SSH key not available (keyId=${profile.keyId}), falling back to password")
+                effectiveAuthType == AuthType.KEYBOARD_INTERACTIVE && !hasStoredPassword && !keyAvailable -> true
+                effectiveAuthType == AuthType.PUBLIC_KEY && !keyAvailable && !hasStoredPassword -> {
+                    Logger.w("TabTerminalActivity", "SSH key not available (keyId=$effectiveKeyId), falling back to password")
                     true
                 }
-                authType == AuthType.PASSWORD && !hasStoredPassword -> true
+                effectiveAuthType == AuthType.PASSWORD && !hasStoredPassword -> true
                 else -> false
             }
 
             if (needPasswordPrompt) {
-                val promptMessage = if (authType == AuthType.PUBLIC_KEY && !keyAvailable) {
-                    "SSH key not found. Enter password for ${profile.username}@${profile.host}"
+                val promptMessage = if (effectiveAuthType == AuthType.PUBLIC_KEY && !keyAvailable) {
+                    "SSH key not found. Enter password for $effectiveUsername@${profile.host}"
                 } else {
-                    "Password required for ${profile.username}@${profile.host}"
+                    "Password required for $effectiveUsername@${profile.host}"
                 }
                 val enteredPassword = promptForPassword(promptMessage)
                 if (enteredPassword == null) {
@@ -901,6 +923,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     return
                 }
                 withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    // Store password for the profile (SSHConnection will look it up)
                     app.securePasswordManager.storePassword(
                         profile.id, enteredPassword, SecurePasswordManager.StorageLevel.SESSION_ONLY
                     )
