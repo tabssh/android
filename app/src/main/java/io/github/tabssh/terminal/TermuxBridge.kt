@@ -50,6 +50,9 @@ class TermuxBridge(
     // Read loop job
     private var readJob: Job? = null
 
+    // Coroutine scope for write operations (IO thread)
+    private val writeScope = CoroutineScope(Dispatchers.IO + Job())
+
     // State
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
@@ -69,15 +72,20 @@ class TermuxBridge(
      */
     private val terminalOutput = object : TerminalOutput() {
         override fun write(data: ByteArray, offset: Int, count: Int) {
-            try {
-                outputStream?.let { stream ->
-                    stream.write(data, offset, count)
-                    stream.flush()
-                    Logger.d(TAG, "Sent $count bytes to SSH")
+            // Copy data to avoid race conditions (input may be reused)
+            val dataCopy = data.copyOfRange(offset, offset + count)
+            // Run on IO thread to avoid NetworkOnMainThreadException
+            writeScope.launch {
+                try {
+                    outputStream?.let { stream ->
+                        stream.write(dataCopy)
+                        stream.flush()
+                        Logger.d(TAG, "Sent ${dataCopy.size} bytes to SSH")
+                    }
+                } catch (e: Exception) {
+                    Logger.e(TAG, "Error writing to SSH", e)
+                    runOnMain { notifyError(e) }
                 }
-            } catch (e: Exception) {
-                Logger.e(TAG, "Error writing to SSH", e)
-                notifyError(e)
             }
         }
 
@@ -496,6 +504,7 @@ class TermuxBridge(
         _isConnected.value = false
         readJob?.cancel()
         readJob = null
+        writeScope.coroutineContext[Job]?.cancel()
 
         try {
             inputStream?.close()
