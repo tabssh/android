@@ -7,5 +7,11 @@
         android:title="Sort"
         android:icon="@drawable/ic_sort"
         app:showAsAction="always" />
-        
+
+    <item
+        android:id="@+id/action_bulk_edit"
+        android:title="Bulk Edit"
+        android:icon="@drawable/ic_edit"
+        app:showAsAction="ifRoom" />
+
 </menu>

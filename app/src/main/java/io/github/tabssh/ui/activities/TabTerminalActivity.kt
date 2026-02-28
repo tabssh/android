@@ -33,6 +33,7 @@ import kotlinx.coroutines.launch
 import io.github.tabssh.utils.showError
 import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.crypto.storage.SecurePasswordManager
+import io.github.tabssh.themes.definitions.BuiltInThemes
 
 /**
  * Main terminal activity with tabbed SSH sessions
@@ -102,18 +103,46 @@ class TabTerminalActivity : AppCompatActivity() {
         Logger.i("TabTerminalActivity", "Terminal activity created")
     }
     
+    // Track if keyboard is visible for back button handling
+    private var isKeyboardVisible = false
+
     private fun setupBackPressHandler() {
+        // Listen for keyboard visibility changes
+        val rootView = window.decorView.rootView
+        rootView.viewTreeObserver.addOnGlobalLayoutListener {
+            val rect = android.graphics.Rect()
+            rootView.getWindowVisibleDisplayFrame(rect)
+            val screenHeight = rootView.height
+            val keypadHeight = screenHeight - rect.bottom
+            isKeyboardVisible = keypadHeight > screenHeight * 0.15
+        }
+
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
+                // First press: hide keyboard if visible
+                if (isKeyboardVisible) {
+                    hideKeyboard()
+                    Logger.d("TabTerminalActivity", "Back pressed: hiding keyboard")
+                    return
+                }
+
+                // Second press: go back to main app, keep session running
                 if (tabManager.getTabCount() > 0) {
-                    // Show options: go home (keep connections) or close all
-                    showBackOptionsDialog()
+                    Logger.i("TabTerminalActivity", "Back pressed: returning to main, keeping ${tabManager.getTabCount()} sessions")
+                    moveTaskToBack(true)
                 } else {
                     isEnabled = false
                     onBackPressedDispatcher.onBackPressed()
                 }
             }
         })
+    }
+
+    private fun hideKeyboard() {
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+        currentFocus?.let { view ->
+            imm.hideSoftInputFromWindow(view.windowToken, 0)
+        }
     }
 
     /**
@@ -514,6 +543,10 @@ class TabTerminalActivity : AppCompatActivity() {
 
             // Set up terminal view
             binding.terminalView.apply {
+                // Load font from preferences
+                val fontValue = app.preferencesManager.getString("terminal_font", "monospace")
+                setFont(fontValue)
+
                 // Load font size from preferences
                 val fontSize = app.preferencesManager.getInt("terminal_font_size", 14)
                 setFontSize(fontSize)
@@ -565,6 +598,25 @@ class TabTerminalActivity : AppCompatActivity() {
 
             Logger.d("TabTerminalActivity", "Single terminal view mode (swipe disabled)")
         }
+
+        // Apply current theme to terminal
+        applyCurrentTheme()
+    }
+
+    /**
+     * Apply the current terminal theme to all terminal views
+     */
+    private fun applyCurrentTheme() {
+        val themeId = app.preferencesManager.getTheme()
+        val theme = app.themeManager.getThemeById(themeId) ?: BuiltInThemes.dracula()
+
+        Logger.d("TabTerminalActivity", "Applying theme: ${theme.name}")
+
+        // Apply to main terminal view (non-swipe mode)
+        binding.terminalView.applyTheme(theme)
+
+        // Apply to all terminal views in ViewPager (swipe mode)
+        pagerAdapter?.setTheme(theme)
     }
 
     /**
@@ -1134,8 +1186,9 @@ class TabTerminalActivity : AppCompatActivity() {
     private fun updateViewPagerAdapter() {
         val allTabs = tabManager.getAllTabs()
 
-        // Get font size preference
+        // Get font preferences
         val fontSize = app.preferencesManager.getInt("terminal_font_size", 14)
+        val fontValue = app.preferencesManager.getString("terminal_font", "monospace")
 
         // Create URL detection callback if enabled
         val urlDetectionCallback = if (app.preferencesManager.getBoolean("detect_urls", true)) {
@@ -1174,11 +1227,12 @@ class TabTerminalActivity : AppCompatActivity() {
         if (pagerAdapter == null) {
             // First time setup
             pagerAdapter = TerminalPagerAdapter(
-                allTabs, 
-                fontSize, 
-                urlDetectionCallback, 
-                gesturesEnabled, 
-                multiplexerType, 
+                allTabs,
+                fontSize,
+                fontValue,
+                urlDetectionCallback,
+                gesturesEnabled,
+                multiplexerType,
                 customPrefix,
                 commandCallback
             )
@@ -1203,11 +1257,12 @@ class TabTerminalActivity : AppCompatActivity() {
             // Recreate adapter with new tabs list
             val currentPosition = viewPager?.currentItem ?: 0
             pagerAdapter = TerminalPagerAdapter(
-                allTabs, 
-                fontSize, 
-                urlDetectionCallback, 
-                gesturesEnabled, 
-                multiplexerType, 
+                allTabs,
+                fontSize,
+                fontValue,
+                urlDetectionCallback,
+                gesturesEnabled,
+                multiplexerType,
                 customPrefix,
                 commandCallback
             )

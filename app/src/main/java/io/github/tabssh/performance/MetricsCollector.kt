@@ -13,6 +13,9 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
     private var previousNetworkStats: Pair<Long, Long>? = null // (rxBytes, txBytes)
     private var previousNetworkTime: Long = 0
 
+    // Platform info is cached since it doesn't change during a session
+    private var cachedPlatformInfo: PlatformInfo? = null
+
     /**
      * Collect all performance metrics
      */
@@ -23,6 +26,7 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
             val diskMetrics = collectDiskMetrics()
             val networkMetrics = collectNetworkMetrics()
             val loadMetrics = collectLoadMetrics()
+            val platformInfo = collectPlatformInfo()
 
             Result.success(
                 PerformanceMetrics(
@@ -31,7 +35,8 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
                     memoryUsage = memoryMetrics,
                     diskUsage = diskMetrics,
                     networkStats = networkMetrics,
-                    loadAverage = loadMetrics
+                    loadAverage = loadMetrics,
+                    platformInfo = platformInfo
                 )
             )
         } catch (e: Exception) {
@@ -274,10 +279,94 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
     }
 
     /**
+     * Collect platform/OS information (cached after first call)
+     */
+    private suspend fun collectPlatformInfo(): PlatformInfo {
+        // Return cached info if available
+        cachedPlatformInfo?.let { return it }
+
+        return try {
+            // Collect uname info
+            val unameOutput = sshConnection.executeCommand("uname -a")
+            val hostnameOutput = sshConnection.executeCommand("hostname").trim()
+            val archOutput = sshConnection.executeCommand("uname -m").trim()
+            val osNameOutput = sshConnection.executeCommand("uname -s").trim()
+            val kernelOutput = sshConnection.executeCommand("uname -r").trim()
+
+            // Try to get distro info from /etc/os-release (most common)
+            val osReleaseOutput = try {
+                sshConnection.executeCommand("cat /etc/os-release 2>/dev/null || cat /etc/lsb-release 2>/dev/null || echo ''")
+            } catch (e: Exception) {
+                ""
+            }
+
+            val platformInfo = parseOsRelease(osReleaseOutput, osNameOutput, kernelOutput, archOutput, hostnameOutput)
+            cachedPlatformInfo = platformInfo
+            Logger.d("MetricsCollector", "Detected platform: ${platformInfo.getDisplayName()} (${platformInfo.architecture})")
+            platformInfo
+        } catch (e: Exception) {
+            Logger.e("MetricsCollector", "Failed to collect platform info", e)
+            PlatformInfo.empty()
+        }
+    }
+
+    /**
+     * Parse /etc/os-release or /etc/lsb-release output
+     */
+    private fun parseOsRelease(
+        osReleaseOutput: String,
+        osName: String,
+        kernelVersion: String,
+        architecture: String,
+        hostname: String
+    ): PlatformInfo {
+        val lines = osReleaseOutput.lines()
+
+        fun getValue(key: String): String {
+            return lines.find { it.startsWith("$key=") }
+                ?.substringAfter("=")
+                ?.trim()
+                ?.removeSurrounding("\"")
+                ?: ""
+        }
+
+        // Try NAME, ID, VERSION_ID, VERSION_CODENAME from os-release
+        var distro = getValue("NAME").ifBlank { getValue("DISTRIB_ID") }
+        var distroVersion = getValue("VERSION_ID").ifBlank { getValue("DISTRIB_RELEASE") }
+        var codename = getValue("VERSION_CODENAME").ifBlank { getValue("DISTRIB_CODENAME") }
+
+        // Fallback: try ID for distro name
+        if (distro.isBlank()) {
+            distro = getValue("ID")
+        }
+
+        // Clean up distro name (remove "GNU/Linux" suffix, etc.)
+        distro = distro.replace("GNU/Linux", "").trim()
+
+        return PlatformInfo(
+            osName = osName,
+            osVersion = kernelVersion,
+            distro = distro,
+            distroVersion = distroVersion,
+            distroCodename = codename,
+            architecture = architecture,
+            hostname = hostname,
+            kernelRelease = kernelVersion
+        )
+    }
+
+    /**
      * Reset network statistics (for new connection)
      */
     fun resetNetworkStats() {
         previousNetworkStats = null
         previousNetworkTime = 0
+    }
+
+    /**
+     * Clear cached platform info (for new connection)
+     */
+    fun resetPlatformInfo() {
+        cachedPlatformInfo = null
     }
 }
