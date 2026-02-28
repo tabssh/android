@@ -26,7 +26,7 @@ import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.ConnectionGroup
-import io.github.tabssh.storage.database.entities.IdentityProfile
+import io.github.tabssh.storage.database.entities.Identity
 import io.github.tabssh.ui.activities.ConnectionEditActivity
 import io.github.tabssh.ui.activities.TabTerminalActivity
 import io.github.tabssh.ui.adapters.ConnectionAdapter
@@ -51,7 +51,7 @@ class ConnectionsFragment : Fragment() {
     
     private var allConnections = listOf<ConnectionProfile>()
     private var allGroups = listOf<ConnectionGroup>()
-    private var allIdentities = listOf<IdentityProfile>()
+    private var allIdentities = listOf<Identity>()
     private var currentSearchQuery = ""
     private var currentSortOption = SortOption.NAME_ASC
     private var useGroupedView = true // Default to grouped view
@@ -467,7 +467,7 @@ class ConnectionsFragment : Fragment() {
 
                     // Apply timeout
                     newTimeout?.let {
-                        updatedConnection = updatedConnection.copy(connectionTimeout = it)
+                        updatedConnection = updatedConnection.copy(connectTimeout = it)
                         modified = true
                     }
 
