@@ -464,6 +464,12 @@ class TermuxBridge(
     }
 
     /**
+     * Get cursor style
+     * @return 0=block, 1=underline, 2=bar (I-beam)
+     */
+    fun getCursorStyle(): Int = cursorStyle
+
+    /**
      * Get number of columns
      */
     fun getColumns(): Int = currentColumns

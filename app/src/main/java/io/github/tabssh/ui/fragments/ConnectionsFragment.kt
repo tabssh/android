@@ -8,6 +8,9 @@ import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ArrayAdapter
+import android.widget.AutoCompleteTextView
+import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SearchView
 import androidx.core.view.MenuProvider
@@ -17,10 +20,13 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.switchmaterial.SwitchMaterial
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.ConnectionGroup
+import io.github.tabssh.storage.database.entities.IdentityProfile
 import io.github.tabssh.ui.activities.ConnectionEditActivity
 import io.github.tabssh.ui.activities.TabTerminalActivity
 import io.github.tabssh.ui.adapters.ConnectionAdapter
@@ -45,9 +51,14 @@ class ConnectionsFragment : Fragment() {
     
     private var allConnections = listOf<ConnectionProfile>()
     private var allGroups = listOf<ConnectionGroup>()
+    private var allIdentities = listOf<IdentityProfile>()
     private var currentSearchQuery = ""
     private var currentSortOption = SortOption.NAME_ASC
     private var useGroupedView = true // Default to grouped view
+
+    // Multi-select mode
+    private var isSelectionMode = false
+    private val selectedConnections = mutableSetOf<String>() // Connection IDs
     
     enum class SortOption(val displayName: String) {
         NAME_ASC("Name (A-Z)"),
@@ -97,6 +108,10 @@ class ConnectionsFragment : Fragment() {
                 return when (menuItem.itemId) {
                     R.id.action_sort -> {
                         showSortDialog()
+                        true
+                    }
+                    R.id.action_bulk_edit -> {
+                        showBulkEditOptions()
                         true
                     }
                     else -> false
@@ -227,6 +242,266 @@ class ConnectionsFragment : Fragment() {
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    /**
+     * Show bulk edit options dialog
+     */
+    private fun showBulkEditOptions() {
+        val options = arrayOf(
+            "Edit All Connections",
+            "Edit Connections in Group...",
+            "Select Multiple to Edit"
+        )
+
+        AlertDialog.Builder(requireContext())
+            .setTitle("Bulk Edit")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> showBulkEditDialog(allConnections)
+                    1 -> showGroupSelectionForBulkEdit()
+                    2 -> enterSelectionMode()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Show group selection dialog for bulk editing
+     */
+    private fun showGroupSelectionForBulkEdit() {
+        if (allGroups.isEmpty()) {
+            android.widget.Toast.makeText(requireContext(), "No groups available", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val groupNames = allGroups.map { it.name }.toTypedArray()
+
+        AlertDialog.Builder(requireContext())
+            .setTitle("Select Group to Edit")
+            .setItems(groupNames) { _, which ->
+                val selectedGroup = allGroups[which]
+                val groupConnections = allConnections.filter { it.groupId == selectedGroup.id }
+                if (groupConnections.isEmpty()) {
+                    android.widget.Toast.makeText(requireContext(), "No connections in this group", android.widget.Toast.LENGTH_SHORT).show()
+                } else {
+                    showBulkEditDialog(groupConnections)
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Enter multi-select mode
+     */
+    private fun enterSelectionMode() {
+        isSelectionMode = true
+        selectedConnections.clear()
+        toolbar.title = "Select Connections"
+        toolbar.setNavigationIcon(R.drawable.ic_close)
+        toolbar.setNavigationOnClickListener { exitSelectionMode() }
+
+        // Show action button for bulk edit
+        toolbar.menu.findItem(R.id.action_bulk_edit)?.isVisible = false
+        toolbar.menu.findItem(R.id.action_sort)?.isVisible = false
+
+        android.widget.Toast.makeText(requireContext(), "Tap connections to select, long-press to edit selected", android.widget.Toast.LENGTH_LONG).show()
+
+        // Update adapter click behavior
+        adapter.setOnItemLongClickListener { _ ->
+            if (selectedConnections.isNotEmpty()) {
+                val selectedList = allConnections.filter { selectedConnections.contains(it.id) }
+                showBulkEditDialog(selectedList)
+            } else {
+                android.widget.Toast.makeText(requireContext(), "Select at least one connection", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            true
+        }
+    }
+
+    /**
+     * Exit multi-select mode
+     */
+    private fun exitSelectionMode() {
+        isSelectionMode = false
+        selectedConnections.clear()
+        toolbar.title = "Connections"
+        toolbar.navigationIcon = null
+        toolbar.setNavigationOnClickListener(null)
+
+        // Restore menu
+        toolbar.menu.findItem(R.id.action_bulk_edit)?.isVisible = true
+        toolbar.menu.findItem(R.id.action_sort)?.isVisible = true
+
+        // Restore adapter click behavior
+        setupRecyclerView()
+        applySortAndFilter()
+    }
+
+    /**
+     * Show bulk edit dialog
+     */
+    private fun showBulkEditDialog(connections: List<ConnectionProfile>) {
+        if (connections.isEmpty()) {
+            android.widget.Toast.makeText(requireContext(), "No connections to edit", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_bulk_edit, null)
+
+        val editUsername = dialogView.findViewById<TextInputEditText>(R.id.edit_username)
+        val editPort = dialogView.findViewById<TextInputEditText>(R.id.edit_port)
+        val dropdownGroup = dialogView.findViewById<AutoCompleteTextView>(R.id.dropdown_group)
+        val dropdownIdentity = dialogView.findViewById<AutoCompleteTextView>(R.id.dropdown_identity)
+        val editTimeout = dialogView.findViewById<TextInputEditText>(R.id.edit_timeout)
+        val switchKeepalive = dialogView.findViewById<SwitchMaterial>(R.id.switch_keepalive)
+        val switchCompression = dialogView.findViewById<SwitchMaterial>(R.id.switch_compression)
+        val textSelectedCount = dialogView.findViewById<TextView>(R.id.text_selected_count)
+
+        textSelectedCount.text = "${connections.size} connections selected"
+
+        // Setup group dropdown
+        val groupOptions = mutableListOf("(No change)", "(Remove from group)")
+        groupOptions.addAll(allGroups.map { it.name })
+        val groupAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, groupOptions)
+        dropdownGroup.setAdapter(groupAdapter)
+        dropdownGroup.setText(groupOptions[0], false)
+
+        // Setup identity dropdown
+        val identityOptions = mutableListOf("(No change)", "(Remove identity)")
+        lifecycleScope.launch {
+            try {
+                app.database.identityDao().getAllIdentities().collect { identities ->
+                    allIdentities = identities
+                    identityOptions.addAll(identities.map { it.name })
+                    val identityAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, identityOptions)
+                    dropdownIdentity.setAdapter(identityAdapter)
+                    dropdownIdentity.setText(identityOptions[0], false)
+                }
+            } catch (e: Exception) {
+                Logger.e("ConnectionsFragment", "Failed to load identities", e)
+            }
+        }
+
+        // Set initial toggle states to indeterminate (we use enabled/disabled to indicate "no change")
+        switchKeepalive.isEnabled = false
+        switchCompression.isEnabled = false
+
+        // Enable toggles on click
+        switchKeepalive.setOnClickListener { switchKeepalive.isEnabled = true }
+        switchCompression.setOnClickListener { switchCompression.isEnabled = true }
+
+        AlertDialog.Builder(requireContext())
+            .setTitle("Bulk Edit ${connections.size} Connections")
+            .setView(dialogView)
+            .setPositiveButton("Apply") { _, _ ->
+                applyBulkEdit(
+                    connections = connections,
+                    newUsername = editUsername.text?.toString()?.takeIf { it.isNotBlank() },
+                    newPort = editPort.text?.toString()?.toIntOrNull(),
+                    newGroupSelection = dropdownGroup.text?.toString()?.takeIf { it != "(No change)" },
+                    newIdentitySelection = dropdownIdentity.text?.toString()?.takeIf { it != "(No change)" },
+                    newTimeout = editTimeout.text?.toString()?.toIntOrNull(),
+                    newKeepalive = if (switchKeepalive.isEnabled) switchKeepalive.isChecked else null,
+                    newCompression = if (switchCompression.isEnabled) switchCompression.isChecked else null
+                )
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Apply bulk edits to connections
+     */
+    private fun applyBulkEdit(
+        connections: List<ConnectionProfile>,
+        newUsername: String?,
+        newPort: Int?,
+        newGroupSelection: String?,
+        newIdentitySelection: String?,
+        newTimeout: Int?,
+        newKeepalive: Boolean?,
+        newCompression: Boolean?
+    ) {
+        lifecycleScope.launch {
+            try {
+                var updatedCount = 0
+
+                for (connection in connections) {
+                    var modified = false
+                    var updatedConnection = connection
+
+                    // Apply username
+                    newUsername?.let {
+                        updatedConnection = updatedConnection.copy(username = it)
+                        modified = true
+                    }
+
+                    // Apply port
+                    newPort?.let {
+                        updatedConnection = updatedConnection.copy(port = it)
+                        modified = true
+                    }
+
+                    // Apply group
+                    newGroupSelection?.let { selection ->
+                        val newGroupId = when (selection) {
+                            "(Remove from group)" -> null
+                            else -> allGroups.find { it.name == selection }?.id
+                        }
+                        updatedConnection = updatedConnection.copy(groupId = newGroupId)
+                        modified = true
+                    }
+
+                    // Apply identity
+                    newIdentitySelection?.let { selection ->
+                        val newIdentityId = when (selection) {
+                            "(Remove identity)" -> null
+                            else -> allIdentities.find { it.name == selection }?.id
+                        }
+                        updatedConnection = updatedConnection.copy(identityId = newIdentityId)
+                        modified = true
+                    }
+
+                    // Apply timeout
+                    newTimeout?.let {
+                        updatedConnection = updatedConnection.copy(connectionTimeout = it)
+                        modified = true
+                    }
+
+                    // Apply keepalive
+                    newKeepalive?.let {
+                        updatedConnection = updatedConnection.copy(keepAlive = it)
+                        modified = true
+                    }
+
+                    // Apply compression
+                    newCompression?.let {
+                        updatedConnection = updatedConnection.copy(compression = it)
+                        modified = true
+                    }
+
+                    if (modified) {
+                        app.database.connectionDao().updateConnection(updatedConnection)
+                        updatedCount++
+                    }
+                }
+
+                Logger.d("ConnectionsFragment", "Bulk edit completed: $updatedCount connections updated")
+                android.widget.Toast.makeText(requireContext(), "Updated $updatedCount connections", android.widget.Toast.LENGTH_SHORT).show()
+
+                // Exit selection mode if active
+                if (isSelectionMode) {
+                    exitSelectionMode()
+                }
+
+            } catch (e: Exception) {
+                Logger.e("ConnectionsFragment", "Bulk edit failed", e)
+                android.widget.Toast.makeText(requireContext(), "Bulk edit failed: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     private fun loadAllConnections() {

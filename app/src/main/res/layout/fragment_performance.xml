@@ -52,6 +52,84 @@
 
             </com.google.android.material.card.MaterialCardView>
 
+            <!--PlatformInfo-->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_platform_info"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/space_md"
+                android:visibility="gone"
+                app:cardElevation="2dp"
+                app:cardCornerRadius="8dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:padding="@dimen/space_md"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:id="@+id/text_platform_icon"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🐧"
+                        android:textSize="28sp"
+                        android:layout_marginEnd="@dimen/space_md" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/text_platform_name"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Ubuntu 22.04"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            android:textColor="?attr/colorOnSurface" />
+
+                        <TextView
+                            android:id="@+id/text_platform_details"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Linux 5.15.0 (x86_64)"
+                            android:textSize="12sp"
+                            android:textColor="?attr/colorOnSurfaceVariant" />
+
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:gravity="end">
+
+                        <TextView
+                            android:id="@+id/text_hostname"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="server01"
+                            android:textSize="14sp"
+                            android:textColor="?attr/colorPrimary" />
+
+                        <TextView
+                            android:id="@+id/text_uptime"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="up 12d 3h"
+                            android:textSize="12sp"
+                            android:textColor="?attr/colorOnSurfaceVariant" />
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
             <!--CPUChart-->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"

@@ -123,24 +123,28 @@
 
     <!-- Terminal fonts -->
     <string-array name="terminal_font_entries">
-        <item>Cascadia Code</item>
-        <item>Fira Code</item>
-        <item>JetBrains Mono</item>
-        <item>Source Code Pro</item>
-        <item>Consolas</item>
-        <item>Menlo</item>
-        <item>Monaco</item>
-        <item>Courier New</item>
+        <item>System Monospace</item>
+        <item>JetBrains Mono Nerd</item>
+        <item>Fira Code Nerd</item>
+        <item>Hack Nerd</item>
+        <item>Cascadia Code Nerd</item>
+        <item>Source Code Pro Nerd</item>
+        <item>Meslo Nerd</item>
+        <item>Roboto Mono Nerd</item>
+        <item>Ubuntu Mono Nerd</item>
+        <item>DejaVu Sans Mono Nerd</item>
     </string-array>
     <string-array name="terminal_font_values">
-        <item>cascadia_code</item>
-        <item>fira_code</item>
-        <item>jetbrains_mono</item>
-        <item>source_code_pro</item>
-        <item>consolas</item>
-        <item>menlo</item>
-        <item>monaco</item>
-        <item>courier_new</item>
+        <item>monospace</item>
+        <item>jetbrains_mono_nerd</item>
+        <item>fira_code_nerd</item>
+        <item>hack_nerd</item>
+        <item>cascadia_code_nerd</item>
+        <item>source_code_pro_nerd</item>
+        <item>meslo_nerd</item>
+        <item>roboto_mono_nerd</item>
+        <item>ubuntu_mono_nerd</item>
+        <item>dejavu_mono_nerd</item>
     </string-array>
 
     <!-- Cursor styles -->

@@ -57,6 +57,14 @@ class PerformanceFragment : Fragment() {
     private lateinit var layoutEmptyState: View
     private lateinit var progressLoading: CircularProgressIndicator
     private lateinit var fabControl: FloatingActionButton
+
+    // Platform info views
+    private lateinit var cardPlatformInfo: View
+    private lateinit var textPlatformIcon: TextView
+    private lateinit var textPlatformName: TextView
+    private lateinit var textPlatformDetails: TextView
+    private lateinit var textHostname: TextView
+    private lateinit var textUptime: TextView
     
     // Data
     private var allConnections = listOf<ConnectionProfile>()
@@ -109,6 +117,14 @@ class PerformanceFragment : Fragment() {
         layoutEmptyState = view.findViewById(R.id.layout_empty_state)
         progressLoading = view.findViewById(R.id.progress_loading)
         fabControl = view.findViewById(R.id.fab_control)
+
+        // Platform info views
+        cardPlatformInfo = view.findViewById(R.id.card_platform_info)
+        textPlatformIcon = view.findViewById(R.id.text_platform_icon)
+        textPlatformName = view.findViewById(R.id.text_platform_name)
+        textPlatformDetails = view.findViewById(R.id.text_platform_details)
+        textHostname = view.findViewById(R.id.text_hostname)
+        textUptime = view.findViewById(R.id.text_uptime)
         
         setupCpuChart()
         setupConnectionSpinner()
@@ -397,6 +413,17 @@ class PerformanceFragment : Fragment() {
     }
 
     private fun updateUI(metrics: PerformanceMetrics) {
+        // Platform info
+        val platform = metrics.platformInfo
+        if (platform.osName.isNotBlank() || platform.distro.isNotBlank()) {
+            cardPlatformInfo.visibility = View.VISIBLE
+            textPlatformIcon.text = platform.getOsIcon()
+            textPlatformName.text = platform.getDisplayName()
+            textPlatformDetails.text = "${platform.osName} ${platform.osVersion} (${platform.architecture})"
+            textHostname.text = platform.hostname
+            textUptime.text = formatUptime(metrics.loadAverage.uptime)
+        }
+
         // Memory with color coding
         textMemoryPercent.text = "${metrics.memoryUsage.usedPercent.toInt()}%"
         textMemoryDetails.text = "${metrics.memoryUsage.usedMB} MB / ${metrics.memoryUsage.totalMB} MB"
@@ -483,6 +510,21 @@ class PerformanceFragment : Fragment() {
             bytes >= 1024 * 1024 -> String.format("%.1f MB", bytes / 1024.0 / 1024.0)
             bytes >= 1024 -> String.format("%.1f KB", bytes / 1024.0)
             else -> "$bytes B"
+        }
+    }
+
+    private fun formatUptime(seconds: Long): String {
+        if (seconds <= 0) return "unknown"
+
+        val days = seconds / 86400
+        val hours = (seconds % 86400) / 3600
+        val minutes = (seconds % 3600) / 60
+
+        return when {
+            days > 0 -> "up ${days}d ${hours}h"
+            hours > 0 -> "up ${hours}h ${minutes}m"
+            minutes > 0 -> "up ${minutes}m"
+            else -> "up ${seconds}s"
         }
     }
 

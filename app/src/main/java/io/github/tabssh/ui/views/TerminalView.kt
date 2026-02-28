@@ -519,7 +519,41 @@ class TerminalView @JvmOverloads constructor(
     fun getFontSize(): Int {
         return (textPaint.textSize / resources.displayMetrics.density).toInt()
     }
-    
+
+    /**
+     * Set terminal font typeface
+     * @param fontValue Font value from preferences (e.g., "jetbrains_mono_nerd")
+     */
+    fun setFont(fontValue: String) {
+        val typeface = io.github.tabssh.utils.FontManager.getTypeface(context, fontValue)
+        textPaint.typeface = typeface
+        calculateCellDimensions()
+
+        // Recalculate terminal dimensions
+        val availableWidth = width - paddingLeft - paddingRight
+        val availableHeight = height - paddingTop - paddingBottom
+
+        if (availableWidth > 0 && availableHeight > 0) {
+            terminalCols = (availableWidth / cellWidth).toInt().coerceAtLeast(80)
+            terminalRows = (availableHeight / cellHeight).toInt().coerceAtLeast(24)
+            terminalEmulator?.resize(terminalCols, terminalRows)
+        }
+
+        fullRedrawNeeded = true
+        invalidate()
+        Logger.d("TerminalView", "Font changed to: $fontValue")
+    }
+
+    /**
+     * Set terminal font by typeface directly
+     */
+    fun setTypeface(typeface: android.graphics.Typeface) {
+        textPaint.typeface = typeface
+        calculateCellDimensions()
+        fullRedrawNeeded = true
+        invalidate()
+    }
+
     /**
      * Enable custom gesture support for terminal multiplexers
      * @param multiplexerType The multiplexer type (tmux, screen, zellij, or none)
@@ -782,13 +816,31 @@ class TerminalView @JvmOverloads constructor(
             }
         }
 
-        // Draw cursor
+        // Draw cursor based on style (0=block, 1=underline, 2=bar/I-beam)
         if (cursorVisible && cursorRow in 0 until rows && cursorCol in 0 until cols) {
             val cursorX = startX + cursorCol * cellWidth
             val cursorY = startY + cursorRow * cellHeight
             cursorPaint.color = Color.WHITE
-            cursorPaint.alpha = 128
-            canvas.drawRect(cursorX, cursorY, cursorX + cellWidth, cursorY + cellHeight, cursorPaint)
+            cursorPaint.alpha = 200
+
+            when (bridge.getCursorStyle()) {
+                0 -> { // Block cursor - filled rectangle
+                    cursorPaint.alpha = 128
+                    canvas.drawRect(cursorX, cursorY, cursorX + cellWidth, cursorY + cellHeight, cursorPaint)
+                }
+                1 -> { // Underline cursor - thin line at bottom
+                    val underlineHeight = maxOf(2f, cellHeight * 0.15f)
+                    canvas.drawRect(cursorX, cursorY + cellHeight - underlineHeight, cursorX + cellWidth, cursorY + cellHeight, cursorPaint)
+                }
+                2 -> { // Bar/I-beam cursor - thin vertical line
+                    val barWidth = maxOf(2f, cellWidth * 0.15f)
+                    canvas.drawRect(cursorX, cursorY, cursorX + barWidth, cursorY + cellHeight, cursorPaint)
+                }
+                else -> { // Default to bar
+                    val barWidth = maxOf(2f, cellWidth * 0.15f)
+                    canvas.drawRect(cursorX, cursorY, cursorX + barWidth, cursorY + cellHeight, cursorPaint)
+                }
+            }
         }
     }
 

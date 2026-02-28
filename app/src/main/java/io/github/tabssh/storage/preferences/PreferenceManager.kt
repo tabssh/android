@@ -199,6 +199,35 @@ class PreferenceManager(private val context: Context) {
         }
     }
 
+    /**
+     * Get keyboard layout as list of lists of KeyboardKey
+     */
+    fun getKeyboardLayout(): List<List<io.github.tabssh.ui.keyboard.KeyboardKey>> {
+        val json = getKeyboardLayoutJson() ?: return emptyList()
+        return try {
+            val gson = com.google.gson.Gson()
+            val type = object : com.google.gson.reflect.TypeToken<List<List<io.github.tabssh.ui.keyboard.KeyboardKey>>>() {}.type
+            gson.fromJson(json, type) ?: emptyList()
+        } catch (e: Exception) {
+            Logger.e("PreferenceManager", "Failed to parse keyboard layout", e)
+            emptyList()
+        }
+    }
+
+    /**
+     * Set keyboard layout from list of lists of KeyboardKey
+     */
+    fun setKeyboardLayout(layout: List<List<io.github.tabssh.ui.keyboard.KeyboardKey>>) {
+        try {
+            val gson = com.google.gson.Gson()
+            val json = gson.toJson(layout)
+            setKeyboardLayoutJson(json)
+            Logger.d("PreferenceManager", "Saved keyboard layout: ${layout.size} rows")
+        } catch (e: Exception) {
+            Logger.e("PreferenceManager", "Failed to save keyboard layout", e)
+        }
+    }
+
     // Notification preferences
     fun areNotificationsEnabled(): Boolean = getBoolean(KEY_NOTIFICATIONS_ENABLED, true)
     fun setNotificationsEnabled(enabled: Boolean) = setBoolean(KEY_NOTIFICATIONS_ENABLED, enabled)

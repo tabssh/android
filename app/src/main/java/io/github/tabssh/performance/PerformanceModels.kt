@@ -13,7 +13,8 @@ data class PerformanceMetrics(
     val memoryUsage: MemoryMetrics,
     val diskUsage: DiskMetrics,
     val networkStats: NetworkMetrics,
-    val loadAverage: LoadMetrics
+    val loadAverage: LoadMetrics,
+    val platformInfo: PlatformInfo = PlatformInfo.empty()
 )
 
 /**
@@ -91,6 +92,58 @@ data class LoadMetrics(
 ) {
     companion object {
         fun empty() = LoadMetrics(0f, 0f, 0f, 0, 0, 0)
+    }
+}
+
+/**
+ * Platform/OS information
+ */
+data class PlatformInfo(
+    val osName: String,           // e.g., "Linux", "FreeBSD"
+    val osVersion: String,        // Kernel version e.g., "5.15.0-91-generic"
+    val distro: String,           // e.g., "Ubuntu", "Debian", "CentOS"
+    val distroVersion: String,    // e.g., "22.04", "12", "8"
+    val distroCodename: String,   // e.g., "jammy", "bookworm"
+    val architecture: String,     // e.g., "x86_64", "aarch64"
+    val hostname: String,         // Server hostname
+    val kernelRelease: String     // Full kernel string
+) {
+    companion object {
+        fun empty() = PlatformInfo("", "", "", "", "", "", "", "")
+    }
+
+    /**
+     * Get a friendly display name for the OS
+     */
+    fun getDisplayName(): String {
+        return when {
+            distro.isNotBlank() && distroVersion.isNotBlank() -> "$distro $distroVersion"
+            distro.isNotBlank() -> distro
+            osName.isNotBlank() && osVersion.isNotBlank() -> "$osName $osVersion"
+            osName.isNotBlank() -> osName
+            else -> "Unknown"
+        }
+    }
+
+    /**
+     * Get icon emoji based on OS type
+     */
+    fun getOsIcon(): String {
+        return when {
+            distro.contains("ubuntu", ignoreCase = true) -> "🟠"
+            distro.contains("debian", ignoreCase = true) -> "🔴"
+            distro.contains("fedora", ignoreCase = true) -> "🔵"
+            distro.contains("centos", ignoreCase = true) ||
+            distro.contains("rocky", ignoreCase = true) ||
+            distro.contains("alma", ignoreCase = true) -> "🟢"
+            distro.contains("arch", ignoreCase = true) -> "🔷"
+            distro.contains("alpine", ignoreCase = true) -> "🏔️"
+            distro.contains("suse", ignoreCase = true) -> "🦎"
+            osName.contains("freebsd", ignoreCase = true) -> "😈"
+            osName.contains("darwin", ignoreCase = true) ||
+            osName.contains("macos", ignoreCase = true) -> "🍎"
+            else -> "🐧"
+        }
     }
 }
 
