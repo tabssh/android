@@ -906,21 +906,24 @@ class TabTerminalActivity : AppCompatActivity() {
 
         if (connectionProfileId != null) {
             lifecycleScope.launch {
-                // Try embedded JSON first (works for quick-connect / unsaved profiles)
-                val profile: ConnectionProfile? = if (connectionProfileJson != null) {
+                // Always fetch from DB first to get latest changes (including identity)
+                // Only fall back to embedded JSON for quick-connect (unsaved) profiles
+                var profile: ConnectionProfile? = withContext(Dispatchers.IO) {
+                    app.database.connectionDao().getConnectionById(connectionProfileId)
+                }
+
+                // If not in DB, try embedded JSON (for quick-connect)
+                if (profile == null && connectionProfileJson != null) {
                     try {
-                        com.google.gson.Gson().fromJson(connectionProfileJson, ConnectionProfile::class.java)
+                        profile = com.google.gson.Gson().fromJson(connectionProfileJson, ConnectionProfile::class.java)
+                        Logger.d("TabTerminalActivity", "Using embedded profile (quick-connect)")
                     } catch (e: Exception) {
-                        Logger.w("TabTerminalActivity", "Failed to decode profile JSON, falling back to DB", e)
-                        null
+                        Logger.w("TabTerminalActivity", "Failed to decode profile JSON", e)
                     }
-                } else null
-                    ?: withContext(Dispatchers.IO) {
-                        app.database.connectionDao().getConnectionById(connectionProfileId)
-                    }
+                }
 
                 if (profile != null) {
-                    Logger.d("TabTerminalActivity", "Found profile: ${profile.name}")
+                    Logger.d("TabTerminalActivity", "Found profile: ${profile.name}, identityId: ${profile.identityId}")
                     if (autoConnect) {
                         connectToProfile(profile)
                     }
