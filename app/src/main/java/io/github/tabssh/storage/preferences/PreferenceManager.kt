@@ -201,13 +201,12 @@ class PreferenceManager(private val context: Context) {
 
     /**
      * Get keyboard layout as list of lists of KeyboardKey
+     * Parses JSON array of key IDs: [["ESC","TAB"],["UP","DOWN"]]
      */
     fun getKeyboardLayout(): List<List<io.github.tabssh.ui.keyboard.KeyboardKey>> {
         val json = getKeyboardLayoutJson() ?: return emptyList()
         return try {
-            val gson = com.google.gson.Gson()
-            val type = object : com.google.gson.reflect.TypeToken<List<List<io.github.tabssh.ui.keyboard.KeyboardKey>>>() {}.type
-            gson.fromJson(json, type) ?: emptyList()
+            io.github.tabssh.ui.keyboard.KeyboardLayoutManager.parseLayoutJson(json)
         } catch (e: Exception) {
             Logger.e("PreferenceManager", "Failed to parse keyboard layout", e)
             emptyList()
@@ -216,11 +215,12 @@ class PreferenceManager(private val context: Context) {
 
     /**
      * Set keyboard layout from list of lists of KeyboardKey
+     * Saves as JSON array of key IDs: [["ESC","TAB"],["UP","DOWN"]]
      */
     fun setKeyboardLayout(layout: List<List<io.github.tabssh.ui.keyboard.KeyboardKey>>) {
         try {
-            val gson = com.google.gson.Gson()
-            val json = gson.toJson(layout)
+            // Use KeyboardLayoutManager format (key IDs only) for compatibility
+            val json = io.github.tabssh.ui.keyboard.KeyboardLayoutManager.layoutToJson(layout)
             setKeyboardLayoutJson(json)
             Logger.d("PreferenceManager", "Saved keyboard layout: ${layout.size} rows")
         } catch (e: Exception) {
