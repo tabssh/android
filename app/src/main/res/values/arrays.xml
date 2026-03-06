@@ -259,4 +259,16 @@
         <item>sync_operations</item>
     </string-array>
 
+    <!-- Hypervisor API Type Override -->
+    <string-array name="api_type_entries">
+        <item>Auto-detect (recommended)</item>
+        <item>Direct host connection</item>
+        <item>Centralized management</item>
+    </string-array>
+    <string-array name="api_type_values">
+        <item>auto</item>
+        <item>direct</item>
+        <item>centralized</item>
+    </string-array>
+
 </resources>

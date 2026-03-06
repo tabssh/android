@@ -26,7 +26,7 @@ import io.github.tabssh.utils.logging.Logger
         AuditLogEntry::class,
         HypervisorProfile::class
     ],
-    version = 16,
+    version = 17,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -288,7 +288,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     MIGRATION_12_13,
                     MIGRATION_13_14,
                     MIGRATION_14_15,
-                    MIGRATION_15_16
+                    MIGRATION_15_16,
+                    MIGRATION_16_17
                 )
                 .build()
                 INSTANCE = instance
@@ -451,5 +452,13 @@ data class DatabaseStats(
                 // Add password field to identities table for storing credentials
                 database.execSQL("ALTER TABLE identities ADD COLUMN password TEXT")
                 Logger.i("Database", "Migration 15->16: Added password field to identities")
+            }
+        }
+
+        val MIGRATION_16_17 = object : Migration(16, 17) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Add API type override field to hypervisors table
+                database.execSQL("ALTER TABLE hypervisors ADD COLUMN api_type_override TEXT NOT NULL DEFAULT 'auto'")
+                Logger.i("Database", "Migration 16->17: Added api_type_override field to hypervisors")
             }
         }
