@@ -66,6 +66,9 @@ class SSHConnection(
     // Cached resolved identity (loaded on connect)
     private var resolvedIdentity: io.github.tabssh.storage.database.entities.Identity? = null
 
+    // Cached password for UserInfo callbacks (set during setupAuthentication)
+    private var cachedPassword: String? = null
+
     val id: String = profile.id
     val displayName: String = profile.getDisplayName()
 
@@ -91,16 +94,24 @@ class SSHConnection(
 
                 // Resolve linked identity if set (for effective username/credentials)
                 val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
+                Logger.d("SSHConnection", "Profile identityId: ${profile.identityId}")
                 resolvedIdentity = if (profile.identityId != null) {
                     try {
-                        app?.database?.identityDao()?.getIdentityById(profile.identityId!!)?.also {
-                            Logger.i("SSHConnection", "Using identity '${it.name}' for connection")
+                        val identity = app?.database?.identityDao()?.getIdentityById(profile.identityId!!)
+                        if (identity != null) {
+                            Logger.i("SSHConnection", "Using identity '${identity.name}' (keyId=${identity.keyId}, authType=${identity.authType})")
+                        } else {
+                            Logger.w("SSHConnection", "Identity not found in DB for id: ${profile.identityId}")
                         }
+                        identity
                     } catch (e: Exception) {
                         Logger.w("SSHConnection", "Error loading linked identity", e)
                         null
                     }
-                } else null
+                } else {
+                    Logger.d("SSHConnection", "No identity linked to this connection")
+                    null
+                }
 
                 // Use identity username if available, otherwise profile username
                 val effectiveUsername = resolvedIdentity?.username ?: profile.username
@@ -229,7 +240,10 @@ class SSHConnection(
      */
     private fun setupUserInfo(session: Session) {
         session.setUserInfo(object : com.jcraft.jsch.UserInfo {
-            override fun getPassword(): String? = null
+            override fun getPassword(): String? {
+                Logger.d("SSHConnection", "UserInfo.getPassword() called, returning cached password: ${cachedPassword != null}")
+                return cachedPassword
+            }
 
             override fun promptYesNo(message: String): Boolean {
                 Logger.i("SSHConnection", "UserInfo.promptYesNo called: $message")
@@ -277,9 +291,24 @@ class SSHConnection(
                 return shouldAccept
             }
 
-            override fun getPassphrase(): String? = null
-            override fun promptPassphrase(message: String): Boolean = false
-            override fun promptPassword(message: String): Boolean = false
+            override fun getPassphrase(): String? {
+                // Return passphrase for encrypted SSH keys if we have one stored
+                Logger.d("SSHConnection", "UserInfo.getPassphrase() called")
+                return null  // TODO: Support encrypted key passphrases
+            }
+
+            override fun promptPassphrase(message: String): Boolean {
+                Logger.d("SSHConnection", "UserInfo.promptPassphrase called: $message")
+                // Return true if we have a passphrase, false otherwise
+                return false  // TODO: Support encrypted key passphrases
+            }
+
+            override fun promptPassword(message: String): Boolean {
+                Logger.d("SSHConnection", "UserInfo.promptPassword called: $message, hasPassword=${cachedPassword != null}")
+                // Return true if we have a password to provide
+                return cachedPassword != null
+            }
+
             override fun showMessage(message: String) {
                 Logger.i("SSHConnection", "Server message: $message")
             }
@@ -479,9 +508,11 @@ class SSHConnection(
 
         // Use already-resolved identity from connect()
         val linkedIdentity = resolvedIdentity
+        Logger.d("SSHConnection", "setupAuthentication: linkedIdentity=${linkedIdentity?.name}, identity.keyId=${linkedIdentity?.keyId}, profile.keyId=${profile.keyId}")
 
         // Gather available credentials — identity overrides connection-level values
         val effectiveKeyId: String? = linkedIdentity?.keyId ?: profile.keyId
+        Logger.d("SSHConnection", "setupAuthentication: effectiveKeyId=$effectiveKeyId")
 
         // Identity password: try SecurePasswordManager first, fall back to legacy plaintext in DB
         val identityPassword: String? = if (linkedIdentity != null) {
@@ -518,8 +549,9 @@ class SSHConnection(
 
         // Priority 2: Password (if stored)
         if (effectivePassword != null) {
+            cachedPassword = effectivePassword  // Cache for UserInfo callbacks
             session.setPassword(effectivePassword)
-            Logger.i("SSHConnection", "Auth: password")
+            Logger.i("SSHConnection", "Auth: password set on session")
             return@withContext
         }
 

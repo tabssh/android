@@ -341,7 +341,7 @@ class ConnectionsFragment : Fragment() {
     }
 
     /**
-     * Show bulk edit dialog
+     * Show bulk edit dialog with checkboxes for each field
      */
     private fun showBulkEditDialog(connections: List<ConnectionProfile>) {
         if (connections.isEmpty()) {
@@ -351,6 +351,16 @@ class ConnectionsFragment : Fragment() {
 
         val dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_bulk_edit, null)
 
+        // Checkboxes for enabling each field change
+        val checkUsername = dialogView.findViewById<android.widget.CheckBox>(R.id.check_username)
+        val checkPort = dialogView.findViewById<android.widget.CheckBox>(R.id.check_port)
+        val checkGroup = dialogView.findViewById<android.widget.CheckBox>(R.id.check_group)
+        val checkIdentity = dialogView.findViewById<android.widget.CheckBox>(R.id.check_identity)
+        val checkTimeout = dialogView.findViewById<android.widget.CheckBox>(R.id.check_timeout)
+        val checkKeepalive = dialogView.findViewById<android.widget.CheckBox>(R.id.check_keepalive)
+        val checkCompression = dialogView.findViewById<android.widget.CheckBox>(R.id.check_compression)
+
+        // Field inputs
         val editUsername = dialogView.findViewById<TextInputEditText>(R.id.edit_username)
         val editPort = dialogView.findViewById<TextInputEditText>(R.id.edit_port)
         val dropdownGroup = dialogView.findViewById<AutoCompleteTextView>(R.id.dropdown_group)
@@ -362,15 +372,23 @@ class ConnectionsFragment : Fragment() {
 
         textSelectedCount.text = "${connections.size} connections selected"
 
+        // Auto-check checkbox when user edits a field
+        editUsername.setOnFocusChangeListener { _, hasFocus -> if (hasFocus) checkUsername.isChecked = true }
+        editPort.setOnFocusChangeListener { _, hasFocus -> if (hasFocus) checkPort.isChecked = true }
+        editTimeout.setOnFocusChangeListener { _, hasFocus -> if (hasFocus) checkTimeout.isChecked = true }
+        dropdownGroup.setOnItemClickListener { _, _, _, _ -> checkGroup.isChecked = true }
+        dropdownIdentity.setOnItemClickListener { _, _, _, _ -> checkIdentity.isChecked = true }
+        switchKeepalive.setOnCheckedChangeListener { _, _ -> checkKeepalive.isChecked = true }
+        switchCompression.setOnCheckedChangeListener { _, _ -> checkCompression.isChecked = true }
+
         // Setup group dropdown
-        val groupOptions = mutableListOf("(No change)", "(Remove from group)")
+        val groupOptions = mutableListOf("(None - Remove from group)")
         groupOptions.addAll(allGroups.map { it.name })
         val groupAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, groupOptions)
         dropdownGroup.setAdapter(groupAdapter)
-        dropdownGroup.setText(groupOptions[0], false)
 
         // Setup identity dropdown
-        val identityOptions = mutableListOf("(No change)", "(Remove identity)")
+        val identityOptions = mutableListOf("(None - Remove identity)")
         lifecycleScope.launch {
             try {
                 app.database.identityDao().getAllIdentities().collect { identities ->
@@ -378,20 +396,11 @@ class ConnectionsFragment : Fragment() {
                     identityOptions.addAll(identities.map { it.name })
                     val identityAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, identityOptions)
                     dropdownIdentity.setAdapter(identityAdapter)
-                    dropdownIdentity.setText(identityOptions[0], false)
                 }
             } catch (e: Exception) {
                 Logger.e("ConnectionsFragment", "Failed to load identities", e)
             }
         }
-
-        // Set initial toggle states to indeterminate (we use enabled/disabled to indicate "no change")
-        switchKeepalive.isEnabled = false
-        switchCompression.isEnabled = false
-
-        // Enable toggles on click
-        switchKeepalive.setOnClickListener { switchKeepalive.isEnabled = true }
-        switchCompression.setOnClickListener { switchCompression.isEnabled = true }
 
         AlertDialog.Builder(requireContext())
             .setTitle("Bulk Edit ${connections.size} Connections")
@@ -399,13 +408,20 @@ class ConnectionsFragment : Fragment() {
             .setPositiveButton("Apply") { _, _ ->
                 applyBulkEdit(
                     connections = connections,
-                    newUsername = editUsername.text?.toString()?.takeIf { it.isNotBlank() },
-                    newPort = editPort.text?.toString()?.toIntOrNull(),
-                    newGroupSelection = dropdownGroup.text?.toString()?.takeIf { it != "(No change)" },
-                    newIdentitySelection = dropdownIdentity.text?.toString()?.takeIf { it != "(No change)" },
-                    newTimeout = editTimeout.text?.toString()?.toIntOrNull(),
-                    newKeepalive = if (switchKeepalive.isEnabled) switchKeepalive.isChecked else null,
-                    newCompression = if (switchCompression.isEnabled) switchCompression.isChecked else null
+                    applyUsername = checkUsername.isChecked,
+                    newUsername = editUsername.text?.toString() ?: "",
+                    applyPort = checkPort.isChecked,
+                    newPort = editPort.text?.toString()?.toIntOrNull() ?: 22,
+                    applyGroup = checkGroup.isChecked,
+                    newGroupSelection = dropdownGroup.text?.toString(),
+                    applyIdentity = checkIdentity.isChecked,
+                    newIdentitySelection = dropdownIdentity.text?.toString(),
+                    applyTimeout = checkTimeout.isChecked,
+                    newTimeout = editTimeout.text?.toString()?.toIntOrNull() ?: 15,
+                    applyKeepalive = checkKeepalive.isChecked,
+                    newKeepalive = switchKeepalive.isChecked,
+                    applyCompression = checkCompression.isChecked,
+                    newCompression = switchCompression.isChecked
                 )
             }
             .setNegativeButton("Cancel", null)
@@ -413,84 +429,100 @@ class ConnectionsFragment : Fragment() {
     }
 
     /**
-     * Apply bulk edits to connections
+     * Apply bulk edits to connections - only applies checked fields
      */
     private fun applyBulkEdit(
         connections: List<ConnectionProfile>,
-        newUsername: String?,
-        newPort: Int?,
+        applyUsername: Boolean,
+        newUsername: String,
+        applyPort: Boolean,
+        newPort: Int,
+        applyGroup: Boolean,
         newGroupSelection: String?,
+        applyIdentity: Boolean,
         newIdentitySelection: String?,
-        newTimeout: Int?,
-        newKeepalive: Boolean?,
-        newCompression: Boolean?
+        applyTimeout: Boolean,
+        newTimeout: Int,
+        applyKeepalive: Boolean,
+        newKeepalive: Boolean,
+        applyCompression: Boolean,
+        newCompression: Boolean
     ) {
         lifecycleScope.launch {
             try {
                 var updatedCount = 0
+                val changes = mutableListOf<String>()
 
-                for (connection in connections) {
-                    var modified = false
-                    var updatedConnection = connection
+                // Build list of what will change
+                if (applyUsername) changes.add("username")
+                if (applyPort) changes.add("port")
+                if (applyGroup) changes.add("group")
+                if (applyIdentity) changes.add("identity")
+                if (applyTimeout) changes.add("timeout")
+                if (applyKeepalive) changes.add("keepalive")
+                if (applyCompression) changes.add("compression")
 
-                    // Apply username
-                    newUsername?.let {
-                        updatedConnection = updatedConnection.copy(username = it)
-                        modified = true
-                    }
-
-                    // Apply port
-                    newPort?.let {
-                        updatedConnection = updatedConnection.copy(port = it)
-                        modified = true
-                    }
-
-                    // Apply group
-                    newGroupSelection?.let { selection ->
-                        val newGroupId = when (selection) {
-                            "(Remove from group)" -> null
-                            else -> allGroups.find { it.name == selection }?.id
-                        }
-                        updatedConnection = updatedConnection.copy(groupId = newGroupId)
-                        modified = true
-                    }
-
-                    // Apply identity
-                    newIdentitySelection?.let { selection ->
-                        val newIdentityId = when (selection) {
-                            "(Remove identity)" -> null
-                            else -> allIdentities.find { it.name == selection }?.id
-                        }
-                        updatedConnection = updatedConnection.copy(identityId = newIdentityId)
-                        modified = true
-                    }
-
-                    // Apply timeout
-                    newTimeout?.let {
-                        updatedConnection = updatedConnection.copy(connectTimeout = it)
-                        modified = true
-                    }
-
-                    // Apply keepalive
-                    newKeepalive?.let {
-                        updatedConnection = updatedConnection.copy(keepAlive = it)
-                        modified = true
-                    }
-
-                    // Apply compression
-                    newCompression?.let {
-                        updatedConnection = updatedConnection.copy(compression = it)
-                        modified = true
-                    }
-
-                    if (modified) {
-                        app.database.connectionDao().updateConnection(updatedConnection)
-                        updatedCount++
-                    }
+                if (changes.isEmpty()) {
+                    android.widget.Toast.makeText(requireContext(), "No changes selected", android.widget.Toast.LENGTH_SHORT).show()
+                    return@launch
                 }
 
-                Logger.d("ConnectionsFragment", "Bulk edit completed: $updatedCount connections updated")
-                android.widget.Toast.makeText(requireContext(), "Updated $updatedCount connections", android.widget.Toast.LENGTH_SHORT).show()
+                Logger.d("ConnectionsFragment", "Bulk edit: applying ${changes.joinToString(", ")} to ${connections.size} connections")
+
+                for (connection in connections) {
+                    var updatedConnection = connection
+
+                    // Apply username if checked
+                    if (applyUsername) {
+                        updatedConnection = updatedConnection.copy(username = newUsername)
+                    }
+
+                    // Apply port if checked
+                    if (applyPort) {
+                        updatedConnection = updatedConnection.copy(port = newPort)
+                    }
+
+                    // Apply group if checked
+                    if (applyGroup) {
+                        val newGroupId = when {
+                            newGroupSelection.isNullOrEmpty() -> null
+                            newGroupSelection.startsWith("(None") -> null
+                            else -> allGroups.find { it.name == newGroupSelection }?.id
+                        }
+                        updatedConnection = updatedConnection.copy(groupId = newGroupId)
+                    }
+
+                    // Apply identity if checked
+                    if (applyIdentity) {
+                        val newIdentityId = when {
+                            newIdentitySelection.isNullOrEmpty() -> null
+                            newIdentitySelection.startsWith("(None") -> null
+                            else -> allIdentities.find { it.name == newIdentitySelection }?.id
+                        }
+                        updatedConnection = updatedConnection.copy(identityId = newIdentityId)
+                    }
+
+                    // Apply timeout if checked
+                    if (applyTimeout) {
+                        updatedConnection = updatedConnection.copy(connectTimeout = newTimeout)
+                    }
+
+                    // Apply keepalive if checked
+                    if (applyKeepalive) {
+                        updatedConnection = updatedConnection.copy(keepAlive = newKeepalive)
+                    }
+
+                    // Apply compression if checked
+                    if (applyCompression) {
+                        updatedConnection = updatedConnection.copy(compression = newCompression)
+                    }
+
+                    app.database.connectionDao().updateConnection(updatedConnection)
+                    updatedCount++
+                }
+
+                Logger.d("ConnectionsFragment", "Bulk edit completed: $updatedCount connections updated (${changes.joinToString(", ")})")
+                android.widget.Toast.makeText(requireContext(), "Updated $updatedCount connections: ${changes.joinToString(", ")}", android.widget.Toast.LENGTH_SHORT).show()
 
                 // Exit selection mode if active
                 if (isSelectionMode) {
