@@ -18,7 +18,8 @@
       "Bash(emulator:*)",
       "WebFetch(domain:www.tabnine.com)",
       "Bash(./gradlew clean:*)",
-      "WebFetch(domain:developer.broadcom.com)"
+      "WebFetch(domain:developer.broadcom.com)",
+      "WebFetch(domain:docs.xen-orchestra.com)"
     ]
   }
 }
