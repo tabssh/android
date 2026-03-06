@@ -177,6 +177,34 @@
                 android:text="Verify SSL Certificate"
                 android:checked="false" />
 
+            <!-- API Type Override (XCP-ng and VMware only) -->
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/layout_api_type"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_md"
+                android:hint="API Type"
+                android:visibility="gone"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
+
+                <AutoCompleteTextView
+                    android:id="@+id/dropdown_api_type"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="none" />
+
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <TextView
+                android:id="@+id/text_api_type_hint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Auto-detect: Tries both APIs automatically"
+                android:textSize="12sp"
+                android:textColor="?android:textColorSecondary"
+                android:visibility="gone" />
+
             <!-- Notes -->
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"

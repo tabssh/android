@@ -100,28 +100,32 @@ class VMwareManagerActivity : AppCompatActivity() {
                 progressBar.visibility = View.VISIBLE
                 statusText.text = "Connecting to ${profile.name}..."
                 statusText.visibility = View.VISIBLE
-                
+
                 currentClient = VMwareApiClient(
                     host = profile.host,
                     username = profile.username,
                     password = profile.password,
                     verifySsl = profile.verifySsl
                 )
-                
+
                 val authenticated = currentClient?.authenticate() ?: false
-                
+
                 if (authenticated) {
-                    statusText.text = "Connected to ${profile.name}"
+                    // Detect if vCenter or standalone ESXi
+                    val isVCenter = currentClient?.isVCenter() ?: false
+                    val serverType = if (isVCenter) "vCenter" else "ESXi"
+
+                    statusText.text = "Connected to ${profile.name} ($serverType)"
                     app.database.hypervisorDao().updateLastConnected(profile.id, System.currentTimeMillis())
                     refreshVMs()
                 } else {
-                    statusText.text = "Authentication failed"
+                    statusText.text = "Authentication failed - check credentials"
                     progressBar.visibility = View.GONE
                 }
-                
+
             } catch (e: Exception) {
                 Logger.e("VMwareManager", "Connection failed", e)
-                statusText.text = "Connection error"
+                statusText.text = "Connection error: ${e.message}"
                 progressBar.visibility = View.GONE
             }
         }

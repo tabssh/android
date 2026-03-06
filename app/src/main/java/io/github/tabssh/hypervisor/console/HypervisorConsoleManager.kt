@@ -74,8 +74,11 @@ class HypervisorConsoleManager {
 
             Logger.d(TAG, "Got termproxy ticket, connecting to WebSocket")
 
-            // Create WebSocket client
-            webSocketClient = ConsoleWebSocketClient(verifySsl = false)
+            // Create WebSocket client with Proxmox termproxy protocol
+            webSocketClient = ConsoleWebSocketClient(
+                verifySsl = false,
+                protocol = ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_TERM
+            )
 
             // Build WebSocket URL
             // Proxmox termproxy WebSocket: wss://host:port/api2/json/nodes/{node}/{type}/{vmid}/vncwebsocket?port={port}&vncticket={ticket}
@@ -94,6 +97,8 @@ class HypervisorConsoleManager {
             val connected = client.connect(wsUrl, headers, object : ConsoleConnectionListener {
                 override fun onConnected() {
                     Logger.i(TAG, "Proxmox console connected")
+                    // Send initial resize for Proxmox termproxy (default 80x24)
+                    client.sendResize(80, 24)
                     listener?.onConnected(vmName)
                 }
 
@@ -163,8 +168,11 @@ class HypervisorConsoleManager {
 
             Logger.d(TAG, "Got console URL: $consoleUrl")
 
-            // Create WebSocket client
-            webSocketClient = ConsoleWebSocketClient(verifySsl = false)
+            // Create WebSocket client with XCP-ng protocol (raw bytes)
+            webSocketClient = ConsoleWebSocketClient(
+                verifySsl = false,
+                protocol = ConsoleWebSocketClient.ConsoleProtocol.XCPNG
+            )
             val xcpClient = webSocketClient ?: run {
                 Logger.e(TAG, "WebSocket client not initialized")
                 listener?.onError("WebSocket client initialization failed")
@@ -241,8 +249,11 @@ class HypervisorConsoleManager {
 
             Logger.d(TAG, "Got XO console URL: $consoleUrl")
 
-            // Create WebSocket client
-            webSocketClient = ConsoleWebSocketClient(verifySsl = false)
+            // Create WebSocket client with XO protocol (raw bytes)
+            webSocketClient = ConsoleWebSocketClient(
+                verifySsl = false,
+                protocol = ConsoleWebSocketClient.ConsoleProtocol.XO
+            )
             val xoClient = webSocketClient ?: run {
                 Logger.e(TAG, "WebSocket client not initialized")
                 listener?.onError("WebSocket client initialization failed")
@@ -307,6 +318,11 @@ class HypervisorConsoleManager {
         bridge.connect(connection.inputStream, connection.outputStream)
         Logger.i(TAG, "Console wired to terminal for ${connection.vmName}")
     }
+
+    /**
+     * Get WebSocket client for sending control messages (resize, etc.)
+     */
+    fun getWebSocketClient(): ConsoleWebSocketClient? = webSocketClient
 
     /**
      * Disconnect console
