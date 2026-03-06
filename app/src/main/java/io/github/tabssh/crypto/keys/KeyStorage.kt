@@ -244,12 +244,12 @@ class KeyStorage(private val context: Context) {
                 KeyFormat.PKCS8_ENCRYPTED -> parsePKCS8Key(keyContent, passphrase)
                 KeyFormat.PUTTY_PRIVATE -> parsePuttyKey(keyContent, passphrase)
             }
-            
+
             when (parseResult) {
                 is ParseResult.Success -> {
                     val fingerprint = calculateFingerprint(parseResult.keyPair.public)
                     val keyType = detectKeyType(parseResult.keyPair.private)
-                    
+
                     val keyId = storePrivateKey(
                         privateKey = parseResult.keyPair.private,
                         publicKey = parseResult.keyPair.public,
@@ -259,11 +259,20 @@ class KeyStorage(private val context: Context) {
                         fingerprint = fingerprint,
                         passphrase = passphrase
                     )
-                    
+
                     if (keyId != null) {
                         // Store JSch-native bytes so connect-time has the right format
                         try {
-                            val jschBytes = toJSchKeyBytes(parseResult.keyPair.private, parseResult.keyPair.public, keyType)
+                            // For OpenSSH format, use original bytes instead of reconstructing
+                            val jschBytes = if (format == KeyFormat.OPENSSH_PRIVATE && passphrase == null) {
+                                // Unencrypted OpenSSH - use original bytes directly
+                                Logger.d("KeyStorage", "Using original OpenSSH key bytes for $keyId")
+                                keyContent.toByteArray(Charsets.UTF_8)
+                            } else {
+                                // For other formats or encrypted keys, reconstruct
+                                Logger.d("KeyStorage", "Reconstructing JSch bytes for $keyId (format=$format)")
+                                toJSchKeyBytes(parseResult.keyPair.private, parseResult.keyPair.public, keyType)
+                            }
                             storeJSchBytes(keyId, jschBytes)
                         } catch (e: Exception) {
                             Logger.w("KeyStorage", "Could not store JSch bytes for $keyId (non-fatal)", e)

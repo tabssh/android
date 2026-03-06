@@ -132,19 +132,22 @@ class ConsoleWebSocketClient(
                 }
 
                 override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-                    Logger.i(TAG, "Console WebSocket closing: $code $reason")
+                    Logger.w(TAG, "Console WebSocket closing: code=$code reason='$reason'")
                     webSocket.close(1000, null)
                 }
 
                 override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                    Logger.i(TAG, "Console WebSocket closed: $code $reason")
+                    Logger.w(TAG, "Console WebSocket closed: code=$code reason='$reason'")
                     isConnected = false
-                    connectionListener?.onDisconnected(reason)
+                    // Notify with detailed reason
+                    val detailedReason = if (reason.isBlank()) "Connection closed (code $code)" else reason
+                    connectionListener?.onDisconnected(detailedReason)
                     cleanup()
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                    Logger.e(TAG, "Console WebSocket failure", t)
+                    val errorMsg = "WebSocket failure: ${t.message}" + if (response != null) " (HTTP ${response.code})" else ""
+                    Logger.e(TAG, errorMsg, t)
                     isConnected = false
                     connectionListener?.onError(t)
                     cleanup()
