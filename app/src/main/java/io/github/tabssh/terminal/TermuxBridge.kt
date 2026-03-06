@@ -492,12 +492,18 @@ class TermuxBridge(
     /**
      * Resize the terminal
      */
+    // Resize callback for VM console to forward to WebSocket
+    var onResizeCallback: ((cols: Int, rows: Int) -> Unit)? = null
+
     fun resize(newColumns: Int, newRows: Int) {
         if (newColumns != currentColumns || newRows != currentRows) {
             currentColumns = newColumns
             currentRows = newRows
             emulator?.resize(newColumns, newRows)
             Logger.d(TAG, "Resized to ${newColumns}x${newRows}")
+
+            // Notify callback (for VM console WebSocket)
+            onResizeCallback?.invoke(newColumns, newRows)
         }
     }
 

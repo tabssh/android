@@ -202,6 +202,12 @@ class VMConsoleActivity : AppCompatActivity() {
                     // Wire console to terminal
                     termuxBridge?.let { bridge ->
                         consoleManager?.wireToTerminal(connection, bridge)
+
+                        // Setup resize callback for VM console (Proxmox termproxy needs resize messages)
+                        bridge.onResizeCallback = { cols, rows ->
+                            consoleManager?.getWebSocketClient()?.sendResize(cols, rows)
+                        }
+
                         isConnected = true
                         hideProgress()
                         Logger.i(TAG, "Console connected for $vmName")

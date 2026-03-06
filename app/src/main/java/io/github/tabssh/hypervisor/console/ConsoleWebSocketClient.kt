@@ -24,13 +24,22 @@ import javax.net.ssl.X509TrustManager
  * - VMware console (if available)
  */
 class ConsoleWebSocketClient(
-    private val verifySsl: Boolean = false
+    private val verifySsl: Boolean = false,
+    private val protocol: ConsoleProtocol = ConsoleProtocol.PROXMOX_TERM
 ) {
     companion object {
         private const val TAG = "ConsoleWebSocket"
         private const val PING_INTERVAL_SECONDS = 30L
         private const val CONNECT_TIMEOUT_SECONDS = 30L
         private const val READ_TIMEOUT_SECONDS = 0L // No timeout for console
+    }
+
+    enum class ConsoleProtocol {
+        PROXMOX_TERM,  // Proxmox termproxy - uses "0:LENGTH:MSG" format
+        PROXMOX_VNC,   // Proxmox vncproxy - RFB protocol
+        XCPNG,         // XCP-ng console - raw bytes
+        XO,            // Xen Orchestra - raw bytes
+        VMWARE         // VMware VMRC - raw bytes
     }
 
     // WebSocket connection
@@ -46,6 +55,10 @@ class ConsoleWebSocketClient(
     // Connection state
     private var isConnected = false
     private var connectionListener: ConsoleConnectionListener? = null
+
+    // Terminal size for resize messages
+    private var terminalCols: Int = 80
+    private var terminalRows: Int = 24
 
     init {
         val builder = OkHttpClient.Builder()
@@ -114,7 +127,27 @@ class ConsoleWebSocketClient(
                 override fun onMessage(webSocket: WebSocket, text: String) {
                     Logger.d(TAG, "Received text: ${text.length} chars")
                     try {
-                        inputPipeOut?.write(text.toByteArray(Charsets.UTF_8))
+                        val actualData = when (protocol) {
+                            ConsoleProtocol.PROXMOX_TERM -> {
+                                // Parse Proxmox format: "0:LENGTH:MSG"
+                                if (text.startsWith("0:")) {
+                                    val parts = text.split(":", limit = 3)
+                                    if (parts.size == 3) {
+                                        parts[2] // Extract the MSG part
+                                    } else {
+                                        Logger.w(TAG, "Malformed Proxmox message: $text")
+                                        text
+                                    }
+                                } else {
+                                    // Might be ping response or other message type
+                                    Logger.d(TAG, "Non-data message: $text")
+                                    return@onMessage
+                                }
+                            }
+                            else -> text // Raw text for other protocols
+                        }
+
+                        inputPipeOut?.write(actualData.toByteArray(Charsets.UTF_8))
                         inputPipeOut?.flush()
                     } catch (e: Exception) {
                         Logger.e(TAG, "Error writing to input pipe", e)
@@ -173,8 +206,7 @@ class ConsoleWebSocketClient(
                     val bytesRead = outputPipeIn?.read(buffer) ?: -1
                     if (bytesRead > 0) {
                         val data = buffer.copyOf(bytesRead)
-                        webSocket?.send(ByteString.of(*data))
-                        Logger.d(TAG, "Sent $bytesRead bytes to WebSocket")
+                        sendToWebSocket(data)
                     } else if (bytesRead < 0) {
                         break
                     }
@@ -189,6 +221,30 @@ class ConsoleWebSocketClient(
             isDaemon = true
             start()
         }
+    }
+
+    /**
+     * Send data to WebSocket with protocol-specific formatting
+     */
+    private fun sendToWebSocket(data: ByteArray) {
+        val formattedData = when (protocol) {
+            ConsoleProtocol.PROXMOX_TERM -> {
+                // Proxmox termproxy format: "0:LENGTH:MSG"
+                val msg = String(data, Charsets.UTF_8)
+                val packet = "0:${msg.length}:$msg"
+                Logger.d(TAG, "Proxmox format: sending ${data.size} bytes as '$packet'")
+                packet
+            }
+            else -> {
+                // Other protocols: send raw bytes
+                Logger.d(TAG, "Raw format: sending ${data.size} bytes")
+                webSocket?.send(ByteString.of(*data))
+                return
+            }
+        }
+
+        webSocket?.send(formattedData)
+        Logger.d(TAG, "Sent ${data.size} bytes to WebSocket")
     }
 
     /**
@@ -216,6 +272,20 @@ class ConsoleWebSocketClient(
     fun sendBytes(data: ByteArray) {
         if (isConnected) {
             webSocket?.send(ByteString.of(*data))
+        }
+    }
+
+    /**
+     * Send terminal resize notification (Proxmox termproxy format: "1:COLS:ROWS:")
+     */
+    fun sendResize(cols: Int, rows: Int) {
+        terminalCols = cols
+        terminalRows = rows
+
+        if (isConnected && protocol == ConsoleProtocol.PROXMOX_TERM) {
+            val resizeMsg = "1:$cols:$rows:"
+            webSocket?.send(resizeMsg)
+            Logger.d(TAG, "Sent resize: $cols x $rows")
         }
     }
 

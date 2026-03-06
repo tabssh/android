@@ -74,6 +74,16 @@
             android:visibility="gone"
             style="@style/Widget.Material3.Button.TonalButton" />
 
+        <!-- Show Infrastructure Button (XO only) -->
+        <Button
+            android:id="@+id/infrastructure_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🏗️ Show Infrastructure"
+            android:layout_marginTop="8dp"
+            android:visibility="gone"
+            style="@style/Widget.Material3.Button.TonalButton" />
+
         <!-- Progress Bar -->
         <ProgressBar
             android:id="@+id/progress_bar"

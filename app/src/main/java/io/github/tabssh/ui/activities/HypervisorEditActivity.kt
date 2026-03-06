@@ -33,6 +33,9 @@ class HypervisorEditActivity : AppCompatActivity() {
     private lateinit var editRealm: TextInputEditText
     private lateinit var layoutRealm: LinearLayout
     private lateinit var switchVerifySsl: SwitchMaterial
+    private lateinit var layoutApiType: com.google.android.material.textfield.TextInputLayout
+    private lateinit var dropdownApiType: AutoCompleteTextView
+    private lateinit var textApiTypeHint: TextView
     private lateinit var editNotes: TextInputEditText
     private lateinit var buttonTestConnection: MaterialButton
     private lateinit var buttonSave: MaterialButton
@@ -52,8 +55,9 @@ class HypervisorEditActivity : AppCompatActivity() {
         setupViews()
         setupToolbar()
         setupSpinner()
+        setupApiTypeDropdown()
         setupClickListeners()
-        
+
         hypervisorId = intent.getLongExtra("hypervisor_id", -1).takeIf { it != -1L }
         hypervisorId?.let { loadHypervisor(it) }
     }
@@ -69,6 +73,9 @@ class HypervisorEditActivity : AppCompatActivity() {
         editRealm = findViewById(R.id.edit_realm)
         layoutRealm = findViewById(R.id.layout_realm)
         switchVerifySsl = findViewById(R.id.switch_verify_ssl)
+        layoutApiType = findViewById(R.id.layout_api_type)
+        dropdownApiType = findViewById(R.id.dropdown_api_type)
+        textApiTypeHint = findViewById(R.id.text_api_type_hint)
         editNotes = findViewById(R.id.edit_notes)
         buttonTestConnection = findViewById(R.id.button_test)
         buttonSave = findViewById(R.id.button_save)
@@ -97,6 +104,16 @@ class HypervisorEditActivity : AppCompatActivity() {
         
         // Set default ports
         updateUIForType(0)
+    }
+
+    private fun setupApiTypeDropdown() {
+        // Setup API type dropdown with values from arrays.xml
+        val apiTypes = resources.getStringArray(R.array.api_type_entries)
+        val adapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, apiTypes)
+        dropdownApiType.setAdapter(adapter)
+
+        // Set default to auto-detect
+        dropdownApiType.setText(apiTypes[0], false)
     }
 
     private fun setupClickListeners() {
@@ -212,14 +229,22 @@ class HypervisorEditActivity : AppCompatActivity() {
                 if (editPort.text.toString().isEmpty()) editPort.setText("8006")
                 layoutRealm.visibility = View.VISIBLE
                 if (editRealm.text.toString().isEmpty()) editRealm.setText("pam")
+                layoutApiType.visibility = View.GONE
+                textApiTypeHint.visibility = View.GONE
             }
             1 -> { // XCP-ng
                 if (editPort.text.toString().isEmpty()) editPort.setText("443")
                 layoutRealm.visibility = View.GONE
+                layoutApiType.visibility = View.VISIBLE
+                textApiTypeHint.visibility = View.VISIBLE
+                textApiTypeHint.text = "Auto: Try XO REST → XCP-ng XML-RPC\nDirect: XCP-ng host (XML-RPC)\nCentralized: Xen Orchestra (REST API)"
             }
             2 -> { // VMware
                 if (editPort.text.toString().isEmpty()) editPort.setText("443")
                 layoutRealm.visibility = View.GONE
+                layoutApiType.visibility = View.VISIBLE
+                textApiTypeHint.visibility = View.VISIBLE
+                textApiTypeHint.text = "Auto: Try vCenter → ESXi\nDirect: ESXi host\nCentralized: vCenter/vSphere"
             }
         }
     }
@@ -240,6 +265,15 @@ class HypervisorEditActivity : AppCompatActivity() {
                     editPassword.setText(hypervisor.password)
                     editRealm.setText(hypervisor.realm ?: "pam")
                     switchVerifySsl.isChecked = hypervisor.verifySsl
+
+                    // Load API type override
+                    val apiTypeEntries = resources.getStringArray(R.array.api_type_entries)
+                    val apiTypeValues = resources.getStringArray(R.array.api_type_values)
+                    val apiTypeIndex = apiTypeValues.indexOf(hypervisor.apiTypeOverride)
+                    if (apiTypeIndex >= 0) {
+                        dropdownApiType.setText(apiTypeEntries[apiTypeIndex], false)
+                    }
+
                     editNotes.setText(hypervisor.notes ?: "")
                 }
             } catch (e: Exception) {
@@ -302,6 +336,14 @@ class HypervisorEditActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val type = HypervisorType.values()[spinnerType.selectedItemPosition]
+
+                // Get API type override value
+                val apiTypeEntries = resources.getStringArray(R.array.api_type_entries)
+                val apiTypeValues = resources.getStringArray(R.array.api_type_values)
+                val selectedApiType = dropdownApiType.text.toString()
+                val apiTypeIndex = apiTypeEntries.indexOf(selectedApiType)
+                val apiTypeOverride = if (apiTypeIndex >= 0) apiTypeValues[apiTypeIndex] else "auto"
+
                 val hypervisor = HypervisorProfile(
                     id = hypervisorId ?: 0,
                     name = editName.text.toString(),
@@ -312,6 +354,7 @@ class HypervisorEditActivity : AppCompatActivity() {
                     password = editPassword.text.toString(),
                     realm = if (type == HypervisorType.PROXMOX) editRealm.text.toString() else null,
                     verifySsl = switchVerifySsl.isChecked,
+                    apiTypeOverride = apiTypeOverride,
                     linkedConnectionId = linkedConnectionId,
                     notes = editNotes.text.toString().takeIf { it.isNotBlank() },
                     lastConnected = editingHypervisor?.lastConnected ?: 0,

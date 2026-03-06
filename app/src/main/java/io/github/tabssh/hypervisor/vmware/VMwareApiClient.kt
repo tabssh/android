@@ -189,4 +189,21 @@ class VMwareApiClient(
             throw IOException("API request failed: ${response.code}")
         }
     }
+
+    /**
+     * Detect if this is vCenter or standalone ESXi
+     * vCenter has datacenter management, standalone ESXi does not
+     */
+    suspend fun isVCenter(): Boolean = withContext(Dispatchers.IO) {
+        return@withContext try {
+            // Try to list datacenters - this is vCenter-specific
+            apiGet("/vcenter/datacenter")
+            Logger.d("VMwareAPI", "Datacenter endpoint accessible - this is vCenter")
+            true
+        } catch (e: Exception) {
+            // Datacenter endpoint not available - this is standalone ESXi
+            Logger.d("VMwareAPI", "Datacenter endpoint not available - this is standalone ESXi")
+            false
+        }
+    }
 }

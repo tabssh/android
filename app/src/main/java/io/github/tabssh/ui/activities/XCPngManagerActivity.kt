@@ -30,6 +30,7 @@ class XCPngManagerActivity : AppCompatActivity() {
     private lateinit var addServerButton: Button
     private lateinit var refreshButton: Button
     private lateinit var backupJobsButton: Button
+    private lateinit var infrastructureButton: Button
     private lateinit var liveIndicator: View
     private lateinit var liveText: TextView
     
@@ -61,6 +62,7 @@ class XCPngManagerActivity : AppCompatActivity() {
         refreshButton = findViewById(R.id.refresh_button)
         addServerButton = findViewById(R.id.add_server_button)
         backupJobsButton = findViewById(R.id.backup_jobs_button)
+        infrastructureButton = findViewById(R.id.infrastructure_button)
         vmRecyclerView = findViewById(R.id.vm_recycler_view)
         progressBar = findViewById(R.id.progress_bar)
         statusText = findViewById(R.id.status_text)
@@ -72,11 +74,13 @@ class XCPngManagerActivity : AppCompatActivity() {
         refreshButton.setOnClickListener { refreshVMs() }
         addServerButton.setOnClickListener { showAddServerDialog() }
         backupJobsButton.setOnClickListener { showBackupJobsDialog() }
+        infrastructureButton.setOnClickListener { showInfrastructureDialog() }
         
-        // Hide live indicator and backup button initially
+        // Hide live indicator and buttons initially
         liveIndicator.visibility = View.GONE
         liveText.visibility = View.GONE
         backupJobsButton.visibility = View.GONE
+        infrastructureButton.visibility = View.GONE
         
         serverSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
@@ -135,11 +139,13 @@ class XCPngManagerActivity : AppCompatActivity() {
                     statusText.text = "Connected to ${profile.name} ($modeText)"
                     app.database.hypervisorDao().updateLastConnected(profile.id, System.currentTimeMillis())
 
-                    // Show backup jobs button for XO
+                    // Show XO-specific buttons
                     if (detectedXO) {
                         backupJobsButton.visibility = View.VISIBLE
+                        infrastructureButton.visibility = View.VISIBLE
                     } else {
                         backupJobsButton.visibility = View.GONE
+                        infrastructureButton.visibility = View.GONE
                     }
 
                     refreshVMs()
@@ -181,15 +187,48 @@ class XCPngManagerActivity : AppCompatActivity() {
 
     /**
      * Auto-detect whether the server is Xen Orchestra or XCP-ng direct.
-     * Tries XO REST API first (more common), then falls back to XCP-ng XML-RPC.
+     * Respects profile.apiTypeOverride: "auto", "direct", "centralized"
      * Returns Pair(authenticated, isXenOrchestra)
      */
     private suspend fun autoDetectAndConnect(profile: HypervisorProfile): Pair<Boolean, Boolean> {
-        // Try Xen Orchestra REST API first
-        Logger.d("XCPngManager", "Trying Xen Orchestra REST API...")
-        statusText.text = "Trying Xen Orchestra API..."
+        // Check for manual override
+        val override = profile.apiTypeOverride
 
-        try {
+        // If user forced centralized (Xen Orchestra only)
+        if (override == "centralized") {
+            Logger.d("XCPngManager", "User override: Force Xen Orchestra")
+            return tryXenOrchestra(profile)?.let { Pair(it, true) } ?: Pair(false, false)
+        }
+
+        // If user forced direct (XCP-ng only)
+        if (override == "direct") {
+            Logger.d("XCPngManager", "User override: Force XCP-ng direct")
+            return tryXCPngDirect(profile)?.let { Pair(it, false) } ?: Pair(false, false)
+        }
+
+        // Auto-detect: Try XO first, fallback to XCP-ng
+        Logger.d("XCPngManager", "Auto-detecting API type...")
+
+        // Try Xen Orchestra REST API first
+        tryXenOrchestra(profile)?.let { success ->
+            if (success) return Pair(true, true)
+        }
+
+        // Fallback to XCP-ng XML-RPC
+        tryXCPngDirect(profile)?.let { success ->
+            if (success) return Pair(true, false)
+        }
+
+        // Both failed
+        Logger.w("XCPngManager", "All API attempts failed")
+        return Pair(false, false)
+    }
+
+    private suspend fun tryXenOrchestra(profile: HypervisorProfile): Boolean? {
+        return try {
+            Logger.d("XCPngManager", "Trying Xen Orchestra REST API...")
+            statusText.text = "Trying Xen Orchestra API..."
+
             currentClient = null
             currentXoClient = XenOrchestraApiClient(
                 host = profile.host,
@@ -201,17 +240,21 @@ class XCPngManagerActivity : AppCompatActivity() {
 
             if (currentXoClient?.authenticate() == true) {
                 Logger.i("XCPngManager", "Xen Orchestra REST API authentication successful")
-                return Pair(true, true)
+                true
+            } else {
+                false
             }
         } catch (e: Exception) {
             Logger.d("XCPngManager", "Xen Orchestra API failed: ${e.message}")
+            null
         }
+    }
 
-        // Try XCP-ng XML-RPC API
-        Logger.d("XCPngManager", "Trying XCP-ng XML-RPC API...")
-        statusText.text = "Trying XCP-ng Direct API..."
+    private suspend fun tryXCPngDirect(profile: HypervisorProfile): Boolean? {
+        return try {
+            Logger.d("XCPngManager", "Trying XCP-ng XML-RPC API...")
+            statusText.text = "Trying XCP-ng Direct API..."
 
-        try {
             currentXoClient = null
             currentClient = XCPngApiClient(
                 host = profile.host,
@@ -223,15 +266,14 @@ class XCPngManagerActivity : AppCompatActivity() {
 
             if (currentClient?.authenticate() == true) {
                 Logger.i("XCPngManager", "XCP-ng XML-RPC API authentication successful")
-                return Pair(true, false)
+                true
+            } else {
+                false
             }
         } catch (e: Exception) {
             Logger.d("XCPngManager", "XCP-ng API failed: ${e.message}")
+            null
         }
-
-        // Both failed
-        Logger.w("XCPngManager", "Both Xen Orchestra and XCP-ng APIs failed")
-        return Pair(false, false)
     }
 
     private fun refreshVMs() {
@@ -374,29 +416,34 @@ class XCPngManagerActivity : AppCompatActivity() {
         val usernameInput = dialogView.findViewById<EditText>(R.id.username_input)
         val passwordInput = dialogView.findViewById<EditText>(R.id.password_input)
         val realmInput = dialogView.findViewById<EditText>(R.id.realm_input)
-        val xenOrchestraSwitch = dialogView.findViewById<com.google.android.material.switchmaterial.SwitchMaterial>(R.id.xen_orchestra_switch)
-        val xenOrchestraHint = dialogView.findViewById<TextView>(R.id.xen_orchestra_hint)
-        
+        val apiTypeLayout = dialogView.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.api_type_layout)
+        val apiTypeDropdown = dialogView.findViewById<AutoCompleteTextView>(R.id.api_type_dropdown)
+        val apiTypeHint = dialogView.findViewById<TextView>(R.id.api_type_hint)
+
         portInput.setText("443")
         realmInput.visibility = View.GONE // XCP-ng doesn't use realm
-        
-        // Show Xen Orchestra toggle for XCP-ng
-        xenOrchestraSwitch.visibility = View.VISIBLE
-        xenOrchestraHint.visibility = View.VISIBLE
-        
-        // Update username hint based on toggle
-        xenOrchestraSwitch.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked) {
-                usernameInput.hint = "Email (for Xen Orchestra)"
-            } else {
-                usernameInput.hint = "Username"
-            }
-        }
+
+        // Show API type dropdown for XCP-ng
+        apiTypeLayout?.visibility = View.VISIBLE
+        apiTypeHint?.visibility = View.VISIBLE
+
+        // Setup dropdown with XCP-ng specific options
+        val apiTypes = resources.getStringArray(R.array.api_type_entries)
+        val adapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, apiTypes)
+        apiTypeDropdown?.setAdapter(adapter)
+        apiTypeDropdown?.setText(apiTypes[0], false) // Default to auto-detect
         
         MaterialAlertDialogBuilder(this)
             .setTitle("Add XCP-ng / Xen Orchestra Server")
             .setView(dialogView)
             .setPositiveButton("Add") { _, _ ->
+                // Get API type override from dropdown
+                val apiTypeEntries = resources.getStringArray(R.array.api_type_entries)
+                val apiTypeValues = resources.getStringArray(R.array.api_type_values)
+                val selectedApiType = apiTypeDropdown?.text?.toString() ?: apiTypeEntries[0]
+                val apiTypeIndex = apiTypeEntries.indexOf(selectedApiType)
+                val apiTypeOverride = if (apiTypeIndex >= 0) apiTypeValues[apiTypeIndex] else "auto"
+
                 val profile = HypervisorProfile(
                     name = nameInput.text.toString(),
                     type = HypervisorType.XCPNG,
@@ -405,7 +452,7 @@ class XCPngManagerActivity : AppCompatActivity() {
                     username = usernameInput.text.toString(),
                     password = passwordInput.text.toString(),
                     verifySsl = false,
-                    isXenOrchestra = xenOrchestraSwitch.isChecked
+                    apiTypeOverride = apiTypeOverride
                 )
                 
                 lifecycleScope.launch {
@@ -1059,9 +1106,56 @@ class XCPngManagerActivity : AppCompatActivity() {
         })
     }
     
+    private fun showInfrastructureDialog() {
+        lifecycleScope.launch {
+            try {
+                val xoClient = currentXoClient
+                if (xoClient == null) {
+                    Toast.makeText(this@XCPngManagerActivity, "Not connected to Xen Orchestra", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+
+                // Fetch pools and hosts
+                val pools = xoClient.listPools()
+                val hosts = xoClient.listHosts()
+
+                // Build infrastructure tree
+                val message = buildString {
+                    appendLine("Infrastructure Overview:")
+                    appendLine()
+                    appendLine("📦 Pools: ${pools.size}")
+                    pools.forEach { pool ->
+                        appendLine("  • ${pool.name_label}")
+                        appendLine("    UUID: ${pool.uuid}")
+                    }
+                    appendLine()
+                    appendLine("🖥️ Hosts: ${hosts.size}")
+                    hosts.forEach { host ->
+                        val status = if (host.enabled) "✅ Enabled" else "⏸️ Disabled"
+                        appendLine("  • ${host.name_label} ($status)")
+                        appendLine("    ${host.hostname}")
+                        val memGB = host.memory_total / (1024 * 1024 * 1024)
+                        val memFreeGB = host.memory_free / (1024 * 1024 * 1024)
+                        appendLine("    Memory: ${memFreeGB}GB free / ${memGB}GB total")
+                    }
+                }
+
+                MaterialAlertDialogBuilder(this@XCPngManagerActivity)
+                    .setTitle("Xen Orchestra Infrastructure")
+                    .setMessage(message)
+                    .setPositiveButton("OK", null)
+                    .show()
+
+            } catch (e: Exception) {
+                Logger.e("XCPngManager", "Failed to load infrastructure", e)
+                Toast.makeText(this@XCPngManagerActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
-        
+
         // Disconnect WebSocket when activity is destroyed
         currentXoClient?.disconnectWebSocket()
     }
