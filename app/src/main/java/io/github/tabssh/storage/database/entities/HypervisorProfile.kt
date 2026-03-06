@@ -39,7 +39,10 @@ data class HypervisorProfile(
     val verifySsl: Boolean = false,
     
     @ColumnInfo(name = "is_xen_orchestra")
-    val isXenOrchestra: Boolean = false, // For XCP-ng: true = XO REST API, false = XML-RPC direct
+    val isXenOrchestra: Boolean = false, // DEPRECATED: Use apiTypeOverride instead
+
+    @ColumnInfo(name = "api_type_override")
+    val apiTypeOverride: String = "auto", // "auto", "direct", "centralized" - Override auto-detection
 
     @ColumnInfo(name = "linked_connection_id")
     val linkedConnectionId: String? = null, // Reference to existing SSH connection (ConnectionProfile.id)
