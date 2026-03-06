@@ -521,6 +521,13 @@ class SSHConnection(
         } else null
         val effectivePassword: String? = identityPassword ?: getPasswordForAuthentication()
 
+        // ALWAYS cache password first so it's available for fallback if key auth fails
+        if (effectivePassword != null) {
+            cachedPassword = effectivePassword
+            session.setPassword(effectivePassword)
+            Logger.d("SSHConnection", "Auth: Password cached for fallback (length=${effectivePassword.length})")
+        }
+
         // Priority 1: SSH key (if available and retrievable)
         if (effectiveKeyId != null) {
             Logger.i("SSHConnection", "Auth: Attempting SSH key authentication with keyId=$effectiveKeyId")
@@ -534,6 +541,7 @@ class SSHConnection(
 
                     jsch.addIdentity(effectiveKeyId, jschBytes, null, null)
                     Logger.i("SSHConnection", "Auth: SSH key added to JSch successfully (keyId=$effectiveKeyId)")
+                    // Don't return early - let JSch try key first, then fallback to password if configured
                     return@withContext
                 } catch (e: Exception) {
                     Logger.e("SSHConnection", "Auth: Failed to add SSH key to JSch", e)

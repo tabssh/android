@@ -84,9 +84,16 @@ class XCPngApiClient(
             """.trimIndent()
 
             val response = xmlRpcCall(xmlRequest)
-            
+
             Logger.d("XCPngAPI", "Auth response length: ${response.length}")
-            
+
+            // Detect HTML response (likely Xen Orchestra web interface)
+            if (response.trim().startsWith("<!DOCTYPE") || response.trim().startsWith("<html")) {
+                Logger.e("XCPngAPI", "Received HTML instead of XML-RPC - this is likely a Xen Orchestra instance")
+                Logger.d("XCPngAPI", "Response: ${response.take(200)}")
+                throw IllegalStateException("Cannot connect to XCP-ng API - server returned HTML (Xen Orchestra web interface). Please either:\n1. Enable 'Is this Xen Orchestra?' toggle in hypervisor settings\n2. Connect directly to XCP-ng host (not Xen Orchestra) on default port")
+            }
+
             // Parse XML response for session ID
             if (response.contains("<value>") && response.contains("OpaqueRef:")) {
                 val start = response.indexOf("<value>") + 7

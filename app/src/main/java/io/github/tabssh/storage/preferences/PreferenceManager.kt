@@ -185,7 +185,10 @@ class PreferenceManager(private val context: Context) {
             }
         }
     }
-    fun setKeyboardRowCount(count: Int) = setInt(KEY_KEYBOARD_ROW_COUNT, count.coerceIn(1, 5))
+    fun setKeyboardRowCount(count: Int) {
+        // ListPreference stores as String, so we must use String to avoid ClassCastException
+        setString(KEY_KEYBOARD_ROW_COUNT, count.coerceIn(1, 5).toString())
+    }
 
     fun getKeyboardLayoutJson(): String? {
         val json = getString(KEY_KEYBOARD_LAYOUT, "")

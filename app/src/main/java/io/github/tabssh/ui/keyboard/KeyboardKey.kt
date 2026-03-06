@@ -34,7 +34,7 @@ data class KeyboardKey(
             KeyboardKey("CTL", "CTL", "", KeyCategory.MODIFIER),
             KeyboardKey("ALT", "ALT", "", KeyCategory.MODIFIER),
             KeyboardKey("FN", "FN", "", KeyCategory.MODIFIER),
-            KeyboardKey("ENTER", "ENT", "\n"),
+            KeyboardKey("ENTER", "ENT", "\r"),
             KeyboardKey("TOGGLE", "⌨", "", KeyCategory.ACTION)
         )
         
@@ -43,7 +43,7 @@ data class KeyboardKey(
             // Special keys
             KeyboardKey("ESC", "ESC", "\u001B"),
             KeyboardKey("TAB", "TAB", "\t"),
-            KeyboardKey("ENTER", "ENT", "\n"),
+            KeyboardKey("ENTER", "ENT", "\r"),
             KeyboardKey("SPACE", "SPC", " "),
             KeyboardKey("BACKSPACE", "⌫", "\b"),
             KeyboardKey("DELETE", "DEL", "\u001B[3~"),
