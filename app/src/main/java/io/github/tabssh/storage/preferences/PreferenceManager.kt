@@ -14,7 +14,32 @@ class PreferenceManager(private val context: Context) {
     private val preferences: SharedPreferences by lazy {
         AndroidPreferenceManager.getDefaultSharedPreferences(context)
     }
-    
+
+    init {
+        // Migrate old Integer preferences to String for ListPreference compatibility
+        migrateIntToStringPreference(KEY_KEYBOARD_ROW_COUNT)
+    }
+
+    private fun migrateIntToStringPreference(key: String) {
+        try {
+            // Try to read as Int (old format)
+            val intValue = preferences.getInt(key, -1)
+            if (intValue != -1) {
+                // Convert to String and save
+                preferences.edit()
+                    .remove(key) // Remove old Int value
+                    .putString(key, intValue.toString()) // Save as String
+                    .apply()
+                Logger.d("PreferenceManager", "Migrated $key from Int to String: $intValue")
+            }
+        } catch (e: ClassCastException) {
+            // Already a String, no migration needed
+            Logger.d("PreferenceManager", "$key already stored as String")
+        } catch (e: Exception) {
+            Logger.e("PreferenceManager", "Failed to migrate $key", e)
+        }
+    }
+
     companion object {
         // General preferences
         private const val KEY_STARTUP_BEHAVIOR = "general_startup_behavior"

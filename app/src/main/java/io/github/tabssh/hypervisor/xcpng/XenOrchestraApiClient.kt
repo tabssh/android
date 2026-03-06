@@ -184,17 +184,20 @@ class XenOrchestraApiClient(
      */
     private suspend fun authenticateWithVersion(version: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            Logger.d(TAG, "Attempting authentication to $baseUrl with API $version")
+            Logger.d(TAG, "Creating authentication token with XO API $version")
 
-            val json = JSONObject().apply {
-                put("email", email)
-                put("password", password)
-            }
+            // Create authentication token using Basic Auth
+            // POST /rest/v0/users/me/authentication_tokens
+            val credentials = "$email:$password"
+            val encodedCredentials = android.util.Base64.encodeToString(
+                credentials.toByteArray(),
+                android.util.Base64.NO_WRAP
+            )
 
-            val body = json.toString().toRequestBody("application/json".toMediaType())
             val request = Request.Builder()
-                .url("$baseUrl$version/users/signin")
-                .post(body)
+                .url("$baseUrl$version/users/me/authentication_tokens")
+                .post("".toRequestBody()) // Empty body for token creation
+                .addHeader("Authorization", "Basic $encodedCredentials")
                 .build()
 
             val response = client.newCall(request).execute()
@@ -202,26 +205,24 @@ class XenOrchestraApiClient(
             if (response.isSuccessful) {
                 val responseBody = response.body?.string()
                 if (responseBody != null) {
+                    // Response should contain the token
                     val responseJson = JSONObject(responseBody)
+                    val token = responseJson.optString("token")
 
-                    authToken = responseJson.optString("token")
-                    userId = responseJson.optString("userId")
-
-                    // Check if token has expiry (some XO versions may include this)
-                    if (responseJson.has("expiresAt")) {
-                        tokenExpiresAt = responseJson.getLong("expiresAt")
+                    if (token.isNotEmpty()) {
+                        authToken = token
+                        detectedApiVersion = version
+                        Logger.i(TAG, "Authentication successful with $version, token: ${token.take(20)}...")
+                        true
+                    } else {
+                        Logger.d(TAG, "No token in response: $responseBody")
+                        false
                     }
-
-                    Logger.i(TAG, "Authentication successful with $version, userId: $userId")
-                    Logger.d(TAG, "Auth token: ${authToken?.take(20)}...")
-
-                    true
                 } else {
-                    Logger.d(TAG, "Authentication with $version failed: Empty response body")
+                    Logger.d(TAG, "Empty response body")
                     false
                 }
             } else {
-                val errorBody = response.body?.string()
                 Logger.d(TAG, "Authentication with $version failed: HTTP ${response.code}")
                 false
             }
@@ -253,7 +254,8 @@ class XenOrchestraApiClient(
         
         // Add authorization header if authenticated
         authToken?.let {
-            builder.addHeader("Authorization", "Bearer $it")
+            // Use authenticationToken cookie (XO preferred method)
+            builder.addHeader("Cookie", "authenticationToken=$it")
         }
         
         // Add method and body
