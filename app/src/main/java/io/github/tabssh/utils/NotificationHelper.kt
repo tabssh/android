@@ -104,7 +104,7 @@ object NotificationHelper {
     /**
      * Show connection success notification
      */
-    fun showConnectionSuccess(context: Context, serverName: String, username: String) {
+    fun showConnectionSuccess(context: Context, serverName: String, username: String, connectionId: String? = null) {
         // Check if connection notifications are enabled
         val prefManager = PreferenceManager(context)
         if (!prefManager.showConnectionNotifications()) {
@@ -114,10 +114,21 @@ object NotificationHelper {
 
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
+        // Create intent to open the connection when notification is clicked
+        val intent = if (connectionId != null) {
+            Intent(context, io.github.tabssh.ui.activities.TabTerminalActivity::class.java).apply {
+                putExtra(io.github.tabssh.ui.activities.TabTerminalActivity.EXTRA_CONNECTION_PROFILE_ID, connectionId)
+                putExtra(io.github.tabssh.ui.activities.TabTerminalActivity.EXTRA_AUTO_CONNECT, false)
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+        } else {
+            Intent(context, MainActivity::class.java)
+        }
+
         val pendingIntent = PendingIntent.getActivity(
             context,
-            0,
-            Intent(context, MainActivity::class.java),
+            connectionId?.hashCode() ?: 0, // Use unique request code per connection
+            intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 

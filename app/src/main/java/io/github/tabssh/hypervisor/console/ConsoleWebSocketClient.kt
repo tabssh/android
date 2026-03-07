@@ -227,24 +227,21 @@ class ConsoleWebSocketClient(
      * Send data to WebSocket with protocol-specific formatting
      */
     private fun sendToWebSocket(data: ByteArray) {
-        val formattedData = when (protocol) {
+        when (protocol) {
             ConsoleProtocol.PROXMOX_TERM -> {
                 // Proxmox termproxy format: "0:LENGTH:MSG"
-                val msg = String(data, Charsets.UTF_8)
-                val packet = "0:${msg.length}:$msg"
-                Logger.d(TAG, "Proxmox format: sending ${data.size} bytes as '$packet'")
-                packet
+                // LENGTH is byte length, MSG is the actual bytes as string
+                val msg = String(data, Charsets.ISO_8859_1) // Use ISO_8859_1 to preserve binary data
+                val packet = "0:${data.size}:$msg" // Use data.size (byte length), not msg.length
+                Logger.d(TAG, "Proxmox format: sending ${data.size} bytes")
+                webSocket?.send(packet)
             }
             else -> {
                 // Other protocols: send raw bytes
                 Logger.d(TAG, "Raw format: sending ${data.size} bytes")
                 webSocket?.send(ByteString.of(*data))
-                return
             }
         }
-
-        webSocket?.send(formattedData)
-        Logger.d(TAG, "Sent ${data.size} bytes to WebSocket")
     }
 
     /**

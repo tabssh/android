@@ -45,7 +45,7 @@ data class KeyboardKey(
             KeyboardKey("TAB", "TAB", "\t"),
             KeyboardKey("ENTER", "ENT", "\r"),
             KeyboardKey("SPACE", "SPC", " "),
-            KeyboardKey("BACKSPACE", "⌫", "\b"),
+            KeyboardKey("BACKSPACE", "⌫", "\u007F"),
             KeyboardKey("DELETE", "DEL", "\u001B[3~"),
             KeyboardKey("INSERT", "INS", "\u001B[2~"),
             

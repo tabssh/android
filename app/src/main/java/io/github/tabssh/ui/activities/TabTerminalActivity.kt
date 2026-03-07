@@ -119,21 +119,12 @@ class TabTerminalActivity : AppCompatActivity() {
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                // First press: hide keyboard if visible
-                if (isKeyboardVisible) {
-                    hideKeyboard()
-                    Logger.d("TabTerminalActivity", "Back pressed: hiding keyboard")
-                    return
-                }
+                Logger.d("TabTerminalActivity", "Back button pressed")
 
-                // Second press: go back to main app, keep session running
-                if (tabManager.getTabCount() > 0) {
-                    Logger.i("TabTerminalActivity", "Back pressed: returning to main, keeping ${tabManager.getTabCount()} sessions")
-                    moveTaskToBack(true)
-                } else {
-                    isEnabled = false
-                    onBackPressedDispatcher.onBackPressed()
-                }
+                // Always minimize app, keeping sessions alive
+                // This matches expected mobile behavior
+                Logger.i("TabTerminalActivity", "Minimizing app, keeping ${tabManager.getTabCount()} sessions active")
+                moveTaskToBack(true)
             }
         })
     }
@@ -1065,7 +1056,8 @@ class TabTerminalActivity : AppCompatActivity() {
                         io.github.tabssh.utils.NotificationHelper.showConnectionSuccess(
                             this,
                             profile.getDisplayName(),
-                            profile.username
+                            profile.username,
+                            profile.id
                         )
                     } else {
                         Logger.e("TabTerminalActivity", "Failed to connect terminal to SSH for ${profile.getDisplayName()}")
@@ -1963,11 +1955,16 @@ class TabTerminalActivity : AppCompatActivity() {
                 // Parse saved layout (JSON array of rows)
                 val savedLayout = io.github.tabssh.ui.keyboard.KeyboardLayoutManager.parseLayoutJson(layoutJson)
                 binding.multiRowKeyboard.setLayout(savedLayout)
+                Logger.d("TabTerminalActivity", "Loaded custom keyboard layout from preferences")
             } catch (e: Exception) {
                 Logger.e("TabTerminalActivity", "Failed to load keyboard layout, using defaults", e)
                 // Reset to default layout
                 binding.multiRowKeyboard.resetToDefault()
             }
+        } else {
+            // No saved layout - use default
+            Logger.d("TabTerminalActivity", "No saved layout, using default keyboard")
+            binding.multiRowKeyboard.resetToDefault()
         }
 
         binding.multiRowKeyboard.setOnKeyClickListener { key ->
