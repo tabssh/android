@@ -69,6 +69,9 @@ class SSHConnection(
     // Cached password for UserInfo callbacks (set during setupAuthentication)
     private var cachedPassword: String? = null
 
+    // Cached passphrase for encrypted SSH keys
+    private var cachedPassphrase: String? = null
+
     val id: String = profile.id
     val displayName: String = profile.getDisplayName()
 
@@ -293,14 +296,13 @@ class SSHConnection(
 
             override fun getPassphrase(): String? {
                 // Return passphrase for encrypted SSH keys if we have one stored
-                Logger.d("SSHConnection", "UserInfo.getPassphrase() called")
-                return null  // TODO: Support encrypted key passphrases
+                Logger.d("SSHConnection", "UserInfo.getPassphrase() called, hasPassphrase=${cachedPassphrase != null}")
+                return cachedPassphrase
             }
 
             override fun promptPassphrase(message: String): Boolean {
-                Logger.d("SSHConnection", "UserInfo.promptPassphrase called: $message")
-                // Return true if we have a passphrase, false otherwise
-                return false  // TODO: Support encrypted key passphrases
+                Logger.d("SSHConnection", "UserInfo.promptPassphrase called: $message, hasPassphrase=${cachedPassphrase != null}")
+                return cachedPassphrase != null
             }
 
             override fun promptPassword(message: String): Boolean {
@@ -531,6 +533,14 @@ class SSHConnection(
         // Priority 1: SSH key (if available and retrievable)
         if (effectiveKeyId != null) {
             Logger.i("SSHConnection", "Auth: Attempting SSH key authentication with keyId=$effectiveKeyId")
+
+            // Check if key requires passphrase and retrieve it
+            val storedKey = app?.database?.keyDao()?.getKeyById(effectiveKeyId)
+            if (storedKey?.requiresPassphrase == true) {
+                cachedPassphrase = app?.securePasswordManager?.retrievePassword("key_passphrase_$effectiveKeyId")
+                Logger.d("SSHConnection", "Auth: Key requires passphrase, retrieved=${cachedPassphrase != null}")
+            }
+
             val jschBytes = getJSchBytes(effectiveKeyId)
             if (jschBytes != null) {
                 try {

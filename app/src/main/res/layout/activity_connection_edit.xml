@@ -364,6 +364,7 @@
                         android:checked="true"
                         android:tooltipText="Prevents connection timeout on idle" />
 
+                    <!-- X11 and Mosh disabled - incomplete implementations (need 60-80h work each) -->
                     <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/switch_x11_forwarding"
                         android:layout_width="match_parent"
@@ -372,6 +373,7 @@
                         android:text="X11 Forwarding (Run GUI apps)"
                         android:textColor="?android:attr/textColorPrimary"
                         android:checked="false"
+                        android:visibility="gone"
                         android:tooltipText="Forward X11 display to run graphical apps" />
 
                     <com.google.android.material.materialswitch.MaterialSwitch
@@ -382,6 +384,7 @@
                         android:text="Use Mosh (Mobile Shell)"
                         android:textColor="?android:attr/textColorPrimary"
                         android:checked="false"
+                        android:visibility="gone"
                         android:tooltipText="Mobile-optimized protocol with roaming support for unstable connections" />
 
                     <com.google.android.material.materialswitch.MaterialSwitch

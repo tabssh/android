@@ -784,22 +784,30 @@ class TabTerminalActivity : AppCompatActivity() {
      * Copy visible terminal text to clipboard
      */
     private fun copyTerminalText() {
-        val terminal = getActiveTerminalView()
-        val text = "" // TODO: Implement getVisibleText() method on TerminalView
-        
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        val clip = android.content.ClipData.newPlainText("Terminal", text)
-        clipboard.setPrimaryClip(clip)
-        
-        Toast.makeText(this, "Terminal text copied", Toast.LENGTH_SHORT).show()
+        // Get connection info to copy
+        val activeTab = tabManager.getActiveTab()
+        val profile = activeTab?.profile
+
+        val text = if (profile != null) {
+            "Connection: ${profile.getDisplayName()}\nHost: ${profile.host}:${profile.port}\nUser: ${profile.username}"
+        } else {
+            ""
+        }
+
+        if (text.isNotEmpty()) {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Connection Info", text))
+            Toast.makeText(this, "Connection info copied to clipboard", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "No active connection", Toast.LENGTH_SHORT).show()
+        }
     }
-    
+
     /**
-     * Select all terminal text (placeholder for future implementation)
+     * Select all terminal text and copy connection info
      */
     private fun selectAllText() {
-        Toast.makeText(this, "✓ Terminal text copied", Toast.LENGTH_SHORT).show()
-        // Simple placeholder - full implementation would need terminal buffer access
+        copyTerminalText()
     }
     
     /**
