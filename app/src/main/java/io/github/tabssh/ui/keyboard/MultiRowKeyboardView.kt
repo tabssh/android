@@ -90,7 +90,8 @@ class MultiRowKeyboardView @JvmOverloads constructor(
 
         for (i in 0 until numberOfRows) {
             val row = KeyboardRowView(context)
-            row.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
+            // Don't override layoutParams - KeyboardRowView init sets proper 42dp height
+            // Using WRAP_CONTENT causes height to collapse to 0 when row is empty
             row.setOnKeyClickListener { key -> onKeyClickListener?.invoke(key) }
             row.setOnToggleClickListener { onToggleClickListener?.invoke() }
             keyboardRows.add(row)

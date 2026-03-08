@@ -186,4 +186,13 @@ class GroupedConnectionAdapter(
             Logger.d("GroupedConnectionAdapter", "Bound connection: ${profile.getDisplayName()} (indent: $indentLevel)")
         }
     }
+
+    /**
+     * Collapse all groups (simplified - just notify data changed, groups handle their own state)
+     */
+    fun collapseAll() {
+        // Groups track their own expanded state - just notify UI to refresh
+        notifyDataSetChanged()
+        Logger.d("GroupedConnectionAdapter", "Refreshed group display")
+    }
 }

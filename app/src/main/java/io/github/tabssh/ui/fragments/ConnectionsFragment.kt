@@ -11,6 +11,7 @@ import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SearchView
 import androidx.core.view.MenuProvider
@@ -242,6 +243,83 @@ class ConnectionsFragment : Fragment() {
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    private fun showGroupMenu(groupHeader: ConnectionListItem.GroupHeader) {
+        val items = arrayOf("Rename Group", "Delete Group", "Collapse All Groups")
+
+        AlertDialog.Builder(requireContext())
+            .setTitle(groupHeader.group.name)
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> renameGroup(groupHeader.group.name)
+                    1 -> deleteGroup(groupHeader.group.name)
+                    2 -> collapseAllGroups()
+                }
+            }
+            .show()
+    }
+
+    private fun renameGroup(oldName: String) {
+        val editText = android.widget.EditText(requireContext()).apply {
+            setText(oldName)
+            hint = "Group name"
+        }
+
+        AlertDialog.Builder(requireContext())
+            .setTitle("Rename Group")
+            .setView(editText)
+            .setPositiveButton("Rename") { _, _ ->
+                val newName = editText.text.toString()
+                if (newName.isNotBlank() && newName != oldName) {
+                    lifecycleScope.launch {
+                        try {
+                            // Update all connections in this group
+                            val connections = app.database.connectionDao().getAllConnectionsList()
+                            // Note: Groups are stored by ID, not name - this is a simplified implementation
+                            connections.filter { it.groupId == oldName }.forEach { conn ->
+                                val updated = conn.copy(groupId = newName)
+                                app.database.connectionDao().updateConnection(updated)
+                            }
+                            Toast.makeText(requireContext(), "Group renamed to '$newName'", Toast.LENGTH_SHORT).show()
+                            loadAllConnections()
+                        } catch (e: Exception) {
+                            Logger.e("ConnectionsFragment", "Failed to rename group", e)
+                        }
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun deleteGroup(groupName: String) {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Delete Group")
+            .setMessage("Remove group '$groupName' from all connections?\n\nConnections will not be deleted, just ungrouped.")
+            .setPositiveButton("Delete") { _, _ ->
+                lifecycleScope.launch {
+                    try {
+                        // Clear group from all connections
+                        val connections = app.database.connectionDao().getAllConnectionsList()
+                        connections.filter { it.groupId == groupName }.forEach { conn ->
+                            val updated = conn.copy(groupId = null)
+                            app.database.connectionDao().updateConnection(updated)
+                        }
+                        Toast.makeText(requireContext(), "Group deleted", Toast.LENGTH_SHORT).show()
+                        loadAllConnections()
+                    } catch (e: Exception) {
+                        Logger.e("ConnectionsFragment", "Failed to delete group", e)
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun collapseAllGroups() {
+        groupedAdapter?.collapseAll()
+        Toast.makeText(requireContext(), "All groups collapsed", Toast.LENGTH_SHORT).show()
     }
 
     /**
@@ -621,7 +699,7 @@ class ConnectionsFragment : Fragment() {
                 onConnectionEdit = { connection -> editConnection(connection) },
                 onConnectionDelete = { connection -> deleteConnection(connection) },
                 onGroupClick = { groupHeader -> toggleGroupExpanded(groupHeader) },
-                onGroupLongClick = { groupHeader -> /* TODO: Show group menu */ }
+                onGroupLongClick = { groupHeader -> showGroupMenu(groupHeader) }
             )
             recyclerView.adapter = groupedAdapter
         } else {

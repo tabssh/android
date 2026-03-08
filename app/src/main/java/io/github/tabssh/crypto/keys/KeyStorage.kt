@@ -339,7 +339,18 @@ class KeyStorage(private val context: Context) {
             )
             
             database.keyDao().insertKey(storedKey)
-            
+
+            // Store passphrase securely if provided
+            if (passphrase != null) {
+                try {
+                    val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
+                    app?.securePasswordManager?.storePassword("key_passphrase_$keyId", passphrase)
+                    Logger.d("KeyStorage", "Stored passphrase for key $keyId")
+                } catch (e: Exception) {
+                    Logger.e("KeyStorage", "Failed to store passphrase (non-fatal)", e)
+                }
+            }
+
             Logger.i("KeyStorage", "Stored SSH key: $name ($keyType)")
             keyId
             
