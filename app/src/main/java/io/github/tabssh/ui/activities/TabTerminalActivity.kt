@@ -1987,14 +1987,24 @@ class TabTerminalActivity : AppCompatActivity() {
     }
     
     private fun handleCustomKeyPress(key: io.github.tabssh.ui.keyboard.KeyboardKey) {
+        Logger.d("TabTerminalActivity", "Custom key pressed: ${key.label} id=${key.id} sequence=${key.keySequence.map { it.code }}")
         val terminal = getActiveTerminalView()
-        
+
         when (key.id) {
-            "PASTE" -> pasteFromClipboard()
-            "TOGGLE" -> toggleCustomKeyboard()
+            "PASTE" -> {
+                Logger.d("TabTerminalActivity", "Paste action")
+                pasteFromClipboard()
+            }
+            "TOGGLE" -> {
+                Logger.d("TabTerminalActivity", "Toggle keyboard action")
+                toggleCustomKeyboard()
+            }
             else -> {
                 if (key.keySequence.isNotEmpty()) {
+                    Logger.d("TabTerminalActivity", "Sending key sequence to terminal: ${key.keySequence.length} chars")
                     terminal?.sendText(key.keySequence)
+                } else {
+                    Logger.w("TabTerminalActivity", "Key ${key.label} has empty sequence")
                 }
             }
         }

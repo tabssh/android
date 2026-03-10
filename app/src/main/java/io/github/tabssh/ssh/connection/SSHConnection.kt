@@ -534,25 +534,34 @@ class SSHConnection(
         if (effectiveKeyId != null) {
             Logger.i("SSHConnection", "Auth: Attempting SSH key authentication with keyId=$effectiveKeyId")
 
-            // Check if key requires passphrase and retrieve it
-            val storedKey = app?.database?.keyDao()?.getKeyById(effectiveKeyId)
-            if (storedKey?.requiresPassphrase == true) {
-                cachedPassphrase = app?.securePasswordManager?.retrievePassword("key_passphrase_$effectiveKeyId")
-                Logger.d("SSHConnection", "Auth: Key requires passphrase, retrieved=${cachedPassphrase != null}")
+            // Try to retrieve passphrase if key is encrypted (non-blocking)
+            cachedPassphrase = app?.securePasswordManager?.retrievePassword("key_passphrase_$effectiveKeyId")
+            if (cachedPassphrase != null) {
+                Logger.d("SSHConnection", "Auth: Retrieved passphrase for encrypted key")
             }
 
             val jschBytes = getJSchBytes(effectiveKeyId)
             if (jschBytes != null) {
                 try {
                     Logger.d("SSHConnection", "Auth: JSch bytes retrieved, size=${jschBytes.size} bytes")
-                    // Log first line of key for debugging (shows format)
-                    val firstLine = String(jschBytes, Charsets.UTF_8).lines().firstOrNull() ?: ""
-                    Logger.d("SSHConnection", "Auth: Key format indicator: $firstLine")
 
-                    jsch.addIdentity(effectiveKeyId, jschBytes, null, null)
-                    Logger.i("SSHConnection", "Auth: SSH key added to JSch successfully (keyId=$effectiveKeyId)")
-                    // Don't return early - let JSch try key first, then fallback to password if configured
-                    return@withContext
+                    // JSch byte array method has bugs on Linux - use temp file instead
+                    val tempKeyFile = java.io.File(context.cacheDir, "temp_key_$effectiveKeyId")
+                    try {
+                        tempKeyFile.writeBytes(jschBytes)
+                        Logger.d("SSHConnection", "Auth: Wrote key to temp file: ${tempKeyFile.absolutePath}")
+
+                        // Use file path method (more reliable than byte array)
+                        jsch.addIdentity(tempKeyFile.absolutePath, cachedPassphrase?.toByteArray())
+                        Logger.i("SSHConnection", "Auth: SSH key added to JSch from file (keyId=$effectiveKeyId)")
+
+                        // Don't return early - let JSch try key first, then fallback to password if configured
+                        return@withContext
+                    } finally {
+                        // Clean up temp file
+                        tempKeyFile.delete()
+                        Logger.d("SSHConnection", "Auth: Temp key file deleted")
+                    }
                 } catch (e: Exception) {
                     Logger.e("SSHConnection", "Auth: Failed to add SSH key to JSch", e)
                     // Fall through to password auth

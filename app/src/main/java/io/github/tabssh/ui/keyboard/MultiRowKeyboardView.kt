@@ -88,15 +88,23 @@ class MultiRowKeyboardView @JvmOverloads constructor(
         removeAllViews()
         keyboardRows.clear()
 
+        Logger.d(TAG, "Rebuilding $numberOfRows keyboard rows")
+
         for (i in 0 until numberOfRows) {
             val row = KeyboardRowView(context)
             // Don't override layoutParams - KeyboardRowView init sets proper 42dp height
             // Using WRAP_CONTENT causes height to collapse to 0 when row is empty
-            row.setOnKeyClickListener { key -> onKeyClickListener?.invoke(key) }
+            row.setOnKeyClickListener { key ->
+                Logger.d(TAG, "Key clicked: ${key.label} (${key.keySequence})")
+                onKeyClickListener?.invoke(key)
+            }
             row.setOnToggleClickListener { onToggleClickListener?.invoke() }
             keyboardRows.add(row)
             addView(row)
+            Logger.d(TAG, "Added row $i with layoutParams: ${row.layoutParams?.width}x${row.layoutParams?.height}")
         }
+
+        Logger.d(TAG, "Rebuilt ${keyboardRows.size} rows, total children: $childCount")
     }
 
     /**
@@ -104,11 +112,14 @@ class MultiRowKeyboardView @JvmOverloads constructor(
      */
     private fun applyDefaultKeys() {
         val defaultLayouts = getDefaultRowLayouts(numberOfRows)
+        Logger.d(TAG, "Applying default keys: ${defaultLayouts.size} rows")
         defaultLayouts.forEachIndexed { index, keys ->
             if (index < keyboardRows.size) {
+                Logger.d(TAG, "Row $index: setting ${keys.size} keys")
                 keyboardRows[index].setKeys(keys)
             }
         }
+        Logger.d(TAG, "Default keys applied")
     }
 
     /**
