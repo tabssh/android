@@ -1005,7 +1005,9 @@ class TabTerminalActivity : AppCompatActivity() {
                 }
                 val enteredPassword = promptForPassword(promptMessage)
                 if (enteredPassword == null) {
-                    Logger.i("TabTerminalActivity", "User cancelled password prompt")
+                    Logger.i("TabTerminalActivity", "User cancelled password prompt - closing activity")
+                    Toast.makeText(this, "Connection cancelled", Toast.LENGTH_SHORT).show()
+                    finish()
                     return
                 }
                 withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -1094,16 +1096,16 @@ class TabTerminalActivity : AppCompatActivity() {
             } else {
                 // Connection failed - try to get detailed error from last connection attempt
                 Logger.e("TabTerminalActivity", "SSH connection returned NULL for ${profile.getDisplayName()}")
-                
+
                 // Get the connection that failed (it may still exist even though connect() returned null)
                 val failedConnection = app.sshSessionManager.getConnection(profile.id)
                 val errorInfo = failedConnection?.detailedError?.value
-                
+
                 if (errorInfo != null) {
                     runOnUiThread {
                         showSSHConnectionErrorDialog(profile, errorInfo)
                     }
-                    
+
                     // Show error notification
                     io.github.tabssh.utils.NotificationHelper.showConnectionError(
                         this,
@@ -1113,13 +1115,17 @@ class TabTerminalActivity : AppCompatActivity() {
                 } else {
                     // Fallback to simple toast if no detailed error available
                     showError("Connection failed: ${profile.getDisplayName()}", "Error")
-                    
+
                     // Show generic error notification
                     io.github.tabssh.utils.NotificationHelper.showConnectionError(
                         this,
                         profile.getDisplayName(),
                         "Connection failed"
                     )
+
+                // Close activity after connection failure
+                Logger.i("TabTerminalActivity", "Closing activity due to connection failure")
+                finish()
                 }
             }
             
