@@ -41,20 +41,42 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityKeyboardCustomizationBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        Logger.d("KeyboardCustomization", "onCreate started")
 
-        app = application as TabSSHApplication
+        try {
+            binding = ActivityKeyboardCustomizationBinding.inflate(layoutInflater)
+            setContentView(binding.root)
+            Logger.d("KeyboardCustomization", "View binding complete")
 
-        setupToolbar()
-        initViews()
-        loadCurrentLayout()
-        setupListeners()
-        updatePreview()
-        updateCurrentRowDisplay()
-        updateAvailableKeys()
+            app = application as TabSSHApplication
+            Logger.d("KeyboardCustomization", "Got application instance")
 
-        Logger.d("KeyboardCustomization", "Activity created")
+            setupToolbar()
+            Logger.d("KeyboardCustomization", "Toolbar setup complete")
+
+            initViews()
+            Logger.d("KeyboardCustomization", "Views initialized")
+
+            loadCurrentLayout()
+            Logger.d("KeyboardCustomization", "Layout loaded: ${keyboardLayout.size} rows")
+
+            setupListeners()
+            Logger.d("KeyboardCustomization", "Listeners setup complete")
+
+            updatePreview()
+            Logger.d("KeyboardCustomization", "Preview updated")
+
+            updateCurrentRowDisplay()
+            Logger.d("KeyboardCustomization", "Current row display updated")
+
+            updateAvailableKeys()
+            Logger.d("KeyboardCustomization", "Available keys updated")
+
+            Logger.i("KeyboardCustomization", "Activity created successfully with ${keyboardLayout.size} rows")
+        } catch (e: Exception) {
+            Logger.e("KeyboardCustomization", "Failed to create activity", e)
+            throw e
+        }
     }
 
     private fun setupToolbar() {
@@ -322,10 +344,19 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
 
     private fun saveLayout() {
         try {
+            Logger.d("KeyboardCustomization", "Saving layout with ${keyboardLayout.size} rows")
+            keyboardLayout.forEachIndexed { i, row ->
+                Logger.d("KeyboardCustomization", "Row $i: ${row.size} keys - ${row.map { it.label }}")
+            }
+
             app.preferencesManager.setKeyboardLayout(keyboardLayout)
+            Logger.d("KeyboardCustomization", "Layout saved to preferences")
+
             app.preferencesManager.setKeyboardRowCount(keyboardLayout.size)
-            Toast.makeText(this, "Keyboard layout saved", Toast.LENGTH_SHORT).show()
-            Logger.d("KeyboardCustomization", "Layout saved: ${keyboardLayout.size} rows")
+            Logger.d("KeyboardCustomization", "Row count saved: ${keyboardLayout.size}")
+
+            Toast.makeText(this, "Keyboard layout saved (${keyboardLayout.size} rows)", Toast.LENGTH_SHORT).show()
+            Logger.i("KeyboardCustomization", "Layout saved successfully")
             finish()
         } catch (e: Exception) {
             Logger.e("KeyboardCustomization", "Failed to save layout", e)
