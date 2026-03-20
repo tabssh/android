@@ -125,7 +125,7 @@ class ConsoleWebSocketClient(
                 }
 
                 override fun onMessage(webSocket: WebSocket, text: String) {
-                    Logger.d(TAG, "Received text: ${text.length} chars")
+                    Logger.d(TAG, "Received text: ${text.length} chars: '${text.take(100)}'")
                     try {
                         val actualData = when (protocol) {
                             ConsoleProtocol.PROXMOX_TERM -> {
@@ -133,6 +133,7 @@ class ConsoleWebSocketClient(
                                 if (text.startsWith("0:")) {
                                     val parts = text.split(":", limit = 3)
                                     if (parts.size == 3) {
+                                        Logger.d(TAG, "Proxmox data message: length=${parts[1]}, data='${parts[2].take(50)}'")
                                         parts[2] // Extract the MSG part
                                     } else {
                                         Logger.w(TAG, "Malformed Proxmox message: $text")
@@ -140,15 +141,17 @@ class ConsoleWebSocketClient(
                                     }
                                 } else {
                                     // Might be ping response or other message type
-                                    Logger.d(TAG, "Non-data message: $text")
+                                    Logger.d(TAG, "Non-data Proxmox message: $text")
                                     return@onMessage
                                 }
                             }
                             else -> text // Raw text for other protocols
                         }
 
-                        inputPipeOut?.write(actualData.toByteArray(Charsets.UTF_8))
+                        val bytesWritten = actualData.toByteArray(Charsets.UTF_8)
+                        inputPipeOut?.write(bytesWritten)
                         inputPipeOut?.flush()
+                        Logger.d(TAG, "Wrote ${bytesWritten.size} bytes to terminal")
                     } catch (e: Exception) {
                         Logger.e(TAG, "Error writing to input pipe", e)
                     }
@@ -232,9 +235,12 @@ class ConsoleWebSocketClient(
                 // Proxmox termproxy format: "0:LENGTH:MSG"
                 // LENGTH is byte length, MSG is the actual bytes as string
                 val msg = String(data, Charsets.ISO_8859_1) // Use ISO_8859_1 to preserve binary data
-                val packet = "0:${data.size}:$msg" // Use data.size (byte length), not msg.length
-                Logger.d(TAG, "Proxmox format: sending ${data.size} bytes")
-                webSocket?.send(packet)
+                val packet = "0:${data.size}:$msg"
+                val bytesCodes = data.map { it.toInt() and 0xFF }
+                Logger.d(TAG, "Proxmox format: sending ${data.size} bytes: $bytesCodes")
+                Logger.d(TAG, "Proxmox packet: '$packet' (${packet.length} chars)")
+                val sent = webSocket?.send(packet)
+                Logger.d(TAG, "WebSocket send result: $sent")
             }
             else -> {
                 // Other protocols: send raw bytes
