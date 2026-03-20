@@ -46,15 +46,19 @@ class MultiRowKeyboardView @JvmOverloads constructor(
      */
     fun setLayout(rows: List<List<KeyboardKey>>) {
         numberOfRows = rows.size.coerceIn(MIN_ROWS, MAX_ROWS)
+        Logger.d(TAG, "setLayout called with ${rows.size} rows")
         rebuildRows()
 
         rows.take(numberOfRows).forEachIndexed { index, keys ->
+            Logger.d(TAG, "Setting row $index with ${keys.size} keys: ${keys.map { it.label }}")
             if (index < keyboardRows.size) {
                 keyboardRows[index].setKeys(keys)
+            } else {
+                Logger.e(TAG, "Row $index doesn't exist in keyboardRows (size=${keyboardRows.size})")
             }
         }
 
-        Logger.d(TAG, "Layout set with $numberOfRows rows")
+        Logger.d(TAG, "Layout set with $numberOfRows rows, total keys: ${rows.sumOf { it.size }}")
     }
 
     /**
