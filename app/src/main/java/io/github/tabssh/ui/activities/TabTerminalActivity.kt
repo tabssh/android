@@ -1354,6 +1354,29 @@ class TabTerminalActivity : AppCompatActivity() {
                     ConnectionState.DISCONNECTED -> {
                         // Gray or no icon
                         tabLayoutTab.icon = null
+
+                        // Show disconnected message and close tab after delay
+                        Logger.i("TabTerminalActivity", "Tab ${tab.tabId} disconnected - will auto-close")
+                        runOnUiThread {
+                            Toast.makeText(this@TabTerminalActivity,
+                                "Connection closed: ${tab.profile.getDisplayName()}",
+                                Toast.LENGTH_SHORT).show()
+
+                            // Auto-close tab after 2 seconds
+                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                // Find tab index by ID
+                                val allTabs = tabManager.getAllTabs()
+                                val tabIndex = allTabs.indexOfFirst { it.tabId == tab.tabId }
+                                if (tabIndex >= 0) {
+                                    tabManager.closeTab(tabIndex)
+
+                                    // If no tabs left, close activity
+                                    if (tabManager.getTabCount() == 0) {
+                                        finish()
+                                    }
+                                }
+                            }, 2000)
+                        }
                     }
                     else -> {}
                 }

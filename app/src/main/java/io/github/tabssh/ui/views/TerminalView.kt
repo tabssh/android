@@ -1410,13 +1410,13 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
     override fun getExtractedText(request: ExtractedTextRequest?, flags: Int): ExtractedText? = null
 
     override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
-        repeat(beforeLength) { terminalView.sendText("\b") }
+        repeat(beforeLength) { terminalView.sendText("\u007F") } // DEL, not BS
         return true
     }
 
     override fun deleteSurroundingTextInCodePoints(beforeLength: Int, afterLength: Int): Boolean {
         // Handle deletion in code points (for multi-byte characters)
-        repeat(beforeLength) { terminalView.sendText("\b") }
+        repeat(beforeLength) { terminalView.sendText("\u007F") } // DEL, not BS
         return true
     }
 
@@ -1459,7 +1459,11 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
     override fun performPrivateCommand(action: String?, data: Bundle?): Boolean = false
 
     override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
-        text?.let { terminalView.sendText(it.toString()) }
+        text?.let {
+            // Convert newline to carriage return for SSH compatibility
+            val converted = it.toString().replace("\n", "\r")
+            terminalView.sendText(converted)
+        }
         return true
     }
 
