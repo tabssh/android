@@ -29,9 +29,14 @@ class ConsoleWebSocketClient(
 ) {
     companion object {
         private const val TAG = "ConsoleWebSocket"
-        private const val PING_INTERVAL_SECONDS = 30L
+        // OkHttp pings happen at the WS protocol layer; Proxmox's termproxy
+        // doesn't see them, so its idle-inactivity timer (~10 s) still fires.
+        // We keep WS pings frequent for transport health AND emit an
+        // app-layer Proxmox keepalive every 5 s — see startKeepalive().
+        private const val PING_INTERVAL_SECONDS = 10L
         private const val CONNECT_TIMEOUT_SECONDS = 30L
         private const val READ_TIMEOUT_SECONDS = 0L // No timeout for console
+        private const val PROXMOX_KEEPALIVE_INTERVAL_MS = 5_000L
     }
 
     enum class ConsoleProtocol {
@@ -59,6 +64,13 @@ class ConsoleWebSocketClient(
     // Terminal size for resize messages
     private var terminalCols: Int = 80
     private var terminalRows: Int = 24
+
+    // App-layer keepalive thread (Issue #52). Proxmox's termproxy closes
+    // idle WebSockets after ~10 s; OkHttp's protocol-layer pings don't
+    // count as activity. We periodically resend the most-recent resize
+    // message — termproxy treats that as live traffic and keeps the
+    // connection open.
+    private var keepaliveThread: Thread? = null
 
     init {
         val builder = OkHttpClient.Builder()
@@ -122,6 +134,11 @@ class ConsoleWebSocketClient(
 
                     // Start output reader thread (user input -> WebSocket)
                     startOutputReader()
+
+                    // Start app-layer keepalive for Proxmox termproxy.
+                    if (protocol == ConsoleProtocol.PROXMOX_TERM) {
+                        startProxmoxKeepalive()
+                    }
                 }
 
                 override fun onMessage(webSocket: WebSocket, text: String) {
@@ -195,6 +212,36 @@ class ConsoleWebSocketClient(
             Logger.e(TAG, "Failed to connect", e)
             connectionListener?.onError(e)
             return false
+        }
+    }
+
+    /**
+     * Start a low-frequency keepalive thread for Proxmox termproxy.
+     * Issue #52: termproxy kills idle WebSockets after ~10 s of no
+     * application-layer traffic. We resend the most-recent resize
+     * message every 5 s — it's a no-op for the terminal but counts as
+     * a live message on the server.
+     */
+    private fun startProxmoxKeepalive() {
+        keepaliveThread?.interrupt()
+        keepaliveThread = Thread {
+            try {
+                while (isConnected) {
+                    Thread.sleep(PROXMOX_KEEPALIVE_INTERVAL_MS)
+                    if (!isConnected) break
+                    val msg = "1:$terminalCols:$terminalRows:"
+                    val sent = webSocket?.send(msg) ?: false
+                    Logger.d(TAG, "Proxmox keepalive sent=$sent")
+                }
+            } catch (e: InterruptedException) {
+                Logger.d(TAG, "Keepalive thread interrupted")
+            } catch (e: Exception) {
+                Logger.w(TAG, "Keepalive thread error", e)
+            }
+        }.apply {
+            name = "ConsoleProxmoxKeepalive"
+            isDaemon = true
+            start()
         }
     }
 
@@ -303,6 +350,8 @@ class ConsoleWebSocketClient(
     fun disconnect() {
         Logger.i(TAG, "Disconnecting console WebSocket")
         isConnected = false
+        keepaliveThread?.interrupt()
+        keepaliveThread = null
         webSocket?.close(1000, "User disconnected")
         cleanup()
     }

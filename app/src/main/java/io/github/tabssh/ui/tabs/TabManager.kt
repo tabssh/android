@@ -11,8 +11,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 /**
@@ -67,19 +65,38 @@ class TabManager(private val maxTabs: Int = 10) {
         // DISCONNECTED transitions (Issue #50). Without this, exiting the
         // shell ends the SSH read loop but the UI hangs on the dead tab.
         //
-        // CRITICAL: drop the initial StateFlow replay. SSHTab._connectionState
-        // starts as DISCONNECTED before the SSH session even begins. If we
-        // forward that initial value to the activity, the auto-close timer
-        // fires 2 s after EVERY connect — closing the tab the moment the
-        // user lands in it. drop(1) ensures we only react to genuine state
-        // transitions. distinctUntilChanged is belt-and-braces against
-        // duplicate emissions.
+        // CRITICAL guard against the auto-close-on-create regression: a
+        // brand-new SSHTab starts at DISCONNECTED. The previous attempt
+        // (`drop(1).distinctUntilChanged()`) was supposed to swallow the
+        // StateFlow replay but the user still hit the auto-close 60 ms
+        // after createTab — most likely because the StateFlow re-emits
+        // DISCONNECTED at a moment our `drop(1)` couldn't reach (e.g. the
+        // launch's coroutine resuming after another DISCONNECTED was set).
+        //
+        // Bullet-proof fix: track whether the tab has EVER been CONNECTED.
+        // DISCONNECTED is only forwarded to the activity (where it triggers
+        // auto-close) if the tab actually reached CONNECTED at some point.
+        // Other states (CONNECTING, AUTHENTICATING, ERROR) always forward.
         tabObservers[tab.tabId] = tabObserverScope.launch {
-            tab.connectionState
-                .drop(1)
-                .distinctUntilChanged()
-                .collect { state ->
-                    notifyTabConnectionStateChanged(tab, state)
+            var hasBeenConnected = false
+            // StateFlow is already distinct so no distinctUntilChanged()
+            // (Kotlin coroutines flags it as a deprecated no-op).
+            tab.connectionState.collect { state ->
+                    when (state) {
+                        io.github.tabssh.ssh.connection.ConnectionState.CONNECTED -> {
+                            hasBeenConnected = true
+                            notifyTabConnectionStateChanged(tab, state)
+                        }
+                        io.github.tabssh.ssh.connection.ConnectionState.DISCONNECTED -> {
+                            if (hasBeenConnected) {
+                                notifyTabConnectionStateChanged(tab, state)
+                            }
+                            // else: initial replay or pre-connect; suppress.
+                        }
+                        else -> {
+                            notifyTabConnectionStateChanged(tab, state)
+                        }
+                    }
                 }
         }
 
