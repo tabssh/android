@@ -25,27 +25,28 @@
                 app:cardElevation="2dp"
                 app:cardCornerRadius="8dp">
 
+                <!-- Polish #43: was a horizontal row with 50/50 weight which
+                     truncated the spinner label to "Select connec..". Stack
+                     vertically so both header and picker get full width. -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:padding="@dimen/space_md"
-                    android:gravity="center_vertical">
+                    android:orientation="vertical"
+                    android:padding="@dimen/space_md">
 
                     <TextView
-                        android:layout_width="0dp"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
                         android:text="📊 Performance Monitor"
                         android:textSize="18sp"
                         android:textStyle="bold"
-                        android:textColor="?attr/colorOnSurface" />
+                        android:textColor="?attr/colorOnSurface"
+                        android:layout_marginBottom="@dimen/space_sm" />
 
                     <Spinner
                         android:id="@+id/spinner_connection"
-                        android:layout_width="0dp"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
                         android:prompt="@string/select_connection" />
 
                 </LinearLayout>
@@ -150,7 +151,7 @@
                         android:text="CPU Usage"
                         android:textSize="16sp"
                         android:textStyle="bold"
-                        android:textColor="?attr/colorPrimary" />
+                        android:textColor="?attr/colorOnSurface" />
 
                     <com.github.mikephil.charting.charts.LineChart
                         android:id="@+id/chart_cpu"
@@ -191,7 +192,7 @@
                             android:text="Memory"
                             android:textSize="14sp"
                             android:textStyle="bold"
-                            android:textColor="?attr/colorPrimary" />
+                            android:textColor="?attr/colorOnSurface" />
 
                         <TextView
                             android:id="@+id/text_memory_percent"
@@ -240,7 +241,7 @@
                             android:text="Disk"
                             android:textSize="14sp"
                             android:textStyle="bold"
-                            android:textColor="?attr/colorPrimary" />
+                            android:textColor="?attr/colorOnSurface" />
 
                         <TextView
                             android:id="@+id/text_disk_percent"
@@ -298,7 +299,7 @@
                             android:text="Network"
                             android:textSize="14sp"
                             android:textStyle="bold"
-                            android:textColor="?attr/colorPrimary" />
+                            android:textColor="?attr/colorOnSurface" />
 
                         <TextView
                             android:id="@+id/text_network_rx"
@@ -358,7 +359,7 @@
                             android:text="Load Average"
                             android:textSize="14sp"
                             android:textStyle="bold"
-                            android:textColor="?attr/colorPrimary" />
+                            android:textColor="?attr/colorOnSurface" />
 
                         <TextView
                             android:id="@+id/text_load_1min"

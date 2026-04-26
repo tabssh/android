@@ -75,14 +75,11 @@ class IdentitiesFragment : Fragment() {
             }
         })
         
-        // FAB shows menu with options
+        // FAB shows menu with options (Create / Import / Generate). The
+        // empty-state used to also have a centred "Create Identity" tonal
+        // button but that duplicated the FAB; removed in Polish #46.
         view.findViewById<com.google.android.material.floatingactionbutton.FloatingActionButton>(R.id.fab_add_identity).setOnClickListener {
             showAddOptionsMenu()
-        }
-
-        // Empty state button
-        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.button_add_identity).setOnClickListener {
-            showCreateDialog()
         }
     }
     

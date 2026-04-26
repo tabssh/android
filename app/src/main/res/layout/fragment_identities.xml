@@ -89,18 +89,11 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Create reusable credential sets that\ncan be shared across multiple connections"
+                android:text="Tap the + button to create your first identity"
                 android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
                 android:textColor="?android:attr/textColorSecondary"
                 android:gravity="center"
                 android:layout_marginBottom="24dp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/button_add_identity"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Create Identity"
-                style="@style/Widget.Material3.Button.TonalButton" />
 
         </LinearLayout>
 

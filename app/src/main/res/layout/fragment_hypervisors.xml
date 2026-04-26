@@ -72,7 +72,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Add Hypervisor"
-                style="@style/Widget.Material3.Button" />
+                style="@style/Widget.TabSSH.Button" />
 
         </LinearLayout>
 

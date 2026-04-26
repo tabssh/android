@@ -1,16 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
-    
+
+    <!-- Polish #42: titles double as long-press tooltips on Toolbar menu
+         items. Made them action-oriented and added contentDescription so
+         TalkBack reads something descriptive. -->
     <item
         android:id="@+id/action_sort"
-        android:title="Sort"
+        android:title="Sort connections"
+        android:contentDescription="Sort connections"
         android:icon="@drawable/ic_sort"
         app:showAsAction="always" />
 
     <item
         android:id="@+id/action_bulk_edit"
-        android:title="Bulk Edit"
+        android:title="Bulk edit"
+        android:contentDescription="Bulk edit connections"
         android:icon="@drawable/ic_edit"
         app:showAsAction="ifRoom" />
 
