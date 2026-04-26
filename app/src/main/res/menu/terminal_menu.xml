@@ -65,4 +65,19 @@
         android:title="View Transcripts"
         app:showAsAction="never" />
 
+    <item
+        android:id="@+id/action_command_palette"
+        android:title="Command Palette (Ctrl+K)"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_quick_switcher"
+        android:title="Quick Switcher (Ctrl+J)"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_broadcast_input"
+        android:title="Broadcast input: choose targets…"
+        app:showAsAction="never" />
+
 </menu>

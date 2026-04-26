@@ -861,6 +861,8 @@ When modifying this codebase, prefer the following (derived from `CLAUDE.md` pol
 8. **F-Droid build must remain reproducible.** Don't introduce non-deterministic generated code, don't pull in proprietary services, don't add network-fetching Gradle plugins.
 9. **Prefer `Flow` and `StateFlow`.** That's the existing reactive style; don't introduce LiveData, RxJava, or callback chains for new code.
 10. **CLAUDE.md is the runbook, AI.md is the architecture.** When you change architecture, update AI.md. When you add a target/script/policy, update CLAUDE.md.
+11. **Never add `Co-Authored-By` (or any attribution footer) to commit messages.** The maintainer runs Claude Code as themselves and authors every commit personally — there is no separate co-author. Adding the footer falsely implies a second contributor and pollutes git attribution. End commit bodies at the last description line, no trailer.
+12. **Save commit messages to `{project_root}/.git/COMMIT_MESS`.** Project convention so the maintainer can `git commit -F .git/COMMIT_MESS`. Overwrite the file each time. Do not save to `/tmp/tabssh-android/`. Do not also paste inline (the file is the source of truth).
 
 ---
 

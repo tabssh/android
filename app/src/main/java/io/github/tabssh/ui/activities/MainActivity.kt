@@ -284,6 +284,9 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             R.id.nav_settings -> {
                 startActivity(Intent(this, SettingsActivity::class.java))
             }
+            R.id.nav_theme_editor -> {
+                startActivity(ThemeEditorActivity.createIntent(this))
+            }
             R.id.nav_copy_app_log -> {
                 copyAppLog()
             }

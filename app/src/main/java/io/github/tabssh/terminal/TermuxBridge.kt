@@ -47,6 +47,15 @@ class TermuxBridge(
     private var inputStream: InputStream? = null
     private var outputStream: OutputStream? = null
 
+    /** Wave 2.7 — public read of the SSH outputStream so a sibling bridge can
+     *  fan-out broadcast input to it. May be null until [connect] runs. */
+    fun peerOutputStream(): OutputStream? = outputStream
+
+    /** Wave 2.7 — when non-empty, every keystroke written to our SSH stream is
+     *  also written to each of these. The owning Activity manages the list. */
+    @Volatile
+    var broadcastTargets: List<OutputStream> = emptyList()
+
     // Read loop job
     private var readJob: Job? = null
 
@@ -81,6 +90,19 @@ class TermuxBridge(
                         stream.write(dataCopy)
                         stream.flush()
                         Logger.d(TAG, "Sent ${dataCopy.size} bytes to SSH")
+                    }
+                    // Wave 2.7 — broadcast input. After our own SSH write succeeds,
+                    // fan the same bytes out to every registered target (other tabs).
+                    val targets = broadcastTargets
+                    if (targets.isNotEmpty()) {
+                        for (t in targets) {
+                            try {
+                                t.write(dataCopy)
+                                t.flush()
+                            } catch (e: Exception) {
+                                Logger.w(TAG, "Broadcast to peer stream failed: ${e.message}")
+                            }
+                        }
                     }
                 } catch (e: Exception) {
                     Logger.e(TAG, "Error writing to SSH", e)

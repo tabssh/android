@@ -1736,12 +1736,9 @@ Don't use todo list for:
 - **Don't commit** unless user explicitly requests
 - **Check authorship** before amending commits
 - **Use heredoc** for multi-line commit messages
-- **Include attribution:**
-  ```
-  🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-  Co-Authored-By: Claude <noreply@anthropic.com>
-  ```
+- **Never add `Co-Authored-By` (or any attribution footer / "Generated with" line) to commit messages.** The maintainer runs Claude Code as themselves and authors every commit personally — there is no separate co-author. End the commit body at the last description line; no trailer.
+- **Match the repo style:** brief subject line bracketed by an emoji on each side, e.g. `✨ Wave 2.4 + 2.6 + 2.7: theme editor, palette, broadcast ✨`. Multi-paragraph bodies are fine when the change warrants them; single-line is the norm for routine batches.
+- **Save commit messages to `{project_root}/.git/COMMIT_MESS`** (not inline-only, not `/tmp/tabssh-android/`). This is the project's convention so the maintainer can `git commit -F .git/COMMIT_MESS` directly. Overwrite the file each time.
 
 ---
 

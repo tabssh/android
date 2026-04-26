@@ -1,7 +1,7 @@
 # TabSSH Android App - Complete Technical Specification
 
-**Version**: 1.0
-**Date**: February 2026  
+**Version**: 1.0  (database v20)
+**Date**: April 2026 — last sync: post-Wave 2.3 (snippet vars, SSH cert auth, Telnet)
 **Repository**: https://github.com/tabssh/android  
 **Website**: https://tabssh.github.io  
 
@@ -52,8 +52,17 @@ TabSSH is a modern, open-source SSH client for Android that provides a true tabb
 - Hypervisor management: Proxmox VE, XCP-ng, Xen Orchestra (REST + WebSocket), VMware
 - VM serial console access via hypervisor API (no VM network required)
 - Full terminal emulation via Termux TerminalEmulator (vim, htop, tmux work correctly)
-- Cloud sync: Google Drive + WebDAV with AES-256-GCM encryption and 3-way merge
-- Degoogled device support (WebDAV fallback, zero Google Play dependency)
+- Cloud sync: Universal SAF-based sync (works with any installed storage provider — Google Drive, Dropbox, OneDrive, Nextcloud, local) with AES-256-GCM encryption and 3-way merge
+- Degoogled device support (no Google Play dependency anywhere)
+- **Telnet (RFC 854)** alongside SSH — for network gear, console servers, embedded BMCs
+- **OpenSSH user certificate auth** — attach a CA-signed `*-cert.pub` to any stored key
+- **Per-host environment variables** (multi-line `KEY=value`, JSch SetEnv on channel)
+- **Per-host SSH agent forwarding** (ChannelShell.setAgentForwarding)
+- **Find-in-scrollback** over the Termux buffer
+- **Reconnect-on-disconnect dialog** instead of silent auto-close
+- **SFTP polish**: in-app remote text-file editor (1 MiB cap), chmod editing with rwx checkboxes + live octal display, SCP fallback (device → server) for systems without an SFTP subsystem
+- **Bulk import**: CSV / JSON / PuTTY `.reg` / Terraform `.tf` (auto-detected)
+- **Snippet variables**: `{?name:default|hint}` with per-(snippet,var) last-used recall
 
 ---
 
@@ -71,10 +80,10 @@ app/src/main/java/io/github/tabssh/
 │   ├── adapters/           # RecyclerView adapters
 │   ├── views/              # Custom views (TerminalView, PerformanceOverlayView, etc.)
 │   └── tabs/               # Tab management (TabManager, SSHTab)
-├── ssh/                    # SSH connectivity
-│   ├── connection/         # SSHConnection, SSHSessionManager, HostKeyVerifier
+├── ssh/                    # SSH + alternate protocol connectivity
+│   ├── connection/         # SSHConnection, SSHSessionManager, HostKeyVerifier, TelnetConnection
 │   ├── forwarding/         # Port forwarding
-│   └── config/             # SSH config parsing
+│   └── config/             # SSH config parsing + BulkImportParser (CSV/JSON/PuTTY/Terraform)
 ├── terminal/               # Terminal emulation
 │   ├── TermuxBridge.kt     # Bridge to Termux TerminalEmulator (SSH streams ↔ emulator)
 │   ├── recording/          # SessionRecorder, TranscriptManager
@@ -94,7 +103,7 @@ app/src/main/java/io/github/tabssh/
 │   ├── proxmox/            # Proxmox VE REST API client + manager activity
 │   ├── xcpng/              # XCP-ng XML-RPC + Xen Orchestra REST/WebSocket
 │   └── vmware/             # VMware vSphere
-├── sftp/                   # SFTP file browser
+├── sftp/                   # SFTP file browser + SCPClient (device → server)
 ├── themes/                 # Theme system (parser, validator, definitions)
 ├── accessibility/          # TalkBack, high contrast, keyboard navigation
 ├── network/                # Proxy, network detection, security
@@ -199,6 +208,7 @@ Ctrl+Shift+T    - Reopen closed tab
 │ Port: [22]                 │
 │ Username: [admin]          │
 ├─────────────────────────────┤
+│ Protocol: [SSH ▼]          │ ← Wave 2.3 — also "Telnet"
 │ Authentication              │
 │ ○ Password                 │
 │ ● Public Key               │
@@ -210,6 +220,9 @@ Ctrl+Shift+T    - Reopen closed tab
 │ Encoding: [UTF-8]          │
 │ ☑ Compression              │
 │ ☑ Keep Alive              │
+│ Env vars: [KEY=value lines]│ ← Wave 1.2
+│ ☐ Agent forwarding         │ ← Wave 1.5
+│ Post-connect script: …      │
 └─────────────────────────────┘
 ```
 
@@ -510,6 +523,29 @@ public class SFTPManager {
 }
 ```
 
+### 4.4.5 Remote File Editor (Wave 1.7)
+
+In-app text-file editor over SFTP. Pick a remote text file in SFTPActivity →
+"Open / Edit", file is downloaded to cache (1 MiB cap), opened in a monospace
+EditText with dirty-tracking (toolbar shows `filename *`). On save, file is
+re-uploaded via SFTP. Back-button with unsaved changes prompts Save / Discard
+/ Cancel.
+
+### 4.4.6 chmod Editor (Wave 1.8)
+
+SFTPActivity → "Permissions…" shows rwx checkboxes per owner/group/other and
+a live octal display. Initial mode parsed from either symbolic
+(`rwxr-xr--`) or octal (`0644`).
+
+### 4.4.7 SCP Fallback (Wave 1.9)
+
+When an SFTP subsystem isn't available (network gear, minimal embedded
+systems), `SCPClient` speaks the rcp wire protocol directly via JSch's
+`ChannelExec` with `scp -t /target`. Upload-only (device → server); SFTP is
+strictly better for the other direction. The implementation handles ack
+bytes (0=ok, 1=warn, 2=error), the `C0644 <length> <name>` header record,
+streamed bytes, and the trailing null terminator.
+
 ### 4.5 Port Forwarding
 
 #### 4.5.1 Tunnel Types
@@ -546,6 +582,42 @@ public class PortForwardingManager {
     public List<Tunnel> getActiveTunnels();
 }
 ```
+
+### 4.6 Protocol Backends
+
+ConnectionProfile carries a `protocol` field (`"ssh"` default, `"telnet"`
+alt). At connect time, `TabTerminalActivity.connectToProfile` branches on
+this value. Both backends ultimately feed an `InputStream`/`OutputStream`
+pair into `TermuxBridge`, so the terminal layer is protocol-agnostic.
+
+#### 4.6.1 Telnet (Wave 2.3) — RFC 854
+
+`TelnetConnection` opens a raw TCP socket. A daemon "pump" thread reads
+bytes; on `IAC (0xFF)` it handles option negotiation directly:
+
+- `WILL ECHO` / `WILL SUPPRESS-GA` → respond `DO`
+- `DO TERMINAL-TYPE` / `DO NAWS` / `DO SUPPRESS-GA` → respond `WILL`
+- Everything else → polite `WONT` / `DONT`
+- Sub-negotiations are read-and-discarded up to `IAC SE` except
+  `TERMINAL-TYPE SEND` which is answered `IS xterm-256color`.
+
+The output stream wraps the socket and escapes literal `0xFF` as `IAC IAC`
+per §3 of the RFC. Window-size changes push `IAC SB NAWS <cols> <rows> IAC
+SE`. No auth — Telnet authenticates interactively at the remote prompt by
+design.
+
+#### 4.6.2 SSH Agent Forwarding (Wave 1.5)
+
+Per-host opt-in flag (`agent_forwarding` column). When enabled,
+`SSHConnection.openShellChannel` calls `ChannelShell.setAgentForwarding(true)`
+before connect. JSch routes the agent socket through the SSH connection.
+
+#### 4.6.3 Per-Host Environment Variables (Wave 1.2)
+
+Multi-line `KEY=value` field on the connection profile (`env_vars` column).
+Applied via reflection on `ChannelShell.setEnv(String, String)` before
+connect. Server must list the names in `sshd_config:AcceptEnv` or they are
+silently dropped — this is sshd-side policy, not a client bug.
 
 ---
 
@@ -664,6 +736,7 @@ public class KeyStorage {
         private long createdAt;
         private long lastUsed;
         private boolean requiresPassphrase;
+        private String certificate;     // Wave 2.2 — optional OpenSSH user cert (*-cert.pub)
     }
     
     public String storePrivateKey(ParsedKey key, String keyName);
@@ -673,6 +746,25 @@ public class KeyStorage {
     public void exportKey(String keyId, File outputFile);
 }
 ```
+
+#### 5.2.3 OpenSSH User Certificate Auth (Wave 2.2)
+
+When a `StoredKey.certificate` is non-null, `SSHConnection.setupAuthentication`
+routes through JSch's `addIdentity(name, prvkeyBytes, pubkeyBytes,
+passphraseBytes)` and passes the certificate as the public-key portion. The
+server then validates the CA-signed certificate instead of the bare key.
+Without a cert, the existing temp-file path (`addIdentity(path,
+passphraseBytes)`) is preserved — JSch's byte-array variant has known Linux
+quirks for plain keys.
+
+`KeyManagementActivity` → key details → "More…" exposes:
+- "Attach certificate (paste)…" — multi-line dialog accepting a `*-cert.pub`
+  line (e.g. `ssh-rsa-cert-v01@openssh.com AAAA…`)
+- "Attach certificate (file)…" — SAF picker
+- "Remove certificate" (only when one is attached)
+
+Validation requires the literal `-cert-v01@openssh.com` substring to be
+present.
 
 ### 5.3 Host Key Verification
 
@@ -1302,7 +1394,7 @@ android {
         AuditLogEntry::class,
         HypervisorProfile::class
     ],
-    version = 16,
+    version = 20,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -1336,23 +1428,29 @@ abstract class TabSSHDatabase : RoomDatabase() {
 }
 ```
 
-**Database migration history:** v1 → v2 (sync fields) → … → v16 (current)
+**Database migration history:** v1 → v2 (sync fields) → … → v17 (Wave 0
+state) → v18 (Wave 1.2 + 1.5: `connections.env_vars`, `connections.agent_forwarding`)
+→ v19 (Wave 2.2: `stored_keys.certificate`) → v20 (Wave 2.3:
+`connections.protocol`).
 
 #### 8.2.2 Entity Definitions (Key Tables)
 
 The following summarises the primary tables. All entities are Kotlin data classes with Room annotations.
 
-**connections** — SSH connection profiles
-- id (PK), name, host, port, username, auth_type, key_id, group_id, theme
+**connections** — SSH/Telnet connection profiles
+- id (PK), name, host, port, username, protocol ("ssh"|"telnet"), auth_type, key_id, group_id, theme
 - created_at, last_connected, connection_count
 - terminal_type, compression, keep_alive, x11_forwarding, use_mosh
 - proxy_type, proxy_host, proxy_port, proxy_username, proxy_auth_type, proxy_key_id
 - save_password, identity_id, multiplexer_mode, multiplexer_session_name
+- env_vars (multi-line `KEY=value`), agent_forwarding (boolean)
+- post_connect_script, font_size_override
 - lastSyncedAt, syncVersion, modifiedAt, syncDeviceId (sync metadata)
 
 **stored_keys** — SSH private keys (encrypted in SharedPreferences via Android Keystore)
 - keyId (PK), name, key_type (RSA/ECDSA/Ed25519/DSA), comment, fingerprint
 - created_at, last_used, requires_passphrase, key_size
+- certificate (optional `*-cert.pub` line for OpenSSH user-cert auth — Wave 2.2)
 - Private key bytes are AES-256-GCM encrypted in SharedPreferences; keyId is the lookup key
 
 **host_keys** — Known SSH host keys (replaces ~/.ssh/known_hosts)
@@ -1367,8 +1465,12 @@ The following summarises the primary tables. All entities are Kotlin data classe
 **connection_groups** — Folders for organizing connections
 - id (PK), name, color, icon, is_expanded, sort_order, created_at
 
-**snippets** — Reusable command snippets
+**snippets** — Reusable command snippets with prompt-style variables
 - id (PK), name, command, description, category, tags, usage_count, created_at
+- Command supports `{name}` (basic), `{?name}` (prompt), `{?name:default}`
+  (with default), `{?name|hint}` (with placeholder), `{?name:default|hint}`
+  (combined). Last-used values are recalled per `(snippetId, varName)` from
+  `SharedPreferences("snippet_var_recall")` — Wave 2.1.
 
 **identities** — Reusable credential profiles
 - id (PK), name, username, auth_type, key_id, created_at
@@ -2771,8 +2873,9 @@ public class KeyStorageException extends Exception {
 ## Platform Support & Advanced Protocols
 - [x] Android TV optimization and remote control support
 - [x] Chromebook/Chrome OS integration and keyboard optimization
-- [x] Mosh protocol implementation for mobile-optimized connections
-- [x] X11 forwarding for running remote GUI applications
+- [ ] Mosh protocol — UI toggle present, real SSP/OCB-AES backend deferred to Wave 2.X
+- [ ] X11 forwarding — UI toggle present, full integration deferred to Wave 2.X
+- [x] Telnet (RFC 854) — Wave 2.3
 
 ## Advanced Terminal & Protocol Features
 - [x] Split screen terminal support (framework implemented)

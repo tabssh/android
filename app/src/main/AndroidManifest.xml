@@ -184,6 +184,14 @@
             android:parentActivityName=".ui.activities.SFTPActivity"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- Wave 2.4 — In-app theme editor -->
+        <activity
+            android:name=".ui.activities.ThemeEditorActivity"
+            android:exported="false"
+            android:label="Theme Editor"
+            android:parentActivityName=".ui.activities.SettingsActivity"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- Port Forwarding activity -->
         <activity
             android:name=".ui.activities.PortForwardingActivity"
