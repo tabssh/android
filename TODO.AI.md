@@ -22,7 +22,7 @@
 ## 🔬 Phase 7.5 — Discovered During 2026-04-25 Emulator Verification
 
 ### 🐛 Issue #32: Host-key dialog auto-rejects after 60s
-- **Status:** 🔧 FIX APPLIED 2026-04-25 (build OK, awaiting emulator re-verification)
+- **Status:** ✅ VERIFIED FIXED 2026-04-25 (emulator session: see screenshots 53–78)
 - **Priority:** HIGH (security UX)
 - **Impact:** Security-conscious users who pause to compare a 64-hex-char SHA-256 fingerprint against the server will silently lose the connection.
 
@@ -43,7 +43,7 @@ W TabSSH:HostKeyVerifier: User rejected new host key for [10.0.2.2]:2222
 ---
 
 ### 🐛 Issue #33: Duplicate "New Host Key" dialog after Accept & Save
-- **Status:** 🔧 FIX APPLIED 2026-04-25 (build OK, awaiting emulator re-verification)
+- **Status:** ✅ VERIFIED FIXED 2026-04-25 (emulator session: see screenshots 53–78)
 - **Priority:** MEDIUM
 - **Impact:** UX confusion — user accepts a key, then is asked again. Looks like the save failed.
 
@@ -88,7 +88,7 @@ yet the dialog title summary correctly says `ssh-ed25519`. The duplicate dialog 
 ---
 
 ### 🐛 Issue #35: Light-theme low-contrast section labels (near-invisible)
-- **Status:** 🔧 FIX APPLIED 2026-04-25 (build OK, awaiting emulator re-verification)
+- **Status:** ✅ VERIFIED FIXED 2026-04-25 (emulator session: see screenshots 53–78)
 - **Priority:** HIGH (accessibility)
 - **Impact:** Multiple section labels and empty-state text render as very-light-gray on near-white, making them effectively unreadable. Fails WCAG 2.1 AA (4.5:1 contrast). The `themes/ThemeValidator.kt` already enforces this rule for terminal themes — it's not being applied to app chrome.
 
@@ -117,7 +117,7 @@ Not a TabSSH bug — Termux and Termius behave the same way under `adb shell inp
 ---
 
 ### 🐛 Issue #37: Custom keyboard bar — CTL/ALT/FN modifiers don't combine with IME letters
-- **Status:** 🔧 FIX APPLIED 2026-04-25 (build OK, awaiting emulator re-verification)
+- **Status:** ✅ VERIFIED FIXED 2026-04-25 (emulator session: see screenshots 53–78)
 - **Priority:** HIGH (blocks every Ctrl-shortcut workflow: Ctrl-C, Ctrl-D, Ctrl-Z, Ctrl-L, Ctrl-R, screen/tmux prefixes)
 - **Impact:** Effectively no Ctrl-key support on a phone. Users cannot interrupt a command, exit `cat`/`less`, send EOF to a REPL, or use any tmux/screen/emacs shortcut.
 
@@ -140,7 +140,7 @@ Not a TabSSH bug — Termux and Termius behave the same way under `adb shell inp
 ---
 
 ### 🐛 Issue #38: Custom keyboard bar — FN button doesn't reveal F-key row, and may latch input
-- **Status:** 🔧 FIX APPLIED 2026-04-25 (build OK, awaiting emulator re-verification)
+- **Status:** ✅ VERIFIED FIXED 2026-04-25 (emulator session: see screenshots 53–78)
 - **Priority:** MEDIUM
 - **Impact:** No way to send F1–F12 (vim function keys, htop menus, BIOS-style menus over serial console). Worse, after a single FN tap, IME letter input stops reaching SSH until the IME is toggled off and back on.
 
@@ -162,7 +162,7 @@ There is also no visible row change after FN — the same `/ \ | - _ ~ 📋` row
 ---
 
 ### 🐛 Issue #39: Custom bar `⌨` toggle — first tap is a no-op
-- **Status:** 🔧 FIX APPLIED 2026-04-25 (build OK, awaiting emulator re-verification)
+- **Status:** ✅ VERIFIED FIXED 2026-04-25 (emulator session: see screenshots 53–78)
 - **Priority:** LOW (workaround = tap twice)
 - **Impact:** Users tap `⌨` once expecting the IME to appear, see nothing happen, and assume the keyboard is broken.
 
@@ -189,6 +189,76 @@ There is also no visible row change after FN — the same `/ \ | - _ ~ 📋` row
 | KEYCODE_ENTER | Submits commands |
 
 **Untested in this session** (require either a tmux/screen-running server or richer fixtures): PGUP/PGDN scrollback, clipboard paste (could not reliably set Android clipboard from `adb` to verify the tap pasted what was on it). Bar tap registered on both — they just had no observable effect with the test setup.
+
+---
+
+## 🔬 Phase 7.6 — Discovered During 2026-04-25 UI/UX Walkthrough
+
+All seven Phase 7.5 fixes (#32–#39 minus #36 which was a note) were re-verified end-to-end on the Android 14 emulator. New issues surfaced during the broader walkthrough are filed below.
+
+### 🐛 Issue #40: First connection attempt errors with "End of IO Stream Read"
+- **Status:** 🔴 TODO
+- **Priority:** HIGH (every new connection requires user to tap Retry once)
+- **Impact:** First tap on a freshly-saved connection fails with `Session.connect: java.io.IOException: End of IO Stream Read`. SSH server log confirms the password is **accepted** and a session **starts** — the failure is on the client side, post-auth, during shell-channel setup. Tapping Retry succeeds every time.
+
+**Reproduction (verified 2026-04-25):**
+1. Create a new connection with valid creds.
+2. Tap it → host-key dialog → Accept & Save.
+3. Error dialog: "SSH Connection Failed: SSH Error / Session.connect: java.io.IOException: End of IO Stream Read".
+4. sshd log: `Accepted password ... User child is on pid …` — server side is happy.
+5. Tap **Retry** on the error dialog → terminal opens cleanly.
+
+**Hypothesis:** Race during initial channel setup — likely `openChannel("shell")` or its input-stream wiring runs before the JSch session is fully ready, so the first read hits EOF. The Retry path lets enough state settle that channel setup succeeds.
+
+**Files Likely Involved:**
+- `app/src/main/java/io/github/tabssh/ssh/connection/SSHConnection.kt` (post-`session.connect()` shell setup)
+- `app/src/main/java/io/github/tabssh/ssh/session/SSHSessionManager.kt` (channel lifecycle)
+- `app/src/main/java/io/github/tabssh/terminal/TermuxBridge.kt` (input-stream attachment)
+
+**Fix direction:** Make the shell-channel open + stream-attach idempotent and retried inline (e.g., short backoff before the first read). Possibly tied to my #33/#34 fix where `lastHostKeyDecision` is captured — verify the `add()` callback isn't running too late and racing with channel setup.
+
+---
+
+### 🟡 Polish #41: Top-level tabs don't support swipe-between
+- **Status:** 🔴 TODO
+- **Priority:** LOW (tap works fine; swipe would be a mobile-friendlier touch)
+- The `TabLayout` (Frequent / Connections / Identities / Performance / Hypervisors) accepts taps but doesn't pair with a `ViewPager2` so horizontal swipe doesn't switch tabs. Most modern Material apps wire both. Cheap to add.
+
+### 🟡 Polish #42: Toolbar icons in Connections lack tooltips/labels
+- **Status:** 🔴 TODO
+- **Priority:** LOW (a11y / discoverability)
+- The two bar-chart icons + 3-dot overflow in the Connections toolbar give first-time users no signal of what they do. Add `android:tooltipText` and/or `contentDescription`.
+
+### 🟡 Polish #43: Performance "Select connec.." dropdown truncated
+- **Status:** 🔴 TODO
+- **Priority:** LOW
+- The connection-picker on the Performance screen reads `Select connec..` because the spinner has insufficient width. Either widen the spinner, wrap to a second line, or shorten the label to "Select…".
+
+### 🟡 Polish #44: Performance card section labels (CPU Usage / Memory / Disk / etc.) appear faded
+- **Status:** 🔴 TODO
+- **Priority:** LOW (still readable but visually weaker than other section labels)
+- These render as a desaturated blue-gray. Promote them to `?attr/colorOnSurface` (or a stronger weight) so they match the "Connection Details / Authentication / Advanced Settings" treatment on ConnectionEdit.
+
+### 🟡 Polish #45: "Add Hypervisor" empty-state button is low-contrast
+- **Status:** 🔴 TODO
+- **Priority:** LOW
+- Blue text on washed-out blue chip. Promote to a filled primary button to match Identities' "Create Identity" CTA, or align both to outlined.
+
+### 🟡 Polish #46: Identities empty state has TWO "Create" affordances
+- **Status:** 🔴 TODO
+- **Priority:** LOW
+- A centered "Create Identity" button AND the FAB. Pick one (FAB is the persistent shortcut; centered button is the empty-state CTA — together they're redundant). Termius / JuiceSSH convention is empty-state CTA only when the FAB is present and prominent.
+
+### 🐛 Issue #47: TabTerminalActivity traps the system BACK button
+- **Status:** 🔴 TODO
+- **Priority:** MEDIUM (blocks discovery/exit; hurts perceived stability)
+- Hardware/gesture BACK from inside the terminal does nothing — neither dismisses the IME nor returns to MainActivity. The terminal also has no toolbar with a back arrow. Users have to use the system app-switcher or Home + relaunch, which feels broken.
+- Two-step fix: (a) BACK once should hide the IME; BACK again should pop to MainActivity. (b) Add a toolbar with a back arrow and a tab-management menu.
+
+### 🟡 Polish #48: "Quick Connect" and "Performance" drawer icons both look like a triangle
+- **Status:** 🔴 TODO
+- **Priority:** LOW
+- Quick Connect uses ▶ (play). Performance uses 👁 (eye), but at small size it reads as a forward triangle too. Pick a more distinctive icon for Quick Connect — e.g., a lightning bolt ⚡ or a plug.
 
 ---
 

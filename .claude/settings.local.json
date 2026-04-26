@@ -57,7 +57,13 @@
       "Bash(userdel -r tabssh-test)",
       "Bash(gh release *)",
       "Bash(mkdir -p /tmp/walk-test/app/build/outputs/apk/release)",
-      "Read(//tmp/walk-test/app/build/outputs/apk/**)"
+      "Read(//tmp/walk-test/app/build/outputs/apk/**)",
+      "Bash(useradd -m -s /bin/bash tabssh-test)",
+      "Bash(ssh-keygen -t ed25519 -f /tmp/tabssh-android/sshd/host_ed25519_key -N '' -q)",
+      "Bash(ssh-keygen -t rsa -f /tmp/tabssh-android/sshd/host_rsa_key -N '' -q)",
+      "Bash(/tmp/tabssh-android/shot.sh 54-frequent-after-splash)",
+      "Bash(/tmp/tabssh-android/shot.sh 67-list-with-saved *)",
+      "Bash(/tmp/tabssh-android/shot.sh 69-host-key-actual *)"
     ]
   }
 }
