@@ -270,6 +270,46 @@ class ThemeManager(private val context: Context) {
     }
     
     /**
+     * Wave 2.4 — Save a Theme built in the in-app editor (no JSON round-trip).
+     * Caller is responsible for filling all required color slots; we run the
+     * same validator import uses so dud themes don't end up persisted.
+     */
+    suspend fun saveCustomTheme(theme: Theme): ImportThemeResult {
+        return try {
+            val finalTheme = if (theme.id.isBlank() || theme.isBuiltIn) {
+                theme.copy(id = generateThemeId(theme.name), isBuiltIn = false)
+            } else theme
+
+            val validationResult = themeValidator.validateTheme(finalTheme)
+            if (!validationResult.isValid()) {
+                return ImportThemeResult.Error("Theme validation failed: ${validationResult.getIssues()}")
+            }
+
+            val def = ThemeDefinition(
+                themeId = finalTheme.id,
+                name = finalTheme.name,
+                author = finalTheme.author,
+                version = finalTheme.version,
+                isDark = finalTheme.isDark,
+                isBuiltIn = false,
+                backgroundColor = finalTheme.background,
+                foregroundColor = finalTheme.foreground,
+                cursorColor = finalTheme.cursor,
+                selectionColor = finalTheme.selection,
+                ansiColors = Json.encodeToString(kotlinx.serialization.serializer(), finalTheme.ansiColors.toList()),
+                uiColors = encodeUIColors(finalTheme)
+            )
+            database.themeDao().insertTheme(def)
+            loadAvailableThemes()
+            Logger.i("ThemeManager", "Saved custom theme: ${finalTheme.name}")
+            ImportThemeResult.Success(finalTheme)
+        } catch (e: Exception) {
+            Logger.e("ThemeManager", "Failed to save custom theme", e)
+            ImportThemeResult.Error("Save failed: ${e.message}")
+        }
+    }
+
+    /**
      * Export a theme to JSON
      */
     suspend fun exportTheme(themeId: String): String? {

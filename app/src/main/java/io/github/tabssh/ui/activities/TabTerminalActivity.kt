@@ -1671,10 +1671,68 @@ class TabTerminalActivity : AppCompatActivity() {
                 startActivity(Intent(this, TranscriptViewerActivity::class.java))
                 true
             }
+            R.id.action_command_palette -> { showCommandPalette(); true }
+            R.id.action_quick_switcher -> { showQuickSwitcher(); true }
+            R.id.action_broadcast_input -> { showBroadcastTargetsDialog(); true }
             else -> super.onOptionsItemSelected(item)
         }
     }
     
+    /**
+     * Wave 2.7 — Broadcast input across tabs.
+     *
+     * The active tab keeps typing as normal; in addition, every keystroke is
+     * fanned out to the SSH outputStream of each selected target tab.
+     * Implementation: we mutate `termuxBridge.broadcastTargets` on the ACTIVE
+     * tab to the list of (peer-tab outputStreams). When the user switches
+     * tabs we don't currently re-thread the targets — they stay attached to
+     * whichever tab was active when the dialog committed. That's the simple
+     * intended semantic: "I'm typing here, mirror to those".
+     */
+    private val broadcastTargetIds = mutableSetOf<String>()
+
+    private fun showBroadcastTargetsDialog() {
+        val tabs = tabManager.getAllTabs()
+        if (tabs.size < 2) {
+            Toast.makeText(this, "Open at least 2 tabs first", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val active = tabManager.getActiveTab()
+        val others = tabs.filter { it.tabId != active?.tabId }
+        val labels = others.map { it.profile.getDisplayName() }.toTypedArray()
+        val checked = BooleanArray(others.size) { i -> broadcastTargetIds.contains(others[i].tabId) }
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Broadcast input from current tab")
+            .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
+                val tabId = others[which].tabId
+                if (isChecked) broadcastTargetIds.add(tabId) else broadcastTargetIds.remove(tabId)
+            }
+            .setPositiveButton("Apply") { _, _ -> applyBroadcastTargets() }
+            .setNeutralButton("Stop broadcasting") { _, _ ->
+                broadcastTargetIds.clear()
+                applyBroadcastTargets()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun applyBroadcastTargets() {
+        val active = tabManager.getActiveTab() ?: return
+        val targetStreams = tabManager.getAllTabs()
+            .filter { broadcastTargetIds.contains(it.tabId) && it.tabId != active.tabId }
+            .mapNotNull { it.termuxBridge.peerOutputStream() }
+        active.termuxBridge.broadcastTargets = targetStreams
+        // Clear targets on every other tab so we don't accidentally double-broadcast.
+        tabManager.getAllTabs().filter { it.tabId != active.tabId }
+            .forEach { it.termuxBridge.broadcastTargets = emptyList() }
+        if (targetStreams.isEmpty()) {
+            Toast.makeText(this, "Broadcast off", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "Broadcasting to ${targetStreams.size} tab(s)", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun openPortForwarding() {
         val activeTab = tabManager.getActiveTab()
         if (activeTab == null) {
@@ -1749,6 +1807,9 @@ class TabTerminalActivity : AppCompatActivity() {
                     tabManager.switchToTabNumber(tabNumber)
                     return true
                 }
+                // Wave 2.6 — palette / switcher
+                KeyEvent.KEYCODE_K -> { showCommandPalette(); return true }
+                KeyEvent.KEYCODE_J -> { showQuickSwitcher(); return true }
             }
         }
 
@@ -1775,6 +1836,75 @@ class TabTerminalActivity : AppCompatActivity() {
     /**
      * Adjust terminal font size by delta
      */
+    /**
+     * Wave 2.6 — Command palette (Ctrl+K). Lists every navigable destination
+     * + tab/connection actions; fuzzy-filterable from the search box.
+     */
+    private fun showCommandPalette() {
+        val items = mutableListOf<io.github.tabssh.ui.views.PaletteDialog.Item>()
+        items += io.github.tabssh.ui.views.PaletteDialog.Item("Settings", "Open settings") {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
+        items += io.github.tabssh.ui.views.PaletteDialog.Item("Theme Editor", "Create or edit a custom terminal theme") {
+            startActivity(ThemeEditorActivity.createIntent(this))
+        }
+        items += io.github.tabssh.ui.views.PaletteDialog.Item("SSH Keys", "Manage SSH private keys & certificates") {
+            startActivity(Intent(this, KeyManagementActivity::class.java))
+        }
+        items += io.github.tabssh.ui.views.PaletteDialog.Item("Snippets", "Reusable command snippets") {
+            startActivity(Intent(this, SnippetManagerActivity::class.java))
+        }
+        items += io.github.tabssh.ui.views.PaletteDialog.Item("Port Forwarding", "Local / Remote / SOCKS tunnels") {
+            startActivity(Intent(this, PortForwardingActivity::class.java))
+        }
+        items += io.github.tabssh.ui.views.PaletteDialog.Item("Find in scrollback", "Search current tab's history") {
+            showFindDialog()
+        }
+        items += io.github.tabssh.ui.views.PaletteDialog.Item("Close current tab", null) { closeCurrentTab() }
+        items += io.github.tabssh.ui.views.PaletteDialog.Item("Increase font size", "Ctrl+= (or Volume Up)") { adjustFontSize(+2) }
+        items += io.github.tabssh.ui.views.PaletteDialog.Item("Decrease font size", "Ctrl+- (or Volume Down)") { adjustFontSize(-2) }
+        items += io.github.tabssh.ui.views.PaletteDialog.Item("Toggle keyboard", null) { toggleKeyboard() }
+        items += io.github.tabssh.ui.views.PaletteDialog.Item("Paste from clipboard", null) { pasteFromClipboard() }
+        io.github.tabssh.ui.views.PaletteDialog.show(this, "Command Palette", items)
+    }
+
+    /**
+     * Wave 2.6 — Quick switcher (Ctrl+J). Lists open tabs first, then recent
+     * connections — pick one to switch / open.
+     */
+    private fun showQuickSwitcher() {
+        val items = mutableListOf<io.github.tabssh.ui.views.PaletteDialog.Item>()
+        // Open tabs
+        tabManager.getAllTabs().forEachIndexed { index, tab ->
+            items += io.github.tabssh.ui.views.PaletteDialog.Item(
+                "Tab ${index + 1}: ${tab.profile.getDisplayName()}",
+                "Open · ${tab.connectionState.value}"
+            ) { tabManager.switchToTabNumber(index + 1) }
+        }
+        // Recent connections (top 20 most-used)
+        lifecycleScope.launch {
+            try {
+                val recent = app.database.connectionDao().getFrequentlyUsedConnections(20)
+                runOnUiThread {
+                    recent.forEach { profile ->
+                        items += io.github.tabssh.ui.views.PaletteDialog.Item(
+                            profile.getDisplayName(),
+                            "Connect · ${profile.username}@${profile.host}:${profile.port}"
+                        ) {
+                            lifecycleScope.launch { connectToProfile(profile) }
+                        }
+                    }
+                    io.github.tabssh.ui.views.PaletteDialog.show(this@TabTerminalActivity, "Quick Switcher", items)
+                }
+            } catch (e: Exception) {
+                Logger.e("TabTerminalActivity", "Failed to load recent connections for switcher", e)
+                runOnUiThread {
+                    io.github.tabssh.ui.views.PaletteDialog.show(this@TabTerminalActivity, "Quick Switcher", items)
+                }
+            }
+        }
+    }
+
     private fun adjustFontSize(delta: Int) {
         val view = getActiveTerminalView()
         view?.let {
