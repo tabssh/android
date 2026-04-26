@@ -652,20 +652,33 @@ class SSHConnection(
                 try {
                     Logger.d("SSHConnection", "Auth: JSch bytes retrieved, size=${jschBytes.size} bytes")
 
-                    // JSch byte array method has bugs on Linux - use temp file instead
+                    // Wave 2.2 — if an OpenSSH user certificate is attached to this
+                    // key, use the byte-array variant of addIdentity so we can pass
+                    // the cert as the public-key portion. Server validates against
+                    // the CA-signed cert instead of the bare key.
+                    val storedKeyForCert = app?.database?.keyDao()?.getKeyById(effectiveKeyId)
+                    val cert = storedKeyForCert?.certificate?.takeIf { it.isNotBlank() }
+                    if (cert != null) {
+                        jsch.addIdentity(
+                            "tabssh-$effectiveKeyId",
+                            jschBytes,
+                            cert.toByteArray(Charsets.US_ASCII),
+                            cachedPassphrase?.toByteArray()
+                        )
+                        Logger.i("SSHConnection", "Auth: SSH key + certificate added to JSch (keyId=$effectiveKeyId, cert=${cert.length} bytes)")
+                        return@withContext
+                    }
+
+                    // No cert — preserve existing temp-file path (byte-array variant has Linux quirks).
                     val tempKeyFile = java.io.File(context.cacheDir, "temp_key_$effectiveKeyId")
                     try {
                         tempKeyFile.writeBytes(jschBytes)
                         Logger.d("SSHConnection", "Auth: Wrote key to temp file: ${tempKeyFile.absolutePath}")
 
-                        // Use file path method (more reliable than byte array)
                         jsch.addIdentity(tempKeyFile.absolutePath, cachedPassphrase?.toByteArray())
                         Logger.i("SSHConnection", "Auth: SSH key added to JSch from file (keyId=$effectiveKeyId)")
-
-                        // Don't return early - let JSch try key first, then fallback to password if configured
                         return@withContext
                     } finally {
-                        // Clean up temp file
                         tempKeyFile.delete()
                         Logger.d("SSHConnection", "Auth: Temp key file deleted")
                     }

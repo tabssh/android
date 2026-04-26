@@ -39,6 +39,16 @@ data class StoredKey(
     @ColumnInfo(name = "key_size")
     val keySize: Int? = null,
 
+    /**
+     * Wave 2.2 — OpenSSH user certificate. Full single-line `*-cert.pub`
+     * content, e.g. `ssh-rsa-cert-v01@openssh.com AAAA…  user@host`. When
+     * present we pass it to JSch's `addIdentity(name, prvkey, pubkey, …)` as
+     * the public-key portion so the server validates against the CA-signed
+     * cert instead of the bare key. Null = use bare key (existing behaviour).
+     */
+    @ColumnInfo(name = "certificate")
+    val certificate: String? = null,
+
     // Sync metadata fields
     @ColumnInfo(name = "last_synced_at")
     val lastSyncedAt: Long = 0,

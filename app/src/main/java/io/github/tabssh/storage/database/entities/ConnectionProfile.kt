@@ -28,6 +28,14 @@ data class ConnectionProfile(
     @ColumnInfo(name = "username")
     val username: String,
     
+    /**
+     * Wave 2.3 — protocol. "ssh" (default) or "telnet". Telnet skips key/
+     * password auth entirely and just opens a TCP connection; auth happens
+     * interactively at the remote prompt.
+     */
+    @ColumnInfo(name = "protocol")
+    val protocol: String = "ssh",
+
     @ColumnInfo(name = "auth_type")
     val authType: String = AuthType.PASSWORD.name,
     

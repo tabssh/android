@@ -26,7 +26,7 @@ import io.github.tabssh.utils.logging.Logger
         AuditLogEntry::class,
         HypervisorProfile::class
     ],
-    version = 18,
+    version = 20,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -290,7 +290,9 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     MIGRATION_14_15,
                     MIGRATION_15_16,
                     MIGRATION_16_17,
-                    MIGRATION_17_18
+                    MIGRATION_17_18,
+                    MIGRATION_18_19,
+                    MIGRATION_19_20
                 )
                 .build()
                 INSTANCE = instance
@@ -474,5 +476,27 @@ data class DatabaseStats(
                 database.execSQL("ALTER TABLE connections ADD COLUMN env_vars TEXT")
                 database.execSQL("ALTER TABLE connections ADD COLUMN agent_forwarding INTEGER NOT NULL DEFAULT 0")
                 Logger.i("Database", "Migration 17->18: Added env_vars + agent_forwarding to connections")
+            }
+        }
+
+        /**
+         * v18 → v19 — Wave 2.2 SSH certificate auth.
+         * - certificate: OpenSSH user cert (full *-cert.pub line). Optional.
+         */
+        val MIGRATION_18_19 = object : Migration(18, 19) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE stored_keys ADD COLUMN certificate TEXT")
+                Logger.i("Database", "Migration 18->19: Added certificate to stored_keys")
+            }
+        }
+
+        /**
+         * v19 → v20 — Wave 2.3 Telnet protocol.
+         * - protocol: "ssh" (default) or "telnet" on connections.
+         */
+        val MIGRATION_19_20 = object : Migration(19, 20) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE connections ADD COLUMN protocol TEXT NOT NULL DEFAULT 'ssh'")
+                Logger.i("Database", "Migration 19->20: Added protocol to connections")
             }
         }

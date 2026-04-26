@@ -485,6 +485,9 @@ class ConnectionEditActivity : AppCompatActivity() {
         profile.envVars?.let { binding.editEnvVars.setText(it) }
         binding.switchAgentForwarding.isChecked = profile.agentForwarding
 
+        // Wave 2.3: protocol selector
+        binding.spinnerProtocol.setSelection(if (profile.protocol.equals("telnet", true)) 1 else 0)
+
         // Proxy/Jump Host settings
         val proxyTypes = listOf("None", "HTTP", "SOCKS4", "SOCKS5", "SSH Jump Host")
         val proxyType = profile.proxyType ?: "None"
@@ -635,6 +638,8 @@ class ConnectionEditActivity : AppCompatActivity() {
         val postConnectScript = binding.editPostConnectScript.text.toString().takeIf { it.isNotBlank() }
         val envVars = binding.editEnvVars.text.toString().takeIf { it.isNotBlank() }
         val agentForwarding = binding.switchAgentForwarding.isChecked
+        // Wave 2.3: protocol selector
+        val protocol = if (binding.spinnerProtocol.selectedItemPosition == 1) "telnet" else "ssh"
 
         // Proxy/Jump Host settings
         val proxyTypeDisplay = binding.spinnerProxyType.text.toString()
@@ -674,6 +679,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             host = host,
             port = port,
             username = username,
+            protocol = protocol,
             authType = authType.name,
             keyId = keyId,
             identityId = selectedIdentityId,
@@ -701,6 +707,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             host = host,
             port = port,
             username = username,
+            protocol = protocol,
             authType = authType.name,
             keyId = keyId,
             identityId = selectedIdentityId,

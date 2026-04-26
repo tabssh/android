@@ -66,31 +66,65 @@ data class Snippet(
     }
 
     /**
-     * Check if snippet contains variables (placeholders)
-     * Variables are in the format {variable_name}
+     * Check if snippet contains variables (placeholders).
+     * Supported syntaxes:
+     *   {name}                 — basic placeholder
+     *   {?name}                — prompt-style (semantically identical at substitution)
+     *   {?name:default}        — prompt with default value pre-filled
+     *   {?name|hint}           — prompt with hint text
+     *   {?name:default|hint}   — prompt with default + hint
      */
     fun hasVariables(): Boolean {
-        return command.contains(Regex("\\{[^}]+\\}"))
+        return command.contains(Regex("\\{[?]?[^}]+\\}"))
     }
 
-    /**
-     * Get list of variable names in the command
-     */
+    /** Get distinct variable names in source order (preserves backward compat). */
     fun getVariables(): List<String> {
-        val regex = Regex("\\{([^}]+)\\}")
-        return regex.findAll(command).map { it.groupValues[1] }.toList()
+        return getVariableSpecs().map { it.name }.distinct()
     }
 
     /**
-     * Replace variables with provided values
-     * @param values Map of variable name to value
-     * @return Command with variables replaced
+     * Wave 2.1 — rich variable specs with optional default + hint.
+     * Distinct by name (first occurrence wins for default/hint).
+     */
+    fun getVariableSpecs(): List<VarSpec> {
+        // Match either {?name…} OR {name}. Capture groups:
+        //   1 = leading '?' (prompt-style marker, optional)
+        //   2 = name
+        //   3 = default (optional, after ':')
+        //   4 = hint    (optional, after '|')
+        val re = Regex("""\{(\?)?([^}:|]+)(?::([^}|]*))?(?:\|([^}]*))?\}""")
+        val seen = linkedMapOf<String, VarSpec>()
+        for (m in re.findAll(command)) {
+            val name = m.groupValues[2].trim()
+            if (name.isEmpty()) continue
+            if (seen.containsKey(name)) continue
+            seen[name] = VarSpec(
+                name = name,
+                default = m.groupValues[3].takeIf { it.isNotEmpty() },
+                hint = m.groupValues[4].takeIf { it.isNotEmpty() },
+                prompt = m.groupValues[1] == "?"
+            )
+        }
+        return seen.values.toList()
+    }
+
+    /**
+     * Replace variables with provided values. Handles both `{name}` and any
+     * `{?name…}` form (default/hint suffixes are stripped at substitution).
      */
     fun applyVariables(values: Map<String, String>): String {
-        var result = command
-        values.forEach { (key, value) ->
-            result = result.replace("{$key}", value)
+        val re = Regex("""\{(\?)?([^}:|]+)(?::([^}|]*))?(?:\|([^}]*))?\}""")
+        return re.replace(command) { m ->
+            val name = m.groupValues[2].trim()
+            values[name] ?: m.groupValues[3] // fall back to declared default
         }
-        return result
     }
+
+    data class VarSpec(
+        val name: String,
+        val default: String? = null,
+        val hint: String? = null,
+        val prompt: Boolean = false
+    )
 }

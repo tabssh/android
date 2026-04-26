@@ -1199,10 +1199,16 @@ class TabTerminalActivity : AppCompatActivity() {
                 }
             }
 
+            // Wave 2.3 — Telnet branch (no auth, no JSch).
+            if (profile.protocol.equals("telnet", ignoreCase = true)) {
+                connectTelnetProfile(profile)
+                return
+            }
+
             // Create SSH connection
             Logger.d("TabTerminalActivity", "Creating SSH connection via SSHSessionManager")
             val sshConnection = app.sshSessionManager.connectToServer(profile)
-            
+
             if (sshConnection != null) {
                 Logger.i("TabTerminalActivity", "SSH connection established, creating tab")
                 
@@ -1345,6 +1351,43 @@ class TabTerminalActivity : AppCompatActivity() {
         }
     }
     
+    /**
+     * Wave 2.3 — Telnet connect path (no JSch, no auth).
+     */
+    private suspend fun connectTelnetProfile(profile: ConnectionProfile) {
+        Logger.i("TabTerminalActivity", "Telnet connect to ${profile.getDisplayName()}")
+        val telnet = io.github.tabssh.ssh.connection.TelnetConnection(profile.host, profile.port.takeIf { it > 0 } ?: 23)
+
+        val cursorStyle = app.preferencesManager.getCursorStyleInt()
+        val tab = tabManager.createTab(profile, cursorStyle)
+        if (tab == null) {
+            Logger.e("TabTerminalActivity", "Failed to create tab for ${profile.getDisplayName()}")
+            showError("Failed to create terminal tab", "Error")
+            finish()
+            return
+        }
+        kotlinx.coroutines.delay(200) // wait for UI attach
+
+        val ok = tab.connect(telnet)
+        if (ok) {
+            showToast("Connected (telnet) to ${profile.getDisplayName()}")
+            try {
+                app.database.connectionDao().updateLastConnected(profile.id)
+            } catch (e: Exception) {
+                Logger.e("TabTerminalActivity", "Failed to update telnet connection stats", e)
+            }
+            io.github.tabssh.utils.NotificationHelper.showConnectionSuccess(
+                this, profile.getDisplayName(), profile.username, profile.id
+            )
+        } else {
+            showError("Telnet connection to ${profile.host}:${profile.port} failed", "Connection Error")
+            io.github.tabssh.utils.NotificationHelper.showConnectionError(
+                this, profile.getDisplayName(), "Telnet connect failed"
+            )
+            finish()
+        }
+    }
+
     private fun addTabToUI(tab: SSHTab) {
         if (swipeEnabled) {
             // Rebuild ViewPager2 adapter with updated tabs
@@ -1902,29 +1945,41 @@ class TabTerminalActivity : AppCompatActivity() {
     }
 
     /**
-     * Show dialog to fill in snippet variables
+     * Wave 2.1 — Show dialog to fill snippet variables. Honours `{?name:default|hint}`
+     * declared defaults and hints, and recalls the last value used for each
+     * variable name (per snippet) from SharedPreferences so users don't retype
+     * the same hostnames / paths over and over.
      */
     private fun showVariablesDialog(snippet: io.github.tabssh.storage.database.entities.Snippet) {
-        val variables = snippet.getVariables()
-        val values = mutableMapOf<String, String>()
+        val specs = snippet.getVariableSpecs()
+        if (specs.isEmpty()) {
+            getActiveTerminalView()?.sendText(snippet.command)
+            return
+        }
+        val recallPrefs = getSharedPreferences("snippet_var_recall", android.content.Context.MODE_PRIVATE)
         val inputs = mutableListOf<android.widget.EditText>()
 
-        // Create linear layout with inputs for each variable
         val layout = android.widget.LinearLayout(this).apply {
             orientation = android.widget.LinearLayout.VERTICAL
             setPadding(50, 20, 50, 20)
         }
 
-        variables.forEach { varName ->
+        specs.forEach { spec ->
             val label = android.widget.TextView(this).apply {
-                text = varName
+                text = spec.name
                 textSize = 14f
             }
             val input = android.widget.EditText(this).apply {
-                hint = "Enter value for $varName"
+                hint = spec.hint ?: "Enter value for ${spec.name}"
+                // Pre-fill: last-used > declared default > blank
+                val recall = recallPrefs.getString("${snippet.id}/${spec.name}", null)
+                val initial = recall ?: spec.default
+                if (!initial.isNullOrEmpty()) {
+                    setText(initial)
+                    setSelection(text.length)
+                }
             }
             inputs.add(input)
-
             layout.addView(label)
             layout.addView(input)
         }
@@ -1933,20 +1988,19 @@ class TabTerminalActivity : AppCompatActivity() {
             .setTitle("Fill Variables")
             .setView(layout)
             .setPositiveButton("Insert") { _, _ ->
-                // Collect values
-                variables.forEachIndexed { index, varName ->
-                    values[varName] = inputs[index].text.toString()
+                val values = mutableMapOf<String, String>()
+                val recallEdits = recallPrefs.edit()
+                specs.forEachIndexed { i, spec ->
+                    val v = inputs[i].text.toString()
+                    values[spec.name] = v
+                    if (v.isNotBlank()) recallEdits.putString("${snippet.id}/${spec.name}", v)
                 }
+                recallEdits.apply()
 
-                // Apply variables and insert
-                val command = snippet.applyVariables(values)
-                getActiveTerminalView()?.sendText(command)
-
-                // Increment usage count
+                getActiveTerminalView()?.sendText(snippet.applyVariables(values))
                 lifecycleScope.launch {
                     app.database.snippetDao().incrementUsageCount(snippet.id)
                 }
-
                 Logger.d("TabTerminalActivity", "Inserted snippet with variables: ${snippet.name}")
             }
             .setNegativeButton("Cancel", null)

@@ -34,6 +34,10 @@ class SSHTab(
     // Connection (public for gesture command sending)
     var connection: SSHConnection? = null
 
+    // Wave 2.3 — telnet alternative. Only one of `connection` / `telnetConnection`
+    // is set; gesture command sending and clean disconnect both check both.
+    var telnetConnection: io.github.tabssh.ssh.connection.TelnetConnection? = null
+
     // Tab state
     // Default title format: user@host (shows connection info)
     private val _title = MutableStateFlow(generateDefaultTitle())
@@ -221,6 +225,38 @@ class SSHTab(
     }
 
     /**
+     * Wave 2.3 — Connect this tab to a Telnet backend.
+     * Telnet has no separate "shell channel"; we wire its filtered streams
+     * directly into TermuxBridge and drive state manually (Telnet has no
+     * fine-grained CONNECTED/AUTHENTICATING phases — it's just connected).
+     */
+    suspend fun connect(telnet: io.github.tabssh.ssh.connection.TelnetConnection): Boolean {
+        return try {
+            Logger.i("SSHTab", "=== CONNECTING TELNET TAB for ${profile.getDisplayName()} ===")
+            telnetConnection = telnet
+            _connectionState.value = ConnectionState.CONNECTING
+            val ok = telnet.connect()
+            if (!ok) {
+                _connectionState.value = ConnectionState.ERROR
+                _hasError.value = true
+                return false
+            }
+            termuxBridge.connect(telnet.inputStream, telnet.outputStream)
+            _connectionState.value = ConnectionState.CONNECTED
+            updateTitleWithStatus(ConnectionState.CONNECTED)
+            // Push initial NAWS using the bridge's current size.
+            telnet.setWindowSize(termuxBridge.getCols(), termuxBridge.getRows())
+            Logger.i("SSHTab", "=== TELNET TAB WIRED for ${profile.getDisplayName()} ===")
+            true
+        } catch (e: Exception) {
+            Logger.e("SSHTab", "ERROR connecting telnet tab ${profile.getDisplayName()}", e)
+            _hasError.value = true
+            _connectionState.value = ConnectionState.ERROR
+            false
+        }
+    }
+
+    /**
      * Disconnect this tab
      */
     fun disconnect() {
@@ -228,6 +264,8 @@ class SSHTab(
 
         termuxBridge.disconnect()
         connection = null
+        try { telnetConnection?.disconnect() } catch (_: Exception) {}
+        telnetConnection = null
         _connectionState.value = ConnectionState.DISCONNECTED
     }
 
