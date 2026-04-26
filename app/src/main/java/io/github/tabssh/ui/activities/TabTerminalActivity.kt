@@ -1677,6 +1677,8 @@ class TabTerminalActivity : AppCompatActivity() {
             R.id.action_save_workspace -> { showSaveWorkspaceDialog(); true }
             R.id.action_open_workspace -> { showOpenWorkspaceDialog(); true }
             R.id.action_history_palette -> { showHistoryPalette(); true }
+            R.id.action_split_bottom -> { showSplitConnectionPicker(); true }
+            R.id.action_unsplit -> { closeSplitPane(); true }
             else -> super.onOptionsItemSelected(item)
         }
     }
@@ -1906,6 +1908,127 @@ class TabTerminalActivity : AppCompatActivity() {
             .show()
     }
 
+    /**
+     * Wave 2.8 — Minimal split view. One bottom pane per tab; the pane is its
+     * own SSHTab (NOT in tabManager) anchored to the activity. Tap a pane to
+     * focus; getActiveTerminalView() routes keystrokes accordingly. Closing
+     * the pane disconnects its SSH session and hides the layout slot.
+     *
+     * What this is NOT: nested splits, horizontal split, multi-pane grids,
+     * pane resize. The use case is "tail logs in the bottom while typing
+     * commands in the top" on a phone — anything richer is a tablet
+     * problem and not in scope yet.
+     */
+    private var splitTab: SSHTab? = null
+    private var bottomTerminalView: TerminalView? = null
+    private var bottomPaneFocused: Boolean = false
+
+    private fun showSplitConnectionPicker() {
+        if (splitTab != null) {
+            Toast.makeText(this, "Already split — close the bottom pane first", Toast.LENGTH_SHORT).show()
+            return
+        }
+        lifecycleScope.launch {
+            val recent = try {
+                app.database.connectionDao().getFrequentlyUsedConnections(20)
+            } catch (e: Exception) {
+                Logger.e("TabTerminalActivity", "Recent fetch failed for split picker", e)
+                emptyList()
+            }
+            runOnUiThread {
+                if (recent.isEmpty()) {
+                    Toast.makeText(this@TabTerminalActivity, "No saved connections", Toast.LENGTH_SHORT).show()
+                    return@runOnUiThread
+                }
+                val labels = recent.map { it.getDisplayName() }.toTypedArray()
+                androidx.appcompat.app.AlertDialog.Builder(this@TabTerminalActivity)
+                    .setTitle("Split — open in bottom pane")
+                    .setItems(labels) { _, which -> openSplitWithProfile(recent[which]) }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+        }
+    }
+
+    private fun openSplitWithProfile(profile: ConnectionProfile) {
+        val pane = findViewById<android.widget.FrameLayout>(R.id.split_bottom_pane)
+        val term = findViewById<TerminalView>(R.id.split_bottom_terminal)
+        bottomTerminalView = term
+        pane.visibility = View.VISIBLE
+        // Tap-to-focus indicator: simple border swap.
+        pane.setOnClickListener { setBottomPaneFocused(true) }
+        term.setOnClickListener { setBottomPaneFocused(true) }
+        // Tap on top FrameLayout (parent of viewPager / classic terminalView) to refocus top.
+        findViewById<View>(R.id.view_pager)?.setOnClickListener { setBottomPaneFocused(false) }
+        terminalView?.setOnClickListener { setBottomPaneFocused(false) }
+
+        lifecycleScope.launch {
+            val ssh = if (profile.protocol.equals("telnet", ignoreCase = true)) null
+                else app.sshSessionManager.connectToServer(profile)
+            // Telnet branch (separate path)
+            if (profile.protocol.equals("telnet", ignoreCase = true)) {
+                val telnet = io.github.tabssh.ssh.connection.TelnetConnection(profile.host, profile.port.takeIf { it > 0 } ?: 23)
+                val newTab = SSHTab(profile, io.github.tabssh.terminal.TermuxBridge())
+                term.attachTerminalEmulator(newTab.termuxBridge)
+                kotlinx.coroutines.delay(150)
+                if (newTab.connect(telnet)) {
+                    splitTab = newTab
+                    runOnUiThread { Toast.makeText(this@TabTerminalActivity, "Split (telnet) ready", Toast.LENGTH_SHORT).show() }
+                } else {
+                    runOnUiThread {
+                        pane.visibility = View.GONE
+                        Toast.makeText(this@TabTerminalActivity, "Split telnet failed", Toast.LENGTH_LONG).show()
+                    }
+                }
+                return@launch
+            }
+            if (ssh == null) {
+                runOnUiThread {
+                    pane.visibility = View.GONE
+                    Toast.makeText(this@TabTerminalActivity, "Split SSH connect failed", Toast.LENGTH_LONG).show()
+                }
+                return@launch
+            }
+            val newTab = SSHTab(profile, io.github.tabssh.terminal.TermuxBridge())
+            term.attachTerminalEmulator(newTab.termuxBridge)
+            kotlinx.coroutines.delay(150)
+            if (newTab.connect(ssh)) {
+                splitTab = newTab
+                runOnUiThread {
+                    Toast.makeText(this@TabTerminalActivity, "Split: ${profile.getDisplayName()}", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                runOnUiThread {
+                    pane.visibility = View.GONE
+                    Toast.makeText(this@TabTerminalActivity, "Split SSH wire failed", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    private fun closeSplitPane() {
+        val tab = splitTab
+        if (tab == null) {
+            Toast.makeText(this, "No split pane", Toast.LENGTH_SHORT).show()
+            return
+        }
+        try { tab.disconnect() } catch (e: Exception) { Logger.w("TabTerminalActivity", "Split tab disconnect: ${e.message}") }
+        splitTab = null
+        bottomTerminalView = null
+        bottomPaneFocused = false
+        findViewById<View>(R.id.split_bottom_pane).visibility = View.GONE
+        Toast.makeText(this, "Split pane closed", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun setBottomPaneFocused(focus: Boolean) {
+        if (focus && splitTab == null) return
+        bottomPaneFocused = focus
+        // No theme-aware tinting yet — just announce so user notices.
+        if (focus) {
+            Toast.makeText(this, "Bottom pane focused", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun openPortForwarding() {
         val activeTab = tabManager.getActiveTab()
         if (activeTab == null) {
@@ -1997,6 +2120,9 @@ class TabTerminalActivity : AppCompatActivity() {
      * Get the currently active terminal view (works in both classic and swipe modes)
      */
     private fun getActiveTerminalView(): TerminalView? {
+        // Wave 2.8 — split takes precedence: if user has tapped the bottom pane
+        // we route input there, regardless of which top tab is selected.
+        if (bottomPaneFocused && bottomTerminalView != null) return bottomTerminalView
         return if (swipeEnabled) {
             // Get the currently visible page in ViewPager2
             val currentItem = viewPager?.currentItem ?: return null
