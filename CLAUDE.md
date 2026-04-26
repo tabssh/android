@@ -41,7 +41,7 @@
 - ✅ **166 Kotlin source files** (~25,000+ lines of code)
 - ✅ **0 compilation errors** (verified: 2026-02-26)
 - ✅ **5 APK variants** built: `tabssh-{arch}.apk` (28MB each)
-- ✅ **Database Version 12** - All migrations complete
+- ✅ **Database Version 17** - All migrations complete (v1 → v17)
 - 📦 **APKs Ready for Testing** - Located in `./binaries/`
 - ✅ **Complete Settings UI** - All preferences functional
 - ✅ **Universal Cloud Sync** - SAF-based, works with any storage provider (Google Drive, Dropbox, OneDrive, Nextcloud, local storage)
@@ -564,10 +564,10 @@ Examples:
 - minSdk: 21 (Android 5.0 - covers 99%+ devices)
 - targetSdk: 34
 - versionCode: 1
-- versionName: "1.1.0" (updated for sync feature)
+- versionName: "1.0.0"
 - Java: 17
 - Kotlin JVM Target: 17
-- Database Version: 2 (migrated from v1)
+- Database Version: 17 (16 migrations from v1; see AI.md §8.4 for the full table)
 
 **Build Types:**
 - `debug` - Development builds with debugging enabled
@@ -583,8 +583,8 @@ Examples:
 ## Key Dependencies
 
 ### SSH & Security
-- **JSch 0.1.55** - Pure Java SSH implementation
-- **BouncyCastle 1.77** - Cryptography library for SSH key parsing (NEW)
+- **JSch (mwiede fork) 2.27.7** - Actively maintained JSch fork; supports rsa-sha2-256/512 required by OpenSSH 8.8+ (`com.github.mwiede:jsch:2.27.7`)
+- **BouncyCastle 1.77** - Cryptography library for SSH key parsing
 - **AndroidX Security Crypto 1.1.0-alpha06** - Hardware-backed encryption
 - **AndroidX Biometric 1.1.0** - Biometric authentication
 
@@ -1179,7 +1179,7 @@ make release
 **Build Status:**
 - ✅ Compilation: SUCCESS (0 errors, 26 warnings)
 - ⏱️ Build Time: 7m 54s
-- 📦 Database Version: 11 (added use_mosh field)
+- 📦 Database Version: 17 (current; v11 added use_mosh)
 - 🏆 Phase 6: 100% COMPLETE ⭐
 
 **Total Implementation:**
@@ -2381,7 +2381,7 @@ adb uninstall com.tabssh
 - **Kotlin Files:** 155
 - **Lines of Code:** ~25,000+
 - **Packages:** 22+
-- **Database Version:** 11
+- **Database Version:** 17
 - **Test Coverage:** Manual testing complete
 
 ---
@@ -2536,7 +2536,7 @@ adb uninstall com.tabssh
 - **Packages:** 24 main packages (added: sync/*, crypto/ssh)
 - **Classes/Objects:** ~130+
 - **Compilation Status:** ✅ 0 errors (Gradle 8.11.1, Kotlin 2.0.21)
-- **Database Version:** v2 (migrated from v1 with sync metadata fields)
+- **Database Version:** v17 (16 migrations from v1; see AI.md §8.4)
 
 ### Build Artifacts
 - **APK Size:** 31MB per variant

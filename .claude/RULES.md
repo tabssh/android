@@ -82,7 +82,7 @@ fun connectToServer(profile: ConnectionProfile, timeout: Long = 30000L): Boolean
 ## File Locations
 
 - **TODO file:** `TODO.AI.md` (project root) - Issue tracking
-- **Plan file:** `PLAN.md` (project root) - Implementation details
+- **Architecture spec:** `AI.md` (project root) - Code-grounded technical spec
 - **Commit message:** `.git/COMMIT_MESS`
 - **Rules file:** `.claude/RULES.md` (this file)
 - **Version file:** `release.txt` (DO NOT MODIFY)
@@ -90,4 +90,4 @@ fun connectToServer(profile: ConnectionProfile, timeout: Long = 30000L): Boolean
 
 ---
 
-*Last Updated: 2026-02-11*
+*Last Updated: 2026-04-25 (PLAN.md removed; AI.md is now the authoritative architectural reference)*

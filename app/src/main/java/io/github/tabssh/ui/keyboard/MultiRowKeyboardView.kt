@@ -2,14 +2,18 @@ package io.github.tabssh.ui.keyboard
 
 import android.content.Context
 import android.util.AttributeSet
-import android.view.LayoutInflater
 import android.widget.LinearLayout
-import io.github.tabssh.R
 import io.github.tabssh.utils.logging.Logger
 
 /**
  * Multi-row customizable keyboard for SSH terminal
- * Supports 1-5 rows (default 3), each row is independently scrollable and customizable
+ * Supports 1-5 rows (default 3), each row is independently scrollable.
+ *
+ * Owns the sticky CTL/ALT modifier state and FN-row swap so that:
+ *  - tapping a modifier reflects on every visible row
+ *  - the activity (and thus the terminal) sees a single source of truth via
+ *    [setOnModifierChangedListener]
+ *  - tapping FN swaps the layout to F1-F12 + Back, restoring on second tap.
  */
 class MultiRowKeyboardView @JvmOverloads constructor(
     context: Context,
@@ -20,7 +24,17 @@ class MultiRowKeyboardView @JvmOverloads constructor(
     private val keyboardRows = mutableListOf<KeyboardRowView>()
     private var onKeyClickListener: ((KeyboardKey) -> Unit)? = null
     private var onToggleClickListener: (() -> Unit)? = null
+    private var onModifierChangedListener: ((String?) -> Unit)? = null
     private var numberOfRows = DEFAULT_ROWS
+
+    /** Currently latched modifier ("CTL", "ALT") or null. FN is handled via row swap. */
+    private var currentModifier: String? = null
+
+    /** Whether the FN row swap is currently active. */
+    private var fnMode = false
+
+    /** Saved layout to restore when FN is toggled off. */
+    private var savedLayout: List<List<KeyboardKey>>? = null
 
     init {
         orientation = VERTICAL
@@ -96,19 +110,13 @@ class MultiRowKeyboardView @JvmOverloads constructor(
 
         for (i in 0 until numberOfRows) {
             val row = KeyboardRowView(context)
-            // Don't override layoutParams - KeyboardRowView init sets proper 42dp height
-            // Using WRAP_CONTENT causes height to collapse to 0 when row is empty
-            row.setOnKeyClickListener { key ->
-                Logger.d(TAG, "Key clicked: ${key.label} (${key.keySequence})")
-                onKeyClickListener?.invoke(key)
-            }
+            row.setOnKeyClickListener { key -> handleRowKey(key) }
             row.setOnToggleClickListener { onToggleClickListener?.invoke() }
             keyboardRows.add(row)
             addView(row)
-            Logger.d(TAG, "Added row $i with layoutParams: ${row.layoutParams?.width}x${row.layoutParams?.height}")
         }
 
-        Logger.d(TAG, "Rebuilt ${keyboardRows.size} rows, total children: $childCount")
+        applyModifierHighlight()
     }
 
     /**
@@ -116,14 +124,108 @@ class MultiRowKeyboardView @JvmOverloads constructor(
      */
     private fun applyDefaultKeys() {
         val defaultLayouts = getDefaultRowLayouts(numberOfRows)
-        Logger.d(TAG, "Applying default keys: ${defaultLayouts.size} rows")
         defaultLayouts.forEachIndexed { index, keys ->
             if (index < keyboardRows.size) {
-                Logger.d(TAG, "Row $index: setting ${keys.size} keys")
                 keyboardRows[index].setKeys(keys)
             }
         }
-        Logger.d(TAG, "Default keys applied")
+        applyModifierHighlight()
+    }
+
+    /**
+     * Single funnel for every key click coming from any row.
+     */
+    private fun handleRowKey(key: KeyboardKey) {
+        when (key.category) {
+            KeyboardKey.KeyCategory.MODIFIER -> handleModifierTap(key)
+            else -> {
+                // The activity is responsible for the modifier-aware sending.
+                // We just emit the raw key plus the current modifier state.
+                onKeyClickListener?.invoke(key)
+                // CTL/ALT are one-shot — clear after the first non-modifier key.
+                if (currentModifier != null) {
+                    setCurrentModifier(null)
+                }
+            }
+        }
+    }
+
+    /**
+     * Handle a modifier key tap. CTL/ALT toggle the sticky state; FN swaps the
+     * row layout to expose F1-F12.
+     */
+    private fun handleModifierTap(key: KeyboardKey) {
+        when (key.id) {
+            "FN" -> {
+                if (fnMode) restoreFromFn() else enterFnMode()
+            }
+            "CTL", "ALT" -> {
+                val newMod = if (currentModifier == key.id) null else key.id
+                setCurrentModifier(newMod)
+            }
+        }
+    }
+
+    private fun setCurrentModifier(modifier: String?) {
+        if (currentModifier == modifier) return
+        currentModifier = modifier
+        applyModifierHighlight()
+        onModifierChangedListener?.invoke(modifier)
+    }
+
+    private fun applyModifierHighlight() {
+        keyboardRows.forEach { it.highlightModifier(currentModifier) }
+    }
+
+    /**
+     * Replace current rows with an F1-F12 + Back layout.
+     */
+    private fun enterFnMode() {
+        if (fnMode) return
+        fnMode = true
+        savedLayout = getLayout()
+
+        // Use the FN key itself as the back button so a second tap exits via
+        // the existing modifier handler (no extra plumbing needed).
+        val backKey = KeyboardKey("FN", "← Back", "", KeyboardKey.KeyCategory.MODIFIER)
+        val fnRow1 = listOf(
+            backKey,
+            KeyboardKey("F1", "F1", "\u001BOP", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F2", "F2", "\u001BOQ", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F3", "F3", "\u001BOR", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F4", "F4", "\u001BOS", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F5", "F5", "\u001B[15~", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F6", "F6", "\u001B[17~", KeyboardKey.KeyCategory.FUNCTION),
+        )
+        val fnRow2 = listOf(
+            KeyboardKey("F7", "F7", "\u001B[18~", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F8", "F8", "\u001B[19~", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F9", "F9", "\u001B[20~", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F10", "F10", "\u001B[21~", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F11", "F11", "\u001B[23~", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F12", "F12", "\u001B[24~", KeyboardKey.KeyCategory.FUNCTION),
+        )
+
+        // Show first two rows of F-keys, blank any extras.
+        keyboardRows.forEachIndexed { idx, row ->
+            row.setKeys(
+                when (idx) {
+                    0 -> fnRow1
+                    1 -> fnRow2
+                    else -> emptyList()
+                }
+            )
+        }
+    }
+
+    private fun restoreFromFn() {
+        if (!fnMode) return
+        fnMode = false
+        savedLayout?.forEachIndexed { idx, keys ->
+            if (idx < keyboardRows.size) keyboardRows[idx].setKeys(keys)
+        }
+        savedLayout = null
+        applyModifierHighlight()
     }
 
     /**
@@ -131,24 +233,41 @@ class MultiRowKeyboardView @JvmOverloads constructor(
      */
     fun setOnKeyClickListener(listener: (KeyboardKey) -> Unit) {
         this.onKeyClickListener = listener
-        keyboardRows.forEach { it.setOnKeyClickListener(listener) }
     }
 
     /**
-     * Set toggle click listener
+     * Set toggle click listener (system IME show/hide).
      */
     fun setOnToggleClickListener(listener: () -> Unit) {
         this.onToggleClickListener = listener
-        keyboardRows.forEach { it.setOnToggleClickListener(listener) }
+    }
+
+    /**
+     * Subscribe to modifier state changes — payload is "CTL", "ALT" or null.
+     */
+    fun setOnModifierChangedListener(listener: (String?) -> Unit) {
+        this.onModifierChangedListener = listener
+    }
+
+    /** Currently latched modifier ("CTL", "ALT") or null. */
+    fun getCurrentModifier(): String? = currentModifier
+
+    /** Force-clear the latched modifier (e.g. after the terminal consumes it). */
+    fun clearModifier() {
+        if (currentModifier != null) setCurrentModifier(null)
     }
 
     /**
      * Reset to default layout
      */
     fun resetToDefault() {
+        fnMode = false
+        savedLayout = null
+        currentModifier = null
         numberOfRows = DEFAULT_ROWS
         rebuildRows()
         applyDefaultKeys()
+        onModifierChangedListener?.invoke(null)
     }
 
     companion object {

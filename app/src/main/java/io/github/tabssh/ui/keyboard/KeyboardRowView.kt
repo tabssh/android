@@ -6,11 +6,14 @@ import android.view.Gravity
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import com.google.android.material.button.MaterialButton
-import io.github.tabssh.utils.logging.Logger
 
 /**
  * Single row of the multi-row keyboard
- * Horizontally scrollable row of keys
+ * Horizontally scrollable row of keys.
+ *
+ * Modifier (CTL/ALT/FN) state is owned by the parent [MultiRowKeyboardView] so
+ * it is shared across all rows AND visible to the rest of the app (the
+ * terminal view consults it for IME letters). This view just emits clicks.
  */
 class KeyboardRowView @JvmOverloads constructor(
     context: Context,
@@ -31,8 +34,7 @@ class KeyboardRowView @JvmOverloads constructor(
     private var onKeyClickListener: ((KeyboardKey) -> Unit)? = null
     private var onToggleClickListener: (() -> Unit)? = null
 
-    // Modifier state (shared across all rows via parent)
-    private var currentModifier: String? = null
+    /** Buttons keyed by modifier id (CTL/ALT/FN) so the parent can highlight. */
     private val modifierButtons = mutableMapOf<String, MaterialButton>()
 
     init {
@@ -64,6 +66,15 @@ class KeyboardRowView @JvmOverloads constructor(
      * Get current keys
      */
     fun getKeys(): List<KeyboardKey> = keys.toList()
+
+    /**
+     * Highlight the active modifier (called by parent). Pass null to clear.
+     */
+    fun highlightModifier(activeId: String?) {
+        modifierButtons.forEach { (id, button) ->
+            button.alpha = if (id == activeId) 1.0f else 0.7f
+        }
+    }
 
     /**
      * Rebuild key buttons
@@ -108,22 +119,14 @@ class KeyboardRowView @JvmOverloads constructor(
 
         // Color coding by category
         when (key.category) {
-            KeyboardKey.KeyCategory.MODIFIER -> {
-                button.alpha = 0.9f
-            }
-            KeyboardKey.KeyCategory.FUNCTION -> {
-                button.alpha = 0.85f
-            }
-            KeyboardKey.KeyCategory.ACTION -> {
-                button.alpha = 0.95f
-            }
-            else -> {
-                button.alpha = 1.0f
-            }
+            KeyboardKey.KeyCategory.MODIFIER -> button.alpha = 0.7f
+            KeyboardKey.KeyCategory.FUNCTION -> button.alpha = 0.85f
+            KeyboardKey.KeyCategory.ACTION -> button.alpha = 0.95f
+            else -> button.alpha = 1.0f
         }
 
         button.setOnClickListener {
-            handleKeyClick(key, button)
+            handleKeyClick(key)
         }
 
         return button
@@ -132,89 +135,21 @@ class KeyboardRowView @JvmOverloads constructor(
     /**
      * Handle key click
      */
-    private fun handleKeyClick(key: KeyboardKey, button: MaterialButton) {
+    private fun handleKeyClick(key: KeyboardKey) {
         when (key.category) {
-            KeyboardKey.KeyCategory.MODIFIER -> handleModifier(key, button)
-            KeyboardKey.KeyCategory.ACTION -> handleAction(key)
-            else -> sendKeyWithModifier(key)
-        }
-    }
-
-    /**
-     * Handle modifier key press
-     */
-    private fun handleModifier(key: KeyboardKey, button: MaterialButton) {
-        if (key.id == "FN") {
-            // FN is special - handled by parent
-            onKeyClickListener?.invoke(key)
-            return
-        }
-
-        // Toggle modifier
-        if (currentModifier == key.id) {
-            currentModifier = null
-        } else {
-            currentModifier = key.id
-        }
-        updateModifierHighlight()
-    }
-
-    /**
-     * Handle action key press
-     */
-    private fun handleAction(key: KeyboardKey) {
-        when (key.id) {
-            "TOGGLE" -> onToggleClickListener?.invoke()
-            else -> onKeyClickListener?.invoke(key)
-        }
-    }
-
-    /**
-     * Send key with current modifier applied
-     */
-    private fun sendKeyWithModifier(key: KeyboardKey) {
-        val modifiedKey = when (currentModifier) {
-            "CTL" -> {
-                // Ctrl key: convert to control character
-                val ctrlSequence = getCtrlSequence(key)
-                KeyboardKey(key.id, key.label, ctrlSequence, key.category)
+            KeyboardKey.KeyCategory.ACTION -> {
+                if (key.id == "TOGGLE") {
+                    onToggleClickListener?.invoke()
+                } else {
+                    onKeyClickListener?.invoke(key)
+                }
             }
-            "ALT" -> {
-                // Alt key: prepend ESC
-                KeyboardKey(key.id, key.label, "\u001B${key.keySequence}", key.category)
+            else -> {
+                // Modifiers, symbols, arrows, function keys, special — all
+                // propagate to the parent which decides whether to apply a
+                // sticky modifier or interpret as a modifier toggle.
+                onKeyClickListener?.invoke(key)
             }
-            else -> key
-        }
-
-        onKeyClickListener?.invoke(modifiedKey)
-
-        // Clear modifier after use (sticky modifier behavior)
-        if (currentModifier != null) {
-            currentModifier = null
-            updateModifierHighlight()
-        }
-    }
-
-    /**
-     * Get Ctrl sequence for a key
-     */
-    private fun getCtrlSequence(key: KeyboardKey): String {
-        val char = key.keySequence.firstOrNull()?.uppercaseChar()
-        return if (char != null && char in 'A'..'Z') {
-            val ctrlCode = char.code - 'A'.code + 1
-            ctrlCode.toChar().toString()
-        } else {
-            key.keySequence
-        }
-    }
-
-    /**
-     * Update modifier button visual state
-     */
-    private fun updateModifierHighlight() {
-        modifierButtons.forEach { (id, button) ->
-            val isActive = id == currentModifier
-            button.alpha = if (isActive) 1.0f else 0.7f
         }
     }
 

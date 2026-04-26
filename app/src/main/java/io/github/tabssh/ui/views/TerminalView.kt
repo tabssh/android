@@ -472,6 +472,63 @@ class TerminalView @JvmOverloads constructor(
         sendText(sequence)
     }
 
+    // --- Sticky modifier state from custom keyboard bar -------------------
+    //
+    // The custom bar's CTL/ALT buttons toggle a one-shot modifier that the
+    // bar itself applies to its own taps. IME keystrokes do not flow through
+    // the bar, so without this hook a CTL+letter chord typed letter-via-IME
+    // would arrive as a literal letter. We therefore lift the modifier
+    // state into TerminalView so onKeyDown() and the InputConnection paths
+    // can both consume it.
+    private var pendingCtrl = false
+    private var pendingAlt = false
+
+    /** Notified after a pending modifier is consumed so the bar can clear UI. */
+    var onModifierConsumed: (() -> Unit)? = null
+
+    /** Set/clear the pending one-shot modifier. */
+    fun setPendingModifier(modifier: String?) {
+        pendingCtrl = modifier == "CTL"
+        pendingAlt = modifier == "ALT"
+    }
+
+    fun isPendingCtrl(): Boolean = pendingCtrl
+    fun isPendingAlt(): Boolean = pendingAlt
+
+    private fun consumePendingModifier() {
+        if (pendingCtrl || pendingAlt) {
+            pendingCtrl = false
+            pendingAlt = false
+            onModifierConsumed?.invoke()
+        }
+    }
+
+    /**
+     * Send a single character with the pending bar modifier applied. Used by
+     * the InputConnection commitText path where we don't have a full KeyEvent.
+     * Returns true if a modifier was applied (and therefore consumed).
+     */
+    fun sendCharWithPendingModifier(c: Char): Boolean {
+        return when {
+            pendingCtrl -> {
+                val upper = c.uppercaseChar()
+                if (upper in 'A'..'Z') {
+                    sendText(((upper.code - 'A'.code + 1).toChar()).toString())
+                } else {
+                    sendText(c.toString())
+                }
+                consumePendingModifier()
+                true
+            }
+            pendingAlt -> {
+                sendKeySequence("\u001b$c")
+                consumePendingModifier()
+                true
+            }
+            else -> false
+        }
+    }
+
     /**
      * Apply terminal theme
      */
@@ -976,8 +1033,11 @@ class TerminalView @JvmOverloads constructor(
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        val isCtrl = event.isCtrlPressed
-        val isAlt = event.isAltPressed
+        // OR in any sticky modifier set by the custom keyboard bar so a CTL
+        // tap on the bar followed by an IME letter still produces a control
+        // code, not a literal character (Issue #37).
+        val isCtrl = event.isCtrlPressed || pendingCtrl
+        val isAlt = event.isAltPressed || pendingAlt
         val isShift = event.isShiftPressed
 
         // Handle Ctrl+letter combinations (send control codes)
@@ -985,6 +1045,7 @@ class TerminalView @JvmOverloads constructor(
             val ctrlCode = getCtrlCode(keyCode)
             if (ctrlCode != null) {
                 sendText(ctrlCode)
+                consumePendingModifier()
                 return true
             }
         }
@@ -994,6 +1055,7 @@ class TerminalView @JvmOverloads constructor(
             val char = event.unicodeChar.toChar()
             if (char.isLetterOrDigit() || char in "!@#$%^&*()") {
                 sendKeySequence("\u001b$char")
+                consumePendingModifier()
                 return true
             }
         }
@@ -1115,7 +1177,14 @@ class TerminalView @JvmOverloads constructor(
         // Handle text input
         val unicodeChar = event.unicodeChar
         if (unicodeChar != 0) {
-            sendText(String(Character.toChars(unicodeChar)))
+            // If a bar modifier is pending and the produced char is a single
+            // codepoint, route through the helper so CTL/ALT applies.
+            val chars = Character.toChars(unicodeChar)
+            if ((pendingCtrl || pendingAlt) && chars.size == 1 &&
+                sendCharWithPendingModifier(chars[0])) {
+                return true
+            }
+            sendText(String(chars))
             return true
         }
 
@@ -1462,6 +1531,13 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
         text?.let {
             // Convert newline to carriage return for SSH compatibility
             val converted = it.toString().replace("\n", "\r")
+            // If the bar has CTL/ALT pending and we got a single character,
+            // apply the modifier so chords like CTL+c work via IME (Issue #37).
+            if (converted.length == 1 &&
+                (terminalView.isPendingCtrl() || terminalView.isPendingAlt()) &&
+                terminalView.sendCharWithPendingModifier(converted[0])) {
+                return true
+            }
             terminalView.sendText(converted)
         }
         return true
