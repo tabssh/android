@@ -508,9 +508,23 @@ class TermuxBridge(
     }
 
     /**
-     * Disconnect from SSH streams
+     * Disconnect from SSH streams.
+     *
+     * Idempotent (Issue #51): the VM-console teardown path used to call
+     * disconnect() three times (read-loop finally, console-manager
+     * disconnect, cleanup), each one firing onDisconnected() on every
+     * registered listener — producing the user-visible "Terminal
+     * disconnected" toast triplicate. We now gate on the previous state:
+     * fire the listener callbacks ONLY on the first transition from
+     * connected to disconnected.
      */
     fun disconnect() {
+        val wasConnected = _isConnected.value
+        if (!wasConnected && inputStream == null && outputStream == null && readJob == null) {
+            // Already torn down — nothing to do, don't re-fire listeners.
+            return
+        }
+
         Logger.i(TAG, "Disconnecting")
 
         _isConnected.value = false
@@ -532,8 +546,10 @@ class TermuxBridge(
         }
         outputStream = null
 
-        runOnMain {
-            listeners.forEach { it.onDisconnected() }
+        if (wasConnected) {
+            runOnMain {
+                listeners.forEach { it.onDisconnected() }
+            }
         }
     }
 
