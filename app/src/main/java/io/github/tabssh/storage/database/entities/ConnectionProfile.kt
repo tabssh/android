@@ -129,6 +129,14 @@ data class ConnectionProfile(
     @ColumnInfo(name = "font_size_override")
     val fontSizeOverride: Int? = null, // null = use global default, otherwise override
 
+    /**
+     * Wave 3.1 — Per-host color tag. ARGB int (e.g. 0xFFE53935 = red).
+     * 0 (default) = no tag. Rendered as a thin coloured strip on the
+     * connection row and a small dot on the tab.
+     */
+    @ColumnInfo(name = "color_tag")
+    val colorTag: Int = 0,
+
     @ColumnInfo(name = "group_id")
     val groupId: String? = null,
     

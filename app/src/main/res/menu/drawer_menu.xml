@@ -88,6 +88,14 @@
             android:icon="@drawable/ic_settings"
             android:title="Theme Editor" />
         <item
+            android:id="@+id/nav_connection_history"
+            android:icon="@android:drawable/ic_menu_recent_history"
+            android:title="Connection History" />
+        <item
+            android:id="@+id/nav_whats_new"
+            android:icon="@drawable/ic_info"
+            android:title="What's New" />
+        <item
             android:id="@+id/nav_copy_app_log"
             android:icon="@android:drawable/ic_menu_recent_history"
             android:title="Copy App Log (Safe to Share)" />

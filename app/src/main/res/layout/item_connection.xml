@@ -16,6 +16,15 @@
         android:padding="@dimen/list_item_padding"
         android:gravity="center_vertical">
 
+        <!-- Wave 3.1 — color-tag strip on left edge of card. Width 4dp; tinted
+             from ConnectionProfile.colorTag. Hidden when colorTag == 0. -->
+        <View
+            android:id="@+id/color_tag_strip"
+            android:layout_width="4dp"
+            android:layout_height="match_parent"
+            android:layout_marginEnd="@dimen/space_sm"
+            android:visibility="gone" />
+
         <ImageView
             android:id="@+id/icon_connection"
             android:layout_width="@dimen/connection_icon_size"

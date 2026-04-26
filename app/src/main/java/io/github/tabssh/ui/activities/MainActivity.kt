@@ -287,6 +287,12 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             R.id.nav_theme_editor -> {
                 startActivity(ThemeEditorActivity.createIntent(this))
             }
+            R.id.nav_connection_history -> {
+                startActivity(Intent(this, ConnectionHistoryActivity::class.java))
+            }
+            R.id.nav_whats_new -> {
+                startActivity(Intent(this, WhatsNewActivity::class.java))
+            }
             R.id.nav_copy_app_log -> {
                 copyAppLog()
             }
