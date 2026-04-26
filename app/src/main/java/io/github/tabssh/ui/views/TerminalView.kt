@@ -1233,7 +1233,16 @@ class TerminalView @JvmOverloads constructor(
 
     override fun onCreateInputConnection(editorInfo: EditorInfo): InputConnection {
         editorInfo.inputType = EditorInfo.TYPE_NULL
-        editorInfo.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN or EditorInfo.IME_FLAG_NO_EXTRACT_UI
+        // IME_ACTION_DONE makes the soft keyboard show a recognizable
+        // ENTER glyph (down-left arrow) AND routes its press through
+        // performEditorAction(IME_ACTION_DONE) which our InputConnection
+        // handles. Without an explicit action, IMEs would emit
+        // performEditorAction(IME_ACTION_UNSPECIFIED) which our switch
+        // ignored — that's Issue #49 (Android IME ENTER does nothing
+        // while custom-bar ENT works).
+        editorInfo.imeOptions = EditorInfo.IME_ACTION_DONE or
+                                EditorInfo.IME_FLAG_NO_FULLSCREEN or
+                                EditorInfo.IME_FLAG_NO_EXTRACT_UI
 
         return TerminalInputConnection(this)
     }
@@ -1501,13 +1510,13 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
     override fun setSelection(start: Int, end: Int): Boolean = false
 
     override fun performEditorAction(editorAction: Int): Boolean {
-        when (editorAction) {
-            EditorInfo.IME_ACTION_DONE, EditorInfo.IME_ACTION_GO, EditorInfo.IME_ACTION_SEND -> {
-                terminalView.sendText("\r")
-                return true
-            }
-        }
-        return false
+        // Issue #49: terminals always interpret the IME's ENTER button as a
+        // line submit, regardless of which action the IME chose to bind to
+        // it (DONE, GO, SEND, NEXT, UNSPECIFIED, NONE — Gboard sends
+        // UNSPECIFIED with TYPE_NULL fields, which our previous switch
+        // ignored, swallowing every ENTER press).
+        terminalView.sendText("\r")
+        return true
     }
 
     override fun performContextMenuAction(id: Int): Boolean = false

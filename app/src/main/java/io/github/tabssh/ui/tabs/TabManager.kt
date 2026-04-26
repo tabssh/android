@@ -6,6 +6,12 @@ import io.github.tabssh.terminal.TermuxBridge
 import io.github.tabssh.ui.views.TerminalView
 import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
 /**
  * Browser-style tab management for SSH sessions
@@ -15,6 +21,13 @@ class TabManager(private val maxTabs: Int = 10) {
 
     private val tabs = mutableListOf<SSHTab>()
     private var activeTabIndex = 0
+
+    // Per-tab observer jobs that bridge SSHTab.connectionState into the
+    // TabManagerListener.onTabConnectionStateChanged callback. Without this
+    // the activity never sees DISCONNECTED transitions and the auto-close
+    // path in TabTerminalActivity.updateTabIcon() never fires (Issue #50).
+    private val tabObserverScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val tabObservers = mutableMapOf<String, Job>()
 
     /**
      * Get active tab index
@@ -48,6 +61,15 @@ class TabManager(private val maxTabs: Int = 10) {
         tabs.add(tab)
         activeTabIndex = tabs.size - 1
 
+        // Observe this tab's connection state so the activity learns about
+        // DISCONNECTED transitions (Issue #50). Without this, exiting the
+        // shell ends the SSH read loop but the UI hangs on the dead tab.
+        tabObservers[tab.tabId] = tabObserverScope.launch {
+            tab.connectionState.collectLatest { state ->
+                notifyTabConnectionStateChanged(tab, state)
+            }
+        }
+
         Logger.d("TabManager", "Created new tab: ${profile.name}")
         notifyTabCreated(tab)
         return tab
@@ -61,6 +83,7 @@ class TabManager(private val maxTabs: Int = 10) {
             val tab = tabs[index]
             tab.disconnect()
             tabs.removeAt(index)
+            tabObservers.remove(tab.tabId)?.cancel()
 
             // Adjust active tab index
             if (activeTabIndex >= index && activeTabIndex > 0) {
@@ -285,6 +308,8 @@ class TabManager(private val maxTabs: Int = 10) {
      */
     fun cleanup() {
         Logger.d("TabManager", "Cleaning up tab manager")
+        tabObservers.values.forEach { it.cancel() }
+        tabObservers.clear()
         tabs.forEach { it.disconnect() }
         tabs.clear()
         listeners.clear()
