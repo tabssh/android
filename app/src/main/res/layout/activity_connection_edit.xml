@@ -551,6 +551,37 @@
 
                     </com.google.android.material.textfield.TextInputLayout>
 
+                    <!-- Wave 1.2: per-host environment variables -->
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="Environment Variables"
+                        android:layout_marginTop="@dimen/space_sm"
+                        app:helperText="One per line: KEY=value · server must allow via AcceptEnv"
+                        style="@style/Widget.TabSSH.TextInputLayout">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/edit_env_vars"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="textMultiLine"
+                            android:minLines="2"
+                            android:maxLines="6"
+                            android:gravity="top"
+                            android:fontFamily="monospace"
+                            android:tooltipText="Sent via SSH SETENV. Lines beginning with # are ignored." />
+
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <!-- Wave 1.5: SSH agent forwarding -->
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switch_agent_forwarding"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_sm"
+                        android:text="SSH agent forwarding"
+                        android:tooltipText="Forward your local SSH keys to the remote host (use carefully)" />
+
                 </LinearLayout>
 
             </com.google.android.material.card.MaterialCardView>

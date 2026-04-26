@@ -818,6 +818,7 @@ class TabTerminalActivity : AppCompatActivity() {
             "Copy screen",
             "Paste",
             "Send text…",
+            "Find in scrollback…",
             "Font size…",
             "Share connection info",
             "Close this tab"
@@ -830,12 +831,78 @@ class TabTerminalActivity : AppCompatActivity() {
                     0 -> copyTerminalScreen()
                     1 -> pasteFromClipboard()
                     2 -> showSendTextDialog()
-                    3 -> showFontSizeDialog()
-                    4 -> shareSession()
-                    5 -> closeActiveTabConfirmed()
+                    3 -> showFindDialog()
+                    4 -> showFontSizeDialog()
+                    5 -> shareSession()
+                    6 -> closeActiveTabConfirmed()
                 }
             }
             .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Wave 1.3 — Find-in-scrollback. Searches across the visible screen
+     * AND the transcript buffer. Shows matching lines with line numbers
+     * relative to the bottom (1 = newest). User can copy a selected match.
+     * (In-terminal highlighting + scroll-to-position is a future polish.)
+     */
+    private fun showFindDialog() {
+        val tab = tabManager.getActiveTab() ?: run {
+            Toast.makeText(this, "No active session", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val input = android.widget.EditText(this).apply {
+            hint = "Search text"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+            setSingleLine(true)
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Find in scrollback")
+            .setView(input)
+            .setPositiveButton("Search") { _, _ ->
+                val query = input.text?.toString().orEmpty()
+                if (query.isNotEmpty()) showFindResults(tab, query)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showFindResults(tab: SSHTab, query: String) {
+        val haystack = buildString {
+            append(tab.getScrollbackContent())
+            if (isNotEmpty()) append('\n')
+            append(tab.getTerminalContent())
+        }
+        if (haystack.isBlank()) {
+            Toast.makeText(this, "Nothing to search yet", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val lines = haystack.split('\n')
+        val matches = lines.mapIndexedNotNull { idx, line ->
+            if (line.contains(query, ignoreCase = true)) {
+                // Number from the bottom: last line = 1, line above = 2, etc.
+                val fromBottom = lines.size - idx
+                "$fromBottom: ${line.trim().take(120)}"
+            } else null
+        }
+        if (matches.isEmpty()) {
+            Toast.makeText(this, "No matches for \"$query\"", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val items = matches.toTypedArray()
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("${matches.size} match${if (matches.size == 1) "" else "es"}")
+            .setItems(items) { _, which ->
+                // Tap a match to copy it.
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE)
+                    as android.content.ClipboardManager
+                clipboard.setPrimaryClip(
+                    android.content.ClipData.newPlainText("Match", items[which].substringAfter(": "))
+                )
+                Toast.makeText(this, "Match copied", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Close", null)
             .show()
     }
 
@@ -1469,27 +1536,14 @@ class TabTerminalActivity : AppCompatActivity() {
                         // Gray or no icon
                         tabLayoutTab.icon = null
 
-                        // Show disconnected message and close tab after delay
-                        Logger.i("TabTerminalActivity", "Tab ${tab.tabId} disconnected - will auto-close")
+                        // Wave 1.1 — instead of auto-closing the tab after 2s,
+                        // show a Reconnect / Close dialog so the user can resume
+                        // the session in one tap. Common case: SSH timeout, server
+                        // restart, brief network blip — auto-close was destroying
+                        // the user's tab + scrollback unnecessarily.
+                        Logger.i("TabTerminalActivity", "Tab ${tab.tabId} disconnected — offering reconnect")
                         runOnUiThread {
-                            Toast.makeText(this@TabTerminalActivity,
-                                "Connection closed: ${tab.profile.getDisplayName()}",
-                                Toast.LENGTH_SHORT).show()
-
-                            // Auto-close tab after 2 seconds
-                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                                // Find tab index by ID
-                                val allTabs = tabManager.getAllTabs()
-                                val tabIndex = allTabs.indexOfFirst { it.tabId == tab.tabId }
-                                if (tabIndex >= 0) {
-                                    tabManager.closeTab(tabIndex)
-
-                                    // If no tabs left, close activity
-                                    if (tabManager.getTabCount() == 0) {
-                                        finish()
-                                    }
-                                }
-                            }, 2000)
+                            showReconnectDialog(tab)
                         }
                     }
                     else -> {}
@@ -1499,6 +1553,40 @@ class TabTerminalActivity : AppCompatActivity() {
         }
     }
     
+    /**
+     * Wave 1.1 — when a tab's SSH session ends (server-side exit, timeout,
+     * network blip), keep the tab and show a Reconnect / Close dialog
+     * instead of auto-destroying it. The user's scrollback stays visible
+     * behind the dialog so they can read the last output before deciding.
+     */
+    private fun showReconnectDialog(tab: SSHTab) {
+        if (isFinishing || isDestroyed) return
+
+        val tabId = tab.tabId
+        val profile = tab.profile
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Connection closed")
+            .setMessage("${profile.getDisplayName()} disconnected.\nReconnect or close the tab?")
+            .setCancelable(false)
+            .setPositiveButton("Reconnect") { _, _ ->
+                Logger.i("TabTerminalActivity", "User chose RECONNECT for tab $tabId")
+                // Close the dead tab object then start a fresh connect to the
+                // same profile — keeps the slot in the tab strip.
+                val idx = tabManager.getAllTabs().indexOfFirst { it.tabId == tabId }
+                if (idx >= 0) tabManager.closeTab(idx)
+                lifecycleScope.launch { connectToProfile(profile) }
+            }
+            .setNegativeButton("Close tab") { _, _ ->
+                Logger.i("TabTerminalActivity", "User chose CLOSE for tab $tabId")
+                val idx = tabManager.getAllTabs().indexOfFirst { it.tabId == tabId }
+                if (idx >= 0) {
+                    tabManager.closeTab(idx)
+                    if (tabManager.getTabCount() == 0) finish()
+                }
+            }
+            .show()
+    }
+
     // Toolbar options menu removed - using bottom sheet menu instead
     // override fun onCreateOptionsMenu(menu: Menu): Boolean {
     //     menuInflater.inflate(R.menu.terminal_menu, menu)

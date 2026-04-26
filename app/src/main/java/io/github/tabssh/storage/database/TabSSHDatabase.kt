@@ -26,7 +26,7 @@ import io.github.tabssh.utils.logging.Logger
         AuditLogEntry::class,
         HypervisorProfile::class
     ],
-    version = 17,
+    version = 18,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -289,7 +289,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     MIGRATION_13_14,
                     MIGRATION_14_15,
                     MIGRATION_15_16,
-                    MIGRATION_16_17
+                    MIGRATION_16_17,
+                    MIGRATION_17_18
                 )
                 .build()
                 INSTANCE = instance
@@ -460,5 +461,18 @@ data class DatabaseStats(
                 // Add API type override field to hypervisors table
                 database.execSQL("ALTER TABLE hypervisors ADD COLUMN api_type_override TEXT NOT NULL DEFAULT 'auto'")
                 Logger.i("Database", "Migration 16->17: Added api_type_override field to hypervisors")
+            }
+        }
+
+        /**
+         * v17 → v18 — Wave 1 parity batch.
+         * - env_vars: per-connection environment variables (multi-line KEY=value)
+         * - agent_forwarding: per-connection SSH agent forwarding toggle
+         */
+        val MIGRATION_17_18 = object : Migration(17, 18) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE connections ADD COLUMN env_vars TEXT")
+                database.execSQL("ALTER TABLE connections ADD COLUMN agent_forwarding INTEGER NOT NULL DEFAULT 0")
+                Logger.i("Database", "Migration 17->18: Added env_vars + agent_forwarding to connections")
             }
         }

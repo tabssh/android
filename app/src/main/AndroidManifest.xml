@@ -177,6 +177,13 @@
             android:parentActivityName=".ui.activities.TabTerminalActivity"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- Wave 1.7 — Remote text-file editor (download → edit → upload) -->
+        <activity
+            android:name=".ui.activities.RemoteFileEditorActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.activities.SFTPActivity"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- Port Forwarding activity -->
         <activity
             android:name=".ui.activities.PortForwardingActivity"
