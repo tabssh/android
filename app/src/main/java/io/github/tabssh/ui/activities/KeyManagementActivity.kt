@@ -349,22 +349,105 @@ class KeyManagementActivity : AppCompatActivity() {
     }
 
     private fun showKeyDetails(key: StoredKey) {
+        val certInfo = key.certificate?.let {
+            val firstField = it.trim().substringBefore(' ')
+            "Certificate: ✓ attached ($firstField)"
+        } ?: "Certificate: — none"
         AlertDialog.Builder(this)
             .setTitle(key.name)
             .setMessage("""
                 Type: ${key.keyType}
                 Fingerprint: ${key.fingerprint}
                 Created: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).format(java.util.Date(key.createdAt))}
-                ${if (!key.comment.isNullOrEmpty()) "Comment: ${key.comment}\n" else ""}
+                ${if (!key.comment.isNullOrEmpty()) "Comment: ${key.comment}\n" else ""}$certInfo
             """.trimIndent())
             .setPositiveButton("OK", null)
-            .setNeutralButton("Rename") { _, _ ->
-                showRenameKeyDialog(key)
-            }
-            .setNegativeButton("Delete") { _, _ ->
-                deleteKey(key)
-            }
+            .setNeutralButton("More…") { _, _ -> showMoreActionsDialog(key) }
+            .setNegativeButton("Delete") { _, _ -> deleteKey(key) }
             .show()
+    }
+
+    private fun showMoreActionsDialog(key: StoredKey) {
+        val items = mutableListOf("Rename", "Attach certificate (paste)…", "Attach certificate (file)…")
+        if (key.certificate != null) items.add("Remove certificate")
+        AlertDialog.Builder(this)
+            .setTitle(key.name)
+            .setItems(items.toTypedArray()) { _, which ->
+                when (items[which]) {
+                    "Rename" -> showRenameKeyDialog(key)
+                    "Attach certificate (paste)…" -> showPasteCertDialog(key)
+                    "Attach certificate (file)…" -> launchCertFilePicker(key)
+                    "Remove certificate" -> setKeyCert(key, null, "Certificate removed")
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Wave 2.2 — paste an OpenSSH user certificate (single-line *-cert.pub).
+     */
+    private fun showPasteCertDialog(key: StoredKey) {
+        val edit = android.widget.EditText(this).apply {
+            hint = "Paste *-cert.pub line (e.g. ssh-rsa-cert-v01@openssh.com AAAA…)"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            minLines = 4
+            maxLines = 8
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Attach OpenSSH Certificate")
+            .setView(edit)
+            .setPositiveButton("Attach") { _, _ ->
+                val cert = edit.text.toString().trim()
+                if (validateCert(cert)) setKeyCert(key, cert, "Certificate attached")
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private val attachCertLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val pendingKey = pendingCertKey ?: return@registerForActivityResult
+        pendingCertKey = null
+        uri ?: return@registerForActivityResult
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val text = contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }?.trim().orEmpty()
+                withContext(Dispatchers.Main) {
+                    if (validateCert(text)) setKeyCert(pendingKey, text, "Certificate attached")
+                }
+            } catch (e: Exception) {
+                Logger.e("KeyManagementActivity", "Failed to read cert file", e)
+                withContext(Dispatchers.Main) {
+                    showError("Failed to read certificate: ${e.message}", "Attach Error")
+                }
+            }
+        }
+    }
+    private var pendingCertKey: StoredKey? = null
+
+    private fun launchCertFilePicker(key: StoredKey) {
+        pendingCertKey = key
+        attachCertLauncher.launch(arrayOf("*/*"))
+    }
+
+    private fun validateCert(cert: String): Boolean {
+        if (!cert.contains("-cert-v01@openssh.com")) {
+            showError("Doesn't look like an OpenSSH certificate (missing '-cert-v01@openssh.com').", "Invalid Certificate")
+            return false
+        }
+        return true
+    }
+
+    private fun setKeyCert(key: StoredKey, cert: String?, toastMsg: String) {
+        lifecycleScope.launch {
+            try {
+                app.database.keyDao().updateKey(key.copy(certificate = cert))
+                Toast.makeText(this@KeyManagementActivity, toastMsg, Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Logger.e("KeyManagementActivity", "Failed to update certificate", e)
+                showError("Failed to update certificate: ${e.message}", "Error")
+            }
+        }
     }
 
     private fun showRenameKeyDialog(key: StoredKey) {
