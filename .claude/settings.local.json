@@ -54,7 +54,10 @@
       "Bash(/tmp/tabssh-android/shot.sh 26-terminal *)",
       "Bash(export SSHPASS=tabssh-test-pass-1777141623)",
       "Bash(sshpass -e ssh -o StrictHostKeyChecking=no -p 2222 tabssh-test@127.0.0.1 'pkill -INT cat; pgrep -af cat')",
-      "Bash(userdel -r tabssh-test)"
+      "Bash(userdel -r tabssh-test)",
+      "Bash(gh release *)",
+      "Bash(mkdir -p /tmp/walk-test/app/build/outputs/apk/release)",
+      "Read(//tmp/walk-test/app/build/outputs/apk/**)"
     ]
   }
 }

@@ -5,6 +5,13 @@ on:
     tags:
       - 'v*'
 
+# Group by tag ref — re-pushing the same tag cancels any in-flight rebuild
+# for that tag, but distinct version tags pushed back-to-back each get to
+# complete and publish their own release.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   release:
     name: Build & Publish Release
@@ -143,21 +150,21 @@ jobs:
         cd app/build/outputs/apk/release/
         sha256sum tabssh-android-*.apk > tabssh-android-checksums-${{ steps.version.outputs.VERSION }}.sha256
         
-        echo "## 🔐 Release APK Checksums" >> ../../../../RELEASE_NOTES.md
-        echo "\`\`\`" >> ../../../../RELEASE_NOTES.md
-        cat tabssh-android-checksums-${{ steps.version.outputs.VERSION }}.sha256 >> ../../../../RELEASE_NOTES.md
-        echo "\`\`\`" >> ../../../../RELEASE_NOTES.md
-        echo "" >> ../../../../RELEASE_NOTES.md
+        echo "## 🔐 Release APK Checksums" >> ../../../../../RELEASE_NOTES.md
+        echo "\`\`\`" >> ../../../../../RELEASE_NOTES.md
+        cat tabssh-android-checksums-${{ steps.version.outputs.VERSION }}.sha256 >> ../../../../../RELEASE_NOTES.md
+        echo "\`\`\`" >> ../../../../../RELEASE_NOTES.md
+        echo "" >> ../../../../../RELEASE_NOTES.md
 
         cd ../fdroidRelease/
         sha256sum tabssh-android-*-fdroid-*.apk > tabssh-android-fdroid-checksums-${{ steps.version.outputs.VERSION }}.sha256
         
-        echo "## 🔐 F-Droid APK Checksums" >> ../../../../RELEASE_NOTES.md
-        echo "\`\`\`" >> ../../../../RELEASE_NOTES.md
-        cat tabssh-android-fdroid-checksums-${{ steps.version.outputs.VERSION }}.sha256 >> ../../../../RELEASE_NOTES.md
-        echo "\`\`\`" >> ../../../../RELEASE_NOTES.md
-        echo "" >> ../../../../RELEASE_NOTES.md
-        echo "**Verify downloads**: \`sha256sum -c tabssh-android-checksums-${{ steps.version.outputs.VERSION }}.sha256\`" >> ../../../../RELEASE_NOTES.md
+        echo "## 🔐 F-Droid APK Checksums" >> ../../../../../RELEASE_NOTES.md
+        echo "\`\`\`" >> ../../../../../RELEASE_NOTES.md
+        cat tabssh-android-fdroid-checksums-${{ steps.version.outputs.VERSION }}.sha256 >> ../../../../../RELEASE_NOTES.md
+        echo "\`\`\`" >> ../../../../../RELEASE_NOTES.md
+        echo "" >> ../../../../../RELEASE_NOTES.md
+        echo "**Verify downloads**: \`sha256sum -c tabssh-android-checksums-${{ steps.version.outputs.VERSION }}.sha256\`" >> ../../../../../RELEASE_NOTES.md
 
     - name: Delete existing release if exists
       continue-on-error: true

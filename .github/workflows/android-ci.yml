@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ main ]
 
+# One validation run per ref/PR at a time; cancel older runs on new push.
+concurrency:
+  group: validate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     name: Code Validation & Tests
