@@ -10,7 +10,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 /**
@@ -64,10 +66,21 @@ class TabManager(private val maxTabs: Int = 10) {
         // Observe this tab's connection state so the activity learns about
         // DISCONNECTED transitions (Issue #50). Without this, exiting the
         // shell ends the SSH read loop but the UI hangs on the dead tab.
+        //
+        // CRITICAL: drop the initial StateFlow replay. SSHTab._connectionState
+        // starts as DISCONNECTED before the SSH session even begins. If we
+        // forward that initial value to the activity, the auto-close timer
+        // fires 2 s after EVERY connect — closing the tab the moment the
+        // user lands in it. drop(1) ensures we only react to genuine state
+        // transitions. distinctUntilChanged is belt-and-braces against
+        // duplicate emissions.
         tabObservers[tab.tabId] = tabObserverScope.launch {
-            tab.connectionState.collectLatest { state ->
-                notifyTabConnectionStateChanged(tab, state)
-            }
+            tab.connectionState
+                .drop(1)
+                .distinctUntilChanged()
+                .collect { state ->
+                    notifyTabConnectionStateChanged(tab, state)
+                }
         }
 
         Logger.d("TabManager", "Created new tab: ${profile.name}")
