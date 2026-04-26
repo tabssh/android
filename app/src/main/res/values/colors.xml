@@ -88,7 +88,11 @@
     <color name="surface">#FFFFFFFF</color>
     <color name="surface_variant">#FFF5F5F5</color>
     <color name="on_surface">#FF212121</color>
-    <color name="on_surface_variant">#FF616161</color>
+    <!-- on_surface_variant bumped from #616161 (5.7:1, borderline AA) to
+         #424242 (~10:1) so secondary labels and section subtitles in light
+         mode read clearly against the slightly-tinted Material3 surface
+         instead of fading toward invisible (Issue #35). -->
+    <color name="on_surface_variant">#FF424242</color>
     <color name="outline">#FFE0E0E0</color>
     <color name="outline_variant">#FFF5F5F5</color>
     

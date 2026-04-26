@@ -293,12 +293,13 @@ class TabTerminalActivity : AppCompatActivity() {
                 }
             }
 
-            // Wait for user response (60-second timeout for safety)
+            // Wait for the user to actually decide. Issue #32: the previous
+            // 60s timeout silently rejected the connection while a careful
+            // user was still verifying a 64-char SHA-256 fingerprint. The
+            // dialog is non-cancellable and its dismiss listener counts the
+            // latch down on activity destruction, so blocking is safe.
             try {
-                val responded = latch.await(60, java.util.concurrent.TimeUnit.SECONDS)
-                if (!responded) {
-                    Logger.w("TabTerminalActivity", "Host key dialog timed out - rejecting")
-                }
+                latch.await()
             } catch (e: InterruptedException) {
                 Logger.e("TabTerminalActivity", "Interrupted waiting for host key response", e)
             }
@@ -345,12 +346,10 @@ class TabTerminalActivity : AppCompatActivity() {
                 }
             }
 
-            // Wait for user response (60-second timeout for safety)
+            // No timeout — see Issue #32. The dismiss listener releases the
+            // latch on activity destruction, so blocking is safe.
             try {
-                val responded = latch.await(60, java.util.concurrent.TimeUnit.SECONDS)
-                if (!responded) {
-                    Logger.w("TabTerminalActivity", "Host key changed dialog timed out - rejecting")
-                }
+                latch.await()
             } catch (e: InterruptedException) {
                 Logger.e("TabTerminalActivity", "Interrupted waiting for host key response", e)
             }

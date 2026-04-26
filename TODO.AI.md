@@ -22,7 +22,7 @@
 ## 🔬 Phase 7.5 — Discovered During 2026-04-25 Emulator Verification
 
 ### 🐛 Issue #32: Host-key dialog auto-rejects after 60s
-- **Status:** 🔴 TODO
+- **Status:** 🔧 FIX APPLIED 2026-04-25 (build OK, awaiting emulator re-verification)
 - **Priority:** HIGH (security UX)
 - **Impact:** Security-conscious users who pause to compare a 64-hex-char SHA-256 fingerprint against the server will silently lose the connection.
 
@@ -43,7 +43,7 @@ W TabSSH:HostKeyVerifier: User rejected new host key for [10.0.2.2]:2222
 ---
 
 ### 🐛 Issue #33: Duplicate "New Host Key" dialog after Accept & Save
-- **Status:** 🔴 TODO
+- **Status:** 🔧 FIX APPLIED 2026-04-25 (build OK, awaiting emulator re-verification)
 - **Priority:** MEDIUM
 - **Impact:** UX confusion — user accepts a key, then is asked again. Looks like the save failed.
 
@@ -69,7 +69,7 @@ E TabSSH:HostKeyVerifier: Error adding host key
 ---
 
 ### 🐛 Issue #34: First New Host Key dialog shows `Key Type: unknown`
-- **Status:** 🔴 TODO
+- **Status:** 🔧 FIX APPLIED 2026-04-25 (root cause was the same as #33; both fixed by silencing the duplicate UserInfo.promptYesNo dialog path)
 - **Priority:** LOW
 - **Impact:** Reduces user trust ("the app doesn't even know what kind of key this is")
 
@@ -88,7 +88,7 @@ yet the dialog title summary correctly says `ssh-ed25519`. The duplicate dialog 
 ---
 
 ### 🐛 Issue #35: Light-theme low-contrast section labels (near-invisible)
-- **Status:** 🔴 TODO
+- **Status:** 🔧 FIX APPLIED 2026-04-25 (build OK, awaiting emulator re-verification)
 - **Priority:** HIGH (accessibility)
 - **Impact:** Multiple section labels and empty-state text render as very-light-gray on near-white, making them effectively unreadable. Fails WCAG 2.1 AA (4.5:1 contrast). The `themes/ThemeValidator.kt` already enforces this rule for terminal themes — it's not being applied to app chrome.
 

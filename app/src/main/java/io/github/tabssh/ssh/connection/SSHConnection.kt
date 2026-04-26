@@ -63,6 +63,11 @@ class SSHConnection(
     var hostKeyChangedCallback: ((HostKeyChangedInfo) -> HostKeyAction)? = null
     var newHostKeyCallback: ((NewHostKeyInfo) -> HostKeyAction)? = null
 
+    // Last decision returned from the HostKeyRepository.check() callback path.
+    // UserInfo.promptYesNo() consults this so it never fires a second dialog
+    // for the same host (Issues #33 / #34).
+    private var lastHostKeyDecision: HostKeyAction? = null
+
     // Cached resolved identity (loaded on connect)
     private var resolvedIdentity: io.github.tabssh.storage.database.entities.Identity? = null
 
@@ -136,13 +141,17 @@ class SSHConnection(
                 // Configure host key changed callback
                 hostKeyVerifier.setHostKeyChangedCallback { info ->
                     Logger.w("SSHConnection", "⚠️ Host key CHANGED verification triggered for ${info.hostname}")
-                    hostKeyChangedCallback?.invoke(info) ?: HostKeyAction.REJECT_CONNECTION
+                    val action = hostKeyChangedCallback?.invoke(info) ?: HostKeyAction.REJECT_CONNECTION
+                    lastHostKeyDecision = action
+                    action
                 }
 
                 // Configure new host key callback
                 hostKeyVerifier.setNewHostKeyCallback { info ->
                     Logger.i("SSHConnection", "🆕 New host key verification triggered for ${info.hostname}")
-                    newHostKeyCallback?.invoke(info) ?: HostKeyAction.REJECT_CONNECTION
+                    val action = newHostKeyCallback?.invoke(info) ?: HostKeyAction.REJECT_CONNECTION
+                    lastHostKeyDecision = action
+                    action
                 }
 
                 // Setup jump host if configured
@@ -262,30 +271,26 @@ class SSHConnection(
                     message.contains("ECDSA key", ignoreCase = true) ||
                     message.contains("ED25519", ignoreCase = true)) {
 
-                    Logger.w("SSHConnection", "⚠️ Host key prompt detected in UserInfo - this should be handled by HostKeyVerifier")
-
-                    // If we have a newHostKeyCallback, use it
-                    if (newHostKeyCallback != null) {
-                        // Extract hostname from message if possible
-                        val hostname = profile.host
-                        val port = profile.port
-
-                        // Create a basic NewHostKeyInfo
-                        val info = NewHostKeyInfo(
-                            hostname = hostname,
-                            port = port,
-                            keyType = "unknown",
-                            fingerprint = message, // Use the message as fingerprint info
-                            publicKey = ""
-                        )
-
-                        val action = newHostKeyCallback!!.invoke(info)
-                        return action == HostKeyAction.ACCEPT_NEW_KEY || action == HostKeyAction.ACCEPT_ONCE
-                    }
-
-                    // No callback - reject for safety
-                    Logger.w("SSHConnection", "No host key callback available - rejecting")
-                    return false
+                    // Issues #33 / #34: HostKeyRepository.check() already showed
+                    // the proper dialog (with the real key type and SHA-256
+                    // fingerprint) and captured the user's decision in
+                    // lastHostKeyDecision. JSch then asks us to confirm via
+                    // promptYesNo for any check() result of NOT_INCLUDED. If we
+                    // also fired a callback here we would show a SECOND dialog
+                    // — and worse, that one stuffs JSch's raw "authenticity..."
+                    // text into the fingerprint field with `keyType = unknown`,
+                    // which is exactly what the user reported as #34.
+                    //
+                    // Instead, silently honour the decision check() already
+                    // captured. If check() never ran (e.g. some unusual JSch
+                    // path), default to REJECT for safety.
+                    val decision = lastHostKeyDecision
+                    Logger.i(
+                        "SSHConnection",
+                        "Host key prompt suppressed — using check() decision: $decision"
+                    )
+                    return decision == HostKeyAction.ACCEPT_NEW_KEY ||
+                           decision == HostKeyAction.ACCEPT_ONCE
                 }
 
                 // For other prompts, accept if they seem like continuation prompts
