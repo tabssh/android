@@ -1573,17 +1573,32 @@ class TabTerminalActivity : AppCompatActivity() {
     }
 
     private fun toggleKeyboard() {
-        val terminalView = getActiveTerminalView()
-        if (terminalView != null) {
-            val inputMethodManager = getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
-            // Make sure terminal has focus first
-            terminalView.requestFocus()
-            // Use toggleSoftInput which reliably toggles the keyboard state
-            inputMethodManager.toggleSoftInput(
-                android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT,
-                0
+        val terminalView = getActiveTerminalView() ?: return
+        val imm = getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
+            as android.view.inputmethod.InputMethodManager
+
+        // Always grab focus first so the IME has a target.
+        terminalView.requestFocus()
+
+        // toggleSoftInput(SHOW_IMPLICIT) silently no-ops on the first tap when
+        // the framework hasn't seen us as the active input client yet (Issue
+        // #39). Use WindowInsetsCompat to read actual IME visibility and
+        // drive show/hide explicitly.
+        val rootInsets = androidx.core.view.ViewCompat
+            .getRootWindowInsets(terminalView)
+        val imeVisible = rootInsets?.isVisible(
+            androidx.core.view.WindowInsetsCompat.Type.ime()
+        ) == true
+
+        if (imeVisible) {
+            imm.hideSoftInputFromWindow(terminalView.windowToken, 0)
+            Logger.d("TabTerminalActivity", "IME hidden")
+        } else {
+            imm.showSoftInput(
+                terminalView,
+                android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT
             )
-            Logger.d("TabTerminalActivity", "Toggled keyboard for terminal")
+            Logger.d("TabTerminalActivity", "IME shown")
         }
     }
 
@@ -2012,9 +2027,20 @@ class TabTerminalActivity : AppCompatActivity() {
             toggleCustomKeyboard()
         }
 
+        // Bridge bar modifier state into the terminal so IME letters honour
+        // sticky CTL/ALT (Issue #37). Also wire the inverse — when the
+        // terminal consumes a one-shot modifier, the bar UI must reset.
+        binding.multiRowKeyboard.setOnModifierChangedListener { modifier ->
+            val tv = getActiveTerminalView() ?: return@setOnModifierChangedListener
+            tv.setPendingModifier(modifier)
+            tv.onModifierConsumed = {
+                binding.multiRowKeyboard.clearModifier()
+            }
+        }
+
         Logger.d("TabTerminalActivity", "Multi-row keyboard initialized with $rowCount rows")
     }
-    
+
     private fun handleCustomKeyPress(key: io.github.tabssh.ui.keyboard.KeyboardKey) {
         Logger.d("TabTerminalActivity", "Custom key pressed: ${key.label} id=${key.id} sequence=${key.keySequence.map { it.code }}")
         val terminal = getActiveTerminalView()
@@ -2030,8 +2056,22 @@ class TabTerminalActivity : AppCompatActivity() {
             }
             else -> {
                 if (key.keySequence.isNotEmpty()) {
-                    Logger.d("TabTerminalActivity", "Sending key sequence to terminal: ${key.keySequence.length} chars")
-                    terminal?.sendText(key.keySequence)
+                    // If the bar has CTL/ALT latched and the key is a single
+                    // ASCII character (typical for symbol/letter keys), apply
+                    // the modifier here so chords like CTL+/ also work from
+                    // the bar even without the IME path.
+                    val seq = key.keySequence
+                    val applied = if (seq.length == 1 &&
+                        terminal != null &&
+                        terminal.sendCharWithPendingModifier(seq[0])
+                    ) {
+                        true
+                    } else {
+                        false
+                    }
+                    if (!applied) {
+                        terminal?.sendText(seq)
+                    }
                 } else {
                     Logger.w("TabTerminalActivity", "Key ${key.label} has empty sequence")
                 }

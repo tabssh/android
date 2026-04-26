@@ -1,9 +1,196 @@
 # TabSSH TODO - v1.0.0 Bug Fixes & Features
 
-**Last Updated:** 2026-02-14
+**Last Updated:** 2026-04-25
 **Version:** 1.0.0 (pinned via release.txt - DO NOT MODIFY)
 **Total Issues:** 21 bugs + 5 features + 10 NEW CRITICAL BUGS
 **Est. Total Time:** 90-132 hours + 20-30h for new bugs
+
+> **Audit note (2026-04-25):** This file has been spot-reconciled against the
+> code. Issue #20 (Termux) and Issue #21 (VM console) are both done. Issue #29
+> ("Google Sign-In") is **fictional** — neither `DriveAuthenticationManager` nor
+> any Google Sign-In / Play Services code exists in the repository. Sync is
+> SAF-only. The bottom summary table is also stale; treat AI.md and CLAUDE.md as
+> authoritative for current state.
+
+> **Emulator session (2026-04-25):** Phase 7 fixes #22 / #23 / #24 / #25 verified
+> live on Android 14 emulator against a throwaway `sshd` on `127.0.0.1:2222`
+> (target was `tabssh-test@10.0.2.2:2222`). Five **new** issues discovered during
+> that session — see Phase 7.5 below.
+
+---
+
+## 🔬 Phase 7.5 — Discovered During 2026-04-25 Emulator Verification
+
+### 🐛 Issue #32: Host-key dialog auto-rejects after 60s
+- **Status:** 🔴 TODO
+- **Priority:** HIGH (security UX)
+- **Impact:** Security-conscious users who pause to compare a 64-hex-char SHA-256 fingerprint against the server will silently lose the connection.
+
+**Reproduction:** Connect to a new host. Read the fingerprint without tapping a button. After 60 seconds, the dialog auto-dismisses as "Reject" and the connection is torn down with no user-visible explanation; the app then re-attempts and fires a fresh dialog (see #33).
+
+**Logcat evidence:**
+```
+W TabSSH:TabTerminalActivity: Host key dialog timed out - rejecting
+W TabSSH:HostKeyVerifier: User rejected new host key for [10.0.2.2]:2222
+```
+
+**Files Likely Involved:**
+- `app/src/main/java/io/github/tabssh/ui/activities/TabTerminalActivity.kt` (host-key dialog setup; search for the timeout coroutine)
+- `app/src/main/java/io/github/tabssh/ssh/connection/HostKeyVerifier.kt`
+
+**Fix direction:** Either remove the timeout entirely (the SSH session itself enforces a connect timeout), or push it to ≥ 5 minutes, or hold the SSH session open without a timer and let the user dismiss the dialog explicitly.
+
+---
+
+### 🐛 Issue #33: Duplicate "New Host Key" dialog after Accept & Save
+- **Status:** 🔴 TODO
+- **Priority:** MEDIUM
+- **Impact:** UX confusion — user accepts a key, then is asked again. Looks like the save failed.
+
+**Reproduction:** First connection to a fresh host → tap **Accept & Save** → terminal opens → a second New Host Key dialog appears for the same host:port.
+
+**Logcat evidence:**
+```
+I TabSSH:TabTerminalActivity: SSH connection established, creating tab
+…
+E TabSSH:HostKeyVerifier: Error adding host key
+…  (then a second NEW_HOST verification fires)
+```
+
+**Hypothesis:** A second connection (likely the SFTP channel set-up for file-browser support, or the session-monitoring listener) opens a separate JSch session that goes through `HostKeyVerifier` independently. The first save failed — see the `Error adding host key` line — so the second session sees `NEW_HOST` again. May also be related to #32: the original dialog can time-out *while* the user is still reading it, the connection retries, and we end up with two dialogs in flight.
+
+**Files Likely Involved:**
+- `app/src/main/java/io/github/tabssh/ssh/connection/HostKeyVerifier.kt` (the `Error adding host key` path)
+- `app/src/main/java/io/github/tabssh/ssh/session/SSHSessionManager.kt` (whether sessions share the same `HostKeyRepository`)
+- `app/src/main/java/io/github/tabssh/ui/activities/TabTerminalActivity.kt` (dialog suppression while one is already open)
+
+**Fix direction:** (a) Make `HostKeyVerifier`'s persist step idempotent and surface real errors; (b) once a key is `ACCEPTED` for `host:port`, suppress further dialogs for the same key inside the active connection; (c) coordinate the two sessions so only one verifier is in play.
+
+---
+
+### 🐛 Issue #34: First New Host Key dialog shows `Key Type: unknown`
+- **Status:** 🔴 TODO
+- **Priority:** LOW
+- **Impact:** Reduces user trust ("the app doesn't even know what kind of key this is")
+
+**Reproduction:** First time connecting to a new host. The first dialog body contains:
+```
+🔑 Key Type: unknown
+```
+yet the dialog title summary correctly says `ssh-ed25519`. The duplicate dialog (after #33 fires) shows the correct `Key Type: ssh-ed25519` in the body.
+
+**Hypothesis:** The body string is built before the JSch `HostKey.getType()` lookup completes, or the verifier instance for the first session is missing its key-type plumbing. Worth diffing the message-builder paths in the first vs. second NEW_HOST entry points.
+
+**Files Likely Involved:**
+- `app/src/main/java/io/github/tabssh/ssh/connection/HostKeyVerifier.kt`
+- `app/src/main/java/io/github/tabssh/ui/activities/TabTerminalActivity.kt` (dialog builder)
+
+---
+
+### 🐛 Issue #35: Light-theme low-contrast section labels (near-invisible)
+- **Status:** 🔴 TODO
+- **Priority:** HIGH (accessibility)
+- **Impact:** Multiple section labels and empty-state text render as very-light-gray on near-white, making them effectively unreadable. Fails WCAG 2.1 AA (4.5:1 contrast). The `themes/ThemeValidator.kt` already enforces this rule for terminal themes — it's not being applied to app chrome.
+
+**Affected screens (verified):**
+- **MainActivity / Connections tab empty state** — "Connections" toolbar title, "No Connections" header, "Tap the + button to add your first SSH server" subtitle.
+- **MainActivity / Frequent tab empty state** — "Frequently Used Connections" header, "No Frequent Connections" header, body text.
+- **ConnectionEditActivity** — section titles "Connection Details", "Organization", "Authentication", "Save password securely", "Advanced Settings", "Terminal Multiplexer", "Appearance & Scripts", "Proxy / Jump Host" all near-invisible.
+
+**Files Likely Involved:**
+- `app/src/main/res/values/colors.xml`, `app/src/main/res/values/themes.xml`, `app/src/main/res/values-night/themes.xml` (the dark-theme inverse path)
+- All affected layouts use `?android:attr/textColorSecondary` (or similar) which the active theme must be resolving to a too-light value.
+
+**Fix direction:** Audit the `Theme.TabSSH.*` styles' `textColorPrimary` / `textColorSecondary` / `textColorHint` overrides; raise contrast or stop overriding the system value. Apply `ThemeValidator.calculateContrast()` as a build-time check against the chrome palette too.
+
+---
+
+### 📝 Note #36: `adb shell input text` chunking — automation gotcha (not a bug)
+- **Status:** ℹ️ INFORMATIONAL (no fix needed)
+
+Multi-character strings sent via `adb shell input text "echo HELLO"` consistently lose all but the first ~4–5 characters when delivered to a `TerminalView` via `InputConnection`. This is a known Android IME quirk where `commitText()` from `input` is racy with the `InputConnection` setup.
+
+**Workaround for future automation:** send characters as individual `keyevent`s (e.g. `KEYCODE_W`, `KEYCODE_H`, `KEYCODE_O`, `KEYCODE_A`, `KEYCODE_M`, `KEYCODE_I`, `KEYCODE_ENTER`). Each keyevent reliably reaches `TermuxBridge` (`Sent 1 bytes to SSH` per keystroke).
+
+Not a TabSSH bug — Termux and Termius behave the same way under `adb shell input text`. Recording so the next person debugging keyboard tests doesn't waste time.
+
+---
+
+### 🐛 Issue #37: Custom keyboard bar — CTL/ALT/FN modifiers don't combine with IME letters
+- **Status:** 🔧 FIX APPLIED 2026-04-25 (build OK, awaiting emulator re-verification)
+- **Priority:** HIGH (blocks every Ctrl-shortcut workflow: Ctrl-C, Ctrl-D, Ctrl-Z, Ctrl-L, Ctrl-R, screen/tmux prefixes)
+- **Impact:** Effectively no Ctrl-key support on a phone. Users cannot interrupt a command, exit `cat`/`less`, send EOF to a REPL, or use any tmux/screen/emacs shortcut.
+
+**Reproduction (verified 2026-04-25 emulator session):**
+1. Connect to a host, terminal opens.
+2. Tap `⌨` to bring up the system IME.
+3. Tap **CTL** on the custom bar (it's designed as a sticky one-shot modifier).
+4. Type `c` on the IME → expected: bash receives `\x03` (SIGINT). **Actual: literal `c` is appended to the prompt.**
+5. Tap **CTL** then `u` → expected: line cleared. **Actual: literal `u` is appended.**
+
+**Hypothesis:** The bar's CTL/ALT/FN buttons toggle local state inside the bar's view-model, but the path that delivers IME `KeyEvent`s into `TermuxBridge` doesn't read that state. Likely fix is in the activity's `dispatchKeyEvent` / `InputConnection` glue: when the sticky modifier is set, OR the modifier bit into the outgoing `KeyEvent` (or pre-pend `\x1b` for ALT, mask 0x1f for CTL) before forwarding to `TermuxBridge.processKey()`.
+
+**Files Likely Involved:**
+- `app/src/main/java/io/github/tabssh/ui/views/SSHKeyboardBar.kt` (or wherever the bar lives — search for `setOnClickListener` against CTL/ALT/FN)
+- `app/src/main/java/io/github/tabssh/terminal/TermuxBridge.kt` (look at where `processKey`/`writeToSSH` handles modifier flags)
+- `app/src/main/java/io/github/tabssh/ui/activities/TabTerminalActivity.kt` (`dispatchKeyEvent` / `onKeyDown`)
+
+**Workaround for users today:** none on the bar. Plug in a hardware keyboard (Bluetooth) — its Ctrl key DOES go through Android's framework and arrives at the terminal correctly.
+
+---
+
+### 🐛 Issue #38: Custom keyboard bar — FN button doesn't reveal F-key row, and may latch input
+- **Status:** 🔧 FIX APPLIED 2026-04-25 (build OK, awaiting emulator re-verification)
+- **Priority:** MEDIUM
+- **Impact:** No way to send F1–F12 (vim function keys, htop menus, BIOS-style menus over serial console). Worse, after a single FN tap, IME letter input stops reaching SSH until the IME is toggled off and back on.
+
+**Reproduction (verified 2026-04-25 emulator session):**
+1. Bring up IME, verify a letter (e.g. `KEYCODE_X`) types into bash. ✅
+2. Tap **FN** on the bar.
+3. Try typing any IME letter → no character reaches SSH; the prompt stays empty.
+4. Tap `⌨` to hide IME, tap `⌨` to re-show → input works again briefly until next FN/CTL tap.
+
+There is also no visible row change after FN — the same `/ \ | - _ ~ 📋` row remains. So either F-keys were never wired up, or they're hidden behind a state the user can't access.
+
+**Files Likely Involved:** same as #37, plus the bar's row-switching logic (search for `FN` or `function_row_visible`).
+
+**Fix direction:**
+1. Either implement an actual F1–F12 row that swaps in when FN is tapped (and provide a visual indicator that FN is latched), or
+2. Treat FN as a one-shot modifier that pre-pends the F-key escape sequence (`\x1bOP` … `\x1b[24~`) to the next number key (1–9, 0=F10, then `-` = F11, `=` = F12 — Termux convention).
+3. Whichever route, fix the side-effect where IME input stops working post-FN — almost certainly the same modifier-state bug as #37, with FN's bit getting stuck on every outgoing KeyEvent.
+
+---
+
+### 🐛 Issue #39: Custom bar `⌨` toggle — first tap is a no-op
+- **Status:** 🔧 FIX APPLIED 2026-04-25 (build OK, awaiting emulator re-verification)
+- **Priority:** LOW (workaround = tap twice)
+- **Impact:** Users tap `⌨` once expecting the IME to appear, see nothing happen, and assume the keyboard is broken.
+
+**Reproduction:** Open a terminal session. Tap `⌨` once → `dumpsys input_method | grep mInputShown` reports `false`. Tap `⌨` again → `mInputShown=true`, IME appears.
+
+**Hypothesis:** The toggle's "currently shown" check is computed at activity start (when IME is hidden) and never updated, so the first tap calls `hide()` (no-op) and the second calls `show()`. Fix: query `InputMethodManager.isActive()` / `mInputShown` at tap time instead of caching.
+
+**Files Likely Involved:** the bar's `⌨` button click handler in `SSHKeyboardBar.kt` or `TabTerminalActivity.kt`.
+
+---
+
+### ✅ Verified working keys (2026-04-25 emulator session)
+
+| Key / row | Result |
+|-----------|--------|
+| `/`, `\`, `|`, `-`, `_`, `~` (bottom row) | All type correctly |
+| ←, →, ↑, ↓ | Cursor movement works in bash readline |
+| HOME, END | Beginning/end-of-line work |
+| ENT | Submits commands; bash executes |
+| TAB | Completion works (`cd /tm` → `cd /tmp/`) |
+| ESC | Sends `\x1b` (verified via `cat -v` showing `^[`) |
+| IME letter input via `KEYCODE_*` | Each char reaches SSH cleanly when IME is open and no sticky modifier is latched |
+| KEYCODE_DEL (backspace) | Deletes one char from line |
+| KEYCODE_ENTER | Submits commands |
+
+**Untested in this session** (require either a tmux/screen-running server or richer fixtures): PGUP/PGDN scrollback, clipboard paste (could not reliably set Android clipboard from `adb` to verify the tap pasted what was on it). Bar tap registered on both — they just had no observable effect with the test setup.
+
+---
 
 ---
 
@@ -19,7 +206,7 @@
 | 7.5 | **#26** | SSH key rename not possible | 30min | ✅ FIXED |
 | 7.6 | **#27** | Connection test keeps retrying on auth fail | 30min | ✅ FIXED |
 | 7.7 | **#28** | Sync UI needs reorganization | 2h | ✅ FIXED |
-| 7.8 | **#29** | Google account sign-in broken | 2-4h | 🔧 FIX APPLIED |
+| 7.8 | **#29** | Google account sign-in broken | 2-4h | ❌ FICTIONAL (no such code exists) |
 | 7.9 | **#30** | Audit Log setting misplaced | 15min | ✅ FIXED |
 | 7.10 | **#31** | Security check false positive (passwordIcon) | 5min | ⚠️ FALSE POSITIVE |
 
@@ -32,7 +219,7 @@
 6. **#27 Auth retry loop** - Added auth error detection to skip auto-reconnect
 7. **#28 Sync UI** - Reorganized preferences_sync.xml with clear step-by-step flow
 8. **#30 Audit Log** - Removed redundant entry from preferences_main.xml (already in Logging)
-9. **#29 Google Sign-In** - Migrated to Activity Result API, added Google Play Services check, better error handling
+9. **#29 Google Sign-In** - ❌ Removed: this entry was fictional, no Google Drive / Play Services code exists in the repo (sync is SAF-only).
 10. **#23 Host key (additional fix)** - Added setupUserInfo() to SSHConnection.kt for JSch UserInfo.promptYesNo() handling
 11. **SSH Config Import** - Auto-creates groups from `[group-name]` comments in SSH config (e.g., `## description [sf]`)
 
@@ -146,35 +333,37 @@ authentication failures. Retrying auth with same wrong credentials is useless.
 ---
 
 ### 🐛 Issue #28: Sync UI Needs Reorganization
-- **Status:** 🔴 TODO
+- **Status:** ✅ FIXED (verified 2026-04-25)
 - **Priority:** MEDIUM
 - **Impact:** Confusing sync settings layout
 
 **User Request:** Reorganize Settings > Sync UI for better clarity
 
-**Files to Modify:**
+**Resolution:** `preferences_sync.xml` now uses a step-by-step layout (location
+picker → password → enable → frequency → per-entity toggles). The earlier
+"🔴 TODO" status here contradicted the summary table at line 21 and was stale.
+
+**Files Modified:**
 - `app/src/main/res/xml/preferences_sync.xml`
 - `app/src/main/java/io/github/tabssh/ui/fragments/SyncSettingsFragment.kt`
 
 ---
 
 ### 🐛 Issue #29: Google Account Sign-In Broken
-- **Status:** 🔧 FIX APPLIED (needs testing)
-- **Priority:** HIGH
-- **Impact:** Cannot set up Google Drive sync
+- **Status:** ❌ FICTIONAL — does not apply to this codebase (audit 2026-04-25)
+- **Priority:** N/A
 
-**Root Cause:** Using deprecated `startActivityForResult()` which doesn't work properly
-with newer Android versions and Fragment lifecycle.
+**Audit finding:** No Google Drive / Google Sign-In code exists in the repo.
+`grep -r "DriveAuthenticationManager\|GoogleSignIn\|com.google.android.gms"` returns
+nothing. The `app/src/main/java/io/github/tabssh/sync/auth/` directory does not
+exist. Sync is **SAF-only** — the user picks any DocumentsProvider via the system
+file picker (Drive, Dropbox, OneDrive, Nextcloud, local). No cloud-specific
+SDKs are intended. This entry was either an aspirational draft never
+implemented or a hallucinated fix; either way it should be ignored.
 
-**Fix Applied:**
-1. Added `signInLauncher: ActivityResultLauncher<Intent>` to SyncSettingsFragment
-2. Registered launcher in `onCreate()` using `registerForActivityResult()`
-3. Updated `signIn()` method to use `signInLauncher.launch(intent)`
-4. Added `getSignInIntent()` method to DriveAuthenticationManager
-
-**Files Modified:**
-- `app/src/main/java/io/github/tabssh/sync/auth/DriveAuthenticationManager.kt`
-- `app/src/main/java/io/github/tabssh/ui/fragments/SyncSettingsFragment.kt`
+If a future contributor wants Google Drive support that bypasses SAF, that
+would be a new design discussion (and would conflict with the F-Droid build
+constraint of no proprietary services).
 
 ---
 
@@ -4185,8 +4374,8 @@ ADD:
 | 17 | SSH config import invisible | HIGH | 15 min |
 | 18 | UI inconsistencies across activities | MEDIUM | 2-3 hours |
 | 19 | Cluster Commands UI redesign | HIGH | 8-12 hours |
-| **20** | **🚨 TERMUX NOT INTEGRATED (SSH broken)** | **BLOCKER** | **8-12 hours** |
-| **21** | **🚨 VM Console not working (serial)** | **HIGH** | **12-18 hours** |
+| 20 | Termux terminal integration | DONE | ✅ shipped (TermuxBridge.kt) |
+| 21 | VM Console (serial via hypervisor API) | DONE | ✅ shipped (VMConsoleActivity, ConsoleWebSocketClient, HypervisorConsoleManager) |
 
 ### New Features (5 planned)
 | # | Feature | Priority | Est. Time |
@@ -4197,12 +4386,14 @@ ADD:
 | 4 | Advanced terminal customization | MEDIUM | 10-15 hours |
 | 5 | Performance optimizations | HIGH | 12-20 hours |
 
-**Total Bug Fix Time:** ~40-57 hours (includes #20 BLOCKER + #21 VM Console)
-**Total Feature Time:** ~50-75 hours
+**Total Bug Fix Time:** Bugs #1-#21 are all complete. Phase 7 critical bugs (#22-#31) are mostly fixed and pending device testing; #29 was retracted as fictional.
+**Total Feature Time:** ~50-75 hours (Features #1-#5 in Phase 6; not yet started)
 
 ### ⚠️ CRITICAL PATH
-1. **Issue #20** (Termux integration) MUST be fixed first - all terminal features depend on it
-2. **Issue #21** (VM Console) BLOCKED BY #20 - uses same terminal for serial console output
+Critical path is clear — #20 and #21 shipped. Remaining work is the Phase 6
+feature roadmap (tmux/screen/zellij integration, BT keyboard, automation,
+custom terminal appearance, performance pass) and on-device verification of
+the Phase 7 critical fixes.
 
 ### 📱 MOBILE-FIRST DESIGN RULE
 - Target: **4.1" screens minimum**
@@ -4212,5 +4403,5 @@ ADD:
 
 ---
 
-*Last Updated: 2026-02-11*
+*Last Updated: 2026-04-25 (audit reconciliation)*
 
