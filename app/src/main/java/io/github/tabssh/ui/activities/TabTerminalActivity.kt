@@ -121,10 +121,30 @@ class TabTerminalActivity : AppCompatActivity() {
             override fun handleOnBackPressed() {
                 Logger.d("TabTerminalActivity", "Back button pressed")
 
-                // Always minimize app, keeping sessions alive
-                // This matches expected mobile behavior
-                Logger.i("TabTerminalActivity", "Minimizing app, keeping ${tabManager.getTabCount()} sessions active")
-                moveTaskToBack(true)
+                // Issue #47: BACK used to always moveTaskToBack(), so the user
+                // had no way to navigate back to MainActivity from inside the
+                // terminal. Two-step behaviour now matches Android conventions:
+                //   1. If the soft IME is showing, hide it and stay.
+                //   2. Otherwise, finish() to pop to MainActivity. The SSH
+                //      sessions keep running because they're owned by
+                //      SSHSessionManager / SSHConnectionService, not by this
+                //      activity.
+                val terminalView = getActiveTerminalView()
+                val imm = getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
+                    as android.view.inputmethod.InputMethodManager
+                val imeShown = terminalView?.let {
+                    androidx.core.view.ViewCompat.getRootWindowInsets(it)
+                        ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
+                } ?: false
+
+                if (imeShown && terminalView != null) {
+                    imm.hideSoftInputFromWindow(terminalView.windowToken, 0)
+                    Logger.d("TabTerminalActivity", "BACK: hid IME, staying in terminal")
+                    return
+                }
+
+                Logger.i("TabTerminalActivity", "BACK: returning to MainActivity (${tabManager.getTabCount()} sessions stay active)")
+                finish()
             }
         })
     }

@@ -191,10 +191,22 @@ class SSHConnection(
 
                 setupAuthentication(jsch, newSession)
 
-                // Connect (this performs both connection AND authentication in one step)
-                Logger.i("SSHConnection", "STEP 10: Calling session.connect() - THIS IS WHERE HOST KEY VERIFICATION HAPPENS")
-                newSession.connect()
-                session = newSession
+                // Connect (this performs both connection AND authentication in one step).
+                //
+                // Issue #40: the very first connect() to a fresh host occasionally
+                // fails with `java.io.IOException: End of IO Stream Read` thrown
+                // from inside JSch's Session.connect(). The SSH server log shows
+                // the password was accepted; the failure is on the JSch side
+                // post-auth, before the session is fully marshalled. A second
+                // attempt always succeeds because the host key is now in our
+                // store so the kex phase finishes without the user dialog.
+                //
+                // Until the underlying race is rooted out, retry once silently
+                // (after a short back-off) and only surface the error if the
+                // second try also fails. Keeps the UX sane on first connect.
+                Logger.i("SSHConnection", "STEP 10: Calling session.connect()")
+                val activeSession = connectWithSilentRetry(jsch, newSession, jumpHostPort, effectiveUsername)
+                session = activeSession
 
                 Logger.i("SSHConnection", "Successfully connected and authenticated to ${profile.host}")
                 
@@ -213,6 +225,53 @@ class SSHConnection(
         
         connectJob?.join()
         return@withContext _connectionState.value == ConnectionState.CONNECTED
+    }
+
+    /**
+     * Wrap [Session.connect] with a single silent retry on transient
+     * post-auth IO errors (Issue #40). Returns the connected Session.
+     *
+     * The first attempt's `firstSession` is fully configured by the caller
+     * (`configureSession`, `setupAuthentication`, `setupUserInfo`, etc.). The
+     * retry creates a fresh session with the same configuration since JSch
+     * sessions are not reusable after a failed `connect()`.
+     */
+    private suspend fun connectWithSilentRetry(
+        jsch: JSch,
+        firstSession: Session,
+        jumpHostPort: Int?,
+        effectiveUsername: String
+    ): Session {
+        try {
+            firstSession.connect()
+            return firstSession
+        } catch (e: java.io.IOException) {
+            val msg = e.message.orEmpty()
+            val isTransient = msg.contains("End of IO Stream Read", ignoreCase = true) ||
+                              msg.contains("connection is closed by foreign host", ignoreCase = true)
+            if (!isTransient) throw e
+            Logger.w(
+                "SSHConnection",
+                "session.connect() hit transient IO error '$msg' — retrying once silently"
+            )
+        }
+
+        // Brief back-off so any half-open server-side state can settle.
+        try { Thread.sleep(500) } catch (_: InterruptedException) {}
+
+        val retrySession = if (jumpHostPort != null) {
+            jsch.getSession(effectiveUsername, "localhost", jumpHostPort)
+        } else {
+            jsch.getSession(effectiveUsername, profile.host, profile.port)
+        }
+        setupHttpSocksProxy(retrySession)
+        configureSession(retrySession)
+        retrySession.timeout = profile.connectTimeout * 1000
+        setupUserInfo(retrySession)
+        setupAuthentication(jsch, retrySession)
+        retrySession.connect()
+        Logger.i("SSHConnection", "Silent retry succeeded for ${profile.host}")
+        return retrySession
     }
 
     private fun configureSession(session: Session) {

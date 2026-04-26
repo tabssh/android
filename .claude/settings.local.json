@@ -63,7 +63,9 @@
       "Bash(ssh-keygen -t rsa -f /tmp/tabssh-android/sshd/host_rsa_key -N '' -q)",
       "Bash(/tmp/tabssh-android/shot.sh 54-frequent-after-splash)",
       "Bash(/tmp/tabssh-android/shot.sh 67-list-with-saved *)",
-      "Bash(/tmp/tabssh-android/shot.sh 69-host-key-actual *)"
+      "Bash(/tmp/tabssh-android/shot.sh 69-host-key-actual *)",
+      "Bash(/tmp/tabssh-android/shot.sh 99-terminal-state)",
+      "Bash(/tmp/tabssh-android/shot.sh A1-fresh)"
     ]
   }
 }

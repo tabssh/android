@@ -197,7 +197,7 @@ There is also no visible row change after FN — the same `/ \ | - _ ~ 📋` row
 All seven Phase 7.5 fixes (#32–#39 minus #36 which was a note) were re-verified end-to-end on the Android 14 emulator. New issues surfaced during the broader walkthrough are filed below.
 
 ### 🐛 Issue #40: First connection attempt errors with "End of IO Stream Read"
-- **Status:** 🔴 TODO
+- **Status:** 🔧 FIX APPLIED 2026-04-25 (silent retry on transient JSch IO error; awaiting emulator re-verification)
 - **Priority:** HIGH (every new connection requires user to tap Retry once)
 - **Impact:** First tap on a freshly-saved connection fails with `Session.connect: java.io.IOException: End of IO Stream Read`. SSH server log confirms the password is **accepted** and a session **starts** — the failure is on the client side, post-auth, during shell-channel setup. Tapping Retry succeeds every time.
 
@@ -250,7 +250,7 @@ All seven Phase 7.5 fixes (#32–#39 minus #36 which was a note) were re-verifie
 - A centered "Create Identity" button AND the FAB. Pick one (FAB is the persistent shortcut; centered button is the empty-state CTA — together they're redundant). Termius / JuiceSSH convention is empty-state CTA only when the FAB is present and prominent.
 
 ### 🐛 Issue #47: TabTerminalActivity traps the system BACK button
-- **Status:** 🔴 TODO
+- **Status:** 🔧 FIX APPLIED 2026-04-25 (BACK now hides IME first, then returns to MainActivity; sessions stay alive via SSHSessionManager service)
 - **Priority:** MEDIUM (blocks discovery/exit; hurts perceived stability)
 - Hardware/gesture BACK from inside the terminal does nothing — neither dismisses the IME nor returns to MainActivity. The terminal also has no toolbar with a back arrow. Users have to use the system app-switcher or Home + relaunch, which feels broken.
 - Two-step fix: (a) BACK once should hide the IME; BACK again should pop to MainActivity. (b) Add a toolbar with a back arrow and a tab-management menu.
@@ -259,6 +259,45 @@ All seven Phase 7.5 fixes (#32–#39 minus #36 which was a note) were re-verifie
 - **Status:** 🔴 TODO
 - **Priority:** LOW
 - Quick Connect uses ▶ (play). Performance uses 👁 (eye), but at small size it reads as a forward triangle too. Pick a more distinctive icon for Quick Connect — e.g., a lightning bolt ⚡ or a plug.
+
+---
+
+## 🔬 Phase 7.7 — Discovered During 2026-04-25 Real-Device Testing
+
+### 🐛 Issue #49: Android system IME ENTER key is silently ignored
+- **Status:** 🔧 FIX APPLIED 2026-04-25 (build OK, awaiting on-device verification)
+- **Priority:** HIGH (every IME-typed shell line was unsendable)
+- **Impact:** Pressing ENTER on the soft keyboard (Gboard, etc.) did nothing. The custom keyboard bar's `ENT` worked. So users could see the line they typed but couldn't submit it without tapping the bar.
+
+**Root cause:**
+- `TerminalView.onCreateInputConnection` set `inputType = TYPE_NULL` and `imeOptions` to `IME_FLAG_NO_FULLSCREEN | IME_FLAG_NO_EXTRACT_UI` — but **never** declared an `IME_ACTION_*`. With no action declared, IMEs default to `IME_ACTION_UNSPECIFIED` (= 0).
+- `TerminalInputConnection.performEditorAction` only matched `IME_ACTION_DONE / GO / SEND` and returned `false` otherwise. `IME_ACTION_UNSPECIFIED` fell through, IME swallowed the press.
+
+**Fix:**
+- `imeOptions |= IME_ACTION_DONE` so the soft keyboard renders a recognizable ENTER button AND routes its press through our handler.
+- `performEditorAction` now unconditionally sends `\r` (terminals always interpret IME ENTER as line-submit, regardless of which action the IME chose).
+
+**Files:** `app/src/main/java/io/github/tabssh/ui/views/TerminalView.kt`
+
+---
+
+### 🐛 Issue #50: SSH exit / logout hangs the terminal
+- **Status:** 🔧 FIX APPLIED 2026-04-25 (build OK, awaiting on-device verification)
+- **Priority:** HIGH (no clean way to leave a session)
+- **Impact:** Typing `exit` (or any disconnect on the server side) closes the SSH read loop but the tab and activity stay open showing the dead session. User has to back out manually.
+
+**Root cause:**
+- `TermuxBridge.startReadLoop()` correctly called `disconnect()` when the SSH stream closed, which fires `TermuxBridgeListener.onDisconnected()`.
+- `SSHTab.setupTerminalListener()` correctly handled `onDisconnected()` by setting `_connectionState.value = DISCONNECTED`.
+- `TabTerminalActivity.updateTabIcon()` already had a `ConnectionState.DISCONNECTED` branch that toasts "Connection closed" and auto-closes the tab after 2 s — and finishes the activity if it was the last tab.
+- **But the chain was broken in the middle:** `TabManager` defined `notifyTabConnectionStateChanged()` and never called it. `TabTerminalActivity` registered an `onTabConnectionStateChanged` listener that never fired. So the auto-close logic was dead code.
+
+**Fix:**
+- `TabManager.createTab()` now launches a coroutine on a `SupervisorJob`-scoped dispatcher that collects `tab.connectionState` and forwards each change to `notifyTabConnectionStateChanged(tab, state)`.
+- `closeTab()` cancels the per-tab observer.
+- `cleanup()` cancels all observers.
+
+**Files:** `app/src/main/java/io/github/tabssh/ui/tabs/TabManager.kt`
 
 ---
 
