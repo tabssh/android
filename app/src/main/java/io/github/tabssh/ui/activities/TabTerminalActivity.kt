@@ -119,34 +119,59 @@ class TabTerminalActivity : AppCompatActivity() {
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                Logger.d("TabTerminalActivity", "Back button pressed")
-
-                // Issue #47: BACK used to always moveTaskToBack(), so the user
-                // had no way to navigate back to MainActivity from inside the
-                // terminal. Two-step behaviour now matches Android conventions:
-                //   1. If the soft IME is showing, hide it and stay.
-                //   2. Otherwise, finish() to pop to MainActivity. The SSH
-                //      sessions keep running because they're owned by
-                //      SSHSessionManager / SSHConnectionService, not by this
-                //      activity.
-                val terminalView = getActiveTerminalView()
-                val imm = getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
-                    as android.view.inputmethod.InputMethodManager
-                val imeShown = terminalView?.let {
-                    androidx.core.view.ViewCompat.getRootWindowInsets(it)
-                        ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
-                } ?: false
-
-                if (imeShown && terminalView != null) {
-                    imm.hideSoftInputFromWindow(terminalView.windowToken, 0)
-                    Logger.d("TabTerminalActivity", "BACK: hid IME, staying in terminal")
-                    return
-                }
-
-                Logger.i("TabTerminalActivity", "BACK: returning to MainActivity (${tabManager.getTabCount()} sessions stay active)")
-                finish()
+                Logger.i("TabTerminalActivity", "BACK pressed — handler invoked")
+                handleBackToMainActivity()
             }
         })
+    }
+
+    /**
+     * Robust BACK handling: hide IME if shown, else go to MainActivity
+     * (sessions stay alive in SSHSessionManager + foreground service).
+     * Issue: relying on `finish()` alone left users stranded when the
+     * activity was launched from outside the normal task stack (widget,
+     * notification, etc.) — they ended up at the home screen instead of
+     * MainActivity. Explicit Intent ensures MainActivity always shows.
+     */
+    private fun handleBackToMainActivity() {
+        val terminalView = getActiveTerminalView()
+        val imm = getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
+            as android.view.inputmethod.InputMethodManager
+        val imeShown = terminalView?.let {
+            androidx.core.view.ViewCompat.getRootWindowInsets(it)
+                ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
+        } ?: false
+
+        if (imeShown && terminalView != null) {
+            imm.hideSoftInputFromWindow(terminalView.windowToken, 0)
+            Logger.d("TabTerminalActivity", "BACK: hid IME, staying in terminal")
+            return
+        }
+
+        Logger.i(
+            "TabTerminalActivity",
+            "BACK: launching MainActivity (${tabManager.getTabCount()} sessions stay active in SSHSessionManager)"
+        )
+        // Launch MainActivity explicitly so the user reliably ends up there
+        // regardless of what's in the back stack (widget launch, notification
+        // launch, deep-link, etc. all clear the stack differently).
+        val intent = Intent(this, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+        }
+        startActivity(intent)
+        finish()
+    }
+
+    /**
+     * Hardware/gesture BACK fallback for devices/configurations where the
+     * OnBackPressedDispatcher misses the event (e.g. predictive back gesture
+     * in a fullscreen activity, or third-party launchers). Eat KEYCODE_BACK
+     * here ourselves and route through the same handler.
+     */
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        Logger.i("TabTerminalActivity", "onBackPressed() called directly — routing")
+        handleBackToMainActivity()
     }
 
     private fun hideKeyboard() {
@@ -498,7 +523,7 @@ class TabTerminalActivity : AppCompatActivity() {
 
         view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_copy)?.setOnClickListener {
             bottomSheet.dismiss()
-            copyTerminalText()
+            copyTerminalScreen()
         }
 
         view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_paste)?.setOnClickListener {
@@ -561,18 +586,18 @@ class TabTerminalActivity : AppCompatActivity() {
                 val fontSize = app.preferencesManager.getInt("terminal_font_size", 14)
                 setFontSize(fontSize)
 
-                // Set up URL detection handler
+                // URL detection is opt-in via preference; the long-press
+                // context menu is ALWAYS available so users have a discoverable
+                // way to copy/paste/select/send-text/change-font-size, matching
+                // JuiceSSH's terminal long-press menu.
                 val urlDetectionEnabled = app.preferencesManager.getBoolean("detect_urls", true)
                 if (urlDetectionEnabled) {
-                    // URL detection callback
                     onUrlDetected = { url ->
                         showUrlDialog(url)
                     }
-                    
-                    // Context menu callback for long press on text
-                    onContextMenuRequested = { x, y ->
-                        showTextContextMenu(x, y)
-                    }
+                }
+                onContextMenuRequested = { x, y ->
+                    showTextContextMenu(x, y)
                 }
                 
                 // Set up custom gesture support
@@ -782,51 +807,121 @@ class TabTerminalActivity : AppCompatActivity() {
     /**
      * Show text context menu when user long-presses on non-URL text
      */
+    /**
+     * JuiceSSH-style long-press context menu for the terminal area.
+     * Items roughly mirror what JuiceSSH/Termius offer: copy the visible
+     * screen, paste, send arbitrary text, font size adjustment, share
+     * connection info, close the current tab.
+     */
     private fun showTextContextMenu(x: Float, y: Float) {
-        val items = arrayOf("Copy", "Paste", "Select All", "Share Session", "Cancel")
-        
+        val items = arrayOf(
+            "Copy screen",
+            "Paste",
+            "Send text…",
+            "Font size…",
+            "Share connection info",
+            "Close this tab"
+        )
+
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Terminal Actions")
-            .setItems(items) { dialog, which ->
+            .setTitle("Terminal")
+            .setItems(items) { _, which ->
                 when (which) {
-                    0 -> copyTerminalText() // Copy
-                    1 -> pasteFromClipboard() // Paste
-                    2 -> selectAllText() // Select All
-                    3 -> shareSession() // Share
-                    4 -> dialog.dismiss() // Cancel
+                    0 -> copyTerminalScreen()
+                    1 -> pasteFromClipboard()
+                    2 -> showSendTextDialog()
+                    3 -> showFontSizeDialog()
+                    4 -> shareSession()
+                    5 -> closeActiveTabConfirmed()
                 }
             }
+            .setNegativeButton("Cancel", null)
             .show()
     }
-    
+
     /**
-     * Copy visible terminal text to clipboard
+     * Copy the visible terminal screen + recent scrollback to clipboard.
      */
-    private fun copyTerminalText() {
-        // Get connection info to copy
-        val activeTab = tabManager.getActiveTab()
-        val profile = activeTab?.profile
-
-        val text = if (profile != null) {
-            "Connection: ${profile.getDisplayName()}\nHost: ${profile.host}:${profile.port}\nUser: ${profile.username}"
-        } else {
-            ""
+    private fun copyTerminalScreen() {
+        val tab = tabManager.getActiveTab()
+        if (tab == null) {
+            Toast.makeText(this, "No active session", Toast.LENGTH_SHORT).show()
+            return
         }
-
-        if (text.isNotEmpty()) {
-            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Connection Info", text))
-            Toast.makeText(this, "Connection info copied to clipboard", Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(this, "No active connection", Toast.LENGTH_SHORT).show()
+        val visible = try { tab.getTerminalContent() } catch (e: Exception) { "" }
+        if (visible.isBlank()) {
+            Toast.makeText(this, "Nothing on screen to copy", Toast.LENGTH_SHORT).show()
+            return
         }
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        clipboard.setPrimaryClip(
+            android.content.ClipData.newPlainText("Terminal", visible)
+        )
+        Toast.makeText(this, "Terminal screen copied", Toast.LENGTH_SHORT).show()
     }
 
     /**
-     * Select all terminal text and copy connection info
+     * Send arbitrary text to the active terminal — useful for inserting
+     * passwords/snippets that don't fit the snippets manager.
      */
-    private fun selectAllText() {
-        copyTerminalText()
+    private fun showSendTextDialog() {
+        val input = android.widget.EditText(this).apply {
+            hint = "Text to send"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            setSingleLine(false)
+            minLines = 2
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Send text")
+            .setView(input)
+            .setPositiveButton("Send") { _, _ ->
+                val text = input.text?.toString().orEmpty()
+                if (text.isNotEmpty()) {
+                    getActiveTerminalView()?.sendText(text)
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Inline +/- font-size adjuster reused from the volume-key path.
+     */
+    private fun showFontSizeDialog() {
+        val current = getActiveTerminalView()?.getFontSize() ?: 14
+        val items = arrayOf("Smaller (-2 sp)", "Larger (+2 sp)", "Reset to 14 sp")
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Font size — current: ${current} sp")
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> adjustFontSize(-2)
+                    1 -> adjustFontSize(2)
+                    2 -> {
+                        getActiveTerminalView()?.setFontSize(14)
+                        app.preferencesManager.setInt("terminal_font_size", 14)
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Close the currently-visible tab (with a confirm step so a stray
+     * long-press doesn't lose work).
+     */
+    private fun closeActiveTabConfirmed() {
+        val tab = tabManager.getActiveTab() ?: return
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Close tab")
+            .setMessage("Close ${tab.profile.getDisplayName()}?")
+            .setPositiveButton("Close") { _, _ ->
+                val idx = tabManager.getAllTabs().indexOfFirst { it.tabId == tab.tabId }
+                if (idx >= 0) tabManager.closeTab(idx)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
     
     /**

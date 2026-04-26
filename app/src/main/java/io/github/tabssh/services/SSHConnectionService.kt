@@ -126,55 +126,79 @@ class SSHConnectionService : Service() {
     }
     
     private fun createNotification(): Notification {
+        // Tapping the notification opens the terminal directly when there's
+        // at least one active session (so users can resume their session in
+        // one tap instead of going through MainActivity → tab list). With
+        // zero sessions we shouldn't be showing this notification at all,
+        // but if we do somehow, fall back to MainActivity.
+        val tapTarget = if (activeConnections > 0) {
+            Intent(this, io.github.tabssh.ui.activities.TabTerminalActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            }
+        } else {
+            Intent(this, MainActivity::class.java)
+        }
         val pendingIntent = PendingIntent.getActivity(
             this,
             0,
-            Intent(this, MainActivity::class.java),
+            tapTarget,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        
-        // Action buttons for notification
+
         val disconnectIntent = PendingIntent.getService(
             this,
             1,
             Intent(this, SSHConnectionService::class.java).apply { action = ACTION_STOP_SERVICE },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        
+
         val contentText = when (activeConnections) {
             0 -> "Ready for SSH connections"
-            1 -> "1 active SSH connection"
-            else -> "$activeConnections active SSH connections"
+            1 -> "1 active SSH session — tap to open"
+            else -> "$activeConnections active SSH sessions — tap to open"
         }
-        
+
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("TabSSH")
             .setContentText(contentText)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(pendingIntent)
-            .setOngoing(true) // CRITICAL: Keeps service running in background
+            .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOnlyAlertOnce(true)            // never re-buzz on update
+            .setSilent(true)                   // explicit: no sound or haptic
             .setShowWhen(false)
-            .setAutoCancel(false) // Prevent accidental dismissal
-        
-        // Add action button to disconnect all
+            .setAutoCancel(false)
+
         if (activeConnections > 0) {
             builder.addAction(
                 R.drawable.ic_disconnect,
-                "Disconnect All",
+                "Disconnect all",
                 disconnectIntent
             )
-        }
-        
-        // Add connection status details
-        if (activeConnections > 0) {
+
+            // Expanded view lists every active session by display name so the
+            // user can see which servers are live without opening the app.
+            val active = try {
+                app.sshSessionManager.getActiveConnections()
+                    .filter { it.connectionState.value == ConnectionState.CONNECTED }
+                    .map { "• ${it.displayName}" }
+            } catch (e: Exception) {
+                emptyList()
+            }
             val bigTextStyle = NotificationCompat.BigTextStyle()
-                .setBigContentTitle("TabSSH - $activeConnections Active")
-                .bigText("SSH connections running in background.\n\nTap to open terminal interface.")
+                .setBigContentTitle(
+                    if (activeConnections == 1) "TabSSH — 1 active session"
+                    else "TabSSH — $activeConnections active sessions"
+                )
+                .bigText(
+                    if (active.isEmpty()) "Sessions running in background.\nTap to open."
+                    else active.joinToString("\n") + "\n\nTap to open."
+                )
             builder.setStyle(bigTextStyle)
         }
-        
+
         return builder.build()
     }
     
@@ -216,12 +240,27 @@ class SSHConnectionService : Service() {
     private fun updateConnectionCount() {
         val stats = app.sshSessionManager.getConnectionStatistics()
         activeConnections = stats.connectedConnections
-        
-        // Update notification
+
+        if (activeConnections == 0) {
+            // No live sessions → kill the service so the persistent
+            // notification disappears immediately. Previously we'd sit on
+            // a "Ready for SSH connections" notification forever, which
+            // the user (rightly) flagged as noise.
+            Logger.i("SSHConnectionService", "No active connections — stopping service")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+            } else {
+                @Suppress("DEPRECATION")
+                stopForeground(true)
+            }
+            stopSelf()
+            return
+        }
+
         serviceScope.launch(Dispatchers.Main) {
             updateNotification()
         }
-        
+
         Logger.d("SSHConnectionService", "Active connections: $activeConnections")
     }
     

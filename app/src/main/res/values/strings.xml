@@ -173,6 +173,7 @@
     <string name="no">No</string>
     <string name="close">Close</string>
     <string name="save">Save</string>
+    <string name="test_button">Test</string>
     <string name="delete">Delete</string>
     <string name="edit">Edit</string>
     <string name="share">Share</string>

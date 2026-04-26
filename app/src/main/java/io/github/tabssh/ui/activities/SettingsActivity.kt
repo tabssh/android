@@ -15,7 +15,10 @@ import io.github.tabssh.ui.activities.SyncSettingsActivity
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.launch
 
-class SettingsActivity : AppCompatActivity() {
+class SettingsActivity :
+    AppCompatActivity(),
+    PreferenceFragmentCompat.OnPreferenceStartFragmentCallback {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
@@ -36,9 +39,40 @@ class SettingsActivity : AppCompatActivity() {
         Logger.d("SettingsActivity", "onCreate completed")
     }
 
+    /**
+     * gh #3 fix — instantiate and navigate to the preference's
+     * `android:fragment="..."` target. Without this callback, AndroidX
+     * Preference throws when the user taps any list entry that uses the
+     * `fragment` attribute, which is what made every settings tap crash
+     * back to the main screen.
+     */
+    override fun onPreferenceStartFragment(
+        caller: PreferenceFragmentCompat,
+        pref: Preference
+    ): Boolean {
+        val fragmentName = pref.fragment ?: return false
+        val fragment = supportFragmentManager.fragmentFactory.instantiate(
+            classLoader,
+            fragmentName
+        ).apply {
+            arguments = pref.extras
+        }
+        supportFragmentManager
+            .beginTransaction()
+            .replace(R.id.settings_container, fragment)
+            .addToBackStack(null)
+            .commit()
+        supportActionBar?.title = pref.title
+        return true
+    }
+
     override fun onSupportNavigateUp(): Boolean {
         if (supportFragmentManager.backStackEntryCount > 0) {
             supportFragmentManager.popBackStack()
+            // Restore main title when popping back to the root list.
+            if (supportFragmentManager.backStackEntryCount == 1) {
+                supportActionBar?.title = "Settings"
+            }
             return true
         }
         finish()

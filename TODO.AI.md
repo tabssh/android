@@ -255,6 +255,47 @@ All seven Phase 7.5 fixes (#32–#39 minus #36 which was a note) were re-verifie
 - Hardware/gesture BACK from inside the terminal does nothing — neither dismisses the IME nor returns to MainActivity. The terminal also has no toolbar with a back arrow. Users have to use the system app-switcher or Home + relaunch, which feels broken.
 - Two-step fix: (a) BACK once should hide the IME; BACK again should pop to MainActivity. (b) Add a toolbar with a back arrow and a tab-management menu.
 
+### 🐛 Issue #51: VM console "Terminal disconnected" fires 3× per actual close
+- **Status:** 🔧 FIX APPLIED 2026-04-26 (build OK, awaiting on-device verification)
+- **Priority:** MEDIUM (cosmetic spam in logs/toasts)
+- `TermuxBridge.disconnect()` was called three times during VM-console teardown:
+  read-loop finally → `consoleManager.disconnect()` → `cleanup()`. Each call
+  fired `listeners.forEach { it.onDisconnected() }`.
+- Made disconnect() idempotent: gate on previous state, only fire listener
+  callbacks on the actual transition from connected → disconnected.
+- File: `app/src/main/java/io/github/tabssh/terminal/TermuxBridge.kt`
+
+### 🐛 Issue #52: VM console (Proxmox termproxy) drops after exactly 10 s
+- **Status:** 🔧 FIX APPLIED 2026-04-26 (build OK, awaiting on-device verification)
+- **Priority:** HIGH (console unusable past 10 s)
+- Proxmox's termproxy enforces an application-layer idle timer (~10 s) and
+  doesn't count OkHttp's WebSocket-protocol pings as activity.
+- Reduced WS pingInterval to 10 s for transport health, AND added a 5 s
+  app-layer keepalive thread that resends the most-recent
+  `1:COLS:ROWS:` resize message (a no-op for the terminal but live
+  traffic from termproxy's perspective). Thread is interrupted on
+  disconnect.
+- File: `app/src/main/java/io/github/tabssh/hypervisor/console/ConsoleWebSocketClient.kt`
+
+### 🐛 Regression to #50 fix (auto-close on every connect, attempt 2)
+- **Status:** 🔧 FIX APPLIED 2026-04-26 (build OK; first attempt with `drop(1)`
+  proved insufficient on real device, replaced with bulletproof guard)
+- **Priority:** CRITICAL — blocks every connection.
+- First attempt (`drop(1).distinctUntilChanged()`) skipped the StateFlow's
+  initial replay but the user still hit the auto-close ~60 ms after
+  createTab. Probable cause: Kotlin's StateFlow re-replays current value
+  whenever a downstream collector re-subscribes after suspension, or the
+  replay raced with the launch's coroutine resumption — `drop(1)` only
+  guards the FIRST visible emission per attached collector.
+- New defence: per-tab observer tracks `hasBeenConnected: Boolean`. The
+  flag is only set true when the StateFlow emits `CONNECTED`. The
+  observer forwards DISCONNECTED to the activity (and therefore the
+  auto-close handler) ONLY if `hasBeenConnected` is true. Initial
+  DISCONNECTED replays — however many — cannot trigger auto-close.
+- File: `app/src/main/java/io/github/tabssh/ui/tabs/TabManager.kt`
+
+---
+
 ### 🟡 Polish #48: "Quick Connect" and "Performance" drawer icons both look like a triangle
 - **Status:** 🔴 TODO
 - **Priority:** LOW
@@ -300,6 +341,62 @@ All seven Phase 7.5 fixes (#32–#39 minus #36 which was a note) were re-verifie
 **Files:** `app/src/main/java/io/github/tabssh/ui/tabs/TabManager.kt`
 
 ---
+
+## 🔬 Phase 7.8 — Real-device session 2026-04-26 (gh issues + UX rework)
+
+### 🐛 gh #3: Crash on any settings activity tap
+- **Status:** 🔧 FIX APPLIED 2026-04-26
+- `SettingsActivity` didn't implement `OnPreferenceStartFragmentCallback`; AndroidX Preference framework throws when `android:fragment="..."` entries are tapped without it. Implemented the callback to instantiate the named fragment, swap into `R.id.settings_container`, addToBackStack, and update toolbar title.
+- **Files:** `SettingsActivity.kt`
+
+### 🐛 gh #4: Save button stretched, bottom-bar labels cropped
+- **Status:** 🔧 FIX APPLIED 2026-04-26
+- (a) Save button: in German `cancel = "❌ Abbrechen"` (emoji + 9 chars) overflowed its weight=1 allotment, squashing the next button. Fix: emoji prefixes removed from action-button labels in de/fr/es; `@string/test_button` added; all three action buttons set `minWidth=0`, `insetLeft/Right=0`, `singleLine=true`, `ellipsize=end` to enforce graceful truncation.
+- (b) Bottom action bar: `bottom_bar_height` 56dp → 72dp so icon+label fit vertically.
+- Contrast portion already addressed by 51a63aa (Theme.TabSSH.Dark → Material3.Dark).
+- **Files:** `activity_connection_edit.xml`, `values/dimens.xml`, `values{,-de,-es,-fr}/strings.xml`
+
+### 🐛 gh #1: SSH Key management does not open
+- **Status:** ✅ VERIFIED FIXED in dev (no code change in this commit)
+- KeyManagementActivity registered in manifest, drawer entry `nav_manage_keys` wired in `MainActivity.kt:235-237`, plus 2 more launch sites; the stale "Opening key management — feature available in settings" toast text is gone (grep finds nothing). Issue was filed against v1.0.0 stable which predated the implementation; will close on next dev prerelease verification.
+
+### 🐛 BACK does nothing in terminal (re-fix of #47)
+- **Status:** 🔧 FIX APPLIED 2026-04-26 (more robust than first attempt)
+- First fix (`finish()`) didn't reach MainActivity in some launch contexts (widget/notification with NEW_TASK/CLEAR_TOP). Now explicitly launches MainActivity with `FLAG_ACTIVITY_REORDER_TO_FRONT` then `finish()`. Also overrides `onBackPressed()` directly as a hardware-back fallback for devices/configurations where the OnBackPressedDispatcher misses the event.
+- Sessions stay alive in `SSHSessionManager` + `SSHConnectionService` (foreground notification keeps the process pinned).
+- **Files:** `TabTerminalActivity.kt`
+
+### 🐛 Persistent notification: stop when idle, silent on update, list active sessions
+- **Status:** 🔧 FIX APPLIED 2026-04-26
+- Old behaviour: notification persisted with "Ready for SSH connections" even when zero sessions active.
+- New: when `activeConnections == 0`, `stopForeground` + `stopSelf` runs immediately so the notification disappears. While ≥1 active: tap opens TabTerminalActivity (not MainActivity), expanded notification lists every active session by display name, `setSilent(true)` + `setOnlyAlertOnce(true)` ensure no buzz on updates.
+- **Files:** `SSHConnectionService.kt`
+
+### ✨ Long-press context menu in terminal (JuiceSSH-style)
+- **Status:** 🔧 FIX APPLIED 2026-04-26
+- Long-press on terminal area now ALWAYS triggers a context menu (was previously gated behind `detect_urls=true`). New menu items: Copy screen, Paste, Send text…, Font size…, Share connection info, Close this tab.
+  - `Copy screen` — clips current visible terminal content (was previously copying connection metadata)
+  - `Send text…` — multi-line input → sent to terminal stdin (passwords, snippets that don't fit Snippets manager)
+  - `Font size…` — sub-menu for ±2sp / reset to 14
+  - `Close this tab` — confirm dialog before closing
+- **Files:** `TabTerminalActivity.kt`
+
+---
+
+## 📋 Phase 7.9 — Newly reported / open work (queued 2026-04-26)
+
+### 🐛 Mosh support missing
+- **Status:** 🔴 TODO
+- App has Mosh code in `protocols/mosh/` but the connection edit form's "use mosh" toggle exists without a working backend wiring.
+
+### 🐛 Connections menu has 2 "Bulk Edit" entries
+- **Status:** 🔴 TODO
+- Duplicate menu/action — needs dedup. Bulk edit feature also needs expansion (multi-select operations: delete, group-assign, identity-assign, export).
+
+### 💬 JuiceSSH/Termius parity audit
+- **Status:** 🔴 TODO — needs structured discussion
+- User-stated goal: full parity with both apps' built-in features (no plugins). Sync stays SAF-based (must work on de-Googled ROMs without Play Services).
+- Will be opened as a tracked discussion (mobile-friendly format) listing known gaps with priority + effort estimates.
 
 ---
 

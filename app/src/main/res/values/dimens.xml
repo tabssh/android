@@ -26,7 +26,10 @@
     <dimen name="tab_min_width">64dp</dimen>
     <dimen name="tab_max_width">140dp</dimen>
     <dimen name="toolbar_height">40dp</dimen>
-    <dimen name="bottom_bar_height">56dp</dimen>
+    <!-- gh #4: 56dp wasn't enough vertical room for icon+label, so the
+         labels (Kbd / Snip / Files / Paste / Menu) got cropped to their
+         first character. 72dp leaves comfortable space for both. -->
+    <dimen name="bottom_bar_height">72dp</dimen>
     <dimen name="function_key_height">40dp</dimen>
     <dimen name="function_key_width">64dp</dimen>
     
