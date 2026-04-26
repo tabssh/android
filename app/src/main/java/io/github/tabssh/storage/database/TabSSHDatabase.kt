@@ -27,7 +27,7 @@ import io.github.tabssh.utils.logging.Logger
         HypervisorProfile::class,
         Workspace::class
     ],
-    version = 21,
+    version = 22,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -295,7 +295,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     MIGRATION_17_18,
                     MIGRATION_18_19,
                     MIGRATION_19_20,
-                    MIGRATION_20_21
+                    MIGRATION_20_21,
+                    MIGRATION_21_22
                 )
                 .build()
                 INSTANCE = instance
@@ -501,6 +502,17 @@ data class DatabaseStats(
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE connections ADD COLUMN protocol TEXT NOT NULL DEFAULT 'ssh'")
                 Logger.i("Database", "Migration 19->20: Added protocol to connections")
+            }
+        }
+
+        /**
+         * v21 → v22 — Wave 3.1 Per-host color tags.
+         * - color_tag: ARGB int on connections (0 = no tag).
+         */
+        val MIGRATION_21_22 = object : Migration(21, 22) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE connections ADD COLUMN color_tag INTEGER NOT NULL DEFAULT 0")
+                Logger.i("Database", "Migration 21->22: Added color_tag to connections")
             }
         }
 

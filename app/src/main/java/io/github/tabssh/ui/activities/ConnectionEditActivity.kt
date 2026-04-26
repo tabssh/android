@@ -50,6 +50,20 @@ class ConnectionEditActivity : AppCompatActivity() {
     private var selectedGroupName: String = "No Group"
     private var availableIdentities: List<io.github.tabssh.storage.database.entities.Identity> = emptyList()
     private var selectedIdentityId: String? = null
+
+    /** Wave 3.1 — current color tag in the editor (ARGB int; 0 = none). */
+    private var currentColorTag: Int = 0
+
+    private val colorTagPresets = listOf(
+        0xFFE53935.toInt() to "Red",
+        0xFFFB8C00.toInt() to "Orange",
+        0xFFFDD835.toInt() to "Yellow",
+        0xFF43A047.toInt() to "Green",
+        0xFF1E88E5.toInt() to "Blue",
+        0xFF8E24AA.toInt() to "Purple",
+        0xFF6D4C41.toInt() to "Brown",
+        0xFF546E7A.toInt() to "Slate"
+    )
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -372,6 +386,34 @@ class ConnectionEditActivity : AppCompatActivity() {
         binding.btnGenerateKey.setOnClickListener {
             showKeyManagementDialog()
         }
+        // Wave 3.1 — color tag picker buttons
+        binding.btnPickColorTag.setOnClickListener { showColorTagPicker() }
+        binding.btnClearColorTag.setOnClickListener {
+            currentColorTag = 0
+            renderColorTagPreview()
+        }
+        renderColorTagPreview()
+    }
+
+    private fun showColorTagPicker() {
+        val labels = colorTagPresets.map { it.second }.toTypedArray()
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Pick color tag")
+            .setItems(labels) { _, which ->
+                currentColorTag = colorTagPresets[which].first
+                renderColorTagPreview()
+            }
+            .setNeutralButton("Clear") { _, _ -> currentColorTag = 0; renderColorTagPreview() }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun renderColorTagPreview() {
+        if (currentColorTag != 0) {
+            binding.previewColorTag.setBackgroundColor(currentColorTag)
+        } else {
+            binding.previewColorTag.setBackgroundColor(0xFFCCCCCC.toInt())
+        }
     }
     
     private fun loadConnection(connectionId: String) {
@@ -487,6 +529,10 @@ class ConnectionEditActivity : AppCompatActivity() {
 
         // Wave 2.3: protocol selector
         binding.spinnerProtocol.setSelection(if (profile.protocol.equals("telnet", true)) 1 else 0)
+
+        // Wave 3.1: color tag preview + picker
+        currentColorTag = profile.colorTag
+        renderColorTagPreview()
 
         // Proxy/Jump Host settings
         val proxyTypes = listOf("None", "HTTP", "SOCKS4", "SOCKS5", "SSH Jump Host")
@@ -640,6 +686,8 @@ class ConnectionEditActivity : AppCompatActivity() {
         val agentForwarding = binding.switchAgentForwarding.isChecked
         // Wave 2.3: protocol selector
         val protocol = if (binding.spinnerProtocol.selectedItemPosition == 1) "telnet" else "ssh"
+        // Wave 3.1: color tag (0 = none)
+        val colorTag = currentColorTag
 
         // Proxy/Jump Host settings
         val proxyTypeDisplay = binding.spinnerProxyType.text.toString()
@@ -701,7 +749,8 @@ class ConnectionEditActivity : AppCompatActivity() {
             proxyPort = proxyPort,
             proxyUsername = proxyUsername,
             proxyAuthType = proxyAuthType,
-            proxyKeyId = proxyKeyId
+            proxyKeyId = proxyKeyId,
+            colorTag = colorTag
         ) ?: ConnectionProfile(
             name = name,
             host = host,

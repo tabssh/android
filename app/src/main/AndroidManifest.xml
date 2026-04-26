@@ -192,6 +192,20 @@
             android:parentActivityName=".ui.activities.SettingsActivity"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- Wave 3.5 — Connection history -->
+        <activity
+            android:name=".ui.activities.ConnectionHistoryActivity"
+            android:exported="false"
+            android:label="Connection History"
+            android:parentActivityName=".ui.activities.MainActivity" />
+
+        <!-- Wave 3.6 — What's new -->
+        <activity
+            android:name=".ui.activities.WhatsNewActivity"
+            android:exported="false"
+            android:label="What's New"
+            android:parentActivityName=".ui.activities.MainActivity" />
+
         <!-- Port Forwarding activity -->
         <activity
             android:name=".ui.activities.PortForwardingActivity"

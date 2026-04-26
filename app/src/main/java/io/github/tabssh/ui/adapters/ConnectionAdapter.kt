@@ -93,6 +93,14 @@ class ConnectionAdapter(
                 
                 // Connection icon based on type/status
                 iconConnection.setImageResource(getConnectionIcon(connection))
+
+                // Wave 3.1 — color tag strip
+                if (connection.colorTag != 0) {
+                    colorTagStrip.visibility = android.view.View.VISIBLE
+                    colorTagStrip.setBackgroundColor(connection.colorTag)
+                } else {
+                    colorTagStrip.visibility = android.view.View.GONE
+                }
                 
                 // Status indicator
                 updateStatusIndicator(connection)
