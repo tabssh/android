@@ -54,8 +54,12 @@
         <item name="connectionStatusError">@color/connection_error</item>
     </style>
     
-    <!-- Dark theme -->
-    <style name="Theme.TabSSH.Dark" parent="Theme.Material3.DayNight.NoActionBar">
+    <!-- Dark theme — force dark unconditionally. Was DayNight parent before
+         which caused Issue #35: with system in light mode, DayNight handed us
+         a LIGHT background but our explicit dark text-color overrides won,
+         producing light-on-light text. The Dark theme is meant to look dark
+         regardless of the system setting, so use Material3.Dark as parent. -->
+    <style name="Theme.TabSSH.Dark" parent="Theme.Material3.Dark.NoActionBar">
         <item name="colorPrimary">@color/primary_400</item>
         <item name="colorOnPrimary">@color/primary_900</item>
         <item name="colorPrimaryContainer">@color/primary_800</item>
