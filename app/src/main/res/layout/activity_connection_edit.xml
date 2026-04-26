@@ -694,7 +694,19 @@
 
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Action Buttons: Cancel | Test | Save (equal width to prevent overflow) -->
+            <!-- Action Buttons: Cancel | Test | Save.
+                 gh #4: in German the Save button rendered as a thin blue strip
+                 with no visible text because:
+                   1. Cancel was using @string/cancel = "❌ Abbrechen" (11
+                      chars + emoji) which forced the button past its weight
+                      allotment; and
+                   2. Save was hardcoded to "Save" (no string resource) AND
+                      had no minWidth=0/insets to shrink properly under
+                      pressure.
+                 Fix: use string resources for ALL three labels (and add
+                 short German translations), set singleLine + ellipsize so
+                 truncation is graceful, drop minWidth so the weight=1
+                 distribution actually controls width. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -708,6 +720,11 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:layout_marginEnd="@dimen/space_sm"
+                    android:minWidth="0dp"
+                    android:insetLeft="0dp"
+                    android:insetRight="0dp"
+                    android:singleLine="true"
+                    android:ellipsize="end"
                     android:text="@string/cancel" />
 
                 <com.google.android.material.button.MaterialButton
@@ -717,7 +734,12 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:layout_marginEnd="@dimen/space_sm"
-                    android:text="Test" />
+                    android:minWidth="0dp"
+                    android:insetLeft="0dp"
+                    android:insetRight="0dp"
+                    android:singleLine="true"
+                    android:ellipsize="end"
+                    android:text="@string/test_button" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_save"
@@ -725,7 +747,12 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Save" />
+                    android:minWidth="0dp"
+                    android:insetLeft="0dp"
+                    android:insetRight="0dp"
+                    android:singleLine="true"
+                    android:ellipsize="end"
+                    android:text="@string/save" />
 
             </LinearLayout>
 

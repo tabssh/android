@@ -167,12 +167,14 @@
     <string name="about_open_source_licenses">📚 Licencias de Código Abierto</string>
     
     <!-- Common actions -->
-    <string name="ok">✅ Aceptar</string>
-    <string name="cancel">❌ Cancelar</string>
-    <string name="yes">✅ Sí</string>
-    <string name="no">❌ No</string>
-    <string name="close">❌ Cerrar</string>
-    <string name="save">💾 Guardar</string>
+    <string name="ok">Aceptar</string>
+    <!-- gh #4: action-button labels stay text-only to avoid layout overflow. -->
+    <string name="cancel">Cancelar</string>
+    <string name="yes">Sí</string>
+    <string name="no">No</string>
+    <string name="close">Cerrar</string>
+    <string name="save">Guardar</string>
+    <string name="test_button">Probar</string>
     <string name="delete">🗑️ Eliminar</string>
     <string name="edit">✏️ Editar</string>
     <string name="share">📤 Compartir</string>
