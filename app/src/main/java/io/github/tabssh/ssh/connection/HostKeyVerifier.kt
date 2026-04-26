@@ -465,12 +465,9 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
         }
 
         try {
-            // Wait for user response with timeout
-            val responded = latch.await(60, java.util.concurrent.TimeUnit.SECONDS)
-            if (!responded) {
-                Logger.w("HostKeyVerifier", "Dialog timeout - rejecting connection")
-                userAction = HostKeyAction.REJECT_CONNECTION
-            }
+            // No timeout — see Issue #32. The setOnDismissListener releases
+            // the latch on activity destruction so this won't deadlock.
+            latch.await()
         } catch (e: InterruptedException) {
             Logger.e("HostKeyVerifier", "Interrupted waiting for dialog response", e)
             userAction = HostKeyAction.REJECT_CONNECTION
@@ -545,11 +542,8 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
         }
 
         try {
-            val responded = latch.await(60, java.util.concurrent.TimeUnit.SECONDS)
-            if (!responded) {
-                Logger.w("HostKeyVerifier", "Dialog timeout - rejecting connection")
-                userAction = HostKeyAction.REJECT_CONNECTION
-            }
+            // No timeout — see Issue #32.
+            latch.await()
         } catch (e: InterruptedException) {
             Logger.e("HostKeyVerifier", "Interrupted waiting for dialog response", e)
             userAction = HostKeyAction.REJECT_CONNECTION

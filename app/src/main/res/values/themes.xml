@@ -7,31 +7,41 @@
         <item name="colorOnPrimary">@color/white</item>
         <item name="colorPrimaryContainer">@color/primary_100</item>
         <item name="colorOnPrimaryContainer">@color/primary_900</item>
-        
+
         <item name="colorSecondary">@color/secondary_500</item>
         <item name="colorOnSecondary">@color/white</item>
         <item name="colorSecondaryContainer">@color/secondary_100</item>
         <item name="colorOnSecondaryContainer">@color/secondary_900</item>
-        
+
         <item name="colorTertiary">@color/info</item>
         <item name="colorOnTertiary">@color/white</item>
-        
+
         <item name="colorError">@color/error</item>
         <item name="colorOnError">@color/white</item>
         <item name="colorErrorContainer">@color/error_dark</item>
-        
+
         <item name="colorSurface">@color/surface</item>
         <item name="colorOnSurface">@color/on_surface</item>
         <item name="colorSurfaceVariant">@color/surface_variant</item>
         <item name="colorOnSurfaceVariant">@color/on_surface_variant</item>
-        
+
         <item name="colorOutline">@color/outline</item>
         <item name="colorOutlineVariant">@color/outline_variant</item>
-        
+
         <item name="android:statusBarColor">@color/primary_600</item>
         <item name="android:navigationBarColor">@color/surface</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">true</item>
+
+        <!-- Anchor the legacy textColor* attrs so layouts that reference
+             ?android:attr/textColorPrimary etc. always get our verified
+             contrast palette, not whatever the system's DayNight defaults
+             pick. Without this, several section titles render as a tint
+             far lighter than intended (Issue #35). -->
+        <item name="android:textColorPrimary">@color/on_surface</item>
+        <item name="android:textColorSecondary">@color/on_surface_variant</item>
+        <item name="android:textColorTertiary">@color/gray_600</item>
+        <item name="android:textColorHint">@color/gray_500</item>
         
         <!-- Custom attributes -->
         <item name="terminalBackgroundColor">@color/terminal_background</item>
@@ -74,7 +84,13 @@
         <item name="android:navigationBarColor">@color/surface_dark</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
-        
+
+        <!-- Anchor textColor* for the dark theme too (Issue #35). -->
+        <item name="android:textColorPrimary">@color/on_surface_dark</item>
+        <item name="android:textColorSecondary">@color/on_surface_variant_dark</item>
+        <item name="android:textColorTertiary">@color/gray_400</item>
+        <item name="android:textColorHint">@color/gray_500</item>
+
         <!-- Custom attributes -->
         <item name="terminalBackgroundColor">@color/terminal_background</item>
         <item name="terminalTextColor">@color/terminal_foreground</item>
