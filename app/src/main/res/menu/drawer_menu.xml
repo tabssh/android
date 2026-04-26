@@ -64,6 +64,10 @@
             android:icon="@android:drawable/ic_menu_upload"
             android:title="Import SSH Config" />
         <item
+            android:id="@+id/nav_bulk_import"
+            android:icon="@android:drawable/ic_menu_upload"
+            android:title="Bulk Import (CSV / JSON / PuTTY / Terraform)" />
+        <item
             android:id="@+id/nav_import_connections"
             android:icon="@android:drawable/ic_menu_upload"
             android:title="Import Backup" />

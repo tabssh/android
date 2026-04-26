@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -169,6 +170,15 @@ class SFTPActivity : AppCompatActivity() {
         binding.btnUpload.setOnClickListener {
             uploadSelectedFiles()
         }
+
+        // Wave 1.9 — long-press the Upload button to switch to SCP mode.
+        // SCP is the fallback for legacy / minimal servers without an
+        // SFTP subsystem. SFTP remains the default; users opt into SCP
+        // explicitly per upload.
+        binding.btnUpload.setOnLongClickListener {
+            askScpModeAndUpload()
+            true
+        }
         
         binding.btnDownload.setOnClickListener {
             downloadSelectedFiles()
@@ -312,6 +322,51 @@ class SFTPActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Wave 1.9 — SCP fallback upload. Long-pressing the Upload button
+     * routes selected files through SCPClient instead of SFTP. Useful for
+     * ancient / minimal servers without an SFTP subsystem (network gear,
+     * stripped-down embedded systems).
+     */
+    private fun askScpModeAndUpload() {
+        val selected = localFileAdapter?.getSelectedFiles() ?: emptyList()
+        if (selected.isEmpty()) {
+            showToast("No files selected. Long-press files to select them.")
+            return
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Upload via SCP")
+            .setMessage("SCP is the legacy fallback for servers without SFTP. " +
+                "Default Upload uses SFTP (recommended). Continue with SCP?")
+            .setPositiveButton("SCP") { _, _ -> uploadSelectedFilesViaScp() }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun uploadSelectedFilesViaScp() {
+        val connectionId = intent.getStringExtra(EXTRA_CONNECTION_ID) ?: return
+        val ssh = app.sshSessionManager.getConnection(connectionId) ?: run {
+            showError("Connection not active", "Error")
+            return
+        }
+        val client = io.github.tabssh.sftp.SCPClient(ssh)
+        val selected = localFileAdapter?.getSelectedFiles() ?: return
+        lifecycleScope.launch {
+            var ok = 0
+            var fail = 0
+            for (file in selected) {
+                if (file.isDirectory) continue
+                val remote = "$currentRemotePath/${file.name}"
+                if (client.uploadFile(file, remote, null)) ok++ else fail++
+            }
+            runOnUiThread {
+                showToast("SCP: $ok ok, $fail failed")
+                localFileAdapter?.clearSelection()
+                loadRemoteDirectory(currentRemotePath)
+            }
+        }
+    }
+
     private fun downloadSelectedFiles() {
         // Multi-file download: Get selected files from FileAdapter
         val selectedFiles = remoteFileAdapter?.getSelectedRemoteFiles() ?: emptyList()
@@ -432,10 +487,12 @@ class SFTPActivity : AppCompatActivity() {
     }
 
     private fun showRemoteFileMenu(file: RemoteFileInfo) {
+        // Wave 1.7 + 1.8 — added "Edit" (text-ish files) and "Permissions"
+        // (chmod) to the per-file long-press menu.
         val items = if (file.isDirectory) {
-            arrayOf("Open", "Download Folder", "Rename", "Delete")
+            arrayOf("Open", "Download Folder", "Rename", "Permissions…", "Delete")
         } else {
-            arrayOf("Download", "Rename", "Delete", "Properties")
+            arrayOf("Open / Edit", "Download", "Rename", "Permissions…", "Properties", "Delete")
         }
 
         androidx.appcompat.app.AlertDialog.Builder(this)
@@ -444,13 +501,144 @@ class SFTPActivity : AppCompatActivity() {
                 if (which < 0 || which >= items.size) return@setItems
                 when (items[which]) {
                     "Open" -> handleRemoteFileClick(file)
+                    "Open / Edit" -> openOrEditRemoteFile(file)
                     "Download", "Download Folder" -> downloadFile(file)
                     "Rename" -> renameRemoteFile(file)
+                    "Permissions…" -> showPermissionsDialog(file)
                     "Delete" -> deleteRemoteFile(file)
                     "Properties" -> showFileProperties(file)
                 }
             }
             .show()
+    }
+
+    /**
+     * Wave 1.8 — chmod dialog. rwx checkboxes for user/group/other plus a
+     * live numeric (octal) display. Apply via SFTPManager.changeRemotePermissions().
+     */
+    private fun showPermissionsDialog(file: RemoteFileInfo) {
+        val current = file.permissions
+        // file.permissions might be a string like "rwxr-xr--" or "0644" — try octal first
+        val initialMode = parseInitialMode(current, file.isDirectory)
+
+        val view = layoutInflater.inflate(android.R.layout.simple_list_item_1, null)
+        // Build the dialog programmatically to avoid a new layout file.
+        val container = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(48, 24, 48, 0)
+        }
+
+        val mode = intArrayOf(initialMode)
+
+        fun makeRow(label: String, shift: Int): android.widget.LinearLayout {
+            val row = android.widget.LinearLayout(this).apply {
+                orientation = android.widget.LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+            }
+            row.addView(android.widget.TextView(this).apply {
+                text = label
+                width = 220
+            })
+            for ((bit, name) in listOf(4 to "r", 2 to "w", 1 to "x")) {
+                val cb = android.widget.CheckBox(this).apply {
+                    text = name
+                    isChecked = (mode[0] shr shift) and bit != 0
+                    setOnCheckedChangeListener { _, isChecked ->
+                        mode[0] = if (isChecked) mode[0] or (bit shl shift)
+                                  else mode[0] and (bit shl shift).inv()
+                        updatePermissionsLabel(container, mode[0])
+                    }
+                }
+                row.addView(cb)
+            }
+            return row
+        }
+
+        container.addView(makeRow("Owner", 6))
+        container.addView(makeRow("Group", 3))
+        container.addView(makeRow("Other", 0))
+        container.addView(android.widget.TextView(this).apply {
+            id = android.R.id.text1
+            text = "Mode: ${octalString(mode[0])}"
+            textSize = 16f
+            setPadding(0, 24, 0, 0)
+        })
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Permissions — ${file.name}")
+            .setView(container)
+            .setPositiveButton("Apply") { _, _ ->
+                lifecycleScope.launch {
+                    val ok = sftpManager.changeRemotePermissions(file.path, mode[0])
+                    runOnUiThread {
+                        Toast.makeText(
+                            this@SFTPActivity,
+                            if (ok) "Permissions set to ${octalString(mode[0])}"
+                            else "chmod failed",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        loadRemoteDirectory(currentRemotePath)
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun updatePermissionsLabel(container: android.view.ViewGroup, mode: Int) {
+        container.findViewById<android.widget.TextView>(android.R.id.text1)?.text =
+            "Mode: ${octalString(mode)}"
+    }
+
+    private fun octalString(mode: Int): String =
+        String.format("%04o (%s)", mode, modeToRwx(mode))
+
+    private fun modeToRwx(mode: Int): String {
+        val sb = StringBuilder()
+        for (shift in intArrayOf(6, 3, 0)) {
+            sb.append(if ((mode shr shift) and 4 != 0) 'r' else '-')
+            sb.append(if ((mode shr shift) and 2 != 0) 'w' else '-')
+            sb.append(if ((mode shr shift) and 1 != 0) 'x' else '-')
+        }
+        return sb.toString()
+    }
+
+    private fun parseInitialMode(perms: String?, isDirectory: Boolean): Int {
+        // Kotlin has no octal literal; use String.toInt(8) for clarity.
+        val defaultDir = "755".toInt(8)   // 0o755
+        val defaultFile = "644".toInt(8)  // 0o644
+        if (perms.isNullOrBlank()) return if (isDirectory) defaultDir else defaultFile
+        perms.trim().toIntOrNull(8)?.let { return it }
+        val s = if (perms.length == 10) perms.substring(1) else perms
+        if (s.length != 9) return if (isDirectory) defaultDir else defaultFile
+        var mode = 0
+        for (i in 0 until 3) {
+            val base = i * 3
+            if (s[base]     == 'r') mode = mode or (4 shl ((2 - i) * 3))
+            if (s[base + 1] == 'w') mode = mode or (2 shl ((2 - i) * 3))
+            if (s[base + 2] == 'x') mode = mode or (1 shl ((2 - i) * 3))
+        }
+        return mode
+    }
+
+    /**
+     * Wave 1.7 — Open / edit a remote text file. Downloads to cache,
+     * launches a simple text editor activity that writes back via SFTP.
+     * For now: only files under 1 MiB. Binary detection skipped — opening
+     * a binary file shows a warning but still proceeds (read-only).
+     */
+    private fun openOrEditRemoteFile(file: RemoteFileInfo) {
+        if (file.size > 1_048_576) {
+            Toast.makeText(this, "File too large (>1 MiB) — download instead", Toast.LENGTH_LONG).show()
+            return
+        }
+        val connectionId = intent.getStringExtra(EXTRA_CONNECTION_ID) ?: return
+        val editorIntent = android.content.Intent(this, RemoteFileEditorActivity::class.java).apply {
+            putExtra(RemoteFileEditorActivity.EXTRA_CONNECTION_ID, connectionId)
+            putExtra(RemoteFileEditorActivity.EXTRA_REMOTE_PATH, file.path)
+            putExtra(RemoteFileEditorActivity.EXTRA_FILE_NAME, file.name)
+        }
+        startActivity(editorIntent)
     }
     
     private fun uploadFile(localFile: File) {

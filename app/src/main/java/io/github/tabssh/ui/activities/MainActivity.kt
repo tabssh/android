@@ -22,7 +22,9 @@ import io.github.tabssh.storage.database.entities.HypervisorType
 import io.github.tabssh.ui.adapters.MainPagerAdapter
 import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Main activity with 5-tab JuiceSSH-inspired layout
@@ -55,6 +57,12 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
     ) { uri ->
         uri?.let { importSSHConfigFromUri(it) }
+    }
+
+    private val bulkImportLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let { bulkImportFromUri(it) }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -261,6 +269,9 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             // Import/Export
             R.id.nav_import_ssh_config -> {
                 importSSHConfig()
+            }
+            R.id.nav_bulk_import -> {
+                bulkImportLauncher.launch(arrayOf("*/*"))
             }
             R.id.nav_import_connections -> {
                 importConnectionsLauncher.launch(arrayOf("application/zip", "application/json"))
@@ -637,6 +648,71 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
      */
     private fun importSSHConfig() {
         importSSHConfigLauncher.launch(arrayOf("*/*"))
+    }
+
+    /**
+     * Wave 1.6 — Bulk import dispatcher (CSV / JSON / PuTTY .reg / Terraform .tf).
+     *
+     * Parses with [io.github.tabssh.ssh.config.BulkImportParser], shows a
+     * preview/confirm dialog, then routes through [importSSHConfigProfiles]
+     * for the actual DB insert (so groups get created the same way).
+     */
+    private fun bulkImportFromUri(uri: android.net.Uri) {
+        lifecycleScope.launch {
+            try {
+                val text = withContext(Dispatchers.IO) {
+                    contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                } ?: throw Exception("Could not open file")
+
+                val result = io.github.tabssh.ssh.config.BulkImportParser.parse(text)
+
+                if (result.hosts.isEmpty()) {
+                    val msg = buildString {
+                        append("No connections detected (${result.format.name}).")
+                        if (result.warnings.isNotEmpty()) {
+                            append("\n\n")
+                            append(result.warnings.joinToString("\n"))
+                        }
+                    }
+                    androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+                        .setTitle("Bulk Import")
+                        .setMessage(msg)
+                        .setPositiveButton(android.R.string.ok, null)
+                        .show()
+                    return@launch
+                }
+                showBulkImportPreviewDialog(result)
+            } catch (e: Exception) {
+                Logger.e("MainActivity", "Bulk import failed", e)
+                android.widget.Toast.makeText(
+                    this@MainActivity,
+                    "Bulk import failed: ${e.message}",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
+    private fun showBulkImportPreviewDialog(result: io.github.tabssh.ssh.config.BulkImportParser.ParseResult) {
+        val sample = result.hosts.take(20).joinToString("\n") { p ->
+            val auth = p.authType?.let { " · $it" }.orEmpty()
+            val grp = p.groupName?.let { " [${'$'}it]" }.orEmpty()
+            "• ${p.name} → ${p.username ?: "?"}@${p.host}:${p.port}$auth$grp"
+        }
+        val more = if (result.hosts.size > 20) "\n… and ${result.hosts.size - 20} more" else ""
+        val warn = if (result.warnings.isNotEmpty()) {
+            "\n\nWarnings:\n" + result.warnings.take(8).joinToString("\n") { "  - $it" }
+        } else ""
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Bulk Import: ${result.format.name}")
+            .setMessage("Found ${result.hosts.size} connection(s).\n\n$sample$more$warn")
+            .setPositiveButton("Import") { _, _ ->
+                val profiles = result.hosts.map { it.toConnectionProfile() }
+                importSSHConfigProfiles(profiles)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
     
     /**

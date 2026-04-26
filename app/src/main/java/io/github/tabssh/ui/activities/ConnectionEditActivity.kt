@@ -481,6 +481,10 @@ class ConnectionEditActivity : AppCompatActivity() {
             binding.editPostConnectScript.setText(script)
         }
 
+        // Wave 1.2: per-host env vars + Wave 1.5: agent forwarding
+        profile.envVars?.let { binding.editEnvVars.setText(it) }
+        binding.switchAgentForwarding.isChecked = profile.agentForwarding
+
         // Proxy/Jump Host settings
         val proxyTypes = listOf("None", "HTTP", "SOCKS4", "SOCKS5", "SSH Jump Host")
         val proxyType = profile.proxyType ?: "None"
@@ -629,6 +633,8 @@ class ConnectionEditActivity : AppCompatActivity() {
 
         val fontSizeOverride = binding.editFontSizeOverride.text.toString().toIntOrNull()?.takeIf { it in 8..32 }
         val postConnectScript = binding.editPostConnectScript.text.toString().takeIf { it.isNotBlank() }
+        val envVars = binding.editEnvVars.text.toString().takeIf { it.isNotBlank() }
+        val agentForwarding = binding.switchAgentForwarding.isChecked
 
         // Proxy/Jump Host settings
         val proxyTypeDisplay = binding.spinnerProxyType.text.toString()
@@ -681,6 +687,8 @@ class ConnectionEditActivity : AppCompatActivity() {
             theme = theme,
             fontSizeOverride = fontSizeOverride,
             postConnectScript = postConnectScript,
+            envVars = envVars,
+            agentForwarding = agentForwarding,
             groupId = selectedGroupId,
             proxyType = proxyType,
             proxyHost = proxyHost,
@@ -706,6 +714,8 @@ class ConnectionEditActivity : AppCompatActivity() {
             theme = theme,
             fontSizeOverride = fontSizeOverride,
             postConnectScript = postConnectScript,
+            envVars = envVars,
+            agentForwarding = agentForwarding,
             groupId = selectedGroupId,
             proxyType = proxyType,
             proxyHost = proxyHost,

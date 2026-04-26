@@ -180,6 +180,9 @@ class SSHConnection(
                 newSession.timeout = profile.connectTimeout * 1000
                 Logger.d("SSHConnection", "Connection timeout set to ${profile.connectTimeout} seconds")
 
+                // Wave 1.2 — env vars are applied at channel open (JSch's
+                // setEnv lives on Channel, not Session). See openShellChannel().
+
                 // Setup UserInfo for host key verification prompts
                 Logger.d("SSHConnection", "STEP 8.5: Setting up UserInfo for host key prompts")
                 setupUserInfo(newSession)
@@ -272,6 +275,46 @@ class SSHConnection(
         retrySession.connect()
         Logger.i("SSHConnection", "Silent retry succeeded for ${profile.host}")
         return retrySession
+    }
+
+    /**
+     * Wave 1.2 — apply per-host env vars from profile.envVars (multi-line
+     * "KEY=value") to a channel. Comment lines beginning with `#` and blank
+     * lines are skipped. Quoted values are unquoted. Invalid lines are
+     * logged and skipped — never crash the connect.
+     *
+     * JSch puts `setEnv` on Channel (not Session). The server must list
+     * each KEY in `AcceptEnv` in sshd_config or it's silently dropped.
+     */
+    private fun applyEnvVarsTo(channel: com.jcraft.jsch.Channel) {
+        val raw = profile.envVars?.takeIf { it.isNotBlank() } ?: return
+        var applied = 0
+        raw.lineSequence().forEachIndexed { idx, line ->
+            val trimmed = line.trim()
+            if (trimmed.isEmpty() || trimmed.startsWith("#")) return@forEachIndexed
+            val eq = trimmed.indexOf('=')
+            if (eq <= 0) {
+                Logger.w("SSHConnection", "envVars line ${idx + 1}: skipping malformed '$trimmed'")
+                return@forEachIndexed
+            }
+            val key = trimmed.substring(0, eq).trim()
+            var value = trimmed.substring(eq + 1).trim()
+            if ((value.startsWith("\"") && value.endsWith("\"")) ||
+                (value.startsWith("'") && value.endsWith("'"))) {
+                value = value.substring(1, value.length - 1)
+            }
+            try {
+                // JSch ChannelShell.setEnv signature accepts String/String
+                val m = channel.javaClass.getMethod("setEnv", String::class.java, String::class.java)
+                m.invoke(channel, key, value)
+                applied++
+            } catch (e: Exception) {
+                Logger.w("SSHConnection", "envVars setEnv($key) failed: ${e.message}")
+            }
+        }
+        if (applied > 0) {
+            Logger.i("SSHConnection", "Applied $applied env var(s) to ${profile.host}")
+        }
     }
 
     private fun configureSession(session: Session) {
@@ -780,6 +823,17 @@ class SSHConnection(
             val channel = currentSession.openChannel("shell") as ChannelShell
             channel.setPtyType(profile.terminalType)
             channel.setPtySize(80, 24, 0, 0) // Will be updated by terminal
+            // Wave 1.2: per-host env vars before channel.connect()
+            applyEnvVarsTo(channel)
+            // Wave 1.5: SSH agent forwarding (per-host opt-in)
+            if (profile.agentForwarding) {
+                try {
+                    channel.setAgentForwarding(true)
+                    Logger.i("SSHConnection", "Enabled SSH agent forwarding for ${profile.host}")
+                } catch (e: Exception) {
+                    Logger.w("SSHConnection", "setAgentForwarding failed: ${e.message}")
+                }
+            }
             channel.connect()
             
             shellChannel = channel

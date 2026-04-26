@@ -103,6 +103,21 @@ data class ConnectionProfile(
     @ColumnInfo(name = "post_connect_script")
     val postConnectScript: String? = null, // Commands to run after connection (one per line)
 
+    /**
+     * Wave 1.2 — per-host environment variables. Multi-line "KEY=value"
+     * lines applied via JSch session.setEnv() before opening the shell
+     * channel. Server must allow them in sshd_config (AcceptEnv) or they
+     * are silently ignored. DB v17 → v18.
+     */
+    @ColumnInfo(name = "env_vars")
+    val envVars: String? = null,
+
+    /**
+     * Wave 1.5 — per-host SSH agent forwarding. JSch's `ChannelShell.setAgentForwarding(true)`.
+     */
+    @ColumnInfo(name = "agent_forwarding")
+    val agentForwarding: Boolean = false,
+
     @ColumnInfo(name = "font_size_override")
     val fontSizeOverride: Int? = null, // null = use global default, otherwise override
 
