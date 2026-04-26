@@ -95,4 +95,14 @@
         android:title="Search history (Ctrl+R)…"
         app:showAsAction="never" />
 
+    <item
+        android:id="@+id/action_split_bottom"
+        android:title="Split horizontally (open below)…"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_unsplit"
+        android:title="Close split pane"
+        app:showAsAction="never" />
+
 </menu>

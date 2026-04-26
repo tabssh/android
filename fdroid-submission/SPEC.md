@@ -1,7 +1,7 @@
 # TabSSH Android App - Complete Technical Specification
 
-**Version**: 1.0  (database v20)
-**Date**: April 2026 — last sync: post-Wave 2.3 (snippet vars, SSH cert auth, Telnet)
+**Version**: 1.0  (database v21)
+**Date**: April 2026 — last sync: end of Wave 2 (9/10; FIDO2 deferred)
 **Repository**: https://github.com/tabssh/android  
 **Website**: https://tabssh.github.io  
 
@@ -582,6 +582,54 @@ public class PortForwardingManager {
     public List<Tunnel> getActiveTunnels();
 }
 ```
+
+### 4.5.1 Palette / Switcher / History (Wave 2.6, 2.10)
+
+`io.github.tabssh.ui.views.PaletteDialog` — reusable VSCode-style overlay
+with a search EditText + filtered RecyclerView using subsequence fuzzy
+matching. Three call sites in `TabTerminalActivity`:
+
+- **Ctrl+K** `showCommandPalette()` — every navigable destination plus
+  active-tab actions (font size, paste, find, close).
+- **Ctrl+J** `showQuickSwitcher()` — currently open tabs first, then top-20
+  most-used connections from the DB. Tap to switch / open.
+- **Ctrl+R** `showHistoryPalette()` — per-tab cached `~/.bash_history` +
+  `~/.zsh_history`, fetched via `HistoryFetcher` (JSch ChannelExec, single
+  `cat` of both files, dedupe most-recent-first, cap 2000 entries / 512KB
+  per file). Zsh extended history (`: <epoch>:0;<command>`) prefix is
+  stripped so both formats look uniform.
+
+### 4.5.2 Workspaces (Wave 2.5)
+
+Save the currently open tabs (their connection IDs in tab order) as a named
+workspace; reopen later by fanning out `connectToProfile` with a 400ms
+stagger. Backed by the `workspaces` table — see §8.2.
+
+### 4.5.3 Broadcast Input (Wave 2.7)
+
+Type once in the active tab, mirror to N other tabs. Implementation lives
+in `TermuxBridge.terminalOutput.write`: after the local SSH write succeeds,
+the same byte buffer is fanned out to each `OutputStream` in
+`broadcastTargets`. The owning Activity sets that list (via
+`peerOutputStream()` of each target tab's bridge) when the user picks
+targets in the multi-select dialog.
+
+### 4.5.4 Split View (Wave 2.8)
+
+Minimal vertical 2-pane split. The bottom pane is its own `SSHTab` +
+`TermuxBridge` anchored to the activity (NOT in `tabManager`). Tap to
+focus; `getActiveTerminalView()` routes keystrokes to whichever pane is
+focused. Closing the pane disconnects its SSH session and hides the
+layout slot. Out of scope: nested splits, horizontal split, grids, pane
+resize. Build it on a tablet later.
+
+### 4.5.5 Theme Editor (Wave 2.4)
+
+`ThemeEditorActivity` — pick a base theme, tweak any of {background,
+foreground, cursor, selection, 16 ANSI colors} via hex input + clickable
+swatch (HSV slider dialog). Live preview pane at top. Save via
+`ThemeManager.saveCustomTheme(theme)` which runs the same validator the
+import path uses, so dud themes don't end up persisted.
 
 ### 4.6 Protocol Backends
 
@@ -1394,7 +1442,7 @@ android {
         AuditLogEntry::class,
         HypervisorProfile::class
     ],
-    version = 20,
+    version = 21,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -1431,7 +1479,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
 **Database migration history:** v1 → v2 (sync fields) → … → v17 (Wave 0
 state) → v18 (Wave 1.2 + 1.5: `connections.env_vars`, `connections.agent_forwarding`)
 → v19 (Wave 2.2: `stored_keys.certificate`) → v20 (Wave 2.3:
-`connections.protocol`).
+`connections.protocol`) → v21 (Wave 2.5: new `workspaces` table).
 
 #### 8.2.2 Entity Definitions (Key Tables)
 
@@ -1464,6 +1512,14 @@ The following summarises the primary tables. All entities are Kotlin data classe
 
 **connection_groups** — Folders for organizing connections
 - id (PK), name, color, icon, is_expanded, sort_order, created_at
+
+**workspaces** — Wave 2.5. Named tab groups.
+- id (PK), name, connection_ids (JSON array of `ConnectionProfile.id`)
+- created_at, modified_at, sync metadata
+- Saving captures the IDs of currently open tabs in tab order. Opening fans
+  out `connectToProfile` for each ID with a 400ms inter-open stagger so we
+  don't slam every host at once. Missing IDs (deleted profiles) are skipped
+  silently — no FK constraint at the DB level.
 
 **snippets** — Reusable command snippets with prompt-style variables
 - id (PK), name, command, description, category, tags, usage_count, created_at

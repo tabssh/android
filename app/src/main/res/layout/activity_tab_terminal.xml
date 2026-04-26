@@ -103,6 +103,28 @@
 
         </FrameLayout>
 
+        <!-- Wave 2.8 — Split-view bottom pane. Hidden until user invokes
+             "Split current view…". Hosts a separate SSHTab + TerminalView. -->
+        <FrameLayout
+            android:id="@+id/split_bottom_pane"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:background="@color/terminal_background"
+            android:visibility="gone">
+
+            <io.github.tabssh.ui.views.TerminalView
+                android:id="@+id/split_bottom_terminal"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@color/terminal_background"
+                app:terminalFontSize="@dimen/terminal_text_size_default"
+                app:terminalFontFamily="monospace"
+                app:showScrollbar="true"
+                app:scrollbackLines="1000" />
+
+        </FrameLayout>
+
         <!-- Multi-Row Custom Keyboard -->
         <io.github.tabssh.ui.keyboard.MultiRowKeyboardView
             android:id="@+id/multi_row_keyboard"
