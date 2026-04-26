@@ -80,4 +80,19 @@
         android:title="Broadcast input: choose targets…"
         app:showAsAction="never" />
 
+    <item
+        android:id="@+id/action_save_workspace"
+        android:title="Save current tabs as workspace…"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_open_workspace"
+        android:title="Open workspace…"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_history_palette"
+        android:title="Search history (Ctrl+R)…"
+        app:showAsAction="never" />
+
 </menu>

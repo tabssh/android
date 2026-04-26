@@ -24,9 +24,10 @@ import io.github.tabssh.utils.logging.Logger
         Snippet::class,
         Identity::class,
         AuditLogEntry::class,
-        HypervisorProfile::class
+        HypervisorProfile::class,
+        Workspace::class
     ],
-    version = 20,
+    version = 21,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -44,6 +45,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
     abstract fun identityDao(): IdentityDao
     abstract fun auditLogDao(): AuditLogDao
     abstract fun hypervisorDao(): HypervisorDao
+    abstract fun workspaceDao(): WorkspaceDao
     
     companion object {
         @Volatile
@@ -292,7 +294,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     MIGRATION_16_17,
                     MIGRATION_17_18,
                     MIGRATION_18_19,
-                    MIGRATION_19_20
+                    MIGRATION_19_20,
+                    MIGRATION_20_21
                 )
                 .build()
                 INSTANCE = instance
@@ -498,5 +501,29 @@ data class DatabaseStats(
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE connections ADD COLUMN protocol TEXT NOT NULL DEFAULT 'ssh'")
                 Logger.i("Database", "Migration 19->20: Added protocol to connections")
+            }
+        }
+
+        /**
+         * v20 → v21 — Wave 2.5 Workspaces (named tab groups).
+         * - new `workspaces` table.
+         */
+        val MIGRATION_20_21 = object : Migration(20, 21) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS workspaces (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        connection_ids TEXT NOT NULL,
+                        created_at INTEGER NOT NULL,
+                        modified_at INTEGER NOT NULL,
+                        last_synced_at INTEGER NOT NULL DEFAULT 0,
+                        sync_version INTEGER NOT NULL DEFAULT 0,
+                        sync_device_id TEXT NOT NULL DEFAULT ''
+                    )
+                    """.trimIndent()
+                )
+                Logger.i("Database", "Migration 20->21: Created workspaces table")
             }
         }

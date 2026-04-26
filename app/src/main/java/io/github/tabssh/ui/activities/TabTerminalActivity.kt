@@ -1674,10 +1674,60 @@ class TabTerminalActivity : AppCompatActivity() {
             R.id.action_command_palette -> { showCommandPalette(); true }
             R.id.action_quick_switcher -> { showQuickSwitcher(); true }
             R.id.action_broadcast_input -> { showBroadcastTargetsDialog(); true }
+            R.id.action_save_workspace -> { showSaveWorkspaceDialog(); true }
+            R.id.action_open_workspace -> { showOpenWorkspaceDialog(); true }
+            R.id.action_history_palette -> { showHistoryPalette(); true }
             else -> super.onOptionsItemSelected(item)
         }
     }
     
+    /**
+     * Wave 2.10 — Per-tab cache of remote shell history. Lazy-fetched on
+     * first Ctrl+R for that tab so we don't pay the round-trip until the
+     * user actually wants the palette.
+     */
+    private val historyCache = mutableMapOf<String, List<String>>()
+
+    private fun showHistoryPalette() {
+        val active = tabManager.getActiveTab()
+        if (active == null) {
+            Toast.makeText(this, "No active tab", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val ssh = active.connection
+        if (ssh == null) {
+            Toast.makeText(this, "Not an SSH tab — history needs a live SSH session", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val cached = historyCache[active.tabId]
+        if (cached != null) {
+            showHistoryDialog(cached)
+            return
+        }
+        Toast.makeText(this, "Fetching history…", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            val hist = io.github.tabssh.ssh.HistoryFetcher(ssh).fetch()
+            historyCache[active.tabId] = hist
+            runOnUiThread {
+                if (hist.isEmpty()) {
+                    Toast.makeText(this@TabTerminalActivity, "No history found (or files unreadable)", Toast.LENGTH_LONG).show()
+                } else {
+                    showHistoryDialog(hist)
+                }
+            }
+        }
+    }
+
+    private fun showHistoryDialog(history: List<String>) {
+        val items = history.map { line ->
+            io.github.tabssh.ui.views.PaletteDialog.Item(
+                title = line,
+                subtitle = null
+            ) { getActiveTerminalView()?.sendText(line) }
+        }
+        io.github.tabssh.ui.views.PaletteDialog.show(this, "Remote history (${history.size})", items)
+    }
+
     /**
      * Wave 2.7 — Broadcast input across tabs.
      *
@@ -1731,6 +1781,129 @@ class TabTerminalActivity : AppCompatActivity() {
         } else {
             Toast.makeText(this, "Broadcasting to ${targetStreams.size} tab(s)", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    /**
+     * Wave 2.5 — Save the currently open tabs (their connection IDs, in tab
+     * order) as a named workspace. Reopening the workspace later will fan
+     * out connectToProfile to each one in sequence with a small inter-open
+     * delay so we don't slam every host at once.
+     */
+    private fun showSaveWorkspaceDialog() {
+        val tabs = tabManager.getAllTabs()
+        if (tabs.isEmpty()) {
+            Toast.makeText(this, "No open tabs", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val edit = android.widget.EditText(this).apply {
+            hint = "Workspace name"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Save workspace (${tabs.size} tab${if (tabs.size == 1) "" else "s"})")
+            .setView(edit)
+            .setPositiveButton("Save") { _, _ ->
+                val name = edit.text.toString().trim().ifBlank { "Workspace ${System.currentTimeMillis() / 1000}" }
+                val ids = tabs.map { it.profile.id }
+                val json = org.json.JSONArray(ids).toString()
+                lifecycleScope.launch {
+                    try {
+                        app.database.workspaceDao().upsert(
+                            io.github.tabssh.storage.database.entities.Workspace(
+                                name = name,
+                                connectionIdsJson = json
+                            )
+                        )
+                        runOnUiThread {
+                            Toast.makeText(this@TabTerminalActivity, "Saved workspace '$name'", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (e: Exception) {
+                        Logger.e("TabTerminalActivity", "Save workspace failed", e)
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showOpenWorkspaceDialog() {
+        lifecycleScope.launch {
+            val all = try {
+                app.database.workspaceDao().getAll()
+            } catch (e: Exception) {
+                Logger.e("TabTerminalActivity", "Load workspaces failed", e)
+                emptyList()
+            }
+            runOnUiThread {
+                if (all.isEmpty()) {
+                    Toast.makeText(this@TabTerminalActivity, "No workspaces saved", Toast.LENGTH_SHORT).show()
+                    return@runOnUiThread
+                }
+                val labels = all.map { ws ->
+                    val n = try { org.json.JSONArray(ws.connectionIdsJson).length() } catch (_: Exception) { 0 }
+                    "${ws.name} ($n tab${if (n == 1) "" else "s"})"
+                }.toTypedArray()
+                androidx.appcompat.app.AlertDialog.Builder(this@TabTerminalActivity)
+                    .setTitle("Open workspace")
+                    .setItems(labels) { _, which -> openWorkspace(all[which]) }
+                    .setNeutralButton("Delete…") { _, _ -> showDeleteWorkspaceDialog(all) }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+        }
+    }
+
+    private fun openWorkspace(ws: io.github.tabssh.storage.database.entities.Workspace) {
+        val ids: List<String> = try {
+            val arr = org.json.JSONArray(ws.connectionIdsJson)
+            (0 until arr.length()).map { arr.getString(it) }
+        } catch (e: Exception) {
+            Logger.e("TabTerminalActivity", "Workspace ${ws.id} has malformed connection list", e)
+            emptyList()
+        }
+        if (ids.isEmpty()) {
+            Toast.makeText(this, "Workspace is empty", Toast.LENGTH_SHORT).show()
+            return
+        }
+        lifecycleScope.launch {
+            var opened = 0
+            var skipped = 0
+            for (id in ids) {
+                val profile = try { app.database.connectionDao().getConnectionById(id) } catch (_: Exception) { null }
+                if (profile == null) { skipped++; continue }
+                connectToProfile(profile)
+                opened++
+                kotlinx.coroutines.delay(400) // gentle stagger
+            }
+            runOnUiThread {
+                Toast.makeText(
+                    this@TabTerminalActivity,
+                    "Opened $opened${if (skipped > 0) " (skipped $skipped missing)" else ""}",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
+    private fun showDeleteWorkspaceDialog(all: List<io.github.tabssh.storage.database.entities.Workspace>) {
+        val labels = all.map { it.name }.toTypedArray()
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Delete workspace")
+            .setItems(labels) { _, which ->
+                val ws = all[which]
+                lifecycleScope.launch {
+                    try {
+                        app.database.workspaceDao().delete(ws)
+                        runOnUiThread {
+                            Toast.makeText(this@TabTerminalActivity, "Deleted '${ws.name}'", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (e: Exception) {
+                        Logger.e("TabTerminalActivity", "Delete workspace failed", e)
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun openPortForwarding() {
@@ -1810,6 +1983,8 @@ class TabTerminalActivity : AppCompatActivity() {
                 // Wave 2.6 — palette / switcher
                 KeyEvent.KEYCODE_K -> { showCommandPalette(); return true }
                 KeyEvent.KEYCODE_J -> { showQuickSwitcher(); return true }
+                // Wave 2.10 — remote history palette
+                KeyEvent.KEYCODE_R -> { showHistoryPalette(); return true }
             }
         }
 
