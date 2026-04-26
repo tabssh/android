@@ -460,9 +460,9 @@ TabSSH is built on the shoulders of giants:
 
 ## 🗺️ Roadmap
 
-### Current Focus (v1.1.x)
+### Current Focus (v1.0.0)
 - [x] Terminal output rendering fixes
-- [x] Copy button on all error messages  
+- [x] Copy button on all error messages
 - [x] Full-screen terminal with edge gestures
 - [x] CI/CD keystore handling
 - [ ] Complete testing and bug fixes

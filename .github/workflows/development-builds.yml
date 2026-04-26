@@ -4,6 +4,13 @@ on:
   push:
     branches: [ main, master, devel, develop ]
 
+# Only one development build per ref at a time — cancel any in-flight run
+# when a newer push arrives so we don't race on the rolling `development`
+# release tag.
+concurrency:
+  group: dev-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-devel:
     name: Build Development APKs

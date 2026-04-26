@@ -271,12 +271,12 @@ Added intelligent tooltips for better UX:
 
 ---
 
-## Previous Changes (2026-02-04) - v1.1.0 Release
+## Previous Changes (2026-02-04) - Production-readiness session
 
 ### Session Summary
 **Duration:** 4 hours
 **Goal:** Complete verification and fix all critical gaps
-**Result:** ✅ v1.1.0 Production-Ready Release
+**Result:** ✅ Production-ready state — version remains v1.0.0 (the version was never bumped; release.txt is the pinned source of truth)
 
 ### What Was Completed
 
@@ -301,11 +301,10 @@ Added intelligent tooltips for better UX:
 
 **Result:** Fixed FALSE README claim, now 4 languages supported
 
-#### 4. Version & Documentation
-- Updated `app/build.gradle`: 1.0.0 → 1.1.0 (versionCode 2)
-- Created `docs/CHANGELOG-v1.1.0.md`
-- Updated README.md (version, features, stats)
+#### 4. Documentation
+- Updated README.md (features, stats)
 - Updated CLAUDE.md (this file)
+- (Version stayed at v1.0.0 — no bump intended, release.txt is the source of truth)
 
 #### 5. Build & Verification
 - ✅ Clean build executed
@@ -321,9 +320,8 @@ Added intelligent tooltips for better UX:
 5. app/src/main/res/values-es/strings.xml (created)
 6. app/src/main/res/values-fr/strings.xml (created)
 7. app/src/main/res/values-de/strings.xml (created)
-8. docs/CHANGELOG-v1.1.0.md (created)
-9. README.md (updated)
-10. CLAUDE.md (this file - updated)
+8. README.md (updated)
+9. CLAUDE.md (this file - updated)
 
 **Total Lines Added:** ~970 (500 code + 470 translations)
 
@@ -334,7 +332,7 @@ Added intelligent tooltips for better UX:
 - Accessibility & Security: 5 features
 
 ### Build Status
-- **Version:** 1.1.0 (versionCode 2)
+- **Version:** 1.0.0 (pinned via release.txt)
 - **Compilation Errors:** 0 ✅
 - **Critical Warnings:** 0 ✅
 - **APK Size:** 30MB per variant
@@ -353,7 +351,7 @@ Added intelligent tooltips for better UX:
 
 ### Next Steps (User's Choice)
 1. Test APKs on Android devices
-2. Create GitHub release v1.1.0
+2. Create GitHub release v1.0.0
 3. Submit to F-Droid
 4. User testing and feedback
 
@@ -634,7 +632,7 @@ Examples:
 ### Hypervisor Support
 - ✅ **Proxmox VE** - VM management via REST API
 - ✅ **XCP-ng / XenServer** - Direct XML-RPC API
-- ✅ **Xen Orchestra** - REST API + WebSocket real-time updates (NEW: v1.2.0)
+- ✅ **Xen Orchestra** - REST API + WebSocket real-time updates (NEW)
   - Toggle-based: Single UI for both XCP-ng direct and XO
   - Full VM management (start, stop, reboot, suspend, resume)
   - Snapshot management (create, delete, revert)
@@ -852,7 +850,7 @@ make release
 ---
 
 ### Xen Orchestra Integration - ✅ COMPLETE (2026-02-09)
-**Implementation:** Full Xen Orchestra REST API + WebSocket real-time updates (v1.2.0)
+**Implementation:** Full Xen Orchestra REST API + WebSocket real-time updates (shipped in v1.0.0)
 
 **Goal:** Enterprise-grade VM management through Xen Orchestra alongside direct XCP-ng support
 
@@ -2034,9 +2032,8 @@ make logs
 # 1. Ensure all changes committed
 git status
 
-# 2. Update version in app/build.gradle
-# versionCode = 2
-# versionName = "1.1.0"
+# 2. Version is pinned to 1.0.0 in app/build.gradle and tracked via
+#    release.txt — DO NOT bump it without explicit user approval.
 
 # 3. Build and release
 make release
