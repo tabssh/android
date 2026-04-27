@@ -239,6 +239,31 @@ class SecuritySettingsFragment : PreferenceFragmentCompat() {
             android.widget.Toast.makeText(requireContext(), "Lock timeout set to $minutes minute(s)", android.widget.Toast.LENGTH_SHORT).show()
             true
         }
+
+        // Wave 3.2 — PIN lock setup / change / disable
+        findPreference<Preference>("app_lock_pin_setup")?.setOnPreferenceClickListener {
+            val app = requireActivity().application as TabSSHApplication
+            val enabled = app.preferencesManager.getBoolean(io.github.tabssh.ui.activities.PinLockActivity.PREF_PIN_ENABLED, false)
+            val ctx = requireContext()
+            val items = if (enabled) arrayOf("Change PIN", "Disable PIN lock") else arrayOf("Set PIN")
+            androidx.appcompat.app.AlertDialog.Builder(ctx)
+                .setTitle("App lock PIN")
+                .setItems(items) { _, which ->
+                    when {
+                        items[which] == "Set PIN" || items[which] == "Change PIN" -> {
+                            startActivity(io.github.tabssh.ui.activities.PinLockActivity.setupIntent(ctx))
+                        }
+                        items[which] == "Disable PIN lock" -> {
+                            app.preferencesManager.setBoolean(io.github.tabssh.ui.activities.PinLockActivity.PREF_PIN_ENABLED, false)
+                            app.preferencesManager.setString(io.github.tabssh.ui.activities.PinLockActivity.PREF_PIN_HASH, "")
+                            android.widget.Toast.makeText(ctx, "PIN lock disabled", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+            true
+        }
     }
 
     private fun clearKnownHosts() {

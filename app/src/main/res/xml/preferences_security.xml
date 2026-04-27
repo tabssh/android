@@ -29,6 +29,12 @@
             android:defaultValue="false"
             android:dependency="security_lock_enabled" />
 
+        <!-- Wave 3.2 — PIN code app lock (independent of biometric/inactivity) -->
+        <Preference
+            android:key="app_lock_pin_setup"
+            android:title="App lock PIN"
+            android:summary="Prompt for PIN on app launch (set / change / disable)" />
+
     </PreferenceCategory>
 
     <PreferenceCategory

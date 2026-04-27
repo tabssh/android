@@ -206,6 +206,14 @@
             android:label="What's New"
             android:parentActivityName=".ui.activities.MainActivity" />
 
+        <!-- Wave 3.2 — PIN lock screen (FLAG_SECURE; not exported) -->
+        <activity
+            android:name=".ui.activities.PinLockActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:label="App Lock" />
+
         <!-- Port Forwarding activity -->
         <activity
             android:name=".ui.activities.PortForwardingActivity"

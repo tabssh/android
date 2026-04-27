@@ -231,16 +231,18 @@
 
         </HorizontalScrollView>
 
-        <!-- Bottom action bar (hidden by default - tap bottom edge to show) -->
+        <!-- Wave 3.7 — Compact bottom action bar. Visible by default on phones
+             (preference `show_bottom_nav`, default true). 48dp meets RULES.md
+             min touch target. Auto-hide is the user's existing edge-tap toggle. -->
         <LinearLayout
             android:id="@+id/bottom_action_bar"
             android:layout_width="match_parent"
-            android:layout_height="@dimen/bottom_bar_height"
+            android:layout_height="48dp"
             android:orientation="horizontal"
             android:background="?attr/colorSurface"
             android:gravity="center_vertical"
-            android:paddingHorizontal="@dimen/space_md"
-            android:visibility="gone">
+            android:paddingHorizontal="@dimen/space_sm"
+            android:visibility="visible">
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_keyboard"

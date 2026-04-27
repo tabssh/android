@@ -1037,7 +1037,14 @@ class TerminalView @JvmOverloads constructor(
         // tap on the bar followed by an IME letter still produces a control
         // code, not a literal character (Issue #37).
         val isCtrl = event.isCtrlPressed || pendingCtrl
-        val isAlt = event.isAltPressed || pendingAlt
+        // Wave 3.8 — distinguish AltGr (right-Alt only) from real Alt. EU
+        // keyboards use AltGr to type # @ € € via the layout. We must NOT
+        // treat AltGr like an Esc-prefix Alt — let the layout's unicodeChar
+        // through unmodified.
+        val isLeftAlt = (event.metaState and KeyEvent.META_ALT_LEFT_ON) != 0
+        val isRightAlt = (event.metaState and KeyEvent.META_ALT_RIGHT_ON) != 0
+        val isAltGr = isRightAlt && !isLeftAlt
+        val isAlt = (event.isAltPressed || pendingAlt) && !isAltGr
         val isShift = event.isShiftPressed
 
         // Handle Ctrl+letter combinations (send control codes)

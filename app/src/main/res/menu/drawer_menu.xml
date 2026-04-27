@@ -30,7 +30,7 @@
         <item
             android:id="@+id/nav_port_forwarding"
             android:icon="@drawable/ic_forward"
-            android:title="Port Forwarding" />
+            android:title="Port Forwarding (background tunnels)" />
     </group>
 
     <!-- Hypervisors Section -->
