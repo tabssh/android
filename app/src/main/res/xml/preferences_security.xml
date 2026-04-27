@@ -35,6 +35,12 @@
             android:title="App lock PIN"
             android:summary="Prompt for PIN on app launch (set / change / disable)" />
 
+        <!-- Wave 8.3 — FIDO2 / U2F detection (alpha; not wired to SSH auth) -->
+        <Preference
+            android:key="fido2_detector"
+            android:title="FIDO2 hardware (Alpha)"
+            android:summary="Detect connected security keys (YubiKey, SoloKey, …). SSH auth via these keys is NOT yet implemented." />
+
     </PreferenceCategory>
 
     <PreferenceCategory

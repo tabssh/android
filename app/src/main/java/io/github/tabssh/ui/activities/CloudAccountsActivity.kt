@@ -19,9 +19,12 @@ import androidx.core.view.setPadding
 import androidx.lifecycle.lifecycleScope
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.cloud.AwsEc2Client
+import io.github.tabssh.cloud.AzureVmClient
 import io.github.tabssh.cloud.CloudProvider
 import io.github.tabssh.cloud.CloudProviderType
 import io.github.tabssh.cloud.DigitalOceanClient
+import io.github.tabssh.cloud.GcpComputeClient
 import io.github.tabssh.cloud.HetznerClient
 import io.github.tabssh.cloud.ImportCandidate
 import io.github.tabssh.cloud.LinodeClient
@@ -166,15 +169,26 @@ class CloudAccountsActivity : AppCompatActivity() {
         providerSpinner.adapter = android.widget.ArrayAdapter(
             this, android.R.layout.simple_spinner_dropdown_item, providerLabels
         )
+        val tokenHelp = TextView(this)
         val tokenEdit = EditText(this).apply {
             hint = "API token / Bearer secret"
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        // Wave 8.1 — provider-specific token format hint (AWS uses AKID:SECRET:REGION).
+        providerSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(p: android.widget.AdapterView<*>?, v: View?, position: Int, id: Long) {
+                val pt = CloudProviderType.entries[position]
+                tokenHelp.text = pt.tokenHelp
+                tokenEdit.hint = pt.tokenHelp
+            }
+            override fun onNothingSelected(p: android.widget.AdapterView<*>?) {}
         }
         container.addView(TextView(this).apply { text = "Name" })
         container.addView(nameEdit)
         container.addView(TextView(this).apply { text = "Provider" })
         container.addView(providerSpinner)
         container.addView(TextView(this).apply { text = "Token" })
+        container.addView(tokenHelp)
         container.addView(tokenEdit)
 
         AlertDialog.Builder(this)
@@ -227,6 +241,9 @@ class CloudAccountsActivity : AppCompatActivity() {
                 CloudProviderType.HETZNER -> HetznerClient()
                 CloudProviderType.LINODE -> LinodeClient()
                 CloudProviderType.VULTR -> VultrClient()
+                CloudProviderType.AWS -> AwsEc2Client()
+                CloudProviderType.GCP -> GcpComputeClient()
+                CloudProviderType.AZURE -> AzureVmClient()
                 null -> {
                     runOnUiThread {
                         Toast.makeText(this@CloudAccountsActivity, "Unknown provider: ${account.provider}", Toast.LENGTH_LONG).show()

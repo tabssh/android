@@ -27,6 +27,18 @@
         android:orientation="vertical"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
+        <!-- Wave 8.5 — SFTP tabs (chip strip).
+             Each chip represents a connection's remote browser. The "+" chip
+             opens a connection picker to add another tab. Single local pane
+             on the left, swappable remote pane on the right. -->
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/sftp_tabs_strip"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="@dimen/space_sm"
+            app:singleLine="true"
+            app:singleSelection="true" />
+
         <!-- Dual-pane file browser -->
         <LinearLayout
             android:layout_width="match_parent"

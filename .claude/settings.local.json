@@ -91,7 +91,11 @@
       "Bash(/opt/android/platform-tools/adb start-server *)",
       "Bash(ps -p 669 -o pid,cmd)",
       "Bash(ps -p 88771 -o pid,cmd)",
-      "Bash(./scripts/android-emulator.sh stop *)"
+      "Bash(./scripts/android-emulator.sh stop *)",
+      "Bash(python3 -c 'import json,sys; [print\\(x[\"type\"], x[\"name\"]\\) for x in json.load\\(sys.stdin\\)]')",
+      "Bash(ps -p 42714 -o pid,etime,cmd)",
+      "Bash(bash -n /root/Projects/github/tabssh/android/mosh/build-android.sh)",
+      "Bash(bash -n /root/Projects/github/tabssh/android/scripts/fetch-mosh-binaries.sh)"
     ]
   }
 }

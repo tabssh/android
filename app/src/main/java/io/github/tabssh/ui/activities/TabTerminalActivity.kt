@@ -1240,7 +1240,37 @@ class TabTerminalActivity : AppCompatActivity() {
                     val connected = tab.connect(sshConnection)
                     if (connected) {
                         Logger.i("TabTerminalActivity", "TERMINAL CONNECTED SUCCESSFULLY to ${profile.getDisplayName()}")
-                        showToast("Connected to ${profile.getDisplayName()}")
+
+                        // Wave 9.2 — auto-mosh path. When `useMosh` is true on the
+                        // profile AND we have a bundled native mosh-client, run
+                        // mosh-server over the just-opened SSH session, then swap
+                        // the tab's I/O from SSH to mosh-client. The SSH stays open
+                        // briefly so the bootstrap completes; mosh-server detaches
+                        // and continues listening on UDP independently.
+                        if (profile.useMosh && io.github.tabssh.protocols.mosh.MoshNativeClient.resolveBinary(this) != null) {
+                            val handoff = io.github.tabssh.protocols.mosh.MoshHandoff.bootstrap(
+                                sshConnection, profile.username, profile.host
+                            )
+                            if (handoff is io.github.tabssh.protocols.mosh.MoshHandoff.Result.Success) {
+                                tab.disconnect()
+                                val moshOk = tab.connectMosh(
+                                    this, handoff.info.host, handoff.info.port, handoff.info.keyBase64
+                                )
+                                if (moshOk) {
+                                    Logger.i("TabTerminalActivity", "✅ MOSH attached for ${profile.getDisplayName()}")
+                                    showToast("Mosh: ${profile.getDisplayName()}")
+                                } else {
+                                    Logger.w("TabTerminalActivity", "Mosh attach failed; falling back to SSH")
+                                    tab.connect(sshConnection)  // restore SSH
+                                    showToast("Mosh failed — using SSH")
+                                }
+                            } else {
+                                Logger.w("TabTerminalActivity", "Mosh bootstrap failed: ${(handoff as? io.github.tabssh.protocols.mosh.MoshHandoff.Result.Error)?.message}")
+                                showToast("Mosh bootstrap failed — using SSH")
+                            }
+                        } else {
+                            showToast("Connected to ${profile.getDisplayName()}")
+                        }
 
                         // Update connection statistics (count + timestamp)
                         try {
@@ -2058,25 +2088,74 @@ class TabTerminalActivity : AppCompatActivity() {
             runOnUiThread {
                 when (res) {
                     is io.github.tabssh.protocols.mosh.MoshHandoff.Result.Success -> {
-                        val cmd = res.info.toClientCommand()
-                        androidx.appcompat.app.AlertDialog.Builder(this@TabTerminalActivity)
+                        val info = res.info
+                        val cmd = info.toClientCommand()
+                        val termuxLauncher = io.github.tabssh.protocols.mosh.TermuxMoshLauncher
+                        val termuxStatus = termuxLauncher.status(this@TabTerminalActivity)
+                        val builder = androidx.appcompat.app.AlertDialog.Builder(this@TabTerminalActivity)
                             .setTitle("Mosh handoff ready")
-                            .setMessage(
-                                "mosh-server is listening on UDP :${res.info.port}.\n\n" +
-                                "TabSSH does NOT speak the Mosh wire protocol. To attach:\n" +
-                                "  1. Install Termux on this device (or any Mosh client).\n" +
-                                "  2. Run the command below.\n\n" +
-                                "$cmd\n\n" +
-                                "Closing your SSH tab does NOT kill mosh-server — Mosh is " +
-                                "now detached and listening on UDP."
-                            )
-                            .setPositiveButton("Copy command") { _, _ ->
-                                val cb = getSystemService(android.content.ClipboardManager::class.java)
-                                cb?.setPrimaryClip(android.content.ClipData.newPlainText("mosh handoff", cmd))
-                                Toast.makeText(this@TabTerminalActivity, "Copied", Toast.LENGTH_SHORT).show()
+                        when (termuxStatus) {
+                            is io.github.tabssh.protocols.mosh.TermuxMoshLauncher.Status.Ready,
+                            is io.github.tabssh.protocols.mosh.TermuxMoshLauncher.Status.Unknown -> {
+                                builder.setMessage(
+                                    "mosh-server is listening on UDP :${info.port}.\n\n" +
+                                    "Termux is installed — TabSSH can hand off to it directly. " +
+                                    "Tap **Open in Termux** to start the Mosh session there. " +
+                                    "Closing your SSH tab does NOT kill mosh-server.\n\n" +
+                                    "If Termux refuses, ensure `allow-external-apps=true` is set " +
+                                    "in `${io.github.tabssh.protocols.mosh.TermuxMoshLauncher.TERMUX_PROPS_HINT}` " +
+                                    "and that you've granted the RUN_COMMAND permission."
+                                )
+                                .setPositiveButton("Open in Termux") { _, _ ->
+                                    val ok = termuxLauncher.launch(
+                                        this@TabTerminalActivity,
+                                        info.host, info.port, info.keyBase64, info.username
+                                    )
+                                    if (!ok) {
+                                        Toast.makeText(this@TabTerminalActivity,
+                                            "Termux refused — check RUN_COMMAND permission + allow-external-apps", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                                .setNeutralButton("Copy command") { _, _ ->
+                                    val cb = getSystemService(android.content.ClipboardManager::class.java)
+                                    cb?.setPrimaryClip(android.content.ClipData.newPlainText("mosh handoff", cmd))
+                                    Toast.makeText(this@TabTerminalActivity, "Copied", Toast.LENGTH_SHORT).show()
+                                }
+                                .setNegativeButton("Close", null)
                             }
-                            .setNegativeButton("Close", null)
-                            .show()
+                            io.github.tabssh.protocols.mosh.TermuxMoshLauncher.Status.MoshNotInstalled -> {
+                                builder.setMessage(
+                                    "mosh-server is listening on UDP :${info.port}.\n\n" +
+                                    "Termux is installed but `mosh-client` isn't available. Open " +
+                                    "Termux and run:\n  pkg install mosh\n\nThen come back and " +
+                                    "tap Mosh handoff again.\n\nMeanwhile, copy this command:\n$cmd"
+                                )
+                                .setPositiveButton("Copy command") { _, _ ->
+                                    val cb = getSystemService(android.content.ClipboardManager::class.java)
+                                    cb?.setPrimaryClip(android.content.ClipData.newPlainText("mosh handoff", cmd))
+                                    Toast.makeText(this@TabTerminalActivity, "Copied", Toast.LENGTH_SHORT).show()
+                                }
+                                .setNegativeButton("Close", null)
+                            }
+                            io.github.tabssh.protocols.mosh.TermuxMoshLauncher.Status.TermuxMissing -> {
+                                builder.setMessage(
+                                    "mosh-server is listening on UDP :${info.port}.\n\n" +
+                                    "Install Termux + mosh to attach. F-Droid is the recommended " +
+                                    "source. Without it, you'll need to run this command on any " +
+                                    "Mosh-capable client:\n\n$cmd"
+                                )
+                                .setPositiveButton("Install Termux") { _, _ ->
+                                    termuxLauncher.openTermuxListing(this@TabTerminalActivity)
+                                }
+                                .setNeutralButton("Copy command") { _, _ ->
+                                    val cb = getSystemService(android.content.ClipboardManager::class.java)
+                                    cb?.setPrimaryClip(android.content.ClipData.newPlainText("mosh handoff", cmd))
+                                    Toast.makeText(this@TabTerminalActivity, "Copied", Toast.LENGTH_SHORT).show()
+                                }
+                                .setNegativeButton("Close", null)
+                            }
+                        }
+                        builder.show()
                     }
                     is io.github.tabssh.protocols.mosh.MoshHandoff.Result.Error -> {
                         showError(res.message, "Mosh handoff failed")

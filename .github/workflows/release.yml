@@ -74,6 +74,17 @@ jobs:
         echo "📦 Building release for tag: $TAG_NAME"
         echo "📦 Version: $VERSION"
         
+    - name: Fetch latest mosh-client binaries
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Pulls latest mosh-X.Y.Z release assets from this repo and drops
+        # them into app/src/main/jniLibs/<abi>/libmosh-client.so. Won't fail
+        # the build if no release exists yet (workflow `mosh-binaries.yml`
+        # publishes them on a monthly cadence).
+        chmod +x scripts/fetch-mosh-binaries.sh
+        TABSSH_REPO="${{ github.repository }}" scripts/fetch-mosh-binaries.sh
+
     - name: Build release APK
       run: ./gradlew assembleRelease
       env:

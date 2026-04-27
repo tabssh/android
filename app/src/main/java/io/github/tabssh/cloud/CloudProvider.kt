@@ -29,11 +29,14 @@ interface CloudProvider {
  * Tagged enum of supported providers. The string `tag` matches the
  * `cloud_accounts.provider` column.
  */
-enum class CloudProviderType(val tag: String, val displayName: String) {
-    DIGITALOCEAN("digitalocean", "DigitalOcean"),
-    HETZNER("hetzner", "Hetzner Cloud"),
-    LINODE("linode", "Linode (Akamai)"),
-    VULTR("vultr", "Vultr");
+enum class CloudProviderType(val tag: String, val displayName: String, val tokenHelp: String) {
+    DIGITALOCEAN("digitalocean", "DigitalOcean", "API token (Bearer)"),
+    HETZNER("hetzner", "Hetzner Cloud", "API token (Bearer)"),
+    LINODE("linode", "Linode (Akamai)", "Personal access token"),
+    VULTR("vultr", "Vultr", "API key"),
+    AWS("aws", "AWS EC2", "AKID:SECRET:REGION (e.g. AKIA…:wJal…:us-east-1)"),
+    GCP("gcp", "GCP Compute Engine", "Paste full service-account JSON"),
+    AZURE("azure", "Azure VMs", "TENANT:CLIENT_ID:CLIENT_SECRET:SUBSCRIPTION_ID");
 
     companion object {
         fun fromTag(tag: String): CloudProviderType? = entries.firstOrNull { it.tag == tag }

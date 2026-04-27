@@ -1,5 +1,34 @@
 # What's New
 
+## Wave 9 — Real Mosh via Termux
+- The Mosh handoff dialog now detects **Termux** and offers a one-tap
+  **"Open in Termux"** button. TabSSH dispatches `mosh-client` directly
+  via Termux's RUN_COMMAND service — full UDP transport, real roaming,
+  predictive echo. Requires Termux + `pkg install mosh` once + setting
+  `allow-external-apps=true` in `~/.termux/termux.properties`.
+- The dialog adapts to what's installed:
+  - Termux not installed → "Install Termux" button (Play / F-Droid).
+  - Termux without mosh → exact `pkg install mosh` instructions.
+  - Both ready → one-tap launch.
+- Future native bundling (mosh-client compiled into TabSSH itself) is
+  scoped via `mosh/build-android.sh` — multi-session NDK cross-compile.
+
+## Wave 8 — picking up deferred items
+- **AWS EC2** inventory via SigV4 signing — paste an Access Key ID +
+  Secret + Region as `AKID:SECRET:us-east-1` to import running instances.
+- **GCP Compute Engine** — paste a service-account JSON; we sign a JWT
+  locally and exchange it for a short-lived access token (compute.readonly).
+- **Azure VMs** — paste `TENANT:CLIENT_ID:CLIENT_SECRET:SUBSCRIPTION_ID`
+  (service-principal client-credentials).
+- **FIDO2 / U2F detection (Alpha, untested)** — Settings → "FIDO2 Hardware
+  (Alpha)" detects connected YubiKeys / SoloKeys / Nitrokeys via USB +
+  reports NFC availability. **SSH auth via these keys is NOT yet wired** —
+  JSch doesn't support `sk-*` SSH key types. This dialog confirms the
+  device sees the hardware; full auth is a separate project.
+- **SFTP multi-connection tabs** — in the SFTP browser, a chip strip lets
+  you open additional connections (must already have an active SSH tab).
+  Click a chip to swap which connection's remote pane is shown.
+
 ## Wave 2.X — Mosh + X11 (honest scope)
 - **X11 forwarding** is real now. Toggle "X11 forwarding" on a connection;
   remote `xclock` / `xeyes` / `xfce4-terminal` / etc. will route their X11

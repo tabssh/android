@@ -166,3 +166,7 @@ gen-external-apklibs
 
 .android-keystore/
 keystore.jks
+
+# Mosh native binaries — fetched from GH releases at build time
+# (see scripts/fetch-mosh-binaries.sh + .github/workflows/mosh-binaries.yml)
+app/src/main/jniLibs/*/libmosh-client.so

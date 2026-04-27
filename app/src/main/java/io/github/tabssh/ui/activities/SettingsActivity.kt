@@ -240,6 +240,34 @@ class SecuritySettingsFragment : PreferenceFragmentCompat() {
             true
         }
 
+        // Wave 8.3 — FIDO2 hardware detection (alpha, untested for SSH auth)
+        findPreference<Preference>("fido2_detector")?.setOnPreferenceClickListener {
+            val ctx = requireContext()
+            val results = io.github.tabssh.crypto.fido.Fido2Detector.detect(ctx)
+            val message = if (results.isEmpty()) {
+                "No FIDO2 / U2F authenticators detected.\n\n" +
+                "If you have a YubiKey or similar, plug it into a USB-OTG adapter or " +
+                "tap it to the back of the phone (NFC). Then re-open this dialog.\n\n" +
+                "Note: SSH auth via these keys (sk-ed25519, sk-ecdsa) is NOT yet " +
+                "wired in TabSSH — JSch lacks `sk-*` key support. This dialog only " +
+                "confirms the device sees the hardware."
+            } else {
+                buildString {
+                    appendLine("Detected ${results.size} FIDO2-capable device(s):")
+                    appendLine()
+                    results.forEach { appendLine("• ${it.summary()}") }
+                    appendLine()
+                    append("⚠️ Alpha — TabSSH does NOT yet sign SSH challenges with these keys.")
+                }
+            }
+            androidx.appcompat.app.AlertDialog.Builder(ctx)
+                .setTitle("FIDO2 Hardware (Alpha)")
+                .setMessage(message)
+                .setPositiveButton(android.R.string.ok, null)
+                .show()
+            true
+        }
+
         // Wave 3.2 — PIN lock setup / change / disable
         findPreference<Preference>("app_lock_pin_setup")?.setOnPreferenceClickListener {
             val app = requireActivity().application as TabSSHApplication
