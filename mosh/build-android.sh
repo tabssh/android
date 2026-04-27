@@ -157,11 +157,16 @@ cmake --install . >&2
 cd ../..
 
 # ── 4. mosh ───────────────────────────────────────────────────────────────
+# Use the official release tarball from GitHub releases (a proper
+# `make dist` archive that ships pre-generated configure + VERSION).
+# The github "archive" tarball lacks those and breaks `make -C src/include`.
 echo "──── mosh 1.4.0 ────"
 use_ndk_toolchain
 tar xzf "$SRC_CACHE/mosh-1.4.0.tar.gz"
-cd mosh-mosh-1.4.0
-./autogen.sh >&2
+cd mosh-1.4.0
+# Mosh's `make` regenerates src/include/version.h from $top/VERSION; the
+# dist tarball doesn't ship that file, so we drop it in manually.
+echo "1.4.0" > VERSION
 PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" \
 PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig" \
 PROTOC="$HOST_PROTOC" \
@@ -177,7 +182,9 @@ LIBS="-lcrypto -lssl -lncurses -lprotobuf" \
     --disable-hardening \
     >&2
 # Build only the client; server isn't needed (it runs on the remote, the
-# user already has mosh-server there).
+# user already has mosh-server there). src/include must run first — it
+# generates version.h (BUILT_SOURCES) from the VERSION file we just made.
+make -C src/include -j"$(nproc)" >&2
 make -C src/protobufs -j"$(nproc)" >&2
 make -C src/network -j"$(nproc)" >&2
 make -C src/util -j"$(nproc)" >&2
