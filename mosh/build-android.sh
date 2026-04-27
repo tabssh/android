@@ -19,7 +19,10 @@
 set -euo pipefail
 
 ABI="${1:-arm64-v8a}"
-API_LEVEL="${API_LEVEL:-24}"  # Match TabSSH minSdk for Termux-overridden libs.
+# Mosh needs API 26+ — `nl_langinfo` was only added to Bionic in API 26.
+# TabSSH itself has minSdk 24, but Mosh tab will be runtime-gated on
+# devices below API 26 (the binary won't run there; SSH still works).
+API_LEVEL="${API_LEVEL:-26}"
 
 case "$ABI" in
   arm64-v8a)    TRIPLE="aarch64-linux-android";    BIN_PREFIX="aarch64-linux-android" ;;
@@ -84,8 +87,8 @@ cd ncurses-6.4
     --without-progs --without-tests --without-manpages \
     --disable-db-install --without-cxx-binding \
     --disable-stripping
-make -j"$(nproc)" libs >/dev/null 2>&1
-make install.libs install.includes >/dev/null 2>&1
+make -j"$(nproc)" libs >&2
+make install.libs install.includes >&2
 cd ..
 
 # ── 2. openssl ────────────────────────────────────────────────────────────
@@ -106,53 +109,18 @@ ANDROID_NDK_ROOT="$NDK" \
     --prefix="$PREFIX" \
     --openssldir="$PREFIX/ssl" \
     no-shared no-tests no-asm
-PATH="$TOOLCHAIN/bin:$PATH" make -j"$(nproc)" build_libs >/dev/null
-PATH="$TOOLCHAIN/bin:$PATH" make install_dev >/dev/null 2>&1
+PATH="$TOOLCHAIN/bin:$PATH" make -j"$(nproc)" build_libs >&2
+PATH="$TOOLCHAIN/bin:$PATH" make install_dev >&2
 cd ..
 
-# ── 2.5. abseil-cpp (protobuf 25.x runtime dep) ─────────────────────────
-# Two-pass: host build first (for the protoc compile), then NDK cross.
-# CRITICAL: Host build must use system gcc/g++, NOT the NDK toolchain —
-# otherwise abseil bakes in AndroidLogSink which needs Bionic libc and
-# the host protoc link fails with undefined __android_log_write.
-echo "──── abseil-cpp 20240116.2 (host) ────"
-use_host_toolchain
-tar xzf "$SRC_CACHE/abseil-cpp-20240116.2.tar.gz"
-ABSL_SRC="$BUILD/abseil-cpp-20240116.2"
-mkdir "$ABSL_SRC/build-host" && cd "$ABSL_SRC/build-host"
-cmake .. \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX="$BUILD/host-prefix" \
-    -DCMAKE_CXX_STANDARD=17 \
-    -DABSL_PROPAGATE_CXX_STD=ON \
-    -DABSL_BUILD_TESTING=OFF \
-    >/dev/null
-cmake --build . -j"$(nproc)" >/dev/null
-cmake --install . >/dev/null 2>&1
-cd "$BUILD"
-
-echo "──── abseil-cpp 20240116.2 (android-${ABI}) ────"
-use_ndk_toolchain
-mkdir "$ABSL_SRC/build-android" && cd "$ABSL_SRC/build-android"
-cmake .. \
-    -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
-    -DANDROID_ABI="$ABI" \
-    -DANDROID_PLATFORM="android-${API_LEVEL}" \
-    -DCMAKE_INSTALL_PREFIX="$PREFIX" \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_CXX_STANDARD=17 \
-    -DABSL_PROPAGATE_CXX_STD=ON \
-    -DABSL_BUILD_TESTING=OFF \
-    -DBUILD_SHARED_LIBS=OFF \
-    >/dev/null
-cmake --build . -j"$(nproc)" >/dev/null
-cmake --install . >/dev/null 2>&1
-cd "$BUILD"
-
-# ── 3. protobuf (cross + host protoc) ────────────────────────────────────
-echo "──── protobuf 25.3 (cross + host protoc) ────"
-tar xzf "$SRC_CACHE/protobuf-25.3.tar.gz"
-cd protobuf-25.3
+# ── 3. protobuf 21.12 (cross + host protoc) ─────────────────────────────
+# Sticking to 21.12 — the last protobuf without abseil-cpp dependency.
+# 22+ requires building abseil for both host and target separately and
+# the find_package(absl) dance fights the NDK toolchain. mosh-client
+# doesn't care about protobuf version (it just needs *some* protoc).
+echo "──── protobuf 21.12 (cross + host protoc) ────"
+tar xzf "$SRC_CACHE/protobuf-cpp-3.21.12.tar.gz"
+cd protobuf-3.21.12
 
 # Pass 1 — host build of protoc (needed to generate sources during cross-build)
 use_host_toolchain
@@ -162,12 +130,10 @@ cmake .. \
     -DCMAKE_CXX_STANDARD=17 \
     -Dprotobuf_BUILD_TESTS=OFF \
     -Dprotobuf_BUILD_EXAMPLES=OFF \
+    -Dprotobuf_BUILD_SHARED_LIBS=OFF \
     -Dprotobuf_INSTALL=OFF \
-    -Dprotobuf_ABSL_PROVIDER=package \
-    -DCMAKE_PREFIX_PATH="$BUILD/host-prefix" \
-    -DABSL_PROPAGATE_CXX_STD=ON \
-    >/dev/null
-cmake --build . --target protoc -j"$(nproc)" >/dev/null
+    >&2
+cmake --build . --target protoc -j"$(nproc)" >&2
 HOST_PROTOC="$(pwd)/protoc"
 cd ..
 
@@ -185,12 +151,9 @@ cmake .. \
     -Dprotobuf_BUILD_EXAMPLES=OFF \
     -Dprotobuf_BUILD_PROTOC_BINARIES=OFF \
     -Dprotobuf_BUILD_SHARED_LIBS=OFF \
-    -Dprotobuf_PROTOC_EXE="$HOST_PROTOC" \
-    -Dprotobuf_ABSL_PROVIDER=package \
-    -DCMAKE_PREFIX_PATH="$PREFIX" \
-    >/dev/null
-cmake --build . -j"$(nproc)" >/dev/null
-cmake --install . >/dev/null 2>&1
+    >&2
+cmake --build . -j"$(nproc)" >&2
+cmake --install . >&2
 cd ../..
 
 # ── 4. mosh ───────────────────────────────────────────────────────────────
@@ -198,13 +161,13 @@ echo "──── mosh 1.4.0 ────"
 use_ndk_toolchain
 tar xzf "$SRC_CACHE/mosh-1.4.0.tar.gz"
 cd mosh-mosh-1.4.0
-./autogen.sh >/dev/null 2>&1
+./autogen.sh >&2
 PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" \
 PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig" \
 PROTOC="$HOST_PROTOC" \
 LDFLAGS="-static-libstdc++ -L$PREFIX/lib" \
 CPPFLAGS="-I$PREFIX/include" \
-LIBS="-lcrypto -lssl -lncurses -lprotobuf -labsl_log_internal_check_op -labsl_log_internal_message" \
+LIBS="-lcrypto -lssl -lncurses -lprotobuf" \
 ./configure \
     --host="$BIN_PREFIX" \
     --prefix="$PREFIX" \
@@ -212,21 +175,21 @@ LIBS="-lcrypto -lssl -lncurses -lprotobuf -labsl_log_internal_check_op -labsl_lo
     --disable-server \
     --disable-completion \
     --disable-hardening \
-    >/dev/null
+    >&2
 # Build only the client; server isn't needed (it runs on the remote, the
 # user already has mosh-server there).
-make -C src/protobufs -j"$(nproc)" >/dev/null
-make -C src/network -j"$(nproc)" >/dev/null
-make -C src/util -j"$(nproc)" >/dev/null
-make -C src/crypto -j"$(nproc)" >/dev/null
-make -C src/statesync -j"$(nproc)" >/dev/null
-make -C src/terminal -j"$(nproc)" >/dev/null
-make -C src/frontend mosh-client >/dev/null
+make -C src/protobufs -j"$(nproc)" >&2
+make -C src/network -j"$(nproc)" >&2
+make -C src/util -j"$(nproc)" >&2
+make -C src/crypto -j"$(nproc)" >&2
+make -C src/statesync -j"$(nproc)" >&2
+make -C src/terminal -j"$(nproc)" >&2
+make -C src/frontend mosh-client >&2
 cp src/frontend/mosh-client "$OUT/mosh-client"
-"$STRIP" "$OUT/mosh-client" 2>/dev/null || true
+"$STRIP" "$OUT/mosh-client" 2>&2 || true
 cd ..
 
 echo "═════════════════════════════════════════════════════════════════"
 echo "✅ Built $OUT/mosh-client"
-file "$OUT/mosh-client" 2>/dev/null || true
+file "$OUT/mosh-client" 2>&2 || true
 ls -la "$OUT"
