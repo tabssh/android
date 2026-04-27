@@ -25,9 +25,10 @@ import io.github.tabssh.utils.logging.Logger
         Identity::class,
         AuditLogEntry::class,
         HypervisorProfile::class,
-        Workspace::class
+        Workspace::class,
+        CloudAccount::class
     ],
-    version = 22,
+    version = 23,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -46,6 +47,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
     abstract fun auditLogDao(): AuditLogDao
     abstract fun hypervisorDao(): HypervisorDao
     abstract fun workspaceDao(): WorkspaceDao
+    abstract fun cloudAccountDao(): CloudAccountDao
     
     companion object {
         @Volatile
@@ -296,7 +298,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     MIGRATION_18_19,
                     MIGRATION_19_20,
                     MIGRATION_20_21,
-                    MIGRATION_21_22
+                    MIGRATION_21_22,
+                    MIGRATION_22_23
                 )
                 .build()
                 INSTANCE = instance
@@ -513,6 +516,31 @@ data class DatabaseStats(
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE connections ADD COLUMN color_tag INTEGER NOT NULL DEFAULT 0")
                 Logger.i("Database", "Migration 21->22: Added color_tag to connections")
+            }
+        }
+
+        /**
+         * v22 → v23 — Wave 5.1 Cloud accounts (DigitalOcean inventory etc.).
+         * - new `cloud_accounts` table; tokens encrypted via SecurePasswordManager
+         *   under `cloud_token_${id}`, NOT stored in this table.
+         */
+        val MIGRATION_22_23 = object : Migration(22, 23) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS cloud_accounts (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        provider TEXT NOT NULL,
+                        enabled INTEGER NOT NULL DEFAULT 1,
+                        last_refresh_at INTEGER NOT NULL DEFAULT 0,
+                        last_count INTEGER NOT NULL DEFAULT 0,
+                        created_at INTEGER NOT NULL,
+                        modified_at INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                Logger.i("Database", "Migration 22->23: Created cloud_accounts table")
             }
         }
 

@@ -221,6 +221,14 @@
             android:label="Multi-host Dashboard"
             android:parentActivityName=".ui.activities.MainActivity" />
 
+        <!-- Wave 5.1 — Cloud accounts (DigitalOcean inventory etc.) -->
+        <activity
+            android:name=".ui.activities.CloudAccountsActivity"
+            android:exported="false"
+            android:label="Cloud Accounts"
+            android:parentActivityName=".ui.activities.MainActivity"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- Port Forwarding activity -->
         <activity
             android:name=".ui.activities.PortForwardingActivity"

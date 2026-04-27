@@ -442,6 +442,11 @@ agreed scope in `/tmp/tabssh-android/parity-decisions.md`.
 - 3.7 ✅ Bottom nav bar on phones (48dp compact, `show_bottom_nav` pref default ON)
 - 3.8 ✅ Bluetooth keyboard polish + AltGr handling (right-Alt unicodeChar passes through unmodified)
 
+### Wave 5 — Cloud auto-import 🟢 2/7 PROVIDERS, 3 DEFERRED (OAuth2)
+- 5.1 ✅ Framework + DigitalOcean (DB v22→v23, `cloud_accounts` table, `CloudProvider` interface, `DigitalOceanClient`, `CloudAccountsActivity` with token-encrypted-via-SecurePasswordManager flow + refresh + import multi-select)
+- 5.2 ✅ Hetzner Cloud, Linode (Akamai), Vultr — bearer-token REST inventory
+- 5.X ⏸ AWS / GCP / Azure — DEFERRED until OAuth2 / SigV4 design pass
+
 ### Wave 4 — Tier 4 speculative 🟢 4/7 SHIPPED, 3 DEFERRED (need hardware)
 - T4a ✅ True-color (24-bit) rendering — fixed latent OOB crash on `SGR 38;2;R;G;B`; encoded ARGB pass-through
 - T4b ⏸ Foldable layout — DEFERRED, needs foldable device to verify
