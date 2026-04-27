@@ -103,6 +103,42 @@ class SyncDataApplier {
             // Apply preferences
             appliedCount += applyPreferences(data.preferences)
 
+            // Wave 5.3 — apply workspaces (last-write-wins via REPLACE).
+            data.workspaces.forEach { ws ->
+                try {
+                    database.workspaceDao().upsert(ws)
+                    appliedCount++
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Failed to apply workspace: ${ws.name}", e)
+                }
+            }
+
+            // Wave 5.4 — snippets / identities / groups, REPLACE on PK conflict.
+            data.snippets.forEach { s ->
+                try {
+                    database.snippetDao().insertSnippet(s)
+                    appliedCount++
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Failed to apply snippet: ${s.name}", e)
+                }
+            }
+            data.identities.forEach { id ->
+                try {
+                    database.identityDao().insert(id)
+                    appliedCount++
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Failed to apply identity: ${id.name}", e)
+                }
+            }
+            data.groups.forEach { g ->
+                try {
+                    database.connectionGroupDao().insertGroup(g)
+                    appliedCount++
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Failed to apply group: ${g.name}", e)
+                }
+            }
+
             Logger.i(TAG, "Applied $appliedCount items from sync data")
             ApplyResult.Success(appliedCount)
         } catch (e: Exception) {

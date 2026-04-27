@@ -503,8 +503,27 @@ GCM authentication tag is appended by the cipher (128 bits, embedded by Java's A
 
 ### 9.4 Data collection / application
 
-- `sync/data/SyncDataCollector.kt` — `collectAll()` and `collectChangedSince(timestamp)` (delta sync via `modified_at`). Collects connections, keys, themes, host keys, and 6 preference categories (general, security, terminal, ui, connection, sync).
+- `sync/data/SyncDataCollector.kt` — `collectAll()` and `collectChangedSince(timestamp)` (delta sync via `modified_at`). Collects connections, keys, themes, host keys, **workspaces** (Wave 5.3), **snippets / identities / connection_groups** (Wave 5.4), and 6 preference categories (general, security, terminal, ui, connection, sync).
 - `sync/data/SyncDataApplier.kt` — `applyAll(SyncDataPackage)` upserts rows into Room.
+
+**Sync coverage matrix (Wave 5.4):**
+
+| Entity | Synced? | Notes |
+|---|---|---|
+| `connections` | ✅ 3-way merge | full `MergeEngine` |
+| `stored_keys` | ✅ 3-way merge | |
+| `themes` | ✅ 3-way merge | |
+| `host_keys` | ✅ 3-way merge | |
+| `preferences` | ✅ | per-category |
+| `workspaces` | ✅ last-write-wins | Wave 5.3 |
+| `snippets` | ✅ last-write-wins | Wave 5.4 |
+| `identities` | ✅ last-write-wins | Wave 5.4 |
+| `connection_groups` | ✅ last-write-wins | Wave 5.4 |
+| `cloud_accounts` | ❌ NOT synced | per-device hardware-keystore-bound token in `SecurePasswordManager` would be missing on the destination — sync the row alone is broken |
+| `tab_sessions` | ❌ NOT synced | per-device runtime state |
+| `audit_log` | ❌ NOT synced | per-device security trail |
+| `trusted_certificates` | ❌ NOT synced (yet) | host-key-style; could be synced — open question |
+| `hypervisor_profiles` | ❌ NOT synced (yet) | similar to connections; defer to Wave 5.5 |
 
 ### 9.5 Scheduling
 
