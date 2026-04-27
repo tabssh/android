@@ -96,7 +96,9 @@
       "Bash(ps -p 42714 -o pid,etime,cmd)",
       "Bash(bash -n /root/Projects/github/tabssh/android/mosh/build-android.sh)",
       "Bash(bash -n /root/Projects/github/tabssh/android/scripts/fetch-mosh-binaries.sh)",
-      "Bash(python3 *)"
+      "Bash(python3 *)",
+      "Bash(gh workflow *)",
+      "Bash(tar xz *)"
     ]
   }
 }

@@ -48,10 +48,13 @@ RUN wget -q https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-
 
 # Pre-cache source tarballs so repeat builds don't re-download.
 WORKDIR /opt/sources
+# protobuf 21.12 — last version that builds without abseil-cpp.
+# protobuf 22+ pulls in abseil and the cross-compile dance becomes a
+# nightmare (see git history). mosh-client just needs any protoc to
+# generate code from .proto files — version is irrelevant.
 RUN wget -q https://invisible-mirror.net/archives/ncurses/ncurses-6.4.tar.gz && \
     wget -q https://www.openssl.org/source/openssl-3.0.13.tar.gz && \
-    wget -q https://github.com/protocolbuffers/protobuf/releases/download/v25.3/protobuf-25.3.tar.gz && \
-    wget -q https://github.com/abseil/abseil-cpp/releases/download/20240116.2/abseil-cpp-20240116.2.tar.gz && \
+    wget -q https://github.com/protocolbuffers/protobuf/releases/download/v21.12/protobuf-cpp-3.21.12.tar.gz && \
     wget -q https://github.com/mobile-shell/mosh/archive/refs/tags/mosh-1.4.0.tar.gz
 
 WORKDIR /work
