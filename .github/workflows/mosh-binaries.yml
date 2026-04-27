@@ -163,14 +163,18 @@ jobs:
             && gh release delete "$tag" --repo "${GITHUB_REPOSITORY}" --yes --cleanup-tag \
             || true
 
+          cat > /tmp/mosh-release-notes.md <<EOF
+          Cross-compiled \`mosh-client\` ${version} (upstream [mobile-shell/mosh](https://github.com/mobile-shell/mosh)) for Android, all four ABIs.
+
+          These binaries are bundled into the TabSSH APK at \`app/src/main/jniLibs/<abi>/libmosh-client.so\` so they get unpacked to the app's \`nativeLibraryDir\` on install.
+
+          **License:** \`mosh-client\` is GPL-3.0 (see [mobile-shell/mosh LICENSE](https://github.com/mobile-shell/mosh/blob/master/COPYING)). It is aggregated alongside TabSSH (MIT) — neither license infects the other.
+
+          **Built from:** \`mosh-${version}\` upstream release, via \`mosh/Dockerfile\` + \`mosh/build-android.sh\` in this repo.
+          EOF
+
           gh release create "$tag" \
             --repo "${GITHUB_REPOSITORY}" \
             --title "Mosh ${version} for Android" \
-            --notes "Cross-compiled \`mosh-client\` ${version} (upstream [mobile-shell/mosh](https://github.com/mobile-shell/mosh)) for Android, all four ABIs.
-
-These binaries are bundled into the TabSSH APK at \`app/src/main/jniLibs/<abi>/libmosh-client.so\` so they get unpacked to the app's \`nativeLibraryDir\` on install.
-
-**License:** \`mosh-client\` is GPL-3.0 (see [mobile-shell/mosh LICENSE](https://github.com/mobile-shell/mosh/blob/master/COPYING)). It is aggregated alongside TabSSH (MIT) — neither license infects the other.
-
-**Built from:** \`mosh-${version}\` upstream release, via \`mosh/Dockerfile\` + \`mosh/build-android.sh\` in this repo." \
+            --notes-file /tmp/mosh-release-notes.md \
             artifacts/mosh-client-*
