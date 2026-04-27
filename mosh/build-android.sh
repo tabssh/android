@@ -172,7 +172,7 @@ PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig" \
 PROTOC="$HOST_PROTOC" \
 LDFLAGS="-static-libstdc++ -L$PREFIX/lib" \
 CPPFLAGS="-I$PREFIX/include" \
-LIBS="-lcrypto -lssl -lncurses -lprotobuf" \
+LIBS="-lcrypto -lssl -lncurses -lprotobuf -llog" \
 ./configure \
     --host="$BIN_PREFIX" \
     --prefix="$PREFIX" \
