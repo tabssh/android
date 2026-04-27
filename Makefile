@@ -24,7 +24,7 @@ BLUE := \033[0;34m
 YELLOW := \033[1;33m
 NC := \033[0m
 
-.PHONY: build check clean install logs image help
+.PHONY: build check clean install logs image fetch-mosh help
 
 .DEFAULT_GOAL := help
 
@@ -33,13 +33,16 @@ help: ## Show available targets
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(BLUE)%-10s$(NC) %s\n", $$1, $$2}'
 
-build: _ensure-image ## Build debug APKs
+build: _ensure-image fetch-mosh ## Build debug APKs
 	@echo -e "$(GREEN)🚀 Building TabSSH v$(VERSION)...$(NC)"
 	@$(DOCKER_RUN) $(BUILD_IMAGE) ./gradlew clean assembleDebug --no-daemon -q
 	@mkdir -p $(BINARIES)
 	@cp $(DEBUG_DIR)/*.apk $(BINARIES)/ 2>/dev/null || true
 	@echo -e "$(GREEN)✅ Done$(NC)"
 	@ls -lh $(BINARIES)/*.apk 2>/dev/null
+
+fetch-mosh: ## Fetch mosh-client binaries from latest GH release
+	@scripts/fetch-mosh-binaries.sh
 
 check: _ensure-image ## Check for errors
 	@$(DOCKER_RUN) $(BUILD_IMAGE) ./gradlew compileDebugKotlin --no-daemon 2>&1 | grep "^e:" || echo -e "$(GREEN)✅ No errors$(NC)"

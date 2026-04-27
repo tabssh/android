@@ -51,6 +51,22 @@ class SFTPActivity : AppCompatActivity() {
     // Current directories
     private var currentLocalPath = "/storage/emulated/0" // Default to external storage
     private var currentRemotePath = "/"
+
+    /**
+     * Wave 8.5 — multi-connection SFTP tabs. Each [SftpTab] holds the
+     * SFTPManager + last remembered remote path for one connection. Tap a
+     * chip in the strip to swap which manager [sftpManager] points at. The
+     * 16+ existing references stay valid because we just reseat the field.
+     */
+    private data class SftpTab(
+        val connectionId: String,
+        val displayName: String,
+        val sftpManager: SFTPManager,
+        var rememberedRemotePath: String = "/"
+    )
+
+    private val sftpTabs = mutableListOf<SftpTab>()
+    private var activeSftpTabIndex: Int = -1
     
     // File lists
     private val localFiles = mutableListOf<File>()
@@ -106,9 +122,17 @@ class SFTPActivity : AppCompatActivity() {
                 
                 sftpManager = SFTPManager(connection)
                 val connected = sftpManager.connect()
-                
+
                 if (connected) {
                     Logger.i("SFTPActivity", "SFTP connected successfully")
+                    // Wave 8.5 — register this initial connection as the first tab.
+                    val displayName = try {
+                        app.database.connectionDao().getConnectionById(connectionId)?.getDisplayName()
+                            ?: connectionId.take(8)
+                    } catch (_: Exception) { connectionId.take(8) }
+                    sftpTabs.add(SftpTab(connectionId, displayName, sftpManager, "/"))
+                    activeSftpTabIndex = 0
+                    rebuildSftpTabsStrip()
                     loadRemoteDirectory(currentRemotePath)
                 } else {
                     Logger.e("SFTPActivity", "Failed to connect SFTP")
@@ -123,7 +147,119 @@ class SFTPActivity : AppCompatActivity() {
             }
         }
     }
-    
+
+    /**
+     * Wave 8.5 — Render the chip strip from [sftpTabs]. Includes a "+" chip
+     * at the end to add another connection. Tap a chip to swap [sftpManager]
+     * and reload the remote pane.
+     */
+    private fun rebuildSftpTabsStrip() {
+        val strip = findViewById<com.google.android.material.chip.ChipGroup>(R.id.sftp_tabs_strip)
+        strip.removeAllViews()
+        sftpTabs.forEachIndexed { index, tab ->
+            val chip = com.google.android.material.chip.Chip(this).apply {
+                text = tab.displayName
+                isCheckable = true
+                isChecked = (index == activeSftpTabIndex)
+                isCloseIconVisible = sftpTabs.size > 1
+                setOnClickListener { switchToSftpTab(index) }
+                setOnCloseIconClickListener { closeSftpTab(index) }
+            }
+            strip.addView(chip)
+        }
+        val addChip = com.google.android.material.chip.Chip(this).apply {
+            text = "+"
+            isCheckable = false
+            setOnClickListener { showAddSftpTabPicker() }
+        }
+        strip.addView(addChip)
+    }
+
+    private fun switchToSftpTab(index: Int) {
+        if (index == activeSftpTabIndex) return
+        if (index !in sftpTabs.indices) return
+        // Save current path on the outgoing tab.
+        if (activeSftpTabIndex in sftpTabs.indices) {
+            sftpTabs[activeSftpTabIndex].rememberedRemotePath = currentRemotePath
+        }
+        activeSftpTabIndex = index
+        val tab = sftpTabs[index]
+        sftpManager = tab.sftpManager
+        currentRemotePath = tab.rememberedRemotePath
+        rebuildSftpTabsStrip()
+        loadRemoteDirectory(currentRemotePath)
+    }
+
+    private fun closeSftpTab(index: Int) {
+        if (sftpTabs.size <= 1) return
+        val tab = sftpTabs[index]
+        try { tab.sftpManager.disconnect() } catch (e: Exception) { Logger.w("SFTPActivity", "tab disconnect: ${e.message}") }
+        sftpTabs.removeAt(index)
+        if (activeSftpTabIndex >= sftpTabs.size) activeSftpTabIndex = sftpTabs.size - 1
+        // Switch to the new active tab.
+        val tgt = sftpTabs[activeSftpTabIndex]
+        sftpManager = tgt.sftpManager
+        currentRemotePath = tgt.rememberedRemotePath
+        rebuildSftpTabsStrip()
+        loadRemoteDirectory(currentRemotePath)
+    }
+
+    private fun showAddSftpTabPicker() {
+        lifecycleScope.launch {
+            val candidates = try { app.database.connectionDao().getRecentConnections(50) } catch (_: Exception) { emptyList() }
+                .filter { c ->
+                    // Only those with an active SSH connection — opening a fresh SSH
+                    // just for SFTP would mean a separate auth dialog flow.
+                    app.sshSessionManager.getConnection(c.id) != null
+                }
+            runOnUiThread {
+                if (candidates.isEmpty()) {
+                    showError("Open the connection in the terminal first, then return here to add it as an SFTP tab.", "No active SSH sessions")
+                    return@runOnUiThread
+                }
+                val labels = candidates.map { it.getDisplayName() }.toTypedArray()
+                androidx.appcompat.app.AlertDialog.Builder(this@SFTPActivity)
+                    .setTitle("Add SFTP tab")
+                    .setItems(labels) { _, which -> openNewSftpTab(candidates[which]) }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+        }
+    }
+
+    private fun openNewSftpTab(profile: io.github.tabssh.storage.database.entities.ConnectionProfile) {
+        // Already a tab for this connection? Just switch.
+        val existingIdx = sftpTabs.indexOfFirst { it.connectionId == profile.id }
+        if (existingIdx >= 0) {
+            switchToSftpTab(existingIdx)
+            return
+        }
+        lifecycleScope.launch {
+            val conn = app.sshSessionManager.getConnection(profile.id)
+            if (conn == null) {
+                runOnUiThread { showError("SSH session not active", "Error") }
+                return@launch
+            }
+            val mgr = SFTPManager(conn)
+            val ok = mgr.connect()
+            runOnUiThread {
+                if (!ok) {
+                    showError("Failed to open SFTP for ${profile.getDisplayName()}", "Error")
+                    return@runOnUiThread
+                }
+                if (activeSftpTabIndex in sftpTabs.indices) {
+                    sftpTabs[activeSftpTabIndex].rememberedRemotePath = currentRemotePath
+                }
+                sftpTabs.add(SftpTab(profile.id, profile.getDisplayName(), mgr))
+                activeSftpTabIndex = sftpTabs.size - 1
+                sftpManager = mgr
+                currentRemotePath = "/"
+                rebuildSftpTabsStrip()
+                loadRemoteDirectory(currentRemotePath)
+            }
+        }
+    }
+
     private fun setupFileAdapters() {
         // Local file adapter
         localFileAdapter = FileAdapter()
@@ -999,9 +1135,14 @@ class SFTPActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
 
-        if (::sftpManager.isInitialized) {
-            sftpManager.cleanup()
+        // Wave 8.5 — disconnect every tab's manager (the active one is the
+        // same instance as `sftpManager`, so guard against double-cleanup).
+        sftpTabs.forEach { tab ->
+            try { tab.sftpManager.cleanup() } catch (e: Exception) {
+                Logger.w("SFTPActivity", "tab cleanup: ${e.message}")
+            }
         }
+        sftpTabs.clear()
 
         Logger.d("SFTPActivity", "SFTP activity destroyed")
     }

@@ -437,16 +437,22 @@
                         android:checked="false"
                         android:tooltipText="Routes remote X11 traffic to localhost:6000. Install an X server (XServer-XSDL) on this device; without one, X11 apps will fail with 'cannot open display'." />
 
+                    <!-- Wave 9.2 — Mosh toggle. When enabled AND the bundled
+                         native mosh-client binary is present (jniLibs/<abi>),
+                         TabSSH auto-runs mosh-server over the SSH bootstrap
+                         and swaps the tab to native Mosh. Without the binary,
+                         the SSH session stays plain and the user can still
+                         use the menu's "Mosh handoff…" for a Termux-based
+                         workflow. -->
                     <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/switch_use_mosh"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_sm"
-                        android:text="Use Mosh (Mobile Shell)"
+                        android:text="Use Mosh (auto-attach on connect)"
                         android:textColor="?android:attr/textColorPrimary"
                         android:checked="false"
-                        android:visibility="gone"
-                        android:tooltipText="Mobile-optimized protocol with roaming support for unstable connections" />
+                        android:tooltipText="On connect, run mosh-server on the remote and attach the bundled native mosh-client. Real UDP transport + roaming. Requires mosh-server installed on the remote." />
 
                     <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/switch_port_knock"

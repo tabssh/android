@@ -442,6 +442,22 @@ agreed scope in `/tmp/tabssh-android/parity-decisions.md`.
 - 3.7 ✅ Bottom nav bar on phones (48dp compact, `show_bottom_nav` pref default ON)
 - 3.8 ✅ Bluetooth keyboard polish + AltGr handling (right-Alt unicodeChar passes through unmodified)
 
+### Wave 9 — Mosh: real UDP, in-app 🟡 KOTLIN SHIPPED, NATIVE BINARY BUILDING
+- 9.1 ✅ `TermuxMoshLauncher` — Termux RUN_COMMAND fallback path. Real Mosh in Termux's terminal for users with Termux + `pkg install mosh`.
+- 9.2 🟡 In-app native Mosh:
+  - **Kotlin done** (`MoshNativeClient.kt` spawns from `nativeLibraryDir`; `SSHTab.connectMosh()` wires stdio into TermuxBridge; `TabTerminalActivity.connectToProfile` auto-attaches when `useMosh + binary present`).
+  - **Build infrastructure done** (`mosh/Dockerfile` + `mosh/build-android.sh`) — debian:bookworm + NDK r26d + autotools/cmake + cached source tarballs (ncurses 6.4, openssl 3.0.13, protobuf 25.3, abseil-cpp 20240116.2, mosh 1.4.0).
+  - **Native binary IN PROGRESS** — first cross-compile (x86_64) running. Output: `mosh/out/x86_64/mosh-client`; vendored to `app/src/main/jniLibs/x86_64/libmosh-client.so` (lib*.so naming makes APK installer mark it executable in `nativeLibraryDir`). After x86_64 lands + tests pass: arm64-v8a (covers most real phones).
+  - **License:** mosh = GPL-3.0; bundling alongside MIT TabSSH = aggregation per GNU FAQ. LICENSE.md will list the bundled binary's license separately.
+- Reference: [Sonelli/mosh](https://github.com/Sonelli/mosh) (GPL-3.0, last code commits 2012 — JuiceSSH's fork) and [Termux mosh recipe](https://github.com/termux/termux-packages/blob/master/packages/mosh/build.sh) inform our build dep list.
+
+### Wave 8 — Pick up the deferred items 🟢 5/5 SHIPPED
+- 8.1 ✅ AWS EC2 inventory — SigV4 signing in pure Kotlin (`AwsEc2Client`). Token format `AKID:SECRET:REGION`. Filters running instances; picks PublicDnsName → PublicIpAddress.
+- 8.2 ✅ GCP Compute Engine inventory — service-account JSON → RS256 JWT → OAuth2 access token → `aggregated/instances`. Honest scope: no token caching yet (each refresh = new exchange), single page only.
+- 8.3 ✅ FIDO2 / U2F detection (**ALPHA, untested for SSH auth**) — Settings → "FIDO2 Hardware (Alpha)" lists USB-connected security keys (Yubico/SoloKeys/Nitrokey/Feitian/etc. by VID + HID heuristic) + reports NFC availability. SSH auth via `sk-*` keys is NOT wired (JSch lacks `sk-*` support). Manifest declares `android.hardware.usb.host` + `android.hardware.nfc` as **optional** features so non-FIDO devices still install.
+- 8.4 ✅ Azure VM inventory — client-credentials OAuth2 (service principal). Token `TENANT:CLIENT_ID:CLIENT_SECRET:SUBSCRIPTION_ID`. Joins VMs → NICs → publicIPAddresses with two list calls (no per-VM fan-out).
+- 8.5 ✅ SFTP tabs — chip strip in `SFTPActivity` swaps the active `SFTPManager` between connections. New tabs only allowed for connections with a live SSH session (no separate auth flow). All tab managers cleaned up on `onDestroy`.
+
 ### Wave 7 — Closeout 🟢 2/2 SHIPPED
 - 7.1 ✅ Sync HypervisorProfile + TrustedCertificate (last-write-wins). Closes the AI.md §9.4 sync matrix — only `cloud_accounts` (per-device tokens), `tab_sessions` (runtime state), and `audit_log` (per-device trail) intentionally remain unsynced.
 - 7.2 ✅ Drawer menu cleanup — 22 actions reorganized under nested-menu section headers (Quick / Manage / Connect / Insights / Import-Export / Settings / Diagnostics) for proper visual grouping.

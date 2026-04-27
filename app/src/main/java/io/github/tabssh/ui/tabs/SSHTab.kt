@@ -38,6 +38,11 @@ class SSHTab(
     // is set; gesture command sending and clean disconnect both check both.
     var telnetConnection: io.github.tabssh.ssh.connection.TelnetConnection? = null
 
+    // Wave 9.2 — bundled native mosh-client session. Lives in parallel to
+    // (or in place of) the SSH session; mosh-server detaches from its
+    // bootstrap SSH and roams independently after start.
+    var moshSession: io.github.tabssh.protocols.mosh.MoshNativeClient.Session? = null
+
     // Tab state
     // Default title format: user@host (shows connection info)
     private val _title = MutableStateFlow(generateDefaultTitle())
@@ -257,6 +262,42 @@ class SSHTab(
     }
 
     /**
+     * Wave 9.2 — Connect this tab to a bundled native mosh-client session.
+     * Caller has already run [io.github.tabssh.protocols.mosh.MoshHandoff]
+     * over an SSH connection to capture the (port, key) pair; we spawn
+     * mosh-client locally and wire its stdio into the terminal.
+     *
+     * The SSH session that bootstrapped Mosh can be torn down after this —
+     * Mosh's design is that mosh-server detaches from its parent SSH
+     * immediately and listens on UDP independently.
+     */
+    suspend fun connectMosh(
+        context: android.content.Context,
+        host: String,
+        port: Int,
+        moshKeyBase64: String
+    ): Boolean {
+        return try {
+            Logger.i("SSHTab", "=== CONNECTING MOSH TAB for ${profile.getDisplayName()} ($host:$port) ===")
+            _connectionState.value = ConnectionState.CONNECTING
+            val session = io.github.tabssh.protocols.mosh.MoshNativeClient.spawn(
+                context, host, port, moshKeyBase64
+            )
+            moshSession = session
+            termuxBridge.connect(session.input, session.output)
+            _connectionState.value = ConnectionState.CONNECTED
+            updateTitleWithStatus(ConnectionState.CONNECTED)
+            Logger.i("SSHTab", "=== MOSH TAB WIRED for ${profile.getDisplayName()} ===")
+            true
+        } catch (e: Exception) {
+            Logger.e("SSHTab", "ERROR connecting mosh tab ${profile.getDisplayName()}", e)
+            _hasError.value = true
+            _connectionState.value = ConnectionState.ERROR
+            false
+        }
+    }
+
+    /**
      * Disconnect this tab
      */
     fun disconnect() {
@@ -266,6 +307,8 @@ class SSHTab(
         connection = null
         try { telnetConnection?.disconnect() } catch (_: Exception) {}
         telnetConnection = null
+        try { moshSession?.close() } catch (_: Exception) {}
+        moshSession = null
         _connectionState.value = ConnectionState.DISCONNECTED
     }
 

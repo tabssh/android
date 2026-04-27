@@ -1,0 +1,176 @@
+name: Mosh Native Binaries
+
+# Builds mosh-client for all 4 Android ABIs and publishes a GitHub release
+# tagged `mosh-<upstream-version>`. Runs monthly; if upstream mosh hasn't
+# released a new version since our last `mosh-*` release, exits cleanly.
+#
+# Triggered manually via workflow_dispatch with optional `force: true` to
+# rebuild even if upstream version hasn't changed.
+#
+# Output: release `mosh-<X.Y.Z>` with assets:
+#   - mosh-client-arm64-v8a
+#   - mosh-client-armeabi-v7a
+#   - mosh-client-x86_64
+#   - mosh-client-x86
+#
+# `scripts/fetch-mosh-binaries.sh` consumes the latest such release at APK
+# build time (drops files to app/src/main/jniLibs/<abi>/libmosh-client.so).
+
+on:
+  schedule:
+    - cron: '0 6 1 * *'   # 06:00 UTC on the 1st of every month
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force rebuild even if upstream version unchanged'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: write   # need write to create the release
+
+jobs:
+  check-version:
+    name: Check upstream mosh version
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.compare.outputs.should_build }}
+      upstream_version: ${{ steps.compare.outputs.upstream_version }}
+      release_tag: ${{ steps.compare.outputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve latest upstream mosh release
+        id: upstream
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # mobile-shell/mosh tags releases as `mosh-X.Y.Z`
+          latest=$(gh release view --repo mobile-shell/mosh --json tagName --jq .tagName)
+          version=${latest#mosh-}
+          echo "upstream_version=$version" >> "$GITHUB_OUTPUT"
+          echo "Upstream mosh: $version"
+
+      - name: Resolve last published mosh-binary release
+        id: ours
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Look for our most recent `mosh-X.Y.Z` release tag.
+          ours=$(gh release list --repo "${GITHUB_REPOSITORY}" --limit 50 \
+                  --json tagName --jq '.[].tagName' \
+                  | grep -E '^mosh-[0-9]+\.[0-9]+\.[0-9]+$' \
+                  | head -n1 || true)
+          version=${ours#mosh-}
+          echo "previous_version=${version:-none}" >> "$GITHUB_OUTPUT"
+          echo "Previous TabSSH mosh-binary release: ${version:-none}"
+
+      - name: Decide whether to build
+        id: compare
+        run: |
+          upstream="${{ steps.upstream.outputs.upstream_version }}"
+          previous="${{ steps.ours.outputs.previous_version }}"
+          force="${{ inputs.force }}"
+          tag="mosh-${upstream}"
+
+          if [[ "$force" == "true" ]]; then
+            echo "Force rebuild requested"
+            should_build=true
+          elif [[ "$previous" == "none" || "$previous" != "$upstream" ]]; then
+            echo "Version changed: $previous → $upstream"
+            should_build=true
+          else
+            echo "No change ($previous == $upstream); skipping"
+            should_build=false
+          fi
+
+          {
+            echo "should_build=$should_build"
+            echo "upstream_version=$upstream"
+            echo "release_tag=$tag"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build mosh-client (${{ matrix.abi }})
+    needs: check-version
+    if: needs.check-version.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [arm64-v8a, armeabi-v7a, x86_64, x86]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build cross-compile image
+        run: |
+          docker build -t tabssh/mosh-build:latest mosh/
+
+      - name: Cross-compile mosh-client for ${{ matrix.abi }}
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/mosh:/work" \
+            tabssh/mosh-build:latest \
+            /work/build-android.sh ${{ matrix.abi }}
+
+      - name: Verify binary
+        run: |
+          binary="mosh/out/${{ matrix.abi }}/mosh-client"
+          test -f "$binary" || { echo "Missing binary"; exit 1; }
+          file "$binary"
+          ls -la "$binary"
+          # Rename to flat asset name (no .so for the GH release).
+          mkdir -p artifacts
+          cp "$binary" "artifacts/mosh-client-${{ matrix.abi }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mosh-client-${{ matrix.abi }}
+          path: artifacts/mosh-client-${{ matrix.abi }}
+          retention-days: 7
+
+  release:
+    name: Publish GitHub release
+    needs: [check-version, build]
+    if: needs.check-version.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List collected binaries
+        run: ls -la artifacts/
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${{ needs.check-version.outputs.release_tag }}"
+          version="${{ needs.check-version.outputs.upstream_version }}"
+
+          # If a release with this tag already exists (e.g. force rebuild),
+          # delete it first so we can replace assets cleanly.
+          gh release view "$tag" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1 \
+            && gh release delete "$tag" --repo "${GITHUB_REPOSITORY}" --yes --cleanup-tag \
+            || true
+
+          gh release create "$tag" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "Mosh ${version} for Android" \
+            --notes "Cross-compiled \`mosh-client\` ${version} (upstream [mobile-shell/mosh](https://github.com/mobile-shell/mosh)) for Android, all four ABIs.
+
+These binaries are bundled into the TabSSH APK at \`app/src/main/jniLibs/<abi>/libmosh-client.so\` so they get unpacked to the app's \`nativeLibraryDir\` on install.
+
+**License:** \`mosh-client\` is GPL-3.0 (see [mobile-shell/mosh LICENSE](https://github.com/mobile-shell/mosh/blob/master/COPYING)). It is aggregated alongside TabSSH (MIT) — neither license infects the other.
+
+**Built from:** \`mosh-${version}\` upstream release, via \`mosh/Dockerfile\` + \`mosh/build-android.sh\` in this repo." \
+            artifacts/mosh-client-*

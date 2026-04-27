@@ -32,6 +32,23 @@
     <!-- Termux terminal-emulator may use some API 24 features, test on older devices -->
     <uses-sdk tools:overrideLibrary="com.termux.terminal,com.termux.view" />
 
+    <!-- Wave 8.3 — FIDO2 / U2F security-key detection (alpha; SSH auth NOT
+         wired). All optional: device without USB Host or NFC simply reports
+         "no authenticators detected" instead of failing to install. -->
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+    <uses-feature android:name="android.hardware.nfc" android:required="false" />
+    <uses-permission android:name="android.permission.NFC" />
+
+    <!-- Wave 9.1 — Termux integration for real Mosh.
+         User must grant via Settings > Apps > TabSSH > Permissions, AND
+         set `allow-external-apps=true` in ~/.termux/termux.properties. -->
+    <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
+
+    <!-- Termux package visibility (Android 11+ requires explicit package query). -->
+    <queries>
+        <package android:name="com.termux" />
+    </queries>
+
     <application
         android:name=".TabSSHApplication"
         android:allowBackup="false"
