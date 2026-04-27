@@ -55,6 +55,10 @@
             android:id="@+id/nav_performance"
             android:icon="@android:drawable/ic_menu_view"
             android:title="Performance" />
+        <item
+            android:id="@+id/nav_multi_dashboard"
+            android:icon="@android:drawable/ic_menu_view"
+            android:title="Multi-host Dashboard" />
     </group>
 
     <!-- Data Section -->

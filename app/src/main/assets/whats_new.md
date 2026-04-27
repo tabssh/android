@@ -1,9 +1,21 @@
 # What's New
 
-## Wave 3 — polish (in progress)
+## Wave 4 — speculative polish (in progress)
+- True 24-bit color rendering (fix latent crash on `SGR 38;2;R;G;B`)
+- Cluster command results stream live as each host completes
+- **Voice typing**: works out of the box — tap the mic on any voice-capable
+  IME (e.g. Gboard); spoken text streams into the active terminal exactly
+  like typed input. Nothing to enable.
+
+## Wave 3 — polish ✅ COMPLETE
 - Per-host color tags on connections (visible strip on cards & rows)
 - Connection history view (most-recent-first, tap to reconnect)
 - This What's New screen
+- PIN code app lock (alongside biometric, FLAG_SECURE)
+- Run port forwards without a terminal session (background tunnels)
+- Auto-detect HTTP on a forwarded port and offer to open browser
+- Compact 48dp bottom nav bar (preference toggle)
+- Bluetooth keyboard polish: AltGr passes through correctly on EU layouts
 
 ## Wave 2 — Tier 2 features
 - Snippet variables: `{?name:default|hint}` with per-(snippet,var) recall
