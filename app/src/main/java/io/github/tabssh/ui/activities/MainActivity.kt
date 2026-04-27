@@ -296,6 +296,9 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             R.id.nav_multi_dashboard -> {
                 startActivity(Intent(this, MultiHostDashboardActivity::class.java))
             }
+            R.id.nav_cloud_accounts -> {
+                startActivity(Intent(this, CloudAccountsActivity::class.java))
+            }
             R.id.nav_copy_app_log -> {
                 copyAppLog()
             }

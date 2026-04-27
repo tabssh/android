@@ -4,7 +4,7 @@
 >
 > **Generated:** 2026-04-25 from a parallel survey of 166 Kotlin sources, all Gradle/Docker/CI configs, and every preference/layout/menu XML.
 >
-> **Last verified against:** `versionCode 3` / `versionName 1.0.0`, database `v22` (post-Wave 3.1; v17 → v18 env_vars+agent_forwarding → v19 stored_keys.certificate → v20 connections.protocol → v21 workspaces table → v22 connections.color_tag), JSch `mwiede:2.27.7`, Termux `terminal-emulator:0.118.1`, AGP 8.7.3, Kotlin 2.0.21, Gradle 8.11.1.
+> **Last verified against:** `versionCode 3` / `versionName 1.0.0`, database `v23` (post-Wave 5.1; v17 → v18 env_vars+agent_forwarding → v19 stored_keys.certificate → v20 connections.protocol → v21 workspaces table → v22 connections.color_tag → v23 cloud_accounts table), JSch `mwiede:2.27.7`, Termux `terminal-emulator:0.118.1`, AGP 8.7.3, Kotlin 2.0.21, Gradle 8.11.1.
 >
 > **Format conventions:**
 > - File paths are repo-relative unless prefixed with `/`.
