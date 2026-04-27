@@ -55,7 +55,7 @@ WORKDIR /opt/sources
 RUN wget -q https://invisible-mirror.net/archives/ncurses/ncurses-6.4.tar.gz && \
     wget -q https://www.openssl.org/source/openssl-3.0.13.tar.gz && \
     wget -q https://github.com/protocolbuffers/protobuf/releases/download/v21.12/protobuf-cpp-3.21.12.tar.gz && \
-    wget -q https://github.com/mobile-shell/mosh/archive/refs/tags/mosh-1.4.0.tar.gz
+    wget -q https://github.com/mobile-shell/mosh/releases/download/mosh-1.4.0/mosh-1.4.0.tar.gz
 
 WORKDIR /work
 ENTRYPOINT ["/bin/bash"]
