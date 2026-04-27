@@ -422,17 +422,20 @@
                         android:checked="true"
                         android:tooltipText="Prevents connection timeout on idle" />
 
-                    <!-- X11 and Mosh disabled - incomplete implementations (need 60-80h work each) -->
+                    <!-- Wave 2.X — X11 forwarding enabled (real JSch channel
+                         forwarding to localhost:6000). Requires an X server
+                         on the device — XServer-XSDL is the recommended
+                         Android option. Mosh stays gone (no Java/Kotlin
+                         Mosh client; see Mosh handoff in the terminal menu). -->
                     <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/switch_x11_forwarding"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_sm"
-                        android:text="X11 Forwarding (Run GUI apps)"
+                        android:text="X11 Forwarding (needs XServer-XSDL)"
                         android:textColor="?android:attr/textColorPrimary"
                         android:checked="false"
-                        android:visibility="gone"
-                        android:tooltipText="Forward X11 display to run graphical apps" />
+                        android:tooltipText="Routes remote X11 traffic to localhost:6000. Install an X server (XServer-XSDL) on this device; without one, X11 apps will fail with 'cannot open display'." />
 
                     <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/switch_use_mosh"

@@ -1,5 +1,21 @@
 # What's New
 
+## Wave 2.X — Mosh + X11 (honest scope)
+- **X11 forwarding** is real now. Toggle "X11 forwarding" on a connection;
+  remote `xclock` / `xeyes` / `xfce4-terminal` / etc. will route their X11
+  traffic to `localhost:6000` via JSch's X11 channel forwarding. **You
+  need an X server on the device** — install **XServer-XSDL** (free, on
+  F-Droid + Play) and start it before connecting. With XServer-XSDL on
+  the default port, that's it.
+- **Mosh handoff** (NOT real Mosh): a new **"Mosh handoff…"** menu item
+  in the terminal runs `mosh-server new` over the live SSH session,
+  parses `MOSH CONNECT <port> <key>`, and shows the user a ready-to-copy
+  `MOSH_KEY=… mosh -p PORT user@host` command. Closing your TabSSH tab
+  does NOT kill mosh-server — Mosh detaches and keeps listening on UDP.
+  TabSSH itself does not speak Mosh's UDP wire protocol; pair this with
+  an actual Mosh client (Termux's `mosh`, the official iOS Mosh app,
+  etc.) to get true roaming.
+
 ## Wave 4 — speculative polish (in progress)
 - True 24-bit color rendering (fix latent crash on `SGR 38;2;R;G;B`)
 - Cluster command results stream live as each host completes

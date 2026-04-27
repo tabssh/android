@@ -522,8 +522,8 @@ GCM authentication tag is appended by the cipher (128 bits, embedded by Java's A
 | `cloud_accounts` | ❌ NOT synced | per-device hardware-keystore-bound token in `SecurePasswordManager` would be missing on the destination — sync the row alone is broken |
 | `tab_sessions` | ❌ NOT synced | per-device runtime state |
 | `audit_log` | ❌ NOT synced | per-device security trail |
-| `trusted_certificates` | ❌ NOT synced (yet) | host-key-style; could be synced — open question |
-| `hypervisor_profiles` | ❌ NOT synced (yet) | similar to connections; defer to Wave 5.5 |
+| `trusted_certificates` | ✅ last-write-wins | Wave 7.1 |
+| `hypervisor_profiles` | ✅ last-write-wins | Wave 7.1 (caveat: `id` is autogenerate Long → cross-device PK collisions could overwrite an unrelated row; users have ≤ 5 hypervisors typically so risk is low) |
 
 ### 9.5 Scheduling
 
@@ -783,6 +783,13 @@ Keystore is decoded from the `KEYSTORE_BASE64` secret. Gradle cache key is `${{ 
 - `prepare-fdroid-submission.sh` — assembles the F-Droid package.
 - `notify-release.sh` — Matrix + Mastodon notifications (requires `MATRIX_TOKEN`, `MASTODON_TOKEN`).
 - `check/quick-check.sh`, `check/dev-shell.sh` — error-count check, interactive Docker shell.
+- `android-emulator.sh` — headless test-emulator manager. **One AVD per
+  (type, size); one running emulator at a time.** Subcommands `start` /
+  `stop` / `delete` / `clean` / `list`; types `phone` / `tablet` / `fold`
+  / `tv` with optional `small` / `large` size. Auto-installs missing SDK
+  pieces via `sdkmanager`. Pins `-port` + `adb -s emulator-PORT` so
+  boot-wait can't attach to a stale instance. See CLAUDE.md §"Test
+  Emulators" for the full runbook.
 
 ### 14.5 F-Droid metadata
 

@@ -18,6 +18,13 @@ interface HypervisorDao {
     
     @Insert
     suspend fun insert(hypervisor: HypervisorProfile): Long
+
+    /** Wave 7.1 — Sync upsert: REPLACE on PK conflict. */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertForSync(hypervisor: HypervisorProfile): Long
+
+    @Query("SELECT * FROM hypervisors ORDER BY name ASC")
+    suspend fun getAllList(): List<HypervisorProfile>
     
     @Update
     suspend fun update(hypervisor: HypervisorProfile)

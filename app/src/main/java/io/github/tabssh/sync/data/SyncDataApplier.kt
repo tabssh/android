@@ -139,6 +139,24 @@ class SyncDataApplier {
                 }
             }
 
+            // Wave 7.1 — hypervisors / trusted_certificates, REPLACE on PK conflict.
+            data.hypervisors.forEach { h ->
+                try {
+                    database.hypervisorDao().upsertForSync(h)
+                    appliedCount++
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Failed to apply hypervisor: ${h.name}", e)
+                }
+            }
+            data.certificates.forEach { c ->
+                try {
+                    database.certificateDao().insertCertificate(c)
+                    appliedCount++
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Failed to apply certificate: ${c.fingerprint}", e)
+                }
+            }
+
             Logger.i(TAG, "Applied $appliedCount items from sync data")
             ApplyResult.Success(appliedCount)
         } catch (e: Exception) {

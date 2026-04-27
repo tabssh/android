@@ -1,7 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Wave 7.2 — drawer reorganized with nested-menu section headers.
+  Keeps the same 22 actions, but groups them under explicit headings so the
+  drawer reads top-to-bottom in order of frequency-of-use:
+    Quick → Manage → Connect → Insights → Import/Export → Settings → Diagnostics
+
+  Headers come from `<item android:title="X"><menu>…</menu></item>`. The
+  parent <item> is non-clickable; NavigationView renders just the title.
+-->
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Quick Actions - No header, immediately accessible -->
+    <!-- Quick: most-used; no header. -->
     <group android:id="@+id/group_quick">
         <item
             android:id="@+id/nav_quick_connect"
@@ -13,116 +22,126 @@
             android:title="Connections" />
     </group>
 
-    <!-- Manage Section -->
-    <group android:id="@+id/group_manage">
-        <item
-            android:id="@+id/nav_identities"
-            android:icon="@android:drawable/ic_menu_myplaces"
-            android:title="Identities" />
-        <item
-            android:id="@+id/nav_manage_keys"
-            android:icon="@android:drawable/ic_lock_lock"
-            android:title="SSH Keys" />
-        <item
-            android:id="@+id/nav_snippets"
-            android:icon="@drawable/ic_code"
-            android:title="Snippets" />
-        <item
-            android:id="@+id/nav_port_forwarding"
-            android:icon="@drawable/ic_forward"
-            android:title="Port Forwarding (background tunnels)" />
-    </group>
+    <item android:title="Manage">
+        <menu>
+            <item
+                android:id="@+id/nav_identities"
+                android:icon="@android:drawable/ic_menu_myplaces"
+                android:title="Identities" />
+            <item
+                android:id="@+id/nav_manage_keys"
+                android:icon="@android:drawable/ic_lock_lock"
+                android:title="SSH Keys" />
+            <item
+                android:id="@+id/nav_snippets"
+                android:icon="@drawable/ic_code"
+                android:title="Snippets" />
+            <item
+                android:id="@+id/nav_manage_groups"
+                android:icon="@android:drawable/ic_menu_agenda"
+                android:title="Groups" />
+            <item
+                android:id="@+id/nav_cloud_accounts"
+                android:icon="@android:drawable/ic_menu_upload"
+                android:title="Cloud Accounts" />
+            <item
+                android:id="@+id/nav_hypervisors"
+                android:icon="@android:drawable/ic_menu_manage"
+                android:title="Hypervisors" />
+        </menu>
+    </item>
 
-    <!-- Hypervisors Section -->
-    <group android:id="@+id/group_hypervisors">
-        <item
-            android:id="@+id/nav_hypervisors"
-            android:icon="@android:drawable/ic_menu_manage"
-            android:title="Hypervisors" />
-    </group>
+    <item android:title="Connect">
+        <menu>
+            <item
+                android:id="@+id/nav_port_forwarding"
+                android:icon="@drawable/ic_forward"
+                android:title="Port Forwarding (background tunnels)" />
+            <item
+                android:id="@+id/nav_cluster_commands"
+                android:icon="@android:drawable/ic_menu_share"
+                android:title="Cluster Commands" />
+        </menu>
+    </item>
 
-    <!-- Tools Section -->
-    <group android:id="@+id/group_tools">
-        <item
-            android:id="@+id/nav_manage_groups"
-            android:icon="@android:drawable/ic_menu_agenda"
-            android:title="Groups" />
-        <item
-            android:id="@+id/nav_cluster_commands"
-            android:icon="@android:drawable/ic_menu_share"
-            android:title="Cluster Commands" />
-        <item
-            android:id="@+id/nav_performance"
-            android:icon="@android:drawable/ic_menu_view"
-            android:title="Performance" />
-        <item
-            android:id="@+id/nav_multi_dashboard"
-            android:icon="@android:drawable/ic_menu_view"
-            android:title="Multi-host Dashboard" />
-        <item
-            android:id="@+id/nav_cloud_accounts"
-            android:icon="@android:drawable/ic_menu_upload"
-            android:title="Cloud Accounts" />
-    </group>
+    <item android:title="Insights">
+        <menu>
+            <item
+                android:id="@+id/nav_performance"
+                android:icon="@android:drawable/ic_menu_view"
+                android:title="Performance" />
+            <item
+                android:id="@+id/nav_multi_dashboard"
+                android:icon="@android:drawable/ic_menu_view"
+                android:title="Multi-host Dashboard" />
+            <item
+                android:id="@+id/nav_connection_history"
+                android:icon="@android:drawable/ic_menu_recent_history"
+                android:title="Connection History" />
+        </menu>
+    </item>
 
-    <!-- Data Section -->
-    <group android:id="@+id/group_data">
-        <item
-            android:id="@+id/nav_import_ssh_config"
-            android:icon="@android:drawable/ic_menu_upload"
-            android:title="Import SSH Config" />
-        <item
-            android:id="@+id/nav_export_ssh_config"
-            android:icon="@android:drawable/ic_menu_save"
-            android:title="Export SSH Config" />
-        <item
-            android:id="@+id/nav_bulk_import"
-            android:icon="@android:drawable/ic_menu_upload"
-            android:title="Bulk Import (CSV / JSON / PuTTY / Terraform)" />
-        <item
-            android:id="@+id/nav_import_connections"
-            android:icon="@android:drawable/ic_menu_upload"
-            android:title="Import Backup" />
-        <item
-            android:id="@+id/nav_export_connections"
-            android:icon="@android:drawable/ic_menu_save"
-            android:title="Export Backup" />
-    </group>
+    <item android:title="Import / Export">
+        <menu>
+            <item
+                android:id="@+id/nav_import_ssh_config"
+                android:icon="@android:drawable/ic_menu_upload"
+                android:title="Import SSH Config" />
+            <item
+                android:id="@+id/nav_export_ssh_config"
+                android:icon="@android:drawable/ic_menu_save"
+                android:title="Export SSH Config" />
+            <item
+                android:id="@+id/nav_bulk_import"
+                android:icon="@android:drawable/ic_menu_upload"
+                android:title="Bulk Import (CSV / JSON / PuTTY / Terraform)" />
+            <item
+                android:id="@+id/nav_import_connections"
+                android:icon="@android:drawable/ic_menu_upload"
+                android:title="Import Backup" />
+            <item
+                android:id="@+id/nav_export_connections"
+                android:icon="@android:drawable/ic_menu_save"
+                android:title="Export Backup" />
+        </menu>
+    </item>
 
-    <!-- Settings Section -->
-    <group android:id="@+id/group_settings">
-        <item
-            android:id="@+id/nav_settings"
-            android:icon="@drawable/ic_settings"
-            android:title="Settings" />
-        <item
-            android:id="@+id/nav_theme_editor"
-            android:icon="@drawable/ic_settings"
-            android:title="Theme Editor" />
-        <item
-            android:id="@+id/nav_connection_history"
-            android:icon="@android:drawable/ic_menu_recent_history"
-            android:title="Connection History" />
-        <item
-            android:id="@+id/nav_whats_new"
-            android:icon="@drawable/ic_info"
-            android:title="What's New" />
-        <item
-            android:id="@+id/nav_copy_app_log"
-            android:icon="@android:drawable/ic_menu_recent_history"
-            android:title="Copy App Log (Safe to Share)" />
-        <item
-            android:id="@+id/nav_copy_debug_logs"
-            android:icon="@android:drawable/ic_menu_info_details"
-            android:title="Copy Debug Logs (Developer)" />
-        <item
-            android:id="@+id/nav_help"
-            android:icon="@drawable/ic_help"
-            android:title="Help" />
-        <item
-            android:id="@+id/nav_about"
-            android:icon="@drawable/ic_info"
-            android:title="About" />
-    </group>
+    <item android:title="Settings">
+        <menu>
+            <item
+                android:id="@+id/nav_settings"
+                android:icon="@drawable/ic_settings"
+                android:title="Settings" />
+            <item
+                android:id="@+id/nav_theme_editor"
+                android:icon="@drawable/ic_settings"
+                android:title="Theme Editor" />
+            <item
+                android:id="@+id/nav_whats_new"
+                android:icon="@drawable/ic_info"
+                android:title="What's New" />
+        </menu>
+    </item>
+
+    <item android:title="Diagnostics">
+        <menu>
+            <item
+                android:id="@+id/nav_copy_app_log"
+                android:icon="@android:drawable/ic_menu_recent_history"
+                android:title="Copy App Log (Safe to Share)" />
+            <item
+                android:id="@+id/nav_copy_debug_logs"
+                android:icon="@android:drawable/ic_menu_info_details"
+                android:title="Copy Debug Logs (Developer)" />
+            <item
+                android:id="@+id/nav_help"
+                android:icon="@drawable/ic_help"
+                android:title="Help" />
+            <item
+                android:id="@+id/nav_about"
+                android:icon="@drawable/ic_info"
+                android:title="About" />
+        </menu>
+    </item>
 
 </menu>

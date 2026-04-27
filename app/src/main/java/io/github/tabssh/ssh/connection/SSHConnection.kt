@@ -847,6 +847,21 @@ class SSHConnection(
                     Logger.w("SSHConnection", "setAgentForwarding failed: ${e.message}")
                 }
             }
+            // Wave 2.X — real X11 channel forwarding via JSch.
+            // We DO NOT implement an X server in-app; we route the X11 channel
+            // to whatever's listening on localhost:6000 (XServer-XSDL is a
+            // good Android option). With this enabled, sshd on the remote
+            // sets DISPLAY=localhost:N.0 and JSch tunnels it back.
+            if (profile.x11Forwarding) {
+                try {
+                    currentSession.setX11Host("localhost")
+                    currentSession.setX11Port(6000)
+                    channel.setXForwarding(true)
+                    Logger.i("SSHConnection", "Enabled X11 forwarding for ${profile.host} (target: localhost:6000)")
+                } catch (e: Exception) {
+                    Logger.w("SSHConnection", "X11 forwarding setup failed: ${e.message}")
+                }
+            }
             channel.connect()
             
             shellChannel = channel

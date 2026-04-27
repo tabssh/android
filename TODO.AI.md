@@ -442,6 +442,10 @@ agreed scope in `/tmp/tabssh-android/parity-decisions.md`.
 - 3.7 ✅ Bottom nav bar on phones (48dp compact, `show_bottom_nav` pref default ON)
 - 3.8 ✅ Bluetooth keyboard polish + AltGr handling (right-Alt unicodeChar passes through unmodified)
 
+### Wave 7 — Closeout 🟢 2/2 SHIPPED
+- 7.1 ✅ Sync HypervisorProfile + TrustedCertificate (last-write-wins). Closes the AI.md §9.4 sync matrix — only `cloud_accounts` (per-device tokens), `tab_sessions` (runtime state), and `audit_log` (per-device trail) intentionally remain unsynced.
+- 7.2 ✅ Drawer menu cleanup — 22 actions reorganized under nested-menu section headers (Quick / Manage / Connect / Insights / Import-Export / Settings / Diagnostics) for proper visual grouping.
+
 ### Wave 6 — Polish + import/export round-out ✅ 4/4 SHIPPED
 - 6.1 ✅ Export connections to OpenSSH config text (`SSHConfigExporter`, drawer entry, SAF SaveDocument)
 - 6.2 ✅ Bulk delete in connections (multi-select mode + confirmation)

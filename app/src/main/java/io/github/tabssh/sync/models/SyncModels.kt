@@ -34,10 +34,12 @@ data class SyncItemCounts(
     val workspaces: Int = 0,    // Wave 5.3
     val snippets: Int = 0,       // Wave 5.4
     val identities: Int = 0,     // Wave 5.4
-    val groups: Int = 0          // Wave 5.4
+    val groups: Int = 0,         // Wave 5.4
+    val hypervisors: Int = 0,    // Wave 7.1
+    val certificates: Int = 0    // Wave 7.1
 ) {
     fun total(): Int = connections + keys + themes + preferences + hostKeys +
-        workspaces + snippets + identities + groups
+        workspaces + snippets + identities + groups + hypervisors + certificates
 }
 
 /**
@@ -73,7 +75,10 @@ data class SyncFileData(
     /** Wave 5.4 — additional last-write-wins entities. */
     val snippets: List<io.github.tabssh.storage.database.entities.Snippet> = emptyList(),
     val identities: List<io.github.tabssh.storage.database.entities.Identity> = emptyList(),
-    val groups: List<io.github.tabssh.storage.database.entities.ConnectionGroup> = emptyList()
+    val groups: List<io.github.tabssh.storage.database.entities.ConnectionGroup> = emptyList(),
+    /** Wave 7.1 — last-write-wins. */
+    val hypervisors: List<io.github.tabssh.storage.database.entities.HypervisorProfile> = emptyList(),
+    val certificates: List<io.github.tabssh.storage.database.entities.TrustedCertificate> = emptyList()
 )
 
 /**
@@ -103,7 +108,14 @@ data class SyncDataPackage(
     /** Wave 5.4 — snippets / identities / groups, last-write-wins. */
     val snippets: List<io.github.tabssh.storage.database.entities.Snippet> = emptyList(),
     val identities: List<io.github.tabssh.storage.database.entities.Identity> = emptyList(),
-    val groups: List<io.github.tabssh.storage.database.entities.ConnectionGroup> = emptyList()
+    val groups: List<io.github.tabssh.storage.database.entities.ConnectionGroup> = emptyList(),
+    /** Wave 7.1 — hypervisors / trusted_certificates, last-write-wins.
+     *  Caveat: HypervisorProfile uses an autoGenerate Long PK, so cross-device
+     *  ID collisions could overwrite an unrelated row on the destination.
+     *  Mitigation: typical users have ≤ 5 hypervisors and rarely sync mid-edit.
+     *  Documented in AI.md §9.4. */
+    val hypervisors: List<io.github.tabssh.storage.database.entities.HypervisorProfile> = emptyList(),
+    val certificates: List<io.github.tabssh.storage.database.entities.TrustedCertificate> = emptyList()
 )
 
 /**
