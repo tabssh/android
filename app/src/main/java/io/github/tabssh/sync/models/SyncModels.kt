@@ -30,9 +30,14 @@ data class SyncItemCounts(
     val keys: Int = 0,
     val themes: Int = 0,
     val preferences: Int = 0,
-    val hostKeys: Int = 0
+    val hostKeys: Int = 0,
+    val workspaces: Int = 0,    // Wave 5.3
+    val snippets: Int = 0,       // Wave 5.4
+    val identities: Int = 0,     // Wave 5.4
+    val groups: Int = 0          // Wave 5.4
 ) {
-    fun total(): Int = connections + keys + themes + preferences + hostKeys
+    fun total(): Int = connections + keys + themes + preferences + hostKeys +
+        workspaces + snippets + identities + groups
 }
 
 /**
@@ -62,7 +67,13 @@ data class SyncFileData(
     val themes: List<ThemeDefinition>,
     val preferences: Map<String, JsonElement>,
     val hostKeys: List<HostKeyEntry>,
-    val syncBase: SyncBase
+    val syncBase: SyncBase,
+    /** Wave 5.3 — optional for backward compat with v2 sync files. */
+    val workspaces: List<io.github.tabssh.storage.database.entities.Workspace> = emptyList(),
+    /** Wave 5.4 — additional last-write-wins entities. */
+    val snippets: List<io.github.tabssh.storage.database.entities.Snippet> = emptyList(),
+    val identities: List<io.github.tabssh.storage.database.entities.Identity> = emptyList(),
+    val groups: List<io.github.tabssh.storage.database.entities.ConnectionGroup> = emptyList()
 )
 
 /**
@@ -86,7 +97,13 @@ data class SyncDataPackage(
     val themes: List<ThemeDefinition> = emptyList(),
     val preferences: Map<String, JsonElement> = emptyMap(),
     val hostKeys: List<HostKeyEntry> = emptyList(),
-    val metadata: SyncMetadata
+    val metadata: SyncMetadata,
+    /** Wave 5.3 — workspaces sync as plain last-write-wins. */
+    val workspaces: List<io.github.tabssh.storage.database.entities.Workspace> = emptyList(),
+    /** Wave 5.4 — snippets / identities / groups, last-write-wins. */
+    val snippets: List<io.github.tabssh.storage.database.entities.Snippet> = emptyList(),
+    val identities: List<io.github.tabssh.storage.database.entities.Identity> = emptyList(),
+    val groups: List<io.github.tabssh.storage.database.entities.ConnectionGroup> = emptyList()
 )
 
 /**

@@ -69,13 +69,21 @@ class SyncDataCollector {
         val themes = collectThemes()
         val preferences = collectPreferences()
         val hostKeys = collectHostKeys()
+        val workspaces = collectWorkspaces() // Wave 5.3
+        val snippets = collectSnippets()      // Wave 5.4
+        val identities = collectIdentities()  // Wave 5.4
+        val groups = collectGroups()          // Wave 5.4
 
         val itemCounts = SyncItemCounts(
             connections = connections.size,
             keys = keys.size,
             themes = themes.size,
             preferences = preferences.size,
-            hostKeys = hostKeys.size
+            hostKeys = hostKeys.size,
+            workspaces = workspaces.size,
+            snippets = snippets.size,
+            identities = identities.size,
+            groups = groups.size
         )
 
         val metadata = metadataManager.createSyncMetadata(itemCounts)
@@ -88,8 +96,52 @@ class SyncDataCollector {
             themes = themes,
             preferences = preferences,
             hostKeys = hostKeys,
-            metadata = metadata
+            metadata = metadata,
+            workspaces = workspaces,
+            snippets = snippets,
+            identities = identities,
+            groups = groups
         )
+    }
+
+    private suspend fun collectSnippets(): List<io.github.tabssh.storage.database.entities.Snippet> {
+        return try {
+            database.snippetDao().getAllSnippets().first()
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to collect snippets", e)
+            emptyList()
+        }
+    }
+
+    private suspend fun collectIdentities(): List<io.github.tabssh.storage.database.entities.Identity> {
+        return try {
+            database.identityDao().getAllIdentitiesList()
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to collect identities", e)
+            emptyList()
+        }
+    }
+
+    private suspend fun collectGroups(): List<io.github.tabssh.storage.database.entities.ConnectionGroup> {
+        return try {
+            database.connectionGroupDao().getAllGroups().first()
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to collect groups", e)
+            emptyList()
+        }
+    }
+
+    /** Wave 5.3 — collect Workspace rows. CloudAccount is intentionally
+     *  NOT collected: its encrypted token is per-device hardware-keystore-bound
+     *  via SecurePasswordManager, so a synced row without the matching token
+     *  would be unusable on the destination device. */
+    private suspend fun collectWorkspaces(): List<io.github.tabssh.storage.database.entities.Workspace> {
+        return try {
+            database.workspaceDao().getAll()
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to collect workspaces", e)
+            emptyList()
+        }
     }
 
     /**
@@ -102,6 +154,10 @@ class SyncDataCollector {
         val keys = collectKeys().filter { it.modifiedAt > timestamp }
         val themes = collectThemes().filter { it.modifiedAt > timestamp }
         val hostKeys = collectHostKeys().filter { it.modifiedAt > timestamp }
+        val workspaces = collectWorkspaces().filter { it.modifiedAt > timestamp }
+        val snippets = collectSnippets().filter { it.modifiedAt > timestamp }
+        val identities = collectIdentities().filter { it.modifiedAt > timestamp }
+        val groups = collectGroups().filter { it.modifiedAt > timestamp }
 
         val preferences = if (hasPreferencesChanged(timestamp)) {
             collectPreferences()
@@ -114,7 +170,11 @@ class SyncDataCollector {
             keys = keys.size,
             themes = themes.size,
             preferences = preferences.size,
-            hostKeys = hostKeys.size
+            hostKeys = hostKeys.size,
+            workspaces = workspaces.size,
+            snippets = snippets.size,
+            identities = identities.size,
+            groups = groups.size
         )
 
         val metadata = metadataManager.createSyncMetadata(itemCounts)
@@ -127,7 +187,11 @@ class SyncDataCollector {
             themes = themes,
             preferences = preferences,
             hostKeys = hostKeys,
-            metadata = metadata
+            metadata = metadata,
+            workspaces = workspaces,
+            snippets = snippets,
+            identities = identities,
+            groups = groups
         )
     }
 
