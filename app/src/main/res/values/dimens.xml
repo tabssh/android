@@ -107,6 +107,11 @@
     <dimen name="elevation_high">8dp</dimen>
     <dimen name="elevation_very_high">16dp</dimen>
     
+    <!-- Wave 4.c — Drawer width. Phones use the off-canvas overlay default
+         (Material Components computes ~280dp); tablets override in
+         values-sw720dp/ to a wider permanent sidebar. -->
+    <dimen name="nav_drawer_width">280dp</dimen>
+
     <!-- Bottom sheet dimensions -->
     <dimen name="bottom_sheet_peek_height">64dp</dimen>
     <dimen name="bottom_sheet_corner_radius">16dp</dimen>
