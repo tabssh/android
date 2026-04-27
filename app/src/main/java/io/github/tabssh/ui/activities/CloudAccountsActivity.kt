@@ -274,22 +274,66 @@ class CloudAccountsActivity : AppCompatActivity() {
             .show()
     }
 
+    /**
+     * Wave 6.5 — Dedup on import. For each candidate, if an existing
+     * connection has the same (host, port, username) AND the same
+     * `cloud_source` tag in advancedSettings, update it in place (name +
+     * region timestamp) instead of inserting a duplicate. Anything else is
+     * inserted fresh. Returns inserted/updated counts so the user knows
+     * what happened.
+     */
     private fun importPicked(picked: List<ImportCandidate>) {
         if (picked.isEmpty()) return
         lifecycleScope.launch {
             try {
-                app.database.connectionDao().insertConnections(picked.map { it.profile })
+                val existing = app.database.connectionDao().getAllConnectionsList()
+                var inserted = 0
+                var updated = 0
+                for (cand in picked) {
+                    val src = extractCloudSource(cand.profile.advancedSettings)
+                    val match = existing.firstOrNull { e ->
+                        e.host == cand.profile.host &&
+                        e.port == cand.profile.port &&
+                        e.username == cand.profile.username &&
+                        extractCloudSource(e.advancedSettings) == src
+                    }
+                    if (match != null) {
+                        app.database.connectionDao().updateConnection(
+                            match.copy(
+                                name = cand.profile.name,
+                                advancedSettings = cand.profile.advancedSettings,
+                                modifiedAt = System.currentTimeMillis()
+                            )
+                        )
+                        updated++
+                    } else {
+                        app.database.connectionDao().insertConnection(cand.profile)
+                        inserted++
+                    }
+                }
                 runOnUiThread {
-                    Toast.makeText(this@CloudAccountsActivity, "Imported ${picked.size} connections", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        this@CloudAccountsActivity,
+                        "Inserted $inserted, updated $updated",
+                        Toast.LENGTH_SHORT
+                    ).show()
                     reload()
                 }
             } catch (e: Exception) {
-                Logger.e(TAG, "Bulk insert failed", e)
+                Logger.e(TAG, "Bulk insert/update failed", e)
                 runOnUiThread {
                     Toast.makeText(this@CloudAccountsActivity, "Import failed: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
         }
+    }
+
+    /** Pull the `cloud_source` field out of the advancedSettings JSON, or null. */
+    private fun extractCloudSource(advanced: String?): String? {
+        if (advanced.isNullOrBlank()) return null
+        return try {
+            org.json.JSONObject(advanced).optString("cloud_source").takeIf { it.isNotBlank() }
+        } catch (_: Exception) { null }
     }
 
     private fun confirmDelete(account: CloudAccount) {

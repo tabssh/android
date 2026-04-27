@@ -329,7 +329,8 @@ class ConnectionsFragment : Fragment() {
         val options = arrayOf(
             "Edit All Connections",
             "Edit Connections in Group...",
-            "Select Multiple to Edit"
+            "Select Multiple to Edit",
+            "Select Multiple to Delete"  // Wave 6.2
         )
 
         AlertDialog.Builder(requireContext())
@@ -339,6 +340,7 @@ class ConnectionsFragment : Fragment() {
                     0 -> showBulkEditDialog(allConnections)
                     1 -> showGroupSelectionForBulkEdit()
                     2 -> enterSelectionMode()
+                    3 -> enterSelectionMode(deleteMode = true)  // Wave 6.2
                 }
             }
             .setNegativeButton("Cancel", null)
@@ -374,10 +376,10 @@ class ConnectionsFragment : Fragment() {
     /**
      * Enter multi-select mode
      */
-    private fun enterSelectionMode() {
+    private fun enterSelectionMode(deleteMode: Boolean = false) {
         isSelectionMode = true
         selectedConnections.clear()
-        toolbar.title = "Select Connections"
+        toolbar.title = if (deleteMode) "Select to Delete" else "Select Connections"
         toolbar.setNavigationIcon(R.drawable.ic_close)
         toolbar.setNavigationOnClickListener { exitSelectionMode() }
 
@@ -385,18 +387,59 @@ class ConnectionsFragment : Fragment() {
         toolbar.menu.findItem(R.id.action_bulk_edit)?.isVisible = false
         toolbar.menu.findItem(R.id.action_sort)?.isVisible = false
 
-        android.widget.Toast.makeText(requireContext(), "Tap connections to select, long-press to edit selected", android.widget.Toast.LENGTH_LONG).show()
+        val hint = if (deleteMode)
+            "Tap connections to select, long-press to delete selected"
+        else
+            "Tap connections to select, long-press to edit selected"
+        android.widget.Toast.makeText(requireContext(), hint, android.widget.Toast.LENGTH_LONG).show()
 
-        // Update adapter click behavior
+        // Update adapter click behavior — long-press triggers the chosen action.
         adapter.setOnItemLongClickListener { _ ->
-            if (selectedConnections.isNotEmpty()) {
-                val selectedList = allConnections.filter { selectedConnections.contains(it.id) }
-                showBulkEditDialog(selectedList)
-            } else {
+            if (selectedConnections.isEmpty()) {
                 android.widget.Toast.makeText(requireContext(), "Select at least one connection", android.widget.Toast.LENGTH_SHORT).show()
+                return@setOnItemLongClickListener true
+            }
+            val selectedList = allConnections.filter { selectedConnections.contains(it.id) }
+            if (deleteMode) {
+                confirmAndBulkDelete(selectedList)
+            } else {
+                showBulkEditDialog(selectedList)
             }
             true
         }
+    }
+
+    /**
+     * Wave 6.2 — Bulk delete with confirmation. Uses connectionDao.deleteConnection
+     * one-by-one so the existing audit / cascade behaviour fires per row.
+     */
+    private fun confirmAndBulkDelete(selected: List<ConnectionProfile>) {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Delete ${selected.size} connection(s)?")
+            .setMessage("This cannot be undone. Stored passwords for these connections will also be cleared.")
+            .setPositiveButton("Delete") { _, _ ->
+                lifecycleScope.launch {
+                    var deleted = 0
+                    val app = requireActivity().application as io.github.tabssh.TabSSHApplication
+                    for (c in selected) {
+                        try {
+                            app.database.connectionDao().deleteConnection(c)
+                            try { app.securePasswordManager.clearPassword(c.id) } catch (_: Exception) {}
+                            deleted++
+                        } catch (e: Exception) {
+                            Logger.e("ConnectionsFragment", "Bulk delete failed for ${c.name}", e)
+                        }
+                    }
+                    android.widget.Toast.makeText(
+                        requireContext(),
+                        "Deleted $deleted connection(s)",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                    exitSelectionMode()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     /**

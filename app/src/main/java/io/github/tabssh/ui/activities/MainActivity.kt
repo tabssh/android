@@ -23,6 +23,7 @@ import io.github.tabssh.ui.adapters.MainPagerAdapter
 import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -63,6 +64,13 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
     ) { uri ->
         uri?.let { bulkImportFromUri(it) }
+    }
+
+    // Wave 6.1 — SSH config export (SAF SaveDocument)
+    private val exportSshConfigLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("text/plain")
+    ) { uri ->
+        uri?.let { exportSshConfigToUri(it) }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -272,6 +280,9 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             }
             R.id.nav_bulk_import -> {
                 bulkImportLauncher.launch(arrayOf("*/*"))
+            }
+            R.id.nav_export_ssh_config -> {
+                exportSshConfigLauncher.launch("ssh_config_${System.currentTimeMillis() / 1000}.txt")
             }
             R.id.nav_import_connections -> {
                 importConnectionsLauncher.launch(arrayOf("application/zip", "application/json"))
@@ -666,6 +677,40 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     }
 
     /**
+     * Wave 6.1 — Export current connections to OpenSSH config text. Writes to
+     * the SAF-picked URI; passwords are NEVER written (they live in Keystore).
+     */
+    private fun exportSshConfigToUri(uri: android.net.Uri) {
+        lifecycleScope.launch {
+            try {
+                val connections = withContext(Dispatchers.IO) {
+                    app.database.connectionDao().getAllConnectionsList()
+                }
+                val groups = withContext(Dispatchers.IO) {
+                    try { app.database.connectionGroupDao().getAllGroups().first() } catch (_: Exception) { emptyList() }
+                }
+                val text = io.github.tabssh.ssh.config.SSHConfigExporter.export(connections, groups)
+                withContext(Dispatchers.IO) {
+                    contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray(Charsets.UTF_8)) }
+                        ?: throw java.io.IOException("Could not open output stream")
+                }
+                android.widget.Toast.makeText(
+                    this@MainActivity,
+                    "Exported ${connections.size} connections",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            } catch (e: Exception) {
+                Logger.e("MainActivity", "SSH config export failed", e)
+                android.widget.Toast.makeText(
+                    this@MainActivity,
+                    "Export failed: ${e.message}",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
+    /**
      * Wave 1.6 — Bulk import dispatcher (CSV / JSON / PuTTY .reg / Terraform .tf).
      *
      * Parses with [io.github.tabssh.ssh.config.BulkImportParser], shows a
@@ -854,22 +899,34 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                     }
                 }
 
-                // Step 3: Update profiles with actual group IDs and insert
+                // Step 3: Update profiles with actual group IDs and insert.
+                // Wave 6.4 — dedup on (host, port, username); skip rows that
+                // already exist instead of creating duplicates on re-import.
+                val existing = app.database.connectionDao().getAllConnectionsList()
+                val existingTriples = existing.map { Triple(it.host, it.port, it.username) }.toHashSet()
                 var connectionsImported = 0
+                var connectionsSkipped = 0
                 profiles.forEach { profile ->
-                    // Replace group name with group ID
                     val updatedProfile = if (profile.groupId != null && groupNameToId.containsKey(profile.groupId)) {
                         profile.copy(groupId = groupNameToId[profile.groupId])
                     } else {
                         profile
                     }
-                    app.database.connectionDao().insertConnection(updatedProfile)
-                    connectionsImported++
+                    val triple = Triple(updatedProfile.host, updatedProfile.port, updatedProfile.username)
+                    if (existingTriples.contains(triple)) {
+                        connectionsSkipped++
+                    } else {
+                        app.database.connectionDao().insertConnection(updatedProfile)
+                        existingTriples.add(triple) // catch in-batch duplicates too
+                        connectionsImported++
+                    }
                 }
 
-                // Show success with details
                 val message = buildString {
                     append("✓ Imported $connectionsImported connection(s)")
+                    if (connectionsSkipped > 0) {
+                        append("\n• Skipped $connectionsSkipped already-existing host(s)")
+                    }
                     if (groupsCreated > 0) {
                         append("\n✓ Created $groupsCreated new group(s)")
                     }

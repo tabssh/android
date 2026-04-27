@@ -442,6 +442,12 @@ agreed scope in `/tmp/tabssh-android/parity-decisions.md`.
 - 3.7 ✅ Bottom nav bar on phones (48dp compact, `show_bottom_nav` pref default ON)
 - 3.8 ✅ Bluetooth keyboard polish + AltGr handling (right-Alt unicodeChar passes through unmodified)
 
+### Wave 6 — Polish + import/export round-out ✅ 4/4 SHIPPED
+- 6.1 ✅ Export connections to OpenSSH config text (`SSHConfigExporter`, drawer entry, SAF SaveDocument)
+- 6.2 ✅ Bulk delete in connections (multi-select mode + confirmation)
+- 6.4 ✅ Bulk import dedup — skip already-existing (host, port, username) triples
+- 6.5 ✅ Cloud import dedup — re-refresh updates in place when (host, port, username, cloud_source) match
+
 ### Wave 5 — Cloud auto-import + sync coverage 🟢 4/7 PROVIDERS, 3 DEFERRED (OAuth2)
 - 5.1 ✅ Framework + DigitalOcean (DB v22→v23, `cloud_accounts` table, `CloudProvider` interface, `DigitalOceanClient`, `CloudAccountsActivity` with token-encrypted-via-SecurePasswordManager flow + refresh + import multi-select)
 - 5.2 ✅ Hetzner Cloud, Linode (Akamai), Vultr — bearer-token REST inventory
