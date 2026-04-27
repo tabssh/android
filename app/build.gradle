@@ -226,6 +226,11 @@ dependencies {
     // causes NoClassDefFoundError at runtime.
     implementation 'androidx.concurrent:concurrent-futures:1.2.0'
 
+    // Wave 4.b — Jetpack WindowManager: observe FoldingFeature so foldables
+    // in book mode (Galaxy Fold, Pixel Fold) can lock the drawer open as a
+    // sidebar even though `is_tablet` is false on the unfolded display.
+    implementation 'androidx.window:window:1.3.0'
+
     // Sync uses Android Storage Access Framework (SAF) - no external dependencies needed
     // Works with Google Drive app, Dropbox, OneDrive, Nextcloud, or any DocumentsProvider
 

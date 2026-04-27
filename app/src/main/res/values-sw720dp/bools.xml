@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Wave 4.c — Tablet detection. sw>=720dp = ~7" tablet or larger.
+         Used by MainActivity to lock the drawer open as a permanent
+         sidebar instead of an off-canvas overlay. -->
+    <bool name="is_tablet">true</bool>
+</resources>

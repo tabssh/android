@@ -61,10 +61,13 @@
 
     </androidx.coordinatorlayout.widget.CoordinatorLayout>
 
-    <!-- Navigation Drawer -->
+    <!-- Navigation Drawer.
+         Wave 4.c — width pulled from a dimen override; on sw>=720dp the
+         drawer becomes 320dp wide and MainActivity locks it open as a
+         permanent sidebar. -->
     <com.google.android.material.navigation.NavigationView
         android:id="@+id/nav_view"
-        android:layout_width="wrap_content"
+        android:layout_width="@dimen/nav_drawer_width"
         android:layout_height="match_parent"
         android:layout_gravity="start"
         style="@style/Widget.TabSSH.NavigationView"

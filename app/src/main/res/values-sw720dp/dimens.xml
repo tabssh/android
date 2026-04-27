@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Wave 4.c — Tablet (sw>=720dp) overrides.
+         Permanent sidebar pattern: a wider drawer stays open as a side panel.
+         Slightly larger touch targets / spacing where space allows. -->
+    <dimen name="space_md">20dp</dimen>
+    <dimen name="space_lg">28dp</dimen>
+
+    <!-- Drawer width as a sidebar — 280dp is the Material guideline for a
+         persistent drawer on tablets; 320dp gives breathing room for our
+         long item titles like "Bulk Import (CSV / JSON / PuTTY / Terraform)". -->
+    <dimen name="nav_drawer_width">320dp</dimen>
+
+    <!-- Connection list rows can afford to breathe more. -->
+    <dimen name="list_item_padding">20dp</dimen>
+    <dimen name="connection_item_height">64dp</dimen>
+</resources>

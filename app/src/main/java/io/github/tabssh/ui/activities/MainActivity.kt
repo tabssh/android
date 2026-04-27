@@ -99,6 +99,19 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         drawerLayout.addDrawerListener(toggle)
         toggle.syncState()
 
+        // Wave 4.c — Tablet sidebar mode. On sw>=720dp the drawer locks open
+        // as a permanent sidebar; the hamburger is hidden and the user can't
+        // swipe it shut. Phones unchanged (off-canvas overlay).
+        if (resources.getBoolean(R.bool.is_tablet)) {
+            applySidebarMode(toggle)
+        }
+        // Wave 4.b — Foldable book mode. On a foldable that's HALF_OPENED with
+        // a vertical hinge (book posture), unfold gives us "tablet-shaped"
+        // real estate even though sw720dp may still be false on the inner
+        // display. Lock the drawer open while in that state; restore overlay
+        // mode when device is folded again.
+        observeFoldingFeature(toggle)
+
         // Setup ViewPager2 + TabLayout
         viewPager = findViewById(R.id.view_pager)
         tabLayout = findViewById(R.id.tab_layout)
@@ -1107,6 +1120,44 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     }
 
     private var pinUnlocked = false
+
+    /** Wave 4.b — toggle a sidebar-locked-open mode (used by tablet + foldable). */
+    private fun applySidebarMode(toggle: ActionBarDrawerToggle) {
+        drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_OPEN)
+        drawerLayout.openDrawer(GravityCompat.START)
+        supportActionBar?.setDisplayHomeAsUpEnabled(false)
+        toggle.isDrawerIndicatorEnabled = false
+    }
+
+    /** Wave 4.b — restore phone overlay mode (used when folding back). */
+    private fun applyPhoneOverlayMode(toggle: ActionBarDrawerToggle) {
+        drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED)
+        drawerLayout.closeDrawer(GravityCompat.START)
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        toggle.isDrawerIndicatorEnabled = true
+    }
+
+    /** Wave 4.b — observe FoldingFeature; flip drawer mode on hinge state changes. */
+    private fun observeFoldingFeature(toggle: ActionBarDrawerToggle) {
+        // Skip when we're already locked open from is_tablet.
+        if (resources.getBoolean(R.bool.is_tablet)) return
+        val tracker = androidx.window.layout.WindowInfoTracker.getOrCreate(this)
+        lifecycleScope.launch {
+            try {
+                tracker.windowLayoutInfo(this@MainActivity).collect { info ->
+                    val fold = info.displayFeatures
+                        .filterIsInstance<androidx.window.layout.FoldingFeature>()
+                        .firstOrNull()
+                    val bookMode = fold != null &&
+                        fold.state == androidx.window.layout.FoldingFeature.State.HALF_OPENED &&
+                        fold.orientation == androidx.window.layout.FoldingFeature.Orientation.VERTICAL
+                    if (bookMode) applySidebarMode(toggle) else applyPhoneOverlayMode(toggle)
+                }
+            } catch (e: Exception) {
+                Logger.w("MainActivity", "FoldingFeature observation failed: ${e.message}")
+            }
+        }
+    }
 
     private fun maybePromptPinLock() {
         if (pinUnlocked) return

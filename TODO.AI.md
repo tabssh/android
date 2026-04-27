@@ -455,11 +455,11 @@ agreed scope in `/tmp/tabssh-android/parity-decisions.md`.
 - 5.4 ✅ Sync expansion — Snippet, Identity, ConnectionGroup added to sync collector + applier (last-write-wins)
 - 5.X ⏸ AWS / GCP / Azure cloud import — DEFERRED until OAuth2 / SigV4 design pass
 
-### Wave 4 — Tier 4 speculative 🟢 4/7 SHIPPED, 3 DEFERRED (need hardware)
+### Wave 4 — Tier 4 speculative 🟢 6/7 SHIPPED, 1 DEFERRED
 - T4a ✅ True-color (24-bit) rendering — fixed latent OOB crash on `SGR 38;2;R;G;B`; encoded ARGB pass-through
-- T4b ⏸ Foldable layout — DEFERRED, needs foldable device to verify
-- T4c ⏸ Tablet desktop chrome (sw>=720dp) — DEFERRED, needs tablet
-- T4d ⏸ SFTP tabs / drag-drop — DEFERRED, tablet-only ergonomics
+- T4b ✅ Foldable layout — Jetpack `WindowInfoTracker` observes `FoldingFeature`; book-mode locks drawer open as sidebar (verifiable on foldable emulator)
+- T4c ✅ Tablet desktop chrome (sw>=720dp) — `values-sw720dp/` overrides + `is_tablet` bool drives `LOCK_MODE_LOCKED_OPEN` permanent sidebar
+- T4d ⏸ SFTP tabs / drag-drop — DEFERRED, needs design pass (existing dual-pane local/remote already covers most of the use case; adding multi-connection drag-drop is its own sub-project)
 - T4e ✅ Cluster command live result streaming — Semaphore + Mutex per-host emission
 - T4f ✅ Voice typing — already works via system IME; documented in whats_new.md
 - T4g ✅ Multi-host performance dashboard — `MultiHostDashboardActivity` with 5s polling, parallel hosts
