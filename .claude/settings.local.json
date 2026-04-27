@@ -67,7 +67,9 @@
       "Bash(/tmp/tabssh-android/shot.sh 99-terminal-state)",
       "Bash(/tmp/tabssh-android/shot.sh A1-fresh)",
       "Bash(python3 -c \"import sys,json; print\\(json.load\\(sys.stdin\\).get\\('data',{}\\).get\\('ticket','FAIL'\\)[:30]+'...'\\)\")",
-      "Bash(gh issue *)"
+      "Bash(gh issue *)",
+      "Bash(v17)",
+      "Bash(v22)"
     ]
   }
 }

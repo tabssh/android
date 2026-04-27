@@ -1037,7 +1037,42 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
 
     override fun onResume() {
         super.onResume()
+        // Wave 3.2 — PIN gate. Triggered once per process launch and after
+        // every onPause where the activity actually went to background.
+        maybePromptPinLock()
         // Fragments will handle their own data refreshing
+    }
+
+    private var pinUnlocked = false
+
+    private fun maybePromptPinLock() {
+        if (pinUnlocked) return
+        val enabled = app.preferencesManager.getBoolean(PinLockActivity.PREF_PIN_ENABLED, false)
+        val hash = app.preferencesManager.getString(PinLockActivity.PREF_PIN_HASH, "")
+        if (!enabled || hash.isBlank()) return
+        startActivityForResult(PinLockActivity.verifyIntent(this), PIN_VERIFY_REQ)
+    }
+
+    @Deprecated("startActivityForResult required for one-shot lock screen pre-AndroidX result API in this codebase")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == PIN_VERIFY_REQ) {
+            if (resultCode == RESULT_OK) {
+                pinUnlocked = true
+            } else {
+                finishAffinity() // user couldn't / wouldn't unlock
+            }
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // Re-lock when we're sent to background.
+        if (isFinishing.not()) pinUnlocked = false
+    }
+
+    companion object {
+        private const val PIN_VERIFY_REQ = 0xA10C
     }
     
     /**

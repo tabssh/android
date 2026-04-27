@@ -269,30 +269,31 @@ class TabTerminalActivity : AppCompatActivity() {
      * Setup bottom action bar with slide-up functionality
      */
     private fun setupBottomActionBar() {
-        // Setup button click listeners
+        // Wave 3.7 — `show_bottom_nav` preference (default true) keeps the bar
+        // visible at all times. If false we fall back to the edge-tap toggle
+        // (legacy behaviour) where the bar appears for 5s then hides.
+        val persistent = app.preferencesManager.getBoolean("show_bottom_nav", true)
+        binding.bottomActionBar.visibility = if (persistent) View.VISIBLE else View.GONE
+
         binding.btnKeyboard.setOnClickListener {
             toggleKeyboard()
-            hideBottomActionBar()
+            if (!persistent) hideBottomActionBar()
         }
-        
         binding.btnSnippets.setOnClickListener {
             showSnippetsDialog()
-            hideBottomActionBar()
+            if (!persistent) hideBottomActionBar()
         }
-        
         binding.btnFiles.setOnClickListener {
             openFileManager()
-            hideBottomActionBar()
+            if (!persistent) hideBottomActionBar()
         }
-        
         binding.btnPaste.setOnClickListener {
             pasteFromClipboard()
-            hideBottomActionBar()
+            if (!persistent) hideBottomActionBar()
         }
-        
         binding.btnMenu.setOnClickListener {
             showTerminalMenu()
-            hideBottomActionBar()
+            if (!persistent) hideBottomActionBar()
         }
     }
 

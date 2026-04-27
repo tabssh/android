@@ -42,14 +42,67 @@ class PortForwardingActivity : AppCompatActivity() {
 
         connectionId = intent.getStringExtra("connection_id")
         if (connectionId == null) {
-            Logger.e("PortForwardingActivity", "No connection ID provided")
-            finish()
-            return
+            // Wave 3.3 — no connection passed in, treat as standalone launch
+            // ("Background Tunnels" entry from the drawer). Pick a saved
+            // connection, open an SSH session that persists in
+            // SSHSessionManager, and proceed without a terminal.
+            promptStandaloneConnection()
+        } else {
+            setupRecyclerView()
+            setupFab()
+            loadTunnels()
         }
+    }
 
-        setupRecyclerView()
-        setupFab()
-        loadTunnels()
+    private fun promptStandaloneConnection() {
+        val app = application as io.github.tabssh.TabSSHApplication
+        lifecycleScope.launch {
+            val candidates = try {
+                app.database.connectionDao().getRecentConnections(50)
+            } catch (e: Exception) {
+                Logger.e("PortForwardingActivity", "Recent fetch failed", e)
+                emptyList()
+            }
+            if (candidates.isEmpty()) {
+                runOnUiThread {
+                    showError("No saved connections — add one first to use background tunnels.")
+                    finish()
+                }
+                return@launch
+            }
+            runOnUiThread {
+                val labels = candidates.map { it.getDisplayName() }.toTypedArray()
+                MaterialAlertDialogBuilder(this@PortForwardingActivity)
+                    .setTitle("Pick connection for background tunnels")
+                    .setItems(labels) { _, which ->
+                        attachStandaloneSession(candidates[which])
+                    }
+                    .setNegativeButton("Cancel") { _, _ -> finish() }
+                    .setOnCancelListener { finish() }
+                    .show()
+            }
+        }
+    }
+
+    private fun attachStandaloneSession(profile: io.github.tabssh.storage.database.entities.ConnectionProfile) {
+        val app = application as io.github.tabssh.TabSSHApplication
+        lifecycleScope.launch {
+            val session = app.sshSessionManager.connectToServer(profile)
+            if (session == null) {
+                runOnUiThread {
+                    showError("SSH connection failed — can't open background tunnels.")
+                    finish()
+                }
+                return@launch
+            }
+            connectionId = profile.id
+            runOnUiThread {
+                supportActionBar?.title = "Port Forwarding · ${profile.getDisplayName()}"
+                setupRecyclerView()
+                setupFab()
+                loadTunnels()
+            }
+        }
     }
 
     private fun setupRecyclerView() {
@@ -59,8 +112,14 @@ class PortForwardingActivity : AppCompatActivity() {
         adapter = TunnelAdapter(
             onStart = { tunnel ->
                 lifecycleScope.launch {
-                    portForwardingManager?.startTunnel(tunnel.id)
+                    val ok = portForwardingManager?.startTunnel(tunnel.id) ?: false
                     loadTunnels()
+                    // Wave 3.4 — auto-detect HTTP on the local end after a
+                    // successful Local Forward; offer "Open in browser" if so.
+                    if (ok && tunnel.type == TunnelType.LOCAL_FORWARD) {
+                        val effectivePort = tunnel.actualLocalPort?.takeIf { it > 0 } ?: tunnel.localPort
+                        offerBrowserOpenIfHttp(effectivePort)
+                    }
                 }
             },
             onStop = { tunnel ->
@@ -228,5 +287,31 @@ class PortForwardingActivity : AppCompatActivity() {
     override fun onSupportNavigateUp(): Boolean {
         finish()
         return true
+    }
+
+    /**
+     * Wave 3.4 — Probe the freshly opened local port; if it's an HTTP server,
+     * offer a one-tap "Open in browser" via a confirmation dialog.
+     */
+    private fun offerBrowserOpenIfHttp(localPort: Int) {
+        if (localPort <= 0) return
+        lifecycleScope.launch {
+            val isHttp = io.github.tabssh.ssh.forwarding.HttpPortProbe.probe(localPort)
+            if (!isHttp) return@launch
+            val url = "http://127.0.0.1:$localPort/"
+            MaterialAlertDialogBuilder(this@PortForwardingActivity)
+                .setTitle("HTTP detected on :$localPort")
+                .setMessage("Open $url in your browser?")
+                .setPositiveButton("Open") { _, _ ->
+                    try {
+                        startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+                    } catch (e: Exception) {
+                        Logger.w("PortForwardingActivity", "No browser to handle $url: ${e.message}")
+                        showError("No browser available to open $url")
+                    }
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
     }
 }

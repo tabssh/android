@@ -400,6 +400,59 @@ All seven Phase 7.5 fixes (#32–#39 minus #36 which was a note) were re-verifie
 
 ---
 
+## 🌊 Parity-catch-up Waves (2026-04-26 → present)
+
+Tracks the multi-wave parity push captured in `FEATURES_AUDIT.md` and the
+agreed scope in `/tmp/tabssh-android/parity-decisions.md`.
+
+### Wave 1 — Tier 1 quick wins ✅ COMPLETE
+- 1.1 Reconnect dialog on disconnected tab
+- 1.2 Per-host environment variables (DB v17→v18)
+- 1.3 Find-in-scrollback over Termux buffer
+- 1.4 Mosh wiring — DEFERRED to Wave 2.X (real SSP/OCB-AES = thousands of LOC)
+- 1.5 SSH agent forwarding (per-host opt-in)
+- 1.6 Bulk import (CSV / JSON / PuTTY .reg / Terraform .tf)
+- 1.7 In-app remote text-file editor over SFTP
+- 1.8 chmod editing in SFTP (rwx checkboxes + live octal)
+- 1.9 SCP fallback (device → server) via JSch ChannelExec
+
+### Wave 2 — Tier 2 capabilities 🟢 9/10 COMPLETE
+- 2.1 Snippet variables `{?name:default|hint}` with last-used recall
+- 2.2 OpenSSH user certificate auth (DB v18→v19; `stored_keys.certificate`)
+- 2.3 Telnet protocol (RFC 854) (DB v19→v20; `connections.protocol`)
+- 2.4 Custom theme GUI editor (`ThemeEditorActivity`)
+- 2.5 Workspaces — named tab groups (DB v20→v21; new `workspaces` table)
+- 2.6 Command palette (Ctrl+K) + Quick switcher (Ctrl+J) (`PaletteDialog`)
+- 2.7 Broadcast input across selected tabs (`TermuxBridge.broadcastTargets`)
+- 2.8 Split view (minimal — vertical 2-pane, tap to focus)
+- 2.9 FIDO2 / U2F SSH — **DEFERRED** until physical YubiKey available for verification
+- 2.10 History-based autocomplete (Ctrl+R; remote `~/.bash_history` + `~/.zsh_history`)
+
+### Wave 2.X — Deferred
+- Mosh full implementation (SSP + OCB-AES) + X11 forwarding wire-up
+- FIDO2 / U2F SSH (sk-ed25519, sk-ecdsa) — needs hardware
+
+### Wave 3 — Tier 3 polish ✅ COMPLETE (8/8)
+- 3.1 ✅ Per-host color tags (DB v21→v22)
+- 3.2 ✅ PIN code app lock (SHA-256 hash, FLAG_SECURE lock screen, pin gate on resume)
+- 3.3 ✅ Run port forwards without terminal session (PortForwardingActivity standalone-launch mode)
+- 3.4 ✅ Auto-open browser on forwarded HTTP(S) port (HttpPortProbe + dialog)
+- 3.5 ✅ Connection history view
+- 3.6 ✅ In-app changelog ("What's New")
+- 3.7 ✅ Bottom nav bar on phones (48dp compact, `show_bottom_nav` pref default ON)
+- 3.8 ✅ Bluetooth keyboard polish + AltGr handling (right-Alt unicodeChar passes through unmodified)
+
+### Wave 4+ — Tier 4 speculative
+- T4a True-color (24-bit) rendering pass-through verification
+- T4b Foldable layout
+- T4c Tablet desktop chrome (top tabs, sidebar) when sw>=720dp
+- T4d SFTP tabs / drag-drop (tablet/desktop only)
+- T4e Cluster command live result streaming
+- T4f Voice typing — already works, just document
+- T4g Multi-host performance dashboard
+
+---
+
 ## 🚨 CRITICAL BUGS REPORTED (2026-02-14)
 
 ### Phase 7: CRITICAL - User Testing Bugs

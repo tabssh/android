@@ -36,6 +36,13 @@
             android:summary="Swipe left/right to switch between SSH sessions"
             android:defaultValue="true" />
 
+        <!-- Wave 3.7 — bottom nav visibility -->
+        <SwitchPreferenceCompat
+            android:key="show_bottom_nav"
+            android:title="Show bottom nav bar"
+            android:summary="Compact 48dp nav with Kbd · Snip · Files · Paste · Menu (uncheck for the legacy edge-tap behaviour)"
+            android:defaultValue="true" />
+
         <SwitchPreferenceCompat
             android:key="confirm_exit"
             android:title="Confirm on exit"
