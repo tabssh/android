@@ -293,6 +293,9 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             R.id.nav_whats_new -> {
                 startActivity(Intent(this, WhatsNewActivity::class.java))
             }
+            R.id.nav_multi_dashboard -> {
+                startActivity(Intent(this, MultiHostDashboardActivity::class.java))
+            }
             R.id.nav_copy_app_log -> {
                 copyAppLog()
             }

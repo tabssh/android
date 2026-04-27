@@ -902,13 +902,26 @@ class TerminalView @JvmOverloads constructor(
     }
 
     /**
-     * Convert Termux color index to Android Color
+     * Convert Termux color index to Android Color.
+     *
+     * Wave 4.a — Termux's TextStyle.decodeForeColor returns either:
+     *   - 0..511 for indexed values (incl. 256/257/258 special FG/BG/CURSOR)
+     *   - 0xFFRRGGBB (i.e. negative signed Int with alpha 0xFF) for 24-bit
+     *     true-color from `SGR 38;2;R;G;B` / `SGR 48;2;R;G;B`.
+     *
+     * We MUST detect the true-color form before the `colorIndex < 16` check —
+     * otherwise a negative signed value passes that test and we index
+     * `defaultColors[negative]` → ArrayIndexOutOfBoundsException. Android's
+     * Color int is ARGB, so the encoded value is a valid Color as-is.
      */
     private fun termuxColorToAndroid(colorIndex: Int): Int {
         return when {
             colorIndex == com.termux.terminal.TextStyle.COLOR_INDEX_FOREGROUND -> Color.WHITE
             colorIndex == com.termux.terminal.TextStyle.COLOR_INDEX_BACKGROUND -> Color.BLACK
             colorIndex == com.termux.terminal.TextStyle.COLOR_INDEX_CURSOR -> Color.WHITE
+            // True-color (alpha byte set to 0xFF). Cover both signed and the
+            // unsigned interpretation defensively.
+            (colorIndex and 0xFF000000.toInt()) == 0xFF000000.toInt() -> colorIndex
             colorIndex < 16 -> defaultColors[colorIndex]
             colorIndex < 256 -> {
                 // 256-color palette

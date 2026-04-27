@@ -8,6 +8,10 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 
 /**
  * Execute commands on multiple servers simultaneously
@@ -55,26 +59,35 @@ class ClusterCommandExecutor(private val app: TabSSHApplication) {
             failed = 0
         )
 
-        connections.chunked(maxConcurrent).forEach { batch ->
-            val batchResults = batch.map { profile ->
+        // Wave 4.e — Live streaming: emit a fresh ExecutionProgress as soon as
+        // each host finishes, not when the whole maxConcurrent batch does.
+        // Concurrency is still bounded by maxConcurrent via a Semaphore so we
+        // don't fan out 10000 hosts at once on a phone.
+        val sem = Semaphore(maxConcurrent.coerceAtLeast(1))
+        val mutex = Mutex()
+
+        coroutineScope {
+            val deferreds = connections.map { profile ->
                 async {
-                    executeOnSingleServer(profile, command, timeoutMs)
+                    sem.withPermit {
+                        val r = executeOnSingleServer(profile, command, timeoutMs)
+                        mutex.withLock {
+                            results.add(r)
+                            val succeeded = results.count { it.success }
+                            val failed = results.count { !it.success }
+                            _progress.value = ExecutionProgress(
+                                total = connections.size,
+                                completed = results.size,
+                                inProgress = connections.size - results.size,
+                                succeeded = succeeded,
+                                failed = failed,
+                                results = results.toList()
+                            )
+                        }
+                    }
                 }
-            }.awaitAll()
-            
-            results.addAll(batchResults)
-            
-            val succeeded = results.count { it.success }
-            val failed = results.count { !it.success}
-            
-            _progress.value = ExecutionProgress(
-                total = connections.size,
-                completed = results.size,
-                inProgress = connections.size - results.size,
-                succeeded = succeeded,
-                failed = failed,
-                results = results.toList()
-            )
+            }
+            deferreds.awaitAll()
         }
 
         Logger.i("ClusterCommand", "Complete: ${results.count { it.success }}/${connections.size} succeeded")

@@ -214,6 +214,13 @@
             android:launchMode="singleTask"
             android:label="App Lock" />
 
+        <!-- Wave 4.g — Multi-host performance dashboard -->
+        <activity
+            android:name=".ui.activities.MultiHostDashboardActivity"
+            android:exported="false"
+            android:label="Multi-host Dashboard"
+            android:parentActivityName=".ui.activities.MainActivity" />
+
         <!-- Port Forwarding activity -->
         <activity
             android:name=".ui.activities.PortForwardingActivity"

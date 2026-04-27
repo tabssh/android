@@ -69,7 +69,8 @@
       "Bash(python3 -c \"import sys,json; print\\(json.load\\(sys.stdin\\).get\\('data',{}\\).get\\('ticket','FAIL'\\)[:30]+'...'\\)\")",
       "Bash(gh issue *)",
       "Bash(v17)",
-      "Bash(v22)"
+      "Bash(v22)",
+      "Bash(javap -p -c /tmp/tabssh-android/TextStyle.class)"
     ]
   }
 }
