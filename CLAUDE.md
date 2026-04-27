@@ -435,6 +435,8 @@ Added intelligent tooltips for better UX:
 | `make install-release` | Install release APK to device | Device |
 | `make logs` | View app logs from device | Terminal |
 | `make help` | Show all available targets | Terminal |
+| `scripts/android-emulator.sh [type] [size]` | Start a headless test emulator (idempotent) | adb-attached emulator |
+| `scripts/android-emulator.sh stop` / `delete <type>` / `clean` / `list` | Manage test emulators | - |
 
 ### Detailed Commands
 
@@ -505,6 +507,59 @@ make logs
 - Streams Android logs filtered for TabSSH
 - Uses `adb logcat | grep TabSSH`
 - Press Ctrl+C to stop
+
+---
+
+## Test Emulators (`scripts/android-emulator.sh`)
+
+Headless emulator management for local testing. **One AVD per (type, size); one running emulator at a time.** Idempotent — re-running `start` against an already-running AVD is a no-op; starting a *different* AVD stops the current one first.
+
+### Usage
+```bash
+# Implicit start (first arg is the type)
+scripts/android-emulator.sh                 # phone (default)
+scripts/android-emulator.sh phone           # pixel_6
+scripts/android-emulator.sh phone small     # pixel_5
+scripts/android-emulator.sh tablet          # pixel_tablet (sw720dp testing)
+scripts/android-emulator.sh tablet small    # pixel_c
+scripts/android-emulator.sh fold            # pixel_fold (book-mode testing)
+scripts/android-emulator.sh tv              # tv_1080p
+
+# Explicit commands
+scripts/android-emulator.sh start <type> [size]
+scripts/android-emulator.sh stop  [type]            # stop running (or one named)
+scripts/android-emulator.sh delete <type> [size]    # stop + remove the AVD
+scripts/android-emulator.sh clean                   # stop all + delete every TabSSH_* AVD
+scripts/android-emulator.sh list                    # list TabSSH AVDs + running serials
+```
+
+### What it does
+- **Locates the SDK** in this order: `$ANDROID_HOME` → `$ANDROID_SDK_ROOT` → `/opt/android` → `/opt/android-sdk` → `~/Android/Sdk`.
+- **Installs missing pieces** via `sdkmanager` (platform-tools, emulator, `platforms;android-34`, `system-images;android-34;google_apis;x86_64`). Set `API_LEVEL=33` to override.
+- **Creates `TabSSH_<type>[_<size>]`** AVD only if missing. Fixed names = no AVD spam in your `avd-manager`.
+- **Boots headless** with `-no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel auto`. Logs go to `/tmp/<AVD>.log`.
+- **Pins the adb serial** (`-port` + `adb -s emulator-PORT`) so the boot-wait can't accidentally attach to a stale already-booted instance.
+- **Stops a running different-type emulator** before starting a new one (one at a time).
+
+### Env overrides
+- `API_LEVEL=34` — pick a different API.
+- `FORCE_RECREATE=1` — wipe the AVD before next start (clean slate).
+- `ANDROID_AVD_HOME` — override AVD storage location (default `~/.config/.android/avd`).
+
+### Permissions
+- AVD home dir gets `chmod 700` on first run.
+- Script itself ships `chmod 755` (matching repo convention).
+- KVM (`/dev/kvm`) is checked but NOT chowned — that's a host-level decision; the script warns if it isn't usable and falls back to TCG (slower software emulation).
+
+### Typical workflow
+```bash
+make build                                  # produce APKs (28MB each)
+scripts/android-emulator.sh phone           # boot a phone
+adb -s emulator-5554 install -r binaries/tabssh-x86_64.apk
+adb -s emulator-5554 shell am start -n io.github.tabssh/.ui.activities.MainActivity
+adb logcat | grep TabSSH                    # follow logs
+scripts/android-emulator.sh stop            # when done
+```
 
 ---
 

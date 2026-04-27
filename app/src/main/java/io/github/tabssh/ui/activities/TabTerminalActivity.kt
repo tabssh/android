@@ -1680,6 +1680,7 @@ class TabTerminalActivity : AppCompatActivity() {
             R.id.action_history_palette -> { showHistoryPalette(); true }
             R.id.action_split_bottom -> { showSplitConnectionPicker(); true }
             R.id.action_unsplit -> { closeSplitPane(); true }
+            R.id.action_mosh_handoff -> { showMoshHandoff(); true }
             else -> super.onOptionsItemSelected(item)
         }
     }
@@ -2027,6 +2028,61 @@ class TabTerminalActivity : AppCompatActivity() {
         // No theme-aware tinting yet — just announce so user notices.
         if (focus) {
             Toast.makeText(this, "Bottom pane focused", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Wave 2.X — Mosh handoff. Runs `mosh-server new` over the active SSH
+     * exec channel, parses MOSH CONNECT, and shows the user a copy-able
+     * `mosh -p PORT user@host` command. NOT real Mosh — see
+     * [io.github.tabssh.protocols.mosh.MoshHandoff] for the rationale.
+     */
+    private fun showMoshHandoff() {
+        val active = tabManager.getActiveTab()
+        if (active == null) {
+            Toast.makeText(this, "No active tab", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val ssh = active.connection
+        if (ssh == null) {
+            Toast.makeText(this, "Mosh handoff needs an active SSH session", Toast.LENGTH_LONG).show()
+            return
+        }
+        Toast.makeText(this, "Bootstrapping mosh-server…", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            val res = io.github.tabssh.protocols.mosh.MoshHandoff.bootstrap(
+                ssh,
+                username = active.profile.username,
+                host = active.profile.host
+            )
+            runOnUiThread {
+                when (res) {
+                    is io.github.tabssh.protocols.mosh.MoshHandoff.Result.Success -> {
+                        val cmd = res.info.toClientCommand()
+                        androidx.appcompat.app.AlertDialog.Builder(this@TabTerminalActivity)
+                            .setTitle("Mosh handoff ready")
+                            .setMessage(
+                                "mosh-server is listening on UDP :${res.info.port}.\n\n" +
+                                "TabSSH does NOT speak the Mosh wire protocol. To attach:\n" +
+                                "  1. Install Termux on this device (or any Mosh client).\n" +
+                                "  2. Run the command below.\n\n" +
+                                "$cmd\n\n" +
+                                "Closing your SSH tab does NOT kill mosh-server — Mosh is " +
+                                "now detached and listening on UDP."
+                            )
+                            .setPositiveButton("Copy command") { _, _ ->
+                                val cb = getSystemService(android.content.ClipboardManager::class.java)
+                                cb?.setPrimaryClip(android.content.ClipData.newPlainText("mosh handoff", cmd))
+                                Toast.makeText(this@TabTerminalActivity, "Copied", Toast.LENGTH_SHORT).show()
+                            }
+                            .setNegativeButton("Close", null)
+                            .show()
+                    }
+                    is io.github.tabssh.protocols.mosh.MoshHandoff.Result.Error -> {
+                        showError(res.message, "Mosh handoff failed")
+                    }
+                }
+            }
         }
     }
 

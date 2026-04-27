@@ -73,6 +73,8 @@ class SyncDataCollector {
         val snippets = collectSnippets()      // Wave 5.4
         val identities = collectIdentities()  // Wave 5.4
         val groups = collectGroups()          // Wave 5.4
+        val hypervisors = collectHypervisors()  // Wave 7.1
+        val certificates = collectCertificates() // Wave 7.1
 
         val itemCounts = SyncItemCounts(
             connections = connections.size,
@@ -83,7 +85,9 @@ class SyncDataCollector {
             workspaces = workspaces.size,
             snippets = snippets.size,
             identities = identities.size,
-            groups = groups.size
+            groups = groups.size,
+            hypervisors = hypervisors.size,
+            certificates = certificates.size
         )
 
         val metadata = metadataManager.createSyncMetadata(itemCounts)
@@ -100,8 +104,28 @@ class SyncDataCollector {
             workspaces = workspaces,
             snippets = snippets,
             identities = identities,
-            groups = groups
+            groups = groups,
+            hypervisors = hypervisors,
+            certificates = certificates
         )
+    }
+
+    private suspend fun collectHypervisors(): List<io.github.tabssh.storage.database.entities.HypervisorProfile> {
+        return try {
+            database.hypervisorDao().getAllList()
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to collect hypervisors", e)
+            emptyList()
+        }
+    }
+
+    private suspend fun collectCertificates(): List<io.github.tabssh.storage.database.entities.TrustedCertificate> {
+        return try {
+            database.certificateDao().getAllCertificates().first()
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to collect certificates", e)
+            emptyList()
+        }
     }
 
     private suspend fun collectSnippets(): List<io.github.tabssh.storage.database.entities.Snippet> {
@@ -158,6 +182,11 @@ class SyncDataCollector {
         val snippets = collectSnippets().filter { it.modifiedAt > timestamp }
         val identities = collectIdentities().filter { it.modifiedAt > timestamp }
         val groups = collectGroups().filter { it.modifiedAt > timestamp }
+        // Wave 7.1 — neither HypervisorProfile nor TrustedCertificate has a
+        // modifiedAt column. They're low-volume tables (a few rows per user)
+        // so include them all in delta payloads — cheap, never wrong.
+        val hypervisors = collectHypervisors()
+        val certificates = collectCertificates()
 
         val preferences = if (hasPreferencesChanged(timestamp)) {
             collectPreferences()
@@ -174,7 +203,9 @@ class SyncDataCollector {
             workspaces = workspaces.size,
             snippets = snippets.size,
             identities = identities.size,
-            groups = groups.size
+            groups = groups.size,
+            hypervisors = hypervisors.size,
+            certificates = certificates.size
         )
 
         val metadata = metadataManager.createSyncMetadata(itemCounts)
@@ -191,7 +222,9 @@ class SyncDataCollector {
             workspaces = workspaces,
             snippets = snippets,
             identities = identities,
-            groups = groups
+            groups = groups,
+            hypervisors = hypervisors,
+            certificates = certificates
         )
     }
 

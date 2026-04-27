@@ -105,4 +105,9 @@
         android:title="Close split pane"
         app:showAsAction="never" />
 
+    <item
+        android:id="@+id/action_mosh_handoff"
+        android:title="Mosh handoff…"
+        app:showAsAction="never" />
+
 </menu>

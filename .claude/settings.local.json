@@ -70,7 +70,28 @@
       "Bash(gh issue *)",
       "Bash(v17)",
       "Bash(v22)",
-      "Bash(javap -p -c /tmp/tabssh-android/TextStyle.class)"
+      "Bash(javap -p -c /tmp/tabssh-android/TextStyle.class)",
+      "Bash(adb devices *)",
+      "Bash(/opt/android/cmdline-tools/latest/bin/avdmanager list *)",
+      "Bash(/opt/android/emulator/emulator -list-avds)",
+      "Bash(ANDROID_HOME=/opt/android /opt/android/emulator/emulator *)",
+      "Bash(ANDROID_HOME=/opt/android ANDROID_SDK_ROOT=/opt/android ANDROID_AVD_HOME=/root/.config/.android/avd /opt/android/emulator/emulator *)",
+      "Bash(/opt/android/platform-tools/adb get-state *)",
+      "Bash(/opt/android/platform-tools/adb pull *)",
+      "Bash(./scripts/android-emulator.sh pixel_5)",
+      "Bash(./scripts/android-emulator.sh list *)",
+      "Bash(./scripts/android-emulator.sh phone *)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 emu avd name)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5556 emu kill)",
+      "Bash(bash -n /root/Projects/github/tabssh/android/scripts/android-emulator.sh)",
+      "Bash(./scripts/android-emulator.sh help *)",
+      "Bash(./scripts/android-emulator.sh delete *)",
+      "Bash(bash -c ' *)",
+      "Bash(/opt/android/platform-tools/adb kill-server *)",
+      "Bash(/opt/android/platform-tools/adb start-server *)",
+      "Bash(ps -p 669 -o pid,cmd)",
+      "Bash(ps -p 88771 -o pid,cmd)",
+      "Bash(./scripts/android-emulator.sh stop *)"
     ]
   }
 }
