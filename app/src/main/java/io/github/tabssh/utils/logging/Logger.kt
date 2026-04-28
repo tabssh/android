@@ -29,8 +29,16 @@ object Logger {
     private const val TAG_PREFIX = "TabSSH"
     private const val LOG_FILE_NAME = "tabssh_debug.log"
     private const val APP_LOG_FILE_NAME = "tabssh_app.log"  // Sanitized for public sharing
-    private const val MAX_LOG_SIZE = 10 * 1024 * 1024 // 10MB
-    private const val MAX_APP_LOG_SIZE = 2 * 1024 * 1024 // 2MB for app log (smaller, recent only)
+
+    // Issue #36 — Cap log files at 1 MiB and keep up to N rotated copies.
+    // Was: a single 10 MiB file with one `.old` backup → up to 20 MiB on
+    // disk and a single rotation copying that whole thing. Now we keep
+    // `.log + .log.1 .. .log.{N-1}` so each rotation is fast (just renames),
+    // total on-disk is bounded at MAX_LOG_SIZE * MAX_LOG_FILES, and a
+    // pathologically chatty session can't grow a single file forever.
+    private const val MAX_LOG_SIZE = 1 * 1024 * 1024            // 1 MiB per file
+    private const val MAX_APP_LOG_SIZE = 1 * 1024 * 1024        // 1 MiB per file
+    private const val MAX_LOG_FILES = 5                          // .log + .log.1..4
 
     // Counters for anonymizing hosts/users in app log
     private val hostMap = mutableMapOf<String, String>()
@@ -146,13 +154,11 @@ object Logger {
 
                 // Only rotate if file exceeds max size
                 if (file.exists() && file.length() > MAX_LOG_SIZE) {
-                    val backupFile = File(file.parentFile, "$LOG_FILE_NAME.old")
-                    backupFile.delete() // Remove old backup
-                    file.renameTo(backupFile)
+                    rotateLogFiles(file, LOG_FILE_NAME)
                     // Start fresh log with rotation notice
                     FileWriter(file, false).use { writer ->
                         val timestamp = dateFormat.format(Date())
-                        writer.append("$timestamp I/$TAG_PREFIX:Logger: Log rotated (previous log saved as .old)\n")
+                        writer.append("$timestamp I/$TAG_PREFIX:Logger: Log rotated (previous log saved as .1)\n")
                     }
                 }
 
@@ -186,9 +192,7 @@ object Logger {
             try {
                 // Rotate if file exceeds max size
                 if (file.exists() && file.length() > MAX_APP_LOG_SIZE) {
-                    val backupFile = File(file.parentFile, "$APP_LOG_FILE_NAME.old")
-                    backupFile.delete()
-                    file.renameTo(backupFile)
+                    rotateLogFiles(file, APP_LOG_FILE_NAME)
                     // Reset anonymization maps on rotation
                     hostMap.clear()
                     userMap.clear()
@@ -227,6 +231,34 @@ object Logger {
         }
     }
     @Volatile private var appLogWriteFailureReported = false
+
+    /**
+     * Issue #36 — N-file log rotation.
+     *
+     * Renames are cheap (no file copying), so a rotation triggered on a
+     * 1 MiB file completes in microseconds even on slow storage:
+     *   .log.4   →  deleted
+     *   .log.3   →  .log.4
+     *   .log.2   →  .log.3
+     *   .log.1   →  .log.2
+     *   .log     →  .log.1
+     *
+     * Caller is responsible for opening a fresh `.log` file afterwards.
+     */
+    private fun rotateLogFiles(currentFile: File, baseName: String) {
+        val parent = currentFile.parentFile ?: return
+        // Drop the oldest.
+        File(parent, "$baseName.${MAX_LOG_FILES - 1}").delete()
+        // Shift older copies up one slot. Walk top-down so we don't
+        // overwrite a slot before reading from it.
+        for (i in (MAX_LOG_FILES - 2) downTo 1) {
+            val src = File(parent, "$baseName.$i")
+            val dst = File(parent, "$baseName.${i + 1}")
+            if (src.exists()) src.renameTo(dst)
+        }
+        // Move the current file into the .1 slot.
+        currentFile.renameTo(File(parent, "$baseName.1"))
+    }
 
     /**
      * Sanitize message for public sharing
@@ -296,11 +328,9 @@ object Logger {
         // Write to debug log if enabled
         logFile?.let { file ->
             try {
-                // Rotate if needed
+                // Rotate if needed (Issue #36 — N-file rotation).
                 if (file.exists() && file.length() > MAX_LOG_SIZE) {
-                    val backupFile = File(file.parentFile, "$LOG_FILE_NAME.old")
-                    backupFile.delete()
-                    file.renameTo(backupFile)
+                    rotateLogFiles(file, LOG_FILE_NAME)
                 }
 
                 // Write crash synchronously
@@ -368,8 +398,30 @@ object Logger {
 
         return try {
             val logs = file.readText()
-            val oldLogs = File(file.parentFile, "$APP_LOG_FILE_NAME.old").let {
-                if (it.exists()) "\n\n=== Previous Session ===\n${it.readText()}" else ""
+            // Issue #36 — concatenate rotated backups (.1 .. .{N-1}) in
+            // age order, oldest last, so the human reader sees newest events
+            // first followed by older context. Legacy `.old` is also picked
+            // up to handle rolling upgrades from the previous rotation scheme.
+            val parent = file.parentFile
+            val rotated = buildString {
+                if (parent != null) {
+                    for (i in 1 until MAX_LOG_FILES) {
+                        val rf = File(parent, "$APP_LOG_FILE_NAME.$i")
+                        if (rf.exists()) {
+                            appendLine()
+                            appendLine()
+                            appendLine("=== Rotated log .$i ===")
+                            append(rf.readText())
+                        }
+                    }
+                    val legacy = File(parent, "$APP_LOG_FILE_NAME.old")
+                    if (legacy.exists()) {
+                        appendLine()
+                        appendLine()
+                        appendLine("=== Legacy rotated log (.old) ===")
+                        append(legacy.readText())
+                    }
+                }
             }
 
             buildString {
@@ -383,7 +435,7 @@ object Logger {
                 appendLine("═══════════════════════════════════════════════════")
                 appendLine()
                 append(logs)
-                append(oldLogs)
+                append(rotated)
             }
         } catch (e: Exception) {
             "Failed to read app log: ${e.message}"
@@ -395,9 +447,13 @@ object Logger {
      */
     fun clearLogs() {
         logFile?.delete()
-        // Also delete backup
+        // Issue #36 — also clear all rotated backups
         logFile?.parentFile?.let { dir ->
+            // Drop legacy `.old` if it survived a rolling upgrade
             File(dir, "$LOG_FILE_NAME.old").delete()
+            for (i in 1 until MAX_LOG_FILES) {
+                File(dir, "$LOG_FILE_NAME.$i").delete()
+            }
         }
         if (logToFile) {
             i("Logger", "Debug log cleared by user")
@@ -411,6 +467,9 @@ object Logger {
         appLogFile?.delete()
         appLogFile?.parentFile?.let { dir ->
             File(dir, "$APP_LOG_FILE_NAME.old").delete()
+            for (i in 1 until MAX_LOG_FILES) {
+                File(dir, "$APP_LOG_FILE_NAME.$i").delete()
+            }
         }
         // Reset anonymization maps
         hostMap.clear()
@@ -458,8 +517,28 @@ object Logger {
 
         return try {
             val logs = file.readText()
-            val oldLogs = File(file.parentFile, "$LOG_FILE_NAME.old").let {
-                if (it.exists()) "\n\n=== Previous Log (rotated) ===\n${it.readText()}" else ""
+            // Issue #36 — concatenate rotated debug logs .1..N-1 plus
+            // legacy `.old`. Order: newest first, then older slots.
+            val parent = file.parentFile
+            val rotated = buildString {
+                if (parent != null) {
+                    for (i in 1 until MAX_LOG_FILES) {
+                        val rf = File(parent, "$LOG_FILE_NAME.$i")
+                        if (rf.exists()) {
+                            appendLine()
+                            appendLine()
+                            appendLine("=== Rotated log .$i ===")
+                            append(rf.readText())
+                        }
+                    }
+                    val legacy = File(parent, "$LOG_FILE_NAME.old")
+                    if (legacy.exists()) {
+                        appendLine()
+                        appendLine()
+                        appendLine("=== Legacy rotated log (.old) ===")
+                        append(legacy.readText())
+                    }
+                }
             }
 
             buildString {
@@ -471,7 +550,7 @@ object Logger {
                 appendLine("========================")
                 appendLine()
                 append(logs)
-                append(oldLogs)
+                append(rotated)
             }
         } catch (e: Exception) {
             "Failed to read logs: ${e.message}\n${Log.getStackTraceString(e)}"
@@ -506,10 +585,13 @@ object Logger {
         debugMode = false
         logToFile = false
 
-        // Delete log files
+        // Delete log files (Issue #36 — N-file rotation cleanup)
         logFile?.delete()
         logFile?.parentFile?.let { dir ->
             File(dir, "$LOG_FILE_NAME.old").delete()
+            for (i in 1 until MAX_LOG_FILES) {
+                File(dir, "$LOG_FILE_NAME.$i").delete()
+            }
         }
         logFile = null
     }
