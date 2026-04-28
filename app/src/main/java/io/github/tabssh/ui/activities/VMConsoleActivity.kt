@@ -86,6 +86,7 @@ class VMConsoleActivity : AppCompatActivity() {
         val vmName = intent.getStringExtra(EXTRA_VM_NAME) ?: "VM Console"
         statusText.text = "Connecting to $vmName…"
         setupFloatingControls()
+        setupCustomKeyboard()
 
         // Initialize terminal
         setupTerminal()
@@ -459,6 +460,40 @@ class VMConsoleActivity : AppCompatActivity() {
             .setPositiveButton("Disconnect") { _, _ -> finish() }
             .setNegativeButton("Stay", null)
             .show()
+    }
+
+    /**
+     * Wire the multi-row keyboard at the bottom of the VM console screen.
+     * Same component the SSH terminal uses (so Esc / Tab / arrows / Ctrl
+     * work), but events go to the WebSocket-backed bridge instead of an
+     * SSH stream. Loads the user's saved layout from PreferenceManager;
+     * falls back to default keys if none is configured.
+     */
+    private fun setupCustomKeyboard() {
+        val keyboard = findViewById<io.github.tabssh.ui.keyboard.MultiRowKeyboardView>(
+            R.id.multi_row_keyboard
+        )
+        try {
+            val rowCount = app.preferencesManager.getKeyboardRowCount()
+            keyboard.setRowCount(rowCount)
+            val layoutJson = app.preferencesManager.getKeyboardLayoutJson()
+            if (layoutJson != null) {
+                val saved = io.github.tabssh.ui.keyboard.KeyboardLayoutManager
+                    .parseLayoutJson(layoutJson)
+                keyboard.setLayout(saved)
+            } else {
+                keyboard.resetToDefault()
+            }
+        } catch (e: Exception) {
+            Logger.w(TAG, "Custom keyboard layout load failed; defaults: ${e.message}")
+            keyboard.resetToDefault()
+        }
+        keyboard.setOnKeyClickListener { key ->
+            // KeyboardKey.keySequence already encodes ESC, arrows, F-keys,
+            // etc. Send the bytes verbatim through the same write path as
+            // the long-press menu items.
+            sendBytes(key.keySequence.toByteArray(Charsets.UTF_8))
+        }
     }
 
     private fun setupFloatingControls() {
