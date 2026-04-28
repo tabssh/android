@@ -40,6 +40,14 @@ class TabSSHApplication : Application() {
     val auditLogManager by lazy { io.github.tabssh.audit.AuditLogManager(this, database, preferencesManager) }
     val tabManager by lazy { io.github.tabssh.ui.tabs.TabManager() }
 
+    // ANR watchdog — single instance, only running when debug logging is
+    // active. Public start/stop so the Settings → Logging toggle can flip
+    // it in lockstep with `Logger.forceEnableDebugMode` /
+    // `Logger.disableDebugMode`.
+    private val anrWatchdog by lazy { io.github.tabssh.utils.diagnostics.AnrWatchdog() }
+    fun startAnrWatchdog() = anrWatchdog.start()
+    fun stopAnrWatchdog() = anrWatchdog.stop()
+
     // Track the current foreground activity for showing dialogs from background threads
     private var currentActivityRef: WeakReference<Activity>? = null
 
@@ -52,9 +60,26 @@ class TabSSHApplication : Application() {
     override fun onCreate() {
         super.onCreate()
 
-        // Logger and crash handler must be first — before anything can throw.
-        Logger.initialize(this, BuildConfig.DEBUG_MODE)
+        // Logger init policy:
+        //   - debug builds (BuildConfig.DEBUG_MODE = true) auto-enable
+        //     debug-file logging — these are dev / daily / CI APKs and the
+        //     extra log spam is exactly what makes them useful for testing.
+        //   - release / fdroidRelease builds default OFF; users opt in via
+        //     Settings → Logging → "Enable Debug Logging" (pref key
+        //     `debug_logging_enabled`).
+        // The app log (sanitized for public sharing) is always on regardless
+        // — it's safe and cheap and powers the Copy App Log menu item.
+        val savedDebug = androidx.preference.PreferenceManager
+            .getDefaultSharedPreferences(this)
+            .getBoolean("debug_logging_enabled", false)
+        val debugLoggingActive = BuildConfig.DEBUG_MODE || savedDebug
+        Logger.initialize(this, debugLoggingActive)
         setupExceptionHandler()
+
+        // ANR watchdog tracks debug mode — when debug logging is on we
+        // catch main-thread freezes and write the captured stack trace
+        // to the debug log so it shows up in Copy Debug Logs.
+        if (debugLoggingActive) startAnrWatchdog()
 
         Logger.d("TabSSHApplication", "Application starting...")
 

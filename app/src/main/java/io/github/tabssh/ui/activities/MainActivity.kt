@@ -14,6 +14,7 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.navigation.NavigationView
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
+import io.github.tabssh.BuildConfig
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.ConnectionProfile
@@ -460,22 +461,41 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
      * Copy debug logs to clipboard and offer to share
      */
     private fun copyDebugLogs() {
-        // Probe FIRST — if no log file yet, force-enable debug mode and tell
-        // the user to reproduce. Doing this before reading the logs avoids
-        // the previous bug where a "Status: Debug logging is DISABLED…"
-        // placeholder string was copied to clipboard with a misleading
-        // "Logs Copied" toast (the placeholder strings don't match the
-        // ad-hoc `contains("not found")` checks the old code did).
+        // Probe the actual file — substring-sniffing the rendered text
+        // (what the old version did) was unreliable and copied placeholder
+        // strings into the clipboard while toasting "success". Now we
+        // route on file state directly.
         val file = Logger.getLogFile()
         val haveRealLogs = file != null && file.exists() && file.length() > 0
         if (!haveRealLogs) {
-            Logger.forceEnableDebugMode(this)
+            // Show a hint that depends on which build the user is on:
+            //   debug build  → debug logging is supposed to be on, but no
+            //                  events captured yet — "do something first"
+            //   release build → debug logging is off; tell them where to
+            //                  enable it (Settings → Logging) rather than
+            //                  silently flipping it from this menu (the
+            //                  user wants this controlled from Settings).
+            val msg = if (BuildConfig.DEBUG_MODE) {
+                "Debug logging is enabled (this is a development build) but " +
+                "no events have been captured yet.\n\nUse the app a bit " +
+                "(open a connection, navigate around) and try Copy Debug " +
+                "Logs again."
+            } else {
+                "Debug logging is OFF in this release build.\n\n" +
+                "Enable it in Settings → Logging → \"Enable Debug Logging\", " +
+                "reproduce the issue, then come back here to copy the logs."
+            }
             androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Debug Logging Enabled")
-                .setMessage("No logs captured yet — debug logging is now ON.\n\n" +
-                    "Reproduce the issue (open a connection, click around, etc.) " +
-                    "then come back here to copy the logs.")
+                .setTitle("No Debug Logs Yet")
+                .setMessage(msg)
                 .setPositiveButton("OK", null)
+                .also { b ->
+                    if (!BuildConfig.DEBUG_MODE) {
+                        b.setNeutralButton("Open Settings") { _, _ ->
+                            startActivity(Intent(this, SettingsActivity::class.java))
+                        }
+                    }
+                }
                 .show()
             return
         }
