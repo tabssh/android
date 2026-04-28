@@ -1,7 +1,7 @@
 # TabSSH Android App - Complete Technical Specification
 
-**Version**: 1.0  (database v21)
-**Date**: April 2026 — last sync: end of Wave 2 (9/10; FIDO2 deferred)
+**Version**: 1.0  (database v23)
+**Date**: April 2026 — last sync: 2026-04-28, end of Wave 9.2 (Mosh native binaries shipped end-to-end). Outstanding: FIDO2 hardware-key auth, full SSH-cert UI, snippet `{?password}` variables. See `../FEATURES_AUDIT.md` for the full have/want/drop matrix vs JuiceSSH/Termius.
 **Repository**: https://github.com/tabssh/android  
 **Website**: https://tabssh.github.io  
 
@@ -1442,7 +1442,7 @@ android {
         AuditLogEntry::class,
         HypervisorProfile::class
     ],
-    version = 21,
+    version = 23,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -1459,6 +1459,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
     abstract fun identityDao(): IdentityDao
     abstract fun auditLogDao(): AuditLogDao
     abstract fun hypervisorDao(): HypervisorDao
+    abstract fun workspaceDao(): WorkspaceDao        // Wave 2.5
+    abstract fun cloudAccountDao(): CloudAccountDao  // Wave 5.1
 
     companion object {
         @Volatile private var INSTANCE: TabSSHDatabase? = null
@@ -1479,7 +1481,10 @@ abstract class TabSSHDatabase : RoomDatabase() {
 **Database migration history:** v1 → v2 (sync fields) → … → v17 (Wave 0
 state) → v18 (Wave 1.2 + 1.5: `connections.env_vars`, `connections.agent_forwarding`)
 → v19 (Wave 2.2: `stored_keys.certificate`) → v20 (Wave 2.3:
-`connections.protocol`) → v21 (Wave 2.5: new `workspaces` table).
+`connections.protocol`) → v21 (Wave 2.5: new `workspaces` table) → v22 (Wave
+3.1: `connections.color_tag`) → v23 (Wave 5.1: new `cloud_accounts` table — note
+that provider tokens live in `SecurePasswordManager` under `cloud_token_${id}`,
+NOT in this table, so a DB dump leaks no credentials).
 
 #### 8.2.2 Entity Definitions (Key Tables)
 
@@ -1512,6 +1517,19 @@ The following summarises the primary tables. All entities are Kotlin data classe
 
 **connection_groups** — Folders for organizing connections
 - id (PK), name, color, icon, is_expanded, sort_order, created_at
+
+**connections.color_tag** — Wave 3.1. Per-host color tag (separate from group color). 0=none, otherwise an ARGB int. Set via `showColorTagPicker` in `ConnectionEditActivity`; surfaced in the connection list and tab strip. Useful for marking prod/staging/lab without forcing the connection into a group.
+
+**cloud_accounts** — Wave 5.1. Opt-in inventory pull from explicit-token cloud
+providers (DigitalOcean, Hetzner, Linode, Vultr — AWS/GCP/Azure deliberately
+out-of-scope: privacy + cloud creds).
+- id (PK), name, provider (enum: DIGITAL_OCEAN | HETZNER | LINODE | VULTR), enabled
+- last_refresh_at (epoch ms), last_count (droplets/instances seen on last refresh)
+- created_at, modified_at
+- **Tokens are NOT in this table.** They are encrypted by `SecurePasswordManager`
+  under the alias `cloud_token_${id}`, so a DB export carries no credentials.
+- Inventory itself is not persisted — `CloudAccountsActivity` re-pulls on demand
+  and lets the user mass-import the result as `ConnectionProfile` rows.
 
 **workspaces** — Wave 2.5. Named tab groups.
 - id (PK), name, connection_ids (JSON array of `ConnectionProfile.id`)
@@ -2929,8 +2947,8 @@ public class KeyStorageException extends Exception {
 ## Platform Support & Advanced Protocols
 - [x] Android TV optimization and remote control support
 - [x] Chromebook/Chrome OS integration and keyboard optimization
-- [ ] Mosh protocol — UI toggle present, real SSP/OCB-AES backend deferred to Wave 2.X
-- [ ] X11 forwarding — UI toggle present, full integration deferred to Wave 2.X
+- [x] Mosh protocol — Wave 9.2: cross-compiled `mosh-client` per ABI in `app/src/main/jniLibs/{armeabi-v7a,arm64-v8a,x86,x86_64}/libmosh-client.so`; `MoshNativeClient` + `MoshHandoff` for SSH→Mosh handoff; embedded terminfo fallbacks; monthly GH Actions binary refresh workflow; verified end-to-end on Samsung S546VL
+- [x] X11 forwarding — Wave 7: `X11ForwardingManager` (server + client) at `app/src/main/java/io/github/tabssh/protocols/x11/`
 - [x] Telnet (RFC 854) — Wave 2.3
 
 ## Advanced Terminal & Protocol Features
@@ -3008,10 +3026,10 @@ TabSSH 1.0.0 has a **complete professional architecture and comprehensive framew
 - [ ] **Accessibility Testing** - Real TalkBack testing and refinement
 
 #### **Low Priority (Advanced features):**
-- [ ] **Advanced Protocol Implementation** - Complete Mosh and X11 integration
-- [ ] **Platform-Specific Features** - Android TV navigation, Chromebook optimization
-- [ ] **Theme System UI** - Theme selection and customization interface
-- [ ] **Backup/Restore Implementation** - Data export/import functionality
+- [x] **Advanced Protocol Implementation** — Mosh shipped Wave 9.2 (native binaries); X11 shipped Wave 7 (`X11ForwardingManager`)
+- [ ] **Platform-Specific Features** - Android TV navigation, Chromebook optimization (sw720dp tablet + foldable book-mode shipped Wave 4.b/4.c)
+- [x] **Theme System UI** — Wave 2.4: `ThemeEditorActivity` (GUI editor; was JSON I/O only)
+- [x] **Backup/Restore Implementation** — encrypted ZIP via `BackupManager`; SSH config round-trip via `SSHConfigExporter` (Wave 6.1)
 
 **DEVELOPMENT ESTIMATE**: Integration work actively in progress. Authentication ✅, Notifications ✅, Multiple Instances ✅, Multi-arch builds ✅ completed. Remaining: Terminal-UI integration, SFTP operations, Settings screens.
 
