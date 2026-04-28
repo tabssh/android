@@ -84,9 +84,12 @@ class HypervisorConsoleManager {
             // Proxmox termproxy WebSocket: wss://host:port/api2/json/nodes/{node}/{type}/{vmid}/vncwebsocket?port={port}&vncticket={ticket}
             val wsUrl = termProxy.websocketUrl
 
-            // Connect with auth headers
+            // Connect with auth headers. PVEAuthCookie is needed for the
+            // HTTP-upgrade leg; the in-frame `<userid>:<ticket>\n` handshake
+            // (see ConsoleWebSocketClient) is what termproxy actually checks
+            // before deciding to keep the WS open.
             val headers = mapOf(
-                "Cookie" to "PVEAuthCookie=${termProxy.ticket}"
+                "Cookie" to "PVEAuthCookie=${termProxy.authCookie}"
             )
 
             val client = webSocketClient ?: run {
@@ -94,6 +97,8 @@ class HypervisorConsoleManager {
                 listener?.onError("WebSocket client initialization failed")
                 return@withContext null
             }
+            // First-frame auth required by Proxmox vncterm/termproxy.
+            client.setProxmoxAuthFrame(termProxy.userid, termProxy.termproxyTicket)
             val connected = client.connect(wsUrl, headers, object : ConsoleConnectionListener {
                 override fun onConnected() {
                     Logger.i(TAG, "Proxmox console connected")
