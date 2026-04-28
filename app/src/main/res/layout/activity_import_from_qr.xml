@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  QR Pairing import flow. The activity itself is a thin shell — almost all
+  state changes happen in dialogs (code entry, decrypting spinner, confirm
+  preview). The actual camera capture is delegated to ZXing's CaptureActivity
+  via ScanContract.
+
+  This screen is only visible briefly between scanner-launches and dialog
+  flows; the empty-state text is what shows up while we're booting / waiting
+  for the result.
+-->
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="24dp"
+    android:background="?android:attr/colorBackground">
+
+    <TextView
+        android:id="@+id/text_status"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:textSize="16sp"
+        android:gravity="center"
+        android:textColor="?android:attr/textColorSecondary"
+        android:text="Opening camera…"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
