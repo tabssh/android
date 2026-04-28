@@ -22,7 +22,9 @@ class SSHConfigParser {
             "StrictHostKeyChecking", "UserKnownHostsFile", "LogLevel",
             "PreferredAuthentications", "NumberOfPasswordPrompts",
             "TCPKeepAlive", "ServerAliveCountMax", "ForwardAgent",
-            "ForwardX11", "ForwardX11Trusted", "RequestTTY"
+            "ForwardX11", "ForwardX11Trusted", "RequestTTY",
+            // Issue #37
+            "RemoteCommand", "SendEnv"
         )
 
         private const val DEFAULT_PORT = 22
@@ -49,6 +51,9 @@ class SSHConfigParser {
         var forwardAgent: Boolean = false,
         var forwardX11: Boolean = false,
         var requestTTY: String? = null,
+        // Issue #37 — explicit `RemoteCommand` (string) and `SendEnv` (list of names).
+        var remoteCommand: String? = null,
+        var sendEnv: MutableList<String> = mutableListOf(),
         var groupName: String? = null,
         var additionalOptions: MutableMap<String, String> = mutableMapOf()
     )
@@ -158,6 +163,21 @@ class SSHConfigParser {
                     "forwardx11" -> currentHost?.forwardX11 = value.equals("yes", ignoreCase = true)
                     "requesttty" -> currentHost?.requestTTY = value
 
+                    // Issue #37 — RemoteCommand: the command to run instead of
+                    // a login shell (e.g. SourceForge's `create`). SendEnv:
+                    // names of env vars to forward (values come from the
+                    // local environment per OpenSSH; we treat them as names
+                    // only and let the user populate values via TabSSH's
+                    // env_vars field if desired).
+                    "remotecommand" -> currentHost?.remoteCommand = value
+                    "sendenv" -> {
+                        // SendEnv may list multiple names on one line; OpenSSH
+                        // also allows multiple SendEnv lines per host.
+                        value.split("\\s+".toRegex()).forEach { name ->
+                            if (name.isNotBlank()) currentHost?.sendEnv?.add(name)
+                        }
+                    }
+
                     else -> {
                         // Store unsupported or custom directives
                         if (currentHost != null && directive.isNotEmpty()) {
@@ -197,6 +217,11 @@ class SSHConfigParser {
         if (host.connectTimeout == 15) host.connectTimeout = defaults.connectTimeout
         if (!host.forwardAgent && defaults.forwardAgent) host.forwardAgent = defaults.forwardAgent
         if (!host.forwardX11 && defaults.forwardX11) host.forwardX11 = defaults.forwardX11
+        // Issue #37 — wildcard inheritance for RemoteCommand / SendEnv.
+        if (host.remoteCommand == null) host.remoteCommand = defaults.remoteCommand
+        if (host.sendEnv.isEmpty() && defaults.sendEnv.isNotEmpty()) {
+            host.sendEnv.addAll(defaults.sendEnv)
+        }
     }
 
     /**
@@ -218,6 +243,25 @@ class SSHConfigParser {
         // Build advanced settings JSON
         val advancedSettings = buildAdvancedSettings(host)
 
+        // Issue #37 — SendEnv lists names; values are taken from the local
+        // environment per OpenSSH. TabSSH's `envVars` is "KEY=value" pairs.
+        // For imported `SendEnv NAME` we record `NAME=` (empty value, name
+        // captured) so the user sees the placeholder and can fill it in
+        // later. If `envVars` is already populated from somewhere else we
+        // append SendEnv-derived names that aren't already there.
+        val mergedEnvVars: String? = if (host.sendEnv.isNotEmpty()) {
+            val existing = mutableSetOf<String>()
+            val out = StringBuilder()
+            host.sendEnv.forEach { name ->
+                if (name !in existing) {
+                    if (out.isNotEmpty()) out.append('\n')
+                    out.append(name).append('=')
+                    existing.add(name)
+                }
+            }
+            out.toString()
+        } else null
+
         return ConnectionProfile(
             id = id,
             name = name,
@@ -228,6 +272,8 @@ class SSHConfigParser {
             keyId = host.identityFileStr?.hashCode()?.toString(), // Will need to be resolved separately if identityFileStr is present
             groupId = host.groupName,  // null = appears in "Ungrouped" section
             theme = "dracula",
+            envVars = mergedEnvVars,
+            remoteCommand = host.remoteCommand?.takeIf { it.isNotBlank() },
             createdAt = System.currentTimeMillis(),
             lastConnected = 0,
             connectionCount = 0,

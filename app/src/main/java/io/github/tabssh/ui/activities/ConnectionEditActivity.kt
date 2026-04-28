@@ -84,6 +84,7 @@ class ConnectionEditActivity : AppCompatActivity() {
         setupTerminalTypeSpinner()
         setupMultiplexerSpinner()
         setupConnectionThemeSpinner()
+        setupRemoteCommandSpinner()
         setupValidation()
         setupButtons()
         setupPortKnockUI()
@@ -528,6 +529,10 @@ class ConnectionEditActivity : AppCompatActivity() {
         profile.envVars?.let { binding.editEnvVars.setText(it) }
         binding.switchAgentForwarding.isChecked = profile.agentForwarding
 
+        // Issue #37: snap the spinner to a matching preset, or fall through
+        // to "Custom…" with the value pre-filled in the EditText.
+        applyRemoteCommandToUi(profile.remoteCommand)
+
         // Wave 2.3: protocol selector
         binding.spinnerProtocol.setSelection(if (profile.protocol.equals("telnet", true)) 1 else 0)
 
@@ -685,6 +690,9 @@ class ConnectionEditActivity : AppCompatActivity() {
         val postConnectScript = binding.editPostConnectScript.text.toString().takeIf { it.isNotBlank() }
         val envVars = binding.editEnvVars.text.toString().takeIf { it.isNotBlank() }
         val agentForwarding = binding.switchAgentForwarding.isChecked
+        // Issue #37: pull the active RemoteCommand out of the spinner /
+        // custom EditText (whichever is in play).
+        val remoteCommand = readRemoteCommandFromUi()
         // Wave 2.3: protocol selector
         val protocol = if (binding.spinnerProtocol.selectedItemPosition == 1) "telnet" else "ssh"
         // Wave 3.1: color tag (0 = none)
@@ -744,6 +752,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             postConnectScript = postConnectScript,
             envVars = envVars,
             agentForwarding = agentForwarding,
+            remoteCommand = remoteCommand,
             groupId = selectedGroupId,
             proxyType = proxyType,
             proxyHost = proxyHost,
@@ -773,6 +782,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             postConnectScript = postConnectScript,
             envVars = envVars,
             agentForwarding = agentForwarding,
+            remoteCommand = remoteCommand,
             groupId = selectedGroupId,
             proxyType = proxyType,
             proxyHost = proxyHost,
@@ -781,6 +791,72 @@ class ConnectionEditActivity : AppCompatActivity() {
             proxyAuthType = proxyAuthType,
             proxyKeyId = proxyKeyId
         )
+    }
+
+    // ---------------------------------------------------------------------
+    // Issue #37 — Remote command spinner UX.
+    //
+    // The spinner shows a curated list of common SSH RemoteCommand values
+    // (`create` for SourceForge, `sftp` / `internal-sftp` for SFTP-only
+    // accounts, `tmux attach || tmux new` for auto-attach, …) plus
+    // "Default — login shell" (no command) and "Custom…" (reveal an
+    // EditText for arbitrary input).
+    //
+    // On import: if the saved value matches a preset verbatim, the spinner
+    // snaps to that preset and the EditText stays hidden. Otherwise the
+    // spinner snaps to "Custom…" and pre-fills the EditText.
+    // ---------------------------------------------------------------------
+
+    private fun setupRemoteCommandSpinner() {
+        val customIndex = (resources.getStringArray(R.array.remote_command_values).size) - 1
+        binding.spinnerRemoteCommand.onItemSelectedListener =
+            object : android.widget.AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(
+                    parent: android.widget.AdapterView<*>?,
+                    view: View?,
+                    position: Int,
+                    id: Long
+                ) {
+                    binding.layoutRemoteCommandCustom.visibility =
+                        if (position == customIndex) View.VISIBLE else View.GONE
+                }
+
+                override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+            }
+    }
+
+    private fun applyRemoteCommandToUi(remoteCommand: String?) {
+        val values = resources.getStringArray(R.array.remote_command_values)
+        val customIndex = values.size - 1
+        if (remoteCommand.isNullOrBlank()) {
+            binding.spinnerRemoteCommand.setSelection(0)
+            binding.editRemoteCommandCustom.setText("")
+            binding.layoutRemoteCommandCustom.visibility = View.GONE
+            return
+        }
+        val matchIndex = values.indexOfFirst { it == remoteCommand }
+            .takeIf { it > 0 && it != customIndex }
+        if (matchIndex != null) {
+            binding.spinnerRemoteCommand.setSelection(matchIndex)
+            binding.editRemoteCommandCustom.setText("")
+            binding.layoutRemoteCommandCustom.visibility = View.GONE
+        } else {
+            binding.spinnerRemoteCommand.setSelection(customIndex)
+            binding.editRemoteCommandCustom.setText(remoteCommand)
+            binding.layoutRemoteCommandCustom.visibility = View.VISIBLE
+        }
+    }
+
+    private fun readRemoteCommandFromUi(): String? {
+        val values = resources.getStringArray(R.array.remote_command_values)
+        val customIndex = values.size - 1
+        val pos = binding.spinnerRemoteCommand.selectedItemPosition
+        return when {
+            pos == 0 -> null                                                                  // Default — login shell
+            pos == customIndex -> binding.editRemoteCommandCustom.text.toString().trim().takeIf { it.isNotEmpty() }
+            pos in values.indices -> values[pos].takeIf { it.isNotBlank() }
+            else -> null
+        }
     }
     
     private fun getSelectedAuthType(): AuthType {

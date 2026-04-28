@@ -35,7 +35,13 @@ class SSHConnection(
     private val context: android.content.Context
 ) {
     private var session: Session? = null
-    private var shellChannel: ChannelShell? = null
+    // Issue #37 — Now stored as the JSch `ChannelSession` base type so this
+    // can hold either a `ChannelShell` (the default — login shell) or a
+    // `ChannelExec` (when `profile.remoteCommand` is set, for hosts like
+    // shell.sourceforge.net that need an explicit `create` command). Both
+    // expose the same setPtySize / inputStream / outputStream surface that
+    // we need.
+    private var shellChannel: ChannelSession? = null
     private var sftpChannel: ChannelSftp? = null
     private var jumpHostSession: Session? = null
     private var jumpHostLocalPort: Int = 0
@@ -842,19 +848,37 @@ class SSHConnection(
     /**
      * Open a shell channel for terminal access
      */
-    suspend fun openShellChannel(): ChannelShell? = withContext(Dispatchers.IO) {
+    suspend fun openShellChannel(): ChannelSession? = withContext(Dispatchers.IO) {
         val currentSession = session
         if (currentSession == null || !currentSession.isConnected) {
             Logger.e("SSHConnection", "Cannot open shell channel: session not connected")
             return@withContext null
         }
-        
+
         try {
             if (shellChannel?.isConnected == true) {
                 return@withContext shellChannel
             }
-            
-            val channel = currentSession.openChannel("shell") as ChannelShell
+
+            // Issue #37 — open a `ChannelExec` instead of `ChannelShell` when
+            // a RemoteCommand is set. Required for SourceForge-style hosts
+            // (`create`), forced-`command="..."` jails in authorized_keys,
+            // SFTP-only accounts (`internal-sftp`), gateway/menu hosts, etc.
+            // PTY is always allocated for the exec channel — most real-world
+            // RemoteCommand uses are interactive (need a tty); JSch's
+            // `setPty(true)` is the equivalent of OpenSSH's `RequestTTY yes`.
+            val remoteCmd = profile.remoteCommand?.trim()?.takeIf { it.isNotEmpty() }
+            val channel: ChannelSession = if (remoteCmd != null) {
+                val exec = currentSession.openChannel("exec") as ChannelExec
+                exec.setCommand(remoteCmd)
+                exec.setPty(true)
+                Logger.i("SSHConnection", "Using exec channel with RemoteCommand: ${remoteCmd.take(60)}")
+                exec
+            } else {
+                currentSession.openChannel("shell") as ChannelShell
+            }
+
+            // Common PTY + env + forwarding setup applies to both kinds.
             channel.setPtyType(profile.terminalType)
             channel.setPtySize(80, 24, 0, 0) // Will be updated by terminal
             // Wave 1.2: per-host env vars before channel.connect()
@@ -884,11 +908,11 @@ class SSHConnection(
                 }
             }
             channel.connect()
-            
+
             shellChannel = channel
-            Logger.d("SSHConnection", "Shell channel opened")
+            Logger.d("SSHConnection", "Channel opened (${if (remoteCmd != null) "exec" else "shell"})")
             return@withContext channel
-            
+
         } catch (e: Exception) {
             Logger.e("SSHConnection", "Failed to open shell channel", e)
             return@withContext null

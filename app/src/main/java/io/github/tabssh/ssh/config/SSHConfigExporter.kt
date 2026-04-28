@@ -65,11 +65,29 @@ object SSHConfigExporter {
                 sb.append("    ProxyJump $jh\n")
             }
             if (!c.envVars.isNullOrBlank()) {
-                // OpenSSH SetEnv NAME=value (one per line)
+                // Issue #37 — Two related directives:
+                //  - `SetEnv NAME=value` if we have a literal value (TabSSH-only;
+                //    OpenSSH 7.8+).
+                //  - `SendEnv NAME` if the value is empty (TabSSH stores
+                //    SendEnv-imported entries as `NAME=`); the value is taken
+                //    from the local environment per OpenSSH semantics.
                 for (line in c.envVars.lineSequence()) {
                     val t = line.trim()
-                    if (t.isNotEmpty() && t.contains('=')) sb.append("    SetEnv $t\n")
+                    if (t.isEmpty()) continue
+                    val eq = t.indexOf('=')
+                    when {
+                        eq < 0 -> sb.append("    SendEnv $t\n")          // bare name
+                        eq == t.length - 1 -> sb.append("    SendEnv ${t.substring(0, eq)}\n")
+                        else -> sb.append("    SetEnv $t\n")             // NAME=value
+                    }
                 }
+            }
+            // Issue #37 — Round-trip the RemoteCommand directive. Always
+            // emitted with `RequestTTY yes` since TabSSH always allocates
+            // a PTY when running a RemoteCommand (see SSHConnection.kt).
+            if (!c.remoteCommand.isNullOrBlank()) {
+                sb.append("    RemoteCommand ${c.remoteCommand}\n")
+                sb.append("    RequestTTY yes\n")
             }
         }
         return sb.toString()

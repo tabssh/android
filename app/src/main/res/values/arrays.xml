@@ -10,6 +10,33 @@
         <item>telnet</item>
     </string-array>
 
+    <!-- Issue #37 — Remote command presets for ConnectionEditActivity.
+         Index 0 (Default — login shell) saves null/empty.
+         Last item (Custom…) reveals the EditText for arbitrary input.
+         Order matters: the activity treats the first entry as "no command"
+         and the last entry as "show custom field". -->
+    <string-array name="remote_command_entries">
+        <item>Default — login shell</item>
+        <item>create  (SourceForge shell.sourceforge.net)</item>
+        <item>sftp  (SFTP-only accounts)</item>
+        <item>internal-sftp  (OpenSSH SFTP subsystem)</item>
+        <item>tmux attach -d || tmux new  (auto-attach to tmux)</item>
+        <item>screen -DR  (auto-attach to screen)</item>
+        <item>Custom…</item>
+    </string-array>
+    <!-- Parallel values array — index N matches `remote_command_entries[N]`.
+         Index 0 (default) is the empty string. Index last (Custom…) is also
+         empty — the activity reads the EditText instead. -->
+    <string-array name="remote_command_values">
+        <item></item>
+        <item>create</item>
+        <item>sftp</item>
+        <item>internal-sftp</item>
+        <item>tmux attach -d || tmux new</item>
+        <item>screen -DR</item>
+        <item></item>
+    </string-array>
+
     <!-- Theme options -->
     <string-array name="theme_entries">
         <item>Dark</item>
