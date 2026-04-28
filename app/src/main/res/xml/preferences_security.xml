@@ -41,6 +41,37 @@
             android:title="FIDO2 hardware (Alpha)"
             android:summary="Detect connected security keys (YubiKey, SoloKey, …). SSH auth via these keys is NOT yet implemented." />
 
+        <SwitchPreferenceCompat
+            android:key="security_prevent_screenshots"
+            android:title="Block Screenshots"
+            android:summary="Prevent screenshots and screen recording in the app"
+            android:defaultValue="false" />
+
+        <SwitchPreferenceCompat
+            android:key="security_auto_lock_background"
+            android:title="Lock When Backgrounded"
+            android:summary="Require unlock after returning from background"
+            android:defaultValue="false" />
+
+        <ListPreference
+            android:key="security_auto_lock_timeout"
+            android:title="Background Lock Timeout"
+            android:summary="How long backgrounded before requiring unlock"
+            android:entries="@array/lock_timeout_entries"
+            android:entryValues="@array/lock_timeout_values"
+            android:defaultValue="300"
+            android:dependency="security_auto_lock_background"
+            app:useSimpleSummaryProvider="true" />
+
+        <ListPreference
+            android:key="security_clear_clipboard_timeout"
+            android:title="Auto-Clear Clipboard"
+            android:summary="Clear clipboard after copying from terminal"
+            android:entries="@array/clipboard_timeout_entries"
+            android:entryValues="@array/clipboard_timeout_values"
+            android:defaultValue="0"
+            app:useSimpleSummaryProvider="true" />
+
     </PreferenceCategory>
 
     <PreferenceCategory

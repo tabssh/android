@@ -86,6 +86,46 @@
             android:dependency="terminal_bell" />
 
         <SwitchPreferenceCompat
+            android:key="terminal_bell_visual"
+            android:title="Flash on Bell"
+            android:summary="Briefly invert terminal colors when BEL received"
+            android:defaultValue="true"
+            android:dependency="terminal_bell" />
+
+        <SwitchPreferenceCompat
+            android:key="terminal_word_wrap"
+            android:title="Word Wrap"
+            android:summary="Wrap long lines at the terminal width"
+            android:defaultValue="true" />
+
+        <SwitchPreferenceCompat
+            android:key="terminal_copy_on_select"
+            android:title="Copy on Select"
+            android:summary="Auto-copy selected text to clipboard"
+            android:defaultValue="false" />
+
+        <SeekBarPreference
+            android:key="terminal_line_spacing"
+            android:title="Line Spacing"
+            android:summary="Vertical spacing between lines (100% = normal)"
+            android:defaultValue="120"
+            android:max="200"
+            android:min="100"
+            app:showSeekBarValue="true" />
+
+        <SwitchPreferenceCompat
+            android:key="ui_fullscreen_mode"
+            android:title="Fullscreen Terminal"
+            android:summary="Hide status &amp; navigation bars while in a tab"
+            android:defaultValue="false" />
+
+        <SwitchPreferenceCompat
+            android:key="ui_show_function_keys"
+            android:title="Show Function Key Row"
+            android:summary="Display the custom F1-F12 / arrow row in terminals"
+            android:defaultValue="true" />
+
+        <SwitchPreferenceCompat
             android:key="volume_keys_font_size"
             android:title="Volume Keys Control Font"
             android:summary="Use volume up/down to increase/decrease font size"
