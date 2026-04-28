@@ -48,6 +48,19 @@ class TabSSHApplication : Application() {
     fun startAnrWatchdog() = anrWatchdog.start()
     fun stopAnrWatchdog() = anrWatchdog.stop()
 
+    /**
+     * Issue #36 — application-wide background coroutine scope, used by
+     * `onCreate` to push slow init off the main thread. SupervisorJob
+     * because one component failing shouldn't cancel the others; the
+     * `tryInit` wrapper inside `initializeCoreComponents` already isolates
+     * exceptions per component.
+     *
+     * No need to ever cancel this scope — it dies with the process.
+     */
+    private val applicationScope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.Dispatchers.Default + kotlinx.coroutines.SupervisorJob()
+    )
+
     // Track the current foreground activity for showing dialogs from background threads
     private var currentActivityRef: WeakReference<Activity>? = null
 
@@ -126,19 +139,33 @@ class TabSSHApplication : Application() {
             override fun onActivityDestroyed(activity: Activity) {}
         })
 
-        // Initialize core components
-        initializeCoreComponents()
-
-        // Single source of truth for host-key verification dialogs. Set on
-        // SSHSessionManager so EVERY future connection inherits it
-        // (SSHSessionManager.createConnection copies these onto each new
-        // SSHConnection at construction time). Looks up the current
-        // foreground Activity via currentActivityRef so the dialog renders
-        // wherever the user happens to be — terminal, port-forward,
-        // multi-host dashboard, SFTP, performance, anything.
-        wireGlobalHostKeyCallbacks()
-
-        Logger.i("TabSSHApplication", "Application initialized successfully")
+        // Issue #36 — Move slow init off the main thread.
+        //
+        // The lazy delegates below (`securePasswordManager`, `themeManager`,
+        // `keyStorage`, `sshSessionManager`, ...) do non-trivial work in
+        // their constructors — `SecurePasswordManager` for example does an
+        // eager `getSharedPreferences("tabssh_secure_storage", ...)` plus
+        // `KeyStore.getInstance(...).load(null)` at field-init time. Doing
+        // this on the main thread caused ANRs on update for users with
+        // large saved-credentials sets. Touching the lazies from a
+        // background coroutine first means Kotlin's `lazy { }` runs the
+        // constructor on the background thread; later main-thread accesses
+        // block on the lock but the actual I/O is already done.
+        //
+        // No regression if the main thread races and beats the scope: the
+        // lazy fires on whichever thread hits it first, same as before.
+        applicationScope.launch {
+            initializeCoreComponents()
+            // Single source of truth for host-key verification dialogs. Set
+            // on SSHSessionManager so EVERY future connection inherits it
+            // (SSHSessionManager.createConnection copies these onto each new
+            // SSHConnection at construction time). Looks up the current
+            // foreground Activity via currentActivityRef so the dialog
+            // renders wherever the user happens to be — terminal,
+            // port-forward, multi-host dashboard, SFTP, performance.
+            wireGlobalHostKeyCallbacks()
+            Logger.i("TabSSHApplication", "Application initialized successfully (background)")
+        }
     }
 
     private fun wireGlobalHostKeyCallbacks() {
