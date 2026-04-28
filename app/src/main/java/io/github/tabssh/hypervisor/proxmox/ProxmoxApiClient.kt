@@ -281,7 +281,15 @@ class ProxmoxApiClient(
      * Terminal proxy result containing ticket and WebSocket URL
      */
     data class TermProxyResult(
-        val ticket: String,
+        // PVEAuthCookie value (used for the HTTP-upgrade Cookie header).
+        val authCookie: String,
+        // Per-session termproxy ticket (the value of the `vncticket` query
+        // param AND the password half of the WS first-frame auth handshake).
+        val termproxyTicket: String,
+        // Full Proxmox userid (`user@realm`) — username half of the WS auth
+        // handshake. Termproxy expects `<userid>:<termproxyTicket>\n` as the
+        // first frame after WS open or it closes the connection within ~10s.
+        val userid: String,
         val port: Int,
         val websocketUrl: String
     )
@@ -325,7 +333,9 @@ class ProxmoxApiClient(
                 Logger.i("ProxmoxAPI", "Got termproxy ticket for VM $vmid on port $termProxyPort")
 
                 TermProxyResult(
-                    ticket = authTicket ?: "",
+                    authCookie = authTicket ?: "",
+                    termproxyTicket = ticket,
+                    userid = "$username@$realm",
                     port = termProxyPort,
                     websocketUrl = websocketUrl
                 )
@@ -376,7 +386,9 @@ class ProxmoxApiClient(
                 Logger.i("ProxmoxAPI", "Got vncproxy ticket for VM $vmid on port $vncPort")
 
                 TermProxyResult(
-                    ticket = authTicket ?: "",
+                    authCookie = authTicket ?: "",
+                    termproxyTicket = ticket,
+                    userid = "$username@$realm",
                     port = vncPort,
                     websocketUrl = websocketUrl
                 )

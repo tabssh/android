@@ -72,6 +72,16 @@ class ConsoleWebSocketClient(
     // connection open.
     private var keepaliveThread: Thread? = null
 
+    // Proxmox first-frame auth (`<userid>:<termproxyTicket>\n`). Set via
+    // setProxmoxAuthFrame() before connect(). Sent inside onOpen — without
+    // it, termproxy/vncterm closes the WebSocket within ~10s (the user
+    // sees a "Software caused connection abort" failure mid-session).
+    private var proxmoxAuthFrame: String? = null
+
+    fun setProxmoxAuthFrame(userid: String, ticket: String) {
+        proxmoxAuthFrame = "$userid:$ticket\n"
+    }
+
     init {
         val builder = OkHttpClient.Builder()
             .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -130,6 +140,16 @@ class ConsoleWebSocketClient(
                 override fun onOpen(webSocket: WebSocket, response: Response) {
                     Logger.i(TAG, "Console WebSocket connected")
                     isConnected = true
+
+                    // Proxmox vncterm/termproxy expects the first WS frame
+                    // to be `<userid>:<termproxyTicket>\n`. Send it BEFORE
+                    // anything else (incl. keepalive) so the server accepts
+                    // the session.
+                    proxmoxAuthFrame?.let { authFrame ->
+                        val sent = webSocket.send(authFrame)
+                        Logger.d(TAG, "Sent Proxmox auth frame, accepted=$sent")
+                    }
+
                     connectionListener?.onConnected()
 
                     // Start output reader thread (user input -> WebSocket)

@@ -2859,19 +2859,17 @@ class TabTerminalActivity : AppCompatActivity() {
 
         // Load custom layout from preferences if available
         val layoutJson = app.preferencesManager.getKeyboardLayoutJson()
+        Logger.d("TabTerminalActivity", "Custom keyboard layout JSON length=${layoutJson?.length ?: 0}, rowCount=$rowCount")
         if (layoutJson != null) {
             try {
-                // Parse saved layout (JSON array of rows)
                 val savedLayout = io.github.tabssh.ui.keyboard.KeyboardLayoutManager.parseLayoutJson(layoutJson)
                 binding.multiRowKeyboard.setLayout(savedLayout)
-                Logger.d("TabTerminalActivity", "Loaded custom keyboard layout from preferences")
+                Logger.i("TabTerminalActivity", "Loaded custom keyboard layout: ${savedLayout.size} rows, ${savedLayout.sumOf { it.size }} keys")
             } catch (e: Exception) {
                 Logger.e("TabTerminalActivity", "Failed to load keyboard layout, using defaults", e)
-                // Reset to default layout
                 binding.multiRowKeyboard.resetToDefault()
             }
         } else {
-            // No saved layout - use default
             Logger.d("TabTerminalActivity", "No saved layout, using default keyboard")
             binding.multiRowKeyboard.resetToDefault()
         }
