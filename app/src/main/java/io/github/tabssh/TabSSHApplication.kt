@@ -58,6 +58,12 @@ class TabSSHApplication : Application() {
 
         Logger.d("TabSSHApplication", "Application starting...")
 
+        // Apply the user's saved app theme BEFORE any Activity is created.
+        // SettingsActivity's preference change handler only updates the
+        // mode for the current process; without this, every cold start
+        // ignores the saved value and the user perceives "only dark mode".
+        applySavedAppTheme()
+
         // Create notification channels
         io.github.tabssh.utils.NotificationHelper.createNotificationChannels(this)
         
@@ -115,6 +121,28 @@ class TabSSHApplication : Application() {
         Logger.d("TabSSHApplication", "Core components initialized")
     }
     
+    private fun applySavedAppTheme() {
+        // Read directly via PreferenceManager — same key as SettingsActivity
+        // (preferences_general.xml: `android:key="app_theme"`). Mode values:
+        //   "light"  → MODE_NIGHT_NO
+        //   "dark"   → MODE_NIGHT_YES
+        //   "system" → MODE_NIGHT_FOLLOW_SYSTEM (Android 10+) or AUTO_BATTERY
+        try {
+            val prefs = androidx.preference.PreferenceManager
+                .getDefaultSharedPreferences(this)
+            val theme = prefs.getString("app_theme", "system") ?: "system"
+            val mode = when (theme) {
+                "light"  -> androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_NO
+                "dark"   -> androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES
+                else     -> androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+            }
+            androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(mode)
+            Logger.d("TabSSHApplication", "Applied saved theme: $theme (mode=$mode)")
+        } catch (e: Exception) {
+            Logger.w("TabSSHApplication", "Failed to apply saved theme: ${e.message}")
+        }
+    }
+
     private fun setupExceptionHandler() {
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
