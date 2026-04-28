@@ -56,6 +56,32 @@
         <item>3600</item>
     </string-array>
 
+    <!-- Auto-clear clipboard timeout -->
+    <string-array name="clipboard_timeout_entries">
+        <item>Never</item>
+        <item>30 seconds</item>
+        <item>1 minute</item>
+        <item>5 minutes</item>
+    </string-array>
+    <string-array name="clipboard_timeout_values">
+        <item>0</item>
+        <item>30</item>
+        <item>60</item>
+        <item>300</item>
+    </string-array>
+
+    <!-- Startup behaviour -->
+    <string-array name="startup_entries">
+        <item>Connections list</item>
+        <item>Frequent connections</item>
+        <item>Last open tab</item>
+    </string-array>
+    <string-array name="startup_values">
+        <item>connections</item>
+        <item>frequent</item>
+        <item>last_tab</item>
+    </string-array>
+
     <!-- Terminal types for SSH connections -->
     <string-array name="terminal_types">
         <item>xterm-256color</item>

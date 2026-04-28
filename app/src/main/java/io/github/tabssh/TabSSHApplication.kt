@@ -67,12 +67,21 @@ class TabSSHApplication : Application() {
         // Create notification channels
         io.github.tabssh.utils.NotificationHelper.createNotificationChannels(this)
         
-        // Register activity lifecycle callbacks to track foreground activity
+        // Register activity lifecycle callbacks. Beyond foreground tracking,
+        // this is also where we apply screen-level security flags (FLAG_SECURE
+        // for screenshot blocking, FLAG_KEEP_SCREEN_ON for screen wake) so
+        // the user-facing prefs work uniformly across every Activity without
+        // each activity having to remember to call into a helper.
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
-            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
+                applyWindowSecurityFlags(activity)
+            }
             override fun onActivityStarted(activity: Activity) {}
             override fun onActivityResumed(activity: Activity) {
                 currentActivityRef = WeakReference(activity)
+                // Re-apply on resume — the prefs may have changed in
+                // SettingsActivity since the activity was created.
+                applyWindowSecurityFlags(activity)
             }
             override fun onActivityPaused(activity: Activity) {
                 if (currentActivityRef?.get() == activity) {
@@ -121,6 +130,32 @@ class TabSSHApplication : Application() {
         Logger.d("TabSSHApplication", "Core components initialized")
     }
     
+    private fun applyWindowSecurityFlags(activity: Activity) {
+        try {
+            val prefs = androidx.preference.PreferenceManager
+                .getDefaultSharedPreferences(this)
+            val window = activity.window ?: return
+            val lp = android.view.WindowManager.LayoutParams
+
+            // Block screenshots / screen recording when the user opts in.
+            if (prefs.getBoolean("security_prevent_screenshots", false)) {
+                window.addFlags(lp.FLAG_SECURE)
+            } else {
+                window.clearFlags(lp.FLAG_SECURE)
+            }
+
+            // Keep the screen on globally when the pref says so. Per-activity
+            // overrides (e.g. terminal-only) still apply on top of this.
+            if (prefs.getBoolean("keep_screen_on", false)) {
+                window.addFlags(lp.FLAG_KEEP_SCREEN_ON)
+            } else {
+                window.clearFlags(lp.FLAG_KEEP_SCREEN_ON)
+            }
+        } catch (e: Exception) {
+            Logger.w("TabSSHApplication", "applyWindowSecurityFlags failed: ${e.message}")
+        }
+    }
+
     private fun applySavedAppTheme() {
         // Read directly via PreferenceManager — same key as SettingsActivity
         // (preferences_general.xml: `android:key="app_theme"`). Mode values:

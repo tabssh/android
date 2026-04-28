@@ -95,6 +95,7 @@ class TabTerminalActivity : AppCompatActivity() {
         setupBackPressHandler()
         setupMenuFab()
         setupBottomActionBar()  // NEW: Bottom toolbar setup
+        applyTerminalUiPrefs()
         setupHostKeyVerification()  // Setup host key verification dialogs
 
         // Handle intent
@@ -1013,15 +1014,67 @@ class TabTerminalActivity : AppCompatActivity() {
      * Close the currently-visible tab (with a confirm step so a stray
      * long-press doesn't lose work).
      */
+    /**
+     * Apply terminal-screen UI prefs that aren't covered by the global
+     * Application-level lifecycle (which handles FLAG_SECURE and
+     * keep-screen-on). Called once after the views are bound; cheap to
+     * re-run via onResume if the prefs change while the user is in
+     * Settings.
+     */
+    private fun applyTerminalUiPrefs() {
+        val prefs = app.preferencesManager
+
+        // Fullscreen mode: hide system bars while a tab is active. Uses
+        // WindowInsetsController on API 30+, falls back to flag-based on
+        // older versions. Android 16 (API 36) requires the modern API.
+        if (prefs.getBoolean("ui_fullscreen_mode", false)) {
+            try {
+                val controller = androidx.core.view.WindowCompat
+                    .getInsetsController(window, window.decorView)
+                controller.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat
+                    .BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            } catch (e: Exception) {
+                Logger.w("TabTerminalActivity", "Fullscreen apply failed: ${e.message}")
+            }
+        } else {
+            try {
+                val controller = androidx.core.view.WindowCompat
+                    .getInsetsController(window, window.decorView)
+                controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            } catch (e: Exception) {
+                // best effort
+            }
+        }
+
+        // Function-key row visibility — the existing custom keyboard view
+        // doubles as the function-key row, so toggle that container.
+        val showFnKeys = prefs.getBoolean("ui_show_function_keys", true)
+        try {
+            binding.multiRowKeyboard.visibility =
+                if (showFnKeys) android.view.View.VISIBLE else android.view.View.GONE
+        } catch (e: Exception) {
+            Logger.w("TabTerminalActivity", "Function-key visibility apply failed: ${e.message}")
+        }
+    }
+
     private fun closeActiveTabConfirmed() {
         val tab = tabManager.getActiveTab() ?: return
+        // `ui_confirm_tab_close` (default on) gates the confirmation step.
+        // Power users who want a fast close can disable in Settings.
+        val confirm = app.preferencesManager
+            .getBoolean("ui_confirm_tab_close", true)
+        val doClose = {
+            val idx = tabManager.getAllTabs().indexOfFirst { it.tabId == tab.tabId }
+            if (idx >= 0) tabManager.closeTab(idx)
+        }
+        if (!confirm) {
+            doClose(); return
+        }
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Close tab")
             .setMessage("Close ${tab.profile.getDisplayName()}?")
-            .setPositiveButton("Close") { _, _ ->
-                val idx = tabManager.getAllTabs().indexOfFirst { it.tabId == tab.tabId }
-                if (idx >= 0) tabManager.closeTab(idx)
-            }
+            .setPositiveButton("Close") { _, _ -> doClose() }
             .setNegativeButton("Cancel", null)
             .show()
     }

@@ -55,6 +55,47 @@
             android:summary="Prevent screen from sleeping during connections"
             android:defaultValue="false" />
 
+        <ListPreference
+            android:key="general_startup_behavior"
+            android:title="Startup behavior"
+            android:summary="Which screen to show on app launch"
+            android:entries="@array/startup_entries"
+            android:entryValues="@array/startup_values"
+            android:defaultValue="connections"
+            app:useSimpleSummaryProvider="true" />
+
+        <SwitchPreferenceCompat
+            android:key="ui_confirm_tab_close"
+            android:title="Confirm tab close"
+            android:summary="Ask before closing a tab with an active connection"
+            android:defaultValue="true" />
+
+        <EditTextPreference
+            android:key="ui_max_tabs"
+            android:title="Max open tabs"
+            android:summary="Refuse new tabs once this limit is reached"
+            android:defaultValue="20"
+            android:inputType="number"
+            app:useSimpleSummaryProvider="true" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="Accessibility"
+        android:key="category_accessibility">
+
+        <SwitchPreferenceCompat
+            android:key="accessibility_high_contrast"
+            android:title="High contrast"
+            android:summary="Increase contrast for low-vision users"
+            android:defaultValue="false" />
+
+        <SwitchPreferenceCompat
+            android:key="accessibility_large_touch_targets"
+            android:title="Large touch targets"
+            android:summary="Increase the size of buttons and tap targets"
+            android:defaultValue="false" />
+
     </PreferenceCategory>
 
     <PreferenceCategory
