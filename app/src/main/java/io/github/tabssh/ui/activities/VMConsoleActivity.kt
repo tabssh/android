@@ -170,6 +170,86 @@ class VMConsoleActivity : AppCompatActivity() {
         termuxBridge?.let {
             terminalView.attachTerminalEmulator(it)
         }
+
+        // Wire long-press → context menu (was missing — VM console had
+        // no way to copy/paste/send Ctrl keys; only the SSH terminal did).
+        terminalView.onContextMenuRequested = { _, _ ->
+            showVmConsoleContextMenu()
+        }
+    }
+
+    private fun showVmConsoleContextMenu() {
+        val items = arrayOf(
+            "Paste",
+            "Send Ctrl+C",
+            "Send Ctrl+D",
+            "Send Ctrl+Z",
+            "Send Esc",
+            "Send Tab",
+            "Send Enter",
+            "Send text…",
+            "Toggle keyboard",
+            "Disconnect"
+        )
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("VM Console")
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> pasteFromClipboard()
+                    1 -> sendBytes(byteArrayOf(0x03))                  // ETX
+                    2 -> sendBytes(byteArrayOf(0x04))                  // EOT
+                    3 -> sendBytes(byteArrayOf(0x1A))                  // SUB
+                    4 -> sendBytes(byteArrayOf(0x1B))                  // ESC
+                    5 -> sendBytes(byteArrayOf(0x09))                  // TAB
+                    6 -> sendBytes(byteArrayOf(0x0D))                  // CR
+                    7 -> showSendTextDialog()
+                    8 -> {
+                        val imm = getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
+                            as android.view.inputmethod.InputMethodManager
+                        imm.toggleSoftInput(
+                            android.view.inputmethod.InputMethodManager.SHOW_FORCED, 0)
+                    }
+                    9 -> finish()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun pasteFromClipboard() {
+        val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+            as android.content.ClipboardManager
+        val text = clipboard.primaryClip?.getItemAt(0)?.text?.toString()
+        if (text.isNullOrEmpty()) {
+            Toast.makeText(this, "Clipboard is empty", Toast.LENGTH_SHORT).show()
+            return
+        }
+        sendBytes(text.toByteArray(Charsets.UTF_8))
+    }
+
+    private fun showSendTextDialog() {
+        val input = android.widget.EditText(this).apply {
+            hint = "Text to send"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Send text")
+            .setView(input)
+            .setPositiveButton("Send") { _, _ ->
+                val text = input.text.toString()
+                if (text.isNotEmpty()) sendBytes(text.toByteArray(Charsets.UTF_8))
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun sendBytes(bytes: ByteArray) {
+        try {
+            termuxBridge?.write(bytes)
+        } catch (e: Exception) {
+            Logger.w(TAG, "sendBytes failed: ${e.message}")
+        }
     }
 
     private fun connectToConsole() {
