@@ -64,16 +64,21 @@ class SSHSessionManager(private val context: Context) {
     suspend fun createConnection(profile: ConnectionProfile): SSHConnection {
         Logger.d("SSHSessionManager", "Creating connection for ${profile.getDisplayName()}")
         
-        // Check if connection already exists in pool
+        // Check if connection already exists in pool. Verify the JSch session
+        // is actually alive — after a remote-side EOF the state field can lag
+        // behind, leaving us with a "CONNECTED" wrapper around a dead session.
         connectionPool[profile.id]?.let { existingConnection ->
-            if (existingConnection.connectionState.value == ConnectionState.CONNECTED) {
+            val stateOk = existingConnection.connectionState.value == ConnectionState.CONNECTED
+            val sessionOk = existingConnection.isConnected()
+            if (stateOk && sessionOk) {
                 Logger.d("SSHSessionManager", "Reusing existing connection for ${profile.id}")
                 activeConnections[profile.id] = existingConnection
                 updateConnectionStates()
                 return existingConnection
             } else {
-                // Remove stale connection from pool
+                Logger.d("SSHSessionManager", "Discarding stale pool entry (stateOk=$stateOk, sessionOk=$sessionOk)")
                 connectionPool.remove(profile.id)
+                activeConnections.remove(profile.id)
             }
         }
         

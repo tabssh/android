@@ -109,7 +109,14 @@
       "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell pidof io.github.tabssh)",
       "Bash(/opt/android/platform-tools/adb -s emulator-5554 logcat -d -t 100)",
       "Bash(sshpass -p moshtest ssh -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null mosh@127.0.0.1 'mosh-server new -p 60001')",
-      "Bash(sshpass -p moshtest ssh -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null mosh@127.0.0.1 'LC_ALL=en_US.UTF-8 mosh-server new -p 60001')"
+      "Bash(sshpass -p moshtest ssh -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null mosh@127.0.0.1 'LC_ALL=en_US.UTF-8 mosh-server new -p 60001')",
+      "Bash(scripts/fetch-mosh-binaries.sh --force)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 logcat -c)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell input keyevent KEYCODE_BACK)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell am force-stop io.github.tabssh)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell input tap 800 1500)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell uiautomator dump /sdcard/ui.xml)",
+      "Bash(scripts/android-emulator.sh stop *)"
     ]
   }
 }

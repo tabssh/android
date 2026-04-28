@@ -88,9 +88,18 @@ class SSHConnection(
      * Connect to the SSH server
      */
     suspend fun connect(): Boolean = withContext(Dispatchers.IO) {
-        if (_connectionState.value.isActive()) {
+        // Trust the JSch session over our state field — after a remote-side
+        // EOF the JSch session tears down without our DISCONNECTED transition
+        // firing, leaving _connectionState stuck at CONNECTED. If the session
+        // is actually dead, fall through and reconnect.
+        val sessionAlive = session?.isConnected == true
+        if (_connectionState.value.isActive() && sessionAlive) {
             Logger.w("SSHConnection", "Connection already active: ${_connectionState.value}")
             return@withContext true
+        }
+        if (!sessionAlive && _connectionState.value.isActive()) {
+            Logger.i("SSHConnection", "State was ${_connectionState.value} but JSch session is dead — reconnecting")
+            _connectionState.value = ConnectionState.DISCONNECTED
         }
         
         connectJob?.cancel()

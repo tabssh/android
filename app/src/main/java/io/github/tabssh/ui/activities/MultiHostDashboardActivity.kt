@@ -154,6 +154,13 @@ class MultiHostDashboardActivity : AppCompatActivity() {
             }
             val collector = MetricsCollector(ssh)
             while (true) {
+                if (!ssh.isConnected()) {
+                    // Server closed the SSH session — stop polling, show
+                    // disconnected, exit. Otherwise we'd spam executeCommand
+                    // failures forever (one per metric × N hosts).
+                    runOnUiThread { card.setError("disconnected") }
+                    return@launch
+                }
                 val r = try {
                     collector.collectMetrics()
                 } catch (e: Exception) {
