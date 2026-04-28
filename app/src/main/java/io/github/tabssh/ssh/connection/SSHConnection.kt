@@ -629,10 +629,11 @@ class SSHConnection(
         // surfaced in the UI as "(Alpha)" and the docstring on
         // Fido2SshIdentity explains the missing CTAP2 plumbing.
         if (profile.authType == AuthType.FIDO2_SECURITY_KEY.name) {
-            _errorMessage.value = "FIDO2 SSH auth is not yet implemented (Wave 2.9 alpha). " +
+            val msg = "FIDO2 SSH auth is not yet implemented (Wave 2.9 alpha). " +
                 "Switch this connection to Public Key or Password for now."
+            _errorMessage.value = msg
             Logger.w("SSHConnection", "FIDO2 auth requested but not implemented")
-            throw NotImplementedError(_errorMessage.value)
+            throw NotImplementedError(msg)
         }
 
         // Use already-resolved identity from connect()

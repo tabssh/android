@@ -279,21 +279,19 @@ class TabSSHApplication : Application() {
             val prefs = androidx.preference.PreferenceManager
                 .getDefaultSharedPreferences(this)
             val window = activity.window ?: return
-            val lp = android.view.WindowManager.LayoutParams
-
             // Block screenshots / screen recording when the user opts in.
             if (prefs.getBoolean("security_prevent_screenshots", false)) {
-                window.addFlags(lp.FLAG_SECURE)
+                window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
             } else {
-                window.clearFlags(lp.FLAG_SECURE)
+                window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
             }
 
             // Keep the screen on globally when the pref says so. Per-activity
             // overrides (e.g. terminal-only) still apply on top of this.
             if (prefs.getBoolean("keep_screen_on", false)) {
-                window.addFlags(lp.FLAG_KEEP_SCREEN_ON)
+                window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             } else {
-                window.clearFlags(lp.FLAG_KEEP_SCREEN_ON)
+                window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             }
         } catch (e: Exception) {
             Logger.w("TabSSHApplication", "applyWindowSecurityFlags failed: ${e.message}")

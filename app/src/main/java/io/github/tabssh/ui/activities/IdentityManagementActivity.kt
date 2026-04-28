@@ -147,6 +147,7 @@ class IdentityManagementActivity : AppCompatActivity() {
             AuthType.PUBLIC_KEY -> 1
             AuthType.KEYBOARD_INTERACTIVE -> 2
             AuthType.GSSAPI -> 1 // Map to SSH Key
+            AuthType.FIDO2_SECURITY_KEY -> 1 // FIDO2 alpha — map to SSH Key for now
         })
         
         MaterialAlertDialogBuilder(this)

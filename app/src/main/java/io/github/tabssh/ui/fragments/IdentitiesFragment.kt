@@ -262,6 +262,7 @@ class IdentitiesFragment : Fragment() {
             AuthType.PUBLIC_KEY -> 1
             AuthType.KEYBOARD_INTERACTIVE -> 2
             AuthType.GSSAPI -> 1
+            AuthType.FIDO2_SECURITY_KEY -> 1
         }
         authTypeSpinner.setText(authTypes[authTypeIndex], false)
         
