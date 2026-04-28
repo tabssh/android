@@ -214,10 +214,19 @@ object Logger {
                     writer.append(logLine)
                 }
             } catch (e: Exception) {
-                // Silently fail - don't create infinite loop
+                // Don't create an infinite loop by writing back through the
+                // logger, but DO surface to logcat at least once per session
+                // so a silently-failing app log can be diagnosed without
+                // having to rebuild the app with a debugger attached.
+                if (!appLogWriteFailureReported) {
+                    appLogWriteFailureReported = true
+                    Log.e("$TAG_PREFIX:Logger",
+                        "App log write failed (further failures suppressed): ${e.message}", e)
+                }
             }
         }
     }
+    @Volatile private var appLogWriteFailureReported = false
 
     /**
      * Sanitize message for public sharing

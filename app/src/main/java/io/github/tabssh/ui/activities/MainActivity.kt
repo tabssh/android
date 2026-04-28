@@ -460,20 +460,27 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
      * Copy debug logs to clipboard and offer to share
      */
     private fun copyDebugLogs() {
-        // Force enable debug mode to capture future logs
-        Logger.forceEnableDebugMode(this)
-
-        val logs = Logger.getAllLogs()
-
-        if (logs.isBlank() || logs.contains("not found") || logs.contains("not initialized")) {
+        // Probe FIRST — if no log file yet, force-enable debug mode and tell
+        // the user to reproduce. Doing this before reading the logs avoids
+        // the previous bug where a "Status: Debug logging is DISABLED…"
+        // placeholder string was copied to clipboard with a misleading
+        // "Logs Copied" toast (the placeholder strings don't match the
+        // ad-hoc `contains("not found")` checks the old code did).
+        val file = Logger.getLogFile()
+        val haveRealLogs = file != null && file.exists() && file.length() > 0
+        if (!haveRealLogs) {
+            Logger.forceEnableDebugMode(this)
             androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Debug Logging")
-                .setMessage("Debug logging is now enabled.\n\nPerform the actions that cause the issue, then come back here to copy the logs.")
+                .setTitle("Debug Logging Enabled")
+                .setMessage("No logs captured yet — debug logging is now ON.\n\n" +
+                    "Reproduce the issue (open a connection, click around, etc.) " +
+                    "then come back here to copy the logs.")
                 .setPositiveButton("OK", null)
                 .show()
             return
         }
 
+        val logs = Logger.getAllLogs()
         // Copy to clipboard
         val clipboard = getSystemService(android.content.ClipboardManager::class.java)
         clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("TabSSH Debug Logs", logs))
@@ -502,9 +509,14 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
      * Copy sanitized app log (safe for public sharing)
      */
     private fun copyAppLog() {
-        val logs = Logger.getAppLog()
-
-        if (logs.isBlank() || logs.contains("No logs recorded")) {
+        // Probe the file directly — `getAppLog()` returns a "No logs
+        // recorded yet" placeholder when there's nothing, but checking
+        // file existence + size is more reliable than substring matching
+        // (which previously also missed the placeholder for the debug-log
+        // sibling and copied junk).
+        val file = Logger.getAppLogFile()
+        val haveRealLogs = file != null && file.exists() && file.length() > 0
+        if (!haveRealLogs) {
             androidx.appcompat.app.AlertDialog.Builder(this)
                 .setTitle("Application Log")
                 .setMessage("No logs recorded yet.\n\nUse the app normally, and logs will be captured automatically.")
@@ -513,6 +525,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             return
         }
 
+        val logs = Logger.getAppLog()
         // Copy to clipboard
         val clipboard = getSystemService(android.content.ClipboardManager::class.java)
         clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("TabSSH App Log", logs))
