@@ -85,7 +85,10 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         // Setup toolbar
         val toolbar = findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
-        supportActionBar?.title = "TabSSH"
+        // Toolbar title reflects the active tab (mobile-first — "TabSSH"
+        // alone next to a tab strip is redundant, the user already knows
+        // which app they're in). Re-set in the OnPageChangeCallback.
+        supportActionBar?.title = "Hosts"
 
         // Setup drawer
         drawerLayout = findViewById(R.id.drawer_layout)
@@ -137,6 +140,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             else          -> 1  // Connections tab (default)
         }
         viewPager.setCurrentItem(initialTabIndex, /* smoothScroll = */ false)
+        supportActionBar?.title = pagerAdapter.getTabTitle(initialTabIndex)
         Logger.d("MainActivity", "Startup behavior: $startup → tab $initialTabIndex")
 
         // Persist whichever tab is showing so "last_tab" startup mode has
@@ -144,6 +148,10 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         viewPager.registerOnPageChangeCallback(object : androidx.viewpager2.widget.ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
                 prefs.edit().putInt("ui_last_main_tab_index", position).apply()
+                // Keep the toolbar title in sync with the active tab. The
+                // tab labels already read sensible-phone-friendly names
+                // (Frequent, Hosts, Identities, Stats, VMs).
+                supportActionBar?.title = pagerAdapter.getTabTitle(position)
             }
         })
 

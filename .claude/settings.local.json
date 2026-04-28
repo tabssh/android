@@ -116,7 +116,15 @@
       "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell am force-stop io.github.tabssh)",
       "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell input tap 800 1500)",
       "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell uiautomator dump /sdcard/ui.xml)",
-      "Bash(scripts/android-emulator.sh stop *)"
+      "Bash(scripts/android-emulator.sh stop *)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 logcat -d)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 wait-for-device)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell input keyevent KEYCODE_HOME)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell input tap 100 297)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell input tap 73 180)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 pull /sdcard/ui.xml /tmp/tabssh-android/ui_drawer3.xml)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell screencap -p /sdcard/screen.png)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 pull /sdcard/screen.png /tmp/tabssh-android/screen.png)"
     ]
   }
 }

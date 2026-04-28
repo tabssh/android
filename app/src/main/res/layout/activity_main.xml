@@ -38,8 +38,8 @@
                 app:tabSelectedTextColor="@color/white"
                 app:tabIndicatorColor="@color/accent_500"
                 app:tabIndicatorHeight="3dp"
-                app:tabMode="scrollable"
-                app:tabGravity="start" />
+                app:tabMode="auto"
+                app:tabGravity="fill" />
 
         </com.google.android.material.appbar.AppBarLayout>
 

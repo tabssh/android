@@ -82,7 +82,14 @@ class MultiHostDashboardActivity : AppCompatActivity() {
         }
         root.addView(toolbar)
 
-        val pickBtn = Button(this).apply { text = "Pick hosts to monitor…" }
+        // `isAllCaps = false` keeps the button text in sentence case to
+        // match the rest of the app — Material Button defaults to ALL
+        // CAPS in many themes which clashes with the "Pick hosts to
+        // monitor…" sentence case used everywhere else.
+        val pickBtn = Button(this).apply {
+            text = "Pick hosts to monitor…"
+            isAllCaps = false
+        }
         pickBtn.setOnClickListener { showHostPicker() }
         root.addView(pickBtn)
 
