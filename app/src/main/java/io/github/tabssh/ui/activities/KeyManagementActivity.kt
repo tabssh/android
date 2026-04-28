@@ -143,10 +143,19 @@ class KeyManagementActivity : AppCompatActivity() {
                     ?: return@launch
 
                 val keyContent = inputStream.bufferedReader().readText()
-                val filename = uri.lastPathSegment ?: "Imported Key"
+                // Resolve the human-readable display name via SAF — the URI's
+                // `lastPathSegment` for content:// returns the SAF document
+                // ID (e.g. "msf:1000003152") which then gets stored as the
+                // key name. Useless to the user. The OpenableColumns
+                // DISPLAY_NAME query returns the real filename ("id_ed25519")
+                // which `extractKeyNameFromFilename` then prettifies.
+                val display = resolveDisplayName(uri) ?: uri.lastPathSegment ?: "Imported Key"
+                val suggestion = extractKeyNameFromFilename(display)
 
                 withContext(Dispatchers.Main) {
-                    importKeyContent(keyContent, filename)
+                    promptForKeyName(suggestion) { confirmedName ->
+                        importKeyContent(keyContent, confirmedName)
+                    }
                 }
             } catch (e: Exception) {
                 Logger.e("KeyManagementActivity", "Failed to read key file", e)
@@ -155,6 +164,46 @@ class KeyManagementActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    /** Resolve a SAF content:// URI to its DISPLAY_NAME, or null. */
+    private fun resolveDisplayName(uri: Uri): String? {
+        return try {
+            contentResolver.query(
+                uri,
+                arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
+                null, null, null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+        } catch (e: Exception) {
+            Logger.w("KeyManagementActivity", "Display name lookup failed: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Show a name-this-key dialog pre-filled with [suggestion]. The user can
+     * accept, tweak, or replace; on positive button [onConfirm] gets the
+     * final non-blank name (falls back to suggestion if user clears it).
+     * Used so SAF-imported keys don't end up with names like "msf:1000003152".
+     */
+    private fun promptForKeyName(suggestion: String, onConfirm: (String) -> Unit) {
+        val edit = android.widget.EditText(this).apply {
+            setText(suggestion)
+            setSelection(text.length)
+            hint = "Key name"
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Name this key")
+            .setMessage("This is the label TabSSH will show in the keys list.")
+            .setView(edit)
+            .setPositiveButton("Import") { _, _ ->
+                val name = edit.text.toString().trim().ifBlank { suggestion }
+                onConfirm(name)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun showPasteKeyDialog() {
@@ -168,10 +217,12 @@ class KeyManagementActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("Paste SSH Private Key")
             .setView(editText)
-            .setPositiveButton("Import") { _, _ ->
+            .setPositiveButton("Next") { _, _ ->
                 val keyContent = editText.text.toString()
                 if (keyContent.isNotBlank()) {
-                    importKeyContent(keyContent, "Pasted Key")
+                    promptForKeyName("Pasted Key") { confirmedName ->
+                        importKeyContent(keyContent, confirmedName)
+                    }
                 }
             }
             .setNegativeButton("Cancel", null)
