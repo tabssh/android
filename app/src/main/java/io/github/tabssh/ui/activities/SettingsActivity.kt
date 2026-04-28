@@ -689,6 +689,25 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences_logging, rootKey)
 
+        // Live-toggle the Logger when the user flips the master switch.
+        // Without this, the pref persisted but `Logger.logToFile` /
+        // `Logger.logFile` only updated on the next cold start. Now flipping
+        // the switch creates the log file immediately (or stops writing
+        // to it when turned off).
+        findPreference<androidx.preference.SwitchPreferenceCompat>("debug_logging_enabled")
+            ?.setOnPreferenceChangeListener { _, newValue ->
+                val enabled = newValue as? Boolean ?: false
+                val app = requireActivity().application as io.github.tabssh.TabSSHApplication
+                if (enabled) {
+                    io.github.tabssh.utils.logging.Logger.forceEnableDebugMode(requireContext())
+                    app.startAnrWatchdog()
+                } else {
+                    io.github.tabssh.utils.logging.Logger.disableDebugMode()
+                    app.stopAnrWatchdog()
+                }
+                true
+            }
+
         // View Debug Log
         findPreference<Preference>("view_debug_log")?.setOnPreferenceClickListener {
             showLogViewer("Debug Log", "debug")
