@@ -58,7 +58,7 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.TabSSH.Dark"
+        android:theme="@style/Theme.TabSSH"
         android:hardwareAccelerated="true"
         android:largeHeap="true"
         tools:targetApi="31">
@@ -289,7 +289,7 @@
         <activity
             android:name=".ui.activities.WidgetConfigurationActivity"
             android:exported="false"
-            android:theme="@style/Theme.TabSSH.Dark">
+            android:theme="@style/Theme.TabSSH">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
             </intent-filter>

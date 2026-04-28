@@ -193,8 +193,18 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             }
         })
 
-        // Set initial FAB visibility (hidden until Connections tab selected)
-        fab.visibility = android.view.View.GONE
+        // Set initial FAB visibility based on the CURRENT tab (the
+        // OnPageChangeCallback above only fires on subsequent changes;
+        // setCurrentItem during cold-start runs BEFORE the callback is
+        // registered, so without this the FAB stayed hidden until the
+        // user manually swiped away and back to the Hosts tab — even
+        // though the empty-state UI literally says "Tap the + button to
+        // add your first SSH server").
+        fab.visibility = if (viewPager.currentItem == 1) {
+            android.view.View.VISIBLE
+        } else {
+            android.view.View.GONE
+        }
 
         // Handle back press for drawer
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
