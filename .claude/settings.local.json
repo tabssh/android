@@ -107,7 +107,9 @@
       "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell ls -la '/data/app/~~7qPo56wNhsr2j5mcYtLoBw==/io.github.tabssh-_3-aQBpkrm-OlvKYMr9HDg==/lib/x86_64/')",
       "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell am start -n io.github.tabssh/.ui.activities.MainActivity)",
       "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell pidof io.github.tabssh)",
-      "Bash(/opt/android/platform-tools/adb -s emulator-5554 logcat -d -t 100)"
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 logcat -d -t 100)",
+      "Bash(sshpass -p moshtest ssh -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null mosh@127.0.0.1 'mosh-server new -p 60001')",
+      "Bash(sshpass -p moshtest ssh -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null mosh@127.0.0.1 'LC_ALL=en_US.UTF-8 mosh-server new -p 60001')"
     ]
   }
 }
