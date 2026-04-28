@@ -2,6 +2,7 @@ package io.github.tabssh.ui.activities
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.widget.ArrayAdapter
 import androidx.appcompat.app.AppCompatActivity
@@ -979,10 +980,12 @@ class ConnectionEditActivity : AppCompatActivity() {
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Paste SSH Private Key")
             .setView(editText)
-            .setPositiveButton("Import") { _, _ ->
+            .setPositiveButton("Next") { _, _ ->
                 val keyContent = editText.text.toString().trim()
                 if (keyContent.isNotEmpty()) {
-                    importKeyFromContent(keyContent, "pasted_key")
+                    promptForKeyName("Pasted Key") { confirmedName ->
+                        importKeyFromContent(keyContent, confirmedName)
+                    }
                 } else {
                     showToast("Key content is empty")
                 }
@@ -1390,8 +1393,18 @@ SSH Key Import - Supported Formats:
                 try {
                     contentResolver.openInputStream(uri)?.use { inputStream ->
                         val keyContent = inputStream.bufferedReader().readText()
-                        val filename = uri.lastPathSegment ?: "imported_key"
-                        importKeyFromContent(keyContent, filename)
+                        // SAF URI lastPathSegment is the document ID
+                        // ("msf:1000003152"), not a real filename. Resolve
+                        // DISPLAY_NAME and prompt user for confirmation.
+                        val display = resolveDisplayName(uri)
+                            ?: uri.lastPathSegment ?: "imported_key"
+                        val suggestion = display
+                            .replace(Regex("\\.(pem|key|pub)$"), "")
+                            .replace("_", " ")
+                            .trim()
+                        promptForKeyName(suggestion) { confirmedName ->
+                            importKeyFromContent(keyContent, confirmedName)
+                        }
                     }
                 } catch (e: Exception) {
                     Logger.e("ConnectionEditActivity", "Failed to read key file", e)
@@ -1399,6 +1412,39 @@ SSH Key Import - Supported Formats:
                 }
             }
         }
+    }
+
+    private fun resolveDisplayName(uri: Uri): String? {
+        return try {
+            contentResolver.query(
+                uri,
+                arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
+                null, null, null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+        } catch (e: Exception) {
+            Logger.w("ConnectionEditActivity", "Display name lookup failed: ${e.message}")
+            null
+        }
+    }
+
+    private fun promptForKeyName(suggestion: String, onConfirm: (String) -> Unit) {
+        val edit = android.widget.EditText(this).apply {
+            setText(suggestion)
+            setSelection(text.length)
+            hint = "Key name"
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Name this key")
+            .setMessage("This is the label TabSSH will show in the keys list.")
+            .setView(edit)
+            .setPositiveButton("Import") { _, _ ->
+                val name = edit.text.toString().trim().ifBlank { suggestion }
+                onConfirm(name)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun showGroupSelectionDialog() {
