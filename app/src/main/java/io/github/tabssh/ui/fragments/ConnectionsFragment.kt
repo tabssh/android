@@ -323,24 +323,26 @@ class ConnectionsFragment : Fragment() {
     }
 
     /**
-     * Show bulk edit options dialog
+     * Show bulk edit options dialog. Three scopes — all, by group, by
+     * multi-select. Bulk DELETE has its own entry point (long-press
+     * → "Select Multiple to Delete") so it doesn't pollute this menu.
      */
     private fun showBulkEditOptions() {
         val options = arrayOf(
-            "Edit All Connections",
-            "Edit Connections in Group...",
-            "Select Multiple to Edit",
-            "Select Multiple to Delete"  // Wave 6.2
+            "Edit all (${allConnections.size}) connections",
+            "Edit connections in a group…",
+            "Pick connections to edit…",
+            "Pick connections to delete…"
         )
 
         AlertDialog.Builder(requireContext())
-            .setTitle("Bulk Edit")
+            .setTitle("Bulk edit")
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> showBulkEditDialog(allConnections)
                     1 -> showGroupSelectionForBulkEdit()
                     2 -> enterSelectionMode()
-                    3 -> enterSelectionMode(deleteMode = true)  // Wave 6.2
+                    3 -> enterSelectionMode(deleteMode = true)
                 }
             }
             .setNegativeButton("Cancel", null)
@@ -480,6 +482,12 @@ class ConnectionsFragment : Fragment() {
         val checkTimeout = dialogView.findViewById<android.widget.CheckBox>(R.id.check_timeout)
         val checkKeepalive = dialogView.findViewById<android.widget.CheckBox>(R.id.check_keepalive)
         val checkCompression = dialogView.findViewById<android.widget.CheckBox>(R.id.check_compression)
+        val checkTerminalType = dialogView.findViewById<android.widget.CheckBox>(R.id.check_terminal_type)
+        val checkColorTag = dialogView.findViewById<android.widget.CheckBox>(R.id.check_color_tag)
+        val checkX11 = dialogView.findViewById<android.widget.CheckBox>(R.id.check_x11)
+        val checkMosh = dialogView.findViewById<android.widget.CheckBox>(R.id.check_mosh)
+        val checkAgentFwd = dialogView.findViewById<android.widget.CheckBox>(R.id.check_agent_fwd)
+        val checkPostConnect = dialogView.findViewById<android.widget.CheckBox>(R.id.check_post_connect)
 
         // Field inputs
         val editUsername = dialogView.findViewById<TextInputEditText>(R.id.edit_username)
@@ -489,6 +497,12 @@ class ConnectionsFragment : Fragment() {
         val editTimeout = dialogView.findViewById<TextInputEditText>(R.id.edit_timeout)
         val switchKeepalive = dialogView.findViewById<SwitchMaterial>(R.id.switch_keepalive)
         val switchCompression = dialogView.findViewById<SwitchMaterial>(R.id.switch_compression)
+        val dropdownTerminalType = dialogView.findViewById<AutoCompleteTextView>(R.id.dropdown_terminal_type)
+        val dropdownColorTag = dialogView.findViewById<AutoCompleteTextView>(R.id.dropdown_color_tag)
+        val switchX11 = dialogView.findViewById<SwitchMaterial>(R.id.switch_x11)
+        val switchMosh = dialogView.findViewById<SwitchMaterial>(R.id.switch_mosh)
+        val switchAgentFwd = dialogView.findViewById<SwitchMaterial>(R.id.switch_agent_fwd)
+        val editPostConnect = dialogView.findViewById<TextInputEditText>(R.id.edit_post_connect)
         val textSelectedCount = dialogView.findViewById<TextView>(R.id.text_selected_count)
 
         textSelectedCount.text = "${connections.size} connections selected"
@@ -501,6 +515,20 @@ class ConnectionsFragment : Fragment() {
         dropdownIdentity.setOnItemClickListener { _, _, _, _ -> checkIdentity.isChecked = true }
         switchKeepalive.setOnCheckedChangeListener { _, _ -> checkKeepalive.isChecked = true }
         switchCompression.setOnCheckedChangeListener { _, _ -> checkCompression.isChecked = true }
+        dropdownTerminalType.setOnItemClickListener { _, _, _, _ -> checkTerminalType.isChecked = true }
+        dropdownColorTag.setOnItemClickListener { _, _, _, _ -> checkColorTag.isChecked = true }
+        switchX11.setOnCheckedChangeListener { _, _ -> checkX11.isChecked = true }
+        switchMosh.setOnCheckedChangeListener { _, _ -> checkMosh.isChecked = true }
+        switchAgentFwd.setOnCheckedChangeListener { _, _ -> checkAgentFwd.isChecked = true }
+        editPostConnect.setOnFocusChangeListener { _, hasFocus -> if (hasFocus) checkPostConnect.isChecked = true }
+
+        // Terminal type dropdown
+        val terminalTypeOptions = arrayOf("xterm-256color", "xterm", "vt100", "vt220", "screen-256color", "tmux-256color")
+        dropdownTerminalType.setAdapter(ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, terminalTypeOptions))
+
+        // Color tag dropdown — labels map 1:1 to ConnectionProfile.colorTag indices.
+        val colorTagOptions = arrayOf("(none)", "Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Pink")
+        dropdownColorTag.setAdapter(ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, colorTagOptions))
 
         // Setup group dropdown
         val groupOptions = mutableListOf("(None - Remove from group)")
@@ -524,7 +552,7 @@ class ConnectionsFragment : Fragment() {
         }
 
         AlertDialog.Builder(requireContext())
-            .setTitle("Bulk Edit ${connections.size} Connections")
+            .setTitle("Bulk edit ${connections.size} connections")
             .setView(dialogView)
             .setPositiveButton("Apply") { _, _ ->
                 applyBulkEdit(
@@ -542,7 +570,21 @@ class ConnectionsFragment : Fragment() {
                     applyKeepalive = checkKeepalive.isChecked,
                     newKeepalive = switchKeepalive.isChecked,
                     applyCompression = checkCompression.isChecked,
-                    newCompression = switchCompression.isChecked
+                    newCompression = switchCompression.isChecked,
+                    applyTerminalType = checkTerminalType.isChecked,
+                    newTerminalType = dropdownTerminalType.text?.toString()
+                        ?.takeIf { it.isNotBlank() } ?: "xterm-256color",
+                    applyColorTag = checkColorTag.isChecked,
+                    newColorTag = colorTagOptions.indexOf(dropdownColorTag.text?.toString())
+                        .coerceAtLeast(0),
+                    applyX11 = checkX11.isChecked,
+                    newX11 = switchX11.isChecked,
+                    applyMosh = checkMosh.isChecked,
+                    newMosh = switchMosh.isChecked,
+                    applyAgentFwd = checkAgentFwd.isChecked,
+                    newAgentFwd = switchAgentFwd.isChecked,
+                    applyPostConnect = checkPostConnect.isChecked,
+                    newPostConnect = editPostConnect.text?.toString()
                 )
             }
             .setNegativeButton("Cancel", null)
@@ -567,7 +609,19 @@ class ConnectionsFragment : Fragment() {
         applyKeepalive: Boolean,
         newKeepalive: Boolean,
         applyCompression: Boolean,
-        newCompression: Boolean
+        newCompression: Boolean,
+        applyTerminalType: Boolean,
+        newTerminalType: String,
+        applyColorTag: Boolean,
+        newColorTag: Int,
+        applyX11: Boolean,
+        newX11: Boolean,
+        applyMosh: Boolean,
+        newMosh: Boolean,
+        applyAgentFwd: Boolean,
+        newAgentFwd: Boolean,
+        applyPostConnect: Boolean,
+        newPostConnect: String?
     ) {
         lifecycleScope.launch {
             try {
@@ -582,6 +636,12 @@ class ConnectionsFragment : Fragment() {
                 if (applyTimeout) changes.add("timeout")
                 if (applyKeepalive) changes.add("keepalive")
                 if (applyCompression) changes.add("compression")
+                if (applyTerminalType) changes.add("terminal type")
+                if (applyColorTag) changes.add("color tag")
+                if (applyX11) changes.add("X11 forwarding")
+                if (applyMosh) changes.add("Mosh")
+                if (applyAgentFwd) changes.add("agent forwarding")
+                if (applyPostConnect) changes.add("post-connect script")
 
                 if (changes.isEmpty()) {
                     android.widget.Toast.makeText(requireContext(), "No changes selected", android.widget.Toast.LENGTH_SHORT).show()
@@ -636,6 +696,27 @@ class ConnectionsFragment : Fragment() {
                     // Apply compression if checked
                     if (applyCompression) {
                         updatedConnection = updatedConnection.copy(compression = newCompression)
+                    }
+
+                    if (applyTerminalType) {
+                        updatedConnection = updatedConnection.copy(terminalType = newTerminalType)
+                    }
+                    if (applyColorTag) {
+                        updatedConnection = updatedConnection.copy(colorTag = newColorTag)
+                    }
+                    if (applyX11) {
+                        updatedConnection = updatedConnection.copy(x11Forwarding = newX11)
+                    }
+                    if (applyMosh) {
+                        updatedConnection = updatedConnection.copy(useMosh = newMosh)
+                    }
+                    if (applyAgentFwd) {
+                        updatedConnection = updatedConnection.copy(agentForwarding = newAgentFwd)
+                    }
+                    if (applyPostConnect) {
+                        // null/blank → clear; otherwise set verbatim.
+                        val script = newPostConnect?.takeIf { it.isNotBlank() }
+                        updatedConnection = updatedConnection.copy(postConnectScript = script)
                     }
 
                     app.database.connectionDao().updateConnection(updatedConnection)

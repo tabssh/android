@@ -12,14 +12,16 @@
         android:layout_height="match_parent"
         android:orientation="vertical">
 
-        <!-- Toolbar with Sort Button -->
+        <!-- Toolbar with Sort + Bulk Edit. The menu is inflated via the
+             fragment's MenuProvider (lifecycle-aware) — DON'T set
+             `app:menu` here, that double-inflates and gives you two of
+             every icon. -->
         <com.google.android.material.appbar.MaterialToolbar
             android:id="@+id/toolbar_connections"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="?attr/colorSurface"
-            app:title="Connections"
-            app:menu="@menu/menu_connections" />
+            app:title="Connections" />
 
         <!-- Search Bar -->
         <com.google.android.material.card.MaterialCardView
