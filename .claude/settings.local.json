@@ -98,7 +98,16 @@
       "Bash(bash -n /root/Projects/github/tabssh/android/scripts/fetch-mosh-binaries.sh)",
       "Bash(python3 *)",
       "Bash(gh workflow *)",
-      "Bash(tar xz *)"
+      "Bash(tar xz *)",
+      "Bash(scripts/android-emulator.sh phone *)",
+      "Bash(unzip -l binaries/tabssh-x86_64.apk)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 install -r binaries/tabssh-x86_64.apk)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell dumpsys package io.github.tabssh)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell ls -la '/data/app/~~7qPo56wNhsr2j5mcYtLoBw==/io.github.tabssh-_3-aQBpkrm-OlvKYMr9HDg==/lib/')",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell ls -la '/data/app/~~7qPo56wNhsr2j5mcYtLoBw==/io.github.tabssh-_3-aQBpkrm-OlvKYMr9HDg==/lib/x86_64/')",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell am start -n io.github.tabssh/.ui.activities.MainActivity)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell pidof io.github.tabssh)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 logcat -d -t 100)"
     ]
   }
 }
