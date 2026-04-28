@@ -131,7 +131,8 @@
       "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell screencap -p /sdcard/sc.png)",
       "Bash(/opt/android/platform-tools/adb -s emulator-5554 pull /sdcard/sc.png /tmp/tabssh-android/sc_after_theme.png)",
       "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell run-as io.github.tabssh cat /data/data/io.github.tabssh/shared_prefs/io.github.tabssh_preferences.xml)",
-      "Bash(/opt/android/platform-tools/adb -s emulator-5554 pull /sdcard/sc.png /tmp/tabssh-android/sc_themed2.png)"
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 pull /sdcard/sc.png /tmp/tabssh-android/sc_themed2.png)",
+      "Bash(node -c js/main.js)"
     ]
   }
 }

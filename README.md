@@ -58,7 +58,7 @@
 - 💾 **Backup & Restore** - Export/import all settings and connections as encrypted ZIP
 - 🔄 **Session Persistence** - Resume sessions after app restart or reboot
 - 📊 **Connection Statistics** - Track usage, last connected, connection count
-- ☁️ **Cloud Sync** - Google Drive + WebDAV (self-hosted) with encryption & 3-way merge
+- ☁️ **Cloud Sync** - Storage Access Framework (works with **any** provider — Google Drive, Dropbox, OneDrive, Nextcloud, local storage), AES-256-GCM encryption with PBKDF2, and 3-way merge with conflict UI. **No Google services dependency** — runs on de-Googled ROMs.
 - 📝 **Custom Fonts** - 8 monospace fonts: Cascadia Code, Fira Code, JetBrains Mono, and more
 - 🏠 **Home Screen Widgets** - Quick connect from home screen
 - 🌐 **Hypervisor Management** - Proxmox VE, VMware vSphere, XCP-ng, **Xen Orchestra** (REST API + WebSocket)
@@ -219,7 +219,7 @@ android/
 │   │   ├── terminal/             # Terminal emulator
 │   │   ├── themes/               # Theme management
 │   │   ├── ui/                   # User interface
-│   │   └── sync/                 # Cloud sync (Google Drive/WebDAV)
+│   │   └── sync/                 # SAF-based universal cloud sync (any provider)
 │   ├── src/main/res/             # Resources (layouts, strings, themes)
 │   └── build.gradle              # App-level build configuration
 ├── .github/                      # GitHub Actions workflows & templates
@@ -409,7 +409,7 @@ A: Yes! Completely free, open source, no ads, no in-app purchases, forever.
 A: No. Zero analytics, zero telemetry, zero data collection. Your data stays on your device.
 
 **Q: Can I use TabSSH without Google Play Services?**
-A: Yes! TabSSH works perfectly on degoogled devices. Cloud sync supports WebDAV as an alternative to Google Drive.
+A: Yes — TabSSH has zero Google services dependency. Cloud sync goes through Android's Storage Access Framework, so you pick whichever storage provider is installed on your device (Nextcloud, Dropbox, ownCloud, local storage, …). Works perfectly on de-Googled ROMs.
 
 **Q: Which devices are supported?**
 A: Any Android 5.0+ device (covers 99%+ of active Android devices).
@@ -448,13 +448,15 @@ TabSSH is built on the shoulders of giants:
 
 ## 📊 Stats
 
-- **164 Kotlin files** - ~49,000 lines of code
-- **100+ XML resources** - Layouts, themes, strings, translations
-- **10+ built-in themes** - Professional color schemes
+- **201 Kotlin files** - ~61,668 lines of code
+- **30 Activities · 7 Fragments · 1 Service** (`SSHConnectionService`)
+- **23 built-in terminal themes** + GUI theme editor (Wave 2.4)
+- **100+ XML resources** — Layouts, themes, strings, translations
 - **4 languages** - English, Spanish, French, German
 - **100% open source** - MIT licensed
 - **0 trackers** - Complete privacy
-- **5 APK variants** - Universal + 4 architecture-specific builds
+- **5 APK variants** - Universal + 4 architecture-specific builds (`tabssh-{arch}.apk`)
+- **Database v23** — 22 forward migrations from v1
 
 ---
 
@@ -503,7 +505,7 @@ If you find TabSSH useful, please consider starring the repository! It helps oth
 - ✅ **Copy Button on All Errors** - 72 error messages now have copy buttons for easy debugging
 - ✅ **Full-Screen Terminal** - Menu and toolbars hidden by default, accessible via edge taps
 - ✅ **CI/CD Signing Fixed** - Consistent APK signing across all build sources
-- ✅ **Cloud Sync** - Google Drive and WebDAV sync with encryption
+- ✅ **Cloud Sync** - SAF-based universal sync (Google Drive, Dropbox, OneDrive, Nextcloud, local) with AES-256-GCM encryption + 3-way conflict merge
 - ✅ **SSH Key Management** - Universal parser for all key formats (OpenSSH, PEM, PKCS#8, PuTTY)
 - ✅ **Mobile UX** - Swipe between tabs, volume keys font control, URL detection
 

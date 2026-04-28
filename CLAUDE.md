@@ -1,8 +1,8 @@
 # TabSSH Android - Claude Project Tracker
 
-**Last Updated:** 2026-02-11
-**Version:** 1.0.0
-**Status:** ✅ **Feature Complete** - Issue #20 & #21 Implemented
+**Last Updated:** 2026-04-28
+**Version:** 1.0.0 (release.txt-pinned; do not bump without user approval)
+**Status:** ✅ **Waves 1.X – 9.X shipped** — terminal palette/switcher/history, workspaces, broadcast input, theme editor, color tags, cloud host import (DigitalOcean/Hetzner/Linode/Vultr), Mosh native binaries, X11, foldable + sw720dp layouts, PIN lock, ANR watchdog, build-aware debug logging
 
 ---
 
@@ -38,13 +38,118 @@
 **TabSSH** is a modern, open-source SSH client for Android with browser-style tabs, Material Design 3 UI, and comprehensive security features. Built with Kotlin and powered by JSch for SSH connectivity.
 
 ### Current State
-- ✅ **166 Kotlin source files** (~25,000+ lines of code)
-- ✅ **0 compilation errors** (verified: 2026-02-26)
-- ✅ **5 APK variants** built: `tabssh-{arch}.apk` (28MB each)
-- ✅ **Database Version 17** - All migrations complete (v1 → v17)
+- ✅ **201 Kotlin source files** (~61,668 lines of code) under `app/src/main/`
+- ✅ **0 compilation errors** (verified: 2026-04-28)
+- ✅ **5 APK variants** built: `tabssh-{arch}.apk`
+- ✅ **Database Version 23** — migrations v1 → v23 (latest: v22 `connections.color_tag`, v23 `cloud_accounts` table)
+- ✅ **30 Activities, 7 Fragments, 1 Service** (`SSHConnectionService`)
 - 📦 **APKs Ready for Testing** - Located in `./binaries/`
-- ✅ **Complete Settings UI** - All preferences functional
+- ✅ **Complete Settings UI** - All preferences functional, build-aware debug logging
 - ✅ **Universal Cloud Sync** - SAF-based, works with any storage provider (Google Drive, Dropbox, OneDrive, Nextcloud, local storage)
+- ✅ **Mosh native binaries** — pre-built per-arch `libmosh-client.so` shipped in jniLibs (monthly GH Actions release workflow)
+- ✅ **X11 forwarding** — full `X11ForwardingManager` (server + client)
+- ✅ **Cloud host import** — DigitalOcean / Hetzner / Linode / Vultr (token in Keystore, opt-in only, no auto-discovery)
+- ✅ **Crash + ANR capture** — daemon watchdog logs main-thread freezes to debug log when debug logging is enabled (auto-on for debug builds, opt-in for release)
+
+---
+
+## What landed since 2026-02-11 (Waves 1–9)
+
+This is the bridge between the old 2026-02-11 "Feature Complete" snapshot and today (2026-04-28). 106 commits, ~36k lines of new code. Truth source: `git log --since="2026-02-11"` and `FEATURES_AUDIT.md`. Older sections below are kept as historical reference.
+
+### Wave 1 — finish-the-half-done + quick wins
+- **1.2** Per-connection environment variables (DB v17→v18 — `connections.env_vars`)
+- **1.5** SSH agent forwarding wired (DB v18 — `connections.agent_forwarding`)
+- **1.7** Remote file editor — open SFTP file → in-app text editor → save back (`RemoteFileEditorActivity`)
+- **1.8** chmod editor in SFTP (was display-only)
+- **1.9** SCP fallback path
+- Reconnect button on disconnected tab (replaces auto-close-only behaviour)
+- Find/search in scrollback
+- Bulk import (CSV/JSON/PuTTY) — `BulkImportParser`, `dialog_bulk_edit.xml`
+
+### Wave 2 — meaningful new capabilities
+- **2.2** OpenSSH user certificate auth (DB v18→v19 — `stored_keys.certificate`)
+- **2.3** Telnet protocol (DB v19→v20 — `connections.protocol`)
+- **2.4** Theme editor — `ThemeEditorActivity` (was JSON-only; now a real GUI)
+- **2.5** Workspaces — named tab groups (DB v20→v21 — new `workspaces` table; `WorkspaceDao`)
+- **2.6** Command palette (Ctrl+K) + quick switcher (Ctrl+J) — `showCommandPalette`, `showQuickSwitcher` in `TabTerminalActivity`
+- **2.7** Broadcast input (interactive multi-host typing) — `showBroadcastTargetsDialog`
+- **2.8** Split view (multi-pane terminal — tablet win)
+- **2.10** History palette (Ctrl+R) — `ConnectionHistoryActivity`, `HistoryFetcher`
+
+### Wave 3 — UX polish
+- **3.1** Per-host color tags (DB v21→v22 — `connections.color_tag`); `showColorTagPicker` in `ConnectionEditActivity`
+- **3.2** PIN-code app lock (separate from biometric) — `PinLockActivity`
+- **3.3** Background tunnels (port forwards survive without terminal session)
+- **3.4** Browser-open URL handling
+- **3.5** Connection history view (separate from "last connected" timestamp)
+- **3.6** What's-new screen — `WhatsNewActivity`
+- **3.7 / 3.8** Round of polish fixes
+
+### Wave 4 — terminal + form factor
+- **4.a** True 24-bit color rendering (`0xFFRRGGBB` paths in `TerminalView`)
+- **4.b** Foldable book-mode layout (sidebar-locked when unfolded)
+- **4.c** Tablet `sw720dp` sidebar layout (`res/values-sw720dp/`, `is_tablet=true`)
+- **4.e** Cluster command live result streaming (`ClusterCommandExecutor`)
+- **4.f / 4.g** Voice typing affordance (Android STT keyboard) + misc
+
+### Wave 5 — sync + cloud import
+- **5.1** Cloud host import: DigitalOcean (DB v22→v23 — new `cloud_accounts` table; tokens in `SecurePasswordManager` under `cloud_token_${id}`, **never** in DB)
+- **5.2** Hetzner / Linode / Vultr providers (same `CloudProvider` interface)
+- **5.3** Sync workspaces + snippets + identities + groups
+- **5.4** Last-write-wins → 3-way merge with conflict UI
+
+### Wave 6 — bulk + import/export
+- **6.1** SSH config export (round-trip with parser) — `SSHConfigExporter`
+- **6.2** Bulk delete in `ConnectionsFragment`
+- **6.4 / 6.5** Bulk import wizard
+
+### Wave 7 — hypervisor + console UX
+- VM serial console via hypervisor API (no VM network needed) — `VMConsoleActivity`, `HypervisorConsoleManager`
+- Multi-row custom keyboard inside VM console
+- Proxmox VM console disconnect-after-7s fix
+- VM console: dropped AppBar (mobile-first full-screen terminal)
+
+### Wave 9.2 — Mosh native binaries
+- Cross-compiled `mosh-client` for all 4 ABIs → `app/src/main/jniLibs/{armeabi-v7a,arm64-v8a,x86,x86_64}/libmosh-client.so`
+- Monthly GH Actions release workflow + `fetch-mosh-binaries.sh` build hook
+- `MoshNativeClient` + `MoshHandoff` for handoff from SSH session
+- protobuf 21.12 (dropped 25.3 + abseil-cpp dep)
+- Embedded terminfo fallbacks
+- Verified end-to-end on Samsung S546VL
+
+### Cross-cutting hardening (April 2026 beta-test passes)
+- **Theme switching actually works** — previously `Theme.TabSSH.Dark` was hardcoded in `AndroidManifest`; now uses `Theme.TabSSH` (DayNight) with `values-night/colors.xml`
+- **App theme preference** — `applySavedAppTheme()` in `TabSSHApplication` reads `app_theme` and calls `AppCompatDelegate.setDefaultNightMode`
+- **Centralised host-key dialog** — single source in `TabSSHApplication.wireGlobalHostKeyCallbacks` (~250 lines of duplicate dialog code removed)
+- **Logger / debug mode** — debug builds auto-enable; release builds opt-in via Settings → Logging → Enable Debug Logging; preference change listener wires `Logger.forceEnableDebugMode` + `startAnrWatchdog` live
+- **ANR watchdog** — daemon thread posts no-op to main Looper; on >5s delay captures stack trace to debug log (`AnrWatchdog.kt`)
+- **Crash reporter** — global `Thread.setDefaultUncaughtExceptionHandler` writes stack to debug log + opens `CrashReportActivity` on next launch
+- **Copy App Log / Copy Debug Logs** — fixed (was sniffing for "not found"/"not initialized" placeholder strings that never matched; now probes file directly via `exists() && length() > 0`)
+- **PTY resize / SIGWINCH** — keyboard open/close re-sends rows/cols to remote (`termuxBridge.onResizeCallback → sshConnection.resizePty`)
+- **Mobile-first tab strip + toolbar** — short labels, `tabMode=auto`, FAB initial visibility from `viewPager.currentItem`, toolbar title mirrors active tab
+- **Long-press context menus** + JuiceSSH-style key shortcuts
+- **Bulk edit dialog** — kill duplicate icons + 6 more editable fields
+- **Performance monitor persistence** — `perf_last_connection_id` pref
+- **Beta-test pass** preference key mismatches across 3 batches (XML key vs code-side key drifted)
+- **SSH key import naming fix** — SAF `DISPLAY_NAME` query + "Name this key" confirmation dialog (was storing `msf:1000003152` document IDs)
+
+### Database migration table (current)
+| From | To | Wave | Change |
+|------|----|------|--------|
+| v1   | v17 | 0   | Baseline (covered by historical sections below) |
+| v17  | v18 | 1.2/1.5 | `connections.env_vars`, `connections.agent_forwarding` |
+| v18  | v19 | 2.2 | `stored_keys.certificate` (OpenSSH user certs) |
+| v19  | v20 | 2.3 | `connections.protocol` (SSH/Telnet) |
+| v20  | v21 | 2.5 | new `workspaces` table |
+| v21  | v22 | 3.1 | `connections.color_tag` |
+| v22  | v23 | 5.1 | new `cloud_accounts` table (tokens **not** in DB — Keystore only) |
+
+### Activities now present (30)
+AuditLogViewer, CloudAccounts, ClusterCommand, ConnectionEdit, ConnectionHistory, CrashReport, GroupManagement, HypervisorEdit, IdentityManagement, KeyboardCustomization, KeyManagement, LogViewer, **Main**, MultiHostDashboard, PinLock, PortForwarding, ProxmoxManager, RemoteFileEditor, **Settings**, SFTP, SnippetManager, SyncSettings, **TabTerminal**, ThemeEditor, TranscriptViewer, VMConsole, VMwareManager, WhatsNew, WidgetConfiguration, XCPngManager.
+
+### Known gaps (per `FEATURES_AUDIT.md`)
+Tier 1: ❌ FIDO2 / hardware key auth, ❌ SSH cert auth UI complete (entity exists v19), 🟡 SSH agent forwarding (UI exists, runtime not wired). Tier 2: ❌ Custom theme GUI editor (we have JSON I/O + the new ThemeEditorActivity GUI — verify completeness), ❌ Snippet variables `{?password}`, 🟡 Bluetooth keyboard polish + AltGr. Out of scope (do not implement): AI command generation, AWS/GCP/Azure auto-import (DO/Hetzner/Linode/Vultr ARE done because they're explicit-token), Team Vault, SAML/SCIM, CLI companion, plugin SDK.
 
 ---
 
