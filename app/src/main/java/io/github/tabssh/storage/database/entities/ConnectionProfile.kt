@@ -126,6 +126,24 @@ data class ConnectionProfile(
     @ColumnInfo(name = "agent_forwarding")
     val agentForwarding: Boolean = false,
 
+    /**
+     * Issue #37 — Remote command to run instead of opening a login shell.
+     *
+     * Maps to the OpenSSH `RemoteCommand` directive. When non-blank, the
+     * connection opens a JSch `ChannelExec` with this as its command (with
+     * a PTY allocated, equivalent to `RequestTTY yes`) instead of the
+     * usual `ChannelShell`.
+     *
+     * Required for hosts like `shell.sourceforge.net` that need an explicit
+     * command (e.g. `create`) to spawn a shell, forced-`command="…"` jails
+     * in `authorized_keys`, gateway/menu hosts, and SFTP-only accounts.
+     *
+     * Empty / null = open a normal login shell (default, what 99% of hosts
+     * want). DB v23 → v24.
+     */
+    @ColumnInfo(name = "remote_command")
+    val remoteCommand: String? = null,
+
     @ColumnInfo(name = "font_size_override")
     val fontSizeOverride: Int? = null, // null = use global default, otherwise override
 

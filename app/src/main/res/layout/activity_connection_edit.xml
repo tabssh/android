@@ -640,6 +640,53 @@
 
                     </com.google.android.material.textfield.TextInputLayout>
 
+                    <!-- Issue #37: Remote command (replaces the login shell).
+                         Most hosts: leave at "Default — login shell".
+                         shell.sourceforge.net needs `create`. Forced-command jails,
+                         SFTP-only accounts, gateway/menu hosts: pick or type. -->
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_md"
+                        android:text="Remote Command"
+                        android:textAppearance="?attr/textAppearanceLabelLarge"
+                        android:textColor="?android:attr/textColorPrimary" />
+
+                    <Spinner
+                        android:id="@+id/spinner_remote_command"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_xs"
+                        android:entries="@array/remote_command_entries" />
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/layout_remote_command_custom"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:visibility="gone"
+                        android:layout_marginTop="@dimen/space_xs"
+                        android:hint="Custom remote command"
+                        app:helperText="Sent as the SSH exec command instead of opening a login shell. PTY allocated automatically."
+                        style="@style/Widget.TabSSH.TextInputLayout">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/edit_remote_command_custom"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="text"
+                            android:fontFamily="monospace" />
+
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_xs"
+                        android:textSize="12sp"
+                        android:textColor="?android:attr/textColorSecondary"
+                        android:text="For most hosts leave this at the default. Some hosts (e.g. shell.sourceforge.net) require a specific command to spawn a shell." />
+
+
                     <!-- Wave 1.5: SSH agent forwarding -->
                     <com.google.android.material.switchmaterial.SwitchMaterial
                         android:id="@+id/switch_agent_forwarding"

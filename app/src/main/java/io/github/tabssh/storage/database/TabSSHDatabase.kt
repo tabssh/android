@@ -28,7 +28,7 @@ import io.github.tabssh.utils.logging.Logger
         Workspace::class,
         CloudAccount::class
     ],
-    version = 23,
+    version = 24,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -299,7 +299,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     MIGRATION_19_20,
                     MIGRATION_20_21,
                     MIGRATION_21_22,
-                    MIGRATION_22_23
+                    MIGRATION_22_23,
+                    MIGRATION_23_24
                 )
                 .build()
                 INSTANCE = instance
@@ -516,6 +517,21 @@ data class DatabaseStats(
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE connections ADD COLUMN color_tag INTEGER NOT NULL DEFAULT 0")
                 Logger.i("Database", "Migration 21->22: Added color_tag to connections")
+            }
+        }
+
+        /**
+         * v23 → v24 — Issue #37 RemoteCommand support.
+         * - `connections.remote_command TEXT` — when non-NULL, the connection
+         *   opens a `ChannelExec` with this command (PTY allocated) instead
+         *   of `ChannelShell`. Lets hosts like shell.sourceforge.net that
+         *   need an explicit `create` to spawn a shell actually work.
+         * - Existing rows get NULL → keeps current behaviour (login shell).
+         */
+        val MIGRATION_23_24 = object : Migration(23, 24) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE connections ADD COLUMN remote_command TEXT")
+                Logger.i("Database", "Migration 23->24: Added remote_command to connections")
             }
         }
 
