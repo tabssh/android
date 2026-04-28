@@ -76,7 +76,9 @@ class TabSSHApplication : Application() {
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
                 applyWindowSecurityFlags(activity)
             }
-            override fun onActivityStarted(activity: Activity) {}
+            override fun onActivityStarted(activity: Activity) {
+                maybeRequireUnlock(activity)
+            }
             override fun onActivityResumed(activity: Activity) {
                 currentActivityRef = WeakReference(activity)
                 // Re-apply on resume — the prefs may have changed in
@@ -88,15 +90,118 @@ class TabSSHApplication : Application() {
                     currentActivityRef = null
                 }
             }
-            override fun onActivityStopped(activity: Activity) {}
+            override fun onActivityStopped(activity: Activity) {
+                // Track when the app was last visible so the unlock check
+                // on next foreground knows how long we were in background.
+                val prefs = androidx.preference.PreferenceManager
+                    .getDefaultSharedPreferences(this@TabSSHApplication)
+                prefs.edit().putLong("ui_last_backgrounded_at", System.currentTimeMillis()).apply()
+            }
             override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
             override fun onActivityDestroyed(activity: Activity) {}
         })
 
         // Initialize core components
         initializeCoreComponents()
-        
+
+        // Single source of truth for host-key verification dialogs. Set on
+        // SSHSessionManager so EVERY future connection inherits it
+        // (SSHSessionManager.createConnection copies these onto each new
+        // SSHConnection at construction time). Looks up the current
+        // foreground Activity via currentActivityRef so the dialog renders
+        // wherever the user happens to be — terminal, port-forward,
+        // multi-host dashboard, SFTP, performance, anything.
+        wireGlobalHostKeyCallbacks()
+
         Logger.i("TabSSHApplication", "Application initialized successfully")
+    }
+
+    private fun wireGlobalHostKeyCallbacks() {
+        sshSessionManager.newHostKeyCallback = { info ->
+            promptHostKey(
+                title = "New Host Key",
+                message = info.getDisplayMessage(),
+                changedHost = false,
+            )
+        }
+        sshSessionManager.hostKeyChangedCallback = { info ->
+            promptHostKey(
+                title = "⚠️ Host Key CHANGED",
+                message = info.getDisplayMessage(),
+                changedHost = true,
+            )
+        }
+    }
+
+    /**
+     * Block the calling (background) thread on a UI dialog and return the
+     * user's decision. SSH connect is on Dispatchers.IO so the latch wait
+     * is safe; the dialog itself is shown on the foreground activity via
+     * currentActivityRef.
+     *
+     * Falls back to REJECT_CONNECTION if no foreground activity is
+     * available (app backgrounded mid-connect, or first launch racing
+     * with an auto-restored multi-host pump).
+     */
+    private fun promptHostKey(
+        title: String,
+        message: String,
+        changedHost: Boolean,
+    ): io.github.tabssh.ssh.connection.HostKeyAction {
+        val activity = currentActivityRef?.get()
+        if (activity == null || activity.isFinishing || activity.isDestroyed) {
+            Logger.w("TabSSHApplication",
+                "No foreground activity to show host-key dialog — rejecting (${if (changedHost) "changed" else "new"})")
+            return io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
+        }
+        var userAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
+        val latch = java.util.concurrent.CountDownLatch(1)
+        activity.runOnUiThread {
+            try {
+                val builder = androidx.appcompat.app.AlertDialog.Builder(activity)
+                    .setTitle(title)
+                    .setMessage(message)
+                    .setCancelable(false)
+                    .setOnDismissListener { latch.countDown() }
+                if (changedHost) {
+                    // MITM warning — make Reject the prominent choice.
+                    builder
+                        .setNegativeButton("Reject (recommended)") { _, _ ->
+                            userAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
+                            latch.countDown()
+                        }
+                        .setPositiveButton("Accept new key & save") { _, _ ->
+                            userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_NEW_KEY
+                            latch.countDown()
+                        }
+                        .setNeutralButton("Accept once") { _, _ ->
+                            userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_ONCE
+                            latch.countDown()
+                        }
+                } else {
+                    // First-time host — Accept-and-save is the common path.
+                    builder
+                        .setPositiveButton("Accept & save") { _, _ ->
+                            userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_NEW_KEY
+                            latch.countDown()
+                        }
+                        .setNeutralButton("Accept once") { _, _ ->
+                            userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_ONCE
+                            latch.countDown()
+                        }
+                        .setNegativeButton("Reject") { _, _ ->
+                            userAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
+                            latch.countDown()
+                        }
+                }
+                builder.show()
+            } catch (e: Exception) {
+                Logger.e("TabSSHApplication", "Failed to show host-key dialog", e)
+                latch.countDown()
+            }
+        }
+        try { latch.await() } catch (_: InterruptedException) {}
+        return userAction
     }
     
     private fun initializeCoreComponents() {
@@ -130,6 +235,45 @@ class TabSSHApplication : Application() {
         Logger.d("TabSSHApplication", "Core components initialized")
     }
     
+    /**
+     * Background-lock guard — invoked from `onActivityStarted` for every
+     * Activity. If the user has `security_auto_lock_background` on AND
+     * the app was backgrounded for longer than `security_auto_lock_timeout`
+     * seconds AND a PIN is configured, redirect to the PIN-verify screen.
+     *
+     * Skipped for the PinLockActivity itself (would loop) and skipped if
+     * we're tracking the very first launch (no prior background timestamp).
+     */
+    private fun maybeRequireUnlock(activity: Activity) {
+        try {
+            val prefs = androidx.preference.PreferenceManager
+                .getDefaultSharedPreferences(this)
+            if (!prefs.getBoolean("security_auto_lock_background", false)) return
+            if (!prefs.getBoolean("app_lock_enabled", false)) return
+            if (activity::class.java.simpleName == "PinLockActivity") return
+
+            val backgroundedAt = prefs.getLong("ui_last_backgrounded_at", 0L)
+            if (backgroundedAt == 0L) return  // first launch in this process
+            val timeoutSec = (prefs.getString("security_auto_lock_timeout", "300") ?: "300")
+                .toIntOrNull() ?: 300
+            val elapsed = (System.currentTimeMillis() - backgroundedAt) / 1000
+            if (elapsed < timeoutSec) return
+
+            Logger.i("TabSSHApplication",
+                "Auto-lock triggered after ${elapsed}s background (limit ${timeoutSec}s)")
+            // Reset the timestamp so we don't re-trigger immediately if the
+            // PIN screen itself moves through the lifecycle hooks.
+            prefs.edit().putLong("ui_last_backgrounded_at", 0L).apply()
+
+            val intent = io.github.tabssh.ui.activities.PinLockActivity
+                .verifyIntent(activity)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            activity.startActivity(intent)
+        } catch (e: Exception) {
+            Logger.w("TabSSHApplication", "maybeRequireUnlock failed: ${e.message}")
+        }
+    }
+
     private fun applyWindowSecurityFlags(activity: Activity) {
         try {
             val prefs = androidx.preference.PreferenceManager

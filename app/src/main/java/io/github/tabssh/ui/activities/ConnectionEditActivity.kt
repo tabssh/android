@@ -899,85 +899,13 @@ class ConnectionEditActivity : AppCompatActivity() {
                     profile, lifecycleScope, this@ConnectionEditActivity
                 )
 
-                // Set up host key callbacks for test connection
-                connection.newHostKeyCallback = { info ->
-                    Logger.i("ConnectionEditActivity", "New host key for ${info.hostname}")
-                    var userAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
-                    val latch = java.util.concurrent.CountDownLatch(1)
-
-                    runOnUiThread {
-                        try {
-                            androidx.appcompat.app.AlertDialog.Builder(this@ConnectionEditActivity)
-                                .setTitle("New Host Key")
-                                .setMessage(info.getDisplayMessage())
-                                .setPositiveButton("Accept & Save") { _, _ ->
-                                    userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_NEW_KEY
-                                    latch.countDown()
-                                }
-                                .setNeutralButton("Accept Once") { _, _ ->
-                                    userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_ONCE
-                                    latch.countDown()
-                                }
-                                .setNegativeButton("Reject") { _, _ ->
-                                    userAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
-                                    latch.countDown()
-                                }
-                                .setCancelable(false)
-                                .setOnDismissListener { latch.countDown() }
-                                .show()
-                        } catch (e: Exception) {
-                            Logger.e("ConnectionEditActivity", "Failed to show host key dialog", e)
-                            latch.countDown()
-                        }
-                    }
-
-                    try {
-                        latch.await(60, java.util.concurrent.TimeUnit.SECONDS)
-                    } catch (e: InterruptedException) {
-                        Logger.e("ConnectionEditActivity", "Interrupted waiting for host key response", e)
-                    }
-                    userAction
-                }
-
-                connection.hostKeyChangedCallback = { info ->
-                    Logger.w("ConnectionEditActivity", "Host key CHANGED for ${info.hostname}")
-                    var userAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
-                    val latch = java.util.concurrent.CountDownLatch(1)
-
-                    runOnUiThread {
-                        try {
-                            androidx.appcompat.app.AlertDialog.Builder(this@ConnectionEditActivity)
-                                .setTitle("⚠️ WARNING: Host Key Changed!")
-                                .setMessage(info.getDisplayMessage())
-                                .setIcon(android.R.drawable.ic_dialog_alert)
-                                .setPositiveButton("Accept New Key") { _, _ ->
-                                    userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_NEW_KEY
-                                    latch.countDown()
-                                }
-                                .setNeutralButton("Accept Once") { _, _ ->
-                                    userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_ONCE
-                                    latch.countDown()
-                                }
-                                .setNegativeButton("Reject (Recommended)") { _, _ ->
-                                    userAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
-                                    latch.countDown()
-                                }
-                                .setCancelable(false)
-                                .setOnDismissListener { latch.countDown() }
-                                .show()
-                        } catch (e: Exception) {
-                            Logger.e("ConnectionEditActivity", "Failed to show host key dialog", e)
-                            latch.countDown()
-                        }
-                    }
-
-                    try {
-                        latch.await(60, java.util.concurrent.TimeUnit.SECONDS)
-                    } catch (e: InterruptedException) {
-                        Logger.e("ConnectionEditActivity", "Interrupted waiting for host key response", e)
-                    }
-                    userAction
-                }
+                // ConnectionEditActivity builds a one-off SSHConnection
+                // directly (not via SSHSessionManager) for the "Test"
+                // button, so the manager's callbacks don't auto-attach.
+                // Pull them in from the same global slot to keep the
+                // host-key dialog identical to every other SSH path.
+                connection.newHostKeyCallback = app.sshSessionManager.newHostKeyCallback
+                connection.hostKeyChangedCallback = app.sshSessionManager.hostKeyChangedCallback
 
                 val success = connection.connect()
                 connection.disconnect()

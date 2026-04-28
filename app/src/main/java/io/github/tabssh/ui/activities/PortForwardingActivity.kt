@@ -40,6 +40,10 @@ class PortForwardingActivity : AppCompatActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.title = "Port Forwarding"
 
+        // Host-key dialogs are wired ONCE in TabSSHApplication; whichever
+        // Activity is foreground at the moment of the SSH challenge will
+        // receive the dialog. No per-activity wiring needed.
+
         connectionId = intent.getStringExtra("connection_id")
         if (connectionId == null) {
             // Wave 3.3 — no connection passed in, treat as standalone launch
@@ -48,11 +52,23 @@ class PortForwardingActivity : AppCompatActivity() {
             // SSHSessionManager, and proceed without a terminal.
             promptStandaloneConnection()
         } else {
+            // Caller (terminal activity) already opened the session; reuse
+            // it AND wire the manager so the rest of this screen works.
+            val app = application as io.github.tabssh.TabSSHApplication
+            val existing = app.sshSessionManager.getConnection(connectionId!!)
+            if (existing != null) {
+                portForwardingManager =
+                    io.github.tabssh.ssh.forwarding.PortForwardingManager(existing)
+            } else {
+                Logger.w("PortForwardingActivity",
+                    "connectionId=$connectionId given but no live SSH session")
+            }
             setupRecyclerView()
             setupFab()
             loadTunnels()
         }
     }
+
 
     private fun promptStandaloneConnection() {
         val app = application as io.github.tabssh.TabSSHApplication
@@ -86,16 +102,35 @@ class PortForwardingActivity : AppCompatActivity() {
 
     private fun attachStandaloneSession(profile: io.github.tabssh.storage.database.entities.ConnectionProfile) {
         val app = application as io.github.tabssh.TabSSHApplication
+
+        // Show a "connecting" indicator immediately so the screen doesn't
+        // look like it instantly jumped back to the main UI when host key
+        // dialogs / auth prompts take a moment.
+        supportActionBar?.title = "Port Forwarding · connecting…"
+
         lifecycleScope.launch {
             val session = app.sshSessionManager.connectToServer(profile)
             if (session == null) {
                 runOnUiThread {
-                    showError("SSH connection failed — can't open background tunnels.")
-                    finish()
+                    // Don't auto-finish — let the user read the error and
+                    // hit back themselves. The previous behaviour
+                    // (immediate finish()) is exactly what the user
+                    // reported as "just goes back to main UI".
+                    showErrorAndAllowRetry(profile,
+                        "SSH connection failed for ${profile.getDisplayName()}.\n\n" +
+                        "Likely causes:\n" +
+                        " • Host key not yet trusted (accept it from a regular terminal first)\n" +
+                        " • Bad password / wrong key\n" +
+                        " • Host unreachable")
                 }
                 return@launch
             }
             connectionId = profile.id
+            // CRITICAL — without this the screen renders but every action
+            // is a silent no-op because portForwardingManager?.X returns
+            // null. This was the actual root cause of the user-reported bug.
+            portForwardingManager =
+                io.github.tabssh.ssh.forwarding.PortForwardingManager(session)
             runOnUiThread {
                 supportActionBar?.title = "Port Forwarding · ${profile.getDisplayName()}"
                 setupRecyclerView()
@@ -103,6 +138,19 @@ class PortForwardingActivity : AppCompatActivity() {
                 loadTunnels()
             }
         }
+    }
+
+    private fun showErrorAndAllowRetry(
+        profile: io.github.tabssh.storage.database.entities.ConnectionProfile,
+        message: String,
+    ) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Couldn't attach")
+            .setMessage(message)
+            .setPositiveButton("Pick another host") { _, _ -> promptStandaloneConnection() }
+            .setNegativeButton("Close") { _, _ -> finish() }
+            .setCancelable(false)
+            .show()
     }
 
     private fun setupRecyclerView() {

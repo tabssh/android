@@ -326,7 +326,10 @@ class PreferenceManager(private val context: Context) {
     fun getConnectTimeout(): Int = getStringAsInt(KEY_CONNECT_TIMEOUT, 15)
     fun setConnectTimeout(timeout: Int) = setString(KEY_CONNECT_TIMEOUT, timeout.toString())
 
-    private fun getStringAsInt(key: String, default: Int): Int {
+    /** Public so callers outside this class can read int prefs that may be
+     *  stored as String (EditTextPreference) or Int (SeekBarPreference)
+     *  without crashing. */
+    fun getStringAsInt(key: String, default: Int): Int {
         return try {
             val raw = preferences.all[key]
             when (raw) {

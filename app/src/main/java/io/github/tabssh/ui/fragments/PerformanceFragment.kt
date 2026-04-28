@@ -172,10 +172,13 @@ class PerformanceFragment : Fragment() {
         spinnerConnection.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 if (position > 0 && position <= allConnections.size) {
-                    selectedConnection = allConnections[position - 1]
+                    val picked = allConnections[position - 1]
+                    selectedConnection = picked
+                    saveLastSelectedConnectionId(picked.id)
                     onConnectionSelected()
                 } else {
                     selectedConnection = null
+                    saveLastSelectedConnectionId(null)
                     stopMonitoring()
                 }
             }
@@ -185,6 +188,23 @@ class PerformanceFragment : Fragment() {
                 stopMonitoring()
             }
         }
+    }
+
+    /**
+     * Persist the user's choice across fragment recreations so they don't
+     * have to re-pick the same host every time the Performance tab is
+     * opened. Single-value pref keyed `perf_last_connection_id`.
+     */
+    private fun saveLastSelectedConnectionId(id: String?) {
+        val prefs = androidx.preference.PreferenceManager
+            .getDefaultSharedPreferences(requireContext())
+        prefs.edit().putString("perf_last_connection_id", id).apply()
+    }
+
+    private fun lastSelectedConnectionId(): String? {
+        val prefs = androidx.preference.PreferenceManager
+            .getDefaultSharedPreferences(requireContext())
+        return prefs.getString("perf_last_connection_id", null)
     }
 
     private fun setupFabControl() {
@@ -213,10 +233,30 @@ class PerformanceFragment : Fragment() {
     private fun updateConnectionSpinner() {
         val items = mutableListOf("Select connection...")
         items.addAll(allConnections.map { "${it.name} (${it.username}@${it.host})" })
-        
+
         val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, items)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         spinnerConnection.adapter = adapter
+
+        // Auto-restore the last-used host on the FIRST spinner population
+        // only. Setting the spinner's selection synthesises an
+        // `onItemSelected` event, which opens the SSH connection — so we
+        // don't need a parallel auto-connect call. We gate on
+        // `selectedConnection == null` so a subsequent re-population
+        // (e.g. DB Flow re-emission after the user edits another row in
+        // ConnectionsFragment) doesn't tear down the live SSH session and
+        // reconnect.
+        val savedId = lastSelectedConnectionId()
+        if (savedId != null && selectedConnection == null) {
+            val idx = allConnections.indexOfFirst { it.id == savedId }
+            if (idx >= 0) {
+                spinnerConnection.setSelection(idx + 1, /* animate = */ false)
+            } else {
+                Logger.d("PerformanceFragment",
+                    "Saved host id=$savedId is no longer in the list; clearing.")
+                saveLastSelectedConnectionId(null)
+            }
+        }
     }
 
     private fun onConnectionSelected() {
@@ -271,102 +311,16 @@ class PerformanceFragment : Fragment() {
     }
 
     /**
-     * Setup host key verification callbacks
+     * Inherit host-key dialog callbacks from the global slot wired in
+     * TabSSHApplication. PerformanceFragment can build its own
+     * SSHConnection (rather than going through SSHSessionManager) so the
+     * inheritance has to be explicit. Same callback instance, same dialog,
+     * same UX as the rest of the app.
      */
     private fun setupHostKeyVerification(conn: SSHConnection) {
-        // Setup callback for new (unknown) host keys
-        conn.newHostKeyCallback = { info ->
-            Logger.i("PerformanceFragment", "New host key callback for ${info.hostname}")
-
-            var userAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
-            val latch = java.util.concurrent.CountDownLatch(1)
-
-            requireActivity().runOnUiThread {
-                if (!isAdded || requireActivity().isFinishing) {
-                    latch.countDown()
-                    return@runOnUiThread
-                }
-                try {
-                    androidx.appcompat.app.AlertDialog.Builder(requireContext())
-                        .setTitle("New Host Key")
-                        .setMessage(info.getDisplayMessage())
-                        .setPositiveButton("Accept & Save") { _, _ ->
-                            userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_NEW_KEY
-                            latch.countDown()
-                        }
-                        .setNeutralButton("Accept Once") { _, _ ->
-                            userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_ONCE
-                            latch.countDown()
-                        }
-                        .setNegativeButton("Reject") { _, _ ->
-                            userAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
-                            latch.countDown()
-                        }
-                        .setCancelable(false)
-                        .setOnDismissListener { latch.countDown() }
-                        .show()
-                } catch (e: Exception) {
-                    Logger.e("PerformanceFragment", "Failed to show host key dialog", e)
-                    latch.countDown()
-                }
-            }
-
-            // Wait for user response
-            try {
-                latch.await(60, java.util.concurrent.TimeUnit.SECONDS)
-            } catch (e: InterruptedException) {
-                Logger.e("PerformanceFragment", "Interrupted waiting for host key response", e)
-            }
-
-            userAction
-        }
-
-        // Setup callback for changed host keys (MITM warning)
-        conn.hostKeyChangedCallback = { info ->
-            Logger.w("PerformanceFragment", "Host key CHANGED for ${info.hostname}")
-
-            var userAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
-            val latch = java.util.concurrent.CountDownLatch(1)
-
-            requireActivity().runOnUiThread {
-                if (!isAdded || requireActivity().isFinishing) {
-                    latch.countDown()
-                    return@runOnUiThread
-                }
-                try {
-                    androidx.appcompat.app.AlertDialog.Builder(requireContext())
-                        .setTitle("⚠️ Warning: Host Key Changed")
-                        .setMessage("The server's host key has changed!\n\n" +
-                            "This could indicate a man-in-the-middle attack, or the server was reinstalled.\n\n" +
-                            "Previous: ${info.oldFingerprint}\n" +
-                            "New: ${info.newFingerprint}\n\n" +
-                            "Do you want to accept the new key?")
-                        .setPositiveButton("Accept New Key") { _, _ ->
-                            userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_NEW_KEY
-                            latch.countDown()
-                        }
-                        .setNegativeButton("Reject") { _, _ ->
-                            userAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
-                            latch.countDown()
-                        }
-                        .setCancelable(false)
-                        .setOnDismissListener { latch.countDown() }
-                        .show()
-                } catch (e: Exception) {
-                    Logger.e("PerformanceFragment", "Failed to show host key changed dialog", e)
-                    latch.countDown()
-                }
-            }
-
-            // Wait for user response
-            try {
-                latch.await(60, java.util.concurrent.TimeUnit.SECONDS)
-            } catch (e: InterruptedException) {
-                Logger.e("PerformanceFragment", "Interrupted waiting for host key response", e)
-            }
-
-            userAction
-        }
+        val app = requireActivity().application as io.github.tabssh.TabSSHApplication
+        conn.newHostKeyCallback = app.sshSessionManager.newHostKeyCallback
+        conn.hostKeyChangedCallback = app.sshSessionManager.hostKeyChangedCallback
     }
 
     private fun startMonitoring() {

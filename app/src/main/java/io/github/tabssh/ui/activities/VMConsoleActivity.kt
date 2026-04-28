@@ -80,13 +80,12 @@ class VMConsoleActivity : AppCompatActivity() {
         progressBar = findViewById(R.id.progress_bar)
         statusText = findViewById(R.id.status_text)
 
-        // Setup toolbar
+        // Mobile-first: no action bar / toolbar. The VM name shows briefly
+        // in the loading overlay's status text. Disconnect / Reconnect
+        // controls live as floating overlay buttons.
         val vmName = intent.getStringExtra(EXTRA_VM_NAME) ?: "VM Console"
-        supportActionBar?.apply {
-            title = vmName
-            subtitle = "Serial Console"
-            setDisplayHomeAsUpEnabled(true)
-        }
+        statusText.text = "Connecting to $vmName…"
+        setupFloatingControls()
 
         // Initialize terminal
         setupTerminal()
@@ -127,11 +126,11 @@ class VMConsoleActivity : AppCompatActivity() {
             }
 
             override fun onTitleChanged(title: String) {
-                runOnUiThread {
-                    if (title.isNotBlank()) {
-                        supportActionBar?.title = title
-                    }
-                }
+                // No-op: there's no action bar to update in mobile-first
+                // mode. The escape-sequence title (set by remote shell) is
+                // still useful info, but we choose to drop it rather than
+                // claw back vertical space for a custom title strip.
+                Logger.d(TAG, "Remote terminal title changed: $title (ignored)")
             }
 
             override fun onBell() {
@@ -209,7 +208,7 @@ class VMConsoleActivity : AppCompatActivity() {
                         imm.toggleSoftInput(
                             android.view.inputmethod.InputMethodManager.SHOW_FORCED, 0)
                     }
-                    9 -> finish()
+                    9 -> confirmDisconnectThenFinish()
                 }
             }
             .setNegativeButton("Cancel", null)
@@ -290,6 +289,7 @@ class VMConsoleActivity : AppCompatActivity() {
 
                         isConnected = true
                         hideProgress()
+                        refreshFloatingControls()  // refresh Disconnect/Reconnect visibility
                         Logger.i(TAG, "Console connected for $vmName")
                     }
                 } else {
@@ -395,6 +395,7 @@ class VMConsoleActivity : AppCompatActivity() {
             runOnUiThread {
                 showStatus("Disconnected: $reason")
                 isConnected = false
+                refreshFloatingControls()  // surfaces the Reconnect menu item
             }
         }
 
@@ -431,8 +432,54 @@ class VMConsoleActivity : AppCompatActivity() {
     }
 
     override fun onSupportNavigateUp(): Boolean {
-        finish()
+        confirmDisconnectThenFinish()
         return true
+    }
+
+    override fun onBackPressed() {
+        confirmDisconnectThenFinish()
+    }
+
+    /**
+     * VM consoles are WebSocket-backed — there's no `exit` to type and
+     * no SSH layer to politely tear down, so the user needs an obvious
+     * way out. Toolbar overflow → "Disconnect", up-arrow, hardware back,
+     * and the long-press context menu's "Disconnect" all route here.
+     *
+     * If the console is still connected, confirm before tearing down so
+     * a stray edge-swipe doesn't kill an active session.
+     */
+    private fun confirmDisconnectThenFinish() {
+        if (!isConnected) {
+            finish(); return
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Disconnect VM console?")
+            .setMessage("This closes the WebSocket session. The VM keeps running on the hypervisor.")
+            .setPositiveButton("Disconnect") { _, _ -> finish() }
+            .setNegativeButton("Stay", null)
+            .show()
+    }
+
+    private fun setupFloatingControls() {
+        findViewById<android.widget.ImageButton>(R.id.btn_disconnect).setOnClickListener {
+            confirmDisconnectThenFinish()
+        }
+        findViewById<android.widget.Button>(R.id.btn_reconnect).setOnClickListener {
+            Logger.i(TAG, "Manual reconnect requested")
+            connectToConsole()
+        }
+        refreshFloatingControls()
+    }
+
+    /** Show Disconnect when connected, Reconnect when not. */
+    private fun refreshFloatingControls() {
+        runOnUiThread {
+            findViewById<android.widget.ImageButton>(R.id.btn_disconnect)?.visibility =
+                if (isConnected) android.view.View.VISIBLE else android.view.View.GONE
+            findViewById<android.widget.Button>(R.id.btn_reconnect)?.visibility =
+                if (isConnected) android.view.View.GONE else android.view.View.VISIBLE
+        }
     }
 
     override fun onDestroy() {
@@ -440,4 +487,5 @@ class VMConsoleActivity : AppCompatActivity() {
         consoleManager?.disconnect()
         termuxBridge?.cleanup()
     }
+
 }
