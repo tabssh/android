@@ -18,12 +18,16 @@ class MainPagerAdapter(activity: FragmentActivity) : FragmentStateAdapter(activi
         HypervisorsFragment.newInstance()
     )
 
+    // Mobile-first labels — long words don't fit 5 tabs on a phone.
+    // "Connections" → "Hosts", "Performance" → "Stats", "Hypervisors" →
+    // "VMs". Tab content is unchanged; the underlying fragments still
+    // refer to themselves with the longer names internally.
     private val tabTitles = listOf(
         "Frequent",
-        "Connections",
+        "Hosts",
         "Identities",
-        "Performance",
-        "Hypervisors"
+        "Stats",
+        "VMs"
     )
 
     override fun getItemCount(): Int = fragments.size
