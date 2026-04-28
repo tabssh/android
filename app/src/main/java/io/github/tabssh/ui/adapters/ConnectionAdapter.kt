@@ -136,6 +136,7 @@ class ConnectionAdapter(
                 io.github.tabssh.ssh.auth.AuthType.PUBLIC_KEY -> "SSH Key"
                 io.github.tabssh.ssh.auth.AuthType.KEYBOARD_INTERACTIVE -> "2FA"
                 io.github.tabssh.ssh.auth.AuthType.GSSAPI -> "GSSAPI"
+                io.github.tabssh.ssh.auth.AuthType.FIDO2_SECURITY_KEY -> "FIDO2 α"
             }
         }
         

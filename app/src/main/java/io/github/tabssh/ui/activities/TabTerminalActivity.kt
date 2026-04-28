@@ -545,14 +545,28 @@ class TabTerminalActivity : AppCompatActivity() {
      */
     private fun applyCurrentTheme() {
         val themeId = app.preferencesManager.getTheme()
-        val theme = app.themeManager.getThemeById(themeId) ?: BuiltInThemes.dracula()
+        var theme = app.themeManager.getThemeById(themeId) ?: BuiltInThemes.dracula()
 
-        Logger.d("TabTerminalActivity", "Applying theme: ${theme.name}")
+        // `accessibility_high_contrast` (default off) overrides whatever
+        // theme was selected with pure black/white. The user's choice still
+        // wins for everything else (font, spacing, cursor) — only the
+        // foreground/background pair is swapped. Cheap, predictable,
+        // honest implementation that doesn't pretend to do AAA contrast
+        // tuning.
+        val prefs = androidx.preference.PreferenceManager
+            .getDefaultSharedPreferences(this)
+        if (prefs.getBoolean("accessibility_high_contrast", false)) {
+            theme = theme.copy(
+                background = 0xFF000000.toInt(),
+                foreground = 0xFFFFFFFF.toInt(),
+                cursor = 0xFFFFFFFF.toInt(),
+            )
+        }
 
-        // Apply to main terminal view (non-swipe mode)
+        Logger.d("TabTerminalActivity", "Applying theme: ${theme.name}" +
+            if (prefs.getBoolean("accessibility_high_contrast", false)) " (high contrast)" else "")
+
         binding.terminalView.applyTheme(theme)
-
-        // Apply to all terminal views in ViewPager (swipe mode)
         pagerAdapter?.setTheme(theme)
     }
 
@@ -964,6 +978,44 @@ class TabTerminalActivity : AppCompatActivity() {
             getActiveTerminalView()?.setLineSpacingPercent(spacing)
         } catch (e: Exception) {
             Logger.w("TabTerminalActivity", "Line spacing apply failed: ${e.message}")
+        }
+
+        // `terminal_word_wrap` (default ON) → DECAWM on the LOCAL emulator.
+        // We inject the standard ANSI sequence straight into Termux's
+        // processor — no traffic to the remote. OFF gives vt100 semantics:
+        // cursor sits at the right edge for over-long lines (same as
+        // `setterm -linewrap off` on Linux).
+        val wrap = prefs.getBoolean("terminal_word_wrap", true)
+        val seq = if (wrap) "\u001B[?7h".toByteArray() else "\u001B[?7l".toByteArray()
+        try {
+            tabManager.getAllTabs().forEach { it.termuxBridge.injectLocally(seq) }
+        } catch (e: Exception) {
+            Logger.w("TabTerminalActivity", "Word-wrap apply failed: ${e.message}")
+        }
+
+        // `accessibility_large_touch_targets` (default off): bump the
+        // minimum tap target on every interactive child of the root view
+        // from Material's 48dp to 64dp. Walks the view hierarchy once;
+        // matters mainly for buttons/icons in the bottom toolbar and the
+        // floating menu FAB.
+        if (prefs.getBoolean("accessibility_large_touch_targets", false)) {
+            val targetPx = (64 * resources.displayMetrics.density).toInt()
+            applyLargeTouchTargets(binding.root, targetPx)
+        }
+    }
+
+    private fun applyLargeTouchTargets(view: android.view.View, minPx: Int) {
+        // Buttons / image buttons / FABs → bump min height + width.
+        if (view is android.widget.Button ||
+            view is android.widget.ImageButton ||
+            view is com.google.android.material.floatingactionbutton.FloatingActionButton) {
+            view.minimumHeight = minPx
+            view.minimumWidth = minPx
+        }
+        if (view is android.view.ViewGroup) {
+            for (i in 0 until view.childCount) {
+                applyLargeTouchTargets(view.getChildAt(i), minPx)
+            }
         }
     }
 

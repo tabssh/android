@@ -512,6 +512,23 @@ class TermuxBridge(
     fun getBuffer(): com.termux.terminal.TerminalBuffer? = emulator?.screen
 
     /**
+     * Inject bytes directly into the LOCAL emulator without sending to the
+     * remote shell. Used for setting DECSET / DECRST modes (auto-wrap,
+     * cursor visibility, alt-screen, …) on the local renderer based on
+     * user preferences without involving the remote.
+     *
+     * Safe to call from any thread; `append` is internally synchronized
+     * on Termux's screen.
+     */
+    fun injectLocally(bytes: ByteArray) {
+        try {
+            emulator?.append(bytes, bytes.size)
+        } catch (e: Exception) {
+            Logger.w(TAG, "injectLocally failed: ${e.message}")
+        }
+    }
+
+    /**
      * Resize the terminal
      */
     // Resize callback for VM console to forward to WebSocket

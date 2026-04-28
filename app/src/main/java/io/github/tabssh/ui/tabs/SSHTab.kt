@@ -426,8 +426,9 @@ class SSHTab(
         termuxBridge.resize(cols, rows)
         // Push the new size to the remote PTY too — the local emulator
         // alone isn't enough; the remote shell reflows lines based on
-        // what it thinks the terminal width is.
-        connection.resizePty(cols, rows)
+        // what it thinks the terminal width is. `connection` may be null
+        // briefly during initial setup; safe-call.
+        connection?.resizePty(cols, rows)
         Logger.d("SSHTab", "Resized tab ${profile.getDisplayName()} terminal to ${cols}x${rows}")
     }
 
