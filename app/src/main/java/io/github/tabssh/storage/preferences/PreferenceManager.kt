@@ -81,7 +81,12 @@ class PreferenceManager(private val context: Context) {
         private const val KEY_SHOW_FUNCTION_KEYS = "ui_show_function_keys"
         private const val KEY_FULLSCREEN_MODE = "ui_fullscreen_mode"
         private const val KEY_KEEP_SCREEN_ON = "ui_keep_screen_on"
-        private const val KEY_APP_THEME = "ui_app_theme"
+        // Key MUST match preferences_general.xml's `<ListPreference android:key="app_theme"/>`
+        // — they share `getDefaultSharedPreferences`, so different keys means
+        // SettingsActivity's writes and getAppTheme()'s reads land in
+        // different slots and the saved theme is never applied on startup
+        // (the visible "only has dark mode" symptom).
+        private const val KEY_APP_THEME = "app_theme"
         private const val KEY_DYNAMIC_COLORS = "ui_dynamic_colors"
 
         // Notification preferences
@@ -92,12 +97,17 @@ class PreferenceManager(private val context: Context) {
         private const val KEY_NOTIFICATION_VIBRATE = "notification_vibrate"
 
         // Connection preferences
-        private const val KEY_DEFAULT_USERNAME = "connection_default_username"
-        private const val KEY_DEFAULT_PORT = "connection_default_port"
-        private const val KEY_CONNECT_TIMEOUT = "connection_connect_timeout"
-        private const val KEY_AUTO_RECONNECT = "connection_auto_reconnect"
-        private const val KEY_COMPRESSION = "connection_compression"
-        private const val KEY_KEEP_ALIVE_INTERVAL = "connection_keep_alive_interval"
+        // These keys MUST match the `android:key` values in
+        // preferences_connection.xml — same SharedPreferences file (default),
+        // mismatched names mean every "Connection settings" preference the
+        // user toggles silently goes nowhere. Same root cause as the
+        // app_theme bug fixed in this commit.
+        private const val KEY_DEFAULT_USERNAME = "default_username"
+        private const val KEY_DEFAULT_PORT = "default_port"
+        private const val KEY_CONNECT_TIMEOUT = "connect_timeout"
+        private const val KEY_AUTO_RECONNECT = "auto_reconnect"
+        private const val KEY_COMPRESSION = "compression_enabled"
+        private const val KEY_KEEP_ALIVE_INTERVAL = "keep_alive_interval"
         
         // Accessibility preferences
         private const val KEY_HIGH_CONTRAST = "accessibility_high_contrast"
@@ -294,15 +304,31 @@ class PreferenceManager(private val context: Context) {
     fun isDynamicColors(): Boolean = getBoolean(KEY_DYNAMIC_COLORS, true)
     fun setDynamicColors(enabled: Boolean) = setBoolean(KEY_DYNAMIC_COLORS, enabled)
     
-    // Connection preferences
+    // Connection preferences. EditTextPreference stores values as String
+    // even when `inputType="number"` — getInt() against a String slot will
+    // throw ClassCastException — so we read as String and parse, falling
+    // back to the default on parse error.
     fun getDefaultUsername(): String = getString(KEY_DEFAULT_USERNAME, System.getProperty("user.name", ""))
     fun setDefaultUsername(username: String) = setString(KEY_DEFAULT_USERNAME, username)
-    
-    fun getDefaultPort(): Int = getInt(KEY_DEFAULT_PORT, 22)
-    fun setDefaultPort(port: Int) = setInt(KEY_DEFAULT_PORT, port)
-    
-    fun getConnectTimeout(): Int = getInt(KEY_CONNECT_TIMEOUT, 15)
-    fun setConnectTimeout(timeout: Int) = setInt(KEY_CONNECT_TIMEOUT, timeout)
+
+    fun getDefaultPort(): Int = getStringAsInt(KEY_DEFAULT_PORT, 22)
+    fun setDefaultPort(port: Int) = setString(KEY_DEFAULT_PORT, port.toString())
+
+    fun getConnectTimeout(): Int = getStringAsInt(KEY_CONNECT_TIMEOUT, 15)
+    fun setConnectTimeout(timeout: Int) = setString(KEY_CONNECT_TIMEOUT, timeout.toString())
+
+    private fun getStringAsInt(key: String, default: Int): Int {
+        return try {
+            val raw = preferences.all[key]
+            when (raw) {
+                is Int -> raw
+                is String -> raw.toIntOrNull() ?: default
+                else -> default
+            }
+        } catch (e: Exception) {
+            default
+        }
+    }
     
     fun isAutoReconnect(): Boolean = getBoolean(KEY_AUTO_RECONNECT, true)
     fun setAutoReconnect(enabled: Boolean) = setBoolean(KEY_AUTO_RECONNECT, enabled)

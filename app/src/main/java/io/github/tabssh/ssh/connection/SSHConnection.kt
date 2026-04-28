@@ -1319,6 +1319,23 @@ class SSHConnection(
     /**
      * Get input stream for shell channel
      */
+    /**
+     * Push a new PTY size to the remote shell. Called whenever the local
+     * terminal view resizes (rotation, IME show/hide, font-size change).
+     * Without this, the remote sees the initial 80×24 forever and lines
+     * wrap at column 80 even when the local view is ~55 columns wide —
+     * which is what "terminal reports 80 cols but actual is closer to 55"
+     * looked like in the wild.
+     */
+    fun resizePty(cols: Int, rows: Int) {
+        try {
+            shellChannel?.setPtySize(cols, rows, 0, 0)
+            Logger.d("SSHConnection", "Pushed PTY size to remote: ${cols}x${rows}")
+        } catch (e: Exception) {
+            Logger.w("SSHConnection", "setPtySize failed: ${e.message}")
+        }
+    }
+
     fun getInputStream(): InputStream? = shellChannel?.inputStream
     
     /**
