@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Night-mode color overrides. These names match the ones in
+  values/colors.xml but resolve to dark equivalents whenever the
+  device (or user pref via setDefaultNightMode) is in night mode.
+
+  Without this file, Theme.TabSSH (which references @color/surface,
+  @color/on_surface, @color/outline, …) would always resolve to the
+  light values and the user-facing "App theme = Dark" preference
+  would have no visible effect on activity backgrounds.
+
+  The actual hex values mirror the `*_dark` siblings already present
+  in values/colors.xml — kept in this separate file so non-night-mode
+  callers can still reference the explicit `*_dark` names directly
+  when they really need a dark color regardless of mode (e.g. terminal
+  output backgrounds).
+-->
+<resources>
+    <!-- Surfaces & on-surface text -->
+    <color name="surface">#FF121212</color>
+    <color name="surface_variant">#FF1E1E1E</color>
+    <color name="on_surface">#FFFFFFFF</color>
+    <color name="on_surface_variant">#FFBDBDBD</color>
+
+    <!-- Outlines -->
+    <color name="outline">#FF424242</color>
+    <color name="outline_variant">#FF2C2C2C</color>
+
+    <!-- Tab strip uses surface on day; in night just stay dark too -->
+    <color name="tab_background">#FF1E1E1E</color>
+    <color name="tab_text">#FFFFFFFF</color>
+</resources>
