@@ -86,7 +86,8 @@ cd ncurses-6.4
     --without-shared --with-normal --without-debug \
     --without-progs --without-tests --without-manpages \
     --disable-db-install --without-cxx-binding \
-    --disable-stripping
+    --disable-stripping \
+    --with-fallbacks=xterm-256color,xterm,vt100,linux,screen,screen-256color,tmux,tmux-256color,ansi,dumb
 make -j"$(nproc)" libs >&2
 make install.libs install.includes >&2
 cd ..
