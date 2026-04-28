@@ -1,6 +1,5 @@
 package io.github.tabssh.ui.activities
 
-import android.content.Intent
 import android.os.Bundle
 import android.view.Gravity
 import android.view.MenuItem
@@ -21,6 +20,7 @@ import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.performance.MetricsCollector
 import io.github.tabssh.performance.PerformanceMetrics
 import io.github.tabssh.ssh.connection.SSHConnection
+import io.github.tabssh.storage.database.entities.ConnectionGroup
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.CoroutineScope
@@ -29,22 +29,21 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
- * Wave 4.g — Multi-host performance dashboard.
+ * Wave 4.g + persistence/grouping update.
  *
- * Pick N saved connections and watch CPU% / mem% / load1 update on each
- * card every 5s. Hosts run independently — slow / dead hosts don't block
- * others' updates.
+ * Selection persists across activity restarts via the
+ * `multihost_selected_ids` pref. Cards render grouped by
+ * `ConnectionProfile.groupId`: each group becomes a header row that
+ * collapses (`groupname / N hosts`) on tap; ungrouped hosts render
+ * flat at the bottom. Collapse state is per-group, also persisted.
  *
- * Implementation:
- *  - Each host gets its own SSHConnection + MetricsCollector + repeat job.
- *  - Cards live in a vertical LinearLayout inside a ScrollView. Quick to
- *    add/remove without RecyclerView ceremony.
- *  - On finish() we cancel every job and disconnect each SSH session that
- *    we opened ourselves; sessions reused from SSHSessionManager are left
- *    alone for whoever opened them first.
+ * Per-host monitoring is unchanged from before — each host gets its
+ * own SSHConnection + MetricsCollector + repeat job; slow / dead
+ * hosts don't block the others.
  */
 class MultiHostDashboardActivity : AppCompatActivity() {
 
@@ -53,6 +52,9 @@ class MultiHostDashboardActivity : AppCompatActivity() {
         private const val REFRESH_MS = 5000L
         private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
         private const val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
+        private const val PREF_SELECTED = "multihost_selected_ids"
+        private const val PREF_COLLAPSED = "multihost_collapsed_groups"
+        private const val UNGROUPED = "__ungrouped__"
     }
 
     private lateinit var app: TabSSHApplication
@@ -61,6 +63,9 @@ class MultiHostDashboardActivity : AppCompatActivity() {
     private val jobs = mutableMapOf<String, Job>()
     private val ownedSessions = mutableMapOf<String, SSHConnection>()
     private val cards = mutableMapOf<String, HostCard>()
+    private val groupHeaders = mutableMapOf<String, GroupHeader>()
+    private val collapsedGroups = mutableSetOf<String>()
+    private var groupCache = emptyList<ConnectionGroup>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -96,8 +101,30 @@ class MultiHostDashboardActivity : AppCompatActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         toolbar.setNavigationOnClickListener { finish() }
 
-        // Auto-prompt on first open.
-        showHostPicker()
+        // Restore collapse state.
+        collapsedGroups.clear()
+        collapsedGroups.addAll(prefSet(PREF_COLLAPSED))
+
+        // Auto-restore previous selection. If nothing saved, prompt.
+        val saved = prefSet(PREF_SELECTED)
+        if (saved.isNotEmpty()) {
+            restoreSelection(saved)
+        } else {
+            showHostPicker()
+        }
+    }
+
+    private fun restoreSelection(savedIds: Set<String>) {
+        lifecycleScope.launch {
+            try {
+                groupCache = app.database.connectionGroupDao().getAllGroups().first()
+                val all = app.database.connectionDao().getAllConnectionsList()
+                val want = all.filter { it.id in savedIds }
+                runOnUiThread { applySelection(want, persist = false) }
+            } catch (e: Exception) {
+                Logger.e(TAG, "Restore selection failed", e)
+            }
+        }
     }
 
     private fun showHostPicker() {
@@ -108,13 +135,20 @@ class MultiHostDashboardActivity : AppCompatActivity() {
                 Logger.e(TAG, "Recent fetch failed", e)
                 emptyList()
             }
+            try {
+                groupCache = app.database.connectionGroupDao().getAllGroups().first()
+            } catch (_: Exception) { /* picker still works without group names */ }
+
             if (all.isEmpty()) {
                 runOnUiThread {
                     Toast.makeText(this@MultiHostDashboardActivity, "No saved connections", Toast.LENGTH_SHORT).show()
                 }
                 return@launch
             }
-            val labels = all.map { it.getDisplayName() }.toTypedArray()
+            val labels = all.map { p ->
+                val g = groupCache.firstOrNull { it.id == p.groupId }
+                if (g != null) "${g.name} / ${p.getDisplayName()}" else p.getDisplayName()
+            }.toTypedArray()
             val checked = BooleanArray(all.size) { i -> jobs.containsKey(all[i].id) }
             runOnUiThread {
                 AlertDialog.Builder(this@MultiHostDashboardActivity)
@@ -124,7 +158,7 @@ class MultiHostDashboardActivity : AppCompatActivity() {
                     }
                     .setPositiveButton("Apply") { _, _ ->
                         val want = all.filterIndexed { i, _ -> checked[i] }
-                        applySelection(want)
+                        applySelection(want, persist = true)
                     }
                     .setNegativeButton("Cancel", null)
                     .show()
@@ -132,60 +166,97 @@ class MultiHostDashboardActivity : AppCompatActivity() {
         }
     }
 
-    private fun applySelection(want: List<ConnectionProfile>) {
+    private fun applySelection(want: List<ConnectionProfile>, persist: Boolean) {
         // Stop hosts no longer wanted.
         val keepIds = want.map { it.id }.toSet()
-        jobs.keys.toList().filter { it !in keepIds }.forEach { stopHost(it) }
-        // Start newly wanted.
-        for (p in want) {
-            if (!jobs.containsKey(p.id)) startHost(p)
+        jobs.keys.toList().filter { it !in keepIds }.forEach { stopHost(it, persistChange = false) }
+
+        // Wipe and re-render container so groups stay sorted as they
+        // change. Remember which jobs are already alive — we don't
+        // restart their pumps, just re-attach the existing cards.
+        listContainer.removeAllViews()
+        groupHeaders.clear()
+
+        val byGroup = want.groupBy { it.groupId ?: UNGROUPED }
+
+        // Stable order: named groups alphabetical, then ungrouped last.
+        val groupOrder = byGroup.keys.sortedWith(compareBy({ it == UNGROUPED }, { groupName(it) }))
+        for (gid in groupOrder) {
+            val members = byGroup[gid].orEmpty()
+            if (gid != UNGROUPED) {
+                val header = GroupHeader(gid, groupName(gid), members.size)
+                groupHeaders[gid] = header
+                listContainer.addView(header.view)
+                if (gid in collapsedGroups) {
+                    members.forEach { p ->
+                        // Still need the pump; just hide the card view.
+                        ensurePumpFor(p)
+                        cards[p.id]?.view?.visibility = View.GONE
+                    }
+                    continue
+                }
+            }
+            for (p in members) {
+                ensurePumpFor(p)
+                cards[p.id]?.view?.let {
+                    it.visibility = View.VISIBLE
+                    listContainer.addView(it)
+                }
+            }
+        }
+
+        if (persist) prefPutSet(PREF_SELECTED, keepIds)
+    }
+
+    private fun ensurePumpFor(profile: ConnectionProfile) {
+        if (!cards.containsKey(profile.id)) {
+            cards[profile.id] = HostCard(profile)
+        }
+        if (!jobs.containsKey(profile.id)) {
+            jobs[profile.id] = pumpScope.launch { runHostPump(profile) }
         }
     }
 
-    private fun startHost(profile: ConnectionProfile) {
-        val card = HostCard(profile).also { cards[profile.id] = it }
-        listContainer.addView(card.view)
-
-        jobs[profile.id] = pumpScope.launch {
-            val ssh = openOrReuseSession(profile)
-            if (ssh == null) {
-                runOnUiThread { card.setError("connect failed") }
-                return@launch
+    private suspend fun runHostPump(profile: ConnectionProfile) {
+        val card = cards[profile.id] ?: return
+        val ssh = openOrReuseSession(profile)
+        if (ssh == null) {
+            runOnUiThread { card.setError("connect failed") }
+            return
+        }
+        val collector = MetricsCollector(ssh)
+        while (true) {
+            if (!ssh.isConnected()) {
+                runOnUiThread { card.setError("disconnected") }
+                return
             }
-            val collector = MetricsCollector(ssh)
-            while (true) {
-                if (!ssh.isConnected()) {
-                    // Server closed the SSH session — stop polling, show
-                    // disconnected, exit. Otherwise we'd spam executeCommand
-                    // failures forever (one per metric × N hosts).
-                    runOnUiThread { card.setError("disconnected") }
-                    return@launch
-                }
-                val r = try {
-                    collector.collectMetrics()
-                } catch (e: Exception) {
-                    Result.failure<PerformanceMetrics>(e)
-                }
-                runOnUiThread {
-                    if (r.isSuccess) card.update(r.getOrThrow()) else card.setError(r.exceptionOrNull()?.message ?: "error")
-                }
-                delay(REFRESH_MS)
+            val r = try {
+                collector.collectMetrics()
+            } catch (e: Exception) {
+                Result.failure<PerformanceMetrics>(e)
             }
+            runOnUiThread {
+                if (r.isSuccess) card.update(r.getOrThrow())
+                else card.setError(r.exceptionOrNull()?.message ?: "error")
+            }
+            delay(REFRESH_MS)
         }
     }
 
-    private fun stopHost(id: String) {
+    private fun stopHost(id: String, persistChange: Boolean) {
         jobs.remove(id)?.cancel()
         ownedSessions.remove(id)?.let {
             try { it.disconnect() } catch (e: Exception) { Logger.w(TAG, "disconnect: ${e.message}") }
         }
         cards.remove(id)?.let { listContainer.removeView(it.view) }
+        if (persistChange) {
+            val current = prefSet(PREF_SELECTED).toMutableSet().also { it.remove(id) }
+            prefPutSet(PREF_SELECTED, current)
+        }
     }
 
     private suspend fun openOrReuseSession(profile: ConnectionProfile): SSHConnection? {
-        // Reuse if already in SessionManager (user already opened terminal).
         app.sshSessionManager.getConnection(profile.id)?.let { return it }
-        // Otherwise open and remember so we can clean up on finish.
         val s = app.sshSessionManager.connectToServer(profile)
         if (s != null) ownedSessions[profile.id] = s
         return s
@@ -206,6 +277,64 @@ class MultiHostDashboardActivity : AppCompatActivity() {
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun prefSet(key: String): Set<String> {
+        val csv = androidx.preference.PreferenceManager
+            .getDefaultSharedPreferences(this)
+            .getString(key, "") ?: ""
+        return csv.split(",").filter { it.isNotBlank() }.toSet()
+    }
+
+    private fun prefPutSet(key: String, value: Set<String>) {
+        androidx.preference.PreferenceManager
+            .getDefaultSharedPreferences(this)
+            .edit()
+            .putString(key, value.joinToString(","))
+            .apply()
+    }
+
+    private fun groupName(id: String): String =
+        if (id == UNGROUPED) "Ungrouped" else groupCache.firstOrNull { it.id == id }?.name ?: "Group"
+
+    /** Group heading row — tap to collapse / expand. Reflows the layout. */
+    private inner class GroupHeader(val groupId: String, name: String, count: Int) {
+        val view: View
+        private val title: TextView
+
+        init {
+            val row = LinearLayout(this@MultiHostDashboardActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(8), dp(8), dp(8), dp(4))
+                setBackgroundColor(0xFF101820.toInt())
+                val lp = LinearLayout.LayoutParams(MATCH, WRAP)
+                lp.bottomMargin = dp(4)
+                layoutParams = lp
+                isClickable = true
+                isFocusable = true
+            }
+            val collapsed = groupId in collapsedGroups
+            val arrow = if (collapsed) "▶" else "▼"
+            title = TextView(this@MultiHostDashboardActivity).apply {
+                text = "$arrow  $name / $count host${if (count == 1) "" else "s"}"
+                setTextColor(0xFFCCCCCC.toInt())
+                textSize = 14f
+            }
+            row.addView(title)
+            row.setOnClickListener { toggleCollapse() }
+            view = row
+        }
+
+        private fun toggleCollapse() {
+            if (groupId in collapsedGroups) collapsedGroups.remove(groupId)
+            else collapsedGroups.add(groupId)
+            prefPutSet(PREF_COLLAPSED, collapsedGroups)
+            // Re-apply the current selection so the layout reflows; we
+            // don't restart any pumps, just show/hide cards.
+            val want = jobs.keys.mapNotNull { id -> cards[id]?.profile }
+            applySelection(want, persist = false)
+        }
+    }
 
     /** One row per monitored host. UI is plain TextViews — keep it tight. */
     private inner class HostCard(val profile: ConnectionProfile) {

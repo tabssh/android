@@ -265,6 +265,16 @@ class TerminalView @JvmOverloads constructor(
 
             override fun onBell() {
                 Logger.d("TerminalView", "Terminal bell")
+                // `terminal_bell_visual` (default true, gated on
+                // `terminal_bell` parent) → 120ms invert flash. Posted to
+                // the UI thread because onBell can fire from the emulator
+                // background thread.
+                val prefs = androidx.preference.PreferenceManager
+                    .getDefaultSharedPreferences(context)
+                if (prefs.getBoolean("terminal_bell", true) &&
+                    prefs.getBoolean("terminal_bell_visual", true)) {
+                    post { triggerVisualBell() }
+                }
             }
 
             override fun onColorsChanged() {
@@ -695,9 +705,32 @@ class TerminalView @JvmOverloads constructor(
         onContextMenuRequested?.invoke(x, y)
     }
 
+    /** Multiplier from `terminal_line_spacing` pref (100–200%, stored as Int). */
+    private var lineSpacingMultiplier: Float = 1.2f
+
+    /** Visual bell — briefly invert the terminal's foreground/background
+     *  colors as a non-audible BEL indicator. Implemented via a transient
+     *  overlay flag the draw path checks; auto-clears after 120ms. */
+    @Volatile private var visualBellActive = false
+    private fun triggerVisualBell() {
+        visualBellActive = true
+        invalidate()
+        postDelayed({
+            visualBellActive = false
+            invalidate()
+        }, 120)
+    }
+
+    fun setLineSpacingPercent(percent: Int) {
+        lineSpacingMultiplier = (percent.coerceIn(100, 200)) / 100f
+        calculateCellDimensions()
+        requestLayout()
+        invalidate()
+    }
+
     private fun calculateCellDimensions() {
         val fontMetrics = textPaint.fontMetrics
-        cellHeight = fontMetrics.bottom - fontMetrics.top
+        cellHeight = (fontMetrics.bottom - fontMetrics.top) * lineSpacingMultiplier
         cellWidth = textPaint.measureText("M") // Use 'M' as reference for monospace
     }
 
@@ -743,6 +776,11 @@ class TerminalView @JvmOverloads constructor(
         // Prefer Termux buffer rendering if available
         termuxBuffer?.let { buffer ->
             renderTermuxBuffer(canvas, buffer)
+            // Visual bell overlay — XOR-ish full-screen flash via translucent
+            // accent. Cheap; auto-clears in 120ms via postDelayed.
+            if (visualBellActive) {
+                canvas.drawColor(0x40FFFFFF.toInt())
+            }
             return
         }
 
@@ -1406,14 +1444,18 @@ class TerminalView @JvmOverloads constructor(
         val word = text.substring(wordStart, wordEnd + 1).trim()
 
         if (word.isNotBlank()) {
-            // Copy to clipboard
-            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-            val clip = android.content.ClipData.newPlainText("Selected Text", word)
-            clipboard.setPrimaryClip(clip)
-
-            // Show toast
-            android.widget.Toast.makeText(context, "Copied: $word", android.widget.Toast.LENGTH_SHORT).show()
-            Logger.d("TerminalView", "Double-tap selected word: $word")
+            // `terminal_copy_on_select` (default true) gates auto-copy on
+            // double-tap. Off → just visually select, leave clipboard alone.
+            val prefs = androidx.preference.PreferenceManager
+                .getDefaultSharedPreferences(context)
+            val copyOnSelect = prefs.getBoolean("terminal_copy_on_select", true)
+            if (copyOnSelect) {
+                io.github.tabssh.utils.ClipboardHelper.copy(
+                    context, label = "Selected Text", text = word, sensitive = true
+                )
+                android.widget.Toast.makeText(context, "Copied: $word", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            Logger.d("TerminalView", "Double-tap selected word: $word (copied=$copyOnSelect)")
         }
     }
 

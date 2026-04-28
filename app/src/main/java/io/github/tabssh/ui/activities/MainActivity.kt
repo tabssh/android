@@ -125,6 +125,28 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             tab.text = pagerAdapter.getTabTitle(position)
         }.attach()
 
+        // `general_startup_behavior` pref → land on a specific tab on cold
+        // start. "last_tab" is treated like "connections" until we add
+        // persistent last-tab tracking; logging both for now.
+        val prefs = androidx.preference.PreferenceManager
+            .getDefaultSharedPreferences(this)
+        val startup = prefs.getString("general_startup_behavior", "connections")
+        val initialTabIndex = when (startup) {
+            "frequent"    -> 0  // Frequent tab in MainPagerAdapter
+            "last_tab"    -> prefs.getInt("ui_last_main_tab_index", 1).coerceIn(0, 4)
+            else          -> 1  // Connections tab (default)
+        }
+        viewPager.setCurrentItem(initialTabIndex, /* smoothScroll = */ false)
+        Logger.d("MainActivity", "Startup behavior: $startup → tab $initialTabIndex")
+
+        // Persist whichever tab is showing so "last_tab" startup mode has
+        // something to read on next launch.
+        viewPager.registerOnPageChangeCallback(object : androidx.viewpager2.widget.ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                prefs.edit().putInt("ui_last_main_tab_index", position).apply()
+            }
+        })
+
         // FAB action
         fab.setOnClickListener {
             val currentTab = viewPager.currentItem

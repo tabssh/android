@@ -1,72 +1,94 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+  Mobile-first: no AppBar, no toolbar, no subtitle. The 56dp toolbar +
+  status-bar inset was eating ~10% of the vertical viewport on a phone
+  for content the user never looks at after the first second. Disconnect
+  / Reconnect live in a tiny top-right pill overlay; VM name shows in
+  the connecting overlay while attaching. Hardware back still works
+  (confirms first if connected). Long-press in the terminal still
+  brings up the full context menu.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@android:color/black"
+    android:fitsSystemWindows="true"
     tools:context=".ui.activities.VMConsoleActivity">
 
-    <com.google.android.material.appbar.AppBarLayout
-        android:id="@+id/app_bar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:theme="@style/Theme.MaterialComponents.DayNight.DarkActionBar">
-
-        <androidx.appcompat.widget.Toolbar
-            android:id="@+id/toolbar"
-            android:layout_width="match_parent"
-            android:layout_height="?attr/actionBarSize"
-            android:background="?attr/colorPrimary"
-            app:popupTheme="@style/ThemeOverlay.MaterialComponents.Light"
-            app:title="VM Console"
-            app:subtitle="Serial Console" />
-
-    </com.google.android.material.appbar.AppBarLayout>
-
-    <FrameLayout
+    <!-- Terminal fills the entire screen. -->
+    <io.github.tabssh.ui.views.TerminalView
+        android:id="@+id/terminal_view"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+        android:visibility="gone"
+        android:focusable="true"
+        android:focusableInTouchMode="true" />
 
-        <!-- Terminal View -->
-        <io.github.tabssh.ui.views.TerminalView
-            android:id="@+id/terminal_view"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:visibility="gone"
-            android:focusable="true"
-            android:focusableInTouchMode="true" />
+    <!-- Loading overlay (also doubles as a "disconnected" status panel). -->
+    <LinearLayout
+        android:id="@+id/loading_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="32dp">
 
-        <!-- Loading/Status overlay -->
-        <LinearLayout
-            android:id="@+id/loading_overlay"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:padding="32dp">
+        <ProgressBar
+            android:id="@+id/progress_bar"
+            style="?android:attr/progressBarStyleLarge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:indeterminate="true" />
 
-            <ProgressBar
-                android:id="@+id/progress_bar"
-                style="?android:attr/progressBarStyleLarge"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:indeterminate="true" />
+        <TextView
+            android:id="@+id/status_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Connecting..."
+            android:textColor="@android:color/white"
+            android:textSize="16sp"
+            android:gravity="center" />
 
-            <TextView
-                android:id="@+id/status_text"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:text="Connecting..."
-                android:textColor="@android:color/white"
-                android:textSize="16sp"
-                android:gravity="center" />
+    </LinearLayout>
 
-        </LinearLayout>
+    <!-- Floating Disconnect / Reconnect pill, top-right. Sits on top of
+         everything; partially transparent so the user can still see the
+         terminal underneath. Tap = confirm-then-finish (or reconnect
+         when disconnected). The visibility is flipped from
+         VMConsoleActivity based on `isConnected`. -->
+    <ImageButton
+        android:id="@+id/btn_disconnect"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="8dp"
+        android:background="@android:color/transparent"
+        android:contentDescription="Disconnect"
+        android:padding="6dp"
+        android:src="@android:drawable/ic_menu_close_clear_cancel"
+        android:tint="#CCFFFFFF" />
 
-    </FrameLayout>
+    <Button
+        android:id="@+id/btn_reconnect"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="6dp"
+        android:layout_marginEnd="6dp"
+        android:minHeight="0dp"
+        android:minWidth="0dp"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:background="#88000000"
+        android:textColor="#FFFFFFFF"
+        android:textSize="13sp"
+        android:text="Reconnect"
+        android:visibility="gone" />
 
-</androidx.coordinatorlayout.widget.CoordinatorLayout>
+</FrameLayout>

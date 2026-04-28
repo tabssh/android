@@ -96,7 +96,10 @@ class TabTerminalActivity : AppCompatActivity() {
         setupMenuFab()
         setupBottomActionBar()  // NEW: Bottom toolbar setup
         applyTerminalUiPrefs()
-        setupHostKeyVerification()  // Setup host key verification dialogs
+        // Host-key verification dialogs are wired application-wide via
+        // TabSSHApplication.wireGlobalHostKeyCallbacks(). The previous
+        // per-activity setup was kept around briefly while migrating; it
+        // was redundant once the central wiring landed and is now removed.
 
         // Handle intent
         handleIntent(intent)
@@ -224,7 +227,12 @@ class TabTerminalActivity : AppCompatActivity() {
     }
     
     private fun setupTabManager() {
-        tabManager = TabManager(maxTabs = 10)
+        // `ui_max_tabs` pref (default 20). Stored as String by
+        // EditTextPreference; coerced via the tolerant int reader.
+        val maxTabs = app.preferencesManager
+            .getStringAsInt("ui_max_tabs", 20)
+            .coerceIn(1, 100)
+        tabManager = TabManager(maxTabs = maxTabs)
         
         // Set up tab manager listener
         tabManager.addListener(object : TabManagerListener {
@@ -298,114 +306,6 @@ class TabTerminalActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Setup host key verification callbacks for SSH connections
-     */
-    private fun setupHostKeyVerification() {
-        // Setup callback for new (unknown) host keys
-        app.sshSessionManager.newHostKeyCallback = { info ->
-            Logger.i("TabTerminalActivity", "New host key callback invoked for ${info.hostname}")
-
-            var userAction: io.github.tabssh.ssh.connection.HostKeyAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
-            val latch = java.util.concurrent.CountDownLatch(1)
-
-            runOnUiThread {
-                if (isFinishing || isDestroyed) {
-                    Logger.w("TabTerminalActivity", "Activity is finishing/destroyed - rejecting new host key")
-                    latch.countDown()
-                    return@runOnUiThread
-                }
-                try {
-                    androidx.appcompat.app.AlertDialog.Builder(this)
-                        .setTitle("New Host Key")
-                        .setMessage(info.getDisplayMessage())
-                        .setPositiveButton("Accept & Save") { _, _ ->
-                            userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_NEW_KEY
-                            latch.countDown()
-                        }
-                        .setNeutralButton("Accept Once") { _, _ ->
-                            userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_ONCE
-                            latch.countDown()
-                        }
-                        .setNegativeButton("Reject") { _, _ ->
-                            userAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
-                            latch.countDown()
-                        }
-                        .setCancelable(false)
-                        .setOnDismissListener { latch.countDown() }
-                        .show()
-                } catch (e: Exception) {
-                    Logger.e("TabTerminalActivity", "Failed to show new host key dialog", e)
-                    latch.countDown()
-                }
-            }
-
-            // Wait for the user to actually decide. Issue #32: the previous
-            // 60s timeout silently rejected the connection while a careful
-            // user was still verifying a 64-char SHA-256 fingerprint. The
-            // dialog is non-cancellable and its dismiss listener counts the
-            // latch down on activity destruction, so blocking is safe.
-            try {
-                latch.await()
-            } catch (e: InterruptedException) {
-                Logger.e("TabTerminalActivity", "Interrupted waiting for host key response", e)
-            }
-
-            userAction
-        }
-
-        // Setup callback for changed host keys (MITM warning)
-        app.sshSessionManager.hostKeyChangedCallback = { info ->
-            Logger.w("TabTerminalActivity", "Host key CHANGED callback invoked for ${info.hostname}")
-
-            var userAction: io.github.tabssh.ssh.connection.HostKeyAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
-            val latch = java.util.concurrent.CountDownLatch(1)
-
-            runOnUiThread {
-                if (isFinishing || isDestroyed) {
-                    Logger.w("TabTerminalActivity", "Activity is finishing/destroyed - rejecting changed host key")
-                    latch.countDown()
-                    return@runOnUiThread
-                }
-                try {
-                    androidx.appcompat.app.AlertDialog.Builder(this)
-                        .setTitle("WARNING: Host Key Changed!")
-                        .setMessage(info.getDisplayMessage())
-                        .setIcon(android.R.drawable.ic_dialog_alert)
-                        .setPositiveButton("Accept New Key") { _, _ ->
-                            userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_NEW_KEY
-                            latch.countDown()
-                        }
-                        .setNeutralButton("Accept Once") { _, _ ->
-                            userAction = io.github.tabssh.ssh.connection.HostKeyAction.ACCEPT_ONCE
-                            latch.countDown()
-                        }
-                        .setNegativeButton("Reject (Recommended)") { _, _ ->
-                            userAction = io.github.tabssh.ssh.connection.HostKeyAction.REJECT_CONNECTION
-                            latch.countDown()
-                        }
-                        .setCancelable(false)
-                        .setOnDismissListener { latch.countDown() }
-                        .show()
-                } catch (e: Exception) {
-                    Logger.e("TabTerminalActivity", "Failed to show changed host key dialog", e)
-                    latch.countDown()
-                }
-            }
-
-            // No timeout — see Issue #32. The dismiss listener releases the
-            // latch on activity destruction, so blocking is safe.
-            try {
-                latch.await()
-            } catch (e: InterruptedException) {
-                Logger.e("TabTerminalActivity", "Interrupted waiting for host key response", e)
-            }
-
-            userAction
-        }
-
-        Logger.i("TabTerminalActivity", "Host key verification callbacks set up")
-    }
 
     /**
      * Setup edge tap gestures for showing UI elements
@@ -691,9 +591,9 @@ class TabTerminalActivity : AppCompatActivity() {
      * Copy URL to clipboard
      */
     private fun copyUrlToClipboard(url: String) {
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        val clip = android.content.ClipData.newPlainText("URL", url)
-        clipboard.setPrimaryClip(clip)
+        // URLs aren't usually secret; mark non-sensitive so they don't get
+        // hidden behind the system clipboard preview shield.
+        io.github.tabssh.utils.ClipboardHelper.copy(this, "URL", url, sensitive = false)
         Toast.makeText(this, "URL copied to clipboard", Toast.LENGTH_SHORT).show()
         Logger.d("TabTerminalActivity", "Copied URL to clipboard: $url")
     }
@@ -1055,6 +955,15 @@ class TabTerminalActivity : AppCompatActivity() {
                 if (showFnKeys) android.view.View.VISIBLE else android.view.View.GONE
         } catch (e: Exception) {
             Logger.w("TabTerminalActivity", "Function-key visibility apply failed: ${e.message}")
+        }
+
+        // Line-spacing — applies to whichever TerminalView is active (swipe
+        // mode or classic). Stored 100–200, default 120 = 1.2× tight.
+        val spacing = prefs.getStringAsInt("terminal_line_spacing", 120)
+        try {
+            getActiveTerminalView()?.setLineSpacingPercent(spacing)
+        } catch (e: Exception) {
+            Logger.w("TabTerminalActivity", "Line spacing apply failed: ${e.message}")
         }
     }
 
