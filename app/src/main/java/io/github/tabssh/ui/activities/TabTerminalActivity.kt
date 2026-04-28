@@ -816,11 +816,18 @@ class TabTerminalActivity : AppCompatActivity() {
      */
     private fun showTextContextMenu(x: Float, y: Float) {
         val items = arrayOf(
-            "Copy screen",
             "Paste",
-            "Send text…",
+            "Copy screen",
             "Find in scrollback…",
+            "Send text…",
+            "Send Ctrl+C",
+            "Send Ctrl+D",
+            "Send Ctrl+Z",
+            "Send Esc",
+            "Snippets…",
             "Font size…",
+            "Toggle keyboard",
+            "Toggle keyboard layout (rows)",
             "Share connection info",
             "Close this tab"
         )
@@ -829,17 +836,44 @@ class TabTerminalActivity : AppCompatActivity() {
             .setTitle("Terminal")
             .setItems(items) { _, which ->
                 when (which) {
-                    0 -> copyTerminalScreen()
-                    1 -> pasteFromClipboard()
-                    2 -> showSendTextDialog()
-                    3 -> showFindDialog()
-                    4 -> showFontSizeDialog()
-                    5 -> shareSession()
-                    6 -> closeActiveTabConfirmed()
+                    0  -> pasteFromClipboard()
+                    1  -> copyTerminalScreen()
+                    2  -> showFindDialog()
+                    3  -> showSendTextDialog()
+                    4  -> sendBytesToActiveTab(byteArrayOf(0x03))   // ^C
+                    5  -> sendBytesToActiveTab(byteArrayOf(0x04))   // ^D
+                    6  -> sendBytesToActiveTab(byteArrayOf(0x1A))   // ^Z
+                    7  -> sendBytesToActiveTab(byteArrayOf(0x1B))   // ESC
+                    8  -> showSnippetsPickerForActiveTab()
+                    9  -> showFontSizeDialog()
+                    10 -> toggleKeyboard()
+                    11 -> toggleCustomKeyboard()
+                    12 -> shareSession()
+                    13 -> closeActiveTabConfirmed()
                 }
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    private fun sendBytesToActiveTab(bytes: ByteArray) {
+        try {
+            tabManager.getActiveTab()?.connection?.getOutputStream()?.let { os ->
+                os.write(bytes); os.flush()
+            }
+        } catch (e: Exception) {
+            Logger.w("TabTerminalActivity", "sendBytesToActiveTab failed: ${e.message}")
+        }
+    }
+
+    private fun showSnippetsPickerForActiveTab() {
+        // Defer to the existing Snippets activity if present, else inform.
+        try {
+            val cls = Class.forName("io.github.tabssh.ui.activities.SnippetManagerActivity")
+            startActivity(android.content.Intent(this, cls))
+        } catch (e: ClassNotFoundException) {
+            Toast.makeText(this, "Snippets unavailable", Toast.LENGTH_SHORT).show()
+        }
     }
 
     /**
