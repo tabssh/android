@@ -1,12 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Mobile-first: no AppBar, no toolbar, no subtitle. The 56dp toolbar +
-  status-bar inset was eating ~10% of the vertical viewport on a phone
-  for content the user never looks at after the first second. Disconnect
-  / Reconnect live in a tiny top-right pill overlay; VM name shows in
-  the connecting overlay while attaching. Hardware back still works
-  (confirms first if connected). Long-press in the terminal still
-  brings up the full context menu.
+  Mobile-first: no AppBar / toolbar / subtitle. The terminal stretches to
+  fill the available area; the multi-row custom keyboard pins to the
+  bottom (same component used in TabTerminalActivity so VM console gets
+  Esc / Tab / arrows / Ctrl etc. without relying on the soft IME).
+  Disconnect / Reconnect live in a tiny top-right pill overlay.
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -17,14 +15,29 @@
     android:fitsSystemWindows="true"
     tools:context=".ui.activities.VMConsoleActivity">
 
-    <!-- Terminal fills the entire screen. -->
-    <io.github.tabssh.ui.views.TerminalView
-        android:id="@+id/terminal_view"
+    <!-- Vertical stack: terminal grows, keyboard wraps at the bottom. -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:visibility="gone"
-        android:focusable="true"
-        android:focusableInTouchMode="true" />
+        android:orientation="vertical">
+
+        <io.github.tabssh.ui.views.TerminalView
+            android:id="@+id/terminal_view"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:visibility="gone"
+            android:focusable="true"
+            android:focusableInTouchMode="true" />
+
+        <io.github.tabssh.ui.keyboard.MultiRowKeyboardView
+            android:id="@+id/multi_row_keyboard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="?attr/colorSurfaceVariant"
+            android:visibility="visible" />
+
+    </LinearLayout>
 
     <!-- Loading overlay (also doubles as a "disconnected" status panel). -->
     <LinearLayout
@@ -54,11 +67,7 @@
 
     </LinearLayout>
 
-    <!-- Floating Disconnect / Reconnect pill, top-right. Sits on top of
-         everything; partially transparent so the user can still see the
-         terminal underneath. Tap = confirm-then-finish (or reconnect
-         when disconnected). The visibility is flipped from
-         VMConsoleActivity based on `isConnected`. -->
+    <!-- Floating Disconnect / Reconnect pill, top-right. -->
     <ImageButton
         android:id="@+id/btn_disconnect"
         android:layout_width="40dp"

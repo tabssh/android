@@ -215,6 +215,20 @@ class SSHTab(
                 Logger.i("SSHTab", "TermuxBridge state before connect: emulator=${termuxBridge.getEmulator() != null}, listeners=${termuxBridge.isConnected.value}")
                 Logger.i("SSHTab", "Wiring Termux terminal to SSH streams...")
                 termuxBridge.connect(inputStream, outputStream)
+
+                // SIGWINCH plumbing — every time the local terminal view
+                // resizes (rotation, IME show/hide, font-size change),
+                // TerminalView calls bridge.resize() which fires this
+                // callback. We forward to SSHConnection.resizePty so the
+                // remote shell receives SIGWINCH and reflows long lines.
+                // Without this, opening the soft keyboard makes the local
+                // viewport 16 rows but the remote keeps thinking it's 31
+                // rows tall and full-screen apps (vim, htop, less) draw
+                // off-screen.
+                termuxBridge.onResizeCallback = { cols, rows ->
+                    sshConnection.resizePty(cols, rows)
+                }
+
                 Logger.i("SSHTab", "=== TERMINAL WIRED TO SSH SUCCESSFULLY for ${profile.getDisplayName()} ===")
                 true
             } else {
