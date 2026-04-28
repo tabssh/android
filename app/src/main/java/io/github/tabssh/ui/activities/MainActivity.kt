@@ -335,6 +335,9 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             R.id.nav_bulk_import -> {
                 bulkImportLauncher.launch(arrayOf("*/*"))
             }
+            R.id.nav_pair_from_desktop -> {
+                startActivity(Intent(this, ImportFromQrActivity::class.java))
+            }
             R.id.nav_export_ssh_config -> {
                 exportSshConfigLauncher.launch("ssh_config_${System.currentTimeMillis() / 1000}.txt")
             }

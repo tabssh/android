@@ -21,6 +21,12 @@
     <!-- Vibration for notifications -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Camera — required for the "Pair from desktop" QR scanner.
+         Optional feature flag so devices without a camera (Android TV) can
+         still install the app; the Pair menu item just stays disabled. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
     <!-- Post notifications (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
@@ -243,6 +249,14 @@
             android:name=".ui.activities.CloudAccountsActivity"
             android:exported="false"
             android:label="Cloud Accounts"
+            android:parentActivityName=".ui.activities.MainActivity"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- QR Pairing — Pair from desktop (see QR_PAIRING.md) -->
+        <activity
+            android:name=".ui.activities.ImportFromQrActivity"
+            android:exported="false"
+            android:label="Pair from Desktop"
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 

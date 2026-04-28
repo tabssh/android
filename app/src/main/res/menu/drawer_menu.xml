@@ -96,6 +96,10 @@
                 android:icon="@android:drawable/ic_menu_upload"
                 android:title="Bulk Import (CSV / JSON / PuTTY / Terraform)" />
             <item
+                android:id="@+id/nav_pair_from_desktop"
+                android:icon="@android:drawable/ic_menu_camera"
+                android:title="Pair from Desktop (QR)" />
+            <item
                 android:id="@+id/nav_import_connections"
                 android:icon="@android:drawable/ic_menu_upload"
                 android:title="Import Backup" />
