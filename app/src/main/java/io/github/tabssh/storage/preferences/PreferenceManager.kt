@@ -45,29 +45,29 @@ class PreferenceManager(private val context: Context) {
         private const val KEY_STARTUP_BEHAVIOR = "general_startup_behavior"
         private const val KEY_AUTO_BACKUP = "general_auto_backup"
         private const val KEY_BACKUP_FREQUENCY = "general_backup_frequency"
-        private const val KEY_LANGUAGE = "general_language"
+        private const val KEY_LANGUAGE = "app_language"
         
         // Security preferences
         private const val KEY_PASSWORD_STORAGE_LEVEL = "security_password_storage_level"
-        private const val KEY_REQUIRE_BIOMETRIC = "security_require_biometric"
+        private const val KEY_REQUIRE_BIOMETRIC = "biometric_auth"
         private const val KEY_PASSWORD_TTL = "security_password_ttl_hours"
         private const val KEY_AUTO_LOCK_ON_BACKGROUND = "security_auto_lock_background"
         private const val KEY_AUTO_LOCK_TIMEOUT = "security_auto_lock_timeout"
-        private const val KEY_STRICT_HOST_KEY_CHECKING = "security_strict_host_key_checking"
+        private const val KEY_STRICT_HOST_KEY_CHECKING = "strict_host_key_checking"
         private const val KEY_PREVENT_SCREENSHOTS = "security_prevent_screenshots"
         private const val KEY_CLEAR_CLIPBOARD_TIMEOUT = "security_clear_clipboard_timeout"
         
         // Terminal preferences
         private const val KEY_THEME = "terminal_theme"
-        private const val KEY_FONT_FAMILY = "terminal_font_family"
+        private const val KEY_FONT_FAMILY = "terminal_font"
         private const val KEY_FONT_SIZE = "terminal_font_size"
         private const val KEY_LINE_SPACING = "terminal_line_spacing"
         private const val KEY_CURSOR_STYLE = "terminal_cursor_style"
         private const val KEY_CURSOR_BLINK = "terminal_cursor_blink"
-        private const val KEY_SCROLLBACK_LINES = "terminal_scrollback_lines"
+        private const val KEY_SCROLLBACK_LINES = "terminal_scrollback"
         private const val KEY_WORD_WRAP = "terminal_word_wrap"
         private const val KEY_COPY_ON_SELECT = "terminal_copy_on_select"
-        private const val KEY_BELL_NOTIFICATION = "terminal_bell_notification"
+        private const val KEY_BELL_NOTIFICATION = "terminal_bell"
         private const val KEY_BELL_VIBRATE = "terminal_bell_vibrate"
         private const val KEY_BELL_VISUAL = "terminal_bell_visual"
 
@@ -80,7 +80,7 @@ class PreferenceManager(private val context: Context) {
         private const val KEY_CONFIRM_TAB_CLOSE = "ui_confirm_tab_close"
         private const val KEY_SHOW_FUNCTION_KEYS = "ui_show_function_keys"
         private const val KEY_FULLSCREEN_MODE = "ui_fullscreen_mode"
-        private const val KEY_KEEP_SCREEN_ON = "ui_keep_screen_on"
+        private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
         // Key MUST match preferences_general.xml's `<ListPreference android:key="app_theme"/>`
         // — they share `getDefaultSharedPreferences`, so different keys means
         // SettingsActivity's writes and getAppTheme()'s reads land in
@@ -177,8 +177,17 @@ class PreferenceManager(private val context: Context) {
     fun getFontFamily(): String = getString(KEY_FONT_FAMILY, DEFAULT_FONT_FAMILY)
     fun setFontFamily(fontFamily: String) = setString(KEY_FONT_FAMILY, fontFamily)
     
-    fun getFontSize(): Float = getFloat(KEY_FONT_SIZE, DEFAULT_FONT_SIZE)
-    fun setFontSize(size: Float) = setFloat(KEY_FONT_SIZE, size)
+    // SeekBarPreference stores as Int — getFloat() against an Int slot
+    // would crash. Read whatever's there and coerce to Float.
+    fun getFontSize(): Float {
+        return when (val raw = preferences.all[KEY_FONT_SIZE]) {
+            is Int -> raw.toFloat()
+            is Float -> raw
+            is String -> raw.toFloatOrNull() ?: DEFAULT_FONT_SIZE
+            else -> DEFAULT_FONT_SIZE
+        }
+    }
+    fun setFontSize(size: Float) = preferences.edit().putInt(KEY_FONT_SIZE, size.toInt()).apply()
     
     fun getLineSpacing(): Float = getFloat(KEY_LINE_SPACING, 1.2f)
     fun setLineSpacing(spacing: Float) = setFloat(KEY_LINE_SPACING, spacing)
@@ -200,8 +209,8 @@ class PreferenceManager(private val context: Context) {
     fun isCursorBlinkEnabled(): Boolean = getBoolean(KEY_CURSOR_BLINK, true)
     fun setCursorBlinkEnabled(enabled: Boolean) = setBoolean(KEY_CURSOR_BLINK, enabled)
     
-    fun getScrollbackLines(): Int = getInt(KEY_SCROLLBACK_LINES, 1000)
-    fun setScrollbackLines(lines: Int) = setInt(KEY_SCROLLBACK_LINES, lines)
+    fun getScrollbackLines(): Int = getStringAsInt(KEY_SCROLLBACK_LINES, 1000)
+    fun setScrollbackLines(lines: Int) = setString(KEY_SCROLLBACK_LINES, lines.toString())
     
     fun isBellNotificationEnabled(): Boolean = getBoolean(KEY_BELL_NOTIFICATION, true)
     fun setBellNotificationEnabled(enabled: Boolean) = setBoolean(KEY_BELL_NOTIFICATION, enabled)
