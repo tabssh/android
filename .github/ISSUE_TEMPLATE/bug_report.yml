@@ -82,6 +82,10 @@ body:
       label: Android Version
       description: Which version of Android are you using?
       options:
+        - Android 18 (API 38)
+        - Android 17 (API 37)
+        - Android 16 (API 36)
+        - Android 15 (API 35)
         - Android 14 (API 34)
         - Android 13 (API 33)
         - Android 12 (API 31-32)
