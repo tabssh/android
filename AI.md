@@ -121,7 +121,7 @@ Defined in `app/build.gradle`:
 | `release` | R8 on | on | `proguard-android-optimize.txt`, `proguard-rules.pro` | `keystore.jks` |
 | `fdroidRelease` | R8 on | on | …+ `proguard-fdroid.pro` (deterministic, 5 optimization passes, strips line numbers, exports `seeds.txt`/`usage.txt`/`mapping.txt`) | `keystore.jks` |
 
-**APK splits** (`splits.abi`): `arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86`, plus universal. Output renamed to `tabssh-{arch}.apk` via the custom output naming rule in `app/build.gradle`.
+**APK splits** (`splits.abi`): `arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86`, plus universal. Output renamed to `tabssh-android-{arch}.apk` via the custom output naming rule in `app/build.gradle`, where `{arch}` is the simplified tag shared with the desktop client (`arm64`, `arm`, `amd64`, `x86`, `universal`). See "Unified Naming Schema" in `CLAUDE.md`.
 
 ### 3.3 Key dependencies (`app/build.gradle`)
 
@@ -752,7 +752,7 @@ Compose files: `docker/docker-compose.yml` (services: `tabssh-builder`, `tabssh-
 | Target | Effect | Output |
 |---|---|---|
 | `help` | print targets | stdout |
-| `build` | clean + Docker `assembleDebug` | `./binaries/tabssh-{arch}.apk` |
+| `build` | clean + Docker `assembleDebug` | `./binaries/tabssh-android-{arch}.apk` |
 | `check` | compile-only check, error-filtered | stdout |
 | `clean` | remove `.gradle/`, `app/build`, `binaries` | — |
 | `install` | `adb install -r` universal APK | device |

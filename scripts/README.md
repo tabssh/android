@@ -94,9 +94,10 @@ Removes all build artifacts and Gradle cache, then runs fresh build.
 
 **Auto-detects APKs in this order:**
 1. Specified path: `./scripts/install-to-device.sh /path/to/apk`
-2. `binaries/tabssh-universal.apk` (debug build)
-3. `app/build/outputs/apk/debug/tabssh-universal.apk`
-4. `releases/tabssh-universal.apk` (release build)
+2. `binaries/tabssh-android-universal.apk` (debug build)
+3. `app/build/outputs/apk/debug/tabssh-android-universal.apk`
+4. `releases/tabssh-android-universal.apk` (release build)
+5. Legacy fallbacks for partially-rebuilt trees: `binaries/tabssh-universal.apk` and `app-universal-debug.apk`
 
 **Prerequisites:**
 - ADB installed (Android SDK Platform Tools)
@@ -112,7 +113,7 @@ make build
 
 # Install release build
 make release
-./scripts/install-to-device.sh releases/tabssh-universal.apk
+./scripts/install-to-device.sh releases/tabssh-android-universal.apk
 
 # View logs after install
 make logs

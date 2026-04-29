@@ -154,11 +154,28 @@ android {
         unitTests.returnDefaultValues = true
     }
 
-    // Custom APK naming: tabssh-{arch}.apk
+    // Unified release naming: tabssh-{platform}-{arch}.apk
+    //
+    // Maps the canonical Android ABI names to the simplified arch tags
+    // shared with the desktop client and the stable release workflow:
+    //   arm64-v8a   → arm64
+    //   armeabi-v7a → arm
+    //   x86_64      → amd64
+    //   x86         → x86
+    //   (universal) → universal  (no ABI filter)
+    //
+    // The CI dev workflow appends "-dev" before .apk; the stable workflow
+    // appends "-${VERSION}".
     applicationVariants.all { variant ->
         variant.outputs.all { output ->
             def abiName = output.getFilter(com.android.build.OutputFile.ABI) ?: "universal"
-            outputFileName = "tabssh-${abiName}.apk"
+            def archTag = [
+                'arm64-v8a'  : 'arm64',
+                'armeabi-v7a': 'arm',
+                'x86_64'     : 'amd64',
+                'x86'        : 'x86',
+            ][abiName] ?: abiName
+            outputFileName = "tabssh-android-${archTag}.apk"
         }
     }
 }

@@ -52,7 +52,7 @@ clean: ## Clean build artifacts
 	@echo -e "$(GREEN)✅ Cleaned$(NC)"
 
 install: ## Install APK to device
-	@adb install -r $(BINARIES)/tabssh-universal.apk
+	@adb install -r $(BINARIES)/tabssh-android-universal.apk
 
 logs: ## View device logs
 	@adb logcat | grep -E "TabSSH|tabssh"

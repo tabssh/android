@@ -13,6 +13,7 @@ import io.github.tabssh.themes.definitions.ThemeManager
 import io.github.tabssh.storage.preferences.PreferenceManager
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.performance.PerformanceManager
+import kotlinx.coroutines.launch
 
 /**
  * Main application class for TabSSH

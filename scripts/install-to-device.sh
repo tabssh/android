@@ -48,18 +48,22 @@ if [ -n "$1" ]; then
         echo -e "${RED}❌ APK not found: $1${NC}"
         exit 1
     fi
+elif [ -f "binaries/tabssh-android-universal.apk" ]; then
+    APK_PATH="binaries/tabssh-android-universal.apk"
+    APK_TYPE="debug (binaries)"
+elif [ -f "app/build/outputs/apk/debug/tabssh-android-universal.apk" ]; then
+    APK_PATH="app/build/outputs/apk/debug/tabssh-android-universal.apk"
+    APK_TYPE="debug (build output)"
+elif [ -f "releases/tabssh-android-universal.apk" ]; then
+    APK_PATH="releases/tabssh-android-universal.apk"
+    APK_TYPE="release"
+# Legacy fallbacks for partially-rebuilt trees during the schema migration
 elif [ -f "binaries/tabssh-universal.apk" ]; then
     APK_PATH="binaries/tabssh-universal.apk"
-    APK_TYPE="debug (binaries)"
+    APK_TYPE="debug (legacy name, binaries)"
 elif [ -f "app/build/outputs/apk/debug/app-universal-debug.apk" ]; then
     APK_PATH="app/build/outputs/apk/debug/app-universal-debug.apk"
-    APK_TYPE="debug (build output)"
-elif [ -f "app/build/outputs/apk/debug/tabssh-universal.apk" ]; then
-    APK_PATH="app/build/outputs/apk/debug/tabssh-universal.apk"
-    APK_TYPE="debug (build output)"
-elif [ -f "releases/tabssh-universal.apk" ]; then
-    APK_PATH="releases/tabssh-universal.apk"
-    APK_TYPE="release"
+    APK_TYPE="debug (legacy AGP default, build output)"
 else
     echo -e "${RED}❌ No TabSSH APK found${NC}"
     echo ""
