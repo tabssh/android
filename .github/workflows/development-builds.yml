@@ -51,23 +51,30 @@ jobs:
         echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
         echo "✅ Keystore decoded and ready"
 
-    - name: Get version from gradle
+    - name: Compute development version label
       id: version
       run: |
-        # Extract version from app/build.gradle
-        VERSION_NAME=$(grep 'versionName' app/build.gradle | head -1 | sed 's/.*"\(.*\)".*/\1/')
-
-        # Get git commit short hash
+        # Dev builds don't carry the real release version — that lives in
+        # `release.txt` and is reserved for actual stable / pre-release
+        # tags via release.yml. Slamming `1.0.0-{commit}` onto every push
+        # made dev builds look like real 1.0.0 releases on the GH releases
+        # page, which was confusing.
+        #
+        # Use a fixed `devel` label and append the short commit so the
+        # release title still uniquely identifies the build:
+        #
+        #   tag:           development          (overwritten on each push)
+        #   release name:  devel-{commit}       (e.g. devel-8d267f6)
+        #   "Version:" md: devel
+        VERSION_NAME="devel"
         COMMIT_HASH=$(git rev-parse --short HEAD)
-
-        # Simple release title: version-commit
         RELEASE_TITLE="${VERSION_NAME}-${COMMIT_HASH}"
 
         echo "VERSION_NAME=${VERSION_NAME}" >> $GITHUB_OUTPUT
         echo "COMMIT_HASH=${COMMIT_HASH}" >> $GITHUB_OUTPUT
         echo "RELEASE_TITLE=${RELEASE_TITLE}" >> $GITHUB_OUTPUT
 
-        echo "📦 Building version: ${RELEASE_TITLE}"
+        echo "📦 Building dev release: ${RELEASE_TITLE}"
 
     - name: Fetch latest mosh-client binaries
       env:
