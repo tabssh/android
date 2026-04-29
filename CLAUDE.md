@@ -40,7 +40,7 @@
 ### Current State
 - ✅ **201 Kotlin source files** (~61,668 lines of code) under `app/src/main/`
 - ✅ **0 compilation errors** (verified: 2026-04-28)
-- ✅ **5 APK variants** built: `tabssh-{arch}.apk`
+- ✅ **5 APK variants** built: `tabssh-android-{arch}.apk` (arch = `arm64` / `arm` / `amd64` / `x86` / `universal`)
 - ✅ **Database Version 23** — migrations v1 → v23 (latest: v22 `connections.color_tag`, v23 `cloud_accounts` table)
 - ✅ **30 Activities, 7 Fragments, 1 Service** (`SSHConnectionService`)
 - 📦 **APKs Ready for Testing** - Located in `./binaries/`
@@ -593,7 +593,7 @@ make clean
 ```bash
 make install
 ```
-- Installs `./binaries/tabssh-universal.apk` to connected device
+- Installs `./binaries/tabssh-android-universal.apk` to connected device
 - Requires ADB connected device
 - Uses `adb install -r` (reinstall mode)
 
@@ -601,7 +601,7 @@ make install
 ```bash
 make install-release
 ```
-- Installs `./releases/tabssh-universal.apk` to connected device
+- Installs `./releases/tabssh-android-universal.apk` to connected device
 - Production/release version
 - Requires ADB connected device
 
@@ -660,7 +660,7 @@ scripts/android-emulator.sh list                    # list TabSSH AVDs + running
 ```bash
 make build                                  # produce APKs (28MB each)
 scripts/android-emulator.sh phone           # boot a phone
-adb -s emulator-5554 install -r binaries/tabssh-x86_64.apk
+adb -s emulator-5554 install -r binaries/tabssh-android-amd64.apk
 adb -s emulator-5554 shell am start -n io.github.tabssh/.ui.activities.MainActivity
 adb logcat | grep TabSSH                    # follow logs
 scripts/android-emulator.sh stop            # when done
@@ -670,35 +670,59 @@ scripts/android-emulator.sh stop            # when done
 
 ## Build Configuration
 
-### APK Naming Convention
+### Unified Naming Schema (2026-04-28)
 
-**Status:** Naming change configured but not yet built
+Both clients (Android + Desktop) follow:
 
-**New Format (Will be after next build):** `tabssh-{arch}.apk`
-**Current Format (In app/build/outputs/):** `app-{arch}-debug.apk` / `app-{arch}-release.apk`
+```
+tabssh-{platform}-{arch}[-dev][.ext]
+```
 
-Changes have been made to `app/build.gradle`, `build.sh`, and `Makefile`.
-Next build will produce APKs with the new naming format.
+- **platform**: `android` (mobile) or one of `linux` / `macos` / `windows` /
+  `freebsd` / `openbsd` / `netbsd` (desktop)
+- **arch**: `arm64` / `arm` / `amd64` / `x86` / `universal` (Android),
+  `amd64` / `arm64` (desktop)
+- **suffix**: `-dev` for development-channel builds; absent on stable
+  releases
+- **ext**: `.apk` for Android, `.exe` for Windows desktop, no extension
+  for Linux / macOS / BSD desktop binaries
+- **No version suffix** — the GitHub release tag carries the version, and
+  asset URLs are unique per release tag
 
-### APK Variants
+> **F-Droid:** TabSSH builds an F-Droid-flavored APK locally as a CI
+> sanity check (`assembleFdroidRelease`, using `proguard-fdroid.pro`),
+> but does **not** publish it — F-Droid clones the source and builds
+> the APK on F-Droid's own infrastructure, signing with F-Droid's keys.
+> The dev-signed F-Droid APK has no useful distribution channel, so we
+> don't ship it as a release asset.
 
-**Current APKs** (`app/build/outputs/apk/debug/`) - OLD naming format:
-1. **app-universal-debug.apk** - All architectures (23MB)
-2. **app-arm64-v8a-debug.apk** - Modern ARM 64-bit (23MB)
-3. **app-armeabi-v7a-debug.apk** - Older ARM 32-bit (23MB)
-4. **app-x86_64-debug.apk** - x86 64-bit emulator (23MB)
-5. **app-x86-debug.apk** - x86 32-bit emulator (23MB)
+Android build.gradle maps the canonical Android ABIs to the simplified
+arch tags at output-file time:
 
-**After Next Build** - NEW naming format:
-- Debug builds → `./binaries/tabssh-{arch}.apk`
-- Release builds → `./releases/tabssh-{arch}.apk`
+| Android ABI    | Output arch | APK output                     |
+|----------------|-------------|--------------------------------|
+| `arm64-v8a`    | `arm64`     | `tabssh-android-arm64.apk`     |
+| `armeabi-v7a`  | `arm`       | `tabssh-android-arm.apk`       |
+| `x86_64`       | `amd64`     | `tabssh-android-amd64.apk`     |
+| `x86`          | `x86`       | `tabssh-android-x86.apk`       |
+| (no ABI split) | `universal` | `tabssh-android-universal.apk` |
 
-Examples:
-- `tabssh-universal.apk` (all architectures)
-- `tabssh-arm64-v8a.apk` (modern ARM 64-bit)
-- `tabssh-armeabi-v7a.apk` (older ARM 32-bit)
-- `tabssh-x86_64.apk` (x86 64-bit)
-- `tabssh-x86.apk` (x86 32-bit)
+Built by `./gradlew assembleDebug` → `./binaries/` (via `make build`)
+or `./gradlew assembleRelease` → `./releases/` (via `make release`).
+
+### APK Variants (per build)
+
+5 split APKs:
+- `tabssh-android-universal.apk` — all architectures (largest, works on any device)
+- `tabssh-android-arm64.apk` — modern ARM 64-bit (most devices since ~2015)
+- `tabssh-android-arm.apk` — older ARM 32-bit
+- `tabssh-android-amd64.apk` — x86 64-bit emulators / Chromebooks
+- `tabssh-android-x86.apk` — x86 32-bit emulators
+
+CI workflows append `-dev` to the basename for development builds.
+The `fdroidRelease` build type is still produced as a sanity check but
+its APKs are not uploaded — F-Droid distributes via its own build
+infrastructure (see the schema note above).
 
 ### Docker Image
 

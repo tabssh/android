@@ -83,32 +83,28 @@ jobs:
     - name: Build debug APKs
       run: ./gradlew assembleDebug --no-daemon
 
-    - name: Rename APKs with version
+    - name: Rename APKs with -dev suffix
       run: |
         cd app/build/outputs/apk/debug/
 
-        # Rename all APK variants to simple -dev naming
-        for apk in *.apk; do
-          if [[ "$apk" == *"universal"* ]]; then
-            cp "$apk" "tabssh-universal-dev.apk"
-          elif [[ "$apk" == *"arm64-v8a"* ]]; then
-            cp "$apk" "tabssh-arm64-v8a-dev.apk"
-          elif [[ "$apk" == *"armeabi-v7a"* ]]; then
-            cp "$apk" "tabssh-armeabi-v7a-dev.apk"
-          elif [[ "$apk" == *"x86_64"* ]]; then
-            cp "$apk" "tabssh-x86_64-dev.apk"
-          elif [[ "$apk" == *"x86"* ]] && [[ "$apk" != *"x86_64"* ]]; then
-            cp "$apk" "tabssh-x86-dev.apk"
-          fi
+        # build.gradle already outputs the unified naming as
+        # tabssh-android-{arch}.apk (where arch is the simplified tag:
+        # arm64 / arm / amd64 / x86 / universal). All we do here is append
+        # the -dev marker before the extension so dev builds stand apart
+        # from stable releases on the GitHub releases page.
+        for apk in tabssh-android-*.apk; do
+          [[ -e "$apk" ]] || continue
+          base="${apk%.apk}"
+          cp "$apk" "${base}-dev.apk"
         done
 
         echo "📱 APKs renamed:"
-        ls -lh tabssh-*-dev.apk
+        ls -lh tabssh-android-*-dev.apk
 
     - name: Generate checksums
       run: |
         cd app/build/outputs/apk/debug/
-        sha256sum tabssh-*-dev.apk > checksums-dev.sha256
+        sha256sum tabssh-android-*-dev.apk > checksums-dev.sha256
 
         echo "🔐 SHA256 Checksums:"
         cat checksums-dev.sha256
@@ -131,11 +127,11 @@ jobs:
 
         ## Downloads
 
-        - **tabssh-universal-dev.apk** - Recommended (works on all devices)
-        - **tabssh-arm64-v8a-dev.apk** - Modern ARM 64-bit devices
-        - **tabssh-armeabi-v7a-dev.apk** - Older ARM 32-bit devices
-        - **tabssh-x86_64-dev.apk** - x86 64-bit (emulators)
-        - **tabssh-x86-dev.apk** - x86 32-bit (older emulators)
+        - **tabssh-android-universal-dev.apk** - Recommended (works on all devices)
+        - **tabssh-android-arm64-dev.apk** - Modern ARM 64-bit devices
+        - **tabssh-android-arm-dev.apk** - Older ARM 32-bit devices
+        - **tabssh-android-amd64-dev.apk** - x86_64 (emulators, Chromebooks)
+        - **tabssh-android-x86-dev.apk** - x86 32-bit (older emulators)
 
         ## What's New in This Build
 
@@ -172,7 +168,7 @@ jobs:
 
         ```bash
         # Via ADB
-        adb install tabssh-universal-dev.apk
+        adb install tabssh-android-universal-dev.apk
 
         # Manual
         1. Download APK to device
@@ -208,11 +204,11 @@ jobs:
         name: "${{ steps.version.outputs.RELEASE_TITLE }}"
         tag_name: development
         files: |
-          app/build/outputs/apk/debug/tabssh-universal-dev.apk
-          app/build/outputs/apk/debug/tabssh-arm64-v8a-dev.apk
-          app/build/outputs/apk/debug/tabssh-armeabi-v7a-dev.apk
-          app/build/outputs/apk/debug/tabssh-x86_64-dev.apk
-          app/build/outputs/apk/debug/tabssh-x86-dev.apk
+          app/build/outputs/apk/debug/tabssh-android-universal-dev.apk
+          app/build/outputs/apk/debug/tabssh-android-arm64-dev.apk
+          app/build/outputs/apk/debug/tabssh-android-arm-dev.apk
+          app/build/outputs/apk/debug/tabssh-android-amd64-dev.apk
+          app/build/outputs/apk/debug/tabssh-android-x86-dev.apk
           app/build/outputs/apk/debug/checksums-dev.sha256
           RELEASE_NOTES_DEV.md
         body_path: RELEASE_NOTES_DEV.md
@@ -232,7 +228,7 @@ jobs:
         echo "### 📦 APKs Built:" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         cd app/build/outputs/apk/debug/
-        for apk in tabssh-*-dev.apk; do
+        for apk in tabssh-android-*-dev.apk; do
           SIZE=$(du -h "$apk" | cut -f1)
           echo "- \`$apk\` ($SIZE)" >> $GITHUB_STEP_SUMMARY
         done

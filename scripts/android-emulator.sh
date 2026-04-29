@@ -238,7 +238,7 @@ start_avd() {
   "$ADB" devices
   echo
   echo "Install the latest debug APK with:"
-  echo "  $ADB -s $serial install -r ${PWD}/binaries/tabssh-x86_64.apk"
+  echo "  $ADB -s $serial install -r ${PWD}/binaries/tabssh-android-amd64.apk"
 }
 
 stop_avd() {
