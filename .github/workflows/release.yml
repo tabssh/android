@@ -1,5 +1,21 @@
 name: Production Release
 
+# ─────────────────────────────────────────────────────────────────────────
+# RELEASE CHANNEL: ver (versioned / stable)
+#
+# Fires on push of a `v*` tag (e.g. v0.0.9, v1.0.0). Builds + signs +
+# uploads APKs as a non-prerelease GitHub release. The release tag IS
+# the version source of truth — filenames carry no version suffix.
+#
+# This is one of two user-facing release channels. The other is `dev`
+# (`.github/workflows/development-builds.yml`) which produces prerelease
+# builds named `devel-{commit}` on every push to develop branches.
+#
+# `mosh-binaries.yml` produces a third channel that is build-infra only:
+# its releases are marked prerelease and don't appear on the repo's main
+# page — they're consumed at build time by `scripts/fetch-mosh-binaries.sh`.
+# ─────────────────────────────────────────────────────────────────────────
+
 on:
   push:
     tags:

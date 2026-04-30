@@ -1375,8 +1375,8 @@ android {
         applicationId "io.github.tabssh"
         minSdk 21       // Android 5.0 (covers 99%+ of devices)
         targetSdk 34
-        versionCode 3
-        versionName "1.0.0"
+        versionCode 9
+        versionName "0.0.9"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -1798,9 +1798,9 @@ Description: |
 RequiresRoot: false
 
 Builds:
-  - versionName: '1.0.0'
-    versionCode: 1
-    commit: v1.0.0
+  - versionName: '0.0.9'
+    versionCode: 9
+    commit: v0.0.9
     subdir: app
     gradle:
       - yes

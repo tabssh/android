@@ -1,5 +1,22 @@
 name: Development Build
 
+# ─────────────────────────────────────────────────────────────────────────
+# RELEASE CHANNEL: dev (development / pre-release)
+#
+# Fires on every push to a development branch. Builds debug APKs, marks
+# them prerelease, overwrites the rolling `development` tag. Release name
+# is `devel-{shortsha}` (no version number — versions are reserved for
+# the `ver` channel). Filenames are `tabssh-android-{arch}-dev.apk`.
+#
+# This is one of two user-facing release channels. The other is `ver`
+# (`.github/workflows/release.yml`) which fires on `v*` tags and produces
+# the unsuffixed stable APKs.
+#
+# Mosh refreshes (`mosh-binaries.yml`) are also published as prerelease
+# so they don't claim the repo's "Latest" badge — those are build infra,
+# not user downloads.
+# ─────────────────────────────────────────────────────────────────────────
+
 on:
   push:
     branches: [ main, master, devel, develop ]
