@@ -4,7 +4,7 @@
 >
 > **Generated:** 2026-04-25 from a parallel survey of 166 Kotlin sources, all Gradle/Docker/CI configs, and every preference/layout/menu XML.
 >
-> **Last verified against:** `versionCode 3` / `versionName 1.0.0`, database `v23` (post-Wave 5.1; v17 → v18 env_vars+agent_forwarding → v19 stored_keys.certificate → v20 connections.protocol → v21 workspaces table → v22 connections.color_tag → v23 cloud_accounts table), JSch `mwiede:2.27.7`, Termux `terminal-emulator:0.118.1`, AGP 8.7.3, Kotlin 2.0.21, Gradle 8.11.1.
+> **Last verified against:** `versionCode 9` / `versionName 0.0.9`, database `v24` (Wave 9.X; v17 → v18 env_vars+agent_forwarding → v19 stored_keys.certificate → v20 connections.protocol → v21 workspaces table → v22 connections.color_tag → v23 cloud_accounts table → v24 connections.remote_command), JSch `mwiede:2.27.7`, Termux `terminal-emulator:0.118.1`, AGP 8.7.3, Kotlin 2.0.21, Gradle 8.11.1.
 >
 > **Format conventions:**
 > - File paths are repo-relative unless prefixed with `/`.
@@ -400,7 +400,7 @@ If the Keystore is unavailable (e.g. broken ROM), the manager auto-degrades to `
 
 ### 8.1 Room database
 
-`storage/database/TabSSHDatabase.kt` — **version 17**, schema exported to `app/schemas/`.
+`storage/database/TabSSHDatabase.kt` — **version 24**, schema exported to `app/schemas/`.
 
 ### 8.2 Entities (12)
 
@@ -793,7 +793,7 @@ Keystore is decoded from the `KEYSTORE_BASE64` secret. Gradle cache key is `${{ 
 
 ### 14.5 F-Droid metadata
 
-`metadata/io.github.tabssh.yml` — categories (System / Internet / Security), MIT license, source/issue/changelog URLs, `Builds:` entry building `fdroidRelease` from tag `v1.0.0`. Description block lists feature categories.
+`metadata/io.github.tabssh.yml` — categories (System / Internet / Security), MIT license, source/issue/changelog URLs, `Builds:` entry building `fdroidRelease` from tag `v0.0.9`. Description block lists feature categories.
 
 ### 14.6 ProGuard / R8
 

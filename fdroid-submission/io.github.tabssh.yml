@@ -21,7 +21,7 @@ Description: |
     tabbed interface for multiple SSH sessions while maintaining enterprise-grade
     security and accessibility standards.
 
-    🚀 COMPLETE FEATURE SET - Everything included in 1.0.0:
+    🚀 COMPLETE FEATURE SET - Everything included in 0.0.9:
 
     ⭐ CORE SSH FEATURES:
     * True browser-style tabbed interface for multiple SSH sessions
@@ -32,7 +32,7 @@ Description: |
     * SSH config import with full ~/.ssh/config compatibility
     * Host key verification and known_hosts management
 
-    🔑 SSH KEY MANAGEMENT (NEW v1.0.0):
+    🔑 SSH KEY MANAGEMENT:
     * Universal key parser - OpenSSH, PEM, PKCS#8, PuTTY formats
     * All key types - RSA (2048/3072/4096), ECDSA (P-256/384/521), Ed25519, DSA
     * In-app key generation with passphrase protection
@@ -41,7 +41,7 @@ Description: |
     * Dedicated key management UI - view, import, generate, delete keys
     * Export keys in PEM or OpenSSH format
 
-    ☁️ SYNC & BACKUP (v1.0.0):
+    ☁️ SYNC & BACKUP:
     * WebDAV sync for self-hosted servers (Nextcloud/ownCloud compatible)
     * Multi-device synchronization with intelligent conflict resolution
     * Import/Export connections as encrypted ZIP backups
@@ -114,9 +114,9 @@ RequiresRoot: false
 AntiFeatures: []
 
 Builds:
-  - versionName: '1.0.0'
-    versionCode: 1
-    commit: v1.0.0
+  - versionName: '0.0.9'
+    versionCode: 9
+    commit: v0.0.9
     subdir: .
     gradle:
       - fdroidRelease
@@ -127,5 +127,5 @@ Builds:
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$
-CurrentVersion: '1.0.0'
-CurrentVersionCode: 1
+CurrentVersion: '0.0.9'
+CurrentVersionCode: 9

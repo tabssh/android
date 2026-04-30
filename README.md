@@ -462,7 +462,7 @@ TabSSH is built on the shoulders of giants:
 
 ## 🗺️ Roadmap
 
-### Current Focus (v1.0.0)
+### Current Focus (v0.0.9)
 - [x] Terminal output rendering fixes
 - [x] Copy button on all error messages
 - [x] Full-screen terminal with edge gestures
@@ -509,7 +509,7 @@ If you find TabSSH useful, please consider starring the repository! It helps oth
 - ✅ **SSH Key Management** - Universal parser for all key formats (OpenSSH, PEM, PKCS#8, PuTTY)
 - ✅ **Mobile UX** - Swipe between tabs, volume keys font control, URL detection
 
-### v1.0.0 Core Features
+### Future v1.0.0 Goals
 - 📁 **Connection Groups/Folders** - Organize servers efficiently
 - 📝 **Snippets Library** - Quick access to common commands
 - 🆔 **Identity Abstraction** - Reusable credential profiles

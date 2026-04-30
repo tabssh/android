@@ -1,7 +1,7 @@
 # TabSSH Android - Claude Project Tracker
 
-**Last Updated:** 2026-04-28
-**Version:** 1.0.0 (release.txt-pinned; do not bump without user approval)
+**Last Updated:** 2026-04-29
+**Version:** 0.0.9 (release.txt-pinned; do not bump without user approval)
 **Status:** ✅ **Waves 1.X – 9.X shipped** — terminal palette/switcher/history, workspaces, broadcast input, theme editor, color tags, cloud host import (DigitalOcean/Hetzner/Linode/Vultr), Mosh native binaries, X11, foldable + sw720dp layouts, PIN lock, ANR watchdog, build-aware debug logging
 
 ---
@@ -41,7 +41,7 @@
 - ✅ **201 Kotlin source files** (~61,668 lines of code) under `app/src/main/`
 - ✅ **0 compilation errors** (verified: 2026-04-28)
 - ✅ **5 APK variants** built: `tabssh-android-{arch}.apk` (arch = `arm64` / `arm` / `amd64` / `x86` / `universal`)
-- ✅ **Database Version 23** — migrations v1 → v23 (latest: v22 `connections.color_tag`, v23 `cloud_accounts` table)
+- ✅ **Database Version 24** — migrations v1 → v24 (latest: v23 `cloud_accounts` table, v24 `connections.remote_command`)
 - ✅ **30 Activities, 7 Fragments, 1 Service** (`SSHConnectionService`)
 - 📦 **APKs Ready for Testing** - Located in `./binaries/`
 - ✅ **Complete Settings UI** - All preferences functional, build-aware debug logging
@@ -144,6 +144,7 @@ This is the bridge between the old 2026-02-11 "Feature Complete" snapshot and to
 | v20  | v21 | 2.5 | new `workspaces` table |
 | v21  | v22 | 3.1 | `connections.color_tag` |
 | v22  | v23 | 5.1 | new `cloud_accounts` table (tokens **not** in DB — Keystore only) |
+| v23  | v24 | 9.X | `connections.remote_command` (Issue #37: SSH config RemoteCommand support) |
 
 ### Activities now present (30)
 AuditLogViewer, CloudAccounts, ClusterCommand, ConnectionEdit, ConnectionHistory, CrashReport, GroupManagement, HypervisorEdit, IdentityManagement, KeyboardCustomization, KeyManagement, LogViewer, **Main**, MultiHostDashboard, PinLock, PortForwarding, ProxmoxManager, RemoteFileEditor, **Settings**, SFTP, SnippetManager, SyncSettings, **TabTerminal**, ThemeEditor, TranscriptViewer, VMConsole, VMwareManager, WhatsNew, WidgetConfiguration, XCPngManager.
@@ -437,7 +438,7 @@ Added intelligent tooltips for better UX:
 - Accessibility & Security: 5 features
 
 ### Build Status
-- **Version:** 1.0.0 (pinned via release.txt)
+- **Version:** 0.0.9 (pinned via release.txt)
 - **Compilation Errors:** 0 ✅
 - **Critical Warnings:** 0 ✅
 - **APK Size:** 30MB per variant
@@ -745,8 +746,8 @@ infrastructure (see the schema note above).
 - compileSdk: 34
 - minSdk: 21 (Android 5.0 - covers 99%+ devices)
 - targetSdk: 34
-- versionCode: 1
-- versionName: "1.0.0"
+- versionCode: 9
+- versionName: "0.0.9"
 - Java: 17
 - Kotlin JVM Target: 17
 - Database Version: 17 (16 migrations from v1; see AI.md §8.4 for the full table)
@@ -2213,7 +2214,7 @@ make logs
 # 1. Ensure all changes committed
 git status
 
-# 2. Version is pinned to 1.0.0 in app/build.gradle and tracked via
+# 2. Version is pinned to 0.0.9 in app/build.gradle and tracked via
 #    release.txt — DO NOT bump it without explicit user approval.
 
 # 3. Build and release
@@ -2882,4 +2883,4 @@ make release  # → GitHub release + ./releases/
 **This file must be kept in sync with project status.**
 **Update after significant changes, builds, or releases.**
 
-**TabSSH v1.0.0 - 100% Feature Complete - Ready for F-Droid Submission** ✅
+**TabSSH v0.0.9 - First versioned release - Ready for F-Droid Submission** ✅

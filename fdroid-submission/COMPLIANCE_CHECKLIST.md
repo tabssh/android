@@ -1,4 +1,4 @@
-# F-Droid Compliance Checklist for TabSSH 1.0.0
+# F-Droid Compliance Checklist for TabSSH 0.0.9
 
 ## ✅ Essential Requirements
 - [x] **Open Source License**: MIT (F-Droid compatible)
@@ -38,4 +38,4 @@
 - [x] **No External Services**: No cloud dependencies
 - [x] **Transparent Behavior**: All code open source
 
-TabSSH 1.0.0 meets and exceeds all F-Droid requirements!
+TabSSH 0.0.9 meets and exceeds all F-Droid requirements!

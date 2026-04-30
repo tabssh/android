@@ -173,8 +173,13 @@ jobs:
           **Built from:** \`mosh-${version}\` upstream release, via \`mosh/Dockerfile\` + \`mosh/build-android.sh\` in this repo.
           EOF
 
+          # Mosh binary refreshes are infrastructure, not user-facing
+          # app releases. Mark them prerelease so they don't claim the
+          # repo's "Latest" badge — that slot is reserved for actual
+          # TabSSH APK releases (see .github/workflows/release.yml).
           gh release create "$tag" \
             --repo "${GITHUB_REPOSITORY}" \
             --title "Mosh ${version} for Android" \
             --notes-file /tmp/mosh-release-notes.md \
+            --prerelease \
             artifacts/mosh-client-*

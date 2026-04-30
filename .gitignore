@@ -133,6 +133,7 @@ local.properties
 # Log/OS Files
 *.log
 *.txt
+!release.txt
 build-logs/
 # Android Studio generated files and folders
 captures/
