@@ -9,8 +9,8 @@
         <EditTextPreference
             android:key="default_username"
             android:title="Default Username"
-            android:summary="Username for quick connect"
-            android:defaultValue=""
+            android:summary="Username for new connections and quick connect"
+            android:defaultValue="root"
             app:useSimpleSummaryProvider="true" />
 
         <EditTextPreference

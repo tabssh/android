@@ -317,7 +317,7 @@ class PreferenceManager(private val context: Context) {
     // even when `inputType="number"` — getInt() against a String slot will
     // throw ClassCastException — so we read as String and parse, falling
     // back to the default on parse error.
-    fun getDefaultUsername(): String = getString(KEY_DEFAULT_USERNAME, System.getProperty("user.name", ""))
+    fun getDefaultUsername(): String = getString(KEY_DEFAULT_USERNAME, "root")
     fun setDefaultUsername(username: String) = setString(KEY_DEFAULT_USERNAME, username)
 
     fun getDefaultPort(): Int = getStringAsInt(KEY_DEFAULT_PORT, 22)

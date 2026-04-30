@@ -132,7 +132,30 @@
       "Bash(/opt/android/platform-tools/adb -s emulator-5554 pull /sdcard/sc.png /tmp/tabssh-android/sc_after_theme.png)",
       "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell run-as io.github.tabssh cat /data/data/io.github.tabssh/shared_prefs/io.github.tabssh_preferences.xml)",
       "Bash(/opt/android/platform-tools/adb -s emulator-5554 pull /sdcard/sc.png /tmp/tabssh-android/sc_themed2.png)",
-      "Bash(node -c js/main.js)"
+      "Bash(node -c js/main.js)",
+      "Bash(adb -s emulator-5554 shell getprop sys.boot_completed)",
+      "Bash(scripts/android-emulator.sh list *)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 install -r -t binaries/tabssh-android-amd64.apk)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 exec-out screencap -p)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell input tap 320 1370)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell input tap 540 1860)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell input tap 1015 445)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell input tap 880 1555)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell input tap 968 2240)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell input tap 965 2225)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell wm size)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell wm density)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell input tap 540 1457)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell input tap 540 567)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell input text \"Server%sOne\")",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell input tap 540 750)",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell input text \"10.0.0.1\")",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell \"run-as io.github.tabssh ls databases/\")",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell \"run-as io.github.tabssh sqlite3 databases/tabssh_database '.schema connections'\")",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell \"run-as io.github.tabssh cat /data/local/tmp/insert-conns.sql | sqlite3 databases/tabssh_database\")",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell \"run-as io.github.tabssh sqlite3 databases/tabssh_database 'SELECT name,host FROM connections'\")",
+      "Bash(/opt/android/platform-tools/adb -s emulator-5554 shell \"run-as io.github.tabssh cp /data/local/tmp/insert-conns.sql /data/data/io.github.tabssh/insert.sql && run-as io.github.tabssh sqlite3 /data/data/io.github.tabssh/databases/tabssh_database < /data/data/io.github.tabssh/insert.sql\")",
+      "Bash(/opt/android/platform-tools/adb *)"
     ]
   }
 }

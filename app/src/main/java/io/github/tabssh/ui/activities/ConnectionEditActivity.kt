@@ -90,9 +90,20 @@ class ConnectionEditActivity : AppCompatActivity() {
         setupButtons()
         setupPortKnockUI()
         
-        // Load existing connection if editing
-        intent.getStringExtra(EXTRA_CONNECTION_ID)?.let { connectionId ->
+        // Load existing connection if editing — otherwise pre-fill the
+        // username with the user's preferred default (Settings →
+        // Connection → Default username, defaults to "root"). Doing
+        // this here instead of hardcoding android:text="root" in the
+        // layout keeps the form honest if the user changed the default.
+        val connectionId = intent.getStringExtra(EXTRA_CONNECTION_ID)
+        if (connectionId != null) {
             loadConnection(connectionId)
+        } else {
+            val defaultUser = io.github.tabssh.storage.preferences.PreferenceManager(this)
+                .getDefaultUsername()
+            if (defaultUser.isNotBlank()) {
+                binding.editUsername.setText(defaultUser)
+            }
         }
         
         Logger.d("ConnectionEditActivity", "Connection edit activity created, editMode: $isEditMode")

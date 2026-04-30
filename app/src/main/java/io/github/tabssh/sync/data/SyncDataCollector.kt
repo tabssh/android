@@ -16,6 +16,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.encodeToJsonElement
 
 /**
@@ -281,24 +284,39 @@ class SyncDataCollector {
     }
 
     /**
-     * Collect preferences as map
+     * Collect preferences as map.
+     *
+     * Each `collectXPreferences()` returns a `Map<String, Any>` with
+     * mixed value types (Boolean / Int / Long / String). kotlinx.serialization
+     * has no default serializer for `Any`, so we convert each map by
+     * hand into a `JsonObject` of `JsonPrimitive`s — that's what was
+     * silently failing the whole sync upload before.
      */
     private fun collectPreferences(): Map<String, JsonElement> {
         val prefs = mutableMapOf<String, JsonElement>()
-        val json = Json { encodeDefaults = true }
-
         try {
-            prefs["general"] = json.encodeToJsonElement(collectGeneralPreferences())
-            prefs["security"] = json.encodeToJsonElement(collectSecurityPreferences())
-            prefs["terminal"] = json.encodeToJsonElement(collectTerminalPreferences())
-            prefs["ui"] = json.encodeToJsonElement(collectUIPreferences())
-            prefs["connection"] = json.encodeToJsonElement(collectConnectionPreferences())
-            prefs["sync"] = json.encodeToJsonElement(collectSyncPreferences())
+            prefs["general"] = anyMapToJsonObject(collectGeneralPreferences())
+            prefs["security"] = anyMapToJsonObject(collectSecurityPreferences())
+            prefs["terminal"] = anyMapToJsonObject(collectTerminalPreferences())
+            prefs["ui"] = anyMapToJsonObject(collectUIPreferences())
+            prefs["connection"] = anyMapToJsonObject(collectConnectionPreferences())
+            prefs["sync"] = anyMapToJsonObject(collectSyncPreferences())
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to collect preferences", e)
         }
 
         return prefs
+    }
+
+    private fun anyMapToJsonObject(map: Map<String, Any?>): JsonObject =
+        JsonObject(map.mapValues { (_, v) -> anyToJson(v) })
+
+    private fun anyToJson(value: Any?): JsonElement = when (value) {
+        null -> JsonNull
+        is Boolean -> JsonPrimitive(value)
+        is Number -> JsonPrimitive(value)
+        is String -> JsonPrimitive(value)
+        else -> JsonPrimitive(value.toString())
     }
 
     private fun collectGeneralPreferences(): Map<String, Any> {

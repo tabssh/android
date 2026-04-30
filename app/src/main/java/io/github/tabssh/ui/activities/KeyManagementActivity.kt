@@ -110,6 +110,8 @@ class KeyManagementActivity : AppCompatActivity() {
                         recyclerView.visibility = View.VISIBLE
                     }
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // normal lifecycle cancel — never log as an error
             } catch (e: Exception) {
                 Logger.e("KeyManagementActivity", "Failed to load keys", e)
             }

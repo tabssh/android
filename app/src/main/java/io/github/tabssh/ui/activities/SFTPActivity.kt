@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -356,8 +357,10 @@ class SFTPActivity : AppCompatActivity() {
                         localFileAdapter.notifyDataSetChanged()
                         binding.textLocalPath.text = path
                         currentLocalPath = path
+                        binding.emptyLocal.visibility =
+                            if (localFiles.isEmpty()) View.VISIBLE else View.GONE
                     }
-                    
+
                     Logger.d("SFTPActivity", "Loaded local directory: $path (${files.size} items)")
                 }
             } catch (e: Exception) {
@@ -369,27 +372,48 @@ class SFTPActivity : AppCompatActivity() {
     
     private fun loadRemoteDirectory(path: String) {
         if (!::sftpManager.isInitialized) return
-        
+
+        binding.loadingRemote.visibility = View.VISIBLE
+        binding.emptyRemote.visibility = View.GONE
         lifecycleScope.launch {
             try {
                 val files = sftpManager.listRemoteFiles(path)
-                
+
                 remoteFiles.clear()
                 remoteFiles.addAll(files)
-                
+
                 runOnUiThread {
                     remoteFileAdapter.notifyDataSetChanged()
                     binding.textRemotePath.text = path
                     currentRemotePath = path
+                    binding.loadingRemote.visibility = View.GONE
+                    binding.emptyRemote.visibility =
+                        if (remoteFiles.isEmpty()) View.VISIBLE else View.GONE
                 }
-                
+
                 Logger.d("SFTPActivity", "Loaded remote directory: $path (${files.size} items)")
-                
+
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Failed to load remote directory: $path", e)
+                runOnUiThread {
+                    binding.loadingRemote.visibility = View.GONE
+                }
                 showError("Failed to load remote directory", "Error")
             }
         }
+    }
+
+    /**
+     * Hide the transfer-progress card when nothing is queued, surface
+     * it when at least one transfer is in flight. The card was always
+     * visible at 200dp before, eating the bottom of the screen even on
+     * a fresh open with zero activity.
+     */
+    private fun refreshTransferCardVisibility() {
+        binding.transferCard.visibility =
+            if (activeTransfers.isEmpty()) View.GONE else View.VISIBLE
     }
     
     private fun handleLocalFileClick(file: File) {
@@ -841,7 +865,8 @@ class SFTPActivity : AppCompatActivity() {
                 
                 activeTransfers.add(transferTask)
                 transferAdapter.notifyItemInserted(activeTransfers.size - 1)
-                
+                refreshTransferCardVisibility()
+
                 Logger.i("SFTPActivity", "Started upload: ${localFile.name}")
                 
             } catch (e: Exception) {
@@ -913,7 +938,8 @@ class SFTPActivity : AppCompatActivity() {
                 
                 activeTransfers.add(transferTask)
                 transferAdapter.notifyItemInserted(activeTransfers.size - 1)
-                
+                refreshTransferCardVisibility()
+
                 Logger.i("SFTPActivity", "Started download: ${remoteFile.name}")
                 
             } catch (e: Exception) {
@@ -948,6 +974,7 @@ class SFTPActivity : AppCompatActivity() {
         if (index >= 0) {
             activeTransfers.removeAt(index)
             transferAdapter.notifyItemRemoved(index)
+            refreshTransferCardVisibility()
         }
     }
     

@@ -141,7 +141,6 @@
                                 android:id="@+id/edit_username"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:text="root"
                                 android:inputType="textPersonName" />
 
                         </com.google.android.material.textfield.TextInputLayout>

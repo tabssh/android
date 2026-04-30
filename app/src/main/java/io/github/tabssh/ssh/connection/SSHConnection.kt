@@ -1420,11 +1420,23 @@ class SSHConnection(
     }
 
     fun getInputStream(): InputStream? = shellChannel?.inputStream
-    
+
     /**
      * Get output stream for shell channel
      */
     fun getOutputStream(): OutputStream? = shellChannel?.outputStream
+
+    /**
+     * Last exit status reported by the remote shell channel, or -1 if
+     * unknown / not yet reported. JSch fills this in from the SSH
+     * "exit-status" message when the remote shell terminates cleanly
+     * (e.g. user typed `exit`/`logout` → bash sends 0). For sudden
+     * disconnects (network drop, server kill) the channel tears down
+     * without an exit-status message and JSch leaves the field at -1,
+     * which is exactly the discriminator the UI wants for "clean exit
+     * vs unexpected disconnect — should we offer reconnect?".
+     */
+    fun getShellExitStatus(): Int = shellChannel?.exitStatus ?: -1
     
     /**
      * Check if connection is active

@@ -195,5 +195,29 @@
         <item name="backgroundTint">@color/primary_500</item>
         <item name="tint">@color/white</item>
     </style>
-    
+
+    <!--
+        Bulk-edit dialog styles. The "Apply" pattern is: a TextInput
+        on the left (filling weight=1) plus a small switch on the
+        right that turns the field on/off for this bulk edit. Default
+        alpha is dimmed because the row is OFF on dialog open.
+    -->
+    <style name="BulkEdit" parent="" />
+
+    <style name="BulkEdit.FieldRow">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:layout_marginBottom">10dp</item>
+        <item name="android:alpha">0.45</item>
+    </style>
+
+    <style name="BulkEdit.ApplySwitch" parent="Widget.Material3.CompoundButton.MaterialSwitch">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">12dp</item>
+        <item name="android:contentDescription">Include this field in the bulk edit</item>
+    </style>
+
 </resources>

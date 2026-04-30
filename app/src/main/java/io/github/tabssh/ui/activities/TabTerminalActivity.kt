@@ -278,10 +278,12 @@ class TabTerminalActivity : AppCompatActivity() {
      * Setup bottom action bar with slide-up functionality
      */
     private fun setupBottomActionBar() {
-        // Wave 3.7 — `show_bottom_nav` preference (default true) keeps the bar
-        // visible at all times. If false we fall back to the edge-tap toggle
-        // (legacy behaviour) where the bar appears for 5s then hides.
-        val persistent = app.preferencesManager.getBoolean("show_bottom_nav", true)
+        // `show_bottom_nav` preference (default false). Per UX feedback the
+        // bar sandwiched between the custom multi-row keyboard and the Android
+        // keyboard felt redundant — same actions are reachable from the
+        // terminal long-press menu. Users who liked it can re-enable it in
+        // Settings → General → Show bottom nav bar.
+        val persistent = app.preferencesManager.getBoolean("show_bottom_nav", false)
         binding.bottomActionBar.visibility = if (persistent) View.VISIBLE else View.GONE
 
         binding.btnKeyboard.setOnClickListener {
@@ -619,6 +621,16 @@ class TabTerminalActivity : AppCompatActivity() {
         profile: io.github.tabssh.storage.database.entities.ConnectionProfile,
         errorInfo: io.github.tabssh.ssh.connection.SSHConnectionErrorInfo
     ) {
+        // Bail if the activity is already gone — the connect coroutine can
+        // resume after onDestroy/finish (back press during connect, or an
+        // earlier error already called finish()), and Dialog.show() against
+        // a dead window token throws BadTokenException. The notification
+        // path still surfaces the error to the user.
+        if (isFinishing || isDestroyed) {
+            Logger.w("TabTerminalActivity", "Skipping SSH error dialog — activity already gone")
+            return
+        }
+
         val dialogView = layoutInflater.inflate(R.layout.dialog_ssh_connection_error, null)
         
         // Populate connection details
@@ -1663,9 +1675,27 @@ class TabTerminalActivity : AppCompatActivity() {
                         // the session in one tap. Common case: SSH timeout, server
                         // restart, brief network blip — auto-close was destroying
                         // the user's tab + scrollback unnecessarily.
-                        Logger.i("TabTerminalActivity", "Tab ${tab.tabId} disconnected — offering reconnect")
+                        //
+                        // Refinement: if the remote shell reported a clean exit
+                        // (status 0 from `exit`/`logout`) just close the tab —
+                        // the user explicitly ended the session, so prompting
+                        // them to reconnect is friction. The reconnect dialog
+                        // is for *unexpected* disconnects (status -1 = no
+                        // exit-status message, or non-zero = abnormal exit).
+                        val exitStatus = tab.connection?.getShellExitStatus() ?: -1
+                        Logger.i("TabTerminalActivity",
+                            "Tab ${tab.tabId} disconnected (exit=$exitStatus)")
                         runOnUiThread {
-                            showReconnectDialog(tab)
+                            if (exitStatus == 0) {
+                                val idx = tabManager.getAllTabs()
+                                    .indexOfFirst { it.tabId == tab.tabId }
+                                if (idx >= 0) {
+                                    tabManager.closeTab(idx)
+                                    if (tabManager.getTabCount() == 0) finish()
+                                }
+                            } else {
+                                showReconnectDialog(tab)
+                            }
                         }
                     }
                     else -> {}
@@ -2816,6 +2846,18 @@ class TabTerminalActivity : AppCompatActivity() {
     
     override fun onResume() {
         super.onResume()
+
+        // Re-apply theme so toggling accessibility_high_contrast (or any
+        // theme change) in Settings takes effect when the user comes back
+        // here, instead of requiring a full activity recreate.
+        applyCurrentTheme()
+
+        // Re-load keyboard layout — when the user opens
+        // KeyboardCustomizationActivity from Settings and saves a new
+        // layout, the terminal needs to pick it up on return. Without
+        // this we'd keep showing the layout that was current when the
+        // terminal activity was created.
+        setupCustomKeyboard()
 
         // Restore active tab if needed
         val activeTab = tabManager.getActiveTab()

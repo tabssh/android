@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
@@ -11,7 +12,6 @@
         android:layout_height="wrap_content"
         android:hint="Password"
         app:endIconMode="password_toggle"
-        xmlns:app="http://schemas.android.com/apk/res-auto"
         style="@style/Widget.TabSSH.TextInputLayout">
 
         <com.google.android.material.textfield.TextInputEditText
@@ -22,5 +22,32 @@
             android:imeOptions="actionDone" />
 
     </com.google.android.material.textfield.TextInputLayout>
+
+    <!--
+        "Save password" toggle (default OFF). When the user enables it,
+        the password is persisted at ENCRYPTED level via Android
+        Keystore so future connects don't reprompt. Sits below the
+        password field so it's visible but not pushy.
+    -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginTop="12dp">
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/switch_save_password"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="12dp"
+            android:text="Save password for next time"
+            android:textAppearance="?attr/textAppearanceBodyMedium" />
+    </LinearLayout>
 
 </LinearLayout>

@@ -40,8 +40,8 @@
         <SwitchPreferenceCompat
             android:key="show_bottom_nav"
             android:title="Show bottom nav bar"
-            android:summary="Compact 48dp nav with Kbd · Snip · Files · Paste · Menu (uncheck for the legacy edge-tap behaviour)"
-            android:defaultValue="true" />
+            android:summary="Adds a 48dp Kbd · Snip · Files · Paste · Menu bar between the custom keyboard and the Android keyboard. Off by default — most actions live in the terminal long-press menu."
+            android:defaultValue="false" />
 
         <SwitchPreferenceCompat
             android:key="confirm_exit"
