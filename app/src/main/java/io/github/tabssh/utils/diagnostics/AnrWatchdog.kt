@@ -61,12 +61,19 @@ class AnrWatchdog(
 
                 if (!tickedBack.get()) {
                     val main = Looper.getMainLooper().thread
-                    val trace = main.stackTrace
-                        .joinToString("\n") { "    at $it" }
-                    Logger.e(
-                        TAG,
-                        "ANR — main thread blocked for >${timeoutMs}ms\n$trace"
-                    )
+                    val frames = main.stackTrace
+                    // Suppress stalls with no app frame — emulator GPU /
+                    // window-manager pauses outside our control.
+                    val hasAppFrame = frames.any {
+                        it.className.startsWith("io.github.tabssh")
+                    }
+                    if (hasAppFrame) {
+                        val trace = frames.joinToString("\n") { "    at $it" }
+                        Logger.e(
+                            TAG,
+                            "ANR — main thread blocked for >${timeoutMs}ms\n$trace"
+                        )
+                    }
                     Thread.sleep(cooldownMs)  // dedupe sustained blocks
                 }
             }
