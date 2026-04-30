@@ -86,8 +86,8 @@
 
         <SwitchPreferenceCompat
             android:key="accessibility_high_contrast"
-            android:title="High contrast"
-            android:summary="Increase contrast for low-vision users"
+            android:title="High contrast terminal"
+            android:summary="Force pure black background and white foreground in the terminal, overriding the selected color theme"
             android:defaultValue="false" />
 
         <SwitchPreferenceCompat
