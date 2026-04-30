@@ -224,6 +224,8 @@ class PerformanceFragment : Fragment() {
                     allConnections = connections
                     updateConnectionSpinner()
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e("PerformanceFragment", "Failed to load connections", e)
             }

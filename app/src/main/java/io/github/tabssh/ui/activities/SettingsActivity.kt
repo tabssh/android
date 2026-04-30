@@ -442,6 +442,24 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
             startActivity(intent)
             true
         }
+
+        // Reset keyboard layout — wipes the saved JSON so the next
+        // terminal launch falls back to the built-in default. Confirm
+        // first since it's destructive (user could have spent time
+        // arranging keys).
+        findPreference<Preference>("reset_keyboard_layout")?.setOnPreferenceClickListener {
+            androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setTitle("Reset keyboard layout?")
+                .setMessage("This restores the default 3-row layout (Esc/Tab/Ctl/Alt/Fn/Enter, arrows + Home/End/PgUp/PgDn, common symbols). Your current layout will be discarded.")
+                .setPositiveButton("Reset") { _, _ ->
+                    app.preferencesManager.setKeyboardLayoutJson(null)
+                    Toast.makeText(requireContext(), "Keyboard layout reset", Toast.LENGTH_SHORT).show()
+                    Logger.i("Settings", "Keyboard layout reset to default")
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+            true
+        }
     }
 
     private fun importThemeFromUri(uri: android.net.Uri) {

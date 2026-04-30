@@ -3,6 +3,8 @@ package io.github.tabssh.ui.activities
 import android.content.Intent
 import android.os.Bundle
 import android.view.MenuItem
+import android.view.View
+import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
@@ -1203,6 +1205,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         drawerLayout.openDrawer(GravityCompat.START)
         supportActionBar?.setDisplayHomeAsUpEnabled(false)
         toggle.isDrawerIndicatorEnabled = false
+        toggle.syncState()
     }
 
     /** Wave 4.b — restore phone overlay mode (used when folding back). */
@@ -1211,6 +1214,11 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         drawerLayout.closeDrawer(GravityCompat.START)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         toggle.isDrawerIndicatorEnabled = true
+        // Without syncState() after re-enabling the indicator, the toolbar
+        // can be left displaying the back-arrow drawable from a previous
+        // state instead of the hamburger lines. syncState() recomputes the
+        // drawable based on isDrawerIndicatorEnabled + drawer-open progress.
+        toggle.syncState()
     }
 
     /** Wave 4.b — observe FoldingFeature; flip drawer mode on hinge state changes. */
@@ -1276,6 +1284,14 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         val hostLayout = view.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.layout_host)
         val portInput = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.input_port)
         val passwordInput = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.input_password)
+        val switchSave = view.findViewById<com.google.android.material.materialswitch.MaterialSwitch>(R.id.switch_save_connection)
+        val layoutSaveName = view.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.layout_save_name)
+        val inputSaveName = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.input_save_name)
+
+        // Toggle: "Save this connection" reveals/hides the name field.
+        switchSave.setOnCheckedChangeListener { _, checked ->
+            layoutSaveName.visibility = if (checked) View.VISIBLE else View.GONE
+        }
 
         val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Quick Connect")
@@ -1297,13 +1313,70 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                 hostLayout.error = null
 
                 val (username, hostname) = resolveQuickConnectUser(raw)
+                val savePermanent = switchSave.isChecked
+                val saveName = inputSaveName.text?.toString()?.trim()
                 dialog.dismiss()
-                quickConnect(username, hostname, port, password.takeIf { it.isNotEmpty() })
+
+                if (savePermanent) {
+                    saveAndConnect(
+                        name = saveName?.takeIf { it.isNotBlank() } ?: "$username@$hostname",
+                        username = username,
+                        hostname = hostname,
+                        port = port,
+                        password = password.takeIf { it.isNotEmpty() }
+                    )
+                } else {
+                    quickConnect(username, hostname, port, password.takeIf { it.isNotEmpty() })
+                }
             }
         }
 
         dialog.show()
         hostInput.requestFocus()
+    }
+
+    /**
+     * Persist a Quick-Connect dialog's host/port/user/password as a
+     * permanent ConnectionProfile, then launch a connect on it. The
+     * password (if any) is stored at PERSISTENT level via
+     * SecurePasswordManager so the user doesn't get reprompted on
+     * future connects.
+     */
+    private fun saveAndConnect(
+        name: String,
+        username: String,
+        hostname: String,
+        port: Int,
+        password: String?
+    ) {
+        lifecycleScope.launch {
+            val profile = ConnectionProfile(
+                id = java.util.UUID.randomUUID().toString(),
+                name = name,
+                host = hostname,
+                port = port,
+                username = username,
+                authType = if (password != null) AuthType.PASSWORD.name else AuthType.KEYBOARD_INTERACTIVE.name,
+                keyId = null,
+                groupId = null
+            )
+            try {
+                app.database.connectionDao().insertConnection(profile)
+                if (password != null) {
+                    app.securePasswordManager.storePassword(
+                        profile.id, password,
+                        io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.ENCRYPTED
+                    )
+                }
+                Logger.i("MainActivity", "Saved + connecting to $username@$hostname:$port (id=${profile.id})")
+                Toast.makeText(this@MainActivity, "Saved \"$name\"", Toast.LENGTH_SHORT).show()
+                val intent = TabTerminalActivity.createIntent(this@MainActivity, profile, autoConnect = true)
+                startActivity(intent)
+            } catch (e: Exception) {
+                Logger.e("MainActivity", "Failed to save connection", e)
+                Toast.makeText(this@MainActivity, "Failed to save: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     /**

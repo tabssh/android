@@ -101,6 +101,8 @@ class ConnectionListViewModel(application: android.app.Application) : androidx.l
                     _connections.postValue(connectionList.sortedByDescending { it.lastConnected })
                     _isLoading.postValue(false)
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 io.github.tabssh.utils.logging.Logger.e("ConnectionListViewModel", "Failed to load connections", e)
                 _connections.postValue(emptyList())

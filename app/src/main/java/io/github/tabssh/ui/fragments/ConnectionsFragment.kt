@@ -188,19 +188,32 @@ class ConnectionsFragment : Fragment() {
     }
     
     private fun showConnectionMenu(connection: ConnectionProfile) {
-        val items = arrayOf("Open", "Edit", "Duplicate", "Delete")
-        
+        // Order: Connect → Browse Files → Edit → Duplicate → Delete.
+        // "Browse Files" sits between Connect and Edit per UX feedback —
+        // it's a top-level action a user reaches for as often as Connect,
+        // not a buried option. Renamed "Open" to "Connect" to match how
+        // the rest of the app talks about starting an SSH session.
+        val items = arrayOf("Connect", "Browse Files (SFTP)", "Edit", "Duplicate", "Delete")
+
         AlertDialog.Builder(requireContext())
             .setTitle(connection.name)
             .setItems(items) { _, which ->
                 when (which) {
                     0 -> openConnection(connection)
-                    1 -> editConnection(connection)
-                    2 -> duplicateConnection(connection)
-                    3 -> deleteConnection(connection)
+                    1 -> openSftpBrowser(connection)
+                    2 -> editConnection(connection)
+                    3 -> duplicateConnection(connection)
+                    4 -> deleteConnection(connection)
                 }
             }
             .show()
+    }
+
+    private fun openSftpBrowser(connection: ConnectionProfile) {
+        Logger.d("ConnectionsFragment", "Opening SFTP browser for ${connection.name}")
+        startActivity(io.github.tabssh.ui.activities.SFTPActivity.createIntent(
+            requireContext(), connection.id
+        ))
     }
     
     private fun editConnection(connection: ConnectionProfile) {
@@ -466,133 +479,255 @@ class ConnectionsFragment : Fragment() {
     /**
      * Show bulk edit dialog with checkboxes for each field
      */
+    /**
+     * Polished bulk-edit dialog (rewrite, 2026-04-29).
+     *
+     * The layout is `dialog_bulk_edit.xml`; tri-state bool rows include
+     * `include_bulk_edit_tristate.xml`. Visual rules:
+     *   • Each field row dims to alpha=0.45 when its "Apply" switch is OFF
+     *     and brightens to 1.0 when ON. The user can flip the switch
+     *     manually or just edit the field — a TextWatcher / dropdown
+     *     listener auto-flips it ON.
+     *   • Bool rows (Keep-Alive, Compression, Agent fwd, X11, Mosh) use a
+     *     three-button MaterialButtonToggleGroup — "—" / "Off" / "On".
+     *     "—" is the default and means "leave each connection's value
+     *     unchanged"; this replaces the old checkbox+switch tri-state
+     *     dance, which was easy to misread.
+     *   • The positive button text is rebuilt live as the user makes
+     *     changes: "Apply N changes to M connections". Disabled when
+     *     N == 0 so misclicks can't run a no-op bulk write.
+     *   • Reset button clears every field row back to "no change".
+     */
     private fun showBulkEditDialog(connections: List<ConnectionProfile>) {
         if (connections.isEmpty()) {
-            android.widget.Toast.makeText(requireContext(), "No connections to edit", android.widget.Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), "No connections to edit", Toast.LENGTH_SHORT).show()
             return
         }
 
-        val dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_bulk_edit, null)
+        val ctx = requireContext()
+        val dialogView = LayoutInflater.from(ctx).inflate(R.layout.dialog_bulk_edit, null)
 
-        // Checkboxes for enabling each field change
-        val checkUsername = dialogView.findViewById<android.widget.CheckBox>(R.id.check_username)
-        val checkPort = dialogView.findViewById<android.widget.CheckBox>(R.id.check_port)
-        val checkGroup = dialogView.findViewById<android.widget.CheckBox>(R.id.check_group)
-        val checkIdentity = dialogView.findViewById<android.widget.CheckBox>(R.id.check_identity)
-        val checkTimeout = dialogView.findViewById<android.widget.CheckBox>(R.id.check_timeout)
-        val checkKeepalive = dialogView.findViewById<android.widget.CheckBox>(R.id.check_keepalive)
-        val checkCompression = dialogView.findViewById<android.widget.CheckBox>(R.id.check_compression)
-        val checkTerminalType = dialogView.findViewById<android.widget.CheckBox>(R.id.check_terminal_type)
-        val checkColorTag = dialogView.findViewById<android.widget.CheckBox>(R.id.check_color_tag)
-        val checkX11 = dialogView.findViewById<android.widget.CheckBox>(R.id.check_x11)
-        val checkMosh = dialogView.findViewById<android.widget.CheckBox>(R.id.check_mosh)
-        val checkAgentFwd = dialogView.findViewById<android.widget.CheckBox>(R.id.check_agent_fwd)
-        val checkPostConnect = dialogView.findViewById<android.widget.CheckBox>(R.id.check_post_connect)
+        // ── Header ──
+        val textSelectedCount = dialogView.findViewById<TextView>(R.id.text_selected_count)
+        val textApplySummary = dialogView.findViewById<TextView>(R.id.text_apply_summary)
+        val buttonResetAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.button_reset_all)
+        textSelectedCount.text = "${connections.size} connection${if (connections.size == 1) "" else "s"} selected"
 
-        // Field inputs
+        // ── Switch + row pairs (text/dropdown fields) ──
+        // Each pair: the row to fade, the switch to listen on.
+        data class FieldRow(
+            val row: View,
+            val switch: com.google.android.material.materialswitch.MaterialSwitch
+        )
+
+        data class TriRow(
+            val view: View,
+            val getState: () -> TriState
+        )
+
+        // Forward-declared lambda — the real implementation is assigned
+        // after the field/tri-row collections are populated. Callbacks
+        // wired during `bind()` / `wireTriState()` capture this var by
+        // reference, so they see the final body even though it's defined
+        // later in the function body.
+        var refreshApplySummary: () -> Unit = {}
+
+        val fieldRows = mutableListOf<FieldRow>()
+        val triRows = mutableListOf<TriRow>()
+
+        fun bind(rowId: Int, switchId: Int): FieldRow {
+            val row = dialogView.findViewById<View>(rowId)
+            val sw = dialogView.findViewById<com.google.android.material.materialswitch.MaterialSwitch>(switchId)
+            sw.setOnCheckedChangeListener { _, checked ->
+                row.alpha = if (checked) 1f else 0.45f
+                refreshApplySummary()
+            }
+            return FieldRow(row, sw).also { fieldRows.add(it) }
+        }
+
+        val username = bind(R.id.row_username, R.id.check_username)
+        val port = bind(R.id.row_port, R.id.check_port)
+        val group = bind(R.id.row_group, R.id.check_group)
+        val identity = bind(R.id.row_identity, R.id.check_identity)
+        val timeout = bind(R.id.row_timeout, R.id.check_timeout)
+        val terminalType = bind(R.id.row_terminal_type, R.id.check_terminal_type)
+        val colorTag = bind(R.id.row_color_tag, R.id.check_color_tag)
+        val postConnect = bind(R.id.row_post_connect, R.id.check_post_connect)
+
+        // ── Tri-state bool rows ──
+        // wireTriState() takes the included row, sets the icon/label,
+        // and exposes a getter that returns the current selection
+        // (UNCHANGED / OFF / ON) for the apply step.
+        fun wireTriState(rowId: Int, label: String, iconRes: Int): TriRow {
+            val rowView = dialogView.findViewById<View>(rowId)
+            rowView.findViewById<TextView>(R.id.tri_label).text = label
+            rowView.findViewById<android.widget.ImageView>(R.id.tri_icon)
+                .setImageResource(iconRes)
+            val triGroup = rowView.findViewById<com.google.android.material.button.MaterialButtonToggleGroup>(R.id.tri_group)
+            triGroup.check(R.id.tri_unchanged)
+            triGroup.addOnButtonCheckedListener { _, _, _ -> refreshApplySummary() }
+            return TriRow(rowView) {
+                when (triGroup.checkedButtonId) {
+                    R.id.tri_off -> TriState.OFF
+                    R.id.tri_on -> TriState.ON
+                    else -> TriState.UNCHANGED
+                }
+            }.also { triRows.add(it) }
+        }
+
+        val keepalive = wireTriState(R.id.row_keepalive, "Keep-alive", R.drawable.ic_refresh)
+        val compression = wireTriState(R.id.row_compression, "Compression", R.drawable.ic_file_archive)
+        val agentFwd = wireTriState(R.id.row_agent_fwd, "Agent forwarding", R.drawable.ic_forward)
+        val x11 = wireTriState(R.id.row_x11, "X11 forwarding", R.drawable.ic_interface)
+        val mosh = wireTriState(R.id.row_mosh, "Mosh", R.drawable.ic_flash)
+
+        // ── Inputs ──
         val editUsername = dialogView.findViewById<TextInputEditText>(R.id.edit_username)
         val editPort = dialogView.findViewById<TextInputEditText>(R.id.edit_port)
         val dropdownGroup = dialogView.findViewById<AutoCompleteTextView>(R.id.dropdown_group)
         val dropdownIdentity = dialogView.findViewById<AutoCompleteTextView>(R.id.dropdown_identity)
         val editTimeout = dialogView.findViewById<TextInputEditText>(R.id.edit_timeout)
-        val switchKeepalive = dialogView.findViewById<SwitchMaterial>(R.id.switch_keepalive)
-        val switchCompression = dialogView.findViewById<SwitchMaterial>(R.id.switch_compression)
         val dropdownTerminalType = dialogView.findViewById<AutoCompleteTextView>(R.id.dropdown_terminal_type)
         val dropdownColorTag = dialogView.findViewById<AutoCompleteTextView>(R.id.dropdown_color_tag)
-        val switchX11 = dialogView.findViewById<SwitchMaterial>(R.id.switch_x11)
-        val switchMosh = dialogView.findViewById<SwitchMaterial>(R.id.switch_mosh)
-        val switchAgentFwd = dialogView.findViewById<SwitchMaterial>(R.id.switch_agent_fwd)
         val editPostConnect = dialogView.findViewById<TextInputEditText>(R.id.edit_post_connect)
-        val textSelectedCount = dialogView.findViewById<TextView>(R.id.text_selected_count)
 
-        textSelectedCount.text = "${connections.size} connections selected"
-
-        // Auto-check checkbox when user edits a field
-        editUsername.setOnFocusChangeListener { _, hasFocus -> if (hasFocus) checkUsername.isChecked = true }
-        editPort.setOnFocusChangeListener { _, hasFocus -> if (hasFocus) checkPort.isChecked = true }
-        editTimeout.setOnFocusChangeListener { _, hasFocus -> if (hasFocus) checkTimeout.isChecked = true }
-        dropdownGroup.setOnItemClickListener { _, _, _, _ -> checkGroup.isChecked = true }
-        dropdownIdentity.setOnItemClickListener { _, _, _, _ -> checkIdentity.isChecked = true }
-        switchKeepalive.setOnCheckedChangeListener { _, _ -> checkKeepalive.isChecked = true }
-        switchCompression.setOnCheckedChangeListener { _, _ -> checkCompression.isChecked = true }
-        dropdownTerminalType.setOnItemClickListener { _, _, _, _ -> checkTerminalType.isChecked = true }
-        dropdownColorTag.setOnItemClickListener { _, _, _, _ -> checkColorTag.isChecked = true }
-        switchX11.setOnCheckedChangeListener { _, _ -> checkX11.isChecked = true }
-        switchMosh.setOnCheckedChangeListener { _, _ -> checkMosh.isChecked = true }
-        switchAgentFwd.setOnCheckedChangeListener { _, _ -> checkAgentFwd.isChecked = true }
-        editPostConnect.setOnFocusChangeListener { _, hasFocus -> if (hasFocus) checkPostConnect.isChecked = true }
+        // Auto-flip "Apply" switch ON when the user actually changes a value.
+        // Using afterTextChanged (not focus) so just tabbing through fields
+        // doesn't enable everything by accident.
+        fun autoEnableOnEdit(view: TextInputEditText, sw: com.google.android.material.materialswitch.MaterialSwitch) {
+            view.addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                override fun afterTextChanged(s: android.text.Editable?) {
+                    if (!sw.isChecked && view.hasFocus()) sw.isChecked = true
+                }
+            })
+        }
+        autoEnableOnEdit(editUsername, username.switch)
+        autoEnableOnEdit(editPort, port.switch)
+        autoEnableOnEdit(editTimeout, timeout.switch)
+        autoEnableOnEdit(editPostConnect, postConnect.switch)
+        dropdownGroup.setOnItemClickListener { _, _, _, _ -> group.switch.isChecked = true }
+        dropdownIdentity.setOnItemClickListener { _, _, _, _ -> identity.switch.isChecked = true }
+        dropdownTerminalType.setOnItemClickListener { _, _, _, _ -> terminalType.switch.isChecked = true }
+        dropdownColorTag.setOnItemClickListener { _, _, _, _ -> colorTag.switch.isChecked = true }
 
         // Terminal type dropdown
         val terminalTypeOptions = arrayOf("xterm-256color", "xterm", "vt100", "vt220", "screen-256color", "tmux-256color")
-        dropdownTerminalType.setAdapter(ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, terminalTypeOptions))
+        dropdownTerminalType.setAdapter(ArrayAdapter(ctx, android.R.layout.simple_dropdown_item_1line, terminalTypeOptions))
 
         // Color tag dropdown — labels map 1:1 to ConnectionProfile.colorTag indices.
         val colorTagOptions = arrayOf("(none)", "Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Pink")
-        dropdownColorTag.setAdapter(ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, colorTagOptions))
+        dropdownColorTag.setAdapter(ArrayAdapter(ctx, android.R.layout.simple_dropdown_item_1line, colorTagOptions))
 
-        // Setup group dropdown
-        val groupOptions = mutableListOf("(None - Remove from group)")
+        // Group dropdown
+        val groupOptions = mutableListOf("(Clear group assignment)")
         groupOptions.addAll(allGroups.map { it.name })
-        val groupAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, groupOptions)
-        dropdownGroup.setAdapter(groupAdapter)
+        dropdownGroup.setAdapter(ArrayAdapter(ctx, android.R.layout.simple_dropdown_item_1line, groupOptions))
 
-        // Setup identity dropdown
-        val identityOptions = mutableListOf("(None - Remove identity)")
+        // Identity dropdown — populated async
+        val identityOptions = mutableListOf("(Clear identity)")
         lifecycleScope.launch {
             try {
                 app.database.identityDao().getAllIdentities().collect { identities ->
                     allIdentities = identities
-                    identityOptions.addAll(identities.map { it.name })
-                    val identityAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, identityOptions)
-                    dropdownIdentity.setAdapter(identityAdapter)
+                    val opts = mutableListOf("(Clear identity)").also { it.addAll(identities.map { i -> i.name }) }
+                    dropdownIdentity.setAdapter(ArrayAdapter(ctx, android.R.layout.simple_dropdown_item_1line, opts))
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e("ConnectionsFragment", "Failed to load identities", e)
             }
         }
 
-        AlertDialog.Builder(requireContext())
-            .setTitle("Bulk edit ${connections.size} connections")
+        // ── Live "Apply N changes to M connections" updates ──
+        // The dialog reference can't be set until builder.create() runs,
+        // so we close over a nullable holder that's assigned right before
+        // show().
+        var dialogRef: AlertDialog? = null
+        refreshApplySummary = {
+            val triCount = triRows.count { it.getState() != TriState.UNCHANGED }
+            val switchCount = fieldRows.count { it.switch.isChecked }
+            val total = triCount + switchCount
+            textApplySummary.text = if (total == 0) {
+                "No changes selected — flip a switch or pick a value"
+            } else {
+                "$total field${if (total == 1) "" else "s"} will change on ${connections.size} connection${if (connections.size == 1) "" else "s"}"
+            }
+            dialogRef?.getButton(AlertDialog.BUTTON_POSITIVE)?.let { btn ->
+                btn.isEnabled = total > 0
+                btn.text = if (total == 0) "Apply" else "Apply ($total)"
+            }
+        }
+
+        // ── Reset all ──
+        buttonResetAll.setOnClickListener {
+            listOf(username, port, group, identity, timeout, terminalType, colorTag, postConnect)
+                .forEach { it.switch.isChecked = false }
+            listOf(R.id.row_keepalive, R.id.row_compression, R.id.row_agent_fwd, R.id.row_x11, R.id.row_mosh)
+                .forEach { id ->
+                    dialogView.findViewById<View>(id)
+                        .findViewById<com.google.android.material.button.MaterialButtonToggleGroup>(R.id.tri_group)
+                        .check(R.id.tri_unchanged)
+                }
+            // Clear the values too — Reset means "wipe my picks".
+            editUsername.text = null
+            editPort.text = null
+            editTimeout.text = null
+            editPostConnect.text = null
+            dropdownGroup.setText("", false)
+            dropdownIdentity.setText("", false)
+            dropdownTerminalType.setText("", false)
+            dropdownColorTag.setText("", false)
+            refreshApplySummary()
+        }
+
+        dialogRef = AlertDialog.Builder(ctx)
+            .setTitle("Bulk edit")
             .setView(dialogView)
             .setPositiveButton("Apply") { _, _ ->
                 applyBulkEdit(
                     connections = connections,
-                    applyUsername = checkUsername.isChecked,
+                    applyUsername = username.switch.isChecked,
                     newUsername = editUsername.text?.toString() ?: "",
-                    applyPort = checkPort.isChecked,
+                    applyPort = port.switch.isChecked,
                     newPort = editPort.text?.toString()?.toIntOrNull() ?: 22,
-                    applyGroup = checkGroup.isChecked,
+                    applyGroup = group.switch.isChecked,
                     newGroupSelection = dropdownGroup.text?.toString(),
-                    applyIdentity = checkIdentity.isChecked,
+                    applyIdentity = identity.switch.isChecked,
                     newIdentitySelection = dropdownIdentity.text?.toString(),
-                    applyTimeout = checkTimeout.isChecked,
+                    applyTimeout = timeout.switch.isChecked,
                     newTimeout = editTimeout.text?.toString()?.toIntOrNull() ?: 15,
-                    applyKeepalive = checkKeepalive.isChecked,
-                    newKeepalive = switchKeepalive.isChecked,
-                    applyCompression = checkCompression.isChecked,
-                    newCompression = switchCompression.isChecked,
-                    applyTerminalType = checkTerminalType.isChecked,
+                    keepalive = keepalive.getState(),
+                    compression = compression.getState(),
+                    applyTerminalType = terminalType.switch.isChecked,
                     newTerminalType = dropdownTerminalType.text?.toString()
                         ?.takeIf { it.isNotBlank() } ?: "xterm-256color",
-                    applyColorTag = checkColorTag.isChecked,
+                    applyColorTag = colorTag.switch.isChecked,
                     newColorTag = colorTagOptions.indexOf(dropdownColorTag.text?.toString())
                         .coerceAtLeast(0),
-                    applyX11 = checkX11.isChecked,
-                    newX11 = switchX11.isChecked,
-                    applyMosh = checkMosh.isChecked,
-                    newMosh = switchMosh.isChecked,
-                    applyAgentFwd = checkAgentFwd.isChecked,
-                    newAgentFwd = switchAgentFwd.isChecked,
-                    applyPostConnect = checkPostConnect.isChecked,
+                    x11 = x11.getState(),
+                    mosh = mosh.getState(),
+                    agentFwd = agentFwd.getState(),
+                    applyPostConnect = postConnect.switch.isChecked,
                     newPostConnect = editPostConnect.text?.toString()
                 )
             }
             .setNegativeButton("Cancel", null)
-            .show()
+            .create()
+        dialogRef.show()
+        // Initial state: all rows OFF, summary disabled.
+        refreshApplySummary()
     }
 
+    /** Tri-state for bulk-edit boolean fields. */
+    private enum class TriState { UNCHANGED, OFF, ON }
+
     /**
-     * Apply bulk edits to connections - only applies checked fields
+     * Apply bulk edits to connections — only writes fields the user
+     * actually opted into. Bool fields use TriState: UNCHANGED leaves
+     * each connection's value alone, OFF/ON sets it explicitly.
      */
     private fun applyBulkEdit(
         connections: List<ConnectionProfile>,
@@ -606,20 +741,15 @@ class ConnectionsFragment : Fragment() {
         newIdentitySelection: String?,
         applyTimeout: Boolean,
         newTimeout: Int,
-        applyKeepalive: Boolean,
-        newKeepalive: Boolean,
-        applyCompression: Boolean,
-        newCompression: Boolean,
+        keepalive: TriState,
+        compression: TriState,
         applyTerminalType: Boolean,
         newTerminalType: String,
         applyColorTag: Boolean,
         newColorTag: Int,
-        applyX11: Boolean,
-        newX11: Boolean,
-        applyMosh: Boolean,
-        newMosh: Boolean,
-        applyAgentFwd: Boolean,
-        newAgentFwd: Boolean,
+        x11: TriState,
+        mosh: TriState,
+        agentFwd: TriState,
         applyPostConnect: Boolean,
         newPostConnect: String?
     ) {
@@ -634,13 +764,13 @@ class ConnectionsFragment : Fragment() {
                 if (applyGroup) changes.add("group")
                 if (applyIdentity) changes.add("identity")
                 if (applyTimeout) changes.add("timeout")
-                if (applyKeepalive) changes.add("keepalive")
-                if (applyCompression) changes.add("compression")
+                if (keepalive != TriState.UNCHANGED) changes.add("keepalive")
+                if (compression != TriState.UNCHANGED) changes.add("compression")
                 if (applyTerminalType) changes.add("terminal type")
                 if (applyColorTag) changes.add("color tag")
-                if (applyX11) changes.add("X11 forwarding")
-                if (applyMosh) changes.add("Mosh")
-                if (applyAgentFwd) changes.add("agent forwarding")
+                if (x11 != TriState.UNCHANGED) changes.add("X11 forwarding")
+                if (mosh != TriState.UNCHANGED) changes.add("Mosh")
+                if (agentFwd != TriState.UNCHANGED) changes.add("agent forwarding")
                 if (applyPostConnect) changes.add("post-connect script")
 
                 if (changes.isEmpty()) {
@@ -667,7 +797,7 @@ class ConnectionsFragment : Fragment() {
                     if (applyGroup) {
                         val newGroupId = when {
                             newGroupSelection.isNullOrEmpty() -> null
-                            newGroupSelection.startsWith("(None") -> null
+                            newGroupSelection.startsWith("(Clear") -> null
                             else -> allGroups.find { it.name == newGroupSelection }?.id
                         }
                         updatedConnection = updatedConnection.copy(groupId = newGroupId)
@@ -677,7 +807,7 @@ class ConnectionsFragment : Fragment() {
                     if (applyIdentity) {
                         val newIdentityId = when {
                             newIdentitySelection.isNullOrEmpty() -> null
-                            newIdentitySelection.startsWith("(None") -> null
+                            newIdentitySelection.startsWith("(Clear") -> null
                             else -> allIdentities.find { it.name == newIdentitySelection }?.id
                         }
                         updatedConnection = updatedConnection.copy(identityId = newIdentityId)
@@ -688,14 +818,11 @@ class ConnectionsFragment : Fragment() {
                         updatedConnection = updatedConnection.copy(connectTimeout = newTimeout)
                     }
 
-                    // Apply keepalive if checked
-                    if (applyKeepalive) {
-                        updatedConnection = updatedConnection.copy(keepAlive = newKeepalive)
+                    if (keepalive != TriState.UNCHANGED) {
+                        updatedConnection = updatedConnection.copy(keepAlive = keepalive == TriState.ON)
                     }
-
-                    // Apply compression if checked
-                    if (applyCompression) {
-                        updatedConnection = updatedConnection.copy(compression = newCompression)
+                    if (compression != TriState.UNCHANGED) {
+                        updatedConnection = updatedConnection.copy(compression = compression == TriState.ON)
                     }
 
                     if (applyTerminalType) {
@@ -704,14 +831,14 @@ class ConnectionsFragment : Fragment() {
                     if (applyColorTag) {
                         updatedConnection = updatedConnection.copy(colorTag = newColorTag)
                     }
-                    if (applyX11) {
-                        updatedConnection = updatedConnection.copy(x11Forwarding = newX11)
+                    if (x11 != TriState.UNCHANGED) {
+                        updatedConnection = updatedConnection.copy(x11Forwarding = x11 == TriState.ON)
                     }
-                    if (applyMosh) {
-                        updatedConnection = updatedConnection.copy(useMosh = newMosh)
+                    if (mosh != TriState.UNCHANGED) {
+                        updatedConnection = updatedConnection.copy(useMosh = mosh == TriState.ON)
                     }
-                    if (applyAgentFwd) {
-                        updatedConnection = updatedConnection.copy(agentForwarding = newAgentFwd)
+                    if (agentFwd != TriState.UNCHANGED) {
+                        updatedConnection = updatedConnection.copy(agentForwarding = agentFwd == TriState.ON)
                     }
                     if (applyPostConnect) {
                         // null/blank → clear; otherwise set verbatim.
@@ -760,6 +887,8 @@ class ConnectionsFragment : Fragment() {
 
                     Logger.d("ConnectionsFragment", "Loaded ${connections.size} connections, ${groups.size} groups")
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e("ConnectionsFragment", "Failed to load connections", e)
             }

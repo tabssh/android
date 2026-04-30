@@ -56,14 +56,15 @@ class AuthenticationDialog : DialogFragment() {
         val view = requireActivity().layoutInflater.inflate(R.layout.dialog_authentication, null)
         val passwordLayout = view.findViewById<TextInputLayout>(R.id.layout_password)
         val passwordEdit = view.findViewById<TextInputEditText>(R.id.edit_password)
-        
+        val savePasswordSwitch = view.findViewById<com.google.android.material.materialswitch.MaterialSwitch>(R.id.switch_save_password)
+
         return AlertDialog.Builder(requireContext())
             .setTitle("Connect to $connectionName")
             .setMessage("Enter your ${getAuthTypeDisplayName(authType)} to connect:")
             .setView(view)
             .setPositiveButton("Connect") { _, _ ->
                 val password = passwordEdit.text?.toString()
-                handleAuthentication(password)
+                handleAuthentication(password, savePasswordSwitch.isChecked)
             }
             .setNegativeButton("Cancel") { _, _ ->
                 onAuthenticated?.invoke(null)
@@ -88,22 +89,29 @@ class AuthenticationDialog : DialogFragment() {
         }
     }
     
-    private fun handleAuthentication(password: String?) {
+    private fun handleAuthentication(password: String?, savePersistent: Boolean) {
         if (password.isNullOrBlank()) {
             onAuthenticated?.invoke(null)
             return
         }
-        
+
         val connectionId = arguments?.getString(ARG_CONNECTION_ID)
         if (connectionId != null) {
-            // Store password if user wants to save it
+            // Default: stash for the running session only (cleared on
+            // app restart). If the user flipped the "Save password"
+            // switch we instead persist at ENCRYPTED level so JSch
+            // can pull it back on the next connect via
+            // SecurePasswordManager.retrievePassword().
             lifecycleScope.launch {
                 try {
-                    val storageLevel = io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.SESSION_ONLY
+                    val storageLevel = if (savePersistent) {
+                        io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.ENCRYPTED
+                    } else {
+                        io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.SESSION_ONLY
+                    }
                     app.securePasswordManager.storePassword(connectionId, password, storageLevel)
-                    
+
                     onAuthenticated?.invoke(password)
-                    
                 } catch (e: Exception) {
                     Logger.e("AuthenticationDialog", "Failed to store password", e)
                     onAuthenticated?.invoke(password) // Still try to authenticate

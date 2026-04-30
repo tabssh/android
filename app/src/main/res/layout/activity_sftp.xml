@@ -1,4 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    SFTP browser (polish pass, 2026-04-29).
+
+    Polish goals:
+      • Pane headers collapsed to a single row: parent-up button, path,
+        right-aligned home button. Drops the redundant "Local Files" /
+        "Remote Files" colored caption that ate two screen rows.
+      • Empty state per pane — a centred icon + caption when the
+        adapter has zero items, instead of a blank white pane.
+      • Transfer progress card hidden by default; the activity flips it
+        VISIBLE only while there are active transfers, reclaiming the
+        200dp of dead space when nothing is uploading/downloading.
+      • Action bar — icon-on-top + tiny-label buttons, weighted equal.
+        Same height (52dp) as a single big button row but readable on
+        a 360dp phone where the old text-only buttons truncated.
+-->
 <androidx.coordinatorlayout.widget.CoordinatorLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -27,10 +43,7 @@
         android:orientation="vertical"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
-        <!-- Wave 8.5 — SFTP tabs (chip strip).
-             Each chip represents a connection's remote browser. The "+" chip
-             opens a connection picker to add another tab. Single local pane
-             on the left, swappable remote pane on the right. -->
+        <!-- SFTP tabs (chip strip) — one chip per open connection. -->
         <com.google.android.material.chip.ChipGroup
             android:id="@+id/sftp_tabs_strip"
             android:layout_width="match_parent"
@@ -47,183 +60,269 @@
             android:orientation="horizontal"
             android:baselineAligned="false">
 
-            <!-- Local files pane -->
-            <LinearLayout
+            <!-- ───────────── Local pane ───────────── -->
+            <FrameLayout
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:orientation="vertical"
-                android:background="?attr/colorSurface"
-                android:padding="@dimen/space_sm">
+                android:background="?attr/colorSurface">
 
-                <!-- Local path header -->
                 <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:background="?attr/colorSurfaceVariant"
-                    android:padding="@dimen/space_sm"
-                    android:layout_marginBottom="@dimen/space_sm">
+                    android:layout_height="match_parent"
+                    android:orientation="vertical">
 
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/local_files"
-                        android:textStyle="bold"
-                        android:textSize="@dimen/text_size_subtitle" />
+                    <!-- Local path bar -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:background="?attr/colorSurfaceVariant"
+                        android:paddingHorizontal="4dp">
 
-                    <ImageButton
-                        android:id="@+id/btn_local_up"
-                        android:layout_width="@dimen/min_touch_target"
-                        android:layout_height="@dimen/min_touch_target"
-                        android:src="@drawable/ic_arrow_up"
-                        android:background="?attr/selectableItemBackgroundBorderless"
-                        android:contentDescription="Go up" />
+                        <ImageButton
+                            android:id="@+id/btn_local_up"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:src="@drawable/ic_arrow_up"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            app:tint="?attr/colorOnSurfaceVariant"
+                            android:contentDescription="Go up" />
+
+                        <TextView
+                            android:id="@+id/text_local_path"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginHorizontal="4dp"
+                            android:text="/storage/emulated/0"
+                            android:textSize="13sp"
+                            android:textColor="?attr/colorOnSurfaceVariant"
+                            android:singleLine="true"
+                            android:ellipsize="start"
+                            android:fontFamily="monospace" />
+
+                    </LinearLayout>
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/recycler_local_files"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        tools:listitem="@layout/item_file" />
 
                 </LinearLayout>
 
-                <TextView
-                    android:id="@+id/text_local_path"
-                    android:layout_width="match_parent"
+                <!-- Empty state — shown by adapter listener when count=0. -->
+                <LinearLayout
+                    android:id="@+id/empty_local"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="/storage/emulated/0"
-                    android:textSize="@dimen/text_size_caption"
-                    android:singleLine="true"
-                    android:ellipsize="start"
-                    android:layout_marginBottom="@dimen/space_sm" />
+                    android:layout_gravity="center"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:padding="16dp"
+                    android:visibility="gone">
 
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/recycler_local_files"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    tools:listitem="@layout/item_file" />
+                    <ImageView
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:src="@drawable/ic_folder"
+                        app:tint="?attr/colorOutline"
+                        android:alpha="0.5"
+                        android:importantForAccessibility="no" />
 
-            </LinearLayout>
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Empty folder"
+                        android:textSize="13sp"
+                        android:textColor="?attr/colorOnSurfaceVariant" />
+                </LinearLayout>
 
-            <!-- Divider -->
+            </FrameLayout>
+
+            <!-- Vertical divider -->
             <View
                 android:layout_width="@dimen/divider_height"
                 android:layout_height="match_parent"
-                android:background="?attr/colorOutline" />
+                android:background="?attr/colorOutlineVariant" />
 
-            <!-- Remote files pane -->
-            <LinearLayout
+            <!-- ───────────── Remote pane ───────────── -->
+            <FrameLayout
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:orientation="vertical"
-                android:background="?attr/colorSurface"
-                android:padding="@dimen/space_sm">
+                android:background="?attr/colorSurface">
 
-                <!-- Remote path header -->
                 <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:background="?attr/colorSurfaceVariant"
-                    android:padding="@dimen/space_sm"
-                    android:layout_marginBottom="@dimen/space_sm">
+                    android:layout_height="match_parent"
+                    android:orientation="vertical">
 
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/remote_files"
-                        android:textStyle="bold"
-                        android:textSize="@dimen/text_size_subtitle" />
+                    <!-- Remote path bar -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:background="?attr/colorSurfaceVariant"
+                        android:paddingHorizontal="4dp">
 
-                    <ImageButton
-                        android:id="@+id/btn_remote_up"
-                        android:layout_width="@dimen/min_touch_target"
-                        android:layout_height="@dimen/min_touch_target"
-                        android:src="@drawable/ic_arrow_up"
-                        android:background="?attr/selectableItemBackgroundBorderless"
-                        android:contentDescription="Go up" />
+                        <ImageButton
+                            android:id="@+id/btn_remote_up"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:src="@drawable/ic_arrow_up"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            app:tint="?attr/colorOnSurfaceVariant"
+                            android:contentDescription="Go up" />
+
+                        <TextView
+                            android:id="@+id/text_remote_path"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginHorizontal="4dp"
+                            android:text="/"
+                            android:textSize="13sp"
+                            android:textColor="?attr/colorOnSurfaceVariant"
+                            android:singleLine="true"
+                            android:ellipsize="start"
+                            android:fontFamily="monospace" />
+
+                    </LinearLayout>
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/recycler_remote_files"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        tools:listitem="@layout/item_file" />
 
                 </LinearLayout>
 
-                <TextView
-                    android:id="@+id/text_remote_path"
-                    android:layout_width="match_parent"
+                <LinearLayout
+                    android:id="@+id/empty_remote"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="/"
-                    android:textSize="@dimen/text_size_caption"
-                    android:singleLine="true"
-                    android:ellipsize="start"
-                    android:layout_marginBottom="@dimen/space_sm" />
+                    android:layout_gravity="center"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:padding="16dp"
+                    android:visibility="gone">
 
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/recycler_remote_files"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    tools:listitem="@layout/item_file" />
+                    <ImageView
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:src="@drawable/ic_folder"
+                        app:tint="?attr/colorOutline"
+                        android:alpha="0.5"
+                        android:importantForAccessibility="no" />
 
-            </LinearLayout>
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Empty folder"
+                        android:textSize="13sp"
+                        android:textColor="?attr/colorOnSurfaceVariant" />
+                </LinearLayout>
+
+                <!-- Loading indicator overlay — flipped on while listRemoteFiles() runs. -->
+                <com.google.android.material.progressindicator.CircularProgressIndicator
+                    android:id="@+id/loading_remote"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:indeterminate="true"
+                    android:visibility="gone" />
+
+            </FrameLayout>
 
         </LinearLayout>
 
-        <!-- Transfer action bar -->
+        <!-- Action bar: 4 icon-on-top buttons, equal weight. -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:background="?attr/colorSurfaceVariant"
-            android:padding="@dimen/space_md"
+            android:background="?attr/colorSurface"
+            android:paddingHorizontal="4dp"
+            android:paddingVertical="4dp"
             android:gravity="center_vertical">
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_upload"
-                style="@style/Widget.TabSSH.Button"
+                style="@style/Widget.Material3.Button.TextButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="56dp"
                 android:layout_weight="1"
-                android:layout_marginEnd="@dimen/space_sm"
-                android:text="@string/upload_file"
+                android:text="Upload"
+                android:textSize="11sp"
+                app:icon="@drawable/ic_upload"
+                app:iconGravity="top"
+                app:iconSize="20dp"
+                app:iconPadding="2dp"
                 android:enabled="false" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_download"
-                style="@style/Widget.TabSSH.Button"
+                style="@style/Widget.Material3.Button.TextButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="56dp"
                 android:layout_weight="1"
-                android:layout_marginEnd="@dimen/space_sm"
-                android:text="@string/download_file"
+                android:text="Download"
+                android:textSize="11sp"
+                app:icon="@drawable/ic_download"
+                app:iconGravity="top"
+                app:iconSize="20dp"
+                app:iconPadding="2dp"
                 android:enabled="false" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_new_folder"
-                style="@style/Widget.TabSSH.Button.Outlined"
+                style="@style/Widget.Material3.Button.TextButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="56dp"
                 android:layout_weight="1"
-                android:layout_marginEnd="@dimen/space_sm"
-                android:text="@string/new_folder" />
+                android:text="New Folder"
+                android:textSize="11sp"
+                app:icon="@drawable/ic_add"
+                app:iconGravity="top"
+                app:iconSize="20dp"
+                app:iconPadding="2dp" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_refresh"
-                style="@style/Widget.TabSSH.Button.Outlined"
+                style="@style/Widget.Material3.Button.TextButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="56dp"
                 android:layout_weight="1"
-                android:text="Refresh" />
+                android:text="Refresh"
+                android:textSize="11sp"
+                app:icon="@drawable/ic_refresh"
+                app:iconGravity="top"
+                app:iconSize="20dp"
+                app:iconPadding="2dp" />
 
         </LinearLayout>
 
-        <!-- Transfer progress area -->
+        <!-- Transfer progress card — hidden by default, surfaced by the
+             activity when the transfer adapter has > 0 items. Saves the
+             200dp dead-space when nothing is in flight. -->
         <com.google.android.material.card.MaterialCardView
+            android:id="@+id/transfer_card"
             android:layout_width="match_parent"
-            android:layout_height="200dp"
+            android:layout_height="wrap_content"
             android:layout_margin="@dimen/space_sm"
             app:cardCornerRadius="@dimen/card_corner_radius"
-            app:cardElevation="@dimen/elevation_low">
+            app:cardElevation="@dimen/elevation_low"
+            android:visibility="gone">
 
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
+                android:layout_height="wrap_content"
                 android:orientation="vertical">
 
                 <TextView
@@ -239,7 +338,8 @@
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/recycler_transfers"
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent"
+                    android:layout_height="wrap_content"
+                    android:maxHeight="180dp"
                     android:padding="@dimen/space_sm"
                     tools:listitem="@layout/item_transfer" />
 

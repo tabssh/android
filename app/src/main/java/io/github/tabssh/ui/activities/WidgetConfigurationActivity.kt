@@ -104,6 +104,8 @@ class WidgetConfigurationActivity : AppCompatActivity() {
                         Logger.d("WidgetConfigActivity", "Loaded ${connections.size} connections")
                     }
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e("WidgetConfigActivity", "Failed to load connections", e)
             }
