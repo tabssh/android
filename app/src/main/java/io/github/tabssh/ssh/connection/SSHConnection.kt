@@ -181,8 +181,9 @@ class SSHConnection(
                     Logger.i("SSHConnection", "Connecting to target through jump host on localhost:$jumpHostPort as $effectiveUsername")
                     jsch.getSession(effectiveUsername, "localhost", jumpHostPort)
                 } else {
-                    Logger.i("SSHConnection", "Direct connection to ${profile.host}:${profile.port} as $effectiveUsername")
-                    jsch.getSession(effectiveUsername, profile.host, profile.port)
+                    val resolved = resolveHostForIpMode(profile.host, profile.ipMode)
+                    Logger.i("SSHConnection", "Direct connection to $resolved (host=${profile.host}, ipMode=${profile.ipMode}):${profile.port} as $effectiveUsername")
+                    jsch.getSession(effectiveUsername, resolved, profile.port)
                 }
 
                 // Setup HTTP/SOCKS proxy if configured
@@ -292,6 +293,37 @@ class SSHConnection(
         retrySession.connect()
         Logger.i("SSHConnection", "Silent retry succeeded for ${profile.host}")
         return retrySession
+    }
+
+    /**
+     * Issue #6 — pre-resolve [host] to a single literal address matching
+     * the requested [mode] ("ipv4" / "ipv6"). On "auto" or DNS failure
+     * the original host is returned verbatim. If no address of the
+     * requested family is available we fall back to the other family
+     * and surface a toast so the user knows ipMode was overridden.
+     */
+    private fun resolveHostForIpMode(host: String, mode: String): String {
+        if (mode == "auto") return host
+        val all = try {
+            java.net.InetAddress.getAllByName(host)
+        } catch (e: Exception) {
+            Logger.w("SSHConnection", "DNS lookup failed for $host (ipMode=$mode), passing through: ${e.message}")
+            return host
+        }
+        val want4 = mode == "ipv4"
+        all.firstOrNull { (it is java.net.Inet4Address) == want4 }
+            ?.hostAddress?.let { return it }
+
+        val fallback = all.firstOrNull()?.hostAddress ?: return host
+        val msg = if (want4)
+            "No IPv4 address found for $host — connecting via IPv6"
+        else
+            "No IPv6 address found for $host — connecting via IPv4"
+        Logger.w("SSHConnection", msg)
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+        }
+        return fallback
     }
 
     /**

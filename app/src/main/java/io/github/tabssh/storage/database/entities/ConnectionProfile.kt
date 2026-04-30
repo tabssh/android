@@ -144,6 +144,10 @@ data class ConnectionProfile(
     @ColumnInfo(name = "remote_command")
     val remoteCommand: String? = null,
 
+    /** Issue #6 — "auto" / "ipv4" / "ipv6". DB v24 → v25. */
+    @ColumnInfo(name = "ip_mode")
+    val ipMode: String = "auto",
+
     @ColumnInfo(name = "font_size_override")
     val fontSizeOverride: Int? = null, // null = use global default, otherwise override
 

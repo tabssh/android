@@ -10,6 +10,18 @@
         <item>telnet</item>
     </string-array>
 
+    <!-- Issue #6 — IP mode (auto / force IPv4 / force IPv6). -->
+    <string-array name="ip_mode_entries">
+        <item>Auto</item>
+        <item>IPv4</item>
+        <item>IPv6</item>
+    </string-array>
+    <string-array name="ip_mode_values">
+        <item>auto</item>
+        <item>ipv4</item>
+        <item>ipv6</item>
+    </string-array>
+
     <!-- Issue #37 — Remote command presets for ConnectionEditActivity.
          Index 0 (Default — login shell) saves null/empty.
          Last item (Custom…) reveals the EditText for arbitrary input.

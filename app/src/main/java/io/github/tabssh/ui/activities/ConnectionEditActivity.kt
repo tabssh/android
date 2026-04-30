@@ -548,6 +548,11 @@ class ConnectionEditActivity : AppCompatActivity() {
         // Wave 2.3: protocol selector
         binding.spinnerProtocol.setSelection(if (profile.protocol.equals("telnet", true)) 1 else 0)
 
+        // Issue #6: IP mode selector (auto/ipv4/ipv6 → indices 0/1/2)
+        binding.spinnerIpMode.setSelection(
+            when (profile.ipMode.lowercase()) { "ipv4" -> 1; "ipv6" -> 2; else -> 0 }
+        )
+
         // Wave 3.1: color tag preview + picker
         currentColorTag = profile.colorTag
         renderColorTagPreview()
@@ -707,6 +712,8 @@ class ConnectionEditActivity : AppCompatActivity() {
         val remoteCommand = readRemoteCommandFromUi()
         // Wave 2.3: protocol selector
         val protocol = if (binding.spinnerProtocol.selectedItemPosition == 1) "telnet" else "ssh"
+        // Issue #6: IP mode (0=auto, 1=ipv4, 2=ipv6)
+        val ipMode = when (binding.spinnerIpMode.selectedItemPosition) { 1 -> "ipv4"; 2 -> "ipv6"; else -> "auto" }
         // Wave 3.1: color tag (0 = none)
         val colorTag = currentColorTag
 
@@ -765,6 +772,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             envVars = envVars,
             agentForwarding = agentForwarding,
             remoteCommand = remoteCommand,
+            ipMode = ipMode,
             groupId = selectedGroupId,
             proxyType = proxyType,
             proxyHost = proxyHost,
@@ -795,6 +803,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             envVars = envVars,
             agentForwarding = agentForwarding,
             remoteCommand = remoteCommand,
+            ipMode = ipMode,
             groupId = selectedGroupId,
             proxyType = proxyType,
             proxyHost = proxyHost,

@@ -28,7 +28,7 @@ import io.github.tabssh.utils.logging.Logger
         Workspace::class,
         CloudAccount::class
     ],
-    version = 24,
+    version = 25,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -300,7 +300,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     MIGRATION_20_21,
                     MIGRATION_21_22,
                     MIGRATION_22_23,
-                    MIGRATION_23_24
+                    MIGRATION_23_24,
+                    MIGRATION_24_25
                 )
                 .build()
                 INSTANCE = instance
@@ -532,6 +533,16 @@ data class DatabaseStats(
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE connections ADD COLUMN remote_command TEXT")
                 Logger.i("Database", "Migration 23->24: Added remote_command to connections")
+            }
+        }
+
+        /** v24 → v25 — Issue #6: per-host IP mode (auto/ipv4/ipv6). */
+        val MIGRATION_24_25 = object : Migration(24, 25) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE connections ADD COLUMN ip_mode TEXT NOT NULL DEFAULT 'auto'"
+                )
+                Logger.i("Database", "Migration 24->25: Added ip_mode to connections")
             }
         }
 
