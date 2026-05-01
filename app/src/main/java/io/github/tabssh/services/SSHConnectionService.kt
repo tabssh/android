@@ -27,8 +27,9 @@ class SSHConnectionService : Service() {
     
     private val serviceScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private lateinit var app: TabSSHApplication
-    
+
     private var activeConnections = 0
+    private var sessionListener: SessionManagerListener? = null
     
     companion object {
         private const val NOTIFICATION_ID = 1001
@@ -88,11 +89,17 @@ class SSHConnectionService : Service() {
     
     override fun onDestroy() {
         super.onDestroy()
-        
+
         Logger.d("SSHConnectionService", "Service destroyed")
-        
+
         serviceScope.cancel()
-        app.sshSessionManager.cleanup()
+        // Don't tear down the manager here — its lifecycle is the
+        // Application's, not the service's. The service is allowed to
+        // stop and restart (e.g. when there are zero active sessions),
+        // and cancelling the manager's scope here breaks every future
+        // connect() in the process.
+        sessionListener?.let { app.sshSessionManager.removeListener(it) }
+        sessionListener = null
     }
     
     private fun startForegroundService() {
@@ -209,19 +216,19 @@ class SSHConnectionService : Service() {
     }
     
     private fun setupSessionManagerListener() {
-        app.sshSessionManager.addListener(object : SessionManagerListener {
+        val listener = object : SessionManagerListener {
             override fun onConnectionEstablished(profileId: String) {
                 updateConnectionCount()
             }
-            
+
             override fun onConnectionClosed(profileId: String) {
                 updateConnectionCount()
             }
-            
+
             override fun onConnectionStateChanged(profileId: String, state: ConnectionState) {
                 updateConnectionCount()
             }
-            
+
             override fun onAllConnectionsClosed() {
                 updateConnectionCount()
                 // Consider stopping service if no connections remain
@@ -234,7 +241,9 @@ class SSHConnectionService : Service() {
                     }
                 }
             }
-        })
+        }
+        sessionListener = listener
+        app.sshSessionManager.addListener(listener)
     }
     
     private fun updateConnectionCount() {

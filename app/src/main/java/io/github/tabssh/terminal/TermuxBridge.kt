@@ -569,7 +569,9 @@ class TermuxBridge(
         _isConnected.value = false
         readJob?.cancel()
         readJob = null
-        writeScope.coroutineContext[Job]?.cancel()
+        // Don't cancel writeScope's Job — it's a `val` shared across the
+        // bridge's lifetime, and cancelling kills it permanently. Pending
+        // writes drop on the floor when outputStream becomes null below.
 
         try {
             inputStream?.close()

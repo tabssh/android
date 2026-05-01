@@ -44,6 +44,18 @@ class SSHConnection(
     // public `Channel` base type and dispatch on the concrete subclass at
     // call sites that need session-only methods (see `resizeActiveChannelPty`).
     private var shellChannel: Channel? = null
+    // Issue #163 — track every channel we've opened on this Session so that
+    // (a) multiple tabs can each hold their own ChannelShell against one
+    // Session (real multiplexing — opening the same profile twice no longer
+    // returns the same stream pair), and (b) `disconnect()` can tear them
+    // all down together. The legacy `shellChannel` field above is now the
+    // most-recently-opened channel; legacy callers that don't know about
+    // multi-tab (e.g. SFTP path, TabTerminalActivity's getOutputStream
+    // shortcut) get the active tab's stream as long as the active tab was
+    // the last to call openShellChannel — which is true in practice because
+    // the user always activates the tab they just opened.
+    private val openChannels: MutableSet<Channel> =
+        java.util.Collections.synchronizedSet(mutableSetOf())
     private var sftpChannel: ChannelSftp? = null
     private var jumpHostSession: Session? = null
     private var jumpHostLocalPort: Int = 0
@@ -61,8 +73,14 @@ class SSHConnection(
     val bytesTransferred: StateFlow<Long> = _bytesTransferred.asStateFlow()
 
     private var connectJob: Job? = null
+    private var reconnectJob: Job? = null
     private var reconnectAttempts = 0
     private val maxReconnectAttempts = 3
+    // Auto-reconnect should only fire after a session has been *established*
+    // and then dropped — not on initial-connect failures (host unreachable,
+    // wrong port, …). Without this gate the reconnect loop runs in the
+    // background after the activity has bailed.
+    private var hadSuccessfulConnect = false
 
     private val listeners = mutableListOf<ConnectionListener>()
 
@@ -233,6 +251,7 @@ class SSHConnection(
                 
                 _connectionState.value = ConnectionState.CONNECTED
                 reconnectAttempts = 0
+                hadSuccessfulConnect = true
                 notifyListeners { onConnected(id) }
                 
                 Logger.i("SSHConnection", "Connection complete to ${profile.host}")
@@ -379,11 +398,10 @@ class SSHConnection(
             config["compression.c2s"] = "zlib,none"
         }
         
-        // Keep-alive
-        if (profile.keepAlive) {
-            config["ServerAliveInterval"] = "60"
-            config["ServerAliveCountMax"] = "3"
-        }
+        // Keep-alive — JSch uses Session.setServerAliveInterval (ms) +
+        // setServerAliveCountMax. The OpenSSH-style "ServerAliveInterval"
+        // config keys do nothing on JSch. Set on Session below after
+        // setConfig so the values stick.
         
         // Preferred algorithms (secure defaults)
         config["PreferredAuthentications"] = "publickey,keyboard-interactive,password"
@@ -393,8 +411,19 @@ class SSHConnection(
         config["mac.c2s"] = "hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com,hmac-sha2-256,hmac-sha2-512"
         
         session.setConfig(config)
-        
-        Logger.d("SSHConnection", "Session configured with compression=${profile.compression}, keep-alive=${profile.keepAlive}")
+
+        // Mobile-client policy — always set keepalive. Carrier NAT
+        // timeouts, cellular handoffs and Wi-Fi sleep all silently kill
+        // idle TCP sockets within minutes; ~32 bytes/min of NOOP traffic
+        // is a vastly better trade than the user finding their session
+        // dead the next time they unlock the phone. The legacy
+        // `profile.keepAlive` toggle is left in the entity for
+        // round-tripping with imported configs but no longer gates the
+        // setServerAliveInterval call.
+        session.serverAliveInterval = 60_000   // ms
+        session.serverAliveCountMax = 3
+
+        Logger.d("SSHConnection", "Session configured with compression=${profile.compression}, keepalive=on (mobile default)")
     }
 
     /**
@@ -890,9 +919,11 @@ class SSHConnection(
         }
 
         try {
-            if (shellChannel?.isConnected == true) {
-                return@withContext shellChannel
-            }
+            // Issue #163 — always open a NEW channel on each call. Previous
+            // implementation cached and returned the existing shellChannel,
+            // which made "open the same profile in two tabs" silently share
+            // one stream pair. With the cache gone each tab gets its own
+            // ChannelShell on the same Session (multiplexing).
 
             // Issue #37 — open a `ChannelExec` instead of `ChannelShell` when
             // a RemoteCommand is set. Required for SourceForge-style hosts
@@ -935,6 +966,7 @@ class SSHConnection(
                 }
                 exec.connect()
                 shellChannel = exec
+                openChannels.add(exec)
                 Logger.i("SSHConnection", "Opened exec channel with RemoteCommand: ${remoteCmd.take(60)}")
                 return@withContext exec
             }
@@ -972,7 +1004,8 @@ class SSHConnection(
             shell.connect()
 
             shellChannel = shell
-            Logger.d("SSHConnection", "Shell channel opened")
+            openChannels.add(shell)
+            Logger.d("SSHConnection", "Shell channel opened (total open: ${openChannels.size})")
             return@withContext shell
 
         } catch (e: Exception) {
@@ -995,6 +1028,49 @@ class SSHConnection(
             else -> {} // null or some other channel kind we don't manage
         }
     }
+
+    /**
+     * Issue #163 — per-tab PTY resize. Each tab holds its own [Channel];
+     * call this with the tab's channel so its dimensions don't bleed onto
+     * sibling tabs sharing the same Session.
+     */
+    fun resizePtyOf(channel: Channel, cols: Int, rows: Int) {
+        try {
+            when (channel) {
+                is ChannelShell -> channel.setPtySize(cols, rows, 0, 0)
+                is ChannelExec -> channel.setPtySize(cols, rows, 0, 0)
+                else -> {}
+            }
+        } catch (e: Exception) {
+            Logger.w("SSHConnection", "resizePtyOf failed: ${e.message}")
+        }
+    }
+
+    /**
+     * Issue #163 — close ONE tab's channel without tearing down the Session
+     * that sibling tabs are still using. Caller (SSHTab) invokes this on
+     * tab close. The Session lives until [disconnect] runs.
+     */
+    fun closeChannel(channel: Channel) {
+        if (openChannels.remove(channel)) {
+            try { channel.disconnect() } catch (_: Exception) {}
+            // Keep the legacy [shellChannel] pointer pointing at SOMETHING
+            // valid if it was the one we just closed — pick any remaining
+            // open channel or null out.
+            if (shellChannel === channel) {
+                shellChannel = openChannels.toList().firstOrNull()
+            }
+            Logger.d("SSHConnection", "Channel closed (remaining: ${openChannels.size})")
+        }
+    }
+
+    /**
+     * Issue #163 — true if the underlying JSch Session is still up. Tabs
+     * use this to distinguish "my shell exited, session is fine" (don't
+     * cascade to wrapper-level disconnect) from "session died, everything
+     * is gone" (cascade so the global notification fires).
+     */
+    fun isSessionAlive(): Boolean = session?.isConnected == true
     
     /**
      * Execute a command on the remote server and return output
@@ -1105,8 +1181,17 @@ class SSHConnection(
         Logger.i("SSHConnection", "Disconnecting from ${profile.host}")
 
         connectJob?.cancel()
+        reconnectJob?.cancel()
+        reconnectJob = null
+        reconnectAttempts = 0
+        hadSuccessfulConnect = false
 
-        shellChannel?.disconnect()
+        // Issue #163 — close every channel a tab opened against this session,
+        // not just the legacy single shellChannel pointer.
+        openChannels.toList().forEach {
+            try { it.disconnect() } catch (_: Exception) {}
+        }
+        openChannels.clear()
         shellChannel = null
 
         sftpChannel?.disconnect()
@@ -1147,27 +1232,34 @@ class SSHConnection(
         _detailedError.value = errorInfo
         notifyListeners { onError(id, error) }
 
-        // Check if this is an auth error - don't retry on auth failures
+        // Auth-fail markers JSch actually emits — substring matches on
+        // "password" / "publickey" alone caught unrelated kex failures.
         val isAuthError = error.message?.let { msg ->
             msg.contains("Auth fail", ignoreCase = true) ||
-            msg.contains("authentication", ignoreCase = true) ||
-            msg.contains("password", ignoreCase = true) ||
-            msg.contains("publickey", ignoreCase = true) ||
+            msg.contains("Auth cancel", ignoreCase = true) ||
             msg.contains("Permission denied", ignoreCase = true) ||
             msg.contains("Too many authentication failures", ignoreCase = true)
         } ?: false
 
-        // Auto-reconnect logic - only for network errors, not auth failures
-        if (!isAuthError && reconnectAttempts < maxReconnectAttempts) {
-            reconnectAttempts++
-            Logger.i("SSHConnection", "Attempting reconnect $reconnectAttempts/$maxReconnectAttempts")
+        if (isAuthError) {
+            Logger.i("SSHConnection", "Auth error — not retrying")
+            return
+        }
+        if (!hadSuccessfulConnect) {
+            Logger.i("SSHConnection", "Initial connect failed — not auto-retrying")
+            return
+        }
+        if (reconnectAttempts >= maxReconnectAttempts) {
+            Logger.i("SSHConnection", "Max reconnect attempts ($maxReconnectAttempts) reached")
+            return
+        }
 
-            scope.launch {
-                delay(5000) // Wait 5 seconds before retry
-                connect()
-            }
-        } else if (isAuthError) {
-            Logger.i("SSHConnection", "Auth error detected - not retrying")
+        reconnectAttempts++
+        Logger.i("SSHConnection", "Attempting reconnect $reconnectAttempts/$maxReconnectAttempts")
+        reconnectJob?.cancel()
+        reconnectJob = scope.launch {
+            delay(5000)
+            connect()
         }
     }
     

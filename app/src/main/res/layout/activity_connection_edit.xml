@@ -433,15 +433,11 @@
                         android:checked="true"
                         android:tooltipText="Reduce bandwidth usage on slow connections" />
 
-                    <com.google.android.material.materialswitch.MaterialSwitch
-                        android:id="@+id/switch_keep_alive"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/space_sm"
-                        android:text="Keep Alive"
-                        android:textColor="?android:attr/textColorPrimary"
-                        android:checked="true"
-                        android:tooltipText="Prevents connection timeout on idle" />
+                    <!-- Keep-alive toggle removed (Issue #166) — always on
+                         for mobile clients. Carrier NAT timeouts and Wi-Fi
+                         sleep silently kill idle SSH sockets; the trivial
+                         bandwidth cost of NOOP packets is preferable to
+                         finding the session dead on resume. -->
 
                     <!-- Wave 2.X — X11 forwarding enabled (real JSch channel
                          forwarding to localhost:6000). Requires an X server

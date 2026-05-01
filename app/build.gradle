@@ -5,6 +5,35 @@ plugins {
     id 'jacoco'
 }
 
+// Resolve a build-time identifier for the current source. Preference:
+//   1. `git rev-parse --short HEAD` — works on dev machines AND F-Droid's
+//      builder (fdroidserver clones via git and checks out the recipe's
+//      commit SHA, so HEAD is the exact commit being built).
+//   2. release.txt contents — fallback when .git is absent (source
+//      tarballs, IDE imports without git history).
+//   3. "unknown" — last-resort sentinel.
+// Short SHA only — avoid `--dirty` or timestamps which break F-Droid
+// reproducibility (a stray file in the build dir would diverge HEAD).
+//
+// Uses `providers.exec` (the configuration-cache-friendly API) — the
+// legacy `exec { }` block fails Gradle 8's config-cache validation with
+// "Starting an external process during configuration time is unsupported".
+def resolveGitCommit = {
+    try {
+        def execResult = providers.exec {
+            commandLine 'git', 'rev-parse', '--short', 'HEAD'
+            ignoreExitValue = true
+        }
+        def s = execResult.standardOutput.asText.get().trim()
+        if (s) return s
+    } catch (Exception ignored) {}
+    try {
+        def f = file("${rootDir}/release.txt")
+        if (f.exists()) return f.text.trim()
+    } catch (Exception ignored) {}
+    return "unknown"
+}
+
 android {
     namespace 'io.github.tabssh'
     compileSdk 34
@@ -36,7 +65,7 @@ android {
         // Build information - version, commit ID, and build date
         buildConfigField "String", "VERSION_NAME", "\"${versionName}\""
         buildConfigField "int", "VERSION_CODE", "${versionCode}"
-        buildConfigField "String", "GIT_COMMIT_ID", "\"dev\""
+        buildConfigField "String", "GIT_COMMIT_ID", "\"${resolveGitCommit()}\""
         buildConfigField "String", "BUILD_DATE", "\"" + new java.text.SimpleDateFormat("MM/dd/yyyy 'at' HH:mm:ss", java.util.Locale.US).format(new java.util.Date()) + "\""
         buildConfigField "String", "FULL_VERSION", "\"${versionName} (${versionCode})\""
     }

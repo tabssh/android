@@ -491,7 +491,6 @@ class ConnectionEditActivity : AppCompatActivity() {
         // Advanced settings
         binding.spinnerTerminalType.setText(profile.terminalType, false)
         binding.switchCompression.isChecked = profile.compression
-        binding.switchKeepAlive.isChecked = profile.keepAlive
         binding.switchX11Forwarding.isChecked = profile.x11Forwarding
         binding.switchUseMosh.isChecked = profile.useMosh
 
@@ -680,7 +679,9 @@ class ConnectionEditActivity : AppCompatActivity() {
         
         val terminalType = binding.spinnerTerminalType.text.toString().takeIf { it.isNotBlank() } ?: "xterm-256color"
         val compression = binding.switchCompression.isChecked
-        val keepAlive = binding.switchKeepAlive.isChecked
+        // Issue #166 — keepalive is always on at the SSH layer for mobile
+        // clients. Persist `true` so imports/exports round-trip cleanly.
+        val keepAlive = true
         val x11Forwarding = binding.switchX11Forwarding.isChecked
         val useMosh = binding.switchUseMosh.isChecked
 

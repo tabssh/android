@@ -21,11 +21,11 @@ Essential scripts for building, testing, and releasing TabSSH Android.
 
 ### Development
 ```bash
-# Quick error count (fast)
-./scripts/check/quick-check.sh
+# Quick error count (use `make check`)
+make check
 
 # Enter Docker dev shell
-./scripts/check/dev-shell.sh
+./scripts/dev-shell.sh
 ```
 
 ### Release Management
@@ -63,15 +63,6 @@ git add -A
 git commit -m "Your message"
 git push origin main
 ```
-
----
-
-### test-build.sh
-**Purpose:** Fast build test using Docker  
-**Run Time:** ~5-6 minutes  
-**When to use:** Quick validation without full checks
-
-Simpler alternative to `pre-commit-check.sh` - just builds without extra validation.
 
 ---
 
@@ -121,39 +112,25 @@ make logs
 
 ---
 
-### check/quick-check.sh
-**Purpose:** Fast compilation error count  
-**Run Time:** ~2-3 minutes  
-**When to use:** Quick validation during development
-
-Returns error count as exit code. Useful for CI/scripts.
-
-**Example:**
-```bash
-./scripts/check/quick-check.sh
-# Exit code = number of errors
-# 0 = no errors ✅
-# >0 = errors found ❌
-```
-
----
-
-### check/dev-shell.sh
-**Purpose:** Enter TabSSH Android development container shell  
-**Run Time:** ~5 seconds  
-**When to use:** 
+### dev-shell.sh
+**Purpose:** Enter TabSSH Android development container shell
+**Run Time:** ~5 seconds
+**When to use:**
 - Manual Gradle commands
 - Debugging build issues
 - Exploring build environment
 
 **Example:**
 ```bash
-./scripts/check/dev-shell.sh
+./scripts/dev-shell.sh
 # Now in container:
 ./gradlew tasks
 ./gradlew assembleDebug
 exit
 ```
+
+For a fast error-count check use `make check` instead — it runs the
+same `compileDebugKotlin` invocation under the same Docker image.
 
 ---
 
@@ -257,9 +234,9 @@ git checkout <commit> -- scripts/fix/script-name.sh
 ### Adding New Scripts
 
 1. Create script in appropriate directory:
-   - `scripts/` - Main scripts (build, release, etc.)
-   - `scripts/check/` - Validation/checking scripts
-   - `scripts/tools/` - Utility scripts (if needed)
+   - `scripts/` - Main scripts (build, release, dev tooling, test sshd, etc.)
+   - `tests/` - Reserve for actual test code (instrumented / JUnit / integration). Don't put build helpers here.
+   - `docker/` - Dockerfiles + compose files only. Test fixtures that ship as containers (e.g. `docker/test-sshd/`) live here.
 
 2. Make executable:
    ```bash

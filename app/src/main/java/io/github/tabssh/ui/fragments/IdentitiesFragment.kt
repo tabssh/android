@@ -7,7 +7,9 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
@@ -119,15 +121,17 @@ class IdentitiesFragment : Fragment() {
     }
     
     private fun loadData() {
-        // Load identities
-        lifecycleScope.launch {
-            app.database.identityDao().getAllIdentities().collect { identities ->
-                identityAdapter.submitList(identities)
-                Logger.d("IdentitiesFragment", "Loaded ${identities.size} identities")
+        // Issue #158 — defer Flow subscription until STARTED so the synchronous
+        // setup doesn't pile onto the first layout pass on cold start.
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                app.database.identityDao().getAllIdentities().collect { identities ->
+                    identityAdapter.submitList(identities)
+                    Logger.d("IdentitiesFragment", "Loaded ${identities.size} identities")
+                }
             }
         }
-        
-        // Load SSH keys count (for display)
+
         lifecycleScope.launch {
             val keysCount = app.database.keyDao().getKeyCount()
             Logger.d("IdentitiesFragment", "Found $keysCount SSH keys")

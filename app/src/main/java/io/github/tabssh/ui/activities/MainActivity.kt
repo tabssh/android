@@ -1237,6 +1237,8 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                         fold.orientation == androidx.window.layout.FoldingFeature.Orientation.VERTICAL
                     if (bookMode) applySidebarMode(toggle) else applyPhoneOverlayMode(toggle)
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.w("MainActivity", "FoldingFeature observation failed: ${e.message}")
             }

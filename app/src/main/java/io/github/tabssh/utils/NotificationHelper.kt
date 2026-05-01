@@ -31,11 +31,13 @@ object NotificationHelper {
     const val NOTIFICATION_ID_FILE_TRANSFER = 3001
     const val NOTIFICATION_ID_ERROR = 4001
     
-    // Notification Channels
-    private const val CHANNEL_SERVICE = "ssh_service"
-    private const val CHANNEL_CONNECTION = "ssh_connection"
-    private const val CHANNEL_FILE_TRANSFER = "file_transfer"
-    private const val CHANNEL_ERROR = "errors"
+    // Notification Channels — bumped to _v2 so the silent / no-vibrate
+    // defaults below take effect on existing installs (Android caches the
+    // first-create config and ignores updates to a live channel).
+    private const val CHANNEL_SERVICE = "ssh_service_v2"
+    private const val CHANNEL_CONNECTION = "ssh_connection_v2"
+    private const val CHANNEL_FILE_TRANSFER = "file_transfer_v2"
+    private const val CHANNEL_ERROR = "errors_v2"
     
     /**
      * Create all notification channels (Android 8+)
@@ -56,15 +58,18 @@ object NotificationHelper {
                 setSound(null, null)
             }
             
-            // Connection Channel - Default priority
+            // Connection Channel — silent. Routine connect / disconnect
+            // updates shouldn't beep or vibrate. Errors live on the ERROR
+            // channel which keeps sound + vibration.
             val connectionChannel = NotificationChannel(
                 CHANNEL_CONNECTION,
                 "Connection Status",
-                NotificationManager.IMPORTANCE_DEFAULT
+                NotificationManager.IMPORTANCE_LOW
             ).apply {
                 description = "SSH connection status updates"
-                setShowBadge(true)
-                enableVibration(true)
+                setShowBadge(false)
+                enableVibration(false)
+                setSound(null, null)
             }
             
             // File Transfer Channel - High priority, progress updates
@@ -138,7 +143,8 @@ object NotificationHelper {
             .setSmallIcon(R.drawable.ic_connected)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setSilent(true)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .build()
 
@@ -214,6 +220,7 @@ object NotificationHelper {
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setSilent(true)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .build()
 

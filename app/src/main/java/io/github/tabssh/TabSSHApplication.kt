@@ -27,6 +27,7 @@ class TabSSHApplication : Application() {
         const val KEY_LAST_CRASH   = "last_crash"
         const val KEY_CRASH_THREAD = "crash_thread"
         const val KEY_CRASH_TIME   = "crash_time"
+        const val KEY_LAST_LOGGED_COMMIT = "last_logged_commit"
     }
 
     // Core components - initialized lazily
@@ -94,6 +95,21 @@ class TabSSHApplication : Application() {
         // catch main-thread freezes and write the captured stack trace
         // to the debug log so it shows up in Copy Debug Logs.
         if (debugLoggingActive) startAnrWatchdog()
+
+        // Stamp the source-of-truth commit into the log exactly once per
+        // commit-id change (install / update). Lets users grepping their
+        // own log — or pasting it into a bug report — figure out which
+        // build the symptoms came from without having to ask the version
+        // string. Falls through silently when commit_id is the same as
+        // last launch so we don't spam the log on every startup.
+        val prefs = getSharedPreferences(STARTUP_PREFS, MODE_PRIVATE)
+        val lastLoggedCommit = prefs.getString(KEY_LAST_LOGGED_COMMIT, null)
+        if (lastLoggedCommit != BuildConfig.GIT_COMMIT_ID) {
+            val marker = "## apk built from: ${BuildConfig.GIT_COMMIT_ID} ##"
+            Logger.i("TabSSHApplication", marker)
+            Logger.d("TabSSHApplication", marker)
+            prefs.edit().putString(KEY_LAST_LOGGED_COMMIT, BuildConfig.GIT_COMMIT_ID).apply()
+        }
 
         Logger.d("TabSSHApplication", "Application starting...")
 
@@ -165,8 +181,21 @@ class TabSSHApplication : Application() {
             // renders wherever the user happens to be — terminal,
             // port-forward, multi-host dashboard, SFTP, performance.
             wireGlobalHostKeyCallbacks()
+            wireGlobalNotifications()
             Logger.i("TabSSHApplication", "Application initialized successfully (background)")
         }
+    }
+
+    private fun wireGlobalNotifications() {
+        sshSessionManager.addListener(object : io.github.tabssh.ssh.connection.SessionManagerListener {
+            override fun onConnectionStateChanged(profileId: String, state: io.github.tabssh.ssh.connection.ConnectionState) {
+                if (state != io.github.tabssh.ssh.connection.ConnectionState.DISCONNECTED) return
+                applicationScope.launch {
+                    val name = database.connectionDao().getConnectionById(profileId)?.getDisplayName() ?: return@launch
+                    io.github.tabssh.utils.NotificationHelper.showDisconnected(this@TabSSHApplication, name)
+                }
+            }
+        })
     }
 
     private fun wireGlobalHostKeyCallbacks() {
@@ -284,6 +313,11 @@ class TabSSHApplication : Application() {
         tryInit("SSHSession")   { sshSessionManager.initialize() }
         tryInit("Terminal")     { terminalManager.initialize() }
         tryInit("Performance")  { performanceManager.initialize() }
+        // Issue #158 — pre-open the Room DB on the background scope so the
+        // first Flow subscription from ConnectionsFragment doesn't pay for
+        // open + migrations on the main thread. Touching writableDatabase
+        // forces SupportSQLiteOpenHelper to run the migration chain now.
+        tryInit("Database")     { database.openHelper.writableDatabase }
 
         Logger.d("TabSSHApplication", "Core components initialized")
     }

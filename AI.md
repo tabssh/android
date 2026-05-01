@@ -777,12 +777,13 @@ Keystore is decoded from the `KEYSTORE_BASE64` secret. Gradle cache key is `${{ 
 
 `scripts/`:
 - `pre-commit-check.sh` — full Docker build validation (~6–8 min).
-- `test-build.sh` — fast build smoke test.
 - `clean-build.sh` — full clean rebuild.
 - `install-to-device.sh` — auto-detects APK location, runs `adb install`.
 - `prepare-fdroid-submission.sh` — assembles the F-Droid package.
 - `notify-release.sh` — Matrix + Mastodon notifications (requires `MATRIX_TOKEN`, `MASTODON_TOKEN`).
-- `check/quick-check.sh`, `check/dev-shell.sh` — error-count check, interactive Docker shell.
+- `dev-shell.sh` — interactive Docker shell for manual gradle invocations. Use `make check` for the fast error-count instead.
+- `generate-keystore.sh` — recreate the dev signing keystore (one-time).
+- `start-test-sshd.sh` — bring up the `tabssh/test-sshd` container (image lives at `docker/test-sshd/`); writes creds + keypair to `/tmp/tabssh-android/sshd/`.
 - `android-emulator.sh` — headless test-emulator manager. **One AVD per
   (type, size); one running emulator at a time.** Subcommands `start` /
   `stop` / `delete` / `clean` / `list`; types `phone` / `tablet` / `fold`
@@ -889,6 +890,7 @@ When modifying this codebase, prefer the following (derived from `CLAUDE.md` pol
 10. **CLAUDE.md is the runbook, AI.md is the architecture.** When you change architecture, update AI.md. When you add a target/script/policy, update CLAUDE.md.
 11. **Never add `Co-Authored-By` (or any attribution footer) to commit messages.** The maintainer runs Claude Code as themselves and authors every commit personally — there is no separate co-author. Adding the footer falsely implies a second contributor and pollutes git attribution. End commit bodies at the last description line, no trailer.
 12. **Save commit messages to `{project_root}/.git/COMMIT_MESS`.** Project convention so the maintainer can `git commit -F .git/COMMIT_MESS`. Overwrite the file each time. Do not save to `/tmp/tabssh-android/`. Do not also paste inline (the file is the source of truth).
+13. **Downscale screenshots before reading them.** Android screenshots are typically 1080×2400 (or larger on tablets/foldables) and exceed the 2000px image context limit — `Read` will fail with "image context too large". Before reading any screenshot, downscale to ≤1080px on the long edge, then `Read` the `-small.png`. ImageMagick may not be installed; the canonical helper is `/tmp/tabssh-android/resize.py` (PIL-based, persists across sessions): `python3 /tmp/tabssh-android/resize.py <src>.png /tmp/tabssh-android/screenshots/<name>-small.png`. Keep the original around if you need full resolution for visual verification later. This applies to `adb exec-out screencap`, uiautomator dumps with screenshots, and any image pulled off the emulator/device.
 
 ---
 

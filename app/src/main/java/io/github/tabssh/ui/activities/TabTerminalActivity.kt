@@ -45,6 +45,11 @@ class TabTerminalActivity : AppCompatActivity() {
         const val EXTRA_CONNECTION_PROFILE_ID = "connection_profile_id"
         const val EXTRA_CONNECTION_PROFILE = "connection_profile"
         const val EXTRA_AUTO_CONNECT = "auto_connect"
+        // Issue #165 — used by the Connections-tab "Active Sessions" strip
+        // to focus an already-running tab instead of (re)connecting. The
+        // activity reads this in handleIntent(), looks up the tab in the
+        // shared TabManager, and switches to its index.
+        const val EXTRA_TAB_ID = "tab_id"
 
         fun createIntent(context: Context, profile: ConnectionProfile, autoConnect: Boolean = true): Intent {
             return Intent(context, TabTerminalActivity::class.java).apply {
@@ -669,6 +674,7 @@ class TabTerminalActivity : AppCompatActivity() {
         val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("SSH Connection Failed: ${errorInfo.errorType}")
             .setView(dialogView)
+            .setOnCancelListener { finish() }
             .create()
         
         // Copy Error button
@@ -1119,6 +1125,23 @@ class TabTerminalActivity : AppCompatActivity() {
     
     private fun handleIntent(intent: Intent?) {
         if (intent == null) return
+
+        // Issue #165 — Connections-tab "Active Sessions" tap. Look up the
+        // running tab in the shared TabManager and switch to it. No new
+        // connection is created; if the tab is gone (race with cleanup),
+        // fall through to the normal connection-by-profile path below.
+        val tabId = intent.getStringExtra(EXTRA_TAB_ID)
+        if (tabId != null) {
+            val idx = tabManager.getAllTabs().indexOfFirst { it.tabId == tabId }
+            if (idx >= 0) {
+                Logger.d("TabTerminalActivity", "Focusing tab $tabId at index $idx")
+                tabManager.setActiveTab(idx)
+                switchToTab(idx)
+                return
+            } else {
+                Logger.w("TabTerminalActivity", "EXTRA_TAB_ID=$tabId not found; falling through")
+            }
+        }
 
         // Check for widget connection intent
         val widgetConnectionId = intent.getStringExtra("connection_id")

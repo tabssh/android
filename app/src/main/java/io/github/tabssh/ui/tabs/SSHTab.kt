@@ -8,6 +8,7 @@ import io.github.tabssh.terminal.TermuxBridgeListener
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,8 +32,19 @@ class SSHTab(
     // Coroutine scope for managing tab lifecycle
     private val connectionScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    // Active state-flow collector — cancelled before each new connect() so
+    // the mosh-fallback path doesn't accumulate observers.
+    private var stateCollectorJob: Job? = null
+
     // Connection (public for gesture command sending)
     var connection: SSHConnection? = null
+
+    // Issue #163 — this tab's own ChannelShell (or ChannelExec if the
+    // profile carries a RemoteCommand). Each tab gets one. PTY resize and
+    // close-on-tab-disconnect route through this rather than the
+    // connection-level shellChannel pointer, so opening the same profile
+    // in multiple tabs no longer makes them share one stream.
+    private var ownChannel: com.jcraft.jsch.Channel? = null
 
     // Wave 2.3 — telnet alternative. Only one of `connection` / `telnetConnection`
     // is set; gesture command sending and clean disconnect both check both.
@@ -109,6 +121,22 @@ class SSHTab(
                 _connectionState.value = ConnectionState.DISCONNECTED
                 updateTitleWithStatus(ConnectionState.DISCONNECTED)
                 Logger.i("SSHTab", "Terminal disconnected for ${profile.getDisplayName()}")
+                val conn = connection
+                if (conn != null) {
+                    // Issue #163 — close THIS tab's channel only. Sibling tabs
+                    // (same profile, separate channels on the same Session)
+                    // keep working.
+                    ownChannel?.let { conn.closeChannel(it) }
+                    ownChannel = null
+                    // Cascade only if the underlying Session is gone — that's
+                    // the case where every sibling is also dead and we want
+                    // the global disconnect notification to fire. If only the
+                    // shell process under this channel exited, leave the
+                    // session up for siblings.
+                    if (!conn.isSessionAlive()) {
+                        conn.disconnect()
+                    }
+                }
             }
 
             override fun onScreenChanged() {
@@ -185,7 +213,8 @@ class SSHTab(
             connection = sshConnection
 
             // Launch coroutine to observe connection state
-            connectionScope.launch {
+            stateCollectorJob?.cancel()
+            stateCollectorJob = connectionScope.launch {
                 sshConnection.connectionState.collect { state ->
                     _connectionState.value = state
                     updateTitleWithStatus(state)  // Update title with status indicator
@@ -201,6 +230,8 @@ class SSHTab(
             val shellChannel = sshConnection.openShellChannel()
             if (shellChannel != null) {
                 Logger.i("SSHTab", "Shell channel opened successfully, isConnected=${shellChannel.isConnected}")
+
+                ownChannel = shellChannel
 
                 val inputStream = shellChannel.inputStream
                 val outputStream = shellChannel.outputStream
@@ -219,14 +250,11 @@ class SSHTab(
                 // SIGWINCH plumbing — every time the local terminal view
                 // resizes (rotation, IME show/hide, font-size change),
                 // TerminalView calls bridge.resize() which fires this
-                // callback. We forward to SSHConnection.resizePty so the
-                // remote shell receives SIGWINCH and reflows long lines.
-                // Without this, opening the soft keyboard makes the local
-                // viewport 16 rows but the remote keeps thinking it's 31
-                // rows tall and full-screen apps (vim, htop, less) draw
-                // off-screen.
+                // callback. Issue #163 — route through resizePtyOf with
+                // THIS tab's channel so resizing one tab doesn't reshape
+                // sibling tabs that share the same Session.
                 termuxBridge.onResizeCallback = { cols, rows ->
-                    sshConnection.resizePty(cols, rows)
+                    ownChannel?.let { sshConnection.resizePtyOf(it, cols, rows) }
                 }
 
                 Logger.i("SSHTab", "=== TERMINAL WIRED TO SSH SUCCESSFULLY for ${profile.getDisplayName()} ===")
@@ -236,6 +264,8 @@ class SSHTab(
                 false
             }
 
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("SSHTab", "ERROR connecting tab ${profile.getDisplayName()}", e)
             _hasError.value = true
@@ -267,6 +297,8 @@ class SSHTab(
             telnet.setWindowSize(termuxBridge.getCols(), termuxBridge.getRows())
             Logger.i("SSHTab", "=== TELNET TAB WIRED for ${profile.getDisplayName()} ===")
             true
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("SSHTab", "ERROR connecting telnet tab ${profile.getDisplayName()}", e)
             _hasError.value = true
@@ -303,6 +335,8 @@ class SSHTab(
             updateTitleWithStatus(ConnectionState.CONNECTED)
             Logger.i("SSHTab", "=== MOSH TAB WIRED for ${profile.getDisplayName()} ===")
             true
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("SSHTab", "ERROR connecting mosh tab ${profile.getDisplayName()}", e)
             _hasError.value = true
@@ -317,7 +351,15 @@ class SSHTab(
     fun disconnect() {
         Logger.d("SSHTab", "Disconnecting tab ${profile.getDisplayName()}")
 
+        stateCollectorJob?.cancel()
+        stateCollectorJob = null
         termuxBridge.disconnect()
+        // Issue #163 — close just this tab's channel before dropping the
+        // wrapper reference. The underlying Session belongs to whatever
+        // sibling tabs may still be holding it; SSHSessionManager owns its
+        // lifecycle, not us.
+        connection?.let { c -> ownChannel?.let { c.closeChannel(it) } }
+        ownChannel = null
         connection = null
         try { telnetConnection?.disconnect() } catch (_: Exception) {}
         telnetConnection = null

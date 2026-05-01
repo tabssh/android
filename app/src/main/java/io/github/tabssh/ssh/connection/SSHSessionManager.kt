@@ -141,6 +141,8 @@ class SSHSessionManager(private val context: Context) {
                 Logger.w("SSHSessionManager", "Failed to connect to ${profile.getDisplayName()}")
                 null
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("SSHSessionManager", "Error connecting to ${profile.getDisplayName()}", e)
             notifyListeners { onConnectionFailed(profile.id, e) }

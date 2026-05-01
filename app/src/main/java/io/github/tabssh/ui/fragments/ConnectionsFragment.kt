@@ -18,6 +18,7 @@ import androidx.core.view.MenuProvider
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
@@ -49,6 +50,13 @@ class ConnectionsFragment : Fragment() {
     private lateinit var emptyLayout: View
     private lateinit var adapter: ConnectionAdapter
     private var groupedAdapter: GroupedConnectionAdapter? = null
+
+    // Issue #165 — "Active Sessions" strip above the connection list.
+    private lateinit var activeSessionsContainer: View
+    private lateinit var activeSessionsRecycler: RecyclerView
+    private lateinit var activeSessionAdapter: io.github.tabssh.ui.adapters.ActiveSessionAdapter
+    private val activeTabTitleObservers = mutableMapOf<String, kotlinx.coroutines.Job>()
+    private val activeTabStateObservers = mutableMapOf<String, kotlinx.coroutines.Job>()
     
     private var allConnections = listOf<ConnectionProfile>()
     private var allGroups = listOf<ConnectionGroup>()
@@ -89,10 +97,13 @@ class ConnectionsFragment : Fragment() {
         searchView = view.findViewById(R.id.search_view)
         recyclerView = view.findViewById(R.id.recycler_connections)
         emptyLayout = view.findViewById(R.id.layout_empty_connections)
-        
+        activeSessionsContainer = view.findViewById(R.id.active_sessions_container)
+        activeSessionsRecycler = view.findViewById(R.id.recycler_active_sessions)
+
         setupToolbar()
         setupSearchView()
         setupRecyclerView()
+        setupActiveSessionsStrip()
         loadSortPreference()
         loadAllConnections()
         
@@ -162,6 +173,83 @@ class ConnectionsFragment : Fragment() {
                 return true
             }
         })
+    }
+
+    /**
+     * Issue #165 — wire the "Active Sessions" strip. Subscribes to
+     * `app.tabManager.tabsFlow` and to each tab's per-instance `title`
+     * + `connectionState` flows so the strip updates when a remote sets
+     * an OSC 0/2 title or a tab transitions state. Disambiguates same-
+     * default-title tabs (multiple tabs to one host with no OSC title)
+     * by appending `(#N)`.
+     */
+    private fun setupActiveSessionsStrip() {
+        activeSessionAdapter = io.github.tabssh.ui.adapters.ActiveSessionAdapter { tabId ->
+            val intent = android.content.Intent(requireContext(), TabTerminalActivity::class.java).apply {
+                putExtra(TabTerminalActivity.EXTRA_TAB_ID, tabId)
+                addFlags(android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            }
+            startActivity(intent)
+        }
+        activeSessionsRecycler.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(
+            requireContext(), androidx.recyclerview.widget.LinearLayoutManager.HORIZONTAL, false
+        )
+        activeSessionsRecycler.adapter = activeSessionAdapter
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                app.tabManager.tabsFlow.collect { tabs -> rebindActiveSessions(tabs) }
+            }
+        }
+    }
+
+    private fun rebindActiveSessions(tabs: List<io.github.tabssh.ui.tabs.SSHTab>) {
+        // Cancel observers for tabs that disappeared.
+        val live = tabs.map { it.tabId }.toSet()
+        (activeTabTitleObservers.keys - live).forEach { id ->
+            activeTabTitleObservers.remove(id)?.cancel()
+            activeTabStateObservers.remove(id)?.cancel()
+        }
+        // Subscribe to per-tab title + state for any new tab.
+        tabs.forEach { tab ->
+            if (tab.tabId !in activeTabTitleObservers) {
+                activeTabTitleObservers[tab.tabId] = viewLifecycleOwner.lifecycleScope.launch {
+                    tab.title.collect { renderActiveSessionRows() }
+                }
+                activeTabStateObservers[tab.tabId] = viewLifecycleOwner.lifecycleScope.launch {
+                    tab.connectionState.collect { renderActiveSessionRows() }
+                }
+            }
+        }
+        renderActiveSessionRows()
+    }
+
+    private fun renderActiveSessionRows() {
+        val tabs = app.tabManager.getAllTabs()
+        if (tabs.isEmpty()) {
+            activeSessionsContainer.visibility = View.GONE
+            activeSessionAdapter.submit(emptyList())
+            return
+        }
+        activeSessionsContainer.visibility = View.VISIBLE
+
+        // Disambiguate duplicate titles (typically same-host tabs with no
+        // OSC title set) by appending (#N) — N is the running index of
+        // each duplicate occurrence so the labels stay stable.
+        val titleCounts = mutableMapOf<String, Int>()
+        val rows = tabs.mapIndexed { i, tab ->
+            val raw = tab.title.value.ifBlank { tab.profile.getDisplayName() }
+            val seenSoFar = titleCounts[raw] ?: 0
+            titleCounts[raw] = seenSoFar + 1
+            val total = tabs.count { it.title.value.ifBlank { it.profile.getDisplayName() } == raw }
+            val display = if (total > 1) "$raw (#${seenSoFar + 1})" else raw
+            io.github.tabssh.ui.adapters.ActiveSessionAdapter.Row(
+                tabId = tab.tabId,
+                title = display,
+                state = tab.connectionState.value
+            )
+        }
+        activeSessionAdapter.submit(rows)
     }
 
     private fun setupRecyclerView() {
@@ -866,31 +954,37 @@ class ConnectionsFragment : Fragment() {
     }
 
     private fun loadAllConnections() {
-        lifecycleScope.launch {
-            try {
-                // Use combine() to merge both Flows - fixes nested collect() blocking issue
-                // Both connections AND groups will trigger UI updates when changed
-                combine(
-                    app.database.connectionDao().getAllConnections(),
-                    app.database.connectionGroupDao().getAllGroups()
-                ) { connections, groups ->
-                    Pair(connections, groups)
-                }.collect { (connections, groups) ->
-                    allConnections = connections
-                    allGroups = groups
+        // Issue #158 — gate collection behind repeatOnLifecycle(STARTED) so the
+        // Flow setup doesn't run synchronously during the first layout pass.
+        // viewPager2 attaches the fragment view → onViewCreated runs → the old
+        // bare lifecycleScope.launch executed combine().collect on Main.immediate
+        // before the activity finished its initial traversal, contributing to a
+        // multi-second main-thread freeze on cold start.
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                try {
+                    combine(
+                        app.database.connectionDao().getAllConnections(),
+                        app.database.connectionGroupDao().getAllGroups()
+                    ) { connections, groups ->
+                        Pair(connections, groups)
+                    }.collect { (connections, groups) ->
+                        allConnections = connections
+                        allGroups = groups
 
-                    if (useGroupedView) {
-                        applyGroupedView()
-                    } else {
-                        applySortAndFilter()
+                        if (useGroupedView) {
+                            applyGroupedView()
+                        } else {
+                            applySortAndFilter()
+                        }
+
+                        Logger.d("ConnectionsFragment", "Loaded ${connections.size} connections, ${groups.size} groups")
                     }
-
-                    Logger.d("ConnectionsFragment", "Loaded ${connections.size} connections, ${groups.size} groups")
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Logger.e("ConnectionsFragment", "Failed to load connections", e)
                 }
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Logger.e("ConnectionsFragment", "Failed to load connections", e)
             }
         }
     }

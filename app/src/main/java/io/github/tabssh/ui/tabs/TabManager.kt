@@ -10,6 +10,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
@@ -21,6 +24,15 @@ class TabManager(private val maxTabs: Int = 10) {
 
     private val tabs = mutableListOf<SSHTab>()
     private var activeTabIndex = 0
+
+    // Live snapshot of [tabs] for cross-screen observers (e.g. the
+    // Connections-tab "Active Sessions" strip). Re-emitted every time
+    // a tab is created/closed/moved. Title-changes already arrive via
+    // each SSHTab's own `title` Flow — observers should collect both
+    // this and the per-tab title flows.
+    private val _tabsFlow = MutableStateFlow<List<SSHTab>>(emptyList())
+    val tabsFlow: StateFlow<List<SSHTab>> = _tabsFlow.asStateFlow()
+    private fun publishTabs() { _tabsFlow.value = tabs.toList() }
 
     // Per-tab observer jobs that bridge SSHTab.connectionState into the
     // TabManagerListener.onTabConnectionStateChanged callback. Without this
@@ -101,6 +113,7 @@ class TabManager(private val maxTabs: Int = 10) {
         }
 
         Logger.d("TabManager", "Created new tab: ${profile.name}")
+        publishTabs()
         notifyTabCreated(tab)
         return tab
     }
@@ -121,6 +134,7 @@ class TabManager(private val maxTabs: Int = 10) {
             }
 
             Logger.d("TabManager", "Closed tab: ${tab.title.value}")
+            publishTabs()
             notifyTabClosed(tab, index)
         }
     }
@@ -244,6 +258,7 @@ class TabManager(private val maxTabs: Int = 10) {
             }
 
             Logger.d("TabManager", "Moved tab from $fromIndex to $toIndex")
+            publishTabs()
         }
     }
 
