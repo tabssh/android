@@ -33,7 +33,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * "Pair from desktop" flow — see QR_PAIRING.md.
+ * "Pair from desktop" flow — see AI.md §18 for the full spec.
  *
  * State machine:
  *

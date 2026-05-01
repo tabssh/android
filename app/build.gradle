@@ -283,7 +283,7 @@ dependencies {
     // OkHttp - used by hypervisor console WebSocket client
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
 
-    // QR Pairing (see QR_PAIRING.md). ZXing chosen over ML Kit Barcode so we
+    // QR Pairing (see AI.md §18). ZXing chosen over ML Kit Barcode so we
     // don't pull in any Google Play Services dependency — TabSSH targets
     // de-Googled ROMs as a first-class platform.
     //

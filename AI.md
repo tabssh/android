@@ -32,6 +32,7 @@
 15. [Package map](#15-package-map)
 16. [Known stubs and limitations](#16-known-stubs-and-limitations)
 17. [Editing guidelines for AI agents](#17-editing-guidelines-for-ai-agents)
+18. [QR pairing — desktop → mobile setup](#18-qr-pairing--desktop--mobile-setup)
 
 ---
 
@@ -930,6 +931,225 @@ When modifying this codebase, prefer the following (derived from `CLAUDE.md` pol
 11. **Never add `Co-Authored-By` (or any attribution footer) to commit messages.** The maintainer runs Claude Code as themselves and authors every commit personally — there is no separate co-author. Adding the footer falsely implies a second contributor and pollutes git attribution. End commit bodies at the last description line, no trailer.
 12. **Save commit messages to `{project_root}/.git/COMMIT_MESS`.** Project convention so the maintainer can `git commit -F .git/COMMIT_MESS`. Overwrite the file each time. Do not save to `/tmp/tabssh-android/`. Do not also paste inline (the file is the source of truth).
 13. **Downscale screenshots before reading them.** Android screenshots are typically 1080×2400 (or larger on tablets/foldables) and exceed the 2000px image context limit — `Read` will fail with "image context too large". Before reading any screenshot, downscale to ≤1080px on the long edge, then `Read` the `-small.png`. ImageMagick may not be installed; the canonical helper is `/tmp/tabssh-android/resize.py` (PIL-based, persists across sessions): `python3 /tmp/tabssh-android/resize.py <src>.png /tmp/tabssh-android/screenshots/<name>-small.png`. Keep the original around if you need full resolution for visual verification later. This applies to `adb exec-out screencap`, uiautomator dumps with screenshots, and any image pulled off the emulator/device.
+
+---
+
+## 18. QR pairing — desktop → mobile setup
+
+**Status:** Mobile side shipped 2026-04-28; desktop side WIP (tracked in `tabssh/desktop`). The same content lives at `tabssh/desktop/QR_PAIRING.md` so the desktop project can reference the wire format without cloning android.
+**Touches:** `tabssh/android` (this repo, Kotlin) + `tabssh/desktop` (Rust desktop app).
+
+### 18.1 Goal
+
+Make it easy to add an existing TabSSH connection from a desktop install to a phone without retyping. The friction we're solving:
+
+- New phone, no existing sync set up.
+- "Just got this server working on my laptop, want it on my phone for tomorrow's flight."
+- Set up a colleague's phone for shared infra fast.
+
+### 18.2 Flow
+
+1. User opens TabSSH on **desktop** → menu → **Pair Phone…**
+2. Desktop shows a modal with a checklist of current connection profiles. User picks which to send. On confirm, desktop renders a QR + a **6-digit code** + a 60-second countdown.
+3. User opens TabSSH on **phone** → drawer menu → **Pair from desktop…**
+4. Phone opens a camera preview, scans the QR.
+5. Phone prompts the user for the 6-digit code shown on the desktop.
+6. Phone shows a preview: *"Import N connections from {device_label}?"*.
+7. User confirms → connections appear in the phone's list.
+
+### 18.3 Non-goals (v1)
+
+- ❌ Bidirectional pairing (mobile → desktop). Direction matters because desktop has filesystem write access for `~/.ssh/authorized_keys`; phones don't.
+- ❌ Continuous sync. Use SAF-based cloud sync for that — it's already shipped (§9).
+- ❌ Private key transfer. Phone generates its own keypair locally; desktop handles `authorized_keys` provisioning out-of-band.
+- ❌ Multi-frame animated QR. Single-frame only in v1.
+
+### 18.4 Data model
+
+The QR payload, after decryption, is a CBOR-encoded `PairingPayload`:
+
+```
+PairingPayload {
+  version: u8                    // 1
+  expires_at: u64                // unix epoch seconds, ~60s after generation
+  device_label: Option<String>   // "Alice's Linux desktop"
+  connections: [ConnectionProfile]
+  groups: [Group]                // optional, only those referenced by connections
+  identities: [Identity]         // optional, only those referenced by connections
+}
+
+ConnectionProfile {
+  name: String
+  host: String
+  port: u16
+  username: String
+  protocol: enum { SSH, TELNET }
+  auth_type: enum { PASSWORD, PUBLIC_KEY, KEYBOARD_INTERACTIVE }
+  // NO password, NO private key. Public-key fingerprint + comment only.
+  ssh_key_public: Option<String>       // OpenSSH-format `ssh-ed25519 AAAA…` line
+  ssh_key_fingerprint: Option<String>  // SHA-256 fingerprint for verification
+  // Cosmetic + behavioral fields:
+  color_tag: Option<u32>
+  group_name: Option<String>
+  identity_name: Option<String>
+  terminal_type: String
+  compression: bool
+  keep_alive: u32
+  env_vars: Option<String>             // multi-line KEY=value
+  post_connect_script: Option<String>
+  use_mosh: bool
+  agent_forwarding: bool
+  x11_forwarding: bool
+  // Jump host config (no jump-host secrets either):
+  proxy_host: Option<String>
+  proxy_port: Option<u16>
+  proxy_username: Option<String>
+  proxy_auth_type: Option<String>
+}
+```
+
+**CBOR over JSON** — ~30 % smaller, matters near the QR capacity ceiling. Use `ciborium` on the Rust side and a hand-written codec on the Android side (`pairing/QrPayloadCodec.kt`).
+
+#### Capacity reality
+
+QR Code at error-correction level **L** (max capacity):
+- Alphanumeric mode: 4,296 chars
+- Binary mode: 2,953 bytes
+
+Typical encrypted-payload sizes:
+
+| Content | Bytes (after AES-GCM + base64) |
+|---------|-------|
+| 1 connection, no key | ~250 |
+| 1 connection + Ed25519 public key | ~400 |
+| 5 connections, no keys | ~700 |
+| 5 connections + 5 Ed25519 public keys | ~1,400 |
+| 10 connections + RSA-4096 public keys | ~2,800 (close to ceiling) |
+
+Cap v1 at 10 connections per QR.
+
+### 18.5 Encryption
+
+Threat model:
+
+| Threat | Likelihood |
+|--------|-----------|
+| QR photographed by anyone with line-of-sight to the desktop screen | **HIGH — assume QR is public** |
+| Brute-force of the 6-digit code (1M possible values) | High if the QR is captured |
+| Replay across sessions | Low — TTL caps risk |
+| Camera shoulder-surf (the 6-digit code) | Medium — same threat as 2FA codes; accepted |
+| MITM on the QR scan | Effectively zero — phone reads from screen directly |
+
+Scheme:
+
+1. Desktop generates: 6-digit numeric **code**, 16-byte random **salt**, 12-byte random **nonce**.
+2. Derive a 32-byte symmetric key: `key = Argon2id(password=code, salt=salt, m=64MiB, t=3, p=1)`.
+3. Encrypt the CBOR-encoded `PairingPayload`: `ciphertext = AES-256-GCM(key, nonce, plaintext)`.
+4. Build a CBOR-encoded `QrPayload { version: u8, salt: [u8;16], nonce: [u8;12], ciphertext: bytes }`.
+5. Base64-encode `QrPayload` and render the QR in **byte mode**.
+6. Display the 6-digit code separately as a label.
+
+**Why base64 in byte mode rather than raw bytes:** ZXing's `ScanContract` returns the scanned content as a Kotlin `String`. Round-tripping arbitrary bytes through a `String` is fragile (encoding mangling). Standard base64 is ASCII-clean — survives the `String` boundary intact. The codec accepts standard or url-safe base64 with or without padding (`QrPayloadCodec.base64Decode`).
+
+**Argon2id parameters** (`m=64 MiB, t=3, p=1`):
+- Brute-force cost: 1 M codes × ~1 s/derivation = ~12 days on a single core. With a 60 s TTL the QR is gone before any meaningful fraction can be tried.
+- Legitimate cost on phone: ~1 s on mid-range Android. Pure-Rust Argon2id isn't bundled on Android — we use `org.bouncycastle:bcprov-jdk18on` (already a dependency).
+
+### 18.6 QR rendering
+
+**Desktop side:** `qrcodegen` crate (pure Rust, no deps), 256×256 monochrome, ECC level **L**, alphanumeric mode (base64 fits).
+
+**Mobile side:** `com.journeyapps:zxing-android-embedded:4.3.0` + `com.google.zxing:core:3.5.2`. **Why ZXing not ML Kit** — ML Kit Barcode pulls in `com.google.android.gms:play-services-base` even in its "bundled" variant; TabSSH targets de-Googled ROMs, so we can't have any Google Play Services dependency. ZXing is pure Java with zero Google deps.
+
+### 18.7 UX
+
+#### Desktop (Rust + egui)
+
+Trigger: menu → File → Pair Phone…
+
+State machine: `[Idle] → [Selecting] → [Generating] → [Active] → [Expired]`. Active layout: QR + 6-digit code + 60 s countdown + per-profile checklist + Cancel / Generate-new.
+
+#### Mobile (Kotlin + Android)
+
+Trigger: drawer menu → Pair from Desktop (QR).
+
+Activity: `ImportFromQrActivity` (`app/src/main/java/io/github/tabssh/ui/activities/ImportFromQrActivity.kt`).
+
+State machine: `[CheckingPermissions] → [Scanning] → [CodeEntry] → [Decrypting] → [Confirming] → [Importing] → [Success/Failure]`.
+
+Failure-mode UI text:
+
+| Failure | UI text |
+|---------|---------|
+| `version > 1` in `QrPayload` | "This QR was created by a newer TabSSH. Update your phone app." |
+| `expires_at < now` after decrypt | "This QR has expired. Ask the desktop to generate a new one." |
+| AES-GCM auth tag mismatch | "Wrong code. Try again. (3 attempts left.)" |
+| 3 wrong code attempts | "Pairing cancelled. Generate a new QR." |
+| CBOR decode error | "Couldn't read pairing data. Make sure both apps are up to date." |
+| No connections in payload | "This QR has no connections to import." |
+| Camera permission denied | "Camera access is required to scan QRs." |
+
+**3-attempt limit** — important; without it a 6-digit code with no rate limit is brute-forceable in seconds locally.
+
+### 18.8 Implementation status
+
+#### Desktop (Rust)
+
+- [ ] Add deps: `qrcodegen`, `ciborium`, `argon2`, `aes-gcm`, `rand`, `base64`.
+- [ ] `src/pairing/payload.rs` — `PairingPayload`, `ConnectionProfile` (subset, no secrets), serde encode.
+- [ ] `src/pairing/encrypt.rs` — generate code/salt/nonce; Argon2id; AES-GCM encrypt; serialise QrPayload.
+- [ ] `src/pairing/qr.rs` — render `QrPayload` (base64) → QR bitmap via `qrcodegen`.
+- [ ] `src/ui/pairing_dialog.rs` — egui state machine + QR display + countdown.
+- [ ] Wire menu entry: File → Pair Phone…
+- [ ] Tests: round-trip encrypt/decrypt with known test vectors (commit them — mobile reuses).
+
+#### Mobile (Kotlin / Android) — ✅ implemented 2026-04-28
+
+- [x] Deps: ZXing (`com.google.zxing:core:3.5.2` + `com.journeyapps:zxing-android-embedded:4.3.0`) — `app/build.gradle`. BouncyCastle Argon2 reused from existing `org.bouncycastle:bcprov-jdk18on:1.77`.
+- [x] `pairing/PairingPayload.kt` — data classes + sealed result hierarchy.
+- [x] `pairing/QrPayloadCodec.kt` — minimal hand-written CBOR decoder (~120 lines, no library) + base64 unwrap with `android.util.Base64` (API 21+ compatible).
+- [x] `pairing/PairingDecryptor.kt` — Argon2id (m=64MiB, t=3, p=1) + AES-256-GCM via `javax.crypto` + TTL/version validation.
+- [x] `ui/activities/ImportFromQrActivity.kt` — full state machine, dialog-driven UI, 3-attempt code retry.
+- [x] `pairing/PairingImporter.kt` — name-based group/identity dedupe, fresh-UUID connection inserts (never overwrite existing).
+- [x] Drawer menu entry — `drawer_menu.xml` "Pair from Desktop (QR)" in Import / Export group.
+- [x] Camera permission — `AndroidManifest.xml` + runtime `RequestPermission` ActivityResultContract.
+- [x] Activity registration in `AndroidManifest.xml`. MainActivity drawer click handler (`R.id.nav_pair_from_desktop`).
+- [ ] Tests with desktop-generated vectors — waiting on desktop side.
+
+#### Shared
+
+- [ ] Pin CBOR field tags so both sides regression-test against the same blob.
+- [ ] Commit at least 3 desktop-generated test vectors (different connection counts) into both repos.
+- [ ] Decide v2 forward-compat rules (the `version` byte negotiates).
+
+### 18.9 Open questions
+
+1. **Public keys ride along, or generate-on-phone?** Current decision: ride along (so the user has a working OpenSSH-format public key after import) but **only public**. Phone never sees private. If the user wants the phone to authenticate with the same key, they re-import the private half via the existing key-management flow.
+2. **Snippets / themes / workspaces too, or v1 connections-only?** Current decision: connections + groups + identities in v1. Snippets and themes can wait — independent of connection profiles, add payload weight.
+3. **Should the desktop write the phone's public key to `authorized_keys` automatically?** Out of scope for v1.
+4. **Verify-on-desktop step?** Phone shows a 4-digit checksum the user reads back to the desktop, desktop confirms. Adds friction; reduces "wrong device scanned the QR" risk. Defer to v2.
+
+### 18.10 Alternatives considered
+
+| Option | Why rejected for v1 |
+|--------|---------------------|
+| Local-network handshake (mDNS + HTTP) | Both devices must be on the same wifi. Corporate networks, hotel APs with client isolation, mismatched SSIDs all break it. |
+| NFC tap | Only Android phones with NFC. Most desktops have no NFC reader/writer. |
+| `tabssh://` URL via clipboard / SMS / Signal | Copy-paste between devices is awkward; messaging apps mangle URLs; cleartext URL on third-party servers is worse than an encrypted QR on a local screen. |
+| SAF cloud sync (existing) | Right tool for "I want my data on all my devices forever". Wrong tool for "I just want this one connection on my phone, today". |
+| USB tether + adb push | Works for developers; useless for users. |
+| Bluetooth pairing | Pairing prompts on both sides, drivers, "is my Bluetooth on?" — way more friction than a camera. |
+
+### 18.11 References
+
+- `qrcodegen` Rust crate — pure Rust QR encoding.
+- `ciborium` Rust crate — CBOR codec.
+- `argon2` Rust crate — RFC 9106 Argon2id.
+- `aes-gcm` Rust crate — RustCrypto AES-GCM.
+- ZXing (`com.journeyapps:zxing-android-embedded`) — pure-Java QR scanner, zero Google deps.
+- BouncyCastle `bcprov-jdk18on` — already in TabSSH Android deps; provides Argon2id.
+- ISO/IEC 18004:2015 — QR Code spec.
+- RFC 9106 — Argon2 KDF parameters.
 
 ---
 

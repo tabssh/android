@@ -17,7 +17,7 @@
 
 ### QR Pairing — Mobile side
 - **Commit:** `ea4f687f572f` ("Added QR code support")
-- **Spec:** [`QR_PAIRING.md`](QR_PAIRING.md)
+- **Spec:** [`AI.md` §18](AI.md#18-qr-pairing--desktop--mobile-setup)
 - Mobile QR-import flow lets the desktop client send connection profiles to the phone via a one-shot encrypted QR + 6-digit code.
 - 5 new Kotlin files (~1,016 LOC) at `app/src/main/java/io/github/tabssh/pairing/`: `PairingPayload.kt` (data classes), `QrPayloadCodec.kt` (hand-written CBOR codec, no library), `PairingDecryptor.kt` (Argon2id + AES-256-GCM), `PairingImporter.kt` (DB inserts with name-based dedupe), and `ImportFromQrActivity.kt` (state-machine UI).
 - ZXing for the QR scanner (zero Google Play Services dependency, matching TabSSH's de-Googled-ROM stance).
@@ -46,7 +46,7 @@
 ### 📐 QR Pairing — Desktop side
 - **Status:** 🔧 In progress (other instance — see `../desktop/.git/COMMIT_MESS` Phase F line items)
 - **Priority:** MEDIUM
-- **Spec:** [`QR_PAIRING.md`](QR_PAIRING.md)
+- **Spec:** [`AI.md` §18](AI.md#18-qr-pairing--desktop--mobile-setup)
 
 The mobile decoder is in place and waiting for the desktop encoder + interop test vectors. The spec doc has the wire format, encryption parameters, payload schema, and CBOR field names that both sides must agree on.
 
@@ -73,5 +73,5 @@ The mobile decoder is in place and waiting for the desktop encoder + interop tes
 - `CLAUDE.md` — project tracker, current state, recent waves
 - `FEATURES_AUDIT.md` — have/want/drop matrix vs JuiceSSH and Termius
 - `fdroid-submission/SPEC.md` — technical specification (architecture, schema, build)
-- `QR_PAIRING.md` — design spec for desktop→mobile QR pairing
+- `AI.md` §18 — design spec for desktop→mobile QR pairing (folded in from the standalone `QR_PAIRING.md`; the desktop project carries its own copy at `tabssh/desktop/QR_PAIRING.md` for cross-repo reference)
 - `release.txt` — single-line version pin, source of truth for `versionName` (currently `0.0.9`)

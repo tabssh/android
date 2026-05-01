@@ -1,7 +1,7 @@
 package io.github.tabssh.pairing
 
 /**
- * Minimal CBOR decoder for the fixed schemas in QR_PAIRING.md.
+ * Minimal CBOR decoder for the fixed schemas in AI.md §18.4.
  *
  * Why roll our own: `co.nstant.in:cbor` is unmaintained and `com.upokecenter:cbor`
  * is ~700 KB. Our schemas are small + fixed (no dynamic tags, no streaming),
@@ -124,7 +124,7 @@ internal object Cbor {
  * Round-tripping arbitrary bytes through a String is fragile (encoding
  * mangling). Standard base64 is ASCII-clean — survives the String boundary
  * intact. The ~25 % capacity hit is fine since real payloads sit comfortably
- * under the limit (see capacity tables in QR_PAIRING.md).
+ * under the limit (see capacity tables in AI.md §18.4).
  */
 object QrPayloadCodec {
 

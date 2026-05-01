@@ -5,7 +5,7 @@ package io.github.tabssh.pairing
  * (Rust ciborium-serialized struct). Field names are snake_case in the CBOR
  * representation to match Rust's default serde naming.
  *
- * See QR_PAIRING.md for the full design and threat model.
+ * See AI.md §18 for the full design and threat model.
  *
  * **What's in here:** non-secret connection metadata + public-key references.
  * **What's NOT in here:** passwords, private keys, biometric/keystore aliases.
