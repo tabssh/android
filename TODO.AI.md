@@ -1,6 +1,6 @@
 # TabSSH TODO
 
-**Last Updated:** 2026-04-29
+**Last Updated:** 2026-05-01
 **Version:** 0.0.9 (pinned via `release.txt` — DO NOT MODIFY without coordinated bump in `app/build.gradle` + F-Droid metadata)
 
 > Treat `CLAUDE.md` and `FEATURES_AUDIT.md` as the authoritative state-of-the-app docs. This file tracks open issues + planned work that hasn't been implemented yet.
@@ -8,6 +8,12 @@
 ---
 
 ## ✅ Recently Shipped
+
+### "25 fixes" + "6 features" merges (Apr 30 / May 1, 2026)
+- **Commits:** `482c2a04` ("25 fixes") and the follow-on 6-feature batch.
+- 25-fix triage covered connect/reconnect lifecycle, notification system, cold-start ANR, per-tab same-host channels (Issue #163), on-screen keyboard ergonomics (`#161` toggle removed, `#162` vim/tmux reorder), always-on keepalive (`#166`), repo cleanup (`#160`).
+- 6-feature follow-up: centralised error dialogs with Copy (`#167`), edge-swipe tab switching (`#168`), tmux/screen auto-launch + postConnectScript wired (`#170`), modifier-aware hardware-keyboard arrows (`#171`), recordable macros (`#173`, DB v25 → v26), ViewStub-defer Active Sessions strip (`#175`).
+- DB now v26. New `macros` table for byte-exact recordable sequences (distinct from snippets, which carry typed text + `{?var}` substitutions).
 
 ### QR Pairing — Mobile side
 - **Commit:** `ea4f687f572f` ("Added QR code support")

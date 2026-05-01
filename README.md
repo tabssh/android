@@ -19,14 +19,18 @@
 
 ### Core SSH Functionality
 - 📑 **Browser-Style Tabs** - Multiple concurrent SSH sessions with intuitive tab management
+- 🪟 **Multi-Tab Same Host** - Open one profile in two tabs and get **two independent shells** on a single SSH session (per-tab `ChannelShell`, shared JSch session)
 - 🔐 **Multiple Authentication Methods** - Password, public key (RSA, ECDSA, Ed25519, DSA), keyboard-interactive
 - 🔑 **Universal SSH Key Support** - OpenSSH, PEM, PKCS#8, PuTTY formats with import/generation
 - 🖥️ **Full Terminal Emulation** - Termux TerminalEmulator (VT100/ANSI, 256 colors, vim/htop/tmux fully functional)
 - 📁 **Integrated SFTP Browser** - Beautiful file manager with upload/download progress
 - 🔌 **Port Forwarding** - Local and remote port forwarding support
 - 🖼️ **X11 Forwarding** - Run graphical applications remotely
-- 🌐 **SSH Config Import** - Import existing ~/.ssh/config files
+- 🌐 **SSH Config Import** - Import existing ~/.ssh/config files (RemoteCommand + SendEnv supported)
 - 📋 **Clipboard Integration** - Copy/paste with proper encoding
+- 🌐 **IPv4 / IPv6 selection** - Per-host `auto` / `ipv4` / `ipv6` mode with toast on family fallback
+- ❤️ **Always-on Keepalive** - 60s `serverAliveInterval` baked in; idle sessions survive carrier NAT timeouts and Wi-Fi sleep
+- 🚀 **Tmux/Screen auto-launch** - Per-profile auto-attach / create-new for `tmux` / `screen` / `zellij`, plus `postConnectScript` lines
 
 ### Security Features
 - 🔒 **Hardware-Backed Encryption** - Android Keystore integration for secure key storage
@@ -40,11 +44,15 @@
 ### Modern UI/UX
 - 🎨 **Material Design 3** - Beautiful, modern interface following Google's latest design guidelines
 - 🌈 **Built-in Themes** - Dracula, Solarized (Light/Dark), Nord, Monokai, One Dark, Tokyo Night, Gruvbox
-- 🎨 **Custom Themes** - Import/export JSON theme definitions
-- ⌨️ **Custom Keyboard** - SSH-optimized on-screen keyboard with special keys
+- 🎨 **Custom Themes** - Import/export JSON theme definitions, plus a GUI theme editor
+- ⌨️ **Custom Keyboard** - SSH-optimized 1–5 row on-screen keyboard. Default rows reordered for vim/tmux/coding (ESC + CTL/ALT/FN + `:` + `/` + arrows on row 1, navigation on row 2, coding symbols `| \ - _ ~ \` $ * < >` on row 3)
+- ⌨️ **Hardware keyboard polish** - AltGr distinguished from real Alt; xterm-style modifier-encoded arrows / HOME / END / PG family (e.g. ESC `[1;5C` for Ctrl-Right) for tmux pane nav, vim word-jump, bash readline word-delete
+- 👆 **Edge-swipe tab switching** - Single-finger fling within 24dp of the left/right edge switches tabs (backup path for users who turned off ViewPager2 swipe-mode)
+- 🔁 **Active Sessions strip** - Top of the Connections tab shows running tabs with dynamic terminal title (OSC 0/2) and connection-state dot; tap to focus
 - 💡 **Smart Tooltips** - Helpful hints for settings and configuration options
 - 📊 **Visual Indicators** - Connection state, unread output, usage statistics
 - 🔄 **Tab Management** - Drag-to-reorder, Ctrl+Tab switching, persistent sessions
+- 📋 **Copyable error dialogs** - Every error dialog has a Copy button so users can grab the exact message for bug reports
 
 ### Accessibility & Inclusivity
 - ♿ **TalkBack Support** - Full screen reader compatibility
@@ -72,8 +80,10 @@
 - 📂 **Connection Groups** - Organize connections into folders with expand/collapse
 - 🔍 **Search & Sort** - Real-time search with 8 sort options (name, host, usage, date)
 - 📱 **Mobile UX** - Swipe between tabs, volume keys adjust font, click URLs to open
-- 📊 **Logging Systems** - Host logs, debug logs, error logs, audit logs (4 types)
+- 📊 **Logging Systems** - App log, debug log, host logs, audit logs. Each cold start logs `## apk built from: <commit> ##` once per commit-id change so bug reports always carry the exact build.
 - 🎮 **Automation** - Tasker integration, intent-based actions, deep links
+- 📝 **Snippets with variables** - Quick command library with `{?name:default|hint}` placeholders, per-snippet recall of last used value
+- ⏺️ **Recordable macros** - Capture raw byte sequences (escape codes, paste payloads, modifier-composed Ctrl/Alt) and replay verbatim into any tab — distinct from snippets, useful for replaying complex tmux/screen flows
 
 ### Privacy & Open Source
 - 🎯 **Zero Trackers** - No analytics, no ads, complete privacy

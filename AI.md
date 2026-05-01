@@ -266,7 +266,7 @@ Package `io.github.tabssh.ssh.*` (with `services/SSHConnectionService` for the f
 2. `JSch` session with custom `HostKeyRepository` (`HostKeyVerifier`).
 3. **Jump host** support: opens an upstream SSH session and uses `setPortForwardingL` to tunnel to the real target, then connects through that tunnel.
 4. **HTTP/SOCKS proxy** via `ProxyHTTP`, `ProxySOCKS4`, `ProxySOCKS5`.
-5. Session config (compression, keep-alive, ciphers). Default cipher/MAC preferences:
+5. Session config (compression, **always-on keepalive** at 60s, ciphers). Mobile-client policy: `setServerAliveInterval(60_000)` + `setServerAliveCountMax(3)` is set unconditionally regardless of profile flag. Default cipher/MAC preferences:
    ```
    cipher.{s2c,c2s} = aes256-gcm@openssh.com,aes128-gcm@openssh.com,
                       aes256-ctr,aes192-ctr,aes128-ctr
@@ -278,6 +278,33 @@ Package `io.github.tabssh.ssh.*` (with `services/SSHConnectionService` for the f
 7. Opens shell channel (`session.openChannel("shell")`) with PTY type/size, exposes I/O streams.
 8. Detailed error info on failure: `SocketTimeoutException`, `UnknownHostException`, `ConnectException`, `SocketException`, `JSchException`, with `errorType` / `userMessage` / `technicalDetails` / `possibleSolutions` displayed via `dialog_ssh_connection_error.xml`.
 9. Auto-reconnect: up to 3 retries with 5 s delay for transient network errors; never retries auth failures.
+
+#### 5.1.1 Per-tab channels (Issue #163)
+
+`openShellChannel()` no longer caches by Session — every call opens a fresh `ChannelShell` (or `ChannelExec` when `profile.remoteCommand` is set) on the existing JSch Session. Two tabs to the same profile thus get two independent stream pairs (real SSH multiplexing) instead of silently sharing one stream.
+
+Supporting API on `SSHConnection`:
+- `openChannels: MutableSet<Channel>` — every tab's channel against this Session.
+- `closeChannel(ch)` — close one tab's channel without disturbing siblings.
+- `resizePtyOf(ch, cols, rows)` — per-channel resize so opening the keyboard in tab A doesn't reflow tab B.
+- `isSessionAlive()` — true if the underlying JSch Session is still up. `SSHTab.onDisconnected` uses this to distinguish "my shell exited, session is fine" (close just my channel — keep siblings alive) from "session died for everyone" (cascade so the global disconnect notification fires).
+
+`SSHTab` tracks its own `ownChannel: Channel?`. Resize is routed through `resizePtyOf(ownChannel, ...)`. Tab close calls `closeChannel(ownChannel)` instead of disconnecting the whole Session. `disconnect()` iterates `openChannels` and closes them all.
+
+#### 5.1.2 Tmux/Screen auto-launch + post-connect script (Issue #170)
+
+`SSHTab.runPostConnectCommands()` runs ~500ms after the bridge wires up. Two sources, joined and sent down the shell channel as if the user typed them:
+
+1. `profile.multiplexerMode != "OFF"` → injected one of:
+   - tmux: `tmux new -A -s <name>` (AUTO_ATTACH/ASK), `tmux new -s <name>` (CREATE_NEW)
+   - screen: `screen -RR <name>` (AUTO_ATTACH/ASK), `screen -S <name>` (CREATE_NEW)
+   - zellij: `zellij attach --create <name>` (AUTO_ATTACH/ASK), `zellij --session <name>` (CREATE_NEW)
+
+   Multiplexer type from the global `gesture_multiplexer_type` pref (default tmux). Session name from `profile.multiplexerSessionName` (default `tabssh`).
+
+2. `profile.postConnectScript` lines (skipping `#`-prefixed comments and blank lines).
+
+Both used to be defined-but-not-wired. The two flows now share one path; multiplexer command runs first, postConnectScript after.
 
 ### 5.2 Host key verification
 
@@ -400,9 +427,9 @@ If the Keystore is unavailable (e.g. broken ROM), the manager auto-degrades to `
 
 ### 8.1 Room database
 
-`storage/database/TabSSHDatabase.kt` — **version 24**, schema exported to `app/schemas/`.
+`storage/database/TabSSHDatabase.kt` — **version 26**, schema exported to `app/schemas/`.
 
-### 8.2 Entities (12)
+### 8.2 Entities (15)
 
 | Entity | Table | Notable fields | File |
 |---|---|---|---|
@@ -418,16 +445,19 @@ If the Keystore is unavailable (e.g. broken ROM), the manager auto-degrades to `
 | `Identity` | `identities` | `username`, `authType`, `keyId`, encrypted `password` | `entities/Identity.kt` |
 | `AuditLogEntry` | `audit_log` | per-event row with `eventType`, `command`, `output`, `exitCode` | `entities/AuditLogEntry.kt` |
 | `HypervisorProfile` | `hypervisors` | `type` (`PROXMOX`/`XCPNG`/`VMWARE`), credentials, `realm`, `verifySsl`, `apiTypeOverride` (`auto`/`direct`/`centralized`), `linkedConnectionId` | `entities/HypervisorProfile.kt` |
+| `Workspace` | `workspaces` | named tab groups, `connectionIds` (JSON array) | `entities/Workspace.kt` |
+| `CloudAccount` | `cloud_accounts` | `provider`, `enabled`, `lastRefreshAt`, `lastCount` (token in Keystore, **not** in DB) | `entities/CloudAccount.kt` |
+| `Macro` | `macros` | recordable raw byte sequence (`sequence_b64`), `usageCount` | `entities/Macro.kt` |
 
 ### 8.3 DAOs
 
-Twelve DAOs in `storage/database/dao/`. Notable queries:
+Fifteen DAOs in `storage/database/dao/`. Notable queries:
 - `ConnectionDao`: `getAllConnections()` (Flow), `getRecentConnections(limit)`, `getFrequentlyUsedConnections(limit)` (used by Frequent tab), `getUngroupedConnections()`, `searchConnections()`, `updateLastConnected()` (auto-increments connection count).
 - `HypervisorDao`: `getAllHypervisors()` (Flow), `getByType()`, `updateLastConnected()`.
 - `AuditLogDao`: range queries by date, by connection, by session; cleanup queries.
 - All write APIs use `OnConflictStrategy.REPLACE`.
 
-### 8.4 Migrations (`v1 → v17`)
+### 8.4 Migrations (`v1 → v26`)
 
 | Step | Change |
 |---|---|
@@ -447,6 +477,15 @@ Twelve DAOs in `storage/database/dao/`. Notable queries:
 | 14→15 | Add `linked_connection_id` to hypervisors |
 | 15→16 | Add `password` (encrypted) to `identities` |
 | 16→17 | Add `api_type_override` (`auto`/`direct`/`centralized`) to hypervisors — supersedes `is_xen_orchestra` |
+| 17→18 | Add `env_vars`, `agent_forwarding` to connections (Wave 1.2 / 1.5) |
+| 18→19 | Add `certificate` to `stored_keys` (Wave 2.2 OpenSSH user certs) |
+| 19→20 | Add `protocol` to connections (`SSH` / `Telnet`, Wave 2.3) |
+| 20→21 | Create `workspaces` table (Wave 2.5 named tab groups) |
+| 21→22 | Add `color_tag` to connections (Wave 3.1) |
+| 22→23 | Create `cloud_accounts` (Wave 5.1, tokens in Keystore not DB) |
+| 23→24 | Add `remote_command` to connections (Issue #37 SSH config RemoteCommand) |
+| 24→25 | Add `ip_mode` to connections (`auto` / `ipv4` / `ipv6`, Issue #6) |
+| 25→26 | Create `macros` table (Issue #173 recordable byte sequences) |
 
 ### 8.5 Preferences
 
@@ -656,7 +695,7 @@ Realm format `user@pam` / `user@pve`. Optional SSL bypass.
 | `preferences_general.xml` | `GeneralSettingsFragment` | theme, language, behavior, notifications |
 | `preferences_terminal.xml` | `TerminalSettingsFragment` | terminal theme, font, cursor, scrollback, gestures, keyboard, recording |
 | `preferences_security.xml` | `SecuritySettingsFragment` | lock, biometric, host-key strict, port-knock default |
-| `preferences_connection.xml` | `ConnectionSettingsFragment` | default user/port, timeouts, keep-alive, compression, mosh |
+| `preferences_connection.xml` | `ConnectionSettingsFragment` | default user/port, timeouts, compression, mosh (keep-alive is always-on at the SSH layer — no toggle) |
 | `preferences_sync.xml` | `SyncSettingsFragment` (in `SyncSettingsActivity`) | SAF location, password, frequency, per-entity toggles |
 | `preferences_audit.xml` | embedded | command auditing |
 | `preferences_logging.xml` | `LoggingSettingsFragment` | debug / host / error / audit logging |

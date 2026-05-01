@@ -201,8 +201,8 @@
 | Tablet top tabs | ❌ | — | ✅ Free | **LOW** |
 | Foldable optimisation | ❌ | — | ✅ Free | **LOW** |
 | Voice typing into terminal | ❌ | — | ✅ Free | Via Android voice keyboard. **LOW** |
-| Hardware (Bluetooth) keyboard | 🟡 | ✅ | ✅ | We have basic; verify modifier mapping. **MEDIUM** |
-| AltGr handling | ❌ | ✅ | — | International layouts. **LOW** |
+| Hardware (Bluetooth) keyboard | ✅ | ✅ | ✅ | xterm-style modifier-encoded arrows / HOME / END / PG family — `\e[1;<mod><letter>` for Shift/Ctrl/Alt + nav (Issue #171). |
+| AltGr handling | ✅ | ✅ | — | Right-Alt distinguished from real Alt; AltGr-composed unicode passes through as-is. |
 | Chromebook layout | 🟡 | ✅ | — | Per PlatformManager hooks. **LOW** |
 | Shake-to-send-Tab gesture | ❌ | — | ✅ Free | Termius novelty. **LOW** |
 | Volume button → bind to Shift+Tab | ❌ | — | ✅ Free | **LOW** |
@@ -267,6 +267,21 @@
 
 ---
 
+## Shipped since this audit (post-2026-04-30, in addition to crossed-out items above)
+
+- ✅ **Multi-tab same-host with independent shells** (Issue #163) — open one profile in two tabs and get two independent `ChannelShell`s on a single JSch Session. Per-tab close + per-tab PTY resize. Sibling tabs survive when one shell exits.
+- ✅ **Active Sessions strip** (Issue #165) — top of the Connections tab shows running tabs (with dynamic terminal title from OSC 0/2 + connection-state dot). Tap to focus. Disambiguates duplicate titles with `(#N)`. Backed by `TabManager.tabsFlow: StateFlow<List<SSHTab>>`.
+- ✅ **Edge-swipe tab switching** (Issue #168) — single-finger fling within 24dp of the left/right edge (when ViewPager2 swipe-mode is off).
+- ✅ **Tmux/Screen auto-launch + post-connect script** (Issue #170) — `profile.multiplexerMode` (`AUTO_ATTACH` / `CREATE_NEW`) + `profile.postConnectScript` lines now actually fire ~500ms post-connect. Both used to be defined-but-not-wired.
+- ✅ **Always-on keepalive** (Issue #166) — `serverAliveInterval = 60_000ms` + `setServerAliveCountMax(3)` set unconditionally; the per-profile toggle is gone.
+- ✅ **Centralised error dialogs with Copy** (Issue #167) — every `showError` and "Failed" dialog routes through `DialogUtils.showErrorDialog` for a guaranteed Copy button + clipboard toast.
+- ✅ **Recordable macros** (Issue #173, DB v25 → v26) — capture raw byte sequences (escape codes, paste payloads, modifier-composed Ctrl/Alt) via `TermuxBridge.{start,stop}MacroRecording()`; replay verbatim. Distinct from snippets (which are typed text + `{?var}`).
+- ✅ **Hardware keyboard modifier-aware nav keys** (Issue #171) — xterm-style `\e[1;<mod><letter>` for Shift/Ctrl/Alt + arrows / HOME / END / PG family. AltGr distinguished from real Alt.
+- ✅ **Cold-start ANR fixes** (Issue #158) — `MainPagerAdapter` lazy `createFragment`, `repeatOnLifecycle(STARTED)` for Flow collection in `ConnectionsFragment` / `IdentitiesFragment`, DB pre-warm in `initializeCoreComponents`. ViewStub-defer of the Active Sessions strip (Issue #175) recovers the headroom we used adding the strip.
+- ✅ **Cold-start commit-id marker** (Issue #164) — `## apk built from: <commit> ##` logged once per commit-id change to both app + debug log; persisted in shared_prefs so it doesn't spam every cold start. Resolves at build time via `providers.exec` (Gradle config-cache safe), falls back to `release.txt` then `"unknown"`.
+- ✅ **Repo cleanup** (Issue #160) — `setup-emulator.sh`, `scripts/test-build.sh`, `scripts/check/quick-check.sh` deleted as duplicates of `make build` / `make check`. `keystore.jks.sh` → `scripts/generate-keystore.sh`. `scripts/check/dev-shell.sh` → `scripts/dev-shell.sh`. Test sshd container moved to `docker/test-sshd/` with a launcher at `scripts/start-test-sshd.sh` (bakes in the `tabssh-test` user + ed25519 client keypair).
+- ✅ **On-screen keyboard ergonomics** (Issues #161, #162) — IME-toggle (⌨) key dropped from all default-row layouts (back-key already dismisses the soft keyboard). Defaults reordered for vim/tmux/coding: row 1 = ESC + CTL/ALT/FN + `:` + `/` + arrows; row 2 = page navigation + TAB/ENT/PASTE; row 3 = coding symbols `| \ - _ ~ \` $ * < >`.
+
 ## Suggested priority buckets (proposal — you decide)
 
 ### 🔥 Tier 1 — finish the half-done + quick wins
@@ -298,7 +313,7 @@
 22. PIN code app lock (currently biometric-only)
 23. In-app changelog / what's new
 24. Per-host startup commands UI exposure (we have post-connect script field already)
-25. Bluetooth keyboard polish + AltGr
+25. ~~Bluetooth keyboard polish + AltGr~~ — **shipped (Issue #171)**: xterm-style modifier-encoded nav keys, AltGr distinguished from real Alt
 26. Connection history view (separate from "last connected")
 
 ### 🧊 Tier 4 — speculative / situational

@@ -1,8 +1,9 @@
 # TabSSH Android - Claude Project Tracker
 
-**Last Updated:** 2026-04-29
+**Last Updated:** 2026-05-01
 **Version:** 0.0.9 (release.txt-pinned; do not bump without user approval)
-**Status:** ✅ **Waves 1.X – 9.X shipped** — terminal palette/switcher/history, workspaces, broadcast input, theme editor, color tags, cloud host import (DigitalOcean/Hetzner/Linode/Vultr), Mosh native binaries, X11, foldable + sw720dp layouts, PIN lock, ANR watchdog, build-aware debug logging
+**Database:** v26 (added `macros` table for recordable macros — Issue #173)
+**Status:** ✅ **Waves 1.X – 9.X + 25-fix triage + 6-feature follow-up shipped.** Latest commits: 482c2a04 "25 fixes" (connect/reconnect, notifications, cold-start ANR, per-tab same-host channels, on-screen keyboard ergonomics, always-on keepalive, repo cleanup) and the follow-on 6-feature batch (centralised error dialogs with Copy, edge-swipe tab switching, tmux/screen auto-launch + postConnectScript wired, modifier-aware hardware-keyboard arrows, recordable macros, ViewStub-defer Active Sessions strip). Earlier waves still in place: terminal palette/switcher/history, workspaces, broadcast input, theme editor, color tags, cloud host import (DigitalOcean/Hetzner/Linode/Vultr), Mosh native binaries, X11, foldable + sw720dp layouts, PIN lock, ANR watchdog, build-aware debug logging.
 
 ---
 
@@ -41,7 +42,7 @@
 - ✅ **201 Kotlin source files** (~61,668 lines of code) under `app/src/main/`
 - ✅ **0 compilation errors** (verified: 2026-04-28)
 - ✅ **5 APK variants** built: `tabssh-android-{arch}.apk` (arch = `arm64` / `arm` / `amd64` / `x86` / `universal`)
-- ✅ **Database Version 24** — migrations v1 → v24 (latest: v23 `cloud_accounts` table, v24 `connections.remote_command`)
+- ✅ **Database Version 26** — migrations v1 → v26 (latest: v23 `cloud_accounts`, v24 `connections.remote_command`, v25 `connections.ip_mode`, v26 `macros` table)
 - ✅ **30 Activities, 7 Fragments, 1 Service** (`SSHConnectionService`)
 - 📦 **APKs Ready for Testing** - Located in `./binaries/`
 - ✅ **Complete Settings UI** - All preferences functional, build-aware debug logging
@@ -145,6 +146,8 @@ This is the bridge between the old 2026-02-11 "Feature Complete" snapshot and to
 | v21  | v22 | 3.1 | `connections.color_tag` |
 | v22  | v23 | 5.1 | new `cloud_accounts` table (tokens **not** in DB — Keystore only) |
 | v23  | v24 | 9.X | `connections.remote_command` (Issue #37: SSH config RemoteCommand support) |
+| v24  | v25 | #6  | `connections.ip_mode` (auto / ipv4 / ipv6 — Issue #6) |
+| v25  | v26 | #173 | new `macros` table (recordable macros — Issue #173) |
 
 ### Activities now present (30)
 AuditLogViewer, CloudAccounts, ClusterCommand, ConnectionEdit, ConnectionHistory, CrashReport, GroupManagement, HypervisorEdit, IdentityManagement, KeyboardCustomization, KeyManagement, LogViewer, **Main**, MultiHostDashboard, PinLock, PortForwarding, ProxmoxManager, RemoteFileEditor, **Settings**, SFTP, SnippetManager, SyncSettings, **TabTerminal**, ThemeEditor, TranscriptViewer, VMConsole, VMwareManager, WhatsNew, WidgetConfiguration, XCPngManager.

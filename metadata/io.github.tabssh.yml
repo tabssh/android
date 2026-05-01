@@ -25,12 +25,26 @@ Description: |
 
     ⭐ CORE SSH FEATURES:
     * True browser-style tabbed interface for multiple SSH sessions
-    * Complete VT100/ANSI terminal emulation with full escape sequence support
-    * SSH connection management with connection pooling and auto-reconnection
+    * Multi-tab same-host: open one profile in two tabs and get two
+      independent shells on one SSH session (per-tab ChannelShell)
+    * Complete VT100/ANSI terminal emulation (Termux engine) with
+      256-color, vim, htop, tmux working
+    * SSH connection management with connection pooling and auto-reconnect
+    * Always-on keepalive: 60s NOOP packets so idle sessions survive
+      carrier NAT timeouts and Wi-Fi sleep
+    * Per-host IPv4 / IPv6 / auto mode with toast on family fallback
+    * Tmux/screen/zellij auto-launch (per-profile attach-or-create)
+      and post-connect script lines fire automatically
     * Secure by default with hardware-backed encryption (Android Keystore)
     * SSH key management supporting RSA, DSA, ECDSA, and Ed25519
     * SSH config import with full ~/.ssh/config compatibility
     * Host key verification and known_hosts management
+    * Active Sessions strip on the Connections tab — see live tabs by
+      dynamic terminal title, tap to focus
+    * Recordable macros — capture raw byte sequences and replay verbatim
+    * Edge-swipe tab switching + xterm-style modifier-encoded arrow
+      keys for hardware Bluetooth keyboards
+    * Every error dialog has a Copy button for clean bug reports
 
     🎨 THEMES & CUSTOMIZATION:
     * 12 beautiful built-in themes (Dracula, Solarized, Nord, Monokai, One Dark, etc.)
