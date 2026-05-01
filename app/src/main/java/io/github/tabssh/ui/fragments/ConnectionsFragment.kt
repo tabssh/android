@@ -51,10 +51,13 @@ class ConnectionsFragment : Fragment() {
     private lateinit var adapter: ConnectionAdapter
     private var groupedAdapter: GroupedConnectionAdapter? = null
 
-    // Issue #165 — "Active Sessions" strip above the connection list.
-    private lateinit var activeSessionsContainer: View
-    private lateinit var activeSessionsRecycler: RecyclerView
-    private lateinit var activeSessionAdapter: io.github.tabssh.ui.adapters.ActiveSessionAdapter
+    // Issue #165 + #175 — "Active Sessions" strip above the connection
+    // list, deferred behind a ViewStub. Lateinit on the stub itself;
+    // the inflated views are populated only after first non-empty tabs.
+    private lateinit var activeSessionsStub: android.view.ViewStub
+    private var activeSessionsContainer: View? = null
+    private var activeSessionsRecycler: RecyclerView? = null
+    private var activeSessionAdapter: io.github.tabssh.ui.adapters.ActiveSessionAdapter? = null
     private val activeTabTitleObservers = mutableMapOf<String, kotlinx.coroutines.Job>()
     private val activeTabStateObservers = mutableMapOf<String, kotlinx.coroutines.Job>()
     
@@ -97,8 +100,7 @@ class ConnectionsFragment : Fragment() {
         searchView = view.findViewById(R.id.search_view)
         recyclerView = view.findViewById(R.id.recycler_connections)
         emptyLayout = view.findViewById(R.id.layout_empty_connections)
-        activeSessionsContainer = view.findViewById(R.id.active_sessions_container)
-        activeSessionsRecycler = view.findViewById(R.id.recycler_active_sessions)
+        activeSessionsStub = view.findViewById(R.id.stub_active_sessions)
 
         setupToolbar()
         setupSearchView()
@@ -184,23 +186,39 @@ class ConnectionsFragment : Fragment() {
      * by appending `(#N)`.
      */
     private fun setupActiveSessionsStrip() {
-        activeSessionAdapter = io.github.tabssh.ui.adapters.ActiveSessionAdapter { tabId ->
+        // ViewStub-deferred — the strip's RecyclerView/header/container
+        // are NOT inflated yet. Just collect tabsFlow; the first non-empty
+        // emission triggers ensureActiveSessionsInflated().
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                app.tabManager.tabsFlow.collect { tabs -> rebindActiveSessions(tabs) }
+            }
+        }
+    }
+
+    /**
+     * Issue #175 — first-call inflates the ViewStub, builds the adapter +
+     * LayoutManager. No-op on subsequent calls. Keeps cold-start cost at
+     * zero when the user has no running tabs (the common case).
+     */
+    private fun ensureActiveSessionsInflated() {
+        if (activeSessionsContainer != null) return
+        val inflated = activeSessionsStub.inflate()
+        activeSessionsContainer = inflated
+        activeSessionsRecycler = inflated.findViewById(R.id.recycler_active_sessions)
+        val recycler = activeSessionsRecycler!!
+        val adapter = io.github.tabssh.ui.adapters.ActiveSessionAdapter { tabId ->
             val intent = android.content.Intent(requireContext(), TabTerminalActivity::class.java).apply {
                 putExtra(TabTerminalActivity.EXTRA_TAB_ID, tabId)
                 addFlags(android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
             }
             startActivity(intent)
         }
-        activeSessionsRecycler.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(
+        recycler.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(
             requireContext(), androidx.recyclerview.widget.LinearLayoutManager.HORIZONTAL, false
         )
-        activeSessionsRecycler.adapter = activeSessionAdapter
-
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                app.tabManager.tabsFlow.collect { tabs -> rebindActiveSessions(tabs) }
-            }
-        }
+        recycler.adapter = adapter
+        activeSessionAdapter = adapter
     }
 
     private fun rebindActiveSessions(tabs: List<io.github.tabssh.ui.tabs.SSHTab>) {
@@ -227,17 +245,20 @@ class ConnectionsFragment : Fragment() {
     private fun renderActiveSessionRows() {
         val tabs = app.tabManager.getAllTabs()
         if (tabs.isEmpty()) {
-            activeSessionsContainer.visibility = View.GONE
-            activeSessionAdapter.submit(emptyList())
+            // Don't inflate the stub if we never had to. If it was already
+            // inflated (tabs existed earlier), just hide the container.
+            activeSessionsContainer?.visibility = View.GONE
+            activeSessionAdapter?.submit(emptyList())
             return
         }
-        activeSessionsContainer.visibility = View.VISIBLE
+        ensureActiveSessionsInflated()
+        activeSessionsContainer?.visibility = View.VISIBLE
 
         // Disambiguate duplicate titles (typically same-host tabs with no
         // OSC title set) by appending (#N) — N is the running index of
         // each duplicate occurrence so the labels stay stable.
         val titleCounts = mutableMapOf<String, Int>()
-        val rows = tabs.mapIndexed { i, tab ->
+        val rows = tabs.map { tab ->
             val raw = tab.title.value.ifBlank { tab.profile.getDisplayName() }
             val seenSoFar = titleCounts[raw] ?: 0
             titleCounts[raw] = seenSoFar + 1
@@ -249,7 +270,7 @@ class ConnectionsFragment : Fragment() {
                 state = tab.connectionState.value
             )
         }
-        activeSessionAdapter.submit(rows)
+        activeSessionAdapter?.submit(rows)
     }
 
     private fun setupRecyclerView() {

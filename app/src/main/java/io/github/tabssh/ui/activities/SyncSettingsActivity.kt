@@ -437,7 +437,7 @@ class SyncSettingsActivity : AppCompatActivity() {
     }
 
     private fun showError(title: String, msg: String) =
-        AlertDialog.Builder(this).setTitle(title).setMessage(msg).setPositiveButton("OK", null).show()
+        io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(this, title, msg)
 
     private fun toast(msg: String) =
         android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show()

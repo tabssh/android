@@ -26,9 +26,10 @@ import io.github.tabssh.utils.logging.Logger
         AuditLogEntry::class,
         HypervisorProfile::class,
         Workspace::class,
-        CloudAccount::class
+        CloudAccount::class,
+        Macro::class
     ],
-    version = 25,
+    version = 26,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -48,7 +49,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
     abstract fun hypervisorDao(): HypervisorDao
     abstract fun workspaceDao(): WorkspaceDao
     abstract fun cloudAccountDao(): CloudAccountDao
-    
+    abstract fun macroDao(): MacroDao
+
     companion object {
         @Volatile
         private var INSTANCE: TabSSHDatabase? = null
@@ -301,7 +303,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     MIGRATION_21_22,
                     MIGRATION_22_23,
                     MIGRATION_23_24,
-                    MIGRATION_24_25
+                    MIGRATION_24_25,
+                    MIGRATION_25_26
                 )
                 .build()
                 INSTANCE = instance
@@ -543,6 +546,25 @@ data class DatabaseStats(
                     "ALTER TABLE connections ADD COLUMN ip_mode TEXT NOT NULL DEFAULT 'auto'"
                 )
                 Logger.i("Database", "Migration 24->25: Added ip_mode to connections")
+            }
+        }
+
+        /** v25 → v26 — Issue #173: recordable macros table. */
+        val MIGRATION_25_26 = object : Migration(25, 26) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS macros (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        sequence_b64 TEXT NOT NULL,
+                        created_at INTEGER NOT NULL,
+                        modified_at INTEGER NOT NULL,
+                        usage_count INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                Logger.i("Database", "Migration 25->26: Added macros table")
             }
         }
 

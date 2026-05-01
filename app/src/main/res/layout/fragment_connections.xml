@@ -41,44 +41,16 @@
 
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Issue #165 — Active sessions strip. Visible only when there
-             are running tabs. Header + horizontal RecyclerView so users
-             can jump back into a live session without scrolling through
-             every saved profile. The container is collapsed to height=0
-             when empty so the empty Connections state still centers
-             properly. -->
-        <LinearLayout
-            android:id="@+id/active_sessions_container"
+        <!-- Issue #165 + #175 — Active sessions strip behind a ViewStub
+             so its layout cost is paid only when there's actually a
+             running tab to show. Empty-on-cold-start (the common case)
+             is now zero-cost. -->
+        <ViewStub
+            android:id="@+id/stub_active_sessions"
+            android:layout="@layout/view_active_sessions_strip"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:visibility="gone">
-
-            <TextView
-                android:id="@+id/active_sessions_header"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="@dimen/space_md"
-                android:layout_marginEnd="@dimen/space_md"
-                android:layout_marginTop="@dimen/space_sm"
-                android:text="Active Sessions"
-                android:textStyle="bold"
-                android:textColor="?attr/colorOnSurface"
-                android:textSize="14sp" />
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/recycler_active_sessions"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingStart="@dimen/space_md"
-                android:paddingEnd="@dimen/space_md"
-                android:paddingTop="@dimen/space_xs"
-                android:paddingBottom="@dimen/space_sm"
-                android:clipToPadding="false"
-                tools:listitem="@layout/item_active_session"
-                tools:itemCount="3" />
-
-        </LinearLayout>
+            android:inflatedId="@+id/active_sessions_container" />
 
         <!-- All Connections RecyclerView -->
         <androidx.recyclerview.widget.RecyclerView

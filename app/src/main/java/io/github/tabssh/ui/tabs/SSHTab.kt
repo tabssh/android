@@ -257,6 +257,21 @@ class SSHTab(
                     ownChannel?.let { sshConnection.resizePtyOf(it, cols, rows) }
                 }
 
+                // Issue #170 — multiplexer auto-launch + post-connect script.
+                // Fire-and-forget on connectionScope; runs after a short
+                // delay so the remote shell has a chance to print its
+                // greeting/PS1 before we inject anything.
+                connectionScope.launch {
+                    try {
+                        kotlinx.coroutines.delay(500)
+                        runPostConnectCommands(outputStream)
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Logger.w("SSHTab", "post-connect script failed: ${e.message}")
+                    }
+                }
+
                 Logger.i("SSHTab", "=== TERMINAL WIRED TO SSH SUCCESSFULLY for ${profile.getDisplayName()} ===")
                 true
             } else {
@@ -523,6 +538,78 @@ class SSHTab(
         if (newTitle.isNotBlank()) {
             _title.value = newTitle
             Logger.d("SSHTab", "Set custom title for tab: $newTitle")
+        }
+    }
+
+    /**
+     * Issue #170 — assemble the post-connect command stream:
+     * (1) optional tmux/screen/zellij auto-launch (if profile.multiplexerMode
+     *     != OFF), (2) profile.postConnectScript lines (one per line, in
+     *     order). Both are sent down the same shell channel; the remote
+     *     reads them as if the user typed them.
+     *
+     * Multiplexer type comes from the global preference (`gesture_multiplexer_type`,
+     * default tmux), session name from profile.multiplexerSessionName
+     * (default `tabssh`).
+     *
+     * ASK mode is currently treated as AUTO_ATTACH — a future iteration
+     * could surface a tab-level dialog. AUTO_ATTACH and CREATE_NEW already
+     * cover the practical cases; a global "always create new" toggle has
+     * never landed in any SSH client we've copied from.
+     */
+    private fun runPostConnectCommands(outputStream: java.io.OutputStream) {
+        val lines = mutableListOf<String>()
+
+        if (profile.multiplexerMode != "OFF") {
+            val app = try { io.github.tabssh.TabSSHApplication.get() } catch (_: Exception) { null }
+            val type = app?.let {
+                androidx.preference.PreferenceManager
+                    .getDefaultSharedPreferences(it)
+                    .getString("gesture_multiplexer_type", "tmux")
+            } ?: "tmux"
+            val name = profile.multiplexerSessionName?.takeIf { it.isNotBlank() } ?: "tabssh"
+            val cmd = buildMultiplexerCommand(type, profile.multiplexerMode, name)
+            if (cmd != null) {
+                Logger.i("SSHTab", "Multiplexer auto-launch: $cmd")
+                lines.add(cmd)
+            }
+        }
+
+        profile.postConnectScript?.lines()
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() && !it.startsWith("#") }
+            ?.forEach { lines.add(it) }
+
+        if (lines.isEmpty()) return
+
+        val payload = lines.joinToString("\n", postfix = "\n").toByteArray(Charsets.UTF_8)
+        try {
+            outputStream.write(payload)
+            outputStream.flush()
+        } catch (e: Exception) {
+            Logger.w("SSHTab", "Failed to write post-connect commands: ${e.message}")
+        }
+    }
+
+    private fun buildMultiplexerCommand(type: String, mode: String, name: String): String? {
+        val safeName = name.replace("'", "")
+        return when (type) {
+            "tmux" -> when (mode) {
+                "AUTO_ATTACH", "ASK" -> "tmux new -A -s '$safeName'"
+                "CREATE_NEW"         -> "tmux new -s '$safeName'"
+                else                 -> null
+            }
+            "screen" -> when (mode) {
+                "AUTO_ATTACH", "ASK" -> "screen -RR '$safeName'"
+                "CREATE_NEW"         -> "screen -S '$safeName'"
+                else                 -> null
+            }
+            "zellij" -> when (mode) {
+                "AUTO_ATTACH", "ASK" -> "zellij attach --create '$safeName'"
+                "CREATE_NEW"         -> "zellij --session '$safeName'"
+                else                 -> null
+            }
+            else -> null
         }
     }
 

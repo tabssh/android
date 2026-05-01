@@ -122,6 +122,17 @@ class TerminalView @JvmOverloads constructor(
     private var terminalGestureHandler: io.github.tabssh.terminal.gestures.TerminalGestureHandler? = null
     var onCommandSent: ((ByteArray) -> Unit)? = null
 
+    // Issue #168 — edge-swipe callback. Fires when a single-finger fling
+    // starts within EDGE_SWIPE_DP (24dp — matches system back-gesture
+    // inset) of the left or right edge AND the dominant axis is
+    // horizontal AND the swipe heads back into the viewport. We react
+    // to a fling (not a static drag), so the system back gesture wins
+    // on slow pulls and ours wins on quick flicks. Direction:
+    //   -1 = previous tab (swipe right from left edge),
+    //   +1 = next tab     (swipe left  from right edge).
+    var onEdgeSwipe: ((direction: Int) -> Unit)? = null
+    private val edgeSwipeDp = 24
+
     init {
         // Enable focus and touch
         isFocusable = true
@@ -1141,45 +1152,24 @@ class TerminalView @JvmOverloads constructor(
                 return true
             }
 
-            // Arrow keys
-            KeyEvent.KEYCODE_DPAD_UP -> {
-                sendKeySequence("\u001b[A")
-                return true
-            }
-            KeyEvent.KEYCODE_DPAD_DOWN -> {
-                sendKeySequence("\u001b[B")
-                return true
-            }
-            KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                sendKeySequence("\u001b[C")
-                return true
-            }
-            KeyEvent.KEYCODE_DPAD_LEFT -> {
-                sendKeySequence("\u001b[D")
-                return true
-            }
+            // Arrow keys — Issue #171, xterm-style modifier propagation.
+            // Plain: \e[A. Shift+Up: \e[1;2A. Ctrl+Up: \e[1;5A. Alt+Up:
+            // \e[1;3A. Combinations are 1 + (1=Shift, 2=Alt, 4=Ctrl).
+            // tmux, vim, less and most modern TUIs read these to switch
+            // panes / jump words / extend selection.
+            KeyEvent.KEYCODE_DPAD_UP -> { sendKeySequence(arrowSeq('A', isShift, isAlt, isCtrl)); return true }
+            KeyEvent.KEYCODE_DPAD_DOWN -> { sendKeySequence(arrowSeq('B', isShift, isAlt, isCtrl)); return true }
+            KeyEvent.KEYCODE_DPAD_RIGHT -> { sendKeySequence(arrowSeq('C', isShift, isAlt, isCtrl)); return true }
+            KeyEvent.KEYCODE_DPAD_LEFT -> { sendKeySequence(arrowSeq('D', isShift, isAlt, isCtrl)); return true }
 
-            // Navigation keys
-            KeyEvent.KEYCODE_MOVE_HOME -> {
-                sendKeySequence("\u001b[H")
-                return true
-            }
-            KeyEvent.KEYCODE_MOVE_END -> {
-                sendKeySequence("\u001b[F")
-                return true
-            }
-            KeyEvent.KEYCODE_PAGE_UP -> {
-                sendKeySequence("\u001b[5~")
-                return true
-            }
-            KeyEvent.KEYCODE_PAGE_DOWN -> {
-                sendKeySequence("\u001b[6~")
-                return true
-            }
-            KeyEvent.KEYCODE_INSERT -> {
-                sendKeySequence("\u001b[2~")
-                return true
-            }
+            // Navigation keys — same modifier wrapping for HOME/END;
+            // PAGE_UP/PAGE_DOWN/INS use the `\e[N~` family which has its
+            // own modifier form `\e[N;<mod>~`.
+            KeyEvent.KEYCODE_MOVE_HOME -> { sendKeySequence(arrowSeq('H', isShift, isAlt, isCtrl)); return true }
+            KeyEvent.KEYCODE_MOVE_END -> { sendKeySequence(arrowSeq('F', isShift, isAlt, isCtrl)); return true }
+            KeyEvent.KEYCODE_PAGE_UP -> { sendKeySequence(tildeSeq(5, isShift, isAlt, isCtrl)); return true }
+            KeyEvent.KEYCODE_PAGE_DOWN -> { sendKeySequence(tildeSeq(6, isShift, isAlt, isCtrl)); return true }
+            KeyEvent.KEYCODE_INSERT -> { sendKeySequence(tildeSeq(2, isShift, isAlt, isCtrl)); return true }
 
             // Function keys F1-F12
             KeyEvent.KEYCODE_F1 -> {
@@ -1251,6 +1241,26 @@ class TerminalView @JvmOverloads constructor(
 
     /**
      * Get control code for Ctrl+letter combination
+     * Issue #171 — xterm modifier-encoding helpers. Modifier param is
+     * 1 + (1=Shift, 2=Alt, 4=Ctrl). With no modifier we emit the legacy
+     * short form (\e[A) for compatibility with the smallest set of
+     * receivers; with any modifier we use the parameterised form
+     * (\e[1;<mod>A or \e[N;<mod>~).
+     */
+    private fun modifierCode(shift: Boolean, alt: Boolean, ctrl: Boolean): Int =
+        1 + (if (shift) 1 else 0) + (if (alt) 2 else 0) + (if (ctrl) 4 else 0)
+
+    private fun arrowSeq(letter: Char, shift: Boolean, alt: Boolean, ctrl: Boolean): String {
+        val mod = modifierCode(shift, alt, ctrl)
+        return if (mod == 1) "\u001b[$letter" else "\u001b[1;$mod$letter"
+    }
+
+    private fun tildeSeq(num: Int, shift: Boolean, alt: Boolean, ctrl: Boolean): String {
+        val mod = modifierCode(shift, alt, ctrl)
+        return if (mod == 1) "\u001b[$num~" else "\u001b[$num;$mod~"
+    }
+
+    /**
      * Ctrl+A = 0x01, Ctrl+B = 0x02, ..., Ctrl+Z = 0x1A
      */
     private fun getCtrlCode(keyCode: Int): String? {
@@ -1336,6 +1346,24 @@ class TerminalView @JvmOverloads constructor(
         }
 
         override fun onFling(e1: MotionEvent?, e2: MotionEvent, velocityX: Float, velocityY: Float): Boolean {
+            // Issue #168 — edge swipes for tab switching. Detect BEFORE
+            // the vertical-fling scrollback handler so a horizontal edge
+            // swipe doesn't bounce the scrollback.
+            val down = e1
+            if (down != null && Math.abs(velocityX) > Math.abs(velocityY) * 1.5) {
+                val edgePx = edgeSwipeDp * resources.displayMetrics.density
+                val w = width
+                val onLeftEdge = down.x < edgePx
+                val onRightEdge = down.x > w - edgePx
+                if (onLeftEdge && velocityX > 0) {
+                    onEdgeSwipe?.invoke(-1)
+                    return true
+                }
+                if (onRightEdge && velocityX < 0) {
+                    onEdgeSwipe?.invoke(+1)
+                    return true
+                }
+            }
             scroller.fling(0, scrollY, 0, -velocityY.toInt(), 0, 0, 0,
                 terminalBuffer?.getScrollbackSize() ?: 0)
             invalidate()
@@ -1628,4 +1656,5 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
         // Terminal doesn't support rich content input
         return false
     }
+
 }

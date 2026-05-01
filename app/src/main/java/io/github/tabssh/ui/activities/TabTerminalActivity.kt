@@ -508,6 +508,19 @@ class TabTerminalActivity : AppCompatActivity() {
                 onContextMenuRequested = { x, y ->
                     showTextContextMenu(x, y)
                 }
+
+                // Issue #168 — edge-swipe tab switching. Acts as a backup
+                // path for users who turned off ViewPager2 swipe-mode and
+                // would otherwise have no touch gesture for tab switching.
+                // Direction: -1 = previous tab, +1 = next tab.
+                onEdgeSwipe = { direction ->
+                    val count = tabManager.getTabCount()
+                    if (count > 1) {
+                        if (direction < 0) tabManager.switchToPreviousTab()
+                        else               tabManager.switchToNextTab()
+                        switchToTab(tabManager.getActiveTabIndex())
+                    }
+                }
                 
                 // Set up custom gesture support
                 val gesturesEnabled = app.preferencesManager.getBoolean("enable_custom_gestures", false)
@@ -1812,6 +1825,8 @@ class TabTerminalActivity : AppCompatActivity() {
             R.id.action_split_bottom -> { showSplitConnectionPicker(); true }
             R.id.action_unsplit -> { closeSplitPane(); true }
             R.id.action_mosh_handoff -> { showMoshHandoff(); true }
+            R.id.action_macro_record -> { toggleMacroRecording(); true }
+            R.id.action_macro_replay -> { showMacroPicker(); true }
             else -> super.onOptionsItemSelected(item)
         }
     }
@@ -2159,6 +2174,91 @@ class TabTerminalActivity : AppCompatActivity() {
         // No theme-aware tinting yet — just announce so user notices.
         if (focus) {
             Toast.makeText(this, "Bottom pane focused", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Issue #173 — toggle macro recording on the active tab. First tap
+     * starts capture; second tap stops, prompts for a name, and saves
+     * the recorded byte sequence as a Macro.
+     */
+    private fun toggleMacroRecording() {
+        val active = tabManager.getActiveTab() ?: run {
+            Toast.makeText(this, "No active tab", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val bridge = active.termuxBridge
+        if (!bridge.isRecordingMacro()) {
+            bridge.startMacroRecording()
+            Toast.makeText(this, "Recording macro — replay menu to stop", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val bytes = bridge.stopMacroRecording()
+        if (bytes.isEmpty()) {
+            Toast.makeText(this, "No keystrokes recorded", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val input = android.widget.EditText(this).apply {
+            hint = "Macro name"
+            setSingleLine(true)
+        }
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle("Save macro (${bytes.size} bytes)")
+            .setView(input)
+            .setPositiveButton("Save") { _, _ ->
+                val name = input.text.toString().trim().ifBlank { "Macro ${System.currentTimeMillis()}" }
+                lifecycleScope.launch {
+                    try {
+                        app.database.macroDao().insertMacro(
+                            io.github.tabssh.storage.database.entities.Macro.fromBytes(name, bytes)
+                        )
+                        Toast.makeText(this@TabTerminalActivity, "Saved \"$name\"", Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        Logger.e("TabTerminalActivity", "Failed to save macro", e)
+                        showError("Failed to save macro: ${e.message}", "Macro error")
+                    }
+                }
+            }
+            .setNegativeButton("Discard", null)
+            .show()
+    }
+
+    /**
+     * Issue #173 — pick a saved macro and replay its bytes verbatim into
+     * the active tab. Bumps usage count on replay so the picker stays
+     * sorted by frequency.
+     */
+    private fun showMacroPicker() {
+        val active = tabManager.getActiveTab() ?: run {
+            Toast.makeText(this, "No active tab", Toast.LENGTH_SHORT).show()
+            return
+        }
+        lifecycleScope.launch {
+            val macros = try { app.database.macroDao().getAllMacrosList() }
+                catch (e: Exception) {
+                    Logger.e("TabTerminalActivity", "Failed to load macros", e)
+                    emptyList()
+                }
+            if (macros.isEmpty()) {
+                Toast.makeText(this@TabTerminalActivity, "No saved macros — record one first", Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            val labels = macros.map { "${it.name} (${it.decodedSequence().size}b)" }.toTypedArray()
+            com.google.android.material.dialog.MaterialAlertDialogBuilder(this@TabTerminalActivity)
+                .setTitle("Replay macro")
+                .setItems(labels) { _, which ->
+                    val m = macros[which]
+                    val bytes = m.decodedSequence()
+                    // Replay through the bridge's TerminalOutput hook so
+                    // any sibling code (broadcast input, etc.) sees it.
+                    active.termuxBridge.write(bytes)
+                    lifecycleScope.launch {
+                        try { app.database.macroDao().incrementUsageCount(m.id) }
+                        catch (_: Exception) {}
+                    }
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
         }
     }
 

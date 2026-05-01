@@ -110,4 +110,16 @@
         android:title="Mosh handoff…"
         app:showAsAction="never" />
 
+    <!-- Issue #173 — recordable macros. Two entries so the user can
+         start/stop a recording and pick a saved macro to replay. -->
+    <item
+        android:id="@+id/action_macro_record"
+        android:title="Record macro…"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_macro_replay"
+        android:title="Replay macro…"
+        app:showAsAction="never" />
+
 </menu>

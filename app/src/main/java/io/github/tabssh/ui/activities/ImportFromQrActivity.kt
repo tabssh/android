@@ -267,12 +267,12 @@ class ImportFromQrActivity : AppCompatActivity() {
     }
 
     private fun showFatalError(message: String) {
-        AlertDialog.Builder(this)
-            .setTitle("Pairing failed")
-            .setMessage(message)
-            .setPositiveButton("OK") { _, _ -> finish() }
-            .setCancelable(false)
-            .show()
+        // Issue #167 — route through DialogUtils for the Copy button. Add a
+        // dismiss callback so back/outside-tap still finish()s the activity.
+        io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(
+            this, "Pairing failed", message,
+            onDismiss = { finish() }
+        )
     }
 
     private fun abortWith(message: String) {

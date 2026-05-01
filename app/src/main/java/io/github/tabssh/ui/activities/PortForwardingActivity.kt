@@ -144,11 +144,18 @@ class PortForwardingActivity : AppCompatActivity() {
         profile: io.github.tabssh.storage.database.entities.ConnectionProfile,
         message: String,
     ) {
+        // Three-button error: keep retry/close, add Copy so the message
+        // is grabbable for bug reports.
         MaterialAlertDialogBuilder(this)
             .setTitle("Couldn't attach")
             .setMessage(message)
             .setPositiveButton("Pick another host") { _, _ -> promptStandaloneConnection() }
             .setNegativeButton("Close") { _, _ -> finish() }
+            .setNeutralButton("Copy") { _, _ ->
+                val clipboard = getSystemService(android.content.ClipboardManager::class.java)
+                clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("TabSSH error", message))
+                android.widget.Toast.makeText(this, "Error message copied", android.widget.Toast.LENGTH_SHORT).show()
+            }
             .setCancelable(false)
             .show()
     }
@@ -324,13 +331,8 @@ class PortForwardingActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun showError(message: String) {
-        MaterialAlertDialogBuilder(this)
-            .setTitle("Error")
-            .setMessage(message)
-            .setPositiveButton("OK", null)
-            .show()
-    }
+    private fun showError(message: String) =
+        io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(this, "Error", message)
 
     override fun onSupportNavigateUp(): Boolean {
         finish()

@@ -345,11 +345,9 @@ class ThemeEditorActivity : AppCompatActivity() {
                     finish()
                 }
                 is ImportThemeResult.Error -> {
-                    AlertDialog.Builder(this@ThemeEditorActivity)
-                        .setTitle("Save failed")
-                        .setMessage(r.message)
-                        .setPositiveButton(android.R.string.ok, null)
-                        .show()
+                    io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(
+                        this@ThemeEditorActivity, "Save failed", r.message
+                    )
                 }
             }
         }

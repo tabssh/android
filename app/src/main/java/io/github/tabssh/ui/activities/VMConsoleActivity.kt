@@ -429,7 +429,10 @@ class VMConsoleActivity : AppCompatActivity() {
         progressBar.visibility = View.GONE
         statusText.visibility = View.VISIBLE
         statusText.text = "Error: $message"
-        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+        // Issue #167 — surface a copyable error dialog in addition to the
+        // inline status. Toasts vanish; users that want to file a bug
+        // need a way to capture the exact message.
+        io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(this, "VM Console Error", message)
     }
 
     override fun onSupportNavigateUp(): Boolean {

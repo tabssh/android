@@ -672,11 +672,10 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                     showImportPasswordDialog(uri)
                 } else {
                     Logger.e("MainActivity", "Failed to import backup", e)
-                    androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
-                        .setTitle("Import Failed")
-                        .setMessage("Failed to import backup:\n${e.message}")
-                        .setPositiveButton("OK", null)
-                        .show()
+                    io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(
+                        this@MainActivity, "Import Failed",
+                        "Failed to import backup:\n${e.message}"
+                    )
                 }
             }
         }
@@ -730,11 +729,10 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
 
             } catch (e: Exception) {
                 Logger.e("MainActivity", "Failed to import backup with password", e)
-                androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
-                    .setTitle("Import Failed")
-                    .setMessage("Failed to import backup:\n${e.message}\n\nThe password may be incorrect.")
-                    .setPositiveButton("OK", null)
-                    .show()
+                io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(
+                    this@MainActivity, "Import Failed",
+                    "Failed to import backup:\n${e.message}\n\nThe password may be incorrect."
+                )
             }
         }
     }
@@ -1180,11 +1178,10 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
 
             } catch (e: Exception) {
                 Logger.e("MainActivity", "Failed to export backup", e)
-                androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
-                    .setTitle("Export Failed")
-                    .setMessage("Failed to export backup:\n${e.message}")
-                    .setPositiveButton("OK", null)
-                    .show()
+                io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(
+                    this@MainActivity, "Export Failed",
+                    "Failed to export backup:\n${e.message}"
+                )
             }
         }
     }

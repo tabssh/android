@@ -579,15 +579,6 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
     }
 
     private fun showErrorDialog(title: String, message: String) {
-        androidx.appcompat.app.AlertDialog.Builder(requireContext())
-            .setTitle(title)
-            .setMessage(message)
-            .setPositiveButton("OK", null)
-            .setNeutralButton("Copy") { _, _ ->
-                val clipboard = requireContext().getSystemService(android.content.ClipboardManager::class.java)
-                clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("Error", message))
-                showToast("Error copied to clipboard")
-            }
-            .show()
+        io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(requireContext(), title, message)
     }
 }

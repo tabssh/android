@@ -28,6 +28,15 @@ class TabSSHApplication : Application() {
         const val KEY_CRASH_THREAD = "crash_thread"
         const val KEY_CRASH_TIME   = "crash_time"
         const val KEY_LAST_LOGGED_COMMIT = "last_logged_commit"
+
+        // Lightweight Application singleton — set in onCreate, used by
+        // helpers that don't have a Context (notably SSHTab when it
+        // builds the multiplexer auto-launch command from
+        // gesture_multiplexer_type). Intentionally not exposed via
+        // public API; treat as a last-resort accessor.
+        @Volatile private var INSTANCE: TabSSHApplication? = null
+        fun get(): TabSSHApplication = INSTANCE
+            ?: error("TabSSHApplication.get() called before onCreate()")
     }
 
     // Core components - initialized lazily
@@ -74,6 +83,7 @@ class TabSSHApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        INSTANCE = this
 
         // Logger init policy:
         //   - debug builds (BuildConfig.DEBUG_MODE = true) auto-enable

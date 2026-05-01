@@ -62,6 +62,25 @@ class TermuxBridge(
     // Coroutine scope for write operations (IO thread)
     private val writeScope = CoroutineScope(Dispatchers.IO + Job())
 
+    // Issue #173 — recordable macros. When non-null, every byte heading
+    // out to SSH is also appended to this buffer so the activity can
+    // save it as a Macro and replay verbatim later.
+    @Volatile private var macroRecording: java.io.ByteArrayOutputStream? = null
+
+    /** Begin capturing outbound bytes. No-op if already recording. */
+    fun startMacroRecording() {
+        if (macroRecording == null) macroRecording = java.io.ByteArrayOutputStream()
+    }
+
+    /** Stop capturing and return the recorded bytes (empty if not recording). */
+    fun stopMacroRecording(): ByteArray {
+        val buf = macroRecording ?: return ByteArray(0)
+        macroRecording = null
+        return buf.toByteArray()
+    }
+
+    fun isRecordingMacro(): Boolean = macroRecording != null
+
     // State
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
@@ -83,6 +102,11 @@ class TermuxBridge(
         override fun write(data: ByteArray, offset: Int, count: Int) {
             // Copy data to avoid race conditions (input may be reused)
             val dataCopy = data.copyOfRange(offset, offset + count)
+            // Issue #173 — if a macro recording is active, append the
+            // bytes BEFORE we hand them off to writeScope. The recorder
+            // is intentionally byte-exact (no decoding) so escape codes
+            // and paste payloads round-trip on replay.
+            macroRecording?.write(dataCopy)
             // Run on IO thread to avoid NetworkOnMainThreadException
             writeScope.launch {
                 try {

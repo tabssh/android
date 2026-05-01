@@ -384,11 +384,11 @@ class KeyManagementActivity : AppCompatActivity() {
                                 .show()
                         }
                         is GenerateResult.Error -> {
-                            AlertDialog.Builder(this@KeyManagementActivity)
-                                .setTitle("Key Generation Failed")
-                                .setMessage("Failed to generate SSH key:\n\n${result.message}")
-                                .setPositiveButton("OK", null)
-                                .show()
+                            io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(
+                                this@KeyManagementActivity,
+                                "Key Generation Failed",
+                                "Failed to generate SSH key:\n\n${result.message}"
+                            )
                         }
                     }
                 }

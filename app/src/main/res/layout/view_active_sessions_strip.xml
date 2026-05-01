@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Issue #175 — extracted from fragment_connections.xml so it can be
+    deferred behind a ViewStub. Inflation only happens when the first
+    non-empty tabsFlow emission arrives, recovering the cold-start
+    headroom we used adding the strip.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/active_sessions_container"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/active_sessions_header"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/space_md"
+        android:layout_marginEnd="@dimen/space_md"
+        android:layout_marginTop="@dimen/space_sm"
+        android:text="Active Sessions"
+        android:textStyle="bold"
+        android:textColor="?attr/colorOnSurface"
+        android:textSize="14sp" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recycler_active_sessions"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="@dimen/space_md"
+        android:paddingEnd="@dimen/space_md"
+        android:paddingTop="@dimen/space_xs"
+        android:paddingBottom="@dimen/space_sm"
+        android:clipToPadding="false"
+        tools:listitem="@layout/item_active_session"
+        tools:itemCount="3" />
+
+</LinearLayout>
