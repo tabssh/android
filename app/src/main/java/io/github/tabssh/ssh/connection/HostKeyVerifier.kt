@@ -400,158 +400,171 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
     }
 
     /**
-     * Show a blocking dialog for new host key verification
-     * Used when no callback is available (fallback mechanism)
+     * Show a blocking dialog for new host key verification.
+     * Used when no callback is available (fallback mechanism).
+     *
+     * Robustness: previously the latch had no timeout and relied on
+     * `setOnDismissListener` to release on activity destruction. That's
+     * only true if `AlertDialog.Builder.show()` actually succeeds — if
+     * the activity died between resolution and the runOnUiThread post
+     * (or if Builder().show() throws because the activity is in a bad
+     * state), the dismiss listener never fires and the JSch thread
+     * hangs forever. Now: pre-check `isFinishing/isDestroyed`, default
+     * to REJECT after 30s if no user response arrives.
      */
-    private fun showBlockingNewHostDialog(info: NewHostKeyInfo): HostKeyAction {
-        Logger.i("HostKeyVerifier", "Showing blocking dialog for new host: ${info.hostname}:${info.port}")
+    private fun showBlockingNewHostDialog(info: NewHostKeyInfo): HostKeyAction =
+        showBlockingHostDialog(
+            title = "New Host Key",
+            message = info.getDisplayMessage(),
+            icon = null,
+            positiveLabel = "Accept & Save",
+            neutralLabel = "Accept Once",
+            negativeLabel = "Reject",
+            logTag = "new host: ${info.hostname}:${info.port}"
+        )
+
+    /**
+     * Show a blocking dialog for changed host key verification.
+     * Used when no callback is available (fallback mechanism).
+     */
+    private fun showBlockingChangedHostDialog(info: HostKeyChangedInfo): HostKeyAction =
+        showBlockingHostDialog(
+            title = "WARNING: Host Key Changed!",
+            message = info.getDisplayMessage(),
+            icon = android.R.drawable.ic_dialog_alert,
+            positiveLabel = "Accept New Key",
+            neutralLabel = "Accept Once",
+            negativeLabel = "Reject (Recommended)",
+            logTag = "CHANGED host key: ${info.hostname}:${info.port}"
+        )
+
+    /**
+     * Common machinery for the two host-key dialogs. Resolves an
+     * Activity from the context chain or from the app's
+     * current-activity tracking, posts the dialog to the UI thread,
+     * and waits with a hard timeout. On any failure path (no Activity,
+     * Activity already finishing, dialog throws on show, latch
+     * timeout, thread interrupt) the safe answer is REJECT.
+     */
+    private fun showBlockingHostDialog(
+        title: String,
+        message: String,
+        icon: Int?,
+        positiveLabel: String,
+        neutralLabel: String,
+        negativeLabel: String,
+        logTag: String
+    ): HostKeyAction {
+        Logger.i("HostKeyVerifier", "Showing blocking dialog for $logTag")
 
         var userAction: HostKeyAction = HostKeyAction.REJECT_CONNECTION
         val latch = java.util.concurrent.CountDownLatch(1)
 
-        // Get the main activity from the context
-        val activity = when (context) {
-            is android.app.Activity -> context as android.app.Activity
-            is android.content.ContextWrapper -> {
-                var ctx = context
-                while (ctx is android.content.ContextWrapper) {
-                    if (ctx is android.app.Activity) break
-                    ctx = ctx.baseContext
-                }
-                ctx as? android.app.Activity
+        val effectiveActivity = resolveActivity()
+            ?: run {
+                Logger.e("HostKeyVerifier", "Cannot show dialog ($logTag) — no Activity context, defaulting to REJECT")
+                return HostKeyAction.REJECT_CONNECTION
             }
-            else -> null
-        }
 
-        val effectiveActivity = activity ?: run {
-            // Try to get activity from the application's activity tracking
-            val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
-            app?.getCurrentActivity()
-        }
-
-        if (effectiveActivity == null) {
-            Logger.e("HostKeyVerifier", "Cannot show dialog - no activity context available")
-            // Fallback: return REJECT for safety
+        if (effectiveActivity.isFinishing || effectiveActivity.isDestroyed) {
+            Logger.e(
+                "HostKeyVerifier",
+                "Cannot show dialog ($logTag) — activity finishing/destroyed, defaulting to REJECT"
+            )
             return HostKeyAction.REJECT_CONNECTION
         }
 
         effectiveActivity.runOnUiThread {
             try {
-                androidx.appcompat.app.AlertDialog.Builder(effectiveActivity)
-                    .setTitle("New Host Key")
-                    .setMessage(info.getDisplayMessage())
-                    .setPositiveButton("Accept & Save") { _, _ ->
+                if (effectiveActivity.isFinishing || effectiveActivity.isDestroyed) {
+                    // Activity died between our pre-check and this UI-thread
+                    // post — release the latch so the JSch thread doesn't hang.
+                    latch.countDown()
+                    return@runOnUiThread
+                }
+                val builder = androidx.appcompat.app.AlertDialog.Builder(effectiveActivity)
+                    .setTitle(title)
+                    .setMessage(message)
+                    .setPositiveButton(positiveLabel) { _, _ ->
                         userAction = HostKeyAction.ACCEPT_NEW_KEY
                         latch.countDown()
                     }
-                    .setNeutralButton("Accept Once") { _, _ ->
+                    .setNeutralButton(neutralLabel) { _, _ ->
                         userAction = HostKeyAction.ACCEPT_ONCE
                         latch.countDown()
                     }
-                    .setNegativeButton("Reject") { _, _ ->
+                    .setNegativeButton(negativeLabel) { _, _ ->
                         userAction = HostKeyAction.REJECT_CONNECTION
                         latch.countDown()
                     }
                     .setCancelable(false)
                     .setOnDismissListener {
-                        // Ensure latch is counted down even if dialog is dismissed
+                        // Belt-and-suspenders: button handlers already
+                        // count down, but if the dialog is dismissed for
+                        // any other reason (config change, window-leak
+                        // teardown) make sure the JSch thread wakes up.
                         latch.countDown()
                     }
-                    .show()
+                if (icon != null) builder.setIcon(icon)
+                builder.show()
             } catch (e: Exception) {
-                Logger.e("HostKeyVerifier", "Error showing new host dialog", e)
+                Logger.e("HostKeyVerifier", "Error showing host-key dialog ($logTag)", e)
                 latch.countDown()
             }
         }
 
         try {
-            // No timeout — see Issue #32. The setOnDismissListener releases
-            // the latch on activity destruction so this won't deadlock.
-            latch.await()
+            // Hard 30s timeout. If the user can't be reached in that
+            // window, default to REJECT — a hung connection is worse
+            // than a forced disconnect.
+            val signaled = latch.await(DIALOG_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+            if (!signaled) {
+                Logger.w(
+                    "HostKeyVerifier",
+                    "Dialog timeout (${DIALOG_TIMEOUT_SECONDS}s) — defaulting to REJECT for $logTag"
+                )
+                userAction = HostKeyAction.REJECT_CONNECTION
+            }
         } catch (e: InterruptedException) {
-            Logger.e("HostKeyVerifier", "Interrupted waiting for dialog response", e)
+            Logger.e("HostKeyVerifier", "Interrupted waiting for dialog response ($logTag)", e)
             userAction = HostKeyAction.REJECT_CONNECTION
+            Thread.currentThread().interrupt()
         }
 
-        Logger.i("HostKeyVerifier", "Blocking dialog result: $userAction")
+        Logger.i("HostKeyVerifier", "Blocking dialog result for $logTag: $userAction")
         return userAction
     }
 
     /**
-     * Show a blocking dialog for changed host key verification
-     * Used when no callback is available (fallback mechanism)
+     * Walk the context wrapper chain looking for an Activity, then fall
+     * back to the application's tracked current activity. Both showBlocking*
+     * methods use this — keeping it factored so the resolution rules can
+     * evolve in one place.
      */
-    private fun showBlockingChangedHostDialog(info: HostKeyChangedInfo): HostKeyAction {
-        Logger.w("HostKeyVerifier", "Showing blocking dialog for CHANGED host key: ${info.hostname}:${info.port}")
-
-        var userAction: HostKeyAction = HostKeyAction.REJECT_CONNECTION
-        val latch = java.util.concurrent.CountDownLatch(1)
-
-        // Get the main activity from the context
-        val activity = when (context) {
+    private fun resolveActivity(): android.app.Activity? {
+        val direct = when (context) {
             is android.app.Activity -> context as android.app.Activity
             is android.content.ContextWrapper -> {
                 var ctx = context
                 while (ctx is android.content.ContextWrapper) {
-                    if (ctx is android.app.Activity) break
+                    if (ctx is android.app.Activity) return ctx
                     ctx = ctx.baseContext
                 }
-                ctx as? android.app.Activity
+                null
             }
             else -> null
         }
-
-        val effectiveActivity = activity ?: run {
-            // Try to get activity from the application's activity tracking
-            val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
-            app?.getCurrentActivity()
-        }
-
-        if (effectiveActivity == null) {
-            Logger.e("HostKeyVerifier", "Cannot show dialog - no activity context available")
-            return HostKeyAction.REJECT_CONNECTION
-        }
-
-        effectiveActivity.runOnUiThread {
-            try {
-                androidx.appcompat.app.AlertDialog.Builder(effectiveActivity)
-                    .setTitle("WARNING: Host Key Changed!")
-                    .setMessage(info.getDisplayMessage())
-                    .setIcon(android.R.drawable.ic_dialog_alert)
-                    .setPositiveButton("Accept New Key") { _, _ ->
-                        userAction = HostKeyAction.ACCEPT_NEW_KEY
-                        latch.countDown()
-                    }
-                    .setNeutralButton("Accept Once") { _, _ ->
-                        userAction = HostKeyAction.ACCEPT_ONCE
-                        latch.countDown()
-                    }
-                    .setNegativeButton("Reject (Recommended)") { _, _ ->
-                        userAction = HostKeyAction.REJECT_CONNECTION
-                        latch.countDown()
-                    }
-                    .setCancelable(false)
-                    .setOnDismissListener {
-                        latch.countDown()
-                    }
-                    .show()
-            } catch (e: Exception) {
-                Logger.e("HostKeyVerifier", "Error showing changed host dialog", e)
-                latch.countDown()
-            }
-        }
-
-        try {
-            // No timeout — see Issue #32.
-            latch.await()
-        } catch (e: InterruptedException) {
-            Logger.e("HostKeyVerifier", "Interrupted waiting for dialog response", e)
-            userAction = HostKeyAction.REJECT_CONNECTION
-        }
-
-        Logger.w("HostKeyVerifier", "Blocking dialog result for changed key: $userAction")
-        return userAction
+        if (direct != null) return direct
+        val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
+        return app?.getCurrentActivity()
     }
+
+    companion object {
+        /** Hard timeout for the host-key prompt dialogs — see kdoc on
+         *  showBlockingHostDialog. */
+        private const val DIALOG_TIMEOUT_SECONDS: Long = 30
+    }
+
 }
 
 /**
