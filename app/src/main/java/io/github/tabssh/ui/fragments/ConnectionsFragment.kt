@@ -254,19 +254,49 @@ class ConnectionsFragment : Fragment() {
         ensureActiveSessionsInflated()
         activeSessionsContainer?.visibility = View.VISIBLE
 
-        // Disambiguate duplicate titles (typically same-host tabs with no
-        // OSC title set) by appending (#N) — N is the running index of
-        // each duplicate occurrence so the labels stay stable.
-        val titleCounts = mutableMapOf<String, Int>()
-        val rows = tabs.map { tab ->
-            val raw = tab.title.value.ifBlank { tab.profile.getDisplayName() }
-            val seenSoFar = titleCounts[raw] ?: 0
-            titleCounts[raw] = seenSoFar + 1
-            val total = tabs.count { it.title.value.ifBlank { it.profile.getDisplayName() } == raw }
-            val display = if (total > 1) "$raw (#${seenSoFar + 1})" else raw
+        // Build display strings as {user}@{host}:{title}. The title source
+        // priority is: terminal-set OSC title → tab's default → cwd-style
+        // suffix. SSHTab.title can carry a transient state prefix (⏳, ⏸,
+        // 🔐, ❌); strip those for the strip — the colour dot already
+        // conveys state, so duplicating it as a glyph is noisy.
+        val rawDisplays = tabs.map { tab ->
+            val user = tab.profile.username
+            val host = tab.profile.host
+            val cleanTitle = tab.title.value
+                .removePrefix("⏳ ")
+                .removePrefix("⏸ ")
+                .removePrefix("🔐 ")
+                .removePrefix("❌ ")
+                .trim()
+            val userHost = if (user.isNotBlank() && host.isNotBlank()) "$user@$host" else host
+            // If the shell already set a title that starts with "user@host",
+            // don't repeat the prefix — show the OSC title verbatim.
+            val display = when {
+                cleanTitle.isBlank() -> userHost
+                cleanTitle == userHost -> userHost
+                cleanTitle.startsWith("$userHost:") -> cleanTitle
+                cleanTitle.startsWith(userHost) -> cleanTitle
+                else -> "$userHost:$cleanTitle"
+            }
+            tab to display
+        }
+
+        // Disambiguate exact-duplicate displays (same user@host with no
+        // OSC title) by appending (#N) — N is the 1-based running index.
+        val occurrences = rawDisplays.groupingBy { it.second }.eachCount()
+        val seen = mutableMapOf<String, Int>()
+        val rows = rawDisplays.map { (tab, display) ->
+            val total = occurrences[display] ?: 1
+            val label = if (total > 1) {
+                val n = (seen[display] ?: 0) + 1
+                seen[display] = n
+                "$display (#$n)"
+            } else {
+                display
+            }
             io.github.tabssh.ui.adapters.ActiveSessionAdapter.Row(
                 tabId = tab.tabId,
-                title = display,
+                title = label,
                 state = tab.connectionState.value
             )
         }

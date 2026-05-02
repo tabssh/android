@@ -135,12 +135,15 @@ class TabTerminalActivity : AppCompatActivity() {
     }
 
     /**
-     * Robust BACK handling: hide IME if shown, else go to MainActivity
-     * (sessions stay alive in SSHSessionManager + foreground service).
-     * Issue: relying on `finish()` alone left users stranded when the
-     * activity was launched from outside the normal task stack (widget,
-     * notification, etc.) — they ended up at the home screen instead of
-     * MainActivity. Explicit Intent ensures MainActivity always shows.
+     * BACK behaviour: hide IME if shown, otherwise surface MainActivity
+     * **without finishing TabTerminalActivity**. Keeping this activity in
+     * the task is what preserves the live SSH channel + Termux scrollback —
+     * if we `finish()` here, `onDestroy()` triggers `tabManager.cleanup()`
+     * which calls `SSHTab.disconnect()` on every tab and tears the shell
+     * channel down, even though SSHSessionManager would otherwise pool the
+     * Session. MainActivity is `singleTop` and we use REORDER_TO_FRONT so
+     * the existing instance comes forward; pressing BACK from MainActivity
+     * returns to the live terminal exactly where the user left it.
      */
     private fun handleBackToMainActivity() {
         val terminalView = getActiveTerminalView()
@@ -159,28 +162,13 @@ class TabTerminalActivity : AppCompatActivity() {
 
         Logger.i(
             "TabTerminalActivity",
-            "BACK: launching MainActivity (${tabManager.getTabCount()} sessions stay active in SSHSessionManager)"
+            "BACK: surfacing MainActivity, keeping ${tabManager.getTabCount()} live tabs"
         )
-        // Launch MainActivity explicitly so the user reliably ends up there
-        // regardless of what's in the back stack (widget launch, notification
-        // launch, deep-link, etc. all clear the stack differently).
         val intent = Intent(this, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
         }
         startActivity(intent)
-        finish()
-    }
-
-    /**
-     * Hardware/gesture BACK fallback for devices/configurations where the
-     * OnBackPressedDispatcher misses the event (e.g. predictive back gesture
-     * in a fullscreen activity, or third-party launchers). Eat KEYCODE_BACK
-     * here ourselves and route through the same handler.
-     */
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        Logger.i("TabTerminalActivity", "onBackPressed() called directly — routing")
-        handleBackToMainActivity()
+        // Intentionally NO finish() — see kdoc above.
     }
 
     private fun hideKeyboard() {

@@ -358,6 +358,11 @@ class TabManager(private val maxTabs: Int = 10) {
         tabs.forEach { it.disconnect() }
         tabs.clear()
         listeners.clear()
+        // Publish so the Connections-tab "Active Sessions" strip — and any
+        // other tabsFlow consumer — gets the empty-list emission and can
+        // hide itself. Otherwise the strip would show stale entries until
+        // a future `createTab` / `closeTab` triggers a publish.
+        publishTabs()
     }
 }
 

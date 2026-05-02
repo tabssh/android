@@ -427,6 +427,8 @@ object Logger {
             buildString {
                 appendLine("=== TabSSH Application Log ===")
                 appendLine("Generated: ${dateFormat.format(Date())}")
+                appendLine("App Version: ${io.github.tabssh.BuildConfig.VERSION_NAME} (${io.github.tabssh.BuildConfig.VERSION_CODE})")
+                appendLine("Build Commit: ${io.github.tabssh.BuildConfig.GIT_COMMIT_ID ?: "unknown"}")
                 appendLine("Log Size: ${file.length()} bytes")
                 appendLine()
                 appendLine("NOTE: This log is SAFE TO SHARE PUBLICLY.")
@@ -544,6 +546,8 @@ object Logger {
             buildString {
                 appendLine("=== TabSSH Debug Log ===")
                 appendLine("Exported: ${dateFormat.format(Date())}")
+                appendLine("App Version: ${io.github.tabssh.BuildConfig.VERSION_NAME} (${io.github.tabssh.BuildConfig.VERSION_CODE})")
+                appendLine("Build Commit: ${io.github.tabssh.BuildConfig.GIT_COMMIT_ID ?: "unknown"}")
                 appendLine("Debug Mode: $debugMode")
                 appendLine("Log File: ${file.absolutePath}")
                 appendLine("Log Size: ${file.length()} bytes")
