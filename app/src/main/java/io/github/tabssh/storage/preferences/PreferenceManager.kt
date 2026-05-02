@@ -416,6 +416,10 @@ class PreferenceManager(private val context: Context) {
         preferences.edit().putLong(key, value).apply()
     }
 
+    fun getStringSet(key: String, defaultValue: Set<String> = emptySet()): Set<String> {
+        return preferences.getStringSet(key, defaultValue) ?: defaultValue
+    }
+
     /**
      * Clear all preferences (factory reset)
      */

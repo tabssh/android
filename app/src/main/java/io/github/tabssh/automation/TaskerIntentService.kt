@@ -76,6 +76,19 @@ class TaskerIntentService : JobIntentService() {
             return
         }
 
+        // "Require App Unlock" — when on, deny Tasker actions while the device
+        // is keyguard-locked. Matches the user expectation that biometric/PIN
+        // protection extends to automation fired against this app.
+        if (app.preferencesManager.getBoolean("tasker_require_unlock", false)) {
+            val km = getSystemService(Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager
+            if (km != null && km.isDeviceSecure && km.isKeyguardLocked) {
+                Logger.w("TaskerIntentService", "Action blocked: device is locked")
+                logTaskerEvent("blocked_locked", intent.action ?: "unknown")
+                broadcastError("Device is locked — unlock to allow Tasker actions")
+                return
+            }
+        }
+
         when (intent.action) {
             ACTION_CONNECT -> handleConnect(intent)
             ACTION_DISCONNECT -> handleDisconnect(intent)
@@ -86,6 +99,22 @@ class TaskerIntentService : JobIntentService() {
                 broadcastError("Unknown action: ${intent.action}")
             }
         }
+    }
+
+    private fun isConnectionAllowed(profileId: String): Boolean {
+        val allowed = app.preferencesManager.getStringSet("tasker_allowed_connections")
+        if (allowed.isEmpty()) return true // empty = all allowed
+        return allowed.contains(profileId)
+    }
+
+    private fun logTaskerEvent(event: String, detail: String) {
+        if (!app.preferencesManager.getBoolean("tasker_log_events", true)) return
+        Logger.i("TaskerIntentService", "[tasker] $event: $detail")
+    }
+
+    private fun defaultCommandTimeoutMs(): Long {
+        val raw = app.preferencesManager.getString("tasker_command_timeout", DEFAULT_TIMEOUT_MS.toString())
+        return raw.toLongOrNull()?.coerceAtLeast(1000L) ?: DEFAULT_TIMEOUT_MS
     }
 
     private fun handleConnect(intent: Intent) {
@@ -110,10 +139,17 @@ class TaskerIntentService : JobIntentService() {
                     return@runBlocking
                 }
 
+                if (!isConnectionAllowed(profile.id)) {
+                    logTaskerEvent("blocked_not_allowed", "${profile.id}/${profile.name}")
+                    broadcastError("Connection '${profile.name}' is not allowed for Tasker")
+                    return@runBlocking
+                }
+
                 val connection = SSHConnection(profile, scope, this@TaskerIntentService)
                 connection.connect()
                 broadcastConnected(profile)
-                
+                logTaskerEvent("connect", "${profile.id}/${profile.name}")
+
                 Logger.i("TaskerIntentService", "Connected to ${profile.name}")
 
             } catch (e: Exception) {
@@ -143,11 +179,18 @@ class TaskerIntentService : JobIntentService() {
                     return@runBlocking
                 }
 
+                if (!isConnectionAllowed(profile.id)) {
+                    logTaskerEvent("blocked_not_allowed", "${profile.id}/${profile.name}")
+                    broadcastError("Connection '${profile.name}' is not allowed for Tasker")
+                    return@runBlocking
+                }
+
                 val tab = app.tabManager.getAllTabs().find { it.profile.id == profile.id }
-                
+
                 if (tab != null) {
                     tab.disconnect()
                     broadcastDisconnected(profile)
+                    logTaskerEvent("disconnect", "${profile.id}/${profile.name}")
                 } else {
                     broadcastError("No active connection")
                 }
@@ -164,7 +207,7 @@ class TaskerIntentService : JobIntentService() {
         val connectionName = intent.getStringExtra(EXTRA_CONNECTION_NAME)
         val command = intent.getStringExtra(EXTRA_COMMAND)
         val waitForResult = intent.getBooleanExtra(EXTRA_WAIT_FOR_RESULT, false)
-        val timeoutMs = intent.getLongExtra(EXTRA_TIMEOUT_MS, DEFAULT_TIMEOUT_MS)
+        val timeoutMs = intent.getLongExtra(EXTRA_TIMEOUT_MS, defaultCommandTimeoutMs())
 
         if (command.isNullOrEmpty()) {
             broadcastError("No command provided")
@@ -187,8 +230,14 @@ class TaskerIntentService : JobIntentService() {
                     return@runBlocking
                 }
 
+                if (!isConnectionAllowed(profile.id)) {
+                    logTaskerEvent("blocked_not_allowed", "${profile.id}/${profile.name}")
+                    broadcastError("Connection '${profile.name}' is not allowed for Tasker")
+                    return@runBlocking
+                }
+
                 var tab = app.tabManager.getAllTabs().find { it.profile.id == profile.id }
-                
+
                 if (tab == null) {
                     val connection = SSHConnection(profile, scope, this@TaskerIntentService)
                     connection.connect()
@@ -196,13 +245,14 @@ class TaskerIntentService : JobIntentService() {
                     tab = app.tabManager.createTab(profile, cursorStyle)
                     tab?.connect(connection)
                 }
-                
+
                 if (tab == null) {
                     broadcastError("Failed to create tab")
                     return@runBlocking
                 }
 
                 tab.terminal.sendText("$command\n")
+                logTaskerEvent("send_command", "${profile.id}/${profile.name}: $command")
 
                 if (waitForResult) {
                     withTimeout(timeoutMs) {
@@ -249,11 +299,18 @@ class TaskerIntentService : JobIntentService() {
                     return@runBlocking
                 }
 
+                if (!isConnectionAllowed(profile.id)) {
+                    logTaskerEvent("blocked_not_allowed", "${profile.id}/${profile.name}")
+                    broadcastError("Connection '${profile.name}' is not allowed for Tasker")
+                    return@runBlocking
+                }
+
                 val tab = app.tabManager.getAllTabs().find { it.profile.id == profile.id }
-                
+
                 if (tab != null) {
                     val sequence = parseKeySequence(keys)
                     tab.terminal.sendText(sequence)
+                    logTaskerEvent("send_keys", "${profile.id}/${profile.name}: $keys")
                 } else {
                     broadcastError("No active connection")
                 }

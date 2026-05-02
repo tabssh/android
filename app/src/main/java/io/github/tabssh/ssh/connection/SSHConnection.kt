@@ -255,7 +255,13 @@ class SSHConnection(
                 session = activeSession
 
                 Logger.i("SSHConnection", "Successfully connected and authenticated to ${profile.host}")
-                
+
+                // Issue #29 — apply port forwards parsed from `~/.ssh/config`
+                // and stored in `advancedSettings` JSON. Without this, imported
+                // configs with `LocalForward` / `RemoteForward` / `DynamicForward`
+                // round-tripped fine but did nothing at connect time.
+                applyAdvancedSettings(activeSession)
+
                 _connectionState.value = ConnectionState.CONNECTED
                 reconnectAttempts = 0
                 hadSuccessfulConnect = true
@@ -431,6 +437,83 @@ class SSHConnection(
         session.serverAliveCountMax = 3
 
         Logger.d("SSHConnection", "Session configured with compression=${profile.compression}, keepalive=on (mobile default)")
+    }
+
+    /**
+     * Issue #29 — apply post-connect directives from the per-host
+     * `advancedSettings` JSON blob produced by `SSHConfigParser`. Today this
+     * covers the three forward types — they round-tripped through import/
+     * export but never actually fired at connect time.
+     *
+     * Format mirrors what the parser stores: each forward is the raw value
+     * from the user's `~/.ssh/config`, e.g. `"8080 example.com:80"` for a
+     * LocalForward or `"1080"` for a DynamicForward.
+     */
+    private fun applyAdvancedSettings(session: Session) {
+        val raw = profile.advancedSettings?.takeIf { it.isNotBlank() } ?: return
+        val json = try {
+            org.json.JSONObject(raw)
+        } catch (e: Exception) {
+            Logger.w("SSHConnection", "advancedSettings is not valid JSON; skipping (${e.message})")
+            return
+        }
+
+        applyForwardArray(json, "localForwards") { spec ->
+            val (lp, rh, rp) = parseForwardSpec(spec) ?: return@applyForwardArray
+            val assigned = session.setPortForwardingL(lp, rh, rp)
+            Logger.i("SSHConnection", "advancedSettings: LocalForward $lp -> $rh:$rp (assigned=$assigned)")
+        }
+        applyForwardArray(json, "remoteForwards") { spec ->
+            val (rp, lh, lp) = parseForwardSpec(spec) ?: return@applyForwardArray
+            session.setPortForwardingR(rp, lh, lp)
+            Logger.i("SSHConnection", "advancedSettings: RemoteForward $rp -> $lh:$lp")
+        }
+        applyForwardArray(json, "dynamicForwards") { spec ->
+            val port = spec.trim().substringAfter(':', spec).toIntOrNull()
+            if (port == null) {
+                Logger.w("SSHConnection", "advancedSettings: bad DynamicForward spec '$spec'")
+                return@applyForwardArray
+            }
+            session.setPortForwardingL(port.toString())
+            Logger.i("SSHConnection", "advancedSettings: DynamicForward (SOCKS) on $port")
+        }
+    }
+
+    private inline fun applyForwardArray(
+        json: org.json.JSONObject,
+        key: String,
+        body: (String) -> Unit
+    ) {
+        val arr = json.optJSONArray(key) ?: return
+        for (i in 0 until arr.length()) {
+            val spec = arr.optString(i)?.takeIf { it.isNotBlank() } ?: continue
+            try {
+                body(spec)
+            } catch (e: Exception) {
+                Logger.w("SSHConnection", "advancedSettings: $key entry '$spec' failed: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Parse OpenSSH forward spec: `"<localPart> <remotePart>"` where each
+     * part is either `port` or `host:port`. Returns (localPort, remoteHost,
+     * remotePort). For LocalForward the local part may be just a port and
+     * the remote part is `host:port`; for RemoteForward the meaning is
+     * mirrored but the structure is the same.
+     */
+    private fun parseForwardSpec(spec: String): Triple<Int, String, Int>? {
+        val parts = spec.trim().split(Regex("\\s+"))
+        if (parts.size < 2) return null
+        val left = parts[0]
+        val right = parts[1]
+
+        val localPort = left.substringAfter(':', left).toIntOrNull() ?: return null
+        val rhostRportColon = right.lastIndexOf(':')
+        if (rhostRportColon <= 0) return null
+        val rhost = right.substring(0, rhostRportColon)
+        val rport = right.substring(rhostRportColon + 1).toIntOrNull() ?: return null
+        return Triple(localPort, rhost, rport)
     }
 
     /**
