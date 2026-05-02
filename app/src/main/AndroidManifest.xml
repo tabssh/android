@@ -55,6 +55,22 @@
         <package android:name="com.termux" />
     </queries>
 
+    <!-- Custom signature-level permission protecting TaskerIntentService.
+         Without this, the (exported) intent service was reachable from any
+         app on the device — an attacker app could fire CONNECT/SEND_COMMAND
+         intents to drive arbitrary commands on the user's SSH targets.
+         `signature` means callers must be signed with the same certificate
+         as TabSSH itself; in practice that locks it down to same-developer
+         apps only. Tasker integration via this service is therefore
+         disabled until we redesign it (see TODO.AI.md "Tasker preferences
+         XML orphaned" — proper Tasker support needs a different IPC
+         shape; this is the secure-by-default stop-gap). -->
+    <permission
+        android:name="io.github.tabssh.permission.TASKER"
+        android:label="@string/app_name"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="io.github.tabssh.permission.TASKER" />
+
     <application
         android:name=".TabSSHApplication"
         android:allowBackup="false"
@@ -276,11 +292,15 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
-        <!-- Tasker integration service -->
+        <!-- Tasker integration service. Gated on the signature-level
+             permission declared above so only same-signature callers can
+             reach it; previously this was unprotected and any installed
+             app could trigger CONNECT/SEND_COMMAND/SEND_KEYS. -->
         <service
             android:name=".automation.TaskerIntentService"
             android:enabled="true"
-            android:exported="true">
+            android:exported="true"
+            android:permission="io.github.tabssh.permission.TASKER">
             <intent-filter>
                 <action android:name="io.github.tabssh.action.CONNECT" />
                 <action android:name="io.github.tabssh.action.DISCONNECT" />

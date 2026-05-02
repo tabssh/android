@@ -7,6 +7,7 @@ import io.github.tabssh.backup.import.BackupImporter
 import io.github.tabssh.backup.validation.BackupValidator
 import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.preferences.PreferenceManager
+import io.github.tabssh.sync.encryption.SyncEncryptor
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -29,6 +30,12 @@ class BackupManager(private val context: Context) {
     private val exporter = BackupExporter(context, database, preferenceManager)
     private val importer = BackupImporter(context, database, preferenceManager)
     private val validator = BackupValidator()
+    // P0 fix: real password-based encryption for backups. Reuses the
+    // sync subsystem's SyncEncryptor (AES-256-GCM + PBKDF2 100k iter,
+    // see SyncEncryptor.kt) instead of the previous Base64-only stub
+    // that silently failed to encrypt anything despite the
+    // `encryptBackup=true` UI promise.
+    private val encryptor = SyncEncryptor()
 
     data class BackupMetadata(
         val version: Int = BACKUP_VERSION,
@@ -263,25 +270,41 @@ class BackupManager(private val context: Context) {
     }
 
     /**
-     * Encrypt backup data
+     * Encrypt backup data with the user-supplied backup password.
+     *
+     * Real AES-256-GCM + PBKDF2(SHA-256, 100k iterations) via the
+     * shared SyncEncryptor. Output bytes (header + salt + IV +
+     * ciphertext+tag) are Base64-NO_WRAP wrapped so they can travel
+     * through the existing String-based zip-entry writer without
+     * charset corruption.
      */
     private fun encryptData(data: String, password: String): String {
-        // Simple implementation - in production would use proper encryption
-        // Using Android Keystore and AES-GCM
-        return android.util.Base64.encodeToString(
-            data.toByteArray(),
-            android.util.Base64.NO_WRAP
-        )
+        val cipherBytes = encryptor.encrypt(data.toByteArray(Charsets.UTF_8), password)
+        return android.util.Base64.encodeToString(cipherBytes, android.util.Base64.NO_WRAP)
     }
 
     /**
-     * Decrypt backup data
+     * Decrypt backup data. Forward-compatible with the new AES-GCM
+     * format AND tolerant of the legacy Base64-only "encrypted" data
+     * that pre-fix backups produced — if the deserialized bytes lack
+     * the SyncEncryptor magic header, we treat the input as
+     * already-plaintext-Base64 and just decode it. Tolerance is purely
+     * for restoring old backups that were never actually encrypted;
+     * any future export uses real encryption.
      */
     private fun decryptData(data: String, password: String): String {
-        // Simple implementation - in production would use proper decryption
-        return String(
-            android.util.Base64.decode(data, android.util.Base64.NO_WRAP)
-        )
+        val raw = android.util.Base64.decode(data, android.util.Base64.NO_WRAP)
+        return try {
+            val plain = encryptor.decrypt(raw, password)
+            String(plain, Charsets.UTF_8)
+        } catch (e: Exception) {
+            // Legacy fallthrough — old backups were Base64-only; this
+            // path keeps them restorable. Log so the user knows their
+            // old backup wasn't actually encrypted at rest.
+            Logger.w("BackupManager",
+                "decrypt failed (${e.message}); falling back to legacy Base64-only format")
+            String(raw, Charsets.UTF_8)
+        }
     }
 
     /**

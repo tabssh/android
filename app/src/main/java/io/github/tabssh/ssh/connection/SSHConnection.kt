@@ -135,16 +135,23 @@ class SSHConnection(
                 _errorMessage.value = null
                 notifyListeners { onConnecting(id) }
 
-                // Resolve linked identity if set (for effective username/credentials)
+                // Resolve linked identity if set (for effective username/credentials).
+                // P1 fix: use safe-call instead of `profile.identityId!!`. Even
+                // though we just null-checked on the previous line, the field
+                // is a `var`/Room-loaded value and a stale flow emission could
+                // (in theory) deliver a profile whose identityId became null
+                // between the guard and the bang — easier to just read the
+                // field once into a local val and route through that.
                 val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
                 Logger.d("SSHConnection", "Profile identityId: ${profile.identityId}")
-                resolvedIdentity = if (profile.identityId != null) {
+                val identityId = profile.identityId
+                resolvedIdentity = if (identityId != null) {
                     try {
-                        val identity = app?.database?.identityDao()?.getIdentityById(profile.identityId!!)
+                        val identity = app?.database?.identityDao()?.getIdentityById(identityId)
                         if (identity != null) {
                             Logger.i("SSHConnection", "Using identity '${identity.name}' (keyId=${identity.keyId}, authType=${identity.authType})")
                         } else {
-                            Logger.w("SSHConnection", "Identity not found in DB for id: ${profile.identityId}")
+                            Logger.w("SSHConnection", "Identity not found in DB for id: $identityId")
                         }
                         identity
                     } catch (e: Exception) {
