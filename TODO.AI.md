@@ -143,18 +143,22 @@ Two read-only Explore-agent passes — feature-completeness vs. README + project
 
 #### 🧩 Feature gaps — claimed but not wired
 
+> **Audit re-check (2026-05-02):** several of the original claims here
+> were stale by the time the audit ran. Verified-wired items are
+> ~~struck through~~ below; only real gaps remain unmarked.
+
 - **`encryptBackup` UI promise — see P0-#1 above.** Same root cause.
 - **Hypervisor TLS — see P0-#2 above.** Currently the only "feature" is an unsafe-by-default switch.
-- **AWS / GCP / Azure cloud import** — clients fully built (`cloud/AwsEc2Client.kt:57-150`, `GcpComputeClient.kt`, `AzureVmClient.kt`) but `CloudAccountsActivity` has zero menu entry / deep link. Reachable from nowhere. Fix: add Settings → Advanced → Cloud Providers entry. ~5h.
-- **X11 toggle hidden** in `app/src/main/res/layout/activity_connection_edit.xml:448` (`switch_x11_forwarding`). Manager (`X11ForwardingManager.kt:1-150`) and JSch hooks (`SSHConnection.kt:996-1002`) are present; the switch isn't bound to save/load in `ConnectionEditActivity`. Fix: unhide + bind. ~5h.
+- ~~**AWS / GCP / Azure cloud import** — clients fully built~~ — **VERIFIED WIRED** as of 2026-05-02. `CloudAccountsActivity` has a drawer entry (`drawer_menu.xml:44 nav_cloud_accounts`) and `MainActivity` dispatches it. Audit was outdated.
+- ~~**X11 toggle hidden**~~ — **VERIFIED WIRED** as of 2026-05-02. The switch is at `activity_connection_edit.xml:447` with NO `visibility="gone"`, and `ConnectionEditActivity` already binds it (load at line 494, save at lines 685/766/797). Audit was outdated.
 - **SSH user-certificate auth** — `crypto/keys/StoredKey.kt:49-50` has `certificate: String? = null` (added DB v19), `addIdentity` never consumes it. Fix: feed cert bytes alongside the private-key file in `SSHConnection.setupAuthentication`. ~10h.
-- **Snippet `{?var:default|hint}` substitution UI** — parser is in `database/entities/Snippet.kt:42-60`, dialog class `SnippetVariableDialog` referenced but unwired to the snippet-execute path. Fix: prompt for values before insertion, cache last-used per (snippet, var) tuple. ~25h.
-- **Recordable macros** — `Macro` Room entity + DAO complete (DB v26), zero UI. Fix: `MacroManagerActivity` (record button → byte capture; list with playback to active tab). ~35h.
+- ~~**Snippet `{?var:default|hint}` substitution UI**~~ — **VERIFIED WIRED** as of 2026-05-02. `TabTerminalActivity.insertSnippet` calls `showVariablesDialog` (line 2780) which builds an EditText per `getVariableSpecs()` entry, with last-used recall in `snippet_var_recall` SharedPreferences. Audit was outdated.
+- ~~**Recordable macros — zero UI**~~ — **VERIFIED WIRED** as of 2026-05-02. Record/replay flow exists in `TabTerminalActivity` (insertMacro at line 2259, getAllMacrosList + incrementUsageCount at 2284/2303). No dedicated CRUD activity yet, but the in-terminal flow is functional.
 - **FIDO2 SSH signing** — `crypto/fido/Fido2SshIdentity.kt:35-40` throws `JSchException("FIDO2 SSH signing is alpha and not yet implemented")`. JSch upstream doesn't support `sk-*` key types; needs a JSch fork or alternate library. ~80h. **Likely defer indefinitely.**
 - **Mosh full protocol** — `protocols/mosh/MoshHandoff.kt:11-35` only bootstraps the SSP exchange and returns a CLI string the user must paste into a real Mosh client. True transparent UDP/AES-128-OCB Mosh would be ~60h. **Likely keep as handoff only — document accordingly.**
 - **Tasker preferences XML orphaned** — `res/xml/preferences_tasker.xml` exists with full UI schema; no fragment inflates it. The intent service IS wired. Fix: add `TaskerSettingsFragment` and a Settings menu entry. ~5h.
 - **Xen Orchestra REST `TODO: Implement JSON parsing`** at `hypervisor/xcpng/XenOrchestraApiClient.kt:~52`. WebSocket plumbing works; type-erased response parser isn't finished. ~25h.
-- **`activity_main_old.xml`** is an orphan layout (zero `R.layout.X` references). Delete in next cleanup pass.
+- ~~**`activity_main_old.xml`** is an orphan layout~~ — **DELETED** in commit cleanup batch 2026-05-02.
 
 ---
 
