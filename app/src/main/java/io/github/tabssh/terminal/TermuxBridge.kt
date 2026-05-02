@@ -16,6 +16,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.InputStream
 import java.io.OutputStream
 
@@ -62,6 +64,27 @@ class TermuxBridge(
     // Coroutine scope for write operations (IO thread)
     private val writeScope = CoroutineScope(Dispatchers.IO + Job())
 
+    /**
+     * Serializes ALL writes to the SSH OutputStream. JSch's
+     * ChannelOutputStream maintains an internal buffer that is NOT safe
+     * against concurrent `write()` calls — concurrent appends race on
+     * the buffer index AND on the GCM cipher state shared with the
+     * surrounding session, producing on-the-wire ciphertext whose
+     * authentication tag fails server-side. The server then closes the
+     * TCP stream with `ssh_dispatch_run_fatal: message authentication
+     * code incorrect` (verified via /var/log/secure on the user's
+     * AlmaLinux 9.7 servers — see commit message).
+     *
+     * The race window opens whenever two `write()` calls land within
+     * the same flush window, which on Dispatchers.IO (a multi-thread
+     * pool) is trivial — the broadcast-input fan-out, post-connect
+     * script writes, and a fast typist plus the macro recorder are
+     * all routine producers. Funnelling every write through this
+     * Mutex closes the window without changing the public API or
+     * adding a dedicated thread.
+     */
+    private val writeLock = Mutex()
+
     // Issue #173 — recordable macros. When non-null, every byte heading
     // out to SSH is also appended to this buffer so the activity can
     // save it as a Macro and replay verbatim later.
@@ -107,30 +130,44 @@ class TermuxBridge(
             // is intentionally byte-exact (no decoding) so escape codes
             // and paste payloads round-trip on replay.
             macroRecording?.write(dataCopy)
-            // Run on IO thread to avoid NetworkOnMainThreadException
+            // Run on IO thread to avoid NetworkOnMainThreadException.
+            // EVERY write (own stream + broadcast targets) is wrapped in
+            // `writeLock.withLock` so JSch's per-channel cipher state
+            // never sees concurrent append+flush from two coroutines —
+            // the GCM tag race that was producing
+            // `ssh_dispatch_run_fatal: message authentication code
+            // incorrect` server-side.
             writeScope.launch {
-                try {
-                    outputStream?.let { stream ->
-                        stream.write(dataCopy)
-                        stream.flush()
-                        Logger.d(TAG, "Sent ${dataCopy.size} bytes to SSH")
-                    }
-                    // Wave 2.7 — broadcast input. After our own SSH write succeeds,
-                    // fan the same bytes out to every registered target (other tabs).
-                    val targets = broadcastTargets
-                    if (targets.isNotEmpty()) {
-                        for (t in targets) {
-                            try {
-                                t.write(dataCopy)
-                                t.flush()
-                            } catch (e: Exception) {
-                                Logger.w(TAG, "Broadcast to peer stream failed: ${e.message}")
+                writeLock.withLock {
+                    try {
+                        outputStream?.let { stream ->
+                            stream.write(dataCopy)
+                            stream.flush()
+                            Logger.d(
+                                TAG,
+                                "Sent ${dataCopy.size} bytes to SSH (bytes=${dataCopy.toBriefHex()})"
+                            )
+                        }
+                        // Wave 2.7 — broadcast input. After our own SSH write
+                        // succeeds, fan the same bytes out to every registered
+                        // target (other tabs). Still inside the lock so the
+                        // own-stream write and the broadcast writes can't
+                        // interleave on JSch's session lock.
+                        val targets = broadcastTargets
+                        if (targets.isNotEmpty()) {
+                            for (t in targets) {
+                                try {
+                                    t.write(dataCopy)
+                                    t.flush()
+                                } catch (e: Exception) {
+                                    Logger.w(TAG, "Broadcast to peer stream failed: ${e.message}")
+                                }
                             }
                         }
+                    } catch (e: Exception) {
+                        Logger.e(TAG, "Error writing to SSH", e)
+                        runOnMain { notifyError(e) }
                     }
-                } catch (e: Exception) {
-                    Logger.e(TAG, "Error writing to SSH", e)
-                    runOnMain { notifyError(e) }
                 }
             }
         }
@@ -659,6 +696,21 @@ class TermuxBridge(
      * Get the raw emulator for advanced operations
      */
     fun getEmulator(): TerminalEmulator? = emulator
+}
+
+/**
+ * Diagnostic helper — render the first ≤16 bytes as `decimal,decimal,…`,
+ * appending `…` when truncated. Used to make `Sent N bytes to SSH` log
+ * lines self-describing so future "did this packet kill the session?"
+ * triage doesn't require a tcpdump. Decimal (not hex) so the output
+ * matches the existing `sequence=[27, 91, 65]` style on the custom-key
+ * path.
+ */
+private fun ByteArray.toBriefHex(): String {
+    if (isEmpty()) return "[]"
+    val limit = 16
+    val head = take(limit).joinToString(",") { (it.toInt() and 0xFF).toString() }
+    return if (size > limit) "[$head,…(${size - limit} more)]" else "[$head]"
 }
 
 /**
