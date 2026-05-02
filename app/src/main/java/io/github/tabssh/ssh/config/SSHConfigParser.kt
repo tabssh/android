@@ -274,6 +274,14 @@ class SSHConfigParser {
             theme = "dracula",
             envVars = mergedEnvVars,
             remoteCommand = host.remoteCommand?.takeIf { it.isNotBlank() },
+            // ForwardAgent / ForwardX11 from ~/.ssh/config: these must populate
+            // the dedicated entity columns at parse time. Without this they
+            // round-trip through `advancedSettings` JSON but the connection
+            // layer reads the columns, so imported toggles silently dropped.
+            agentForwarding = host.forwardAgent,
+            x11Forwarding = host.forwardX11,
+            compression = host.compression,
+            connectTimeout = host.connectTimeout,
             createdAt = System.currentTimeMillis(),
             lastConnected = 0,
             connectionCount = 0,

@@ -516,6 +516,64 @@ class SSHConnection(
         return Triple(localPort, rhost, rport)
     }
 
+    private companion object {
+        // X11 target on the Android device. XServer-XSDL and Termux:X11 both
+        // default to display :0 = TCP localhost:6000. If we ever expose this
+        // per-host, it lands as columns on ConnectionProfile + a UI field.
+        const val X11_DEFAULT_HOST = "localhost"
+        const val X11_DEFAULT_PORT = 6000
+    }
+
+    /**
+     * Apply per-channel forwarding flags before `channel.connect()`. Both
+     * agent-forwarding (Wave 1.5) and X11-forwarding (Wave 2.X) need:
+     *   1. The toggle to be on in `profile`.
+     *   2. The session-level X11 host/port set BEFORE the channel hands its
+     *      capability blob to the server.
+     *   3. The channel-level `setXForwarding(true)` / `setAgentForwarding(true)`
+     *      call BEFORE `channel.connect()` (JSch sends the cap during the
+     *      channel-open exchange).
+     *
+     * X11 target is hardcoded to `localhost:6000` (matches XServer-XSDL and
+     * Termux:X11 defaults on Android). If a setup step throws, we surface a
+     * one-line error to the listener so the user notices instead of silently
+     * losing the feature.
+     *
+     * `setAgentForwarding` / `setXForwarding` are defined on JSch's
+     * `ChannelSession` parent — but that class is package-private, so we
+     * dispatch on the concrete subclass here too.
+     */
+    private fun applyForwardingFlags(session: Session, channel: Channel) {
+        if (profile.agentForwarding) {
+            try {
+                when (channel) {
+                    is ChannelShell -> channel.setAgentForwarding(true)
+                    is ChannelExec -> channel.setAgentForwarding(true)
+                }
+                Logger.i("SSHConnection", "Enabled SSH agent forwarding for ${profile.host}")
+            } catch (e: Exception) {
+                Logger.w("SSHConnection", "SSH agent forwarding setup failed: ${e.message}")
+                notifyListeners { onError(id, Exception("SSH agent forwarding setup failed: ${e.message}", e)) }
+            }
+        }
+        if (profile.x11Forwarding) {
+            try {
+                session.setX11Host(X11_DEFAULT_HOST)
+                session.setX11Port(X11_DEFAULT_PORT)
+                when (channel) {
+                    is ChannelShell -> channel.setXForwarding(true)
+                    is ChannelExec -> channel.setXForwarding(true)
+                }
+                Logger.i("SSHConnection", "Enabled X11 forwarding for ${profile.host} (target: $X11_DEFAULT_HOST:$X11_DEFAULT_PORT)")
+            } catch (e: Exception) {
+                Logger.w("SSHConnection", "X11 forwarding setup failed: ${e.message}")
+                notifyListeners {
+                    onError(id, Exception("X11 forwarding setup failed (target $X11_DEFAULT_HOST:$X11_DEFAULT_PORT): ${e.message}", e))
+                }
+            }
+        }
+    }
+
     /**
      * Setup UserInfo for handling host key verification prompts
      * This is required for JSch to work with StrictHostKeyChecking="ask"
@@ -1036,24 +1094,7 @@ class SSHConnection(
                 exec.setPtyType(profile.terminalType)
                 exec.setPtySize(80, 24, 0, 0) // Will be updated by terminal
                 applyEnvVarsTo(exec)
-                if (profile.agentForwarding) {
-                    try {
-                        exec.setAgentForwarding(true)
-                        Logger.i("SSHConnection", "Enabled SSH agent forwarding for ${profile.host}")
-                    } catch (e: Exception) {
-                        Logger.w("SSHConnection", "setAgentForwarding failed: ${e.message}")
-                    }
-                }
-                if (profile.x11Forwarding) {
-                    try {
-                        currentSession.setX11Host("localhost")
-                        currentSession.setX11Port(6000)
-                        exec.setXForwarding(true)
-                        Logger.i("SSHConnection", "Enabled X11 forwarding for ${profile.host} (target: localhost:6000)")
-                    } catch (e: Exception) {
-                        Logger.w("SSHConnection", "X11 forwarding setup failed: ${e.message}")
-                    }
-                }
+                applyForwardingFlags(currentSession, exec)
                 exec.connect()
                 shellChannel = exec
                 openChannels.add(exec)
@@ -1067,30 +1108,7 @@ class SSHConnection(
             shell.setPtySize(80, 24, 0, 0) // Will be updated by terminal
             // Wave 1.2: per-host env vars before channel.connect()
             applyEnvVarsTo(shell)
-            // Wave 1.5: SSH agent forwarding (per-host opt-in)
-            if (profile.agentForwarding) {
-                try {
-                    shell.setAgentForwarding(true)
-                    Logger.i("SSHConnection", "Enabled SSH agent forwarding for ${profile.host}")
-                } catch (e: Exception) {
-                    Logger.w("SSHConnection", "setAgentForwarding failed: ${e.message}")
-                }
-            }
-            // Wave 2.X — real X11 channel forwarding via JSch.
-            // We DO NOT implement an X server in-app; we route the X11 channel
-            // to whatever's listening on localhost:6000 (XServer-XSDL is a
-            // good Android option). With this enabled, sshd on the remote
-            // sets DISPLAY=localhost:N.0 and JSch tunnels it back.
-            if (profile.x11Forwarding) {
-                try {
-                    currentSession.setX11Host("localhost")
-                    currentSession.setX11Port(6000)
-                    shell.setXForwarding(true)
-                    Logger.i("SSHConnection", "Enabled X11 forwarding for ${profile.host} (target: localhost:6000)")
-                } catch (e: Exception) {
-                    Logger.w("SSHConnection", "X11 forwarding setup failed: ${e.message}")
-                }
-            }
+            applyForwardingFlags(currentSession, shell)
             shell.connect()
 
             shellChannel = shell

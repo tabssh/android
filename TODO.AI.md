@@ -62,6 +62,7 @@ The audit findings below are historical; this section tracks status.
 | RECONNECT race that destroyed the activity | ✅ shipped | `1f25c29d` (`isReconnecting` flag at `TabTerminalActivity.kt:84,1796,1803`) |
 | Tasker preferences fragment | ✅ shipped | `d714a7b4` (fragment at `SettingsActivity.kt:605-697`, IntentService consumes all 4 prefs) |
 | advancedSettings JSON apply at connect | ✅ shipped | `d714a7b4` (`SSHConnection.applyAdvancedSettings` for Local/Remote/Dynamic forwards) |
+| X11 fixes batch | ✅ shipped | (this batch) Deleted orphan/broken `X11ForwardingManager` (437 LOC of stub in-app X server), refactored duplicated SSHConnection X11/agent setup into `applyForwardingFlags`, surfaced setup failures via `onError` listener, copied `forwardX11`/`forwardAgent`/`compression`/`connectTimeout` from imported `~/.ssh/config` to entity columns (were previously dropped at parse time). |
 
 ---
 
@@ -132,12 +133,12 @@ Re-verified 2026-05-02 against `SSHConnection.applyAdvancedSettings`:
 | `LocalForward` / `RemoteForward` / `DynamicForward` | ✅ | JSON | ✅ as of `d714a7b4` |
 | `ProxyJump` / `ProxyCommand` | ✅ | JSON | ❌ — `ProxyJump` should populate the existing `proxy_host`/`proxy_port`/`proxy_username` columns at parse time instead of living in JSON. `ProxyCommand` has no JSch equivalent and would require a custom `Proxy` impl. |
 | `ServerAliveInterval` / `StrictHostKeyChecking` | ✅ | JSON | ❌ — `ServerAliveInterval` is overridden by the mobile-default 60s keepalive (intentional). `StrictHostKeyChecking` is hardwired to `"ask"` because we own the dialog flow (intentional). Both can stay ignored. |
-| `ForwardAgent` / `ForwardX11` | ✅ | JSON | 🟡 — read at connect from the dedicated `agentForwarding`/`x11Forwarding` columns on `ConnectionProfile`, NOT from the JSON. Importer does not currently copy from JSON to those columns. |
+| `ForwardAgent` / `ForwardX11` | ✅ | JSON + columns | ✅ as of the X11 fixes batch — `convertToConnectionProfile` now copies `host.forwardAgent`/`host.forwardX11` straight into `agentForwarding`/`x11Forwarding` columns. Same fix wired `compression` and `connectTimeout` while it was open. |
 | `RequestTTY` | ✅ | JSON | 🟡 — partly: when `remoteCommand` is set we always allocate a PTY (`exec.setPty(true)`), matching `RequestTTY=yes`. The `force`/`no`/`auto` distinctions aren't honored. |
 
-**Fix sketch:** at `SSHConfigParser.convertToConnectionProfile`, copy `forwardAgent`/`forwardX11` from `host.*` straight into `ConnectionProfile.agentForwarding`/`x11Forwarding` (currently they only land in the JSON blob). For `ProxyJump`, parse `user@host:port` and populate the proxy columns directly. Remove the now-redundant JSON copies once both flows are migrated.
+**Fix sketch (remaining):** for `ProxyJump`, parse `user@host:port` and populate the existing `proxy_host`/`proxy_port`/`proxy_username` columns directly. The forward-agent/X11/compression/connect-timeout copy is already done.
 
-**Estimate:** ~3 hours.
+**Estimate:** ~1 hour for the ProxyJump piece.
 
 ---
 
