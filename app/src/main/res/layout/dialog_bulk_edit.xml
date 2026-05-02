@@ -254,10 +254,8 @@
                 style="@style/BulkEdit.ApplySwitch" />
         </LinearLayout>
 
-        <!-- Tri-state booleans: keepalive, compression, agent fwd -->
-        <include
-            android:id="@+id/row_keepalive"
-            layout="@layout/include_bulk_edit_tristate" />
+        <!-- Tri-state booleans: compression, agent fwd
+             (keepalive removed — always on at mobile default) -->
         <include
             android:id="@+id/row_compression"
             layout="@layout/include_bulk_edit_tristate" />

@@ -35,20 +35,10 @@
         android:title="Connection Behavior"
         android:key="category_connection_behavior">
 
-        <SwitchPreferenceCompat
-            android:key="keep_alive_enabled"
-            android:title="Keep-Alive"
-            android:summary="Send periodic keep-alive packets"
-            android:defaultValue="true" />
-
-        <EditTextPreference
-            android:key="keep_alive_interval"
-            android:title="Keep-Alive Interval"
-            android:summary="Seconds between keep-alive packets"
-            android:defaultValue="30"
-            android:inputType="number"
-            android:dependency="keep_alive_enabled"
-            app:useSimpleSummaryProvider="true" />
+        <!-- Keep-alive is always on at the SSH layer (10s ServerAliveInterval,
+             3 missed before disconnect — see SSHConnection.configureSession).
+             User-facing toggle removed to stop the appearance of a setting
+             that does nothing on mobile. -->
 
         <SwitchPreferenceCompat
             android:key="compression_enabled"

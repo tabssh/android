@@ -518,14 +518,10 @@ class ConnectionSettingsFragment : PreferenceFragmentCompat() {
             true
         }
 
-        // Keep-alive interval change listener
-        findPreference<Preference>("keep_alive_interval")?.setOnPreferenceChangeListener { _, newValue ->
-            val interval = newValue as String
-            val seconds = interval.toInt()
-            android.widget.Toast.makeText(requireContext(), "Keep-alive interval: ${seconds}s", android.widget.Toast.LENGTH_SHORT).show()
-            Logger.i("Settings", "Keep-alive interval changed to: $seconds")
-            true
-        }
+        // Keep-alive listener removed — the toggle and interval preferences
+        // are gone from preferences_connection.xml. SSH-layer keepalive is
+        // unconditionally on at the mobile-default 10s interval (see
+        // SSHConnection.configureSession).
     }
 }
 

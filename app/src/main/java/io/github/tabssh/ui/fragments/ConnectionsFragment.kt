@@ -714,7 +714,6 @@ class ConnectionsFragment : Fragment() {
             }.also { triRows.add(it) }
         }
 
-        val keepalive = wireTriState(R.id.row_keepalive, "Keep-alive", R.drawable.ic_refresh)
         val compression = wireTriState(R.id.row_compression, "Compression", R.drawable.ic_file_archive)
         val agentFwd = wireTriState(R.id.row_agent_fwd, "Agent forwarding", R.drawable.ic_forward)
         val x11 = wireTriState(R.id.row_x11, "X11 forwarding", R.drawable.ic_interface)
@@ -804,7 +803,7 @@ class ConnectionsFragment : Fragment() {
         buttonResetAll.setOnClickListener {
             listOf(username, port, group, identity, timeout, terminalType, colorTag, postConnect)
                 .forEach { it.switch.isChecked = false }
-            listOf(R.id.row_keepalive, R.id.row_compression, R.id.row_agent_fwd, R.id.row_x11, R.id.row_mosh)
+            listOf(R.id.row_compression, R.id.row_agent_fwd, R.id.row_x11, R.id.row_mosh)
                 .forEach { id ->
                     dialogView.findViewById<View>(id)
                         .findViewById<com.google.android.material.button.MaterialButtonToggleGroup>(R.id.tri_group)
@@ -838,7 +837,6 @@ class ConnectionsFragment : Fragment() {
                     newIdentitySelection = dropdownIdentity.text?.toString(),
                     applyTimeout = timeout.switch.isChecked,
                     newTimeout = editTimeout.text?.toString()?.toIntOrNull() ?: 15,
-                    keepalive = keepalive.getState(),
                     compression = compression.getState(),
                     applyTerminalType = terminalType.switch.isChecked,
                     newTerminalType = dropdownTerminalType.text?.toString()
@@ -880,7 +878,6 @@ class ConnectionsFragment : Fragment() {
         newIdentitySelection: String?,
         applyTimeout: Boolean,
         newTimeout: Int,
-        keepalive: TriState,
         compression: TriState,
         applyTerminalType: Boolean,
         newTerminalType: String,
@@ -903,7 +900,6 @@ class ConnectionsFragment : Fragment() {
                 if (applyGroup) changes.add("group")
                 if (applyIdentity) changes.add("identity")
                 if (applyTimeout) changes.add("timeout")
-                if (keepalive != TriState.UNCHANGED) changes.add("keepalive")
                 if (compression != TriState.UNCHANGED) changes.add("compression")
                 if (applyTerminalType) changes.add("terminal type")
                 if (applyColorTag) changes.add("color tag")
@@ -957,9 +953,6 @@ class ConnectionsFragment : Fragment() {
                         updatedConnection = updatedConnection.copy(connectTimeout = newTimeout)
                     }
 
-                    if (keepalive != TriState.UNCHANGED) {
-                        updatedConnection = updatedConnection.copy(keepAlive = keepalive == TriState.ON)
-                    }
                     if (compression != TriState.UNCHANGED) {
                         updatedConnection = updatedConnection.copy(compression = compression == TriState.ON)
                     }

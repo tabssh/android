@@ -43,6 +43,50 @@
 
 ## 📝 Open / Planned Work
 
+### 🔒 Audit findings — 2026-05-01
+
+Two read-only Explore-agent passes — feature-completeness vs. README + project tracker docs, and bug/security. Cited file:line locations are direct from the audit and verified for the P0 entries.
+
+#### 🚨 P0 — security-promise breaking, fix immediately
+
+- **Backup encryption is fake (Base64 only).** `app/src/main/java/io/github/tabssh/backup/BackupManager.kt:268-285` — `encryptData()` is just `Base64.encodeToString(...)`, `decryptData()` is `Base64.decode(...)`. The exported ZIP claims to be password-protected; it isn't. SSH keys, host-key fingerprints, and identity passwords all readable to anyone with the file. Fix: real AES-256-GCM with PBKDF2 (≥100k iterations) keyed off the user's backup password. ~3h.
+- **Hypervisor TLS verification globally disabled by default.** `verifySsl: Boolean = false` in `hypervisor/proxmox/ProxmoxApiClient.kt:21`, `hypervisor/console/ConsoleWebSocketClient.kt:27`, plus the matching XCP-ng / Xen Orchestra / VMware clients. The trust-all `X509TrustManager` accepts any cert — including attacker-issued — for hypervisor REST + serial-console traffic. No per-host pin or CA store. Fix: per-host opt-in with cert pinning, or per-host CA bundle. ~6h (DB schema + UI).
+
+#### 🟠 P1 — exploitable / crash-prone
+
+- **TaskerIntentService is `exported="true"` with no permission gate.** `app/src/main/AndroidManifest.xml:278-289` + `automation/TaskerIntentService.kt`. Any installed app can send `CONNECT` / `SEND_COMMAND` / `SEND_KEYS` intents and drive arbitrary commands on the user's SSH targets. Fix: either set `exported="false"` (Tasker still works on most ROMs through alternate IPC) or require a custom `io.github.tabssh.permission.TASKER` signature-level permission. ~1h.
+- **8× `runBlocking(Dispatchers.IO)` on the main thread inside `HostKeyVerifier.check()`.** `ssh/HostKeyVerifier.kt:64,101,133,225,249,285,309,330`. The CountDownLatch waits at lines 470, 546 have **no timeout** — an Activity destroyed mid-prompt → permanent worker-thread hang. Already triggers ANR risk on slow devices. Fix: convert to fully-async via callback; latch wait with 30s timeout default-rejecting on expiry. ~4h.
+- **Hypervisor passwords stored as plaintext columns** in `storage/database/entities/HypervisorProfile.kt:32-33`. SSH passwords go through `SecurePasswordManager` (Keystore-backed); hypervisor creds bypass it. Device backup or root → cleartext. Fix: route through SecurePasswordManager with `hypervisor_${id}` alias. ~2h.
+- **`WebSocket.send()` return value ignored** in five places: `hypervisor/console/ConsoleWebSocketClient.kt:149,254,309,335,344`. Send-buffer-full or already-closed socket → user keystrokes silently dropped. **Likely contributor to the VM-console disconnect symptom we already saw.** Fix: check Boolean, surface failure to the UI / trigger reconnect. ~2h.
+- **`profile.identityId!!`** at `ssh/connection/SSHConnection.kt:143`. Identity row deleted between the null-guard at 141 and the bang at 143 → NPE. Fix: `profile.identityId?.let { ... } ?: fallthrough`. ~10min.
+
+#### 🟡 P2 — latent / defense-in-depth
+
+- Session passwords held in `String` map for app lifetime, never cleared on pause/destroy — `crypto/SecurePasswordManager.kt:64`.
+- Host-key dialog `latch.await()` no timeout — `HostKeyVerifier.kt:470, 546`.
+- DB query on `Dispatchers.Main` in widget update — `widget/ConnectionWidgetProvider.kt:66`.
+- Jump-host port-forward — no explicit `127.0.0.1` bind on `setPortForwardingL`, JSch default may be `0.0.0.0` — `ssh/connection/SSHConnection.kt:623`.
+- `cachedPassword` / `cachedPassphrase` as `String` for connection lifetime, never zeroed — `ssh/connection/SSHConnection.kt:100-104`.
+- Host-key dialogs walk the context chain to find an Activity; no guard if Activity destroyed mid-prompt — `HostKeyVerifier.kt:406-436`.
+- Logger may surface key bytes if a future caller passes raw bytes (defensive grep audit needed across `Logger.[diwve]` calls touching `bytes`/`key`/`pass`).
+
+#### 🧩 Feature gaps — claimed but not wired
+
+- **`encryptBackup` UI promise — see P0-#1 above.** Same root cause.
+- **Hypervisor TLS — see P0-#2 above.** Currently the only "feature" is an unsafe-by-default switch.
+- **AWS / GCP / Azure cloud import** — clients fully built (`cloud/AwsEc2Client.kt:57-150`, `GcpComputeClient.kt`, `AzureVmClient.kt`) but `CloudAccountsActivity` has zero menu entry / deep link. Reachable from nowhere. Fix: add Settings → Advanced → Cloud Providers entry. ~5h.
+- **X11 toggle hidden** in `app/src/main/res/layout/activity_connection_edit.xml:448` (`switch_x11_forwarding`). Manager (`X11ForwardingManager.kt:1-150`) and JSch hooks (`SSHConnection.kt:996-1002`) are present; the switch isn't bound to save/load in `ConnectionEditActivity`. Fix: unhide + bind. ~5h.
+- **SSH user-certificate auth** — `crypto/keys/StoredKey.kt:49-50` has `certificate: String? = null` (added DB v19), `addIdentity` never consumes it. Fix: feed cert bytes alongside the private-key file in `SSHConnection.setupAuthentication`. ~10h.
+- **Snippet `{?var:default|hint}` substitution UI** — parser is in `database/entities/Snippet.kt:42-60`, dialog class `SnippetVariableDialog` referenced but unwired to the snippet-execute path. Fix: prompt for values before insertion, cache last-used per (snippet, var) tuple. ~25h.
+- **Recordable macros** — `Macro` Room entity + DAO complete (DB v26), zero UI. Fix: `MacroManagerActivity` (record button → byte capture; list with playback to active tab). ~35h.
+- **FIDO2 SSH signing** — `crypto/fido/Fido2SshIdentity.kt:35-40` throws `JSchException("FIDO2 SSH signing is alpha and not yet implemented")`. JSch upstream doesn't support `sk-*` key types; needs a JSch fork or alternate library. ~80h. **Likely defer indefinitely.**
+- **Mosh full protocol** — `protocols/mosh/MoshHandoff.kt:11-35` only bootstraps the SSP exchange and returns a CLI string the user must paste into a real Mosh client. True transparent UDP/AES-128-OCB Mosh would be ~60h. **Likely keep as handoff only — document accordingly.**
+- **Tasker preferences XML orphaned** — `res/xml/preferences_tasker.xml` exists with full UI schema; no fragment inflates it. The intent service IS wired. Fix: add `TaskerSettingsFragment` and a Settings menu entry. ~5h.
+- **Xen Orchestra REST `TODO: Implement JSON parsing`** at `hypervisor/xcpng/XenOrchestraApiClient.kt:~52`. WebSocket plumbing works; type-erased response parser isn't finished. ~25h.
+- **`activity_main_old.xml`** is an orphan layout (zero `R.layout.X` references). Delete in next cleanup pass.
+
+---
+
 ### 📐 QR Pairing — Desktop side
 - **Status:** 🔧 In progress (other instance — see `../desktop/.git/COMMIT_MESS` Phase F line items)
 - **Priority:** MEDIUM

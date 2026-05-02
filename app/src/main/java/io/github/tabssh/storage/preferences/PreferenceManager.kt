@@ -107,8 +107,10 @@ class PreferenceManager(private val context: Context) {
         private const val KEY_CONNECT_TIMEOUT = "connect_timeout"
         private const val KEY_AUTO_RECONNECT = "auto_reconnect"
         private const val KEY_COMPRESSION = "compression_enabled"
-        private const val KEY_KEEP_ALIVE_INTERVAL = "keep_alive_interval"
-        
+        // KEY_KEEP_ALIVE_INTERVAL removed — keepalive is unconditionally on
+        // at the SSH layer (10s ServerAliveInterval, see SSHConnection.kt).
+
+
         // Accessibility preferences
         private const val KEY_HIGH_CONTRAST = "accessibility_high_contrast"
         private const val KEY_LARGE_TOUCH_TARGETS = "accessibility_large_touch_targets"
