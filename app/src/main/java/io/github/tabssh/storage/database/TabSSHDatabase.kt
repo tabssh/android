@@ -27,9 +27,10 @@ import io.github.tabssh.utils.logging.Logger
         HypervisorProfile::class,
         Workspace::class,
         CloudAccount::class,
-        Macro::class
+        Macro::class,
+        io.github.tabssh.storage.database.entities.HypervisorAccount::class
     ],
-    version = 26,
+    version = 27,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -50,6 +51,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
     abstract fun workspaceDao(): WorkspaceDao
     abstract fun cloudAccountDao(): CloudAccountDao
     abstract fun macroDao(): MacroDao
+    abstract fun hypervisorAccountDao(): io.github.tabssh.storage.database.dao.HypervisorAccountDao
 
     companion object {
         @Volatile
@@ -304,7 +306,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     MIGRATION_22_23,
                     MIGRATION_23_24,
                     MIGRATION_24_25,
-                    MIGRATION_25_26
+                    MIGRATION_25_26,
+                    MIGRATION_26_27
                 )
                 .build()
                 INSTANCE = instance
@@ -565,6 +568,43 @@ data class DatabaseStats(
                     """.trimIndent()
                 )
                 Logger.i("Database", "Migration 25->26: Added macros table")
+            }
+        }
+
+        /**
+         * v26 → v27 — Reusable hypervisor accounts.
+         *
+         * New `hypervisor_accounts` table: shared username/realm
+         * credentials that multiple `HypervisorProfile` rows can point
+         * at (the new `hypervisors.account_id` FK column). Password
+         * lives in `SecurePasswordManager` under
+         * `hypervisor_account_${id}`, NOT in this table — same pattern
+         * as `cloud_accounts` (cloud_token_${id}) and the per-host
+         * `hypervisor_${id}` introduced in commit `ae2c613a`.
+         *
+         * `hypervisors.account_id` is nullable; existing rows migrate as
+         * NULL and keep using their inline `username` + Keystore
+         * password. Switching a host to use an account is opt-in via
+         * the dropdown in HypervisorEditActivity.
+         */
+        val MIGRATION_26_27 = object : Migration(26, 27) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS hypervisor_accounts (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        name TEXT NOT NULL,
+                        username TEXT NOT NULL,
+                        realm TEXT,
+                        created_at INTEGER NOT NULL,
+                        modified_at INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    "ALTER TABLE hypervisors ADD COLUMN account_id INTEGER"
+                )
+                Logger.i("Database", "Migration 26->27: Added hypervisor_accounts + hypervisors.account_id")
             }
         }
 

@@ -318,6 +318,9 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             R.id.nav_hypervisors -> {
                 viewPager.currentItem = 4 // Switch to Hypervisors tab
             }
+            R.id.nav_hypervisor_accounts -> {
+                startActivity(Intent(this, HypervisorAccountsActivity::class.java))
+            }
             
             // Tools
             R.id.nav_manage_groups -> {

@@ -107,7 +107,27 @@
             </com.google.android.material.textfield.TextInputLayout>
 
             <!-- Username -->
+            <!-- Optional reusable account. When set, overrides the
+                 inline username / password / realm below. -->
             <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/layout_account"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_md"
+                android:hint="Use account (optional)"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
+
+                <AutoCompleteTextView
+                    android:id="@+id/dropdown_account"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="none" />
+
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- Username (hidden when an account is linked) -->
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/layout_username"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_md"
@@ -123,8 +143,9 @@
 
             </com.google.android.material.textfield.TextInputLayout>
 
-            <!-- Password -->
+            <!-- Password (hidden when an account is linked) -->
             <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/layout_password"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_md"

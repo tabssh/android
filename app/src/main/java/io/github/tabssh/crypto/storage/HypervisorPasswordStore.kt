@@ -29,8 +29,97 @@ import kotlinx.coroutines.withContext
 object HypervisorPasswordStore {
     private const val TAG = "HypervisorPwdStore"
     private const val KEY_PREFIX = "hypervisor_"
+    private const val ACCOUNT_KEY_PREFIX = "hypervisor_account_"
 
     private fun aliasFor(id: Long): String = "$KEY_PREFIX$id"
+    private fun accountAliasFor(id: Long): String = "$ACCOUNT_KEY_PREFIX$id"
+
+    /**
+     * Resolved credentials a hypervisor client uses for one connection.
+     * Either an account-backed reuse, or the per-host inline fields.
+     */
+    data class Credentials(
+        val username: String,
+        val password: String,
+        val realm: String?
+    )
+
+    /**
+     * Resolve the effective username/password/realm for a hypervisor
+     * profile, accounting for an optional linked `HypervisorAccount`.
+     *
+     * Resolution rules (mirrors the kdoc on `HypervisorProfile.accountId`):
+     *   * `profile.accountId == null` (or account row missing):
+     *     fall back to per-host `username` + Keystore password under
+     *     `hypervisor_${profile.id}` + per-host `realm`.
+     *   * `profile.accountId != null` (and account exists):
+     *     use `account.username` + Keystore password under
+     *     `hypervisor_account_${account.id}`. Realm: profile.realm wins
+     *     if non-blank (per-host override), else account.realm.
+     *
+     * Lazy migration of legacy plaintext on the per-host path is
+     * preserved — `retrieve(profile)` is still called in that branch.
+     */
+    suspend fun resolveCredentials(context: Context, profile: HypervisorProfile): Credentials =
+        withContext(Dispatchers.IO) {
+            val app = context.applicationContext as? TabSSHApplication
+                ?: return@withContext Credentials(profile.username, profile.password, profile.realm)
+            val accountId = profile.accountId
+            if (accountId != null) {
+                val account = try {
+                    app.database.hypervisorAccountDao().getById(accountId)
+                } catch (e: Exception) {
+                    Logger.w(TAG, "hypervisorAccountDao.getById($accountId) threw — falling back to per-host", e)
+                    null
+                }
+                if (account != null) {
+                    val pw = retrieveAccountPassword(context, account.id) ?: ""
+                    val realm = profile.realm?.takeIf { it.isNotBlank() } ?: account.realm
+                    return@withContext Credentials(account.username, pw, realm)
+                }
+                Logger.w(TAG, "accountId=$accountId set but row not found — using per-host inline credentials")
+            }
+            Credentials(profile.username, retrieve(context, profile), profile.realm)
+        }
+
+    /** Fetch a stored account password from the Keystore. Returns null
+     *  if nothing is stored — caller may want to prompt. */
+    suspend fun retrieveAccountPassword(context: Context, accountId: Long): String? =
+        withContext(Dispatchers.IO) {
+            val app = context.applicationContext as? TabSSHApplication ?: return@withContext null
+            try {
+                app.securePasswordManager.retrievePassword(accountAliasFor(accountId))
+            } catch (e: Exception) {
+                Logger.w(TAG, "retrieveAccountPassword($accountId) threw", e)
+                null
+            }
+        }
+
+    /** Persist an account password to the Keystore. Returns Keystore-write success. */
+    suspend fun storeAccountPassword(context: Context, accountId: Long, password: String): Boolean =
+        withContext(Dispatchers.IO) {
+            val app = context.applicationContext as? TabSSHApplication ?: return@withContext false
+            try {
+                app.securePasswordManager.storePassword(
+                    accountAliasFor(accountId),
+                    password,
+                    SecurePasswordManager.StorageLevel.ENCRYPTED
+                )
+            } catch (e: Exception) {
+                Logger.w(TAG, "storeAccountPassword($accountId) threw", e)
+                false
+            }
+        }
+
+    /** Delete the Keystore-stored account password — call from account delete. */
+    fun clearAccountPassword(context: Context, accountId: Long) {
+        val app = context.applicationContext as? TabSSHApplication ?: return
+        try {
+            app.securePasswordManager.clearPassword(accountAliasFor(accountId))
+        } catch (e: Exception) {
+            Logger.w(TAG, "clearAccountPassword($accountId) threw", e)
+        }
+    }
 
     /**
      * Get the current password for this hypervisor. Always tries the

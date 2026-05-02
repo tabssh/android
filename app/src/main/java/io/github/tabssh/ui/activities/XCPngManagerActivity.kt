@@ -229,14 +229,14 @@ class XCPngManagerActivity : AppCompatActivity() {
             Logger.d("XCPngManager", "Trying Xen Orchestra REST API...")
             statusText.text = "Trying Xen Orchestra API..."
 
-            val password = io.github.tabssh.crypto.storage.HypervisorPasswordStore
-                .retrieve(this, profile)
+            val creds = io.github.tabssh.crypto.storage.HypervisorPasswordStore
+                .resolveCredentials(this, profile)
             currentClient = null
             currentXoClient = XenOrchestraApiClient(
                 host = profile.host,
                 port = profile.port,
-                email = profile.username,
-                password = password,
+                email = creds.username,
+                password = creds.password,
                 verifySsl = profile.verifySsl
             )
 
@@ -257,14 +257,14 @@ class XCPngManagerActivity : AppCompatActivity() {
             Logger.d("XCPngManager", "Trying XCP-ng XML-RPC API...")
             statusText.text = "Trying XCP-ng Direct API..."
 
-            val password = io.github.tabssh.crypto.storage.HypervisorPasswordStore
-                .retrieve(this, profile)
+            val creds = io.github.tabssh.crypto.storage.HypervisorPasswordStore
+                .resolveCredentials(this, profile)
             currentXoClient = null
             currentClient = XCPngApiClient(
                 host = profile.host,
                 port = profile.port,
-                username = profile.username,
-                password = password,
+                username = creds.username,
+                password = creds.password,
                 verifySsl = profile.verifySsl
             )
 
@@ -397,8 +397,8 @@ class XCPngManagerActivity : AppCompatActivity() {
         // building the launch intent. Same-process Intent extras are
         // local — the security concern was the on-disk DB column.
         lifecycleScope.launch {
-            val password = io.github.tabssh.crypto.storage.HypervisorPasswordStore
-                .retrieve(this@XCPngManagerActivity, profile)
+            val creds = io.github.tabssh.crypto.storage.HypervisorPasswordStore
+                .resolveCredentials(this@XCPngManagerActivity, profile)
             val intent = android.content.Intent(this@XCPngManagerActivity, VMConsoleActivity::class.java).apply {
                 putExtra(VMConsoleActivity.EXTRA_HYPERVISOR_TYPE, hypervisorType)
                 putExtra(VMConsoleActivity.EXTRA_VM_ID, vm.uuid)
@@ -406,8 +406,8 @@ class XCPngManagerActivity : AppCompatActivity() {
                 putExtra(VMConsoleActivity.EXTRA_VM_REF, vm.uuid) // XCP-ng uses uuid as reference
                 putExtra(VMConsoleActivity.EXTRA_HOST, profile.host)
                 putExtra(VMConsoleActivity.EXTRA_PORT, profile.port)
-                putExtra(VMConsoleActivity.EXTRA_USERNAME, profile.username)
-                putExtra(VMConsoleActivity.EXTRA_PASSWORD, password)
+                putExtra(VMConsoleActivity.EXTRA_USERNAME, creds.username)
+                putExtra(VMConsoleActivity.EXTRA_PASSWORD, creds.password)
                 putExtra(VMConsoleActivity.EXTRA_IS_XEN_ORCHESTRA, isXenOrchestra)
                 putExtra(VMConsoleActivity.EXTRA_VERIFY_SSL, profile.verifySsl)
             }

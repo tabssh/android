@@ -210,6 +210,14 @@
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- Hypervisor Accounts CRUD (reusable credentials) -->
+        <activity
+            android:name=".ui.activities.HypervisorAccountsActivity"
+            android:exported="false"
+            android:label="Hypervisor Accounts"
+            android:parentActivityName=".ui.activities.MainActivity"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- SFTP file browser activity -->
         <activity
             android:name=".ui.activities.SFTPActivity"

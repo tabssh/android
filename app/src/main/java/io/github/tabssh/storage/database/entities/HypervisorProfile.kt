@@ -47,6 +47,20 @@ data class HypervisorProfile(
     @ColumnInfo(name = "linked_connection_id")
     val linkedConnectionId: String? = null, // Reference to existing SSH connection (ConnectionProfile.id)
 
+    /**
+     * Optional reference to a reusable `HypervisorAccount`. When set,
+     * the host inherits username + (Keystore) password + (optional)
+     * realm from the account; the inline `username` / `password` /
+     * `realm` columns on this row become legacy fallbacks.
+     *
+     * Resolution rules — see `HypervisorPasswordStore.resolveCredentials`:
+     *   accountId == null: inline fields win.
+     *   accountId != null: account.username + account-Keystore password;
+     *                      profile.realm if non-blank else account.realm.
+     */
+    @ColumnInfo(name = "account_id")
+    val accountId: Long? = null,
+
     @ColumnInfo(name = "notes")
     val notes: String? = null,
     

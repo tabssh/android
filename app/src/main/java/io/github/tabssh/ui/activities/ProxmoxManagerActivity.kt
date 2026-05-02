@@ -104,13 +104,15 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                 statusText.text = "Connecting to ${profile.name}..."
                 statusText.visibility = View.VISIBLE
                 
-                val password = HypervisorPasswordStore.retrieve(this@ProxmoxManagerActivity, profile)
+                val creds = HypervisorPasswordStore.resolveCredentials(
+                    this@ProxmoxManagerActivity, profile
+                )
                 currentClient = ProxmoxApiClient(
                     host = profile.host,
                     port = profile.port,
-                    username = profile.username,
-                    password = password,
-                    realm = profile.realm ?: "pam",
+                    username = creds.username,
+                    password = creds.password,
+                    realm = creds.realm ?: "pam",
                     verifySsl = profile.verifySsl
                 )
                 
@@ -273,7 +275,9 @@ class ProxmoxManagerActivity : AppCompatActivity() {
         // extras don't leave the app, so passing the resolved plaintext
         // here is fine — the security concern was the on-disk DB column.
         lifecycleScope.launch {
-            val password = HypervisorPasswordStore.retrieve(this@ProxmoxManagerActivity, profile)
+            val creds = HypervisorPasswordStore.resolveCredentials(
+                this@ProxmoxManagerActivity, profile
+            )
             val intent = android.content.Intent(this@ProxmoxManagerActivity, VMConsoleActivity::class.java).apply {
                 putExtra(VMConsoleActivity.EXTRA_HYPERVISOR_TYPE, VMConsoleActivity.TYPE_PROXMOX)
                 putExtra(VMConsoleActivity.EXTRA_VM_ID, vm.vmid.toString())
@@ -282,9 +286,9 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                 putExtra(VMConsoleActivity.EXTRA_VM_TYPE, vm.type)
                 putExtra(VMConsoleActivity.EXTRA_HOST, profile.host)
                 putExtra(VMConsoleActivity.EXTRA_PORT, profile.port)
-                putExtra(VMConsoleActivity.EXTRA_USERNAME, profile.username)
-                putExtra(VMConsoleActivity.EXTRA_PASSWORD, password)
-                putExtra(VMConsoleActivity.EXTRA_REALM, profile.realm ?: "pam")
+                putExtra(VMConsoleActivity.EXTRA_USERNAME, creds.username)
+                putExtra(VMConsoleActivity.EXTRA_PASSWORD, creds.password)
+                putExtra(VMConsoleActivity.EXTRA_REALM, creds.realm ?: "pam")
                 putExtra(VMConsoleActivity.EXTRA_VERIFY_SSL, profile.verifySsl)
             }
             startActivity(intent)

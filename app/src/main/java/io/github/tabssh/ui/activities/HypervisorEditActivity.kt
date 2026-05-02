@@ -33,6 +33,8 @@ class HypervisorEditActivity : AppCompatActivity() {
     private lateinit var editPassword: TextInputEditText
     private lateinit var editRealm: TextInputEditText
     private lateinit var layoutRealm: LinearLayout
+    private lateinit var layoutUsername: com.google.android.material.textfield.TextInputLayout
+    private lateinit var layoutPassword: com.google.android.material.textfield.TextInputLayout
     private lateinit var switchVerifySsl: SwitchMaterial
     private lateinit var layoutApiType: com.google.android.material.textfield.TextInputLayout
     private lateinit var dropdownApiType: AutoCompleteTextView
@@ -42,6 +44,14 @@ class HypervisorEditActivity : AppCompatActivity() {
     private lateinit var buttonSave: MaterialButton
     private lateinit var buttonCancel: MaterialButton
     private lateinit var buttonImportHost: MaterialButton
+
+    // Reusable account dropdown (added 2026-05-02). When set, the
+    // host pulls username + password (+ optional realm) from the
+    // account; the inline username/password/realm fields hide.
+    private lateinit var dropdownAccount: AutoCompleteTextView
+    private lateinit var layoutAccount: com.google.android.material.textfield.TextInputLayout
+    private var availableAccounts: List<io.github.tabssh.storage.database.entities.HypervisorAccount> = emptyList()
+    private var selectedAccountId: Long? = null
 
     private var hypervisorId: Long? = null
     private var editingHypervisor: HypervisorProfile? = null
@@ -57,10 +67,70 @@ class HypervisorEditActivity : AppCompatActivity() {
         setupToolbar()
         setupSpinner()
         setupApiTypeDropdown()
+        setupAccountDropdown()
         setupClickListeners()
 
         hypervisorId = intent.getLongExtra("hypervisor_id", -1).takeIf { it != -1L }
         hypervisorId?.let { loadHypervisor(it) }
+    }
+
+    /**
+     * Populate the account dropdown with `(none — use inline credentials)`
+     * + every saved `HypervisorAccount`. Selecting a real account hides
+     * the inline username/password/realm rows; selecting "(none)" shows
+     * them. The user can still pop into Hypervisor Accounts to add a
+     * new one — they re-enter this screen and the new account appears.
+     */
+    private fun setupAccountDropdown() {
+        lifecycleScope.launch {
+            availableAccounts = try {
+                app.database.hypervisorAccountDao().getAllAccountsList()
+            } catch (e: Exception) {
+                io.github.tabssh.utils.logging.Logger.w(
+                    "HypervisorEditActivity", "Failed to load accounts", e
+                )
+                emptyList()
+            }
+            val labels = mutableListOf("(none — use inline credentials)")
+            labels += availableAccounts.map { it.getDisplayName() }
+            dropdownAccount.setAdapter(
+                ArrayAdapter(
+                    this@HypervisorEditActivity,
+                    android.R.layout.simple_dropdown_item_1line,
+                    labels
+                )
+            )
+            // Default to "(none)" until loadHypervisor() picks the right
+            // entry on edit, or the user changes it on a fresh row.
+            if (dropdownAccount.text.isNullOrEmpty()) {
+                dropdownAccount.setText(labels.first(), false)
+                applyAccountSelection(null)
+            }
+            dropdownAccount.setOnItemClickListener { _, _, position, _ ->
+                // position 0 = "(none)", subsequent positions index into
+                // availableAccounts.
+                val acc = if (position == 0) null else availableAccounts.getOrNull(position - 1)
+                applyAccountSelection(acc?.id)
+            }
+        }
+    }
+
+    /**
+     * Hide/show the inline username/password/realm rows based on whether
+     * an account is currently selected. Doesn't TOUCH the field values
+     * — they remain as fallback if the user toggles back to "(none)".
+     * `selectedAccountId` is the source of truth for save.
+     */
+    private fun applyAccountSelection(accountId: Long?) {
+        selectedAccountId = accountId
+        val accountChosen = accountId != null
+        layoutUsername.visibility = if (accountChosen) View.GONE else View.VISIBLE
+        layoutPassword.visibility = if (accountChosen) View.GONE else View.VISIBLE
+        // Realm row visibility is also driven by the selected hypervisor
+        // type (Proxmox-only) — only force it hidden when an account is
+        // chosen; otherwise leave the existing type-driven visibility.
+        if (accountChosen) layoutRealm.visibility = View.GONE
+        else updateUIForType(spinnerType.selectedItemPosition)
     }
 
     private fun setupViews() {
@@ -73,6 +143,8 @@ class HypervisorEditActivity : AppCompatActivity() {
         editPassword = findViewById(R.id.edit_password)
         editRealm = findViewById(R.id.edit_realm)
         layoutRealm = findViewById(R.id.layout_realm)
+        layoutUsername = findViewById(R.id.layout_username)
+        layoutPassword = findViewById(R.id.layout_password)
         switchVerifySsl = findViewById(R.id.switch_verify_ssl)
         layoutApiType = findViewById(R.id.layout_api_type)
         dropdownApiType = findViewById(R.id.dropdown_api_type)
@@ -82,6 +154,8 @@ class HypervisorEditActivity : AppCompatActivity() {
         buttonSave = findViewById(R.id.button_save)
         buttonCancel = findViewById(R.id.button_cancel)
         buttonImportHost = findViewById(R.id.button_import_host)
+        dropdownAccount = findViewById(R.id.dropdown_account)
+        layoutAccount = findViewById(R.id.layout_account)
     }
 
     private fun setupToolbar() {
@@ -273,6 +347,30 @@ class HypervisorEditActivity : AppCompatActivity() {
                     editRealm.setText(hypervisor.realm ?: "pam")
                     switchVerifySsl.isChecked = hypervisor.verifySsl
 
+                    // Account dropdown — wait until availableAccounts has
+                    // been populated by setupAccountDropdown(). It's a
+                    // suspend chain in lifecycleScope so we re-fetch here
+                    // to be safe (cheap query).
+                    val accounts = try {
+                        app.database.hypervisorAccountDao().getAllAccountsList()
+                    } catch (e: Exception) { emptyList() }
+                    availableAccounts = accounts
+                    val labels = mutableListOf("(none — use inline credentials)")
+                    labels += accounts.map { it.getDisplayName() }
+                    dropdownAccount.setAdapter(
+                        ArrayAdapter(
+                            this@HypervisorEditActivity,
+                            android.R.layout.simple_dropdown_item_1line,
+                            labels
+                        )
+                    )
+                    val linkedIdx = if (hypervisor.accountId != null)
+                        accounts.indexOfFirst { it.id == hypervisor.accountId }
+                            .takeIf { it >= 0 }?.plus(1) ?: 0
+                    else 0
+                    dropdownAccount.setText(labels[linkedIdx], false)
+                    applyAccountSelection(if (linkedIdx == 0) null else accounts[linkedIdx - 1].id)
+
                     // Load API type override
                     val apiTypeEntries = resources.getStringArray(R.array.api_type_entries)
                     val apiTypeValues = resources.getStringArray(R.array.api_type_values)
@@ -355,6 +453,13 @@ class HypervisorEditActivity : AppCompatActivity() {
                 // it through the Keystore-backed HypervisorPasswordStore
                 // instead. The entity's `password` column stays empty
                 // for any row this code touches.
+                //
+                // Account-aware: if the user picked a reusable
+                // HypervisorAccount from the dropdown, we store the
+                // accountId on the row, and skip writing inline username
+                // / password / realm (those resolve from the account at
+                // connect time via HypervisorPasswordStore.resolveCredentials).
+                val accountId = selectedAccountId
                 val plaintextPassword = editPassword.text.toString()
                 val hypervisor = HypervisorProfile(
                     id = hypervisorId ?: 0,
@@ -362,12 +467,19 @@ class HypervisorEditActivity : AppCompatActivity() {
                     type = type,
                     host = editHost.text.toString(),
                     port = editPort.text.toString().toInt(),
-                    username = editUsername.text.toString(),
+                    username = if (accountId != null) "" else editUsername.text.toString(),
                     password = "",
-                    realm = if (type == HypervisorType.PROXMOX) editRealm.text.toString() else null,
+                    realm = if (accountId != null) {
+                        // Account is the realm source-of-truth when set.
+                        // Per-host realm override stays a future option.
+                        null
+                    } else if (type == HypervisorType.PROXMOX) {
+                        editRealm.text.toString()
+                    } else null,
                     verifySsl = switchVerifySsl.isChecked,
                     apiTypeOverride = apiTypeOverride,
                     linkedConnectionId = linkedConnectionId,
+                    accountId = accountId,
                     notes = editNotes.text.toString().takeIf { it.isNotBlank() },
                     lastConnected = editingHypervisor?.lastConnected ?: 0,
                     createdAt = editingHypervisor?.createdAt ?: System.currentTimeMillis()
@@ -383,15 +495,24 @@ class HypervisorEditActivity : AppCompatActivity() {
                     newId
                 }
 
-                val storeOk = HypervisorPasswordStore.store(
-                    this@HypervisorEditActivity, savedId, plaintextPassword
-                )
-                if (!storeOk) {
-                    Toast.makeText(
-                        this@HypervisorEditActivity,
-                        "⚠ Password stored insecurely (Keystore unavailable). Re-edit to retry.",
-                        Toast.LENGTH_LONG
-                    ).show()
+                if (accountId == null) {
+                    // Inline-credential path: persist the per-host password.
+                    val storeOk = HypervisorPasswordStore.store(
+                        this@HypervisorEditActivity, savedId, plaintextPassword
+                    )
+                    if (!storeOk) {
+                        Toast.makeText(
+                            this@HypervisorEditActivity,
+                            "⚠ Password stored insecurely (Keystore unavailable). Re-edit to retry.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                } else {
+                    // Account-linked: drop any per-host password we may
+                    // have left over from a previous inline configuration
+                    // so a future account-detach doesn't surface a stale
+                    // ghost credential.
+                    HypervisorPasswordStore.clear(this@HypervisorEditActivity, savedId)
                 }
                 
                 finish()

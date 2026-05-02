@@ -101,12 +101,12 @@ class VMwareManagerActivity : AppCompatActivity() {
                 statusText.text = "Connecting to ${profile.name}..."
                 statusText.visibility = View.VISIBLE
 
-                val password = io.github.tabssh.crypto.storage.HypervisorPasswordStore
-                    .retrieve(this@VMwareManagerActivity, profile)
+                val creds = io.github.tabssh.crypto.storage.HypervisorPasswordStore
+                    .resolveCredentials(this@VMwareManagerActivity, profile)
                 currentClient = VMwareApiClient(
                     host = profile.host,
-                    username = profile.username,
-                    password = password,
+                    username = creds.username,
+                    password = creds.password,
                     verifySsl = profile.verifySsl
                 )
 
