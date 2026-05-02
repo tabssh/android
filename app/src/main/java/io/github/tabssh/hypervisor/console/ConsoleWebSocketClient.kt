@@ -26,7 +26,12 @@ import javax.net.ssl.X509TrustManager
 class ConsoleWebSocketClient(
     private val verifySsl: Boolean = false,
     private val protocol: ConsoleProtocol = ConsoleProtocol.PROXMOX_TERM,
-    private val pinnedCertSha256: String? = null
+    private val pinnedCertSha256: String? = null,
+    /** Display-only — used by the cert-prompt dialogs to show
+     *  "Server: $host:$port" in the body text. The actual WS URL
+     *  passed to connect() is the source of truth for routing. */
+    private val displayHost: String = "",
+    private val displayPort: Int = 0
 ) {
     companion object {
         private const val TAG = "ConsoleWebSocket"
@@ -149,7 +154,7 @@ class ConsoleWebSocketClient(
             .pingInterval(PING_INTERVAL_SECONDS, TimeUnit.SECONDS)
 
         io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.installTrust(
-            builder, verifySsl, pinnedCertSha256, capturedPin
+            builder, verifySsl, pinnedCertSha256, capturedPin, displayHost, displayPort
         )
 
         client = builder.build()

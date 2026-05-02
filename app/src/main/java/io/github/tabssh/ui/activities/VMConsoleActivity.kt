@@ -341,6 +341,8 @@ class VMConsoleActivity : AppCompatActivity() {
                 type = vmType,
                 verifySsl = verifySsl,
                 pinnedCertSha256 = pinnedSha,
+                displayHost = host,
+                displayPort = port,
                 listener = createConsoleListener()
             )
         }
@@ -373,6 +375,8 @@ class VMConsoleActivity : AppCompatActivity() {
                 vmName = vmName,
                 verifySsl = verifySsl,
                 pinnedCertSha256 = pinnedSha,
+                displayHost = host,
+                displayPort = port,
                 listener = createConsoleListener()
             )
         }
@@ -401,6 +405,8 @@ class VMConsoleActivity : AppCompatActivity() {
                 vmName = vmName,
                 verifySsl = verifySsl,
                 pinnedCertSha256 = pinnedSha,
+                displayHost = host,
+                displayPort = port,
                 listener = createConsoleListener()
             )
         }

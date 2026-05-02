@@ -54,18 +54,24 @@ object HypervisorTrustManagerFactory {
      * the given (verifySsl, pinnedSha256) combo. `captured` receives
      * the leaf SHA on first-connect TOFU; ignore it when verifySsl is
      * false or a pin is already set.
+     *
+     * `host` / `port` are display-only — used by the user-prompt
+     * dialogs (Phase 2) so the user sees which server they're being
+     * asked to verify.
      */
     fun installTrust(
         builder: OkHttpClient.Builder,
         verifySsl: Boolean,
         pinnedSha256: String?,
-        captured: CapturedPin
+        captured: CapturedPin,
+        host: String = "",
+        port: Int = 0
     ) {
         if (!verifySsl) {
             installTrustAll(builder)
             return
         }
-        installPinning(builder, pinnedSha256, captured)
+        installPinning(builder, pinnedSha256, captured, host, port)
     }
 
     /** Install a TrustManager that accepts every cert. */
@@ -91,7 +97,9 @@ object HypervisorTrustManagerFactory {
     private fun installPinning(
         builder: OkHttpClient.Builder,
         pinnedSha256: String?,
-        captured: CapturedPin
+        captured: CapturedPin,
+        host: String,
+        port: Int
     ) {
         val pinning = object : X509TrustManager {
             override fun checkClientTrusted(c: Array<X509Certificate>, t: String) {}
@@ -100,24 +108,55 @@ object HypervisorTrustManagerFactory {
                     throw CertificateException("Empty certificate chain")
                 }
                 val presented = sha256Hex(chain[0].encoded)
-                if (pinnedSha256.isNullOrBlank()) {
-                    captured.sha256 = presented
-                    Logger.i(TAG, "TOFU capture — leaf SHA-256: $presented")
-                    return
-                }
-                if (pinnedSha256.equals(presented, ignoreCase = true)) {
+
+                // Pin matches → silent OK.
+                if (!pinnedSha256.isNullOrBlank() &&
+                    pinnedSha256.equals(presented, ignoreCase = true)) {
                     Logger.d(TAG, "Cert pin match — leaf SHA-256: $presented")
                     return
                 }
-                Logger.w(
-                    TAG,
-                    "Cert pin MISMATCH — expected $pinnedSha256, presented $presented (host MITM, server reissue, or stale pin)"
-                )
-                throw CertificateException(
-                    "Hypervisor certificate fingerprint changed.\n" +
-                    "Pinned:    SHA-256 $pinnedSha256\n" +
-                    "Presented: SHA-256 $presented"
-                )
+
+                // Either no prior pin (TOFU) or mismatch. Both cases need
+                // user consent. The prompt dialog blocks this thread up
+                // to 30 s waiting on the UI; default REJECT on timeout.
+                val action = if (pinnedSha256.isNullOrBlank()) {
+                    Logger.i(TAG, "TOFU prompt — leaf SHA-256: $presented (host=$host:$port)")
+                    HypervisorCertPromptDialog.promptNewHost(host, port, presented)
+                } else {
+                    Logger.w(
+                        TAG,
+                        "Cert pin MISMATCH prompt — pinned $pinnedSha256 vs presented $presented (host=$host:$port)"
+                    )
+                    HypervisorCertPromptDialog.promptChangedCert(
+                        host, port, pinnedSha256, presented
+                    )
+                }
+
+                when (action) {
+                    HypervisorCertPromptDialog.Action.ACCEPT_AND_PIN -> {
+                        // Mark the captured holder so persistCapturedPinIfAny
+                        // writes the new pin to the DB after authenticate().
+                        captured.sha256 = presented
+                        Logger.i(TAG, "User accepted + pinned: $presented")
+                    }
+                    HypervisorCertPromptDialog.Action.ACCEPT_ONCE -> {
+                        // Don't touch captured holder — DB stays unchanged.
+                        // Connection succeeds for this session only.
+                        Logger.i(TAG, "User accepted (once-only) — pin NOT updated")
+                    }
+                    HypervisorCertPromptDialog.Action.REJECT -> {
+                        Logger.w(TAG, "User rejected cert — aborting handshake")
+                        throw CertificateException(
+                            "User rejected hypervisor certificate.\n" +
+                            (if (pinnedSha256.isNullOrBlank()) {
+                                "First-time pin not accepted."
+                            } else {
+                                "Pinned:    SHA-256 $pinnedSha256\n" +
+                                "Presented: SHA-256 $presented"
+                            })
+                        )
+                    }
+                }
             }
             override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
         }

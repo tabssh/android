@@ -132,7 +132,7 @@ class XenOrchestraApiClient(
     init {
         val builder = OkHttpClient.Builder()
         io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.installTrust(
-            builder, verifySsl, pinnedCertSha256, capturedPin
+            builder, verifySsl, pinnedCertSha256, capturedPin, host, port
         )
         client = builder.build()
 

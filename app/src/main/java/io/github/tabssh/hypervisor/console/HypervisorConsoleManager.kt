@@ -59,6 +59,8 @@ class HypervisorConsoleManager {
         type: String = "qemu", // "qemu" or "lxc"
         verifySsl: Boolean = false,
         pinnedCertSha256: String? = null,
+        displayHost: String = "",
+        displayPort: Int = 0,
         listener: ConsoleEventListener? = null
     ): ConsoleConnection? = withContext(Dispatchers.IO) {
         consoleListener = listener
@@ -83,7 +85,9 @@ class HypervisorConsoleManager {
             webSocketClient = ConsoleWebSocketClient(
                 verifySsl = verifySsl,
                 protocol = ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_TERM,
-                pinnedCertSha256 = pinnedCertSha256
+                pinnedCertSha256 = pinnedCertSha256,
+                displayHost = displayHost,
+                displayPort = displayPort
             )
 
             // Build WebSocket URL
@@ -164,6 +168,8 @@ class HypervisorConsoleManager {
         vmName: String,
         verifySsl: Boolean = false,
         pinnedCertSha256: String? = null,
+        displayHost: String = "",
+        displayPort: Int = 0,
         listener: ConsoleEventListener? = null
     ): ConsoleConnection? = withContext(Dispatchers.IO) {
         consoleListener = listener
@@ -187,7 +193,9 @@ class HypervisorConsoleManager {
             webSocketClient = ConsoleWebSocketClient(
                 verifySsl = verifySsl,
                 protocol = ConsoleWebSocketClient.ConsoleProtocol.XCPNG,
-                pinnedCertSha256 = pinnedCertSha256
+                pinnedCertSha256 = pinnedCertSha256,
+                displayHost = displayHost,
+                displayPort = displayPort
             )
             val xcpClient = webSocketClient ?: run {
                 Logger.e(TAG, "WebSocket client not initialized")
@@ -250,6 +258,8 @@ class HypervisorConsoleManager {
         vmName: String,
         verifySsl: Boolean = false,
         pinnedCertSha256: String? = null,
+        displayHost: String = "",
+        displayPort: Int = 0,
         listener: ConsoleEventListener? = null
     ): ConsoleConnection? = withContext(Dispatchers.IO) {
         consoleListener = listener
@@ -273,7 +283,9 @@ class HypervisorConsoleManager {
             webSocketClient = ConsoleWebSocketClient(
                 verifySsl = verifySsl,
                 protocol = ConsoleWebSocketClient.ConsoleProtocol.XO,
-                pinnedCertSha256 = pinnedCertSha256
+                pinnedCertSha256 = pinnedCertSha256,
+                displayHost = displayHost,
+                displayPort = displayPort
             )
             val xoClient = webSocketClient ?: run {
                 Logger.e(TAG, "WebSocket client not initialized")
