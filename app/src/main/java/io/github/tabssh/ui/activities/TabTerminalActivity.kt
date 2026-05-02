@@ -66,6 +66,23 @@ class TabTerminalActivity : AppCompatActivity() {
     private lateinit var app: TabSSHApplication
     private lateinit var tabManager: TabManager
 
+    /**
+     * Set to `true` while a Reconnect-from-disconnect-dialog flow is in
+     * flight. The reconnect path must close the dead tab before opening
+     * the new one (so the strip slot is reused), but `closeTab` drives
+     * `onTabClosed` → `if (count == 0) finish()` — which would tear
+     * down this activity AND cancel the just-launched reconnect
+     * coroutine via lifecycleScope. With this flag set, the
+     * onTabClosed handler skips the auto-finish; the reconnect
+     * coroutine clears the flag in its finally{} and finishes the
+     * activity itself if the connection failed and no tabs remain.
+     *
+     * @Volatile because onTabClosed posts to the main looper but the
+     * flip happens from coroutine continuations that may run on
+     * worker threads.
+     */
+    @Volatile private var isReconnecting = false
+
     // UI components
     private var terminalView: TerminalView? = null
     private var viewPager: ViewPager2? = null
@@ -240,8 +257,10 @@ class TabTerminalActivity : AppCompatActivity() {
                 Handler(Looper.getMainLooper()).post {
                     removeTabFromUI(index)
 
-                    // Close activity if no tabs remain
-                    if (tabManager.getTabCount() == 0) {
+                    // Close activity if no tabs remain — UNLESS we're
+                    // mid-reconnect, in which case a new tab is about to
+                    // be created. See `isReconnecting` doc.
+                    if (tabManager.getTabCount() == 0 && !isReconnecting) {
                         finish()
                     }
                 }
@@ -1768,10 +1787,29 @@ class TabTerminalActivity : AppCompatActivity() {
             .setPositiveButton("Reconnect") { _, _ ->
                 Logger.i("TabTerminalActivity", "User chose RECONNECT for tab $tabId")
                 // Close the dead tab object then start a fresh connect to the
-                // same profile — keeps the slot in the tab strip.
+                // same profile — keeps the slot in the tab strip. The
+                // `isReconnecting` flag prevents `onTabClosed` from
+                // auto-finishing this activity in the brief window between
+                // closeTab and the new tab being created. Cleared in the
+                // coroutine's finally{} so a failed reconnect still lets
+                // the activity finish if no tabs remain.
+                isReconnecting = true
                 val idx = tabManager.getAllTabs().indexOfFirst { it.tabId == tabId }
                 if (idx >= 0) tabManager.closeTab(idx)
-                lifecycleScope.launch { connectToProfile(profile) }
+                lifecycleScope.launch {
+                    try {
+                        connectToProfile(profile)
+                    } finally {
+                        isReconnecting = false
+                        // If the reconnect failed (no new tab landed) and
+                        // we're still alive, walk out the same as a normal
+                        // close-on-empty would.
+                        if (!isFinishing && !isDestroyed && tabManager.getTabCount() == 0) {
+                            Logger.i("TabTerminalActivity", "Reconnect produced no tabs — finishing activity")
+                            finish()
+                        }
+                    }
+                }
             }
             .setNegativeButton("Close tab") { _, _ ->
                 Logger.i("TabTerminalActivity", "User chose CLOSE for tab $tabId")
