@@ -1,6 +1,6 @@
 # TabSSH TODO
 
-**Last Updated:** 2026-05-01
+**Last Updated:** 2026-05-02 (full re-verification pass against the codebase — every previously-listed audit item was diff'd against current code; entries that have actually shipped are now ~~struck through~~ with the verifying file:line citations)
 **Version:** 0.0.9 (pinned via `release.txt` — DO NOT MODIFY without coordinated bump in `app/build.gradle` + F-Droid metadata)
 
 > Treat `CLAUDE.md` and `FEATURES_AUDIT.md` as the authoritative state-of-the-app docs. This file tracks open issues + planned work that hasn't been implemented yet.
@@ -50,71 +50,22 @@ The audit findings below are historical; this section tracks status.
 | Item | Status | Commit |
 |---|---|---|
 | P0 #1 backup encryption real | ✅ shipped | `2e4d9648` |
-| P0 #2 hypervisor TLS | 🟡 partial — silent-bypass closed | `5a4b26f5` |
+| P0 #2 hypervisor TLS — silent-bypass closed | ✅ shipped | `5a4b26f5` |
+| P0 #2 hypervisor TLS — TOFU + change-detect cert pinning | ✅ shipped | DB v28 + `crypto/tls/HypervisorTrustManagerFactory.kt` + `HypervisorCertPromptDialog.kt`, wired into all 5 clients |
+| Hypervisor reusable accounts (settled the "identity for hypervisors?" question) | ✅ shipped | DB v27 + `HypervisorAccount` entity / DAO / Activity, drawer entry |
 | P1 Tasker IPC permission gate | ✅ shipped | `2e4d9648` |
-| P1 HostKeyVerifier timeout/destroyed-activity | ✅ shipped | `5ac8f999` |
-| P1 hypervisor passwords → Keystore | ✅ shipped | `ae2c613a` |
-| P1 WebSocket.send return ignored | ✅ shipped | `ae2c613a` |
-| P1 `profile.identityId!!` NPE | ✅ shipped | `2e4d9648` |
-| MAC-failure root-cause (the actual disconnect bug) | ✅ shipped | `bbf15665` |
-| RECONNECT race that destroyed the activity | ✅ shipped | `1f25c29d` |
-
-#### 🟡 Outstanding P0 — finish hypervisor TLS verification
-
-Today's `5a4b26f5` closed a real silent-bypass bug (six sites that
-hardcoded `verifySsl=false` and ignored the user's per-host setting).
-That makes the existing toggle finally take effect. The remaining
-work is the real fix: **per-host SHA-256 cert pinning** modelled on
-the SSH host-key flow.
-
-**Design — to be confirmed before code lands:**
-
-* New DB column on `hypervisors`: `pinned_cert_sha256: TEXT NULL`.
-  Migration v26 → v27, default NULL.
-* `verifySsl: Boolean` stays as the user-facing "verify against
-  pinned SHA" toggle. Default flips to `true` for new rows; existing
-  rows keep their current value (most users have it `false` today
-  for self-signed certs).
-* Custom `X509TrustManager` per host that:
-  * On first connect (pinned SHA == NULL): capture the leaf cert's
-    SHA-256, prompt the user via fingerprint dialog (modelled on
-    `HostKeyVerifier.showBlockingNewHostDialog`), persist on accept.
-  * On subsequent connects (pinned SHA != NULL): require exact
-    match. On mismatch, prompt the user (modelled on
-    `showBlockingChangedHostDialog`) — Accept New / Reject /
-    Once-only. Reject is the default after 30 s timeout.
-  * If `verifySsl=false`: bypass entirely, log a one-time warning.
-* Wire into all five clients (`ProxmoxApiClient`, `XCPngApiClient`,
-  `XenOrchestraApiClient`, `VMwareApiClient`, `ConsoleWebSocketClient`)
-  via a single `HypervisorTrustManager.kt` factory the constructors
-  call into. Replaces the duplicated trust-all-certs blocks.
-* UI: add a "Trusted fingerprint" read-only field in
-  `HypervisorEditActivity` (with a Reset button to drop the pin and
-  re-prompt on next connect).
-
-**Open design question — flagged here for explicit decision before
-build:**
-
-* **Identity reuse for hypervisors.** Should `HypervisorProfile`
-  reference an `Identity` for credentials the way `ConnectionProfile`
-  does? Current take: **no** — Identity is SSH-shaped (carries `keyId`
-  + `authType=PUBLIC_KEY`/`PASSWORD`) and hypervisor REST APIs only
-  use the password half. Reusing it leaves dead fields and ties
-  password-rotation policies that usually aren't aligned (SSH key
-  for prod hosts vs. admin password for hypervisors). If credential
-  reuse becomes a real pain point (5+ hypervisors sharing one admin
-  password), a separate `ApiCredential` entity is cleaner than
-  overloading `Identity`. **Holding off until a user with that
-  scenario asks.** Resume P0 cert-pinning work once this is
-  resolved either way.
-
-**Estimate:** ~6 h cert pinning + ~2 h interop testing across the
-five clients + 1 h UI polish for the fingerprint dialogs. Don't
-start until the identity question is settled.
+| P1 HostKeyVerifier timeout/destroyed-activity | ✅ shipped | `5ac8f999` (now `DIALOG_TIMEOUT_SECONDS=30` at `HostKeyVerifier.kt:565`) |
+| P1 hypervisor passwords → Keystore | ✅ shipped | `ae2c613a` (`HypervisorPasswordStore.resolveCredentials/store/clear/persistCapturedPinIfAny`) |
+| P1 WebSocket.send return ignored | ✅ shipped | `ae2c613a` (single-flight `attemptSend` + `sendFailureFired`) |
+| P1 `profile.identityId!!` NPE | ✅ shipped | `2e4d9648` (read once into local val at `SSHConnection.kt:148`) |
+| MAC-failure root-cause (the actual disconnect bug) | ✅ shipped | `bbf15665` (`writeLock: Mutex` at `TermuxBridge.kt:86,141`) |
+| RECONNECT race that destroyed the activity | ✅ shipped | `1f25c29d` (`isReconnecting` flag at `TabTerminalActivity.kt:84,1796,1803`) |
+| Tasker preferences fragment | ✅ shipped | `d714a7b4` (fragment at `SettingsActivity.kt:605-697`, IntentService consumes all 4 prefs) |
+| advancedSettings JSON apply at connect | ✅ shipped | `d714a7b4` (`SSHConnection.applyAdvancedSettings` for Local/Remote/Dynamic forwards) |
 
 ---
 
-### 🔒 Audit findings — 2026-05-01
+### 🔒 Audit findings — 2026-05-01 (historical)
 
 Two read-only Explore-agent passes — feature-completeness vs. README + project tracker docs, and bug/security. Cited file:line locations are direct from the audit and verified for the P0 entries.
 
@@ -131,15 +82,15 @@ Two read-only Explore-agent passes — feature-completeness vs. README + project
 - **`WebSocket.send()` return value ignored** in five places: `hypervisor/console/ConsoleWebSocketClient.kt:149,254,309,335,344`. Send-buffer-full or already-closed socket → user keystrokes silently dropped. **Likely contributor to the VM-console disconnect symptom we already saw.** Fix: check Boolean, surface failure to the UI / trigger reconnect. ~2h.
 - **`profile.identityId!!`** at `ssh/connection/SSHConnection.kt:143`. Identity row deleted between the null-guard at 141 and the bang at 143 → NPE. Fix: `profile.identityId?.let { ... } ?: fallthrough`. ~10min.
 
-#### 🟡 P2 — latent / defense-in-depth
+#### 🟡 P2 — latent / defense-in-depth (re-verified 2026-05-02)
 
-- Session passwords held in `String` map for app lifetime, never cleared on pause/destroy — `crypto/SecurePasswordManager.kt:64`.
-- Host-key dialog `latch.await()` no timeout — `HostKeyVerifier.kt:470, 546`.
-- DB query on `Dispatchers.Main` in widget update — `widget/ConnectionWidgetProvider.kt:66`.
-- Jump-host port-forward — no explicit `127.0.0.1` bind on `setPortForwardingL`, JSch default may be `0.0.0.0` — `ssh/connection/SSHConnection.kt:623`.
-- `cachedPassword` / `cachedPassphrase` as `String` for connection lifetime, never zeroed — `ssh/connection/SSHConnection.kt:100-104`.
-- Host-key dialogs walk the context chain to find an Activity; no guard if Activity destroyed mid-prompt — `HostKeyVerifier.kt:406-436`.
-- Logger may surface key bytes if a future caller passes raw bytes (defensive grep audit needed across `Logger.[diwve]` calls touching `bytes`/`key`/`pass`).
+- Session passwords held in `mutableMapOf<String, String>` for app lifetime — `crypto/storage/SecurePasswordManager.kt:64`. Cleared on explicit `clearAllPasswords()` (lines 409, 436, 448) but NOT on lifecycle events (pause/destroy/biometric-lock). **Still open.**
+- ~~Host-key dialog `latch.await()` no timeout~~ — **VERIFIED FIXED.** `HostKeyVerifier.kt:520` now uses `latch.await(DIALOG_TIMEOUT_SECONDS, SECONDS)` with `DIALOG_TIMEOUT_SECONDS=30` and a default-REJECT path on expiry (line 524).
+- DB query on `Dispatchers.Main` in widget update — `widget/ConnectionWidgetProvider.kt:66`. Cosmetic-only: Room's suspend DAO funcs (`getConnectionById`) dispatch their own IO regardless of the launching scope, so this isn't an actual main-thread DB hit. Worth tidying for clarity but not a correctness bug. **Cosmetic / low priority.**
+- Jump-host port-forward bind — `setPortForwardingL(0, profile.host, profile.port)` at `ssh/connection/SSHConnection.kt:713`. The 3-arg JSch overload defaults to `127.0.0.1` (not `0.0.0.0`), so this is safe in practice — but worth an explicit `setPortForwardingL("127.0.0.1", 0, host, port)` for self-documentation and version pinning. **Open (cosmetic).**
+- `cachedPassword` / `cachedPassphrase` held as `String` for connection lifetime, never zeroed — `ssh/connection/SSHConnection.kt:101,104`. Same defense-in-depth shape as the SecurePasswordManager map. **Still open.**
+- ~~Host-key dialogs walk the context chain with no Activity guard~~ — **VERIFIED FIXED** in commit `5ac8f999`. `HostKeyVerifier` now resolves the activity via `TabSSHApplication.getCurrentActivity()` and skips when `isFinishing || isDestroyed`.
+- Logger key-bytes audit not yet performed — defensive grep across `Logger.[diwve]` calls touching `bytes`/`key`/`pass`/`secret` to confirm none print raw key material. **Open (low-priority hygiene pass).**
 
 #### 🧩 Feature gaps — claimed but not wired
 
@@ -147,8 +98,8 @@ Two read-only Explore-agent passes — feature-completeness vs. README + project
 > were stale by the time the audit ran. Verified-wired items are
 > ~~struck through~~ below; only real gaps remain unmarked.
 
-- **`encryptBackup` UI promise — see P0-#1 above.** Same root cause.
-- **Hypervisor TLS — see P0-#2 above.** Currently the only "feature" is an unsafe-by-default switch.
+- ~~**`encryptBackup` UI promise**~~ — **VERIFIED WIRED** as of 2026-05-02. `BackupManager.encryptData` at lines 273-285 routes through `SyncEncryptor` (real AES-256-GCM + PBKDF2 100k iterations); `decryptData` is forward-compatible and tolerates legacy Base64-only blobs for restoring pre-fix backups.
+- ~~**Hypervisor TLS**~~ — **VERIFIED WIRED** as of 2026-05-02. DB v28 carries `pinned_cert_sha256`; `crypto/tls/HypervisorTrustManagerFactory.installTrust(...)` runs in all 5 clients (Proxmox/XCP-ng/XO/VMware/ConsoleWebSocketClient) implementing TOFU + change-detect via `HypervisorCertPromptDialog`. `HypervisorEditActivity` shows the pinned fingerprint with a Forget button. The `verifySsl=false` switch is now a deliberate per-host bypass, not the only feature.
 - ~~**AWS / GCP / Azure cloud import** — clients fully built~~ — **VERIFIED WIRED** as of 2026-05-02. `CloudAccountsActivity` has a drawer entry (`drawer_menu.xml:44 nav_cloud_accounts`) and `MainActivity` dispatches it. Audit was outdated.
 - ~~**X11 toggle hidden**~~ — **VERIFIED WIRED** as of 2026-05-02. The switch is at `activity_connection_edit.xml:447` with NO `visibility="gone"`, and `ConnectionEditActivity` already binds it (load at line 494, save at lines 685/766/797). Audit was outdated.
 - ~~**SSH user-certificate auth**~~ — **VERIFIED WIRED** as of 2026-05-02. `StoredKey.certificate` (DB v19) is consumed at `SSHConnection.kt:752-767` via `jsch.addIdentity(name, prvkey, pubkey=cert, passphrase)`. `KeyManagementActivity.kt:424-433` exposes paste/file pickers for attach/remove with `-cert-v01@openssh.com` validation. Audit was outdated.
@@ -158,7 +109,7 @@ Two read-only Explore-agent passes — feature-completeness vs. README + project
 - **Mosh full protocol** — `protocols/mosh/MoshHandoff.kt:11-35` only bootstraps the SSP exchange and returns a CLI string the user must paste into a real Mosh client. True transparent UDP/AES-128-OCB Mosh would be ~60h. **Likely keep as handoff only — document accordingly.**
 - ~~**Tasker preferences XML orphaned**~~ — **VERIFIED WIRED** as of 2026-05-02. `TaskerSettingsFragment` (`SettingsActivity.kt:605-697`) inflates the XML and is reachable from `preferences_main.xml:46-50`. `TaskerIntentService` honours `tasker_enabled`, `tasker_require_unlock` (KeyguardManager check), `tasker_allowed_connections` (whitelist), `tasker_log_events`, and `tasker_command_timeout` (default fallback when intent extra omitted).
 - ~~**`advancedSettings` JSON apply at connect**~~ — **WIRED** as of 2026-05-02. `SSHConnection.applyAdvancedSettings(session)` runs immediately after a successful `session.connect()` and applies `localForwards`, `remoteForwards`, and `dynamicForwards` parsed from `~/.ssh/config`. Other directives (proxyJump/proxyCommand) already had their own paths; the extant gap was port forwards from imported configs being silently dropped.
-- **Xen Orchestra REST `TODO: Implement JSON parsing`** at `hypervisor/xcpng/XenOrchestraApiClient.kt:~52`. WebSocket plumbing works; type-erased response parser isn't finished. ~25h.
+- ~~**Xen Orchestra REST `TODO: Implement JSON parsing`**~~ — **MISLEADING AS WRITTEN** (re-verified 2026-05-02). The TODO at `XenOrchestraApiClient.kt:300` is on a generic `parseJsonResponse<T>` helper that is **defined and never called** (single grep hit at line 296). Concrete parsers ARE implemented for the methods that ship — `listVMs` (lines 365-393), `getVM` (lines 427-441), tags / OS-version helpers (`parseJsonArray`/`parseJsonObject` at 643/655). If a future caller wants type-generic parsing, the helper has to be filled in then; the existing call sites all parse JSON concretely. **Effective status: orphan dead code, can be deleted whenever someone passes through the file.**
 - ~~**`activity_main_old.xml`** is an orphan layout~~ — **DELETED** in commit cleanup batch 2026-05-02.
 
 ---
@@ -170,21 +121,23 @@ Two read-only Explore-agent passes — feature-completeness vs. README + project
 
 The mobile decoder is in place and waiting for the desktop encoder + interop test vectors. The spec doc has the wire format, encryption parameters, payload schema, and CBOR field names that both sides must agree on.
 
-### 🐛 `advancedSettings` JSON wired through to JSch session config
-- **Status:** SCOPED
-- **Priority:** MEDIUM
-- **Impact:** Many `~/.ssh/config` directives are parsed and persisted but never applied at connect time. The parser writes them to `ConnectionProfile.advancedSettings` (JSON column); the exporter reads them for round-trip; **the connection layer doesn't consult them at all**. Verified by grep — 13 files reference `advancedSettings`, none of them are in `ssh/connection/` or `ssh/auth/`.
+### 🐛 `advancedSettings` — partial coverage of remaining directives
+- **Status:** Local/Remote/Dynamic forwards now apply at connect (`d714a7b4`). Other directives still parsed → stored → ignored.
+- **Priority:** LOW (cosmetic — most users hit forwards first)
+
+Re-verified 2026-05-02 against `SSHConnection.applyAdvancedSettings`:
 
 | Directive | Parser | Stored | Applied at connect |
 |---|---|---|---|
-| `ProxyJump` / `ProxyCommand` | ✅ | `advancedSettings` JSON | ❌ No |
-| `LocalForward` / `RemoteForward` / `DynamicForward` | ✅ | `advancedSettings` JSON | ❌ No |
-| `ServerAliveInterval` / `StrictHostKeyChecking` | ✅ | `advancedSettings` JSON | ❌ No |
-| `ForwardAgent` / `ForwardX11` / `RequestTTY` | ✅ | `advancedSettings` JSON | ❌ No |
+| `LocalForward` / `RemoteForward` / `DynamicForward` | ✅ | JSON | ✅ as of `d714a7b4` |
+| `ProxyJump` / `ProxyCommand` | ✅ | JSON | ❌ — `ProxyJump` should populate the existing `proxy_host`/`proxy_port`/`proxy_username` columns at parse time instead of living in JSON. `ProxyCommand` has no JSch equivalent and would require a custom `Proxy` impl. |
+| `ServerAliveInterval` / `StrictHostKeyChecking` | ✅ | JSON | ❌ — `ServerAliveInterval` is overridden by the mobile-default 60s keepalive (intentional). `StrictHostKeyChecking` is hardwired to `"ask"` because we own the dialog flow (intentional). Both can stay ignored. |
+| `ForwardAgent` / `ForwardX11` | ✅ | JSON | 🟡 — read at connect from the dedicated `agentForwarding`/`x11Forwarding` columns on `ConnectionProfile`, NOT from the JSON. Importer does not currently copy from JSON to those columns. |
+| `RequestTTY` | ✅ | JSON | 🟡 — partly: when `remoteCommand` is set we always allocate a PTY (`exec.setPty(true)`), matching `RequestTTY=yes`. The `force`/`no`/`auto` distinctions aren't honored. |
 
-**Fix:** wire each into the existing per-feature paths the way Issue #37 wired RemoteCommand. Most are one-liner `session.setConfig(...)` / `setServerAliveInterval(...)` calls; LocalForward/RemoteForward/DynamicForward route to the existing `PortForwardingActivity` / `SSHConnection` forward setup; `ProxyJump` should populate the existing `proxy_host` / `proxy_port` / `proxy_username` columns rather than living in JSON.
+**Fix sketch:** at `SSHConfigParser.convertToConnectionProfile`, copy `forwardAgent`/`forwardX11` from `host.*` straight into `ConnectionProfile.agentForwarding`/`x11Forwarding` (currently they only land in the JSON blob). For `ProxyJump`, parse `user@host:port` and populate the proxy columns directly. Remove the now-redundant JSON copies once both flows are migrated.
 
-**Estimate:** ~6 hours including a parser unit test + an integration test against a known config.
+**Estimate:** ~3 hours.
 
 ---
 
