@@ -58,6 +58,10 @@ class VMConsoleActivity : AppCompatActivity() {
         // had set in HypervisorEditActivity. The console flow now honours
         // the per-host setting.
         const val EXTRA_VERIFY_SSL = "verify_ssl"
+        // Phase 1 cert pinning — captured leaf SHA-256 from previous
+        // connect, threaded through so the console TLS handshake
+        // enforces the pin (or captures TOFU on first console connect).
+        const val EXTRA_PINNED_CERT_SHA256 = "pinned_cert_sha256"
 
         // Hypervisor type values
         const val TYPE_PROXMOX = "proxmox"
@@ -318,9 +322,10 @@ class VMConsoleActivity : AppCompatActivity() {
         val node = intent.getStringExtra(EXTRA_VM_NODE) ?: return null
         val vmType = intent.getStringExtra(EXTRA_VM_TYPE) ?: "qemu"
         val verifySsl = intent.getBooleanExtra(EXTRA_VERIFY_SSL, false)
+        val pinnedSha = intent.getStringExtra(EXTRA_PINNED_CERT_SHA256)?.takeIf { it.isNotBlank() }
 
         return withContext(Dispatchers.IO) {
-            val client = ProxmoxApiClient(host, port, username, password, realm, verifySsl)
+            val client = ProxmoxApiClient(host, port, username, password, realm, verifySsl, pinnedSha)
             if (!client.authenticate()) {
                 withContext(Dispatchers.Main) {
                     showError("Authentication failed")
@@ -335,6 +340,7 @@ class VMConsoleActivity : AppCompatActivity() {
                 vmName = vmName,
                 type = vmType,
                 verifySsl = verifySsl,
+                pinnedCertSha256 = pinnedSha,
                 listener = createConsoleListener()
             )
         }
@@ -347,9 +353,10 @@ class VMConsoleActivity : AppCompatActivity() {
         val password = intent.getStringExtra(EXTRA_PASSWORD) ?: return null
         val vmRef = intent.getStringExtra(EXTRA_VM_REF)
         val verifySsl = intent.getBooleanExtra(EXTRA_VERIFY_SSL, false)
+        val pinnedSha = intent.getStringExtra(EXTRA_PINNED_CERT_SHA256)?.takeIf { it.isNotBlank() }
 
         return withContext(Dispatchers.IO) {
-            val client = XCPngApiClient(host, port, username, password, verifySsl)
+            val client = XCPngApiClient(host, port, username, password, verifySsl, pinnedSha)
             if (!client.authenticate()) {
                 withContext(Dispatchers.Main) {
                     showError("Authentication failed")
@@ -365,6 +372,7 @@ class VMConsoleActivity : AppCompatActivity() {
                 vmRef = ref,
                 vmName = vmName,
                 verifySsl = verifySsl,
+                pinnedCertSha256 = pinnedSha,
                 listener = createConsoleListener()
             )
         }
@@ -376,9 +384,10 @@ class VMConsoleActivity : AppCompatActivity() {
         val username = intent.getStringExtra(EXTRA_USERNAME) ?: return null
         val password = intent.getStringExtra(EXTRA_PASSWORD) ?: return null
         val verifySsl = intent.getBooleanExtra(EXTRA_VERIFY_SSL, false)
+        val pinnedSha = intent.getStringExtra(EXTRA_PINNED_CERT_SHA256)?.takeIf { it.isNotBlank() }
 
         return withContext(Dispatchers.IO) {
-            val client = XenOrchestraApiClient(host, port, username, password, verifySsl)
+            val client = XenOrchestraApiClient(host, port, username, password, verifySsl, pinnedSha)
             if (!client.authenticate()) {
                 withContext(Dispatchers.Main) {
                     showError("Authentication failed")
@@ -391,6 +400,7 @@ class VMConsoleActivity : AppCompatActivity() {
                 vmId = vmId,
                 vmName = vmName,
                 verifySsl = verifySsl,
+                pinnedCertSha256 = pinnedSha,
                 listener = createConsoleListener()
             )
         }

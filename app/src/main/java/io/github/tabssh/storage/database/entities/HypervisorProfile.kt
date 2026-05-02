@@ -37,6 +37,20 @@ data class HypervisorProfile(
     
     @ColumnInfo(name = "verify_ssl")
     val verifySsl: Boolean = false,
+
+    /**
+     * SHA-256 fingerprint of the leaf certificate this host presented
+     * on its most recent successful connect. Captured by
+     * `HypervisorTrustManagerFactory` on a verifySsl=true connect when
+     * no prior pin existed (TOFU); enforced on subsequent connects —
+     * mismatch aborts the TLS handshake. NULL means "no pin yet";
+     * verifySsl=false ignores this column entirely.
+     *
+     * Format mirrors what we display: lowercase hex bytes joined by
+     * colons, e.g. `f1:c0:fe:...`. Stored without the `SHA-256:` prefix.
+     */
+    @ColumnInfo(name = "pinned_cert_sha256")
+    val pinnedCertSha256: String? = null,
     
     @ColumnInfo(name = "is_xen_orchestra")
     val isXenOrchestra: Boolean = false, // DEPRECATED: Use apiTypeOverride instead

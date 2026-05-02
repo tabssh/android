@@ -40,4 +40,10 @@ interface HypervisorDao {
 
     @Query("UPDATE hypervisors SET is_xen_orchestra = :isXO WHERE id = :id")
     suspend fun updateIsXenOrchestra(id: Long, isXO: Boolean)
+
+    /** Phase 1 cert pinning — write the captured leaf SHA-256
+     *  immediately after a successful TOFU connect so the next
+     *  connect to this host is enforced. */
+    @Query("UPDATE hypervisors SET pinned_cert_sha256 = :sha WHERE id = :id")
+    suspend fun updatePinnedCertSha256(id: Long, sha: String?)
 }

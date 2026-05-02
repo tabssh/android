@@ -237,11 +237,14 @@ class XCPngManagerActivity : AppCompatActivity() {
                 port = profile.port,
                 email = creds.username,
                 password = creds.password,
-                verifySsl = profile.verifySsl
+                verifySsl = profile.verifySsl,
+                pinnedCertSha256 = profile.pinnedCertSha256
             )
 
             if (currentXoClient?.authenticate() == true) {
                 Logger.i("XCPngManager", "Xen Orchestra REST API authentication successful")
+                io.github.tabssh.crypto.storage.HypervisorPasswordStore
+                    .persistCapturedPinIfAny(this@XCPngManagerActivity, profile, currentXoClient?.getCapturedCertSha256())
                 true
             } else {
                 false
@@ -265,11 +268,14 @@ class XCPngManagerActivity : AppCompatActivity() {
                 port = profile.port,
                 username = creds.username,
                 password = creds.password,
-                verifySsl = profile.verifySsl
+                verifySsl = profile.verifySsl,
+                pinnedCertSha256 = profile.pinnedCertSha256
             )
 
             if (currentClient?.authenticate() == true) {
                 Logger.i("XCPngManager", "XCP-ng XML-RPC API authentication successful")
+                io.github.tabssh.crypto.storage.HypervisorPasswordStore
+                    .persistCapturedPinIfAny(this@XCPngManagerActivity, profile, currentClient?.getCapturedCertSha256())
                 true
             } else {
                 false
@@ -410,6 +416,7 @@ class XCPngManagerActivity : AppCompatActivity() {
                 putExtra(VMConsoleActivity.EXTRA_PASSWORD, creds.password)
                 putExtra(VMConsoleActivity.EXTRA_IS_XEN_ORCHESTRA, isXenOrchestra)
                 putExtra(VMConsoleActivity.EXTRA_VERIFY_SSL, profile.verifySsl)
+                putExtra(VMConsoleActivity.EXTRA_PINNED_CERT_SHA256, profile.pinnedCertSha256)
             }
             startActivity(intent)
 

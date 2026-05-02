@@ -198,6 +198,58 @@
                 android:text="Verify SSL Certificate"
                 android:checked="false" />
 
+            <!-- Pinned cert fingerprint (Phase 1 cert pinning).
+                 Visible only when "Verify SSL" is on. Read-only display
+                 of the SHA-256 captured on the most recent successful
+                 connect; "Forget" clears it so the next connect
+                 captures fresh. -->
+            <LinearLayout
+                android:id="@+id/layout_pinned_cert"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="@dimen/space_sm"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Pinned cert (SHA-256)"
+                    android:textSize="12sp"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="2dp">
+
+                    <TextView
+                        android:id="@+id/text_pinned_cert"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="(not pinned yet — will pin on next successful connect)"
+                        android:textSize="13sp"
+                        android:fontFamily="monospace"
+                        android:textColor="?attr/colorOnSurface"
+                        android:singleLine="true"
+                        android:ellipsize="middle" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/button_forget_pin"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:minHeight="36dp"
+                        android:text="Forget"
+                        android:visibility="gone" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
             <!-- API Type Override (XCP-ng and VMware only) -->
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/layout_api_type"

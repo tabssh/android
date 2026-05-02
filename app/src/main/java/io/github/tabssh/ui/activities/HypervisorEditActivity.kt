@@ -53,6 +53,14 @@ class HypervisorEditActivity : AppCompatActivity() {
     private var availableAccounts: List<io.github.tabssh.storage.database.entities.HypervisorAccount> = emptyList()
     private var selectedAccountId: Long? = null
 
+    // Phase 1 cert pinning UI. Visible only when verifySsl is on.
+    private lateinit var layoutPinnedCert: LinearLayout
+    private lateinit var textPinnedCert: TextView
+    private lateinit var buttonForgetPin: MaterialButton
+    /** Holds the current pin while the activity is open. Reset to null
+     *  when the user taps "Forget" so the save path writes pinnedCertSha256=null. */
+    private var currentPin: String? = null
+
     private var hypervisorId: Long? = null
     private var editingHypervisor: HypervisorProfile? = null
     private var linkedConnectionId: String? = null
@@ -156,6 +164,42 @@ class HypervisorEditActivity : AppCompatActivity() {
         buttonImportHost = findViewById(R.id.button_import_host)
         dropdownAccount = findViewById(R.id.dropdown_account)
         layoutAccount = findViewById(R.id.layout_account)
+        layoutPinnedCert = findViewById(R.id.layout_pinned_cert)
+        textPinnedCert = findViewById(R.id.text_pinned_cert)
+        buttonForgetPin = findViewById(R.id.button_forget_pin)
+        // Pinned-cert row visibility tracks the verify-SSL switch.
+        switchVerifySsl.setOnCheckedChangeListener { _, checked ->
+            updatePinnedCertVisibility(checked)
+        }
+        buttonForgetPin.setOnClickListener {
+            currentPin = null
+            renderPinnedCertText()
+            io.github.tabssh.utils.logging.Logger.i(
+                "HypervisorEditActivity",
+                "User cleared pinned cert — next connect will TOFU re-capture"
+            )
+        }
+    }
+
+    /**
+     * Show/hide the pin row based on the verify-SSL switch, and refresh
+     * the displayed value. Called from the switch's listener and from
+     * loadHypervisor() once the value has been read in.
+     */
+    private fun updatePinnedCertVisibility(verifySslOn: Boolean) {
+        layoutPinnedCert.visibility = if (verifySslOn) View.VISIBLE else View.GONE
+        renderPinnedCertText()
+    }
+
+    private fun renderPinnedCertText() {
+        val pin = currentPin
+        if (pin.isNullOrBlank()) {
+            textPinnedCert.text = "(not pinned yet — will pin on next successful connect)"
+            buttonForgetPin.visibility = View.GONE
+        } else {
+            textPinnedCert.text = "SHA-256: $pin"
+            buttonForgetPin.visibility = View.VISIBLE
+        }
     }
 
     private fun setupToolbar() {
@@ -346,6 +390,8 @@ class HypervisorEditActivity : AppCompatActivity() {
                     )
                     editRealm.setText(hypervisor.realm ?: "pam")
                     switchVerifySsl.isChecked = hypervisor.verifySsl
+                    currentPin = hypervisor.pinnedCertSha256
+                    updatePinnedCertVisibility(hypervisor.verifySsl)
 
                     // Account dropdown — wait until availableAccounts has
                     // been populated by setupAccountDropdown(). It's a
@@ -477,6 +523,7 @@ class HypervisorEditActivity : AppCompatActivity() {
                         editRealm.text.toString()
                     } else null,
                     verifySsl = switchVerifySsl.isChecked,
+                    pinnedCertSha256 = currentPin,
                     apiTypeOverride = apiTypeOverride,
                     linkedConnectionId = linkedConnectionId,
                     accountId = accountId,

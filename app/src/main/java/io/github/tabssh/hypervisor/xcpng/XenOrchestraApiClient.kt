@@ -26,11 +26,15 @@ class XenOrchestraApiClient(
     private val port: Int = 443,
     private val email: String,
     private val password: String,
-    private val verifySsl: Boolean = false
+    private val verifySsl: Boolean = false,
+    private val pinnedCertSha256: String? = null
 ) {
 
     private val baseUrl = "https://$host:$port"
     private val client: OkHttpClient
+
+    private val capturedPin = io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.CapturedPin()
+    fun getCapturedCertSha256(): String? = capturedPin.sha256
 
     // Authentication state
     private var authToken: String? = null
@@ -127,24 +131,11 @@ class XenOrchestraApiClient(
      */
     init {
         val builder = OkHttpClient.Builder()
-        
-        if (!verifySsl) {
-            // Trust all certificates (for self-signed certs)
-            val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
-                override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
-                override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {}
-                override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-            })
-            
-            val sslContext = SSLContext.getInstance("TLS")
-            sslContext.init(null, trustAllCerts, java.security.SecureRandom())
-            
-            builder.sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as X509TrustManager)
-            builder.hostnameVerifier { _, _ -> true }
-        }
-        
+        io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.installTrust(
+            builder, verifySsl, pinnedCertSha256, capturedPin
+        )
         client = builder.build()
-        
+
         Logger.d(TAG, "XenOrchestraApiClient initialized for $baseUrl")
     }
     

@@ -25,7 +25,8 @@ import javax.net.ssl.X509TrustManager
  */
 class ConsoleWebSocketClient(
     private val verifySsl: Boolean = false,
-    private val protocol: ConsoleProtocol = ConsoleProtocol.PROXMOX_TERM
+    private val protocol: ConsoleProtocol = ConsoleProtocol.PROXMOX_TERM,
+    private val pinnedCertSha256: String? = null
 ) {
     companion object {
         private const val TAG = "ConsoleWebSocket"
@@ -135,6 +136,11 @@ class ConsoleWebSocketClient(
         try { webSocket?.close(1011, "send rejected") } catch (_: Exception) {}
     }
 
+    /** Phase 1 TLS pin holder — caller reads via getCapturedCertSha256
+     *  after a successful connect to persist a TOFU capture. */
+    private val capturedPin = io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.CapturedPin()
+    fun getCapturedCertSha256(): String? = capturedPin.sha256
+
     init {
         val builder = OkHttpClient.Builder()
             .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -142,19 +148,9 @@ class ConsoleWebSocketClient(
             .writeTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .pingInterval(PING_INTERVAL_SECONDS, TimeUnit.SECONDS)
 
-        if (!verifySsl) {
-            val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
-                override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
-                override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {}
-                override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-            })
-
-            val sslContext = SSLContext.getInstance("TLS")
-            sslContext.init(null, trustAllCerts, java.security.SecureRandom())
-
-            builder.sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as X509TrustManager)
-            builder.hostnameVerifier { _, _ -> true }
-        }
+        io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.installTrust(
+            builder, verifySsl, pinnedCertSha256, capturedPin
+        )
 
         client = builder.build()
     }

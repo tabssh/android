@@ -107,12 +107,19 @@ class VMwareManagerActivity : AppCompatActivity() {
                     host = profile.host,
                     username = creds.username,
                     password = creds.password,
-                    verifySsl = profile.verifySsl
+                    verifySsl = profile.verifySsl,
+                    pinnedCertSha256 = profile.pinnedCertSha256
                 )
 
                 val authenticated = currentClient?.authenticate() ?: false
 
                 if (authenticated) {
+                    io.github.tabssh.crypto.storage.HypervisorPasswordStore
+                        .persistCapturedPinIfAny(
+                            this@VMwareManagerActivity, profile,
+                            currentClient?.getCapturedCertSha256()
+                        )
+
                     // Detect if vCenter or standalone ESXi
                     val isVCenter = currentClient?.isVCenter() ?: false
                     val serverType = if (isVCenter) "vCenter" else "ESXi"

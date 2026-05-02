@@ -30,7 +30,7 @@ import io.github.tabssh.utils.logging.Logger
         Macro::class,
         io.github.tabssh.storage.database.entities.HypervisorAccount::class
     ],
-    version = 27,
+    version = 28,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -307,7 +307,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     MIGRATION_23_24,
                     MIGRATION_24_25,
                     MIGRATION_25_26,
-                    MIGRATION_26_27
+                    MIGRATION_26_27,
+                    MIGRATION_27_28
                 )
                 .build()
                 INSTANCE = instance
@@ -605,6 +606,22 @@ data class DatabaseStats(
                     "ALTER TABLE hypervisors ADD COLUMN account_id INTEGER"
                 )
                 Logger.i("Database", "Migration 26->27: Added hypervisor_accounts + hypervisors.account_id")
+            }
+        }
+
+        /**
+         * v27 → v28 — Phase 1 hypervisor cert pinning. Adds the
+         * `pinned_cert_sha256` column on `hypervisors`. NULL on every
+         * existing row → next connect with verifySsl=true captures
+         * (TOFU) and persists; subsequent connects enforce match via
+         * HypervisorTrustManagerFactory.
+         */
+        val MIGRATION_27_28 = object : Migration(27, 28) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE hypervisors ADD COLUMN pinned_cert_sha256 TEXT"
+                )
+                Logger.i("Database", "Migration 27->28: Added hypervisors.pinned_cert_sha256")
             }
         }
 

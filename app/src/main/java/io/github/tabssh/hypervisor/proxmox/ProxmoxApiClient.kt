@@ -18,13 +18,19 @@ class ProxmoxApiClient(
     private val username: String,
     private val password: String,
     private val realm: String = "pam",
-    private val verifySsl: Boolean = false
+    private val verifySsl: Boolean = false,
+    private val pinnedCertSha256: String? = null
 ) {
 
     private val baseUrl = "https://$host:$port/api2/json"
     private val client: OkHttpClient
     private var authTicket: String? = null
     private var csrfToken: String? = null
+
+    /** Phase 1 TLS pin — caller reads after authenticate() to persist
+     *  the TOFU capture. Null when verifySsl is false or pin already set. */
+    private val capturedPin = io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.CapturedPin()
+    fun getCapturedCertSha256(): String? = capturedPin.sha256
 
     data class ProxmoxNode(
         val node: String,
@@ -52,21 +58,9 @@ class ProxmoxApiClient(
 
     init {
         val builder = OkHttpClient.Builder()
-        
-        if (!verifySsl){
-            val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
-                override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
-                override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {}
-                override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-            })
-            
-            val sslContext = SSLContext.getInstance("TLS")
-            sslContext.init(null, trustAllCerts, java.security.SecureRandom())
-            
-            builder.sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as X509TrustManager)
-            builder.hostnameVerifier { _, _ -> true }
-        }
-        
+        io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.installTrust(
+            builder, verifySsl, pinnedCertSha256, capturedPin
+        )
         client = builder.build()
     }
 

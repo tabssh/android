@@ -122,6 +122,36 @@ object HypervisorPasswordStore {
     }
 
     /**
+     * Phase 1 cert pinning — TOFU persistence helper. Called by every
+     * hypervisor manager activity right after a successful authenticate()
+     * with the value from `client.getCapturedCertSha256()`. Writes to
+     * the DB only when:
+     *   * the client actually captured a SHA (i.e. verifySsl=true and
+     *     no prior pin), AND
+     *   * the row currently has no pin OR a different pin
+     *     (handles the "user clicked Forget pin and reconnected" path).
+     *
+     * No-op for verifySsl=false connects (capturedSha will be null) and
+     * for connects where the pin already matched (capturedSha is also
+     * null because the trust manager didn't write to it).
+     */
+    suspend fun persistCapturedPinIfAny(
+        context: Context,
+        profile: HypervisorProfile,
+        capturedSha: String?
+    ) = withContext(Dispatchers.IO) {
+        val sha = capturedSha?.takeIf { it.isNotBlank() } ?: return@withContext
+        if (sha.equals(profile.pinnedCertSha256, ignoreCase = true)) return@withContext
+        val app = context.applicationContext as? TabSSHApplication ?: return@withContext
+        try {
+            app.database.hypervisorDao().updatePinnedCertSha256(profile.id, sha)
+            Logger.i(TAG, "TOFU pinned ${profile.name} (id=${profile.id}) → SHA-256:$sha")
+        } catch (e: Exception) {
+            Logger.w(TAG, "Failed to persist captured pin for ${profile.name}", e)
+        }
+    }
+
+    /**
      * Get the current password for this hypervisor. Always tries the
      * Keystore first; falls back to the (legacy) DB column and lazily
      * migrates if the Keystore was empty. Returns `""` if nothing is

@@ -113,12 +113,17 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                     username = creds.username,
                     password = creds.password,
                     realm = creds.realm ?: "pam",
-                    verifySsl = profile.verifySsl
+                    verifySsl = profile.verifySsl,
+                    pinnedCertSha256 = profile.pinnedCertSha256
                 )
-                
+
                 val authenticated = currentClient?.authenticate() ?: false
-                
+
                 if (authenticated) {
+                    HypervisorPasswordStore.persistCapturedPinIfAny(
+                        this@ProxmoxManagerActivity, profile,
+                        currentClient?.getCapturedCertSha256()
+                    )
                     statusText.text = "Connected to ${profile.name}"
                     app.database.hypervisorDao().updateLastConnected(profile.id, System.currentTimeMillis())
                     refreshVMs()
@@ -290,6 +295,7 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                 putExtra(VMConsoleActivity.EXTRA_PASSWORD, creds.password)
                 putExtra(VMConsoleActivity.EXTRA_REALM, creds.realm ?: "pam")
                 putExtra(VMConsoleActivity.EXTRA_VERIFY_SSL, profile.verifySsl)
+                putExtra(VMConsoleActivity.EXTRA_PINNED_CERT_SHA256, profile.pinnedCertSha256)
             }
             startActivity(intent)
 
