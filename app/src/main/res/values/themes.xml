@@ -197,27 +197,69 @@
     </style>
 
     <!--
-        Bulk-edit dialog styles. The "Apply" pattern is: a TextInput
-        on the left (filling weight=1) plus a small switch on the
-        right that turns the field on/off for this bulk edit. Default
-        alpha is dimmed because the row is OFF on dialog open.
+        Bulk-edit dialog styles (rewrite 2026-05-02). Apply semantics
+        moved to value-presence — empty input = no change — so there's
+        no per-row apply switch any more. Sections are MaterialCardView
+        with subtle outline, full-width inputs inside.
     -->
     <style name="BulkEdit" parent="" />
 
-    <style name="BulkEdit.FieldRow">
+    <style name="BulkEdit.Section" parent="Widget.Material3.CardView.Outlined">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginBottom">12dp</item>
+        <item name="cardCornerRadius">12dp</item>
+        <item name="cardElevation">0dp</item>
+        <item name="strokeWidth">1dp</item>
+    </style>
+
+    <style name="BulkEdit.SectionInner">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:padding">16dp</item>
+    </style>
+
+    <style name="BulkEdit.SectionHeader">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:orientation">horizontal</item>
         <item name="android:gravity">center_vertical</item>
         <item name="android:layout_marginBottom">10dp</item>
-        <item name="android:alpha">0.45</item>
     </style>
 
-    <style name="BulkEdit.ApplySwitch" parent="Widget.Material3.CompoundButton.MaterialSwitch">
+    <style name="BulkEdit.SectionIcon">
+        <item name="android:layout_width">18dp</item>
+        <item name="android:layout_height">18dp</item>
+        <item name="android:layout_marginEnd">8dp</item>
+        <item name="tint">?attr/colorPrimary</item>
+        <item name="android:importantForAccessibility">no</item>
+    </style>
+
+    <style name="BulkEdit.SectionTitle">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginStart">12dp</item>
-        <item name="android:contentDescription">Include this field in the bulk edit</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelSmall</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.08</item>
+    </style>
+
+    <style name="BulkEdit.Input" parent="Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginBottom">8dp</item>
+    </style>
+
+    <style name="BulkEdit.Dropdown" parent="Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginBottom">8dp</item>
+    </style>
+
+    <style name="BulkEdit.InputEdit">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
     </style>
 
 </resources>

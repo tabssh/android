@@ -1,44 +1,52 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Tri-state boolean row for the bulk-edit dialog.
+    Bulk-edit tri-state row (rewrite, 2026-05-02).
 
-    Three buttons in a MaterialButtonToggleGroup:
-      • R.id.tri_unchanged  →  "—"   (don't change, default)
-      • R.id.tri_off        →  "Off"
-      • R.id.tri_on         →  "On"
+    Vertical layout so the label never has to fight the segmented control
+    for horizontal space. "Don't change" is the default state and reads
+    as words instead of an em-dash so the meaning is obvious. Off / On
+    are the explicit choices.
 
-    The label (R.id.tri_label) is set programmatically per row
-    (Keep-Alive, Compression, Agent forwarding, Mosh, X11 forwarding).
+    The fragment populates `tri_label` + `tri_icon` per row at bind time.
+    `tri_group` ID is referenced by ConnectionsFragment for state lookup.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="horizontal"
-    android:gravity="center_vertical"
-    android:minHeight="56dp"
-    android:paddingVertical="6dp">
+    android:orientation="vertical"
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp">
 
-    <ImageView
-        android:id="@+id/tri_icon"
-        android:layout_width="20dp"
-        android:layout_height="20dp"
-        android:layout_marginEnd="12dp"
-        android:src="@drawable/ic_settings_general"
-        app:tint="?attr/colorOnSurfaceVariant"
-        android:importantForAccessibility="no" />
-
-    <TextView
-        android:id="@+id/tri_label"
-        android:layout_width="0dp"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:text=""
-        android:textAppearance="?attr/textAppearanceBodyLarge" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="6dp">
+
+        <ImageView
+            android:id="@+id/tri_icon"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_marginEnd="12dp"
+            android:src="@drawable/ic_settings_general"
+            app:tint="?attr/colorOnSurfaceVariant"
+            android:importantForAccessibility="no" />
+
+        <TextView
+            android:id="@+id/tri_label"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text=""
+            android:textColor="?attr/colorOnSurface"
+            android:textAppearance="?attr/textAppearanceBodyLarge" />
+    </LinearLayout>
 
     <com.google.android.material.button.MaterialButtonToggleGroup
         android:id="@+id/tri_group"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         app:singleSelection="true"
         app:selectionRequired="true">
@@ -46,38 +54,43 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/tri_unchanged"
             style="?attr/materialButtonOutlinedStyle"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
+            android:layout_weight="1.4"
             android:layout_height="wrap_content"
-            android:minWidth="44dp"
-            android:minHeight="40dp"
+            android:minHeight="44dp"
             android:insetTop="0dp"
             android:insetBottom="0dp"
-            android:paddingHorizontal="12dp"
-            android:text="—"
-            android:contentDescription="Don't change" />
+            android:paddingHorizontal="8dp"
+            android:textAllCaps="false"
+            android:textAppearance="?attr/textAppearanceLabelMedium"
+            android:text="Don't change" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/tri_off"
             style="?attr/materialButtonOutlinedStyle"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
+            android:layout_weight="1"
             android:layout_height="wrap_content"
-            android:minWidth="44dp"
-            android:minHeight="40dp"
+            android:minHeight="44dp"
             android:insetTop="0dp"
             android:insetBottom="0dp"
-            android:paddingHorizontal="12dp"
+            android:paddingHorizontal="8dp"
+            android:textAllCaps="false"
+            android:textAppearance="?attr/textAppearanceLabelMedium"
             android:text="Off" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/tri_on"
             style="?attr/materialButtonOutlinedStyle"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
+            android:layout_weight="1"
             android:layout_height="wrap_content"
-            android:minWidth="44dp"
-            android:minHeight="40dp"
+            android:minHeight="44dp"
             android:insetTop="0dp"
             android:insetBottom="0dp"
-            android:paddingHorizontal="12dp"
+            android:paddingHorizontal="8dp"
+            android:textAllCaps="false"
+            android:textAppearance="?attr/textAppearanceLabelMedium"
             android:text="On" />
 
     </com.google.android.material.button.MaterialButtonToggleGroup>

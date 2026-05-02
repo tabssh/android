@@ -616,26 +616,21 @@ class ConnectionsFragment : Fragment() {
     }
 
     /**
-     * Show bulk edit dialog with checkboxes for each field
-     */
-    /**
-     * Polished bulk-edit dialog (rewrite, 2026-04-29).
+     * Bulk-edit dialog (rewrite, 2026-05-02).
      *
-     * The layout is `dialog_bulk_edit.xml`; tri-state bool rows include
-     * `include_bulk_edit_tristate.xml`. Visual rules:
-     *   • Each field row dims to alpha=0.45 when its "Apply" switch is OFF
-     *     and brightens to 1.0 when ON. The user can flip the switch
-     *     manually or just edit the field — a TextWatcher / dropdown
-     *     listener auto-flips it ON.
-     *   • Bool rows (Keep-Alive, Compression, Agent fwd, X11, Mosh) use a
-     *     three-button MaterialButtonToggleGroup — "—" / "Off" / "On".
-     *     "—" is the default and means "leave each connection's value
-     *     unchanged"; this replaces the old checkbox+switch tri-state
-     *     dance, which was easy to misread.
-     *   • The positive button text is rebuilt live as the user makes
-     *     changes: "Apply N changes to M connections". Disabled when
-     *     N == 0 so misclicks can't run a no-op bulk write.
-     *   • Reset button clears every field row back to "no change".
+     * Layout (`dialog_bulk_edit.xml`) is now four MaterialCardView
+     * sections — Connection / Behavior / Terminal / Advanced — each with
+     * full-width inputs. The per-field "Apply" switch is gone; apply is
+     * driven by value-presence:
+     *   • Text fields: empty → ignored. Non-empty → applied.
+     *   • Dropdowns: blank text → ignored. "(Clear …)" item → write null.
+     *     Any other selection → applied.
+     *   • Tri-state booleans (`include_bulk_edit_tristate.xml`):
+     *     "Don't change" (default) / "Off" / "On".
+     *
+     * The header shows a live "N changes will apply to M connections"
+     * count and disables Apply when N == 0. Reset zeroes every input
+     * back to its default ignored state.
      */
     private fun showBulkEditDialog(connections: List<ConnectionProfile>) {
         if (connections.isEmpty()) {
@@ -652,72 +647,9 @@ class ConnectionsFragment : Fragment() {
         val buttonResetAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.button_reset_all)
         textSelectedCount.text = "${connections.size} connection${if (connections.size == 1) "" else "s"} selected"
 
-        // ── Switch + row pairs (text/dropdown fields) ──
-        // Each pair: the row to fade, the switch to listen on.
-        data class FieldRow(
-            val row: View,
-            val switch: com.google.android.material.materialswitch.MaterialSwitch
-        )
-
-        data class TriRow(
-            val view: View,
-            val getState: () -> TriState
-        )
-
-        // Forward-declared lambda — the real implementation is assigned
-        // after the field/tri-row collections are populated. Callbacks
-        // wired during `bind()` / `wireTriState()` capture this var by
-        // reference, so they see the final body even though it's defined
-        // later in the function body.
+        // Forward-declared so all the listeners we wire below close over
+        // the final body. Assigned just before show().
         var refreshApplySummary: () -> Unit = {}
-
-        val fieldRows = mutableListOf<FieldRow>()
-        val triRows = mutableListOf<TriRow>()
-
-        fun bind(rowId: Int, switchId: Int): FieldRow {
-            val row = dialogView.findViewById<View>(rowId)
-            val sw = dialogView.findViewById<com.google.android.material.materialswitch.MaterialSwitch>(switchId)
-            sw.setOnCheckedChangeListener { _, checked ->
-                row.alpha = if (checked) 1f else 0.45f
-                refreshApplySummary()
-            }
-            return FieldRow(row, sw).also { fieldRows.add(it) }
-        }
-
-        val username = bind(R.id.row_username, R.id.check_username)
-        val port = bind(R.id.row_port, R.id.check_port)
-        val group = bind(R.id.row_group, R.id.check_group)
-        val identity = bind(R.id.row_identity, R.id.check_identity)
-        val timeout = bind(R.id.row_timeout, R.id.check_timeout)
-        val terminalType = bind(R.id.row_terminal_type, R.id.check_terminal_type)
-        val colorTag = bind(R.id.row_color_tag, R.id.check_color_tag)
-        val postConnect = bind(R.id.row_post_connect, R.id.check_post_connect)
-
-        // ── Tri-state bool rows ──
-        // wireTriState() takes the included row, sets the icon/label,
-        // and exposes a getter that returns the current selection
-        // (UNCHANGED / OFF / ON) for the apply step.
-        fun wireTriState(rowId: Int, label: String, iconRes: Int): TriRow {
-            val rowView = dialogView.findViewById<View>(rowId)
-            rowView.findViewById<TextView>(R.id.tri_label).text = label
-            rowView.findViewById<android.widget.ImageView>(R.id.tri_icon)
-                .setImageResource(iconRes)
-            val triGroup = rowView.findViewById<com.google.android.material.button.MaterialButtonToggleGroup>(R.id.tri_group)
-            triGroup.check(R.id.tri_unchanged)
-            triGroup.addOnButtonCheckedListener { _, _, _ -> refreshApplySummary() }
-            return TriRow(rowView) {
-                when (triGroup.checkedButtonId) {
-                    R.id.tri_off -> TriState.OFF
-                    R.id.tri_on -> TriState.ON
-                    else -> TriState.UNCHANGED
-                }
-            }.also { triRows.add(it) }
-        }
-
-        val compression = wireTriState(R.id.row_compression, "Compression", R.drawable.ic_file_archive)
-        val agentFwd = wireTriState(R.id.row_agent_fwd, "Agent forwarding", R.drawable.ic_forward)
-        val x11 = wireTriState(R.id.row_x11, "X11 forwarding", R.drawable.ic_interface)
-        val mosh = wireTriState(R.id.row_mosh, "Mosh", R.drawable.ic_flash)
 
         // ── Inputs ──
         val editUsername = dialogView.findViewById<TextInputEditText>(R.id.edit_username)
@@ -729,42 +661,70 @@ class ConnectionsFragment : Fragment() {
         val dropdownColorTag = dialogView.findViewById<AutoCompleteTextView>(R.id.dropdown_color_tag)
         val editPostConnect = dialogView.findViewById<TextInputEditText>(R.id.edit_post_connect)
 
-        // Auto-flip "Apply" switch ON when the user actually changes a value.
-        // Using afterTextChanged (not focus) so just tabbing through fields
-        // doesn't enable everything by accident.
-        fun autoEnableOnEdit(view: TextInputEditText, sw: com.google.android.material.materialswitch.MaterialSwitch) {
-            view.addTextChangedListener(object : android.text.TextWatcher {
+        val textInputs = listOf(editUsername, editPort, editTimeout, editPostConnect)
+        val dropdowns = listOf(dropdownGroup, dropdownIdentity, dropdownTerminalType, dropdownColorTag)
+
+        // Wire each input so the live summary updates on every change.
+        textInputs.forEach { input ->
+            input.addTextChangedListener(object : android.text.TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-                override fun afterTextChanged(s: android.text.Editable?) {
-                    if (!sw.isChecked && view.hasFocus()) sw.isChecked = true
-                }
+                override fun afterTextChanged(s: android.text.Editable?) { refreshApplySummary() }
             })
         }
-        autoEnableOnEdit(editUsername, username.switch)
-        autoEnableOnEdit(editPort, port.switch)
-        autoEnableOnEdit(editTimeout, timeout.switch)
-        autoEnableOnEdit(editPostConnect, postConnect.switch)
-        dropdownGroup.setOnItemClickListener { _, _, _, _ -> group.switch.isChecked = true }
-        dropdownIdentity.setOnItemClickListener { _, _, _, _ -> identity.switch.isChecked = true }
-        dropdownTerminalType.setOnItemClickListener { _, _, _, _ -> terminalType.switch.isChecked = true }
-        dropdownColorTag.setOnItemClickListener { _, _, _, _ -> colorTag.switch.isChecked = true }
+        // AutoCompleteTextView reports text-watcher changes too, but only
+        // for keystrokes — programmatic setText(_, false) doesn't notify.
+        // The dropdown itemClickListener fires on selection, so we hook
+        // both for symmetry.
+        dropdowns.forEach { dd ->
+            dd.addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                override fun afterTextChanged(s: android.text.Editable?) { refreshApplySummary() }
+            })
+            dd.setOnItemClickListener { _, _, _, _ -> refreshApplySummary() }
+        }
 
-        // Terminal type dropdown
+        // ── Tri-state bool rows ──
+        // Each row: set its label + icon, default to "Don't change",
+        // notify summary on every selection change.
+        data class TriRow(val getState: () -> TriState)
+
+        fun wireTriState(rowId: Int, label: String, iconRes: Int): TriRow {
+            val rowView = dialogView.findViewById<View>(rowId)
+            rowView.findViewById<TextView>(R.id.tri_label).text = label
+            rowView.findViewById<android.widget.ImageView>(R.id.tri_icon)
+                .setImageResource(iconRes)
+            val triGroup = rowView.findViewById<com.google.android.material.button.MaterialButtonToggleGroup>(R.id.tri_group)
+            triGroup.check(R.id.tri_unchanged)
+            triGroup.addOnButtonCheckedListener { _, _, _ -> refreshApplySummary() }
+            return TriRow {
+                when (triGroup.checkedButtonId) {
+                    R.id.tri_off -> TriState.OFF
+                    R.id.tri_on -> TriState.ON
+                    else -> TriState.UNCHANGED
+                }
+            }
+        }
+
+        val compression = wireTriState(R.id.row_compression, "Compression", R.drawable.ic_file_archive)
+        val agentFwd = wireTriState(R.id.row_agent_fwd, "Agent forwarding", R.drawable.ic_forward)
+        val x11 = wireTriState(R.id.row_x11, "X11 forwarding", R.drawable.ic_interface)
+        val mosh = wireTriState(R.id.row_mosh, "Mosh", R.drawable.ic_flash)
+
+        // ── Dropdown options ──
         val terminalTypeOptions = arrayOf("xterm-256color", "xterm", "vt100", "vt220", "screen-256color", "tmux-256color")
         dropdownTerminalType.setAdapter(ArrayAdapter(ctx, android.R.layout.simple_dropdown_item_1line, terminalTypeOptions))
 
-        // Color tag dropdown — labels map 1:1 to ConnectionProfile.colorTag indices.
+        // colorTag indices map 1:1 to entry order — index 0 = "(none)" = no tag.
         val colorTagOptions = arrayOf("(none)", "Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Pink")
         dropdownColorTag.setAdapter(ArrayAdapter(ctx, android.R.layout.simple_dropdown_item_1line, colorTagOptions))
 
-        // Group dropdown
         val groupOptions = mutableListOf("(Clear group assignment)")
         groupOptions.addAll(allGroups.map { it.name })
         dropdownGroup.setAdapter(ArrayAdapter(ctx, android.R.layout.simple_dropdown_item_1line, groupOptions))
 
-        // Identity dropdown — populated async
-        val identityOptions = mutableListOf("(Clear identity)")
+        // Identity dropdown — populated async from Room flow.
         lifecycleScope.launch {
             try {
                 app.database.identityDao().getAllIdentities().collect { identities ->
@@ -779,37 +739,41 @@ class ConnectionsFragment : Fragment() {
             }
         }
 
-        // ── Live "Apply N changes to M connections" updates ──
-        // The dialog reference can't be set until builder.create() runs,
-        // so we close over a nullable holder that's assigned right before
-        // show().
+        // ── Apply summary (live) ──
+        // Counts each field that would change. A change counts when:
+        //  - text input is non-blank (text fields with parseable ints
+        //    additionally need to parse — guard inside),
+        //  - dropdown text is non-blank,
+        //  - tri-state is not UNCHANGED.
         var dialogRef: AlertDialog? = null
         refreshApplySummary = {
-            val triCount = triRows.count { it.getState() != TriState.UNCHANGED }
-            val switchCount = fieldRows.count { it.switch.isChecked }
-            val total = triCount + switchCount
-            textApplySummary.text = if (total == 0) {
-                "No changes selected — flip a switch or pick a value"
+            var n = 0
+            if (!editUsername.text.isNullOrBlank()) n++
+            if (editPort.text?.toString()?.toIntOrNull() != null) n++
+            if (!dropdownGroup.text.isNullOrBlank()) n++
+            if (!dropdownIdentity.text.isNullOrBlank()) n++
+            if (editTimeout.text?.toString()?.toIntOrNull() != null) n++
+            if (!dropdownTerminalType.text.isNullOrBlank()) n++
+            if (!dropdownColorTag.text.isNullOrBlank()) n++
+            if (!editPostConnect.text.isNullOrBlank()) n++
+            if (compression.getState() != TriState.UNCHANGED) n++
+            if (agentFwd.getState() != TriState.UNCHANGED) n++
+            if (x11.getState() != TriState.UNCHANGED) n++
+            if (mosh.getState() != TriState.UNCHANGED) n++
+
+            textApplySummary.text = if (n == 0) {
+                "No changes yet — fill in any field below to enqueue it"
             } else {
-                "$total field${if (total == 1) "" else "s"} will change on ${connections.size} connection${if (connections.size == 1) "" else "s"}"
+                "$n field${if (n == 1) "" else "s"} will change on ${connections.size} connection${if (connections.size == 1) "" else "s"}"
             }
             dialogRef?.getButton(AlertDialog.BUTTON_POSITIVE)?.let { btn ->
-                btn.isEnabled = total > 0
-                btn.text = if (total == 0) "Apply" else "Apply ($total)"
+                btn.isEnabled = n > 0
+                btn.text = if (n == 0) "Apply" else "Apply ($n)"
             }
         }
 
         // ── Reset all ──
         buttonResetAll.setOnClickListener {
-            listOf(username, port, group, identity, timeout, terminalType, colorTag, postConnect)
-                .forEach { it.switch.isChecked = false }
-            listOf(R.id.row_compression, R.id.row_agent_fwd, R.id.row_x11, R.id.row_mosh)
-                .forEach { id ->
-                    dialogView.findViewById<View>(id)
-                        .findViewById<com.google.android.material.button.MaterialButtonToggleGroup>(R.id.tri_group)
-                        .check(R.id.tri_unchanged)
-                }
-            // Clear the values too — Reset means "wipe my picks".
             editUsername.text = null
             editPort.text = null
             editTimeout.text = null
@@ -818,6 +782,12 @@ class ConnectionsFragment : Fragment() {
             dropdownIdentity.setText("", false)
             dropdownTerminalType.setText("", false)
             dropdownColorTag.setText("", false)
+            listOf(R.id.row_compression, R.id.row_agent_fwd, R.id.row_x11, R.id.row_mosh)
+                .forEach { id ->
+                    dialogView.findViewById<View>(id)
+                        .findViewById<com.google.android.material.button.MaterialButtonToggleGroup>(R.id.tri_group)
+                        .check(R.id.tri_unchanged)
+                }
             refreshApplySummary()
         }
 
@@ -827,34 +797,24 @@ class ConnectionsFragment : Fragment() {
             .setPositiveButton("Apply") { _, _ ->
                 applyBulkEdit(
                     connections = connections,
-                    applyUsername = username.switch.isChecked,
-                    newUsername = editUsername.text?.toString() ?: "",
-                    applyPort = port.switch.isChecked,
-                    newPort = editPort.text?.toString()?.toIntOrNull() ?: 22,
-                    applyGroup = group.switch.isChecked,
-                    newGroupSelection = dropdownGroup.text?.toString(),
-                    applyIdentity = identity.switch.isChecked,
-                    newIdentitySelection = dropdownIdentity.text?.toString(),
-                    applyTimeout = timeout.switch.isChecked,
-                    newTimeout = editTimeout.text?.toString()?.toIntOrNull() ?: 15,
+                    newUsername = editUsername.text?.toString()?.takeIf { it.isNotBlank() },
+                    newPort = editPort.text?.toString()?.toIntOrNull(),
+                    newGroupSelection = dropdownGroup.text?.toString()?.takeIf { it.isNotBlank() },
+                    newIdentitySelection = dropdownIdentity.text?.toString()?.takeIf { it.isNotBlank() },
+                    newTimeout = editTimeout.text?.toString()?.toIntOrNull(),
                     compression = compression.getState(),
-                    applyTerminalType = terminalType.switch.isChecked,
-                    newTerminalType = dropdownTerminalType.text?.toString()
-                        ?.takeIf { it.isNotBlank() } ?: "xterm-256color",
-                    applyColorTag = colorTag.switch.isChecked,
-                    newColorTag = colorTagOptions.indexOf(dropdownColorTag.text?.toString())
-                        .coerceAtLeast(0),
+                    newTerminalType = dropdownTerminalType.text?.toString()?.takeIf { it.isNotBlank() },
+                    newColorTagSelection = dropdownColorTag.text?.toString()?.takeIf { it.isNotBlank() },
+                    colorTagOptions = colorTagOptions,
                     x11 = x11.getState(),
                     mosh = mosh.getState(),
                     agentFwd = agentFwd.getState(),
-                    applyPostConnect = postConnect.switch.isChecked,
-                    newPostConnect = editPostConnect.text?.toString()
+                    newPostConnect = editPostConnect.text?.toString()?.takeIf { it.isNotBlank() }
                 )
             }
             .setNegativeButton("Cancel", null)
             .create()
         dialogRef.show()
-        // Initial state: all rows OFF, summary disabled.
         refreshApplySummary()
     }
 
@@ -862,31 +822,29 @@ class ConnectionsFragment : Fragment() {
     private enum class TriState { UNCHANGED, OFF, ON }
 
     /**
-     * Apply bulk edits to connections — only writes fields the user
-     * actually opted into. Bool fields use TriState: UNCHANGED leaves
-     * each connection's value alone, OFF/ON sets it explicitly.
+     * Apply bulk edits — value-presence semantics. Each text/dropdown
+     * argument is null when the user left that field empty, in which
+     * case the connection's existing value is left alone. Tri-state
+     * booleans are explicit: UNCHANGED skips, OFF/ON sets.
+     *
+     * For dropdowns, a "(Clear …)" selection from the user is forwarded
+     * here as a non-null string starting with "(Clear" — we resolve that
+     * to writing null on the entity (explicit clear).
      */
     private fun applyBulkEdit(
         connections: List<ConnectionProfile>,
-        applyUsername: Boolean,
-        newUsername: String,
-        applyPort: Boolean,
-        newPort: Int,
-        applyGroup: Boolean,
+        newUsername: String?,
+        newPort: Int?,
         newGroupSelection: String?,
-        applyIdentity: Boolean,
         newIdentitySelection: String?,
-        applyTimeout: Boolean,
-        newTimeout: Int,
+        newTimeout: Int?,
         compression: TriState,
-        applyTerminalType: Boolean,
-        newTerminalType: String,
-        applyColorTag: Boolean,
-        newColorTag: Int,
+        newTerminalType: String?,
+        newColorTagSelection: String?,
+        colorTagOptions: Array<String>,
         x11: TriState,
         mosh: TriState,
         agentFwd: TriState,
-        applyPostConnect: Boolean,
         newPostConnect: String?
     ) {
         lifecycleScope.launch {
@@ -894,19 +852,18 @@ class ConnectionsFragment : Fragment() {
                 var updatedCount = 0
                 val changes = mutableListOf<String>()
 
-                // Build list of what will change
-                if (applyUsername) changes.add("username")
-                if (applyPort) changes.add("port")
-                if (applyGroup) changes.add("group")
-                if (applyIdentity) changes.add("identity")
-                if (applyTimeout) changes.add("timeout")
+                if (newUsername != null) changes.add("username")
+                if (newPort != null) changes.add("port")
+                if (newGroupSelection != null) changes.add("group")
+                if (newIdentitySelection != null) changes.add("identity")
+                if (newTimeout != null) changes.add("timeout")
                 if (compression != TriState.UNCHANGED) changes.add("compression")
-                if (applyTerminalType) changes.add("terminal type")
-                if (applyColorTag) changes.add("color tag")
+                if (newTerminalType != null) changes.add("terminal type")
+                if (newColorTagSelection != null) changes.add("color tag")
                 if (x11 != TriState.UNCHANGED) changes.add("X11 forwarding")
                 if (mosh != TriState.UNCHANGED) changes.add("Mosh")
                 if (agentFwd != TriState.UNCHANGED) changes.add("agent forwarding")
-                if (applyPostConnect) changes.add("post-connect script")
+                if (newPostConnect != null) changes.add("post-connect script")
 
                 if (changes.isEmpty()) {
                     android.widget.Toast.makeText(requireContext(), "No changes selected", android.widget.Toast.LENGTH_SHORT).show()
@@ -916,76 +873,65 @@ class ConnectionsFragment : Fragment() {
                 Logger.d("ConnectionsFragment", "Bulk edit: applying ${changes.joinToString(", ")} to ${connections.size} connections")
 
                 for (connection in connections) {
-                    var updatedConnection = connection
+                    var updated = connection
 
-                    // Apply username if checked
-                    if (applyUsername) {
-                        updatedConnection = updatedConnection.copy(username = newUsername)
+                    if (newUsername != null) {
+                        updated = updated.copy(username = newUsername)
                     }
-
-                    // Apply port if checked
-                    if (applyPort) {
-                        updatedConnection = updatedConnection.copy(port = newPort)
+                    if (newPort != null) {
+                        updated = updated.copy(port = newPort)
                     }
-
-                    // Apply group if checked
-                    if (applyGroup) {
-                        val newGroupId = when {
-                            newGroupSelection.isNullOrEmpty() -> null
-                            newGroupSelection.startsWith("(Clear") -> null
-                            else -> allGroups.find { it.name == newGroupSelection }?.id
+                    if (newGroupSelection != null) {
+                        val newGroupId = if (newGroupSelection.startsWith("(Clear")) {
+                            null
+                        } else {
+                            allGroups.find { it.name == newGroupSelection }?.id
                         }
-                        updatedConnection = updatedConnection.copy(groupId = newGroupId)
+                        updated = updated.copy(groupId = newGroupId)
                     }
-
-                    // Apply identity if checked
-                    if (applyIdentity) {
-                        val newIdentityId = when {
-                            newIdentitySelection.isNullOrEmpty() -> null
-                            newIdentitySelection.startsWith("(Clear") -> null
-                            else -> allIdentities.find { it.name == newIdentitySelection }?.id
+                    if (newIdentitySelection != null) {
+                        val newIdentityId = if (newIdentitySelection.startsWith("(Clear")) {
+                            null
+                        } else {
+                            allIdentities.find { it.name == newIdentitySelection }?.id
                         }
-                        updatedConnection = updatedConnection.copy(identityId = newIdentityId)
+                        updated = updated.copy(identityId = newIdentityId)
                     }
-
-                    // Apply timeout if checked
-                    if (applyTimeout) {
-                        updatedConnection = updatedConnection.copy(connectTimeout = newTimeout)
+                    if (newTimeout != null) {
+                        updated = updated.copy(connectTimeout = newTimeout)
                     }
-
                     if (compression != TriState.UNCHANGED) {
-                        updatedConnection = updatedConnection.copy(compression = compression == TriState.ON)
+                        updated = updated.copy(compression = compression == TriState.ON)
                     }
-
-                    if (applyTerminalType) {
-                        updatedConnection = updatedConnection.copy(terminalType = newTerminalType)
+                    if (newTerminalType != null) {
+                        updated = updated.copy(terminalType = newTerminalType)
                     }
-                    if (applyColorTag) {
-                        updatedConnection = updatedConnection.copy(colorTag = newColorTag)
+                    if (newColorTagSelection != null) {
+                        // colorTagOptions index maps 1:1 to ConnectionProfile.colorTag.
+                        // Index 0 = "(none)" which is correctly stored as 0 (no tag).
+                        val idx = colorTagOptions.indexOf(newColorTagSelection).coerceAtLeast(0)
+                        updated = updated.copy(colorTag = idx)
                     }
                     if (x11 != TriState.UNCHANGED) {
-                        updatedConnection = updatedConnection.copy(x11Forwarding = x11 == TriState.ON)
+                        updated = updated.copy(x11Forwarding = x11 == TriState.ON)
                     }
                     if (mosh != TriState.UNCHANGED) {
-                        updatedConnection = updatedConnection.copy(useMosh = mosh == TriState.ON)
+                        updated = updated.copy(useMosh = mosh == TriState.ON)
                     }
                     if (agentFwd != TriState.UNCHANGED) {
-                        updatedConnection = updatedConnection.copy(agentForwarding = agentFwd == TriState.ON)
+                        updated = updated.copy(agentForwarding = agentFwd == TriState.ON)
                     }
-                    if (applyPostConnect) {
-                        // null/blank → clear; otherwise set verbatim.
-                        val script = newPostConnect?.takeIf { it.isNotBlank() }
-                        updatedConnection = updatedConnection.copy(postConnectScript = script)
+                    if (newPostConnect != null) {
+                        updated = updated.copy(postConnectScript = newPostConnect)
                     }
 
-                    app.database.connectionDao().updateConnection(updatedConnection)
+                    app.database.connectionDao().updateConnection(updated)
                     updatedCount++
                 }
 
                 Logger.d("ConnectionsFragment", "Bulk edit completed: $updatedCount connections updated (${changes.joinToString(", ")})")
                 android.widget.Toast.makeText(requireContext(), "Updated $updatedCount connections: ${changes.joinToString(", ")}", android.widget.Toast.LENGTH_SHORT).show()
 
-                // Exit selection mode if active
                 if (isSelectionMode) {
                     exitSelectionMode()
                 }
