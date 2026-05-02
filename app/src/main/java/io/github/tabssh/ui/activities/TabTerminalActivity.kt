@@ -766,28 +766,49 @@ class TabTerminalActivity : AppCompatActivity() {
             "Close this tab"
         )
 
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Terminal")
-            .setItems(items) { _, which ->
-                when (which) {
-                    0  -> pasteFromClipboard()
-                    1  -> copyTerminalScreen()
-                    2  -> showFindDialog()
-                    3  -> showSendTextDialog()
-                    4  -> sendBytesToActiveTab(byteArrayOf(0x03))   // ^C
-                    5  -> sendBytesToActiveTab(byteArrayOf(0x04))   // ^D
-                    6  -> sendBytesToActiveTab(byteArrayOf(0x1A))   // ^Z
-                    7  -> sendBytesToActiveTab(byteArrayOf(0x1B))   // ESC
-                    8  -> showSnippetsPickerForActiveTab()
-                    9  -> showFontSizeDialog()
-                    10 -> toggleKeyboard()
-                    11 -> toggleCustomKeyboard()
-                    12 -> shareSession()
-                    13 -> closeActiveTabConfirmed()
-                }
+        Logger.d("TabTerminalActivity", "showTextContextMenu — building dialog")
+        // Defer show() to the next main-thread tick so the in-flight long-press
+        // touch sequence finishes dispatching before the dialog window appears.
+        // Otherwise the ACTION_UP from the user's finger-lift can hit the
+        // freshly-shown dialog at a coord outside its bounds and instantly
+        // dismiss it via tap-outside-cancel — which is exactly the symptom
+        // the user reported (long-press logs fire but no menu visible).
+        // setCanceledOnTouchOutside(false) is belt-and-suspenders.
+        binding.root.post {
+            if (isFinishing || isDestroyed) {
+                Logger.w("TabTerminalActivity", "Activity gone — skipping context menu")
+                return@post
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+            try {
+                val dlg = androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("Terminal")
+                    .setItems(items) { _, which ->
+                        when (which) {
+                            0  -> pasteFromClipboard()
+                            1  -> copyTerminalScreen()
+                            2  -> showFindDialog()
+                            3  -> showSendTextDialog()
+                            4  -> sendBytesToActiveTab(byteArrayOf(0x03))   // ^C
+                            5  -> sendBytesToActiveTab(byteArrayOf(0x04))   // ^D
+                            6  -> sendBytesToActiveTab(byteArrayOf(0x1A))   // ^Z
+                            7  -> sendBytesToActiveTab(byteArrayOf(0x1B))   // ESC
+                            8  -> showSnippetsPickerForActiveTab()
+                            9  -> showFontSizeDialog()
+                            10 -> toggleKeyboard()
+                            11 -> toggleCustomKeyboard()
+                            12 -> shareSession()
+                            13 -> closeActiveTabConfirmed()
+                        }
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .create()
+                dlg.setCanceledOnTouchOutside(false)
+                dlg.show()
+                Logger.d("TabTerminalActivity", "Context menu dialog shown")
+            } catch (e: Exception) {
+                Logger.e("TabTerminalActivity", "Failed to show context menu", e)
+            }
+        }
     }
 
     private fun sendBytesToActiveTab(bytes: ByteArray) {

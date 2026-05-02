@@ -67,6 +67,7 @@
         android:theme="@style/Theme.TabSSH"
         android:hardwareAccelerated="true"
         android:largeHeap="true"
+        android:enableOnBackInvokedCallback="true"
         tools:targetApi="31">
 
         <!-- Main activity - Connection list -->
