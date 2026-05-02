@@ -52,6 +52,12 @@ class VMConsoleActivity : AppCompatActivity() {
         const val EXTRA_PASSWORD = "password"
         const val EXTRA_REALM = "realm" // Proxmox realm
         const val EXTRA_IS_XEN_ORCHESTRA = "is_xen_orchestra"
+        // Per-host TLS verification toggle (matches HypervisorProfile.verifySsl).
+        // Previously this activity hardcoded `false` for every API client +
+        // WebSocket it constructed, silently bypassing whatever the user
+        // had set in HypervisorEditActivity. The console flow now honours
+        // the per-host setting.
+        const val EXTRA_VERIFY_SSL = "verify_ssl"
 
         // Hypervisor type values
         const val TYPE_PROXMOX = "proxmox"
@@ -311,9 +317,10 @@ class VMConsoleActivity : AppCompatActivity() {
         val realm = intent.getStringExtra(EXTRA_REALM) ?: "pam"
         val node = intent.getStringExtra(EXTRA_VM_NODE) ?: return null
         val vmType = intent.getStringExtra(EXTRA_VM_TYPE) ?: "qemu"
+        val verifySsl = intent.getBooleanExtra(EXTRA_VERIFY_SSL, false)
 
         return withContext(Dispatchers.IO) {
-            val client = ProxmoxApiClient(host, port, username, password, realm, false)
+            val client = ProxmoxApiClient(host, port, username, password, realm, verifySsl)
             if (!client.authenticate()) {
                 withContext(Dispatchers.Main) {
                     showError("Authentication failed")
@@ -327,6 +334,7 @@ class VMConsoleActivity : AppCompatActivity() {
                 vmid = vmId.toIntOrNull() ?: return@withContext null,
                 vmName = vmName,
                 type = vmType,
+                verifySsl = verifySsl,
                 listener = createConsoleListener()
             )
         }
@@ -338,9 +346,10 @@ class VMConsoleActivity : AppCompatActivity() {
         val username = intent.getStringExtra(EXTRA_USERNAME) ?: return null
         val password = intent.getStringExtra(EXTRA_PASSWORD) ?: return null
         val vmRef = intent.getStringExtra(EXTRA_VM_REF)
+        val verifySsl = intent.getBooleanExtra(EXTRA_VERIFY_SSL, false)
 
         return withContext(Dispatchers.IO) {
-            val client = XCPngApiClient(host, port, username, password, false)
+            val client = XCPngApiClient(host, port, username, password, verifySsl)
             if (!client.authenticate()) {
                 withContext(Dispatchers.Main) {
                     showError("Authentication failed")
@@ -355,6 +364,7 @@ class VMConsoleActivity : AppCompatActivity() {
                 client = client,
                 vmRef = ref,
                 vmName = vmName,
+                verifySsl = verifySsl,
                 listener = createConsoleListener()
             )
         }
@@ -365,9 +375,10 @@ class VMConsoleActivity : AppCompatActivity() {
         val port = intent.getIntExtra(EXTRA_PORT, 443)
         val username = intent.getStringExtra(EXTRA_USERNAME) ?: return null
         val password = intent.getStringExtra(EXTRA_PASSWORD) ?: return null
+        val verifySsl = intent.getBooleanExtra(EXTRA_VERIFY_SSL, false)
 
         return withContext(Dispatchers.IO) {
-            val client = XenOrchestraApiClient(host, port, username, password, false)
+            val client = XenOrchestraApiClient(host, port, username, password, verifySsl)
             if (!client.authenticate()) {
                 withContext(Dispatchers.Main) {
                     showError("Authentication failed")
@@ -379,6 +390,7 @@ class VMConsoleActivity : AppCompatActivity() {
                 client = client,
                 vmId = vmId,
                 vmName = vmName,
+                verifySsl = verifySsl,
                 listener = createConsoleListener()
             )
         }

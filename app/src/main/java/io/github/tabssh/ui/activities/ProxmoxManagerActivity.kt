@@ -285,6 +285,7 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                 putExtra(VMConsoleActivity.EXTRA_USERNAME, profile.username)
                 putExtra(VMConsoleActivity.EXTRA_PASSWORD, password)
                 putExtra(VMConsoleActivity.EXTRA_REALM, profile.realm ?: "pam")
+                putExtra(VMConsoleActivity.EXTRA_VERIFY_SSL, profile.verifySsl)
             }
             startActivity(intent)
 

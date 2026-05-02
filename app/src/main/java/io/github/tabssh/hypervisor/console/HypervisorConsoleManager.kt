@@ -57,6 +57,7 @@ class HypervisorConsoleManager {
         vmid: Int,
         vmName: String,
         type: String = "qemu", // "qemu" or "lxc"
+        verifySsl: Boolean = false,
         listener: ConsoleEventListener? = null
     ): ConsoleConnection? = withContext(Dispatchers.IO) {
         consoleListener = listener
@@ -74,9 +75,11 @@ class HypervisorConsoleManager {
 
             Logger.d(TAG, "Got termproxy ticket, connecting to WebSocket")
 
-            // Create WebSocket client with Proxmox termproxy protocol
+            // Create WebSocket client with Proxmox termproxy protocol.
+            // `verifySsl` flows through from the per-host setting; the
+            // earlier hardcoded `false` here silently bypassed it.
             webSocketClient = ConsoleWebSocketClient(
-                verifySsl = false,
+                verifySsl = verifySsl,
                 protocol = ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_TERM
             )
 
@@ -156,6 +159,7 @@ class HypervisorConsoleManager {
         client: XCPngApiClient,
         vmRef: String,
         vmName: String,
+        verifySsl: Boolean = false,
         listener: ConsoleEventListener? = null
     ): ConsoleConnection? = withContext(Dispatchers.IO) {
         consoleListener = listener
@@ -173,9 +177,10 @@ class HypervisorConsoleManager {
 
             Logger.d(TAG, "Got console URL: $consoleUrl")
 
-            // Create WebSocket client with XCP-ng protocol (raw bytes)
+            // Create WebSocket client with XCP-ng protocol (raw bytes).
+            // `verifySsl` from the caller; previously hardcoded `false`.
             webSocketClient = ConsoleWebSocketClient(
-                verifySsl = false,
+                verifySsl = verifySsl,
                 protocol = ConsoleWebSocketClient.ConsoleProtocol.XCPNG
             )
             val xcpClient = webSocketClient ?: run {
@@ -237,6 +242,7 @@ class HypervisorConsoleManager {
         client: XenOrchestraApiClient,
         vmId: String,
         vmName: String,
+        verifySsl: Boolean = false,
         listener: ConsoleEventListener? = null
     ): ConsoleConnection? = withContext(Dispatchers.IO) {
         consoleListener = listener
@@ -254,9 +260,10 @@ class HypervisorConsoleManager {
 
             Logger.d(TAG, "Got XO console URL: $consoleUrl")
 
-            // Create WebSocket client with XO protocol (raw bytes)
+            // Create WebSocket client with XO protocol (raw bytes).
+            // `verifySsl` from the caller; previously hardcoded `false`.
             webSocketClient = ConsoleWebSocketClient(
-                verifySsl = false,
+                verifySsl = verifySsl,
                 protocol = ConsoleWebSocketClient.ConsoleProtocol.XO
             )
             val xoClient = webSocketClient ?: run {
