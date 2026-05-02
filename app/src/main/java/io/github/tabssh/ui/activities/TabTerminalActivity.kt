@@ -2425,17 +2425,22 @@ class TabTerminalActivity : AppCompatActivity() {
             }
         }
 
-        // Handle keyboard shortcuts
+        // App-level shortcuts. Bare Ctrl+letter is reserved for the
+        // remote shell (bash/vim/tmux all treat ^C / ^D / ^W / ^R / ^T
+        // / ^K / ^J as critical control codes), so app commands MUST use
+        // Ctrl+Shift+letter. Otherwise we hijack things like
+        // ^W (unix-word-rubout) and ^R (history-search-backward) and
+        // the user's typed input dies inside our app instead of going
+        // to the shell — what they perceive as "the connection got
+        // killed when I hit Ctrl+W".
+        //
+        // Tab navigation (Ctrl+TAB / Ctrl+Shift+TAB / Ctrl+1..9) is
+        // kept on bare Ctrl: every browser, terminal multiplexer, and
+        // IDE uses these, and remotes never bind them. Ctrl+TAB is also
+        // not a printable control code so the shell wouldn't see
+        // anything useful anyway.
         if (event.isCtrlPressed) {
             when (keyCode) {
-                KeyEvent.KEYCODE_T -> {
-                    showConnectionSelector()
-                    return true
-                }
-                KeyEvent.KEYCODE_W -> {
-                    closeCurrentTab()
-                    return true
-                }
                 KeyEvent.KEYCODE_TAB -> {
                     if (event.isShiftPressed) {
                         tabManager.switchToPreviousTab()
@@ -2449,11 +2454,18 @@ class TabTerminalActivity : AppCompatActivity() {
                     tabManager.switchToTabNumber(tabNumber)
                     return true
                 }
-                // Wave 2.6 — palette / switcher
-                KeyEvent.KEYCODE_K -> { showCommandPalette(); return true }
-                KeyEvent.KEYCODE_J -> { showQuickSwitcher(); return true }
-                // Wave 2.10 — remote history palette
-                KeyEvent.KEYCODE_R -> { showHistoryPalette(); return true }
+            }
+            // App command shortcuts — REQUIRE Shift so bare Ctrl+letter
+            // passes through to the terminal as the corresponding
+            // control code (^T / ^W / ^K / ^J / ^R).
+            if (event.isShiftPressed) {
+                when (keyCode) {
+                    KeyEvent.KEYCODE_T -> { showConnectionSelector(); return true }
+                    KeyEvent.KEYCODE_W -> { closeCurrentTab(); return true }
+                    KeyEvent.KEYCODE_K -> { showCommandPalette(); return true }
+                    KeyEvent.KEYCODE_J -> { showQuickSwitcher(); return true }
+                    KeyEvent.KEYCODE_R -> { showHistoryPalette(); return true }
+                }
             }
         }
 

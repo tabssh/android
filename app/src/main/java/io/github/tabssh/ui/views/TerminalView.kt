@@ -1109,8 +1109,15 @@ class TerminalView @JvmOverloads constructor(
         val isAlt = (event.isAltPressed || pendingAlt) && !isAltGr
         val isShift = event.isShiftPressed
 
-        // Handle Ctrl+letter combinations (send control codes)
-        if (isCtrl && !isAlt) {
+        // Handle Ctrl+letter combinations (send control codes).
+        // IMPORTANT: skip when Shift is also pressed — Ctrl+Shift+letter
+        // is reserved for app-level commands (new tab / close tab /
+        // palette / etc.). If we mapped it to a control code here we'd
+        // both send a wrong byte to the shell AND prevent the activity
+        // from seeing the shortcut, since this method already returns
+        // true once it sends the byte. Falling through means the
+        // activity's onKeyDown gets a fair shot.
+        if (isCtrl && !isAlt && !isShift) {
             val ctrlCode = getCtrlCode(keyCode)
             if (ctrlCode != null) {
                 sendText(ctrlCode)
