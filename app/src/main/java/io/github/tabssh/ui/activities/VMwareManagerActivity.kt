@@ -101,10 +101,12 @@ class VMwareManagerActivity : AppCompatActivity() {
                 statusText.text = "Connecting to ${profile.name}..."
                 statusText.visibility = View.VISIBLE
 
+                val password = io.github.tabssh.crypto.storage.HypervisorPasswordStore
+                    .retrieve(this@VMwareManagerActivity, profile)
                 currentClient = VMwareApiClient(
                     host = profile.host,
                     username = profile.username,
-                    password = profile.password,
+                    password = password,
                     verifySsl = profile.verifySsl
                 )
 
@@ -269,12 +271,15 @@ class VMwareManagerActivity : AppCompatActivity() {
                     host = hostInput.text.toString(),
                     port = portInput.text.toString().toIntOrNull() ?: 443,
                     username = usernameInput.text.toString(),
-                    password = passwordInput.text.toString(),
+                    password = "", // P1: stays in Keystore, see HypervisorPasswordStore
                     verifySsl = false
                 )
-                
+                val plaintextPassword = passwordInput.text.toString()
+
                 lifecycleScope.launch {
-                    app.database.hypervisorDao().insert(profile)
+                    val newId = app.database.hypervisorDao().insert(profile)
+                    io.github.tabssh.crypto.storage.HypervisorPasswordStore
+                        .store(this@VMwareManagerActivity, newId, plaintextPassword)
                     loadHypervisors()
                 }
             }

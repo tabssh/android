@@ -209,6 +209,10 @@ class HypervisorsFragment : Fragment() {
                 lifecycleScope.launch {
                     try {
                         app.database.hypervisorDao().delete(hypervisor)
+                        // P1: also drop the Keystore-backed password so the
+                        // alias doesn't dangle if the row id ever gets reused.
+                        io.github.tabssh.crypto.storage.HypervisorPasswordStore
+                            .clear(requireContext(), hypervisor.id)
                         if (!isAdded) return@launch
                         Toast.makeText(
                             requireContext(),

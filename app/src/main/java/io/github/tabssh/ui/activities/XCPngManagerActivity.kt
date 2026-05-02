@@ -229,12 +229,14 @@ class XCPngManagerActivity : AppCompatActivity() {
             Logger.d("XCPngManager", "Trying Xen Orchestra REST API...")
             statusText.text = "Trying Xen Orchestra API..."
 
+            val password = io.github.tabssh.crypto.storage.HypervisorPasswordStore
+                .retrieve(this, profile)
             currentClient = null
             currentXoClient = XenOrchestraApiClient(
                 host = profile.host,
                 port = profile.port,
                 email = profile.username,
-                password = profile.password,
+                password = password,
                 verifySsl = profile.verifySsl
             )
 
@@ -255,12 +257,14 @@ class XCPngManagerActivity : AppCompatActivity() {
             Logger.d("XCPngManager", "Trying XCP-ng XML-RPC API...")
             statusText.text = "Trying XCP-ng Direct API..."
 
+            val password = io.github.tabssh.crypto.storage.HypervisorPasswordStore
+                .retrieve(this, profile)
             currentXoClient = null
             currentClient = XCPngApiClient(
                 host = profile.host,
                 port = profile.port,
                 username = profile.username,
-                password = profile.password,
+                password = password,
                 verifySsl = profile.verifySsl
             )
 
@@ -389,23 +393,29 @@ class XCPngManagerActivity : AppCompatActivity() {
             VMConsoleActivity.TYPE_XCPNG
         }
 
-        // Launch VMConsoleActivity for serial console (works without VM network)
-        val intent = android.content.Intent(this, VMConsoleActivity::class.java).apply {
-            putExtra(VMConsoleActivity.EXTRA_HYPERVISOR_TYPE, hypervisorType)
-            putExtra(VMConsoleActivity.EXTRA_VM_ID, vm.uuid)
-            putExtra(VMConsoleActivity.EXTRA_VM_NAME, vm.name)
-            putExtra(VMConsoleActivity.EXTRA_VM_REF, vm.uuid) // XCP-ng uses uuid as reference
-            putExtra(VMConsoleActivity.EXTRA_HOST, profile.host)
-            putExtra(VMConsoleActivity.EXTRA_PORT, profile.port)
-            putExtra(VMConsoleActivity.EXTRA_USERNAME, profile.username)
-            putExtra(VMConsoleActivity.EXTRA_PASSWORD, profile.password)
-            putExtra(VMConsoleActivity.EXTRA_IS_XEN_ORCHESTRA, isXenOrchestra)
-        }
-        startActivity(intent)
+        // Resolve the password through the Keystore-backed store before
+        // building the launch intent. Same-process Intent extras are
+        // local — the security concern was the on-disk DB column.
+        lifecycleScope.launch {
+            val password = io.github.tabssh.crypto.storage.HypervisorPasswordStore
+                .retrieve(this@XCPngManagerActivity, profile)
+            val intent = android.content.Intent(this@XCPngManagerActivity, VMConsoleActivity::class.java).apply {
+                putExtra(VMConsoleActivity.EXTRA_HYPERVISOR_TYPE, hypervisorType)
+                putExtra(VMConsoleActivity.EXTRA_VM_ID, vm.uuid)
+                putExtra(VMConsoleActivity.EXTRA_VM_NAME, vm.name)
+                putExtra(VMConsoleActivity.EXTRA_VM_REF, vm.uuid) // XCP-ng uses uuid as reference
+                putExtra(VMConsoleActivity.EXTRA_HOST, profile.host)
+                putExtra(VMConsoleActivity.EXTRA_PORT, profile.port)
+                putExtra(VMConsoleActivity.EXTRA_USERNAME, profile.username)
+                putExtra(VMConsoleActivity.EXTRA_PASSWORD, password)
+                putExtra(VMConsoleActivity.EXTRA_IS_XEN_ORCHESTRA, isXenOrchestra)
+            }
+            startActivity(intent)
 
-        val consoleType = if (isXenOrchestra) "Xen Orchestra" else "XCP-ng"
-        Toast.makeText(this, "Opening serial console for ${vm.name}", Toast.LENGTH_SHORT).show()
-        Logger.i("XCPngManager", "Launching $consoleType serial console for VM: ${vm.name} (uuid=${vm.uuid})")
+            val consoleType = if (isXenOrchestra) "Xen Orchestra" else "XCP-ng"
+            Toast.makeText(this@XCPngManagerActivity, "Opening serial console for ${vm.name}", Toast.LENGTH_SHORT).show()
+            Logger.i("XCPngManager", "Launching $consoleType serial console for VM: ${vm.name} (uuid=${vm.uuid})")
+        }
     }
 
     private fun showAddServerDialog() {

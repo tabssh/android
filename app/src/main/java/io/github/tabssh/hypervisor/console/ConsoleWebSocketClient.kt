@@ -82,6 +82,59 @@ class ConsoleWebSocketClient(
         proxmoxAuthFrame = "$userid:$ticket\n"
     }
 
+    /**
+     * Single-flight failure latch so we don't fire `onError` /
+     * `close()` twice if multiple sends fail back-to-back. Reset to
+     * false in `connect()`.
+     */
+    @Volatile private var sendFailureFired = false
+
+    /**
+     * Wrapper around `webSocket.send(...)` that turns a `false` return
+     * (queue full / socket already closed) into a real connection-lost
+     * signal — previously the return value was logged-and-forgotten so
+     * user keystrokes silently vanished and the UI showed a session
+     * that looked alive but couldn't transmit.
+     *
+     * On `false` while we still believe we're connected:
+     *   1. mark `isConnected = false` so the output-reader loop exits,
+     *   2. fire `connectionListener.onError(...)` exactly once,
+     *   3. ask the socket to close so the OkHttp listener fires its
+     *      own onClosed callback and `cleanup()` runs there.
+     *
+     * Returns the original Boolean so callers that want to react
+     * (e.g. the keepalive thread breaking out of its loop) can do so.
+     */
+    private fun attemptSend(payload: String, label: String): Boolean {
+        val ws = webSocket ?: return false
+        val sent = ws.send(payload)
+        if (!sent) handleSendFailure(label, "${payload.length} chars")
+        return sent
+    }
+
+    private fun attemptSend(payload: ByteString, label: String): Boolean {
+        val ws = webSocket ?: return false
+        val sent = ws.send(payload)
+        if (!sent) handleSendFailure(label, "${payload.size} bytes")
+        return sent
+    }
+
+    private fun handleSendFailure(label: String, sizeStr: String) {
+        if (!isConnected) return
+        if (sendFailureFired) return
+        sendFailureFired = true
+        Logger.w(TAG, "WebSocket send REJECTED ($label, $sizeStr) — connection lost; closing")
+        isConnected = false
+        try {
+            connectionListener?.onError(
+                java.io.IOException("WebSocket rejected $label send — connection lost")
+            )
+        } catch (e: Exception) {
+            Logger.w(TAG, "Listener.onError threw", e)
+        }
+        try { webSocket?.close(1011, "send rejected") } catch (_: Exception) {}
+    }
+
     init {
         val builder = OkHttpClient.Builder()
             .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -118,6 +171,7 @@ class ConsoleWebSocketClient(
         listener: ConsoleConnectionListener? = null
     ): Boolean {
         connectionListener = listener
+        sendFailureFired = false
 
         try {
             // Create piped streams for bidirectional communication
@@ -146,8 +200,15 @@ class ConsoleWebSocketClient(
                     // anything else (incl. keepalive) so the server accepts
                     // the session.
                     proxmoxAuthFrame?.let { authFrame ->
+                        // Don't go through attemptSend here — `webSocket`
+                        // is the local param, not our field; field is set
+                        // synchronously by newWebSocket() but we're
+                        // already inside its onOpen so the field assign
+                        // may not have happened yet on this thread. Use
+                        // the local handle and surface failure manually.
                         val sent = webSocket.send(authFrame)
                         Logger.d(TAG, "Sent Proxmox auth frame, accepted=$sent")
+                        if (!sent) handleSendFailure("auth", "${authFrame.length} chars")
                     }
 
                     connectionListener?.onConnected()
@@ -250,8 +311,12 @@ class ConsoleWebSocketClient(
                     Thread.sleep(PROXMOX_KEEPALIVE_INTERVAL_MS)
                     if (!isConnected) break
                     val msg = "1:$terminalCols:$terminalRows:"
-                    val sent = webSocket?.send(msg) ?: false
+                    val sent = attemptSend(msg, "keepalive")
                     Logger.d(TAG, "Proxmox keepalive sent=$sent")
+                    // attemptSend has already triggered the disconnect
+                    // path on `false`; bail explicitly so we don't sleep
+                    // for another 5 s before noticing.
+                    if (!sent) break
                 }
             } catch (e: InterruptedException) {
                 Logger.d(TAG, "Keepalive thread interrupted")
@@ -306,13 +371,13 @@ class ConsoleWebSocketClient(
                 val bytesCodes = data.map { it.toInt() and 0xFF }
                 Logger.d(TAG, "Proxmox format: sending ${data.size} bytes: $bytesCodes")
                 Logger.d(TAG, "Proxmox packet: '$packet' (${packet.length} chars)")
-                val sent = webSocket?.send(packet)
+                val sent = attemptSend(packet, "user-input")
                 Logger.d(TAG, "WebSocket send result: $sent")
             }
             else -> {
                 // Other protocols: send raw bytes
                 Logger.d(TAG, "Raw format: sending ${data.size} bytes")
-                webSocket?.send(ByteString.of(*data))
+                attemptSend(ByteString.of(*data), "user-input")
             }
         }
     }
@@ -332,7 +397,7 @@ class ConsoleWebSocketClient(
      */
     fun sendText(text: String) {
         if (isConnected) {
-            webSocket?.send(text)
+            attemptSend(text, "sendText")
         }
     }
 
@@ -341,7 +406,7 @@ class ConsoleWebSocketClient(
      */
     fun sendBytes(data: ByteArray) {
         if (isConnected) {
-            webSocket?.send(ByteString.of(*data))
+            attemptSend(ByteString.of(*data), "sendBytes")
         }
     }
 
@@ -354,8 +419,8 @@ class ConsoleWebSocketClient(
 
         if (isConnected && protocol == ConsoleProtocol.PROXMOX_TERM) {
             val resizeMsg = "1:$cols:$rows:"
-            webSocket?.send(resizeMsg)
-            Logger.d(TAG, "Sent resize: $cols x $rows")
+            val sent = attemptSend(resizeMsg, "resize")
+            Logger.d(TAG, "Sent resize: $cols x $rows (accepted=$sent)")
         }
     }
 

@@ -11,6 +11,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.crypto.storage.HypervisorPasswordStore
 import io.github.tabssh.hypervisor.proxmox.ProxmoxApiClient
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.HypervisorType
@@ -103,11 +104,12 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                 statusText.text = "Connecting to ${profile.name}..."
                 statusText.visibility = View.VISIBLE
                 
+                val password = HypervisorPasswordStore.retrieve(this@ProxmoxManagerActivity, profile)
                 currentClient = ProxmoxApiClient(
                     host = profile.host,
                     port = profile.port,
                     username = profile.username,
-                    password = profile.password,
+                    password = password,
                     realm = profile.realm ?: "pam",
                     verifySsl = profile.verifySsl
                 )
@@ -240,13 +242,15 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                     host = hostInput.text.toString(),
                     port = portInput.text.toString().toIntOrNull() ?: 8006,
                     username = usernameInput.text.toString(),
-                    password = passwordInput.text.toString(),
+                    password = "", // P1: stays in Keystore, see HypervisorPasswordStore
                     realm = realmInput.text.toString(),
                     verifySsl = false
                 )
-                
+                val plaintextPassword = passwordInput.text.toString()
+
                 lifecycleScope.launch {
-                    app.database.hypervisorDao().insert(profile)
+                    val newId = app.database.hypervisorDao().insert(profile)
+                    HypervisorPasswordStore.store(this@ProxmoxManagerActivity, newId, plaintextPassword)
                     loadHypervisors()
                     Toast.makeText(this@ProxmoxManagerActivity, "Server added", Toast.LENGTH_SHORT).show()
                 }
@@ -264,23 +268,29 @@ class ProxmoxManagerActivity : AppCompatActivity() {
         }
         val profile = hypervisors[position]
 
-        // Launch VMConsoleActivity for serial console (works without VM network)
-        val intent = android.content.Intent(this, VMConsoleActivity::class.java).apply {
-            putExtra(VMConsoleActivity.EXTRA_HYPERVISOR_TYPE, VMConsoleActivity.TYPE_PROXMOX)
-            putExtra(VMConsoleActivity.EXTRA_VM_ID, vm.vmid.toString())
-            putExtra(VMConsoleActivity.EXTRA_VM_NAME, vm.name)
-            putExtra(VMConsoleActivity.EXTRA_VM_NODE, vm.node)
-            putExtra(VMConsoleActivity.EXTRA_VM_TYPE, vm.type)
-            putExtra(VMConsoleActivity.EXTRA_HOST, profile.host)
-            putExtra(VMConsoleActivity.EXTRA_PORT, profile.port)
-            putExtra(VMConsoleActivity.EXTRA_USERNAME, profile.username)
-            putExtra(VMConsoleActivity.EXTRA_PASSWORD, profile.password)
-            putExtra(VMConsoleActivity.EXTRA_REALM, profile.realm ?: "pam")
-        }
-        startActivity(intent)
+        // Resolve the password through HypervisorPasswordStore (Keystore-
+        // backed) before launching VMConsoleActivity. Same-process Intent
+        // extras don't leave the app, so passing the resolved plaintext
+        // here is fine — the security concern was the on-disk DB column.
+        lifecycleScope.launch {
+            val password = HypervisorPasswordStore.retrieve(this@ProxmoxManagerActivity, profile)
+            val intent = android.content.Intent(this@ProxmoxManagerActivity, VMConsoleActivity::class.java).apply {
+                putExtra(VMConsoleActivity.EXTRA_HYPERVISOR_TYPE, VMConsoleActivity.TYPE_PROXMOX)
+                putExtra(VMConsoleActivity.EXTRA_VM_ID, vm.vmid.toString())
+                putExtra(VMConsoleActivity.EXTRA_VM_NAME, vm.name)
+                putExtra(VMConsoleActivity.EXTRA_VM_NODE, vm.node)
+                putExtra(VMConsoleActivity.EXTRA_VM_TYPE, vm.type)
+                putExtra(VMConsoleActivity.EXTRA_HOST, profile.host)
+                putExtra(VMConsoleActivity.EXTRA_PORT, profile.port)
+                putExtra(VMConsoleActivity.EXTRA_USERNAME, profile.username)
+                putExtra(VMConsoleActivity.EXTRA_PASSWORD, password)
+                putExtra(VMConsoleActivity.EXTRA_REALM, profile.realm ?: "pam")
+            }
+            startActivity(intent)
 
-        Toast.makeText(this, "Opening serial console for ${vm.name}", Toast.LENGTH_SHORT).show()
-        Logger.i("ProxmoxManager", "Launching serial console for VM: ${vm.name} (vmid=${vm.vmid})")
+            Toast.makeText(this@ProxmoxManagerActivity, "Opening serial console for ${vm.name}", Toast.LENGTH_SHORT).show()
+            Logger.i("ProxmoxManager", "Launching serial console for VM: ${vm.name} (vmid=${vm.vmid})")
+        }
     }
 
     override fun onSupportNavigateUp(): Boolean {

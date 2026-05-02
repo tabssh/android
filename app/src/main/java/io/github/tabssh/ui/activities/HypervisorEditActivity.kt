@@ -12,6 +12,7 @@ import com.google.android.material.switchmaterial.SwitchMaterial
 import com.google.android.material.textfield.TextInputEditText
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.crypto.storage.HypervisorPasswordStore
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.HypervisorType
 import io.github.tabssh.hypervisor.proxmox.ProxmoxApiClient
@@ -262,7 +263,13 @@ class HypervisorEditActivity : AppCompatActivity() {
                     editHost.setText(hypervisor.host)
                     editPort.setText(hypervisor.port.toString())
                     editUsername.setText(hypervisor.username)
-                    editPassword.setText(hypervisor.password)
+                    // P1 fix: hypervisor passwords now live in the
+                    // Keystore-backed SecurePasswordManager. The DB
+                    // column is empty for migrated rows; legacy rows
+                    // are auto-migrated on first read by the helper.
+                    editPassword.setText(
+                        HypervisorPasswordStore.retrieve(this@HypervisorEditActivity, hypervisor)
+                    )
                     editRealm.setText(hypervisor.realm ?: "pam")
                     switchVerifySsl.isChecked = hypervisor.verifySsl
 
@@ -344,6 +351,11 @@ class HypervisorEditActivity : AppCompatActivity() {
                 val apiTypeIndex = apiTypeEntries.indexOf(selectedApiType)
                 val apiTypeOverride = if (apiTypeIndex >= 0) apiTypeValues[apiTypeIndex] else "auto"
 
+                // P1 fix: NEVER write the password to the entity; route
+                // it through the Keystore-backed HypervisorPasswordStore
+                // instead. The entity's `password` column stays empty
+                // for any row this code touches.
+                val plaintextPassword = editPassword.text.toString()
                 val hypervisor = HypervisorProfile(
                     id = hypervisorId ?: 0,
                     name = editName.text.toString(),
@@ -351,7 +363,7 @@ class HypervisorEditActivity : AppCompatActivity() {
                     host = editHost.text.toString(),
                     port = editPort.text.toString().toInt(),
                     username = editUsername.text.toString(),
-                    password = editPassword.text.toString(),
+                    password = "",
                     realm = if (type == HypervisorType.PROXMOX) editRealm.text.toString() else null,
                     verifySsl = switchVerifySsl.isChecked,
                     apiTypeOverride = apiTypeOverride,
@@ -360,13 +372,26 @@ class HypervisorEditActivity : AppCompatActivity() {
                     lastConnected = editingHypervisor?.lastConnected ?: 0,
                     createdAt = editingHypervisor?.createdAt ?: System.currentTimeMillis()
                 )
-                
-                if (hypervisorId != null) {
+
+                val savedId = if (hypervisorId != null) {
                     app.database.hypervisorDao().update(hypervisor)
                     Toast.makeText(this@HypervisorEditActivity, "Updated ${hypervisor.name}", Toast.LENGTH_SHORT).show()
+                    hypervisorId!!
                 } else {
-                    app.database.hypervisorDao().insert(hypervisor)
+                    val newId = app.database.hypervisorDao().insert(hypervisor)
                     Toast.makeText(this@HypervisorEditActivity, "Added ${hypervisor.name}", Toast.LENGTH_SHORT).show()
+                    newId
+                }
+
+                val storeOk = HypervisorPasswordStore.store(
+                    this@HypervisorEditActivity, savedId, plaintextPassword
+                )
+                if (!storeOk) {
+                    Toast.makeText(
+                        this@HypervisorEditActivity,
+                        "⚠ Password stored insecurely (Keystore unavailable). Re-edit to retry.",
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
                 
                 finish()
