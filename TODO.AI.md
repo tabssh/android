@@ -43,6 +43,77 @@
 
 ## 📝 Open / Planned Work
 
+### ✅ Audit progress — 2026-05-02
+
+The audit findings below are historical; this section tracks status.
+
+| Item | Status | Commit |
+|---|---|---|
+| P0 #1 backup encryption real | ✅ shipped | `2e4d9648` |
+| P0 #2 hypervisor TLS | 🟡 partial — silent-bypass closed | `5a4b26f5` |
+| P1 Tasker IPC permission gate | ✅ shipped | `2e4d9648` |
+| P1 HostKeyVerifier timeout/destroyed-activity | ✅ shipped | `5ac8f999` |
+| P1 hypervisor passwords → Keystore | ✅ shipped | `ae2c613a` |
+| P1 WebSocket.send return ignored | ✅ shipped | `ae2c613a` |
+| P1 `profile.identityId!!` NPE | ✅ shipped | `2e4d9648` |
+| MAC-failure root-cause (the actual disconnect bug) | ✅ shipped | `bbf15665` |
+| RECONNECT race that destroyed the activity | ✅ shipped | `1f25c29d` |
+
+#### 🟡 Outstanding P0 — finish hypervisor TLS verification
+
+Today's `5a4b26f5` closed a real silent-bypass bug (six sites that
+hardcoded `verifySsl=false` and ignored the user's per-host setting).
+That makes the existing toggle finally take effect. The remaining
+work is the real fix: **per-host SHA-256 cert pinning** modelled on
+the SSH host-key flow.
+
+**Design — to be confirmed before code lands:**
+
+* New DB column on `hypervisors`: `pinned_cert_sha256: TEXT NULL`.
+  Migration v26 → v27, default NULL.
+* `verifySsl: Boolean` stays as the user-facing "verify against
+  pinned SHA" toggle. Default flips to `true` for new rows; existing
+  rows keep their current value (most users have it `false` today
+  for self-signed certs).
+* Custom `X509TrustManager` per host that:
+  * On first connect (pinned SHA == NULL): capture the leaf cert's
+    SHA-256, prompt the user via fingerprint dialog (modelled on
+    `HostKeyVerifier.showBlockingNewHostDialog`), persist on accept.
+  * On subsequent connects (pinned SHA != NULL): require exact
+    match. On mismatch, prompt the user (modelled on
+    `showBlockingChangedHostDialog`) — Accept New / Reject /
+    Once-only. Reject is the default after 30 s timeout.
+  * If `verifySsl=false`: bypass entirely, log a one-time warning.
+* Wire into all five clients (`ProxmoxApiClient`, `XCPngApiClient`,
+  `XenOrchestraApiClient`, `VMwareApiClient`, `ConsoleWebSocketClient`)
+  via a single `HypervisorTrustManager.kt` factory the constructors
+  call into. Replaces the duplicated trust-all-certs blocks.
+* UI: add a "Trusted fingerprint" read-only field in
+  `HypervisorEditActivity` (with a Reset button to drop the pin and
+  re-prompt on next connect).
+
+**Open design question — flagged here for explicit decision before
+build:**
+
+* **Identity reuse for hypervisors.** Should `HypervisorProfile`
+  reference an `Identity` for credentials the way `ConnectionProfile`
+  does? Current take: **no** — Identity is SSH-shaped (carries `keyId`
+  + `authType=PUBLIC_KEY`/`PASSWORD`) and hypervisor REST APIs only
+  use the password half. Reusing it leaves dead fields and ties
+  password-rotation policies that usually aren't aligned (SSH key
+  for prod hosts vs. admin password for hypervisors). If credential
+  reuse becomes a real pain point (5+ hypervisors sharing one admin
+  password), a separate `ApiCredential` entity is cleaner than
+  overloading `Identity`. **Holding off until a user with that
+  scenario asks.** Resume P0 cert-pinning work once this is
+  resolved either way.
+
+**Estimate:** ~6 h cert pinning + ~2 h interop testing across the
+five clients + 1 h UI polish for the fingerprint dialogs. Don't
+start until the identity question is settled.
+
+---
+
 ### 🔒 Audit findings — 2026-05-01
 
 Two read-only Explore-agent passes — feature-completeness vs. README + project tracker docs, and bug/security. Cited file:line locations are direct from the audit and verified for the P0 entries.
