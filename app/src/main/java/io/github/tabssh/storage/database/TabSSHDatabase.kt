@@ -339,21 +339,6 @@ abstract class TabSSHDatabase : RoomDatabase() {
             db.clearAllTables()
         }
         
-        /**
-         * Export database for backup
-         */
-        fun exportDatabase(context: Context): String? {
-            return try {
-                val dbFile = context.getDatabasePath(DATABASE_NAME)
-                if (dbFile.exists()) {
-                    dbFile.readText()
-                } else {
-                    null
-                }
-            } catch (e: Exception) {
-                null
-            }
-        }
     }
     
     /**

@@ -83,6 +83,10 @@ class TabTerminalActivity : AppCompatActivity() {
      */
     @Volatile private var isReconnecting = false
 
+    // Held as a field so onDestroy can call tabManager.removeListener — see
+    // setupTabManager() for the construction site and the leak rationale.
+    private var tabManagerListener: TabManagerListener? = null
+
     // UI components
     private var terminalView: TerminalView? = null
     private var viewPager: ViewPager2? = null
@@ -243,9 +247,12 @@ class TabTerminalActivity : AppCompatActivity() {
             .getStringAsInt("ui_max_tabs", 20)
             .coerceIn(1, 100)
         tabManager = TabManager(maxTabs = maxTabs)
-        
-        // Set up tab manager listener
-        tabManager.addListener(object : TabManagerListener {
+
+        // Stored as a field (not anonymous-inline) so onDestroy can call
+        // tabManager.removeListener(it). Anonymous listeners hold an
+        // implicit `this@TabTerminalActivity` reference and prevented the
+        // activity from being collected across reconnect cycles.
+        tabManagerListener = object : TabManagerListener {
             override fun onTabCreated(tab: SSHTab) {
                 Handler(Looper.getMainLooper()).post {
                     addTabToUI(tab)
@@ -277,7 +284,8 @@ class TabTerminalActivity : AppCompatActivity() {
                     updateTabIcon(tab, state)
                 }
             }
-        })
+        }
+        tabManager.addListener(tabManagerListener!!)
     }
     
     private fun setupMenuFab() {
@@ -3065,10 +3073,16 @@ class TabTerminalActivity : AppCompatActivity() {
     
     override fun onDestroy() {
         super.onDestroy()
-        
+
         // Cancel performance overlay updates
         performanceUpdateJob?.cancel()
-        
+
+        // Drop the listener BEFORE cleanup so we can't get a callback into
+        // a half-destroyed activity, and so the anonymous-listener implicit
+        // back-ref to `this` is broken (memory leak fix).
+        tabManagerListener?.let { tabManager.removeListener(it) }
+        tabManagerListener = null
+
         Logger.d("TabTerminalActivity", "Terminal activity destroyed")
         tabManager.cleanup()
     }

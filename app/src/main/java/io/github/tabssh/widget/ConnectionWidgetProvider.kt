@@ -96,14 +96,14 @@ open class ConnectionWidgetProvider : AppWidgetProvider() {
                 R.layout.widget_1x1 -> {
                     val icon = if (connection.keyId != null) "🔑" else "🖥️"
                     views.setTextViewText(R.id.widget_icon, icon)
-                    views.setOnClickPendingIntent(R.id.widget_root, getConnectIntent(context, connection))
+                    views.setOnClickPendingIntent(R.id.widget_root, getConnectIntent(context, widgetId, connection))
                 }
                 R.layout.widget_2x1 -> {
                     val icon = if (connection.keyId != null) "🔑" else "🖥️"
                     views.setTextViewText(R.id.widget_icon, icon)
                     views.setTextViewText(R.id.widget_name, connection.name)
                     views.setTextViewText(R.id.widget_info, "${connection.username}@${connection.host}")
-                    views.setOnClickPendingIntent(R.id.widget_connect, getConnectIntent(context, connection))
+                    views.setOnClickPendingIntent(R.id.widget_connect, getConnectIntent(context, widgetId, connection))
                 }
             }
             
@@ -134,14 +134,19 @@ open class ConnectionWidgetProvider : AppWidgetProvider() {
             appWidgetManager.updateAppWidget(widgetId, views)
         }
 
-        private fun getConnectIntent(context: Context, connection: ConnectionProfile): PendingIntent {
+        private fun getConnectIntent(context: Context, widgetId: Int, connection: ConnectionProfile): PendingIntent {
             val intent = Intent(context, TabTerminalActivity::class.java).apply {
                 putExtra("connection_id", connection.id)
                 putExtra("auto_connect", true)
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
+            // ConnectionProfile.id is a UUID string, not an int — calling
+            // .toInt() on it threw NumberFormatException on every widget tap.
+            // Match QuickConnectWidgetProvider and use widgetId as the
+            // PendingIntent request code, which is unique per placed widget
+            // (Android's contract for AppWidgetManager).
             return PendingIntent.getActivity(
-                context, connection.id.toInt(), intent,
+                context, widgetId, intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
         }

@@ -63,6 +63,9 @@ The audit findings below are historical; this section tracks status.
 | Tasker preferences fragment | ✅ shipped | `d714a7b4` (fragment at `SettingsActivity.kt:605-697`, IntentService consumes all 4 prefs) |
 | advancedSettings JSON apply at connect | ✅ shipped | `d714a7b4` (`SSHConnection.applyAdvancedSettings` for Local/Remote/Dynamic forwards) |
 | X11 fixes batch | ✅ shipped | (this batch) Deleted orphan/broken `X11ForwardingManager` (437 LOC of stub in-app X server), refactored duplicated SSHConnection X11/agent setup into `applyForwardingFlags`, surfaced setup failures via `onError` listener, copied `forwardX11`/`forwardAgent`/`compression`/`connectTimeout` from imported `~/.ssh/config` to entity columns (were previously dropped at parse time). |
+| Audit batch — widget tap crash (`ConnectionWidgetProvider.kt:144` — `connection.id.toInt()` on UUID String) | ✅ shipped | this batch — threaded `widgetId` into `getConnectIntent` to use AppWidget's per-widget id as the PendingIntent request code (matches `QuickConnectWidgetProvider`). Crash fired on every widget tap. |
+| Audit batch — `TabTerminalActivity` `TabManagerListener` leak | ✅ shipped | this batch — listener moved from anonymous-inline to a `tabManagerListener` field, removed in `onDestroy()` before `tabManager.cleanup()`. Anonymous listener held implicit `this@TabTerminalActivity`; was preventing GC across reconnect cycles. |
+| Audit batch — `TabSSHDatabase.exportDatabase()` reading SQLite as text | ✅ shipped | this batch — deleted (was dead code, no callers, plus `dbFile.readText()` on a binary file would have produced corrupt output if anyone ever called it). |
 
 ---
 
@@ -92,6 +95,8 @@ Two read-only Explore-agent passes — feature-completeness vs. README + project
 - `cachedPassword` / `cachedPassphrase` held as `String` for connection lifetime, never zeroed — `ssh/connection/SSHConnection.kt:101,104`. Same defense-in-depth shape as the SecurePasswordManager map. **Still open.**
 - ~~Host-key dialogs walk the context chain with no Activity guard~~ — **VERIFIED FIXED** in commit `5ac8f999`. `HostKeyVerifier` now resolves the activity via `TabSSHApplication.getCurrentActivity()` and skips when `isFinishing || isDestroyed`.
 - Logger key-bytes audit not yet performed — defensive grep across `Logger.[diwve]` calls touching `bytes`/`key`/`pass`/`secret` to confirm none print raw key material. **Open (low-priority hygiene pass).**
+- Translation drift: `values/strings.xml` has 167 keys, each of `values-{es,fr,de}/strings.xml` has 157. The 10 missing keys (`cluster_progress`, `widget_*_description`, `sync_password_*`, `navigation_drawer_open/close`, `select_connection`) silently fall back to base English at runtime — Android's standard locale-resolution behaviour. **Accepted-known: needs a native-speaker translation pass before adding faux-translated stubs.**
+- Hypervisor REST clients use `getJSONObject` rather than `optJSONObject` (`ProxmoxApiClient.kt:84` and similar across the four clients). Outer try/catch swallows the resulting `JSONException` so it doesn't crash, but the user-facing error loses the actual API response shape. **Accepted-known: defense-in-depth across ~20 call sites for marginal benefit; revisit if a real Proxmox/XO/etc. schema change actually fires opaque errors in practice.**
 
 #### 🧩 Feature gaps — claimed but not wired
 
