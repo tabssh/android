@@ -1479,9 +1479,17 @@ class TabTerminalActivity : AppCompatActivity() {
                 }
             }
             
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Activity is going away mid-connect. Make sure we don't leave a
+            // half-authenticated SSH session orphan in SSHSessionManager —
+            // closeConnection is idempotent. Re-throw cancellation so the
+            // launching scope sees it correctly.
+            Logger.i("TabTerminalActivity", "connectToProfile cancelled for ${profile.getDisplayName()} — closing any orphan SSH session")
+            try { app.sshSessionManager.closeConnection(profile.id) } catch (_: Throwable) {}
+            throw e
         } catch (e: Exception) {
             Logger.e("TabTerminalActivity", "Error connecting to ${profile.getDisplayName()}", e)
-            
+
             // Try to create a detailed error info from the exception
             val errorInfo = io.github.tabssh.ssh.connection.SSHConnectionErrorInfo(
                 errorType = "Connection Error",

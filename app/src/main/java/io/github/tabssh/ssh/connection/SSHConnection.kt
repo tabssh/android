@@ -925,7 +925,19 @@ class SSHConnection(
                     // Fall through to password auth
                 }
             } else {
-                Logger.w("SSHConnection", "Auth: JSch bytes null for keyId=$effectiveKeyId - key may not be stored properly")
+                // Key ID is set on the profile/identity but doesn't resolve to
+                // a stored key. Common shape: connection imported from a
+                // `~/.ssh/config` file via `SSHConfigParser` carries
+                // `host.identityFileStr.hashCode().toString()` as a placeholder
+                // keyId that was never bound to a real key. Without surfacing
+                // this, the auth chain falls through to password → keyboard-
+                // interactive → "Auth cancel" with no UX clue.
+                Logger.w("SSHConnection", "Auth: JSch bytes null for keyId=$effectiveKeyId — stored key missing")
+                if (profile.authType == AuthType.PUBLIC_KEY.name && effectivePassword == null) {
+                    val msg = "Configured SSH key (id=$effectiveKeyId) is missing from the keystore. " +
+                        "Re-import the key in Identities, or change this connection's auth type to Password."
+                    _errorMessage.value = msg
+                }
             }
             Logger.w("SSHConnection", "Auth: SSH key failed, falling back to password")
         } else {

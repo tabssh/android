@@ -35,7 +35,9 @@ import io.github.tabssh.ui.adapters.ConnectionAdapter
 import io.github.tabssh.ui.adapters.GroupedConnectionAdapter
 import io.github.tabssh.ui.models.ConnectionListItem
 import io.github.tabssh.utils.logging.Logger
+import androidx.room.withTransaction
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -849,7 +851,6 @@ class ConnectionsFragment : Fragment() {
     ) {
         lifecycleScope.launch {
             try {
-                var updatedCount = 0
                 val changes = mutableListOf<String>()
 
                 if (newUsername != null) changes.add("username")
@@ -870,63 +871,101 @@ class ConnectionsFragment : Fragment() {
                     return@launch
                 }
 
+                // Resolve dropdown name → entity ID up front so we don't get
+                // stuck silently nullifying when the dialog's identity/group
+                // flow hasn't emitted yet (the previous bug). Read directly
+                // from the DB instead of trusting the in-memory caches.
+                val resolvedGroupId: String? = if (newGroupSelection != null) {
+                    if (newGroupSelection.startsWith("(Clear")) {
+                        null
+                    } else {
+                        val match = app.database.connectionGroupDao().getAllGroups().first()
+                            .find { it.name == newGroupSelection }
+                        if (match == null) {
+                            android.widget.Toast.makeText(
+                                requireContext(),
+                                "Bulk edit aborted: group '$newGroupSelection' not found",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                            Logger.w("ConnectionsFragment", "Bulk edit: group '$newGroupSelection' did not resolve to a row")
+                            return@launch
+                        }
+                        match.id
+                    }
+                } else null
+
+                val resolvedIdentityId: String? = if (newIdentitySelection != null) {
+                    if (newIdentitySelection.startsWith("(Clear")) {
+                        null
+                    } else {
+                        val match = app.database.identityDao().getAllIdentitiesList()
+                            .find { it.name == newIdentitySelection }
+                        if (match == null) {
+                            android.widget.Toast.makeText(
+                                requireContext(),
+                                "Bulk edit aborted: identity '$newIdentitySelection' not found",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                            Logger.w("ConnectionsFragment", "Bulk edit: identity '$newIdentitySelection' did not resolve to a row")
+                            return@launch
+                        }
+                        match.id
+                    }
+                } else null
+
                 Logger.d("ConnectionsFragment", "Bulk edit: applying ${changes.joinToString(", ")} to ${connections.size} connections")
 
-                for (connection in connections) {
-                    var updated = connection
+                // One transaction so Room emits the Flow once at the end
+                // instead of per-row (was producing 30+ redundant
+                // `Loaded 37 connections` log lines on a 37-row bulk apply).
+                var updatedCount = 0
+                app.database.withTransaction {
+                    for (connection in connections) {
+                        var updated = connection
 
-                    if (newUsername != null) {
-                        updated = updated.copy(username = newUsername)
-                    }
-                    if (newPort != null) {
-                        updated = updated.copy(port = newPort)
-                    }
-                    if (newGroupSelection != null) {
-                        val newGroupId = if (newGroupSelection.startsWith("(Clear")) {
-                            null
-                        } else {
-                            allGroups.find { it.name == newGroupSelection }?.id
+                        if (newUsername != null) {
+                            updated = updated.copy(username = newUsername)
                         }
-                        updated = updated.copy(groupId = newGroupId)
-                    }
-                    if (newIdentitySelection != null) {
-                        val newIdentityId = if (newIdentitySelection.startsWith("(Clear")) {
-                            null
-                        } else {
-                            allIdentities.find { it.name == newIdentitySelection }?.id
+                        if (newPort != null) {
+                            updated = updated.copy(port = newPort)
                         }
-                        updated = updated.copy(identityId = newIdentityId)
-                    }
-                    if (newTimeout != null) {
-                        updated = updated.copy(connectTimeout = newTimeout)
-                    }
-                    if (compression != TriState.UNCHANGED) {
-                        updated = updated.copy(compression = compression == TriState.ON)
-                    }
-                    if (newTerminalType != null) {
-                        updated = updated.copy(terminalType = newTerminalType)
-                    }
-                    if (newColorTagSelection != null) {
-                        // colorTagOptions index maps 1:1 to ConnectionProfile.colorTag.
-                        // Index 0 = "(none)" which is correctly stored as 0 (no tag).
-                        val idx = colorTagOptions.indexOf(newColorTagSelection).coerceAtLeast(0)
-                        updated = updated.copy(colorTag = idx)
-                    }
-                    if (x11 != TriState.UNCHANGED) {
-                        updated = updated.copy(x11Forwarding = x11 == TriState.ON)
-                    }
-                    if (mosh != TriState.UNCHANGED) {
-                        updated = updated.copy(useMosh = mosh == TriState.ON)
-                    }
-                    if (agentFwd != TriState.UNCHANGED) {
-                        updated = updated.copy(agentForwarding = agentFwd == TriState.ON)
-                    }
-                    if (newPostConnect != null) {
-                        updated = updated.copy(postConnectScript = newPostConnect)
-                    }
+                        if (newGroupSelection != null) {
+                            updated = updated.copy(groupId = resolvedGroupId)
+                        }
+                        if (newIdentitySelection != null) {
+                            updated = updated.copy(identityId = resolvedIdentityId)
+                        }
+                        if (newTimeout != null) {
+                            updated = updated.copy(connectTimeout = newTimeout)
+                        }
+                        if (compression != TriState.UNCHANGED) {
+                            updated = updated.copy(compression = compression == TriState.ON)
+                        }
+                        if (newTerminalType != null) {
+                            updated = updated.copy(terminalType = newTerminalType)
+                        }
+                        if (newColorTagSelection != null) {
+                            // colorTagOptions index maps 1:1 to ConnectionProfile.colorTag.
+                            // Index 0 = "(none)" which is correctly stored as 0 (no tag).
+                            val idx = colorTagOptions.indexOf(newColorTagSelection).coerceAtLeast(0)
+                            updated = updated.copy(colorTag = idx)
+                        }
+                        if (x11 != TriState.UNCHANGED) {
+                            updated = updated.copy(x11Forwarding = x11 == TriState.ON)
+                        }
+                        if (mosh != TriState.UNCHANGED) {
+                            updated = updated.copy(useMosh = mosh == TriState.ON)
+                        }
+                        if (agentFwd != TriState.UNCHANGED) {
+                            updated = updated.copy(agentForwarding = agentFwd == TriState.ON)
+                        }
+                        if (newPostConnect != null) {
+                            updated = updated.copy(postConnectScript = newPostConnect)
+                        }
 
-                    app.database.connectionDao().updateConnection(updated)
-                    updatedCount++
+                        app.database.connectionDao().updateConnection(updated)
+                        updatedCount++
+                    }
                 }
 
                 Logger.d("ConnectionsFragment", "Bulk edit completed: $updatedCount connections updated (${changes.joinToString(", ")})")

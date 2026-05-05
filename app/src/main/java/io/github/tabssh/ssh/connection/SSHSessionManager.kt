@@ -130,7 +130,7 @@ class SSHSessionManager(private val context: Context) {
         return try {
             val connection = createConnection(profile)
             val success = connection.connect()
-            
+
             if (success) {
                 Logger.i("SSHSessionManager", "Successfully connected to ${profile.getDisplayName()}")
                 // Start foreground service to maintain persistent notification
@@ -142,6 +142,13 @@ class SSHSessionManager(private val context: Context) {
                 null
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
+            // Caller's coroutine was cancelled (typically: Activity destroyed
+            // mid-connect). The SSHConnection was added to `activeConnections`
+            // by createConnection() — close it now so JSch's still-running
+            // socket+auth thread can't leave a fully-authenticated session
+            // sitting orphan for the OS to abort 30s later.
+            Logger.i("SSHSessionManager", "Connect cancelled for ${profile.getDisplayName()} — disconnecting orphan")
+            closeConnection(profile.id)
             throw e
         } catch (e: Exception) {
             Logger.e("SSHSessionManager", "Error connecting to ${profile.getDisplayName()}", e)
