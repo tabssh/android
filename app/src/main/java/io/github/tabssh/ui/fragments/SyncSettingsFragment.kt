@@ -142,11 +142,13 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
                     0 -> createFileLauncher.launch(syncManager.getCreateFileIntent())
                     1 -> openFileLauncher.launch(syncManager.getOpenFileIntent())
                     2 -> {
-                        syncManager.clearConfiguration()
-                        findPreference<SwitchPreferenceCompat>("sync_enabled")?.isChecked = false
-                        updateLocationSummary()
-                        updateSyncStatus()
-                        showToast("Sync location cleared")
+                        lifecycleScope.launch {
+                            syncManager.clearConfiguration()
+                            findPreference<SwitchPreferenceCompat>("sync_enabled")?.isChecked = false
+                            updateLocationSummary()
+                            updateSyncStatus()
+                            showToast("Sync location cleared")
+                        }
                     }
                 }
             }
@@ -244,11 +246,13 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
                     errorText.visibility = View.VISIBLE
                 }
                 else -> {
-                    syncManager.setSyncPasswordSync(password)
-                    updatePasswordSummary()
-                    updateSyncStatus()
-                    showToast("Encryption password set")
-                    dialog.dismiss()
+                    lifecycleScope.launch {
+                        syncManager.setSyncPassword(password)
+                        updatePasswordSummary()
+                        updateSyncStatus()
+                        showToast("Encryption password set")
+                        dialog.dismiss()
+                    }
                 }
             }
         }
@@ -526,13 +530,15 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
             .setTitle("Clear Sync Configuration")
             .setMessage("This will remove your sync configuration. You will need to set up sync again.\n\nYour local data will NOT be affected.")
             .setPositiveButton("Clear") { _, _ ->
-                syncManager.clearConfiguration()
-                findPreference<SwitchPreferenceCompat>("sync_enabled")?.isChecked = false
-                workScheduler.cancelPeriodicSync()
-                updateLocationSummary()
-                updatePasswordSummary()
-                updateSyncStatus()
-                updateLastSyncTime()
+                lifecycleScope.launch {
+                    syncManager.clearConfiguration()
+                    findPreference<SwitchPreferenceCompat>("sync_enabled")?.isChecked = false
+                    workScheduler.cancelPeriodicSync()
+                    updateLocationSummary()
+                    updatePasswordSummary()
+                    updateSyncStatus()
+                    updateLastSyncTime()
+                }
                 showToast("Sync configuration cleared")
             }
             .setNegativeButton("Cancel", null)

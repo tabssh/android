@@ -96,15 +96,6 @@ class SAFSyncManager(private val context: Context) {
     }
 
     /**
-     * Set sync password synchronously (for UI thread)
-     */
-    fun setSyncPasswordSync(password: String): Boolean {
-        return kotlinx.coroutines.runBlocking {
-            setSyncPassword(password)
-        }
-    }
-
-    /**
      * Get the sync password from secure storage
      */
     private suspend fun getSyncPassword(): String? {
@@ -365,9 +356,12 @@ class SAFSyncManager(private val context: Context) {
     }
 
     /**
-     * Clear sync configuration
+     * Clear sync configuration. Suspending because clearing the
+     * Keystore-backed password is itself a suspend call — we don't want
+     * to wrap that in `runBlocking` from a UI thread (it can stall on
+     * hardware-backed Keystore latency and trigger an ANR).
      */
-    fun clearConfiguration() {
+    suspend fun clearConfiguration() {
         // Release persistable permission
         getSyncUri()?.let { uri ->
             try {
@@ -379,12 +373,10 @@ class SAFSyncManager(private val context: Context) {
         }
 
         // Clear password from secure storage
-        kotlinx.coroutines.runBlocking {
-            try {
-                app?.securePasswordManager?.clearPassword(SYNC_PASSWORD_KEY)
-            } catch (e: Exception) {
-                Logger.w(TAG, "Could not clear sync password from secure storage", e)
-            }
+        try {
+            app?.securePasswordManager?.clearPassword(SYNC_PASSWORD_KEY)
+        } catch (e: Exception) {
+            Logger.w(TAG, "Could not clear sync password from secure storage", e)
         }
 
         // Clear in-memory password

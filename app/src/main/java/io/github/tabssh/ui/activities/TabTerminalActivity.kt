@@ -87,6 +87,12 @@ class TabTerminalActivity : AppCompatActivity() {
     // setupTabManager() for the construction site and the leak rationale.
     private var tabManagerListener: TabManagerListener? = null
 
+    // OnGlobalLayoutListener for IME-visibility tracking. Held as a field
+    // (not anonymous-inline) so onDestroy can remove it. Without removal
+    // the listener fires for every layout pass after the activity dies
+    // AND its lambda captures `this@TabTerminalActivity`, preventing GC.
+    private var keyboardLayoutListener: android.view.ViewTreeObserver.OnGlobalLayoutListener? = null
+
     // UI components
     private var terminalView: TerminalView? = null
     private var viewPager: ViewPager2? = null
@@ -139,13 +145,14 @@ class TabTerminalActivity : AppCompatActivity() {
     private fun setupBackPressHandler() {
         // Listen for keyboard visibility changes
         val rootView = window.decorView.rootView
-        rootView.viewTreeObserver.addOnGlobalLayoutListener {
+        keyboardLayoutListener = android.view.ViewTreeObserver.OnGlobalLayoutListener {
             val rect = android.graphics.Rect()
             rootView.getWindowVisibleDisplayFrame(rect)
             val screenHeight = rootView.height
             val keypadHeight = screenHeight - rect.bottom
             isKeyboardVisible = keypadHeight > screenHeight * 0.15
         }
+        rootView.viewTreeObserver.addOnGlobalLayoutListener(keyboardLayoutListener)
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -3090,6 +3097,17 @@ class TabTerminalActivity : AppCompatActivity() {
         // back-ref to `this` is broken (memory leak fix).
         tabManagerListener?.let { tabManager.removeListener(it) }
         tabManagerListener = null
+
+        // Same shape: the IME-visibility tracker captures `this` and would
+        // keep firing layout callbacks against a dead activity until GC.
+        keyboardLayoutListener?.let {
+            try {
+                window.decorView.rootView.viewTreeObserver.removeOnGlobalLayoutListener(it)
+            } catch (_: Throwable) {
+                // Window already torn down — listener is implicitly dropped.
+            }
+        }
+        keyboardLayoutListener = null
 
         Logger.d("TabTerminalActivity", "Terminal activity destroyed")
         tabManager.cleanup()

@@ -222,11 +222,13 @@ class SyncSettingsActivity : AppCompatActivity() {
                 .setTitle("Clear Configuration")
                 .setMessage("Remove sync setup. Your local data is NOT affected.")
                 .setPositiveButton("Clear") { _, _ ->
-                    syncManager.clearConfiguration()
-                    switchEnabled.isChecked = false
-                    workScheduler.cancelPeriodicSync()
-                    refresh()
-                    toast("Sync configuration cleared")
+                    lifecycleScope.launch {
+                        syncManager.clearConfiguration()
+                        switchEnabled.isChecked = false
+                        workScheduler.cancelPeriodicSync()
+                        refresh()
+                        toast("Sync configuration cleared")
+                    }
                 }
                 .setNegativeButton("Cancel", null)
                 .show()
@@ -311,7 +313,11 @@ class SyncSettingsActivity : AppCompatActivity() {
                 when (which) {
                     0 -> createFileLauncher.launch(syncManager.getCreateFileIntent())
                     1 -> openFileLauncher.launch(syncManager.getOpenFileIntent())
-                    2 -> { syncManager.clearConfiguration(); refresh(); toast("Location cleared") }
+                    2 -> lifecycleScope.launch {
+                        syncManager.clearConfiguration()
+                        refresh()
+                        toast("Location cleared")
+                    }
                 }
             }
             .setNegativeButton("Cancel", null)
@@ -345,10 +351,12 @@ class SyncSettingsActivity : AppCompatActivity() {
                 pw.length < 8    -> passwordLayout?.error = errTooShort
                 pw != cfm        -> confirmLayout?.error  = errMismatch
                 else -> {
-                    syncManager.setSyncPasswordSync(pw)
-                    refresh()
-                    toast("Password set")
-                    dialog.dismiss()
+                    lifecycleScope.launch {
+                        syncManager.setSyncPassword(pw)
+                        refresh()
+                        toast("Password set")
+                        dialog.dismiss()
+                    }
                 }
             }
         }

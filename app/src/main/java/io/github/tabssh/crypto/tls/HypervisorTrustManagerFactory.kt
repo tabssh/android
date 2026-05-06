@@ -68,6 +68,11 @@ object HypervisorTrustManagerFactory {
         port: Int = 0
     ) {
         if (!verifySsl) {
+            // Trust-all is a deliberate per-host bypass, but the user
+            // should be able to see in the debug log that they took it.
+            // Without this line, a `verifySsl=false` row was indistinguish-
+            // able from a properly-pinned one in postmortem triage.
+            Logger.w(TAG, "TLS trust-all enabled for ${if (host.isNotEmpty()) "$host:$port" else "<unspecified host>"} — connection is MITM-able. Consider pinning instead.")
             installTrustAll(builder)
             return
         }
