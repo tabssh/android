@@ -730,12 +730,42 @@ infrastructure (see the schema note above).
 
 ### Docker Image
 
-- **Name:** `tabssh-android`
-- **Base:** `eclipse-temurin:17-jdk` (updated 2025-12-18)
-- **Size:** 1.15GB
+- **Name:** `ghcr.io/tabssh/android:build` (production CI), `tabssh-android-dev:latest` (local dev)
+- **Base:** `eclipse-temurin:17-jdk` (production), `debian:12-slim` (dev)
+- **Size:** ~1.15 GB
 - **SDK:** Android SDK 34, Build Tools 34.0.0, Platform Tools
-- **Location:** `docker/Dockerfile`
-- **Build Command:** `docker build -t tabssh-android -f docker/Dockerfile .`
+- **Location:** `docker/Dockerfile` and `docker/Dockerfile.dev`
+- **Build Command:** `docker build -t ghcr.io/tabssh/android:build -f docker/Dockerfile .`
+
+#### Docker conventions — IMPORTANT
+
+The split between **Dockerfile** (rootfs) and **docker-compose** (volumes)
+is intentional and easy to drift out of. Honour the convention or builds
+break in confusing ways.
+
+| Concern | Goes where | Rationale |
+|---|---|---|
+| Android SDK install | `Dockerfile` rootfs | Build-time content. Volume-mounting `/opt/android-sdk` shadows the baked install with an empty dir on first run. |
+| Gradle binary + JDK | `Dockerfile` rootfs | Same — these are tools, not state. |
+| `GRADLE_USER_HOME` cache | compose named volume | Runtime mutable. Survives `compose down`. Path **must** match the Dockerfile-set `GRADLE_USER_HOME` (currently `/root/.gradle`). |
+| Source code (`/workspace`) | compose bind-mount | Live-edit during dev. CI mounts host checkout. |
+| AVD / emulator state | compose named volume | Runtime data, not build content. |
+| `~/.android` keystore | compose named volume | Per-user state. |
+
+**Watch out for these specific pitfalls (we've drifted on each before):**
+
+* Mounting `android-sdk:/opt/android-sdk` as a named volume — overlays
+  the Dockerfile-baked SDK with an empty volume. Use rootfs.
+* Setting `GRADLE_USER_HOME` to a path the Dockerfile didn't pre-create
+  — first build fails on missing dir or perms. Keep the env var aligned
+  with the Dockerfile.
+* `dockerfile:` paths in compose are relative to the build `context:`
+  field, not the compose file location. Currently both compose files
+  set `context: .` (i.e. `docker/`) and `dockerfile: Dockerfile`.
+* `version: '3.8'` at the top of compose files is ignored by Compose v2
+  and just sits there as cruft. Don't add it back.
+* `container_name:` must be a valid Docker container name (no slashes,
+  no colons). Don't reuse the image tag.
 
 ### Gradle Configuration
 

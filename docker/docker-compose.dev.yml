@@ -1,15 +1,26 @@
-version: '3.8'
+# TabSSH Android — development container.
+#
+# Convention: this file mounts ONLY runtime-mutable state as volumes
+# (source bind-mount, gradle cache, emulator AVD data). Build-time
+# content (Android SDK, JDK, gradle binary) lives in the Dockerfile's
+# rootfs. Don't add a `/opt/android-sdk` volume here — it shadows the
+# baked-in SDK with an empty directory on first run.
 
 services:
   tabssh-dev:
     build:
       context: .
-      dockerfile: scripts/docker/Dockerfile.dev
-    container_name: ghcr.io/tabssh/android:dev
+      dockerfile: Dockerfile.dev
+    image: tabssh-android-dev:latest
     volumes:
-      - .:/workspace
+      # Source — bind-mount so local edits show up in the container.
+      - ../:/workspace
+      # Gradle user home — named volume so dependency cache survives
+      # `compose down` but doesn't leak into the host.
       - gradle-cache:/root/.gradle
-      - android-sdk:/opt/android-sdk
+      # NOTE: NO `android-sdk` volume here. The SDK is baked into the
+      # image rootfs by Dockerfile.dev — mounting a volume on top
+      # would shadow it.
     working_dir: /workspace
     environment:
       - ANDROID_HOME=/opt/android-sdk
@@ -20,13 +31,16 @@ services:
     networks:
       - tabssh-dev-network
 
-  # Optional: Emulator service for testing
+  # Optional emulator service. Off by default (profile: with-emulator)
+  # because it needs --privileged + KVM and isn't useful for headless
+  # CI builds.
   tabssh-emulator:
     image: thyrlian/android-sdk
     container_name: tabssh-emulator
     privileged: true
     volumes:
-      - .:/workspace
+      - ../:/workspace
+      # AVD + emulator state — volume because it's runtime data.
       - emulator-data:/root/.android
     environment:
       - ANDROID_HOME=/opt/android-sdk
@@ -45,12 +59,9 @@ services:
 volumes:
   gradle-cache:
     driver: local
-  android-sdk:
-    driver: local
   emulator-data:
     driver: local
 
 networks:
   tabssh-dev-network:
     driver: bridge
-

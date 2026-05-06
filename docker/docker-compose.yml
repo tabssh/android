@@ -1,20 +1,30 @@
-version: '3.8'
+# TabSSH Android — CI/build container.
+#
+# Convention: build-time content (SDK, gradle binary, JDK) lives in
+# the Dockerfile's rootfs. This file mounts only runtime-mutable
+# state as volumes (gradle dependency cache, source bind-mount).
+# Don't add a `/opt/android-sdk` or `/opt/gradle` volume here —
+# they'd shadow the baked-in installs.
 
 services:
   tabssh-builder:
     build:
       context: .
       dockerfile: Dockerfile
+    image: ghcr.io/tabssh/android:build
     volumes:
-      - .:/workspace
-      - gradle-cache:/home/gradle/.gradle
+      - ../:/workspace
+      # Path matches GRADLE_USER_HOME baked into the Dockerfile so the
+      # cache mount lands in the right place. If you change one,
+      # change both.
+      - gradle-cache:/root/.gradle
     working_dir: /workspace
     environment:
-      - GRADLE_USER_HOME=/home/gradle/.gradle
+      - GRADLE_USER_HOME=/root/.gradle
     command: >
       bash -c "
-        echo '🚀 TabSSH 1.0.0 - Docker Build Environment';
-        echo '==========================================';
+        echo '🚀 TabSSH - Docker Build Environment';
+        echo '====================================';
         echo '';
         echo '📊 Project Analysis:';
         find app/src/main/java -name '*.kt' | wc -l | xargs echo '   Kotlin files:';
@@ -24,24 +34,25 @@ services:
         echo '🔧 Running build validation...';
         ./gradlew tasks --console=plain;
         echo '';
-        echo '✅ TabSSH 1.0.0 Docker environment ready!';
-        echo 'Run: docker-compose run tabssh-builder ./gradlew build';
+        echo '✅ TabSSH Docker environment ready!';
+        echo 'Run: docker compose run tabssh-builder ./gradlew build';
       "
 
   tabssh-test:
     build:
       context: .
       dockerfile: Dockerfile
+    image: ghcr.io/tabssh/android:build
     volumes:
-      - .:/workspace
-      - gradle-cache:/home/gradle/.gradle
+      - ../:/workspace
+      - gradle-cache:/root/.gradle
     working_dir: /workspace
     environment:
-      - GRADLE_USER_HOME=/home/gradle/.gradle
+      - GRADLE_USER_HOME=/root/.gradle
     command: >
       bash -c "
-        echo '🧪 TabSSH 1.0.0 - Test Suite';
-        echo '============================';
+        echo '🧪 TabSSH - Test Suite';
+        echo '======================';
         ./gradlew test --console=plain;
         ./gradlew lintDebug --console=plain;
         echo '';
@@ -55,22 +66,24 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: ghcr.io/tabssh/android:build
     volumes:
-      - .:/workspace
-      - gradle-cache:/home/gradle/.gradle
+      - ../:/workspace
+      - gradle-cache:/root/.gradle
     working_dir: /workspace
     environment:
-      - GRADLE_USER_HOME=/home/gradle/.gradle
+      - GRADLE_USER_HOME=/root/.gradle
     command: >
       bash -c "
-        echo '📱 TabSSH 1.0.0 - APK Build';
-        echo '===========================';
+        echo '📱 TabSSH - APK Build';
+        echo '=====================';
         ./gradlew assembleDebug --console=plain;
         ls -la app/build/outputs/apk/debug/;
         echo '';
         echo '✅ APK build complete!';
-        echo 'Output: app/build/outputs/apk/debug/app-debug.apk';
+        echo 'Output: app/build/outputs/apk/debug/';
       "
 
 volumes:
   gradle-cache:
+    driver: local
