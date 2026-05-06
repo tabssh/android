@@ -106,6 +106,13 @@ class TabSSHApplication : Application() {
         // to the debug log so it shows up in Copy Debug Logs.
         if (debugLoggingActive) startAnrWatchdog()
 
+        // Restore the user's keystroke-byte-logging opt-in (default off).
+        // Static flag on TermuxBridge — gated separately from debug logging
+        // because users who enable debug logs for protocol triage don't
+        // necessarily want their typed sudo/ssh passwords in those logs.
+        io.github.tabssh.terminal.TermuxBridge.logKeystrokeBytes =
+            preferencesManager.getBoolean("log_keystroke_bytes", false)
+
         // Stamp the source-of-truth commit into the log exactly once per
         // commit-id change (install / update). Lets users grepping their
         // own log — or pasting it into a bug report — figure out which

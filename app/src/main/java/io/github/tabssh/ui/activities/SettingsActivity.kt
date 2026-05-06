@@ -722,6 +722,21 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
                 true
             }
 
+        // Live-toggle keystroke-byte logging. Default off for privacy
+        // (every byte typed at the terminal — including remote sudo/ssh
+        // password prompts — flows through TermuxBridge). Static flag so
+        // the bridge doesn't need to know about Context.
+        findPreference<androidx.preference.SwitchPreferenceCompat>("log_keystroke_bytes")
+            ?.setOnPreferenceChangeListener { _, newValue ->
+                io.github.tabssh.terminal.TermuxBridge.logKeystrokeBytes = newValue as? Boolean ?: false
+                true
+            }
+        // Apply persisted value on fragment open (covers cold start before
+        // the user touches the toggle).
+        io.github.tabssh.terminal.TermuxBridge.logKeystrokeBytes =
+            (requireActivity().application as io.github.tabssh.TabSSHApplication)
+                .preferencesManager.getBoolean("log_keystroke_bytes", false)
+
         // View Debug Log
         findPreference<Preference>("view_debug_log")?.setOnPreferenceClickListener {
             showLogViewer("Debug Log", "debug")

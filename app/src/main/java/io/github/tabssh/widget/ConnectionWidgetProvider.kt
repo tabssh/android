@@ -63,11 +63,16 @@ open class ConnectionWidgetProvider : AppWidgetProvider() {
             }
             
             if (connectionId != null) {
-                CoroutineScope(Dispatchers.Main).launch {
+                // Was launching on Dispatchers.Main and calling a suspend
+                // DAO func — Room dispatches its own IO so this never
+                // actually blocked the main thread, but launching on IO
+                // matches every other DAO call in the app and is harder
+                // to misread later.
+                CoroutineScope(Dispatchers.IO).launch {
                     try {
                         val app = context.applicationContext as TabSSHApplication
                         val connection = app.database.connectionDao().getConnectionById(connectionId)
-                        
+
                         if (connection != null) {
                             updateWidgetWithConnection(context, appWidgetManager, widgetId, connection, layoutResId)
                         } else {

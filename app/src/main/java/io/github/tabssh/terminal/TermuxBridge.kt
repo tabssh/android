@@ -40,6 +40,24 @@ class TermuxBridge(
     companion object {
         private const val TAG = "TermuxBridge"
         private const val READ_BUFFER_SIZE = 8192
+
+        /**
+         * When false (default), keystroke writes log only `Sent N bytes to SSH`.
+         * When true, the first ≤16 bytes are also dumped via `toBriefHex()`.
+         *
+         * Off by default because user keystrokes flow through this path —
+         * including sudo passwords, ssh passphrases entered via `read -s`,
+         * and anything else typed into the terminal. The byte-content payload
+         * is useful for diagnosing protocol-level disconnects (it caught the
+         * GCM-tag race that produced `ssh_dispatch_run_fatal: message
+         * authentication code incorrect` server-side) but should be opt-in.
+         *
+         * Toggled by `LoggingSettingsFragment` from the
+         * `log_keystroke_bytes` preference.
+         */
+        @Volatile
+        @JvmStatic
+        var logKeystrokeBytes: Boolean = false
     }
 
     // Termux emulator instance
@@ -143,10 +161,14 @@ class TermuxBridge(
                         outputStream?.let { stream ->
                             stream.write(dataCopy)
                             stream.flush()
-                            Logger.d(
-                                TAG,
-                                "Sent ${dataCopy.size} bytes to SSH (bytes=${dataCopy.toBriefHex()})"
-                            )
+                            if (logKeystrokeBytes) {
+                                Logger.d(
+                                    TAG,
+                                    "Sent ${dataCopy.size} bytes to SSH (bytes=${dataCopy.toBriefHex()})"
+                                )
+                            } else {
+                                Logger.d(TAG, "Sent ${dataCopy.size} bytes to SSH")
+                            }
                         }
                         // Wave 2.7 — broadcast input. After our own SSH write
                         // succeeds, fan the same bytes out to every registered

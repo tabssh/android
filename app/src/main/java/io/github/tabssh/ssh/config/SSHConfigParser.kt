@@ -262,6 +262,13 @@ class SSHConfigParser {
             out.toString()
         } else null
 
+        // ProxyJump from ~/.ssh/config: parse `[user@]host[:port]` into the
+        // dedicated proxy columns so SSHConnection.setupJumpHost finds them.
+        // Round-trip through advancedSettings JSON is preserved for backward
+        // compat with rows imported under earlier code, but the runtime path
+        // (SSHConnection / SSHConfigExporter) reads from columns.
+        val parsedJump = host.proxyJump?.let { parseProxyJump(it) }
+
         return ConnectionProfile(
             id = id,
             name = name,
@@ -282,11 +289,38 @@ class SSHConfigParser {
             x11Forwarding = host.forwardX11,
             compression = host.compression,
             connectTimeout = host.connectTimeout,
+            proxyType = parsedJump?.let { "SSH" },
+            proxyHost = parsedJump?.host,
+            proxyPort = parsedJump?.port,
+            proxyUsername = parsedJump?.user,
             createdAt = System.currentTimeMillis(),
             lastConnected = 0,
             connectionCount = 0,
             advancedSettings = advancedSettings
         )
+    }
+
+    private data class ParsedJump(val user: String?, val host: String, val port: Int?)
+
+    /**
+     * Parse OpenSSH `ProxyJump` value: `[user@]host[:port]`. IPv6 addresses
+     * inside brackets aren't supported here — same shape as the existing
+     * `setupJumpHost` consumer which uses the literal host string.
+     */
+    private fun parseProxyJump(spec: String): ParsedJump? {
+        val trimmed = spec.trim().takeIf { it.isNotEmpty() } ?: return null
+        val atIdx = trimmed.lastIndexOf('@')
+        val user: String? = if (atIdx > 0) trimmed.substring(0, atIdx) else null
+        val hostAndPort = if (atIdx >= 0) trimmed.substring(atIdx + 1) else trimmed
+        if (hostAndPort.isBlank()) return null
+        val colonIdx = hostAndPort.lastIndexOf(':')
+        return if (colonIdx > 0) {
+            val host = hostAndPort.substring(0, colonIdx).trim()
+            val port = hostAndPort.substring(colonIdx + 1).trim().toIntOrNull()
+            if (host.isEmpty()) null else ParsedJump(user, host, port)
+        } else {
+            ParsedJump(user, hostAndPort, null)
+        }
     }
 
     /**
