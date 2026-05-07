@@ -20,7 +20,7 @@ class KeyboardKeyAdapter(
         
         init {
             view.setOnClickListener {
-                val position = adapterPosition
+                val position = bindingAdapterPosition
                 if (position != RecyclerView.NO_POSITION) {
                     onKeyClick(keys[position])
                 }
@@ -28,7 +28,7 @@ class KeyboardKeyAdapter(
             
             if (isRemovable) {
                 view.setOnLongClickListener {
-                    val position = adapterPosition
+                    val position = bindingAdapterPosition
                     if (position != RecyclerView.NO_POSITION) {
                         onKeyClick(keys[position])
                         true

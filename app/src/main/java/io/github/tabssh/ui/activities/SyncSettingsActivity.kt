@@ -85,7 +85,7 @@ class SyncSettingsActivity : AppCompatActivity() {
 
         syncManager   = SAFSyncManager(this)
         workScheduler = SyncWorkScheduler(this)
-        prefs = android.preference.PreferenceManager.getDefaultSharedPreferences(this)
+        prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
 
         // Toolbar
         setSupportActionBar(findViewById<Toolbar>(R.id.toolbar))

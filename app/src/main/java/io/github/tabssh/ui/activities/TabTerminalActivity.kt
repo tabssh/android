@@ -39,6 +39,10 @@ import io.github.tabssh.themes.definitions.BuiltInThemes
  * Main terminal activity with tabbed SSH sessions
  * This is the core innovation of TabSSH - browser-style SSH tabs
  */
+// `cont.resume(value, onCancellation)` (used in promptForPassword) is
+// flagged @ExperimentalCoroutinesApi. Rather than tag every transitive
+// caller, opt-in once at the class level.
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class TabTerminalActivity : AppCompatActivity() {
     
     companion object {
@@ -562,7 +566,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     onCommandSent = { command ->
                         // Send command to active terminal
                         tabManager.getActiveTab()?.let { tab ->
-                            tab.terminal.sendText(String(command, Charsets.UTF_8))
+                            tab.termuxBridge.sendText(String(command, Charsets.UTF_8))
                             android.widget.Toast.makeText(
                                 this@TabTerminalActivity,
                                 "Gesture command sent",
@@ -1585,7 +1589,7 @@ class TabTerminalActivity : AppCompatActivity() {
             newTab.select()
 
             // Attach the terminal to the view
-            terminalView?.attachTerminalEmulator(tab.terminal)
+            terminalView?.attachTerminalEmulator(tab.termuxBridge)
 
             Logger.d("TabTerminalActivity", "Added tab to UI: ${tab.profile.getDisplayName()}")
         }
@@ -1623,7 +1627,7 @@ class TabTerminalActivity : AppCompatActivity() {
         val commandCallback: ((ByteArray) -> Unit)? = if (gesturesEnabled) {
             { command ->
                 tabManager.getActiveTab()?.let { tab ->
-                    tab.terminal.sendText(String(command, Charsets.UTF_8))
+                    tab.termuxBridge.sendText(String(command, Charsets.UTF_8))
                     android.widget.Toast.makeText(
                         this,
                         "Gesture command sent",
@@ -1715,7 +1719,7 @@ class TabTerminalActivity : AppCompatActivity() {
             val tab = tabManager.getTab(index)
             if (tab != null) {
                 // Connect terminal view to the tab's terminal emulator
-                val terminal = tab.terminal
+                val terminal = tab.termuxBridge
                 terminalView?.attachTerminalEmulator(terminal)
 
                 // Deactivate previous tab
@@ -3069,7 +3073,7 @@ class TabTerminalActivity : AppCompatActivity() {
         if (activeTab != null) {
             if (!swipeEnabled) {
                 // In classic mode, reconnect terminal view to active tab
-                val terminal = activeTab.terminal
+                val terminal = activeTab.termuxBridge
                 terminalView?.initialize(terminal.getRows(), terminal.getCols())
             }
             activeTab.activate()

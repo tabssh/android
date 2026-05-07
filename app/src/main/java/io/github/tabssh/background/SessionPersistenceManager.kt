@@ -345,7 +345,7 @@ class SessionPersistenceManager(
     private suspend fun restoreTabTerminalState(tab: SSHTab, session: TabSession) {
         try {
             // Restore terminal.size
-            tab.terminal.resize(session.terminalRows, session.terminalCols)
+            tab.termuxBridge.resize(session.terminalRows, session.terminalCols)
 
             // Restore scrollback content if available
             session.terminalContent.takeIf { it.isNotEmpty() }?.let { compressedContent ->

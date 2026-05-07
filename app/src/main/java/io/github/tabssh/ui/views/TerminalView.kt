@@ -438,10 +438,12 @@ class TerminalView @JvmOverloads constructor(
             // Partial invalidation - find bounding rect of dirty rows
             val firstDirty = dirtyRows.nextSetBit(0)
             if (firstDirty >= 0) {
-                val lastDirty = dirtyRows.length() - 1
-                val top = (paddingTop + firstDirty * cellHeight).toInt()
-                val bottom = (paddingTop + (lastDirty + 1) * cellHeight).toInt()
-                invalidate(0, top, width, bottom)
+                // The four-arg `invalidate(left, top, right, bottom)` is
+                // deprecated — modern Android composer ignores the rect
+                // and always invalidates the whole view. The dirty-row
+                // tracking above stays useful for any future on-canvas
+                // optimisation; the call itself is now full-invalidate.
+                invalidate()
             }
         }
     }

@@ -251,13 +251,13 @@ class TaskerIntentService : JobIntentService() {
                     return@runBlocking
                 }
 
-                tab.terminal.sendText("$command\n")
+                tab.termuxBridge.sendText("$command\n")
                 logTaskerEvent("send_command", "${profile.id}/${profile.name}: $command")
 
                 if (waitForResult) {
                     withTimeout(timeoutMs) {
                         delay(500)
-                        val output = tab.terminal.getScreenContent()
+                        val output = tab.termuxBridge.getScreenContent()
                         broadcastCommandResult(profile, command, output)
                     }
                 } else {
@@ -309,7 +309,7 @@ class TaskerIntentService : JobIntentService() {
 
                 if (tab != null) {
                     val sequence = parseKeySequence(keys)
-                    tab.terminal.sendText(sequence)
+                    tab.termuxBridge.sendText(sequence)
                     logTaskerEvent("send_keys", "${profile.id}/${profile.name}: $keys")
                 } else {
                     broadcastError("No active connection")

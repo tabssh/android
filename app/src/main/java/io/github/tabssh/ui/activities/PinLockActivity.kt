@@ -75,6 +75,17 @@ class PinLockActivity : AppCompatActivity() {
         app = application as TabSSHApplication
         mode = intent.getStringExtra(EXTRA_MODE) ?: MODE_VERIFY
 
+        // Modern back-press: in MODE_VERIFY we eat the back press
+        // (don't let the user dismiss the gate); otherwise let the
+        // dispatcher fall through to the default Activity finish.
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (mode == MODE_VERIFY) return
+                isEnabled = false
+                onBackPressedDispatcher.onBackPressed()
+            }
+        })
+
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -179,15 +190,6 @@ class PinLockActivity : AppCompatActivity() {
             return
         }
         status.text = "Incorrect — try again (${MAX_ATTEMPTS - attempts} left)"
-    }
-
-    @Deprecated("Block back press while locked")
-    override fun onBackPressed() {
-        if (mode == MODE_VERIFY) {
-            // Don't let user dismiss the gate.
-            return
-        }
-        super.onBackPressed()
     }
 
     private fun dp(value: Int): Int =

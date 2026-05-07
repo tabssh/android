@@ -90,6 +90,15 @@ class VMConsoleActivity : AppCompatActivity() {
         progressBar = findViewById(R.id.progress_bar)
         statusText = findViewById(R.id.status_text)
 
+        // Modern back-press handling — Activity.onBackPressed() is
+        // deprecated, the OnBackPressedDispatcher API is the supported
+        // path (and supports predictive-back gestures on Android 14+).
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                confirmDisconnectThenFinish()
+            }
+        })
+
         // Mobile-first: no action bar / toolbar. The VM name shows briefly
         // in the loading overlay's status text. Disconnect / Reconnect
         // controls live as floating overlay buttons.
@@ -214,10 +223,16 @@ class VMConsoleActivity : AppCompatActivity() {
                     6 -> sendBytes(byteArrayOf(0x0D))                  // CR
                     7 -> showSendTextDialog()
                     8 -> {
-                        val imm = getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
-                            as android.view.inputmethod.InputMethodManager
-                        imm.toggleSoftInput(
-                            android.view.inputmethod.InputMethodManager.SHOW_FORCED, 0)
+                        // toggleSoftInput(SHOW_FORCED, …) is deprecated.
+                        // Use the WindowInsetsController IME toggle which
+                        // works against the active focus and supports the
+                        // predictive-back gesture path.
+                        val view = window.decorView
+                        val imeType = androidx.core.view.WindowInsetsCompat.Type.ime()
+                        val visible = androidx.core.view.ViewCompat.getRootWindowInsets(view)
+                            ?.isVisible(imeType) == true
+                        val ic = androidx.core.view.WindowCompat.getInsetsController(window, view)
+                        if (visible) ic.hide(imeType) else ic.show(imeType)
                     }
                     9 -> confirmDisconnectThenFinish()
                 }
@@ -466,10 +481,6 @@ class VMConsoleActivity : AppCompatActivity() {
     override fun onSupportNavigateUp(): Boolean {
         confirmDisconnectThenFinish()
         return true
-    }
-
-    override fun onBackPressed() {
-        confirmDisconnectThenFinish()
     }
 
     /**

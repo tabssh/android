@@ -40,7 +40,7 @@ class TerminalPagerAdapter(
      * Get terminal view at position (for theme application)
      */
     fun getTerminalViewAt(position: Int): TerminalView? {
-        return boundViewHolders.find { it.adapterPosition == position }?.terminalView
+        return boundViewHolders.find { it.bindingAdapterPosition == position }?.terminalView
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): TerminalViewHolder {
@@ -99,7 +99,7 @@ class TerminalPagerAdapter(
 
         fun bind(tab: SSHTab) {
             // Attach terminal emulator to this view
-            terminalView.attachTerminalEmulator(tab.terminal)
+            terminalView.attachTerminalEmulator(tab.termuxBridge)
 
             // Apply font
             terminalView.setFont(fontValue)

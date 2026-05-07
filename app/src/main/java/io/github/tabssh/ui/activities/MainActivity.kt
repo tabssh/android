@@ -1245,24 +1245,25 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         }
     }
 
+    // Modern result API — replaces startActivityForResult/onActivityResult.
+    // Registered at field-init so it's bound before the activity reaches
+    // STARTED (registerForActivityResult requires this).
+    private val pinVerifyLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            pinUnlocked = true
+        } else {
+            finishAffinity() // user couldn't / wouldn't unlock
+        }
+    }
+
     private fun maybePromptPinLock() {
         if (pinUnlocked) return
         val enabled = app.preferencesManager.getBoolean(PinLockActivity.PREF_PIN_ENABLED, false)
         val hash = app.preferencesManager.getString(PinLockActivity.PREF_PIN_HASH, "")
         if (!enabled || hash.isBlank()) return
-        startActivityForResult(PinLockActivity.verifyIntent(this), PIN_VERIFY_REQ)
-    }
-
-    @Deprecated("startActivityForResult required for one-shot lock screen pre-AndroidX result API in this codebase")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == PIN_VERIFY_REQ) {
-            if (resultCode == RESULT_OK) {
-                pinUnlocked = true
-            } else {
-                finishAffinity() // user couldn't / wouldn't unlock
-            }
-        }
+        pinVerifyLauncher.launch(PinLockActivity.verifyIntent(this))
     }
 
     override fun onPause() {
@@ -1271,10 +1272,6 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         if (isFinishing.not()) pinUnlocked = false
     }
 
-    companion object {
-        private const val PIN_VERIFY_REQ = 0xA10C
-    }
-    
     /**
      * Show quick connect dialog for fast SSH connections.
      * If user types only a hostname (no @), resolves username from

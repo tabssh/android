@@ -51,6 +51,10 @@ class Fido2SshIdentity(
 
     override fun isEncrypted(): Boolean = false
 
+    // JSch's Identity.decrypt() is itself @Deprecated upstream — silence
+    // the override-needs-deprecated warning without propagating a
+    // misleading deprecation onto our impl.
+    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
     @Throws(JSchException::class)
     override fun decrypt(): Boolean = true
 
