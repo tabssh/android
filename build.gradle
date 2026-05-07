@@ -13,6 +13,10 @@ buildscript {
 
 plugins {
     id 'org.owasp.dependencycheck' version '8.4.0'
+    // KSP — replaces Kapt for Room codegen. The version suffix
+    // (`-1.0.25`) is the KSP release; the prefix (`2.0.21`) MUST
+    // match `kotlin_version` above. If you bump Kotlin, bump this.
+    id 'com.google.devtools.ksp' version '2.0.21-1.0.25' apply false
 }
 
 // Repositories are now managed in settings.gradle
