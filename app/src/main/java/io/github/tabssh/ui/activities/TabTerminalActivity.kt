@@ -186,8 +186,10 @@ class TabTerminalActivity : AppCompatActivity() {
                 ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
         } ?: false
 
-        if (imeShown && terminalView != null) {
-            imm.hideSoftInputFromWindow(terminalView.windowToken, 0)
+        if (imeShown) {
+            // imeShown is only true when terminalView was non-null in the
+            // elvis expression above, so the smart cast is sound here.
+            imm.hideSoftInputFromWindow(terminalView!!.windowToken, 0)
             Logger.d("TabTerminalActivity", "BACK: hid IME, staying in terminal")
             return
         }

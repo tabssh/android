@@ -203,7 +203,7 @@ class ProxmoxApiClient(
                 if (data != null && data.length() > 0) {
                     for (i in 0 until data.length()) {
                         val iface = data.getJSONObject(i)
-                        val inet = iface.optString("inet", null)
+                        val inet = iface.optString("inet").takeIf { it.isNotEmpty() }
                         if (inet != null && !inet.startsWith("127.")) {
                             return@withContext inet.split("/")[0] // Remove CIDR notation
                         }

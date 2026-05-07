@@ -93,13 +93,13 @@ class BackupImporter(
                 port = connectionJson.getInt("port"),
                 username = connectionJson.getString("username"),
                 authType = connectionJson.getString("authType"),
-                keyId = connectionJson.optString("keyId", null),
-                groupId = connectionJson.optString("groupId", null),
-                theme = connectionJson.optString("theme", null),
+                keyId = connectionJson.optString("keyId").takeIf { it.isNotEmpty() },
+                groupId = connectionJson.optString("groupId").takeIf { it.isNotEmpty() },
+                theme = connectionJson.optString("theme", "dracula"),
                 createdAt = System.currentTimeMillis(),
                 lastConnected = connectionJson.optLong("lastConnected", 0),
                 connectionCount = connectionJson.optInt("connectionCount", 0),
-                advancedSettings = connectionJson.optString("advancedSettings", null)
+                advancedSettings = connectionJson.optString("advancedSettings").takeIf { it.isNotEmpty() }
             )
 
             database.connectionDao().insertConnection(connection)
@@ -135,7 +135,7 @@ class BackupImporter(
                 keyId = keyJson.getString("keyId"),
                 name = keyJson.getString("name"),
                 keyType = keyJson.getString("keyType"),
-                comment = keyJson.optString("comment", null),
+                comment = keyJson.optString("comment").takeIf { it.isNotEmpty() },
                 fingerprint = keyJson.getString("fingerprint"),
                 createdAt = keyJson.getLong("createdAt"),
                 lastUsed = keyJson.optLong("lastUsed", 0),
