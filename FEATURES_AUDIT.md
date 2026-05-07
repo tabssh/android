@@ -65,9 +65,9 @@
 | Export public key | ✅ | ✅ | ✅ | — |
 | 2FA prompt (TOTP keyboard-interactive) | ✅ | ✅ | — | Already works via keyboard-interactive |
 | SSH agent functionality (keys stay on device) | ✅ | ✅ | — | Inherent (we never send key material) |
-| SSH agent forwarding | 🟡 | ✅ | ✅ Pro | UI toggle exists, not wired. **MEDIUM** |
-| FIDO2 / U2F hardware key auth | ❌ | — | ✅ Free | YubiKey, Solo, Google Titan over USB-C/NFC. **MEDIUM-HIGH** |
-| SSH certificate auth | ❌ | — | ✅ Free | OpenSSH cert files. **MEDIUM** |
+| SSH agent forwarding | ✅ | ✅ | ✅ Pro | UI toggle + JSch IdentityRepository populated from stored keys. |
+| FIDO2 / U2F hardware key auth | 🟡 | — | ✅ Free | Stub `Fido2SshIdentity` exists; CTAP2 transport not implemented (~1k LOC). |
+| SSH certificate auth | ✅ | — | ✅ Free | OpenSSH `*-cert.pub` attach via KeyManagementActivity, `addIdentity(name, prv, cert, pass)`. |
 | Identity abstraction | ✅ | ✅ | ✅ | — |
 | Biometric unlock for app/credentials | ✅ | ✅ | ✅ Pro | — |
 

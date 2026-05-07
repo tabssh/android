@@ -46,31 +46,24 @@ class NetworkDetector(private val context: Context) {
     }
 
     /**
-     * Check current network state
+     * Check current network state. Uses [NetworkCapabilities] on every API
+     * level — `activeNetwork` is API 23+, so on 21–22 we walk
+     * `allNetworks` (deprecated since API 31, but the only path on
+     * pre-M devices) and take the first internet-capable one.
      */
+    @Suppress("DEPRECATION") // allNetworks: only used on API < 23
     private fun checkCurrentNetworkState() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val network = connectivityManager.activeNetwork
-            val capabilities = connectivityManager.getNetworkCapabilities(network)
-
-            if (network != null && capabilities != null) {
-                updateNetworkState(capabilities)
-            } else {
-                _networkState.value = NetworkState()
-            }
+        val capabilities: NetworkCapabilities? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            connectivityManager.getNetworkCapabilities(connectivityManager.activeNetwork)
         } else {
-            // Fallback for older Android versions
-            @Suppress("DEPRECATION")
-            val networkInfo = connectivityManager.activeNetworkInfo
-            _networkState.value = NetworkState(
-                isConnected = networkInfo?.isConnected == true,
-                networkType = when (networkInfo?.type) {
-                    ConnectivityManager.TYPE_WIFI -> NetworkType.WIFI
-                    ConnectivityManager.TYPE_MOBILE -> NetworkType.CELLULAR
-                    ConnectivityManager.TYPE_ETHERNET -> NetworkType.ETHERNET
-                    else -> NetworkType.OTHER
-                }
-            )
+            connectivityManager.allNetworks
+                .mapNotNull { connectivityManager.getNetworkCapabilities(it) }
+                .firstOrNull { it.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) }
+        }
+        if (capabilities != null) {
+            updateNetworkState(capabilities)
+        } else {
+            _networkState.value = NetworkState()
         }
     }
 
@@ -184,24 +177,20 @@ class NetworkDetector(private val context: Context) {
         /**
          * Static helper to check if high speed network is available
          */
+        @Suppress("DEPRECATION") // allNetworks: only used on API < 23
         fun isHighSpeed(context: Context): Boolean {
             val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                val network = connectivityManager.activeNetwork
-                val capabilities = connectivityManager.getNetworkCapabilities(network)
-
-                return capabilities?.let {
-                    val hasWifi = it.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
-                    val hasEthernet = it.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
-                    hasWifi || hasEthernet
-                } ?: false
+            val capabilities = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                connectivityManager.getNetworkCapabilities(connectivityManager.activeNetwork)
             } else {
-                @Suppress("DEPRECATION")
-                val networkInfo = connectivityManager.activeNetworkInfo
-                return networkInfo?.type == ConnectivityManager.TYPE_WIFI ||
-                       networkInfo?.type == ConnectivityManager.TYPE_ETHERNET
-            }
+                connectivityManager.allNetworks
+                    .mapNotNull { connectivityManager.getNetworkCapabilities(it) }
+                    .firstOrNull { it.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) }
+            } ?: return false
+
+            return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
         }
     }
 }

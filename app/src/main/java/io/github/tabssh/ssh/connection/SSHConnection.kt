@@ -8,6 +8,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.SocketException
@@ -853,6 +854,17 @@ class SSHConnection(
             throw NotImplementedError(msg)
         }
 
+        // Wave 1.5 runtime wiring — when agent forwarding is enabled we
+        // populate JSch's identity repository up-front with every stored
+        // key the user has unlocked. JSch services agent-forwarded sign
+        // requests from the same identity list it uses for direct auth,
+        // so addIdentity() is the whole runtime hookup. Done before the
+        // per-connection key path so the connection's own key gets added
+        // on top (and a second addIdentity for the same name is a no-op).
+        if (profile.agentForwarding && app != null) {
+            populateAgentIdentities(jsch, app)
+        }
+
         // Use already-resolved identity from connect()
         val linkedIdentity = resolvedIdentity
         Logger.d("SSHConnection", "setupAuthentication: linkedIdentity=${linkedIdentity?.name}, identity.keyId=${linkedIdentity?.keyId}, profile.keyId=${profile.keyId}")
@@ -1066,6 +1078,44 @@ class SSHConnection(
             Logger.e("SSHConnection", "getJSchBytes: Failed to build JSch bytes for $keyId", e)
             null
         }
+    }
+
+    /**
+     * Wave 1.5 runtime wiring — load every stored key the user has into
+     * JSch's identity repository so agent-forwarded sign requests can be
+     * serviced. Skips encrypted keys with no stored passphrase (those
+     * would throw on first sign and JSch reports the failure as a
+     * generic auth error).
+     *
+     * The intent of "agent forwarding" on Android is *not* to bridge to
+     * a system ssh-agent (there isn't one) — it's to let the remote host
+     * sign with the user's TabSSH-stored keys when it hops to a further
+     * host. Same end-user effect, no socket plumbing.
+     */
+    private suspend fun populateAgentIdentities(
+        jsch: JSch,
+        app: io.github.tabssh.TabSSHApplication
+    ) = withContext(Dispatchers.IO) {
+        val keys = try {
+            app.database.keyDao().getAllKeys().first()
+        } catch (e: Exception) {
+            Logger.w("SSHConnection", "Agent forwarding: failed to enumerate keys: ${e.message}")
+            return@withContext
+        }
+        var added = 0
+        for (key in keys) {
+            try {
+                val bytes = getJSchBytes(key.keyId) ?: continue
+                val passphrase = app.securePasswordManager
+                    .retrievePassword("key_passphrase_${key.keyId}")
+                    ?.toByteArray()
+                jsch.addIdentity("tabssh-agent-${key.keyId}", bytes, null, passphrase)
+                added++
+            } catch (e: Exception) {
+                Logger.d("SSHConnection", "Agent forwarding: skipping key ${key.keyId}: ${e.message}")
+            }
+        }
+        Logger.i("SSHConnection", "Agent forwarding: loaded $added/${keys.size} stored keys into JSch identity repository")
     }
 
     /**

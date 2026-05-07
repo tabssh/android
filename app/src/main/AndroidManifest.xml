@@ -55,7 +55,7 @@
         <package android:name="com.termux" />
     </queries>
 
-    <!-- Custom signature-level permission protecting TaskerIntentService.
+    <!-- Custom signature-level permission protecting TaskerActionReceiver.
          Without this, the (exported) intent service was reachable from any
          app on the device — an attacker app could fire CONNECT/SEND_COMMAND
          intents to drive arbitrary commands on the user's SSH targets.
@@ -300,12 +300,12 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
-        <!-- Tasker integration service. Gated on the signature-level
+        <!-- Tasker integration entry point. Gated on the signature-level
              permission declared above so only same-signature callers can
-             reach it; previously this was unprotected and any installed
-             app could trigger CONNECT/SEND_COMMAND/SEND_KEYS. -->
-        <service
-            android:name=".automation.TaskerIntentService"
+             reach it. Receiver enqueues a TaskerWorker (WorkManager) —
+             previously this was a JobIntentService, which is deprecated. -->
+        <receiver
+            android:name=".automation.TaskerActionReceiver"
             android:enabled="true"
             android:exported="true"
             android:permission="io.github.tabssh.permission.TASKER">
@@ -315,7 +315,7 @@
                 <action android:name="io.github.tabssh.action.SEND_COMMAND" />
                 <action android:name="io.github.tabssh.action.SEND_KEYS" />
             </intent-filter>
-        </service>
+        </receiver>
 
         <!-- File provider for sharing files -->
         <provider
