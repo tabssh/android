@@ -2820,13 +2820,22 @@ class TabTerminalActivity : AppCompatActivity() {
 
         specs.forEach { spec ->
             val label = android.widget.TextView(this).apply {
-                text = spec.name
+                text = if (spec.isPassword) "${spec.name} (masked)" else spec.name
                 textSize = 14f
             }
             val input = android.widget.EditText(this).apply {
                 hint = spec.hint ?: "Enter value for ${spec.name}"
-                // Pre-fill: last-used > declared default > blank
-                val recall = recallPrefs.getString("${snippet.id}/${spec.name}", null)
+                if (spec.isPassword) {
+                    inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                        android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+                }
+                // Pre-fill: last-used > declared default > blank.
+                // For password-typed variables we never recall the prior
+                // value — only the declared default is honoured (and even
+                // that only because if the user wrote the default in
+                // plaintext into the snippet, they've already opted in).
+                val recall = if (spec.isPassword) null
+                    else recallPrefs.getString("${snippet.id}/${spec.name}", null)
                 val initial = recall ?: spec.default
                 if (!initial.isNullOrEmpty()) {
                     setText(initial)
@@ -2847,7 +2856,10 @@ class TabTerminalActivity : AppCompatActivity() {
                 specs.forEachIndexed { i, spec ->
                     val v = inputs[i].text.toString()
                     values[spec.name] = v
-                    if (v.isNotBlank()) recallEdits.putString("${snippet.id}/${spec.name}", v)
+                    // Never persist password-typed variable values.
+                    if (v.isNotBlank() && !spec.isPassword) {
+                        recallEdits.putString("${snippet.id}/${spec.name}", v)
+                    }
                 }
                 recallEdits.apply()
 

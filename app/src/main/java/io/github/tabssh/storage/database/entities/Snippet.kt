@@ -103,10 +103,25 @@ data class Snippet(
                 name = name,
                 default = m.groupValues[3].takeIf { it.isNotEmpty() },
                 hint = m.groupValues[4].takeIf { it.isNotEmpty() },
-                prompt = m.groupValues[1] == "?"
+                prompt = m.groupValues[1] == "?",
+                // Password sniff — variables named "password" / "pass" /
+                // "passphrase" / "secret" / "token" / "apikey" get masked
+                // input and are NOT recalled across runs. Case-insensitive
+                // exact-or-contains match — the noise of a false positive
+                // (Toast says "tokens" → masked) is harmless; the cost of
+                // a false negative (real password rendered to the dialog
+                // and persisted into recall prefs) is not.
+                isPassword = isPasswordName(name)
             )
         }
         return seen.values.toList()
+    }
+
+    private fun isPasswordName(name: String): Boolean {
+        val n = name.lowercase()
+        return n == "password" || n == "pass" || n == "passphrase" || n == "secret" ||
+            n == "token" || n == "apikey" || n == "api_key" ||
+            n.contains("password") || n.contains("passphrase")
     }
 
     /**
@@ -125,6 +140,7 @@ data class Snippet(
         val name: String,
         val default: String? = null,
         val hint: String? = null,
-        val prompt: Boolean = false
+        val prompt: Boolean = false,
+        val isPassword: Boolean = false
     )
 }
