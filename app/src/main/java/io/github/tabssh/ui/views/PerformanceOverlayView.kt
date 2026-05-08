@@ -103,13 +103,23 @@ class PerformanceOverlayView @JvmOverloads constructor(
                 return true
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                if (!isDragging) {
-                    // Treat as click - do nothing
+                // Tap (no drag detected) routes through performClick so
+                // accessibility services hear the click event.
+                if (!isDragging && event.action == MotionEvent.ACTION_UP) {
+                    performClick()
                 }
                 isDragging = false
                 return true
             }
         }
         return super.onTouchEvent(event)
+    }
+
+    override fun performClick(): Boolean {
+        super.performClick()
+        // No click side-effects today — overlay is drag-only — but
+        // overriding satisfies the a11y contract and gives us a hook
+        // if we ever want to expand/collapse the HUD on tap.
+        return true
     }
 }

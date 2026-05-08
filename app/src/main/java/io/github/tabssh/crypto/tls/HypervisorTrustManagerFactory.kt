@@ -1,5 +1,6 @@
 package io.github.tabssh.crypto.tls
 
+import android.annotation.SuppressLint
 import io.github.tabssh.utils.logging.Logger
 import okhttp3.OkHttpClient
 import java.security.MessageDigest
@@ -81,8 +82,13 @@ object HypervisorTrustManagerFactory {
 
     /** Install a TrustManager that accepts every cert. */
     private fun installTrustAll(builder: OkHttpClient.Builder) {
+        // Lint correctly notices this is trust-all; we intentionally
+        // opt into it ONLY when the user has checked "verifySsl = false"
+        // on the hypervisor profile. The warning is logged loudly above.
         val trustAll = object : X509TrustManager {
+            @SuppressLint("TrustAllX509TrustManager")
             override fun checkClientTrusted(c: Array<X509Certificate>, t: String) {}
+            @SuppressLint("TrustAllX509TrustManager")
             override fun checkServerTrusted(c: Array<X509Certificate>, t: String) {}
             override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
         }
@@ -106,7 +112,11 @@ object HypervisorTrustManagerFactory {
         host: String,
         port: Int
     ) {
+        // checkClientTrusted is empty by design — we are the TLS client
+        // here, never validating an inbound client cert. checkServerTrusted
+        // does the real TOFU pinning work below.
         val pinning = object : X509TrustManager {
+            @SuppressLint("TrustAllX509TrustManager")
             override fun checkClientTrusted(c: Array<X509Certificate>, t: String) {}
             override fun checkServerTrusted(chain: Array<X509Certificate>, t: String) {
                 if (chain.isEmpty()) {

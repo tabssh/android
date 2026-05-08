@@ -78,6 +78,7 @@
                 <LinearLayout style="@style/BulkEdit.SectionHeader">
                     <ImageView
                         style="@style/BulkEdit.SectionIcon"
+                        android:importantForAccessibility="no"
                         android:src="@drawable/ic_connection" />
                     <TextView
                         style="@style/BulkEdit.SectionTitle"
@@ -154,6 +155,7 @@
                 <LinearLayout style="@style/BulkEdit.SectionHeader">
                     <ImageView
                         style="@style/BulkEdit.SectionIcon"
+                        android:importantForAccessibility="no"
                         android:src="@drawable/ic_settings_general" />
                     <TextView
                         style="@style/BulkEdit.SectionTitle"
@@ -180,6 +182,7 @@
                 <LinearLayout style="@style/BulkEdit.SectionHeader">
                     <ImageView
                         style="@style/BulkEdit.SectionIcon"
+                        android:importantForAccessibility="no"
                         android:src="@drawable/ic_terminal" />
                     <TextView
                         style="@style/BulkEdit.SectionTitle"
@@ -222,6 +225,7 @@
                 <LinearLayout style="@style/BulkEdit.SectionHeader">
                     <ImageView
                         style="@style/BulkEdit.SectionIcon"
+                        android:importantForAccessibility="no"
                         android:src="@drawable/ic_flash" />
                     <TextView
                         style="@style/BulkEdit.SectionTitle"

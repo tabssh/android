@@ -1092,8 +1092,20 @@ class TerminalView @JvmOverloads constructor(
                 requestFocus()
                 return true
             }
+            MotionEvent.ACTION_UP -> {
+                // Route taps through performClick so accessibility services
+                // can announce the click. Real input handling happens via
+                // the gestureDetector wired up in onTouch(); this is just
+                // the a11y contract.
+                performClick()
+            }
         }
         return super.onTouchEvent(event)
+    }
+
+    override fun performClick(): Boolean {
+        super.performClick()
+        return true
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {

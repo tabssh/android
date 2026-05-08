@@ -343,28 +343,35 @@ class TabTerminalActivity : AppCompatActivity() {
 
 
     /**
-     * Setup edge tap gestures for showing UI elements
+     * Setup edge tap gestures for showing UI elements. Lint flags this
+     * as ClickableViewAccessibility because we can't override
+     * performClick() on a CoordinatorLayout instance we didn't subclass —
+     * we delegate via `v.performClick()` inside the listener instead,
+     * which is the framework-recommended fallback.
      */
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
     private fun setupTerminalGestures() {
         // Get the root view
         val rootView = binding.root
         
-        rootView.setOnTouchListener { _, event ->
+        rootView.setOnTouchListener { v, event ->
             if (event.action == android.view.MotionEvent.ACTION_DOWN) {
                 val x = event.x
                 val y = event.y
                 val width = rootView.width
                 val height = rootView.height
-                
+
                 // Tap on left edge (first 10%) shows menu FAB temporarily
                 if (x < width * 0.1f && y < height * 0.5f) {
                     showMenuFabTemporarily()
+                    v.performClick()
                     return@setOnTouchListener true
                 }
-                
+
                 // Tap on bottom edge (last 10%) shows bottom action bar
                 if (y > height * 0.9f) {
                     toggleBottomActionBar()
+                    v.performClick()
                     return@setOnTouchListener true
                 }
             }

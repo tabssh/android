@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+
+    <!-- BouncyCastle's bcpkix jar contains an internal X509TrustManager
+         class with empty trust methods. It is NOT used as a runtime
+         TrustManager — it's wrapped inside PKIXCertPathChecker / OCSP
+         validation logic. We can't patch a third-party JAR, so ignore
+         the warning for this dep only. Our own trust managers are
+         scoped via @SuppressLint with rationale comments. -->
+    <issue id="TrustAllX509TrustManager">
+        <ignore path="**/bcpkix-jdk18on-*.jar" />
+    </issue>
+
+</lint>
