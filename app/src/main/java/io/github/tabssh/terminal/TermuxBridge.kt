@@ -624,8 +624,35 @@ class TermuxBridge(
             emulator?.resize(newColumns, newRows)
             Logger.d(TAG, "Resized to ${newColumns}x${newRows}")
 
-            // Notify callback (for VM console WebSocket)
-            onResizeCallback?.invoke(newColumns, newRows)
+            // SSH-side window-change MUST share the writeLock with the
+            // keystroke writes — both produce packets on the same JSch
+            // session and a concurrent send corrupts the GCM cipher
+            // state, ending in `ssh_dispatch_run_fatal: message
+            // authentication code incorrect` server-side and an EOF
+            // back to us. Symptom: open keyboard (resize fires) →
+            // type a char → server EOF within 1s.
+            //
+            // The callback usually invokes `Channel.setPtySize`
+            // synchronously, which JSch will route through its own
+            // session writer. By acquiring `writeLock` first we
+            // guarantee no in-flight keystroke is mid-encrypt when
+            // the resize packet goes out, and vice versa.
+            //
+            // We launch on `writeScope` (Dispatchers.IO) for the same
+            // reason keystroke writes do — `setPtySize` blocks on
+            // socket I/O and we MUST NOT do that from the UI thread.
+            val cb = onResizeCallback
+            if (cb != null) {
+                writeScope.launch {
+                    writeLock.withLock {
+                        try {
+                            cb(newColumns, newRows)
+                        } catch (e: Exception) {
+                            Logger.w(TAG, "Resize callback failed: ${e.message}")
+                        }
+                    }
+                }
+            }
         }
     }
 
