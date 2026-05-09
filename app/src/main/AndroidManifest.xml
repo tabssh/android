@@ -223,6 +223,14 @@
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- OCI Path A onboarding (config + .pem importer) -->
+        <activity
+            android:name=".ui.activities.OciOnboardingActivity"
+            android:exported="false"
+            android:label="Add OCI hypervisor"
+            android:parentActivityName=".ui.activities.MainActivity"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- SFTP file browser activity -->
         <activity
             android:name=".ui.activities.SFTPActivity"
