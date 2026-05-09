@@ -20,7 +20,14 @@ class TerminalPagerAdapter(
     private val multiplexerType: io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType = io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.NONE,
     private val customPrefix: String? = null,
     private val onCommandSent: ((ByteArray) -> Unit)? = null,
-    private var currentTheme: Theme? = null
+    private var currentTheme: Theme? = null,
+    // The long-press context menu callback. Without wiring this, the
+    // per-page TerminalView's `onContextMenuRequested` field stays
+    // null, so long-press silently no-ops in swipe mode (the default).
+    // setupTerminalView() in TabTerminalActivity only sets the field
+    // on the SINGLE classic-mode TerminalView; pass it through here
+    // so the swipe-mode pages get it too.
+    private val onContextMenuRequested: ((Float, Float) -> Unit)? = null
 ) : RecyclerView.Adapter<TerminalPagerAdapter.TerminalViewHolder>() {
 
     // Track bound view holders for theme updates
@@ -57,7 +64,8 @@ class TerminalPagerAdapter(
             gesturesEnabled,
             multiplexerType,
             customPrefix,
-            onCommandSent
+            onCommandSent,
+            onContextMenuRequested
         )
     }
 
@@ -94,7 +102,8 @@ class TerminalPagerAdapter(
         private val gesturesEnabled: Boolean,
         private val multiplexerType: io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType,
         private val customPrefix: String?,
-        private val onCommandSent: ((ByteArray) -> Unit)?
+        private val onCommandSent: ((ByteArray) -> Unit)?,
+        private val onContextMenuRequested: ((Float, Float) -> Unit)?
     ) : RecyclerView.ViewHolder(terminalView) {
 
         fun bind(tab: SSHTab) {
@@ -111,7 +120,14 @@ class TerminalPagerAdapter(
             if (onUrlDetected != null) {
                 terminalView.onUrlDetected = onUrlDetected
             }
-            
+
+            // Long-press context menu callback (paste / copy screen /
+            // send-text / Ctrl+C / etc.). Without this, long-press
+            // silently no-ops in swipe mode.
+            if (onContextMenuRequested != null) {
+                terminalView.onContextMenuRequested = onContextMenuRequested
+            }
+
             // Set up gesture support
             if (gesturesEnabled) {
                 terminalView.enableGestureSupport(multiplexerType, customPrefix)

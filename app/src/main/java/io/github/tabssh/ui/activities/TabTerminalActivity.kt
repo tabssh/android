@@ -1658,7 +1658,8 @@ class TabTerminalActivity : AppCompatActivity() {
                 gesturesEnabled,
                 multiplexerType,
                 customPrefix,
-                commandCallback
+                commandCallback,
+                onContextMenuRequested = { x, y -> showTextContextMenu(x, y) }
             )
             viewPager?.adapter = pagerAdapter
 
@@ -1688,7 +1689,8 @@ class TabTerminalActivity : AppCompatActivity() {
                 gesturesEnabled,
                 multiplexerType,
                 customPrefix,
-                commandCallback
+                commandCallback,
+                onContextMenuRequested = { x, y -> showTextContextMenu(x, y) }
             )
             viewPager?.adapter = pagerAdapter
 

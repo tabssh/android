@@ -9,6 +9,7 @@ import android.view.*
 import android.view.inputmethod.*
 import android.widget.OverScroller
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import io.github.tabssh.terminal.emulator.TerminalEmulator
 import io.github.tabssh.terminal.emulator.TerminalBuffer
@@ -690,20 +691,31 @@ class TerminalView @JvmOverloads constructor(
     }
 
     /**
-     * Toggle soft keyboard (mobile-first UX)
+     * Toggle soft keyboard (mobile-first UX).
+     *
+     * `inputMethodManager.isActive(this)` checks "is the IME bound to
+     * this view" — NOT "is the IME visible". After the user explicitly
+     * hides the keyboard (e.g. via back-press or a second tap), the IME
+     * stays bound to TerminalView but is no longer drawn. Using
+     * `isActive` then routed every subsequent toggle into the hide
+     * branch, which is a no-op when already hidden, so the keyboard
+     * never reappeared. Symptom: works once, then dead until the
+     * activity is recreated.
+     *
+     * Real IME visibility lives in WindowInsets — query it via
+     * `WindowInsetsCompat.Type.ime()`.
      */
     fun toggleKeyboard() {
-        if (hasWindowFocus()) {
-            if (inputMethodManager.isActive(this)) {
-                // Keyboard is visible - hide it
-                inputMethodManager.hideSoftInputFromWindow(windowToken, 0)
-                Logger.d("TerminalView", "Hiding keyboard")
-            } else {
-                // Keyboard is hidden - show it
-                requestFocus()
-                inputMethodManager.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
-                Logger.d("TerminalView", "Showing keyboard")
-            }
+        if (!hasWindowFocus()) return
+        val visible = ViewCompat.getRootWindowInsets(this)
+            ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+        if (visible) {
+            inputMethodManager.hideSoftInputFromWindow(windowToken, 0)
+            Logger.d("TerminalView", "Hiding keyboard")
+        } else {
+            requestFocus()
+            inputMethodManager.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
+            Logger.d("TerminalView", "Showing keyboard")
         }
     }
 
