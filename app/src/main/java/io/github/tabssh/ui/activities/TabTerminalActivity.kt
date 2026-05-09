@@ -821,6 +821,7 @@ class TabTerminalActivity : AppCompatActivity() {
         val items = arrayOf(
             "Paste",
             "Copy screen",
+            "Select text…",
             "Find in scrollback…",
             "Send text…",
             "Send Ctrl+C",
@@ -855,18 +856,19 @@ class TabTerminalActivity : AppCompatActivity() {
                         when (which) {
                             0  -> pasteFromClipboard()
                             1  -> copyTerminalScreen()
-                            2  -> showFindDialog()
-                            3  -> showSendTextDialog()
-                            4  -> sendBytesToActiveTab(byteArrayOf(0x03))   // ^C
-                            5  -> sendBytesToActiveTab(byteArrayOf(0x04))   // ^D
-                            6  -> sendBytesToActiveTab(byteArrayOf(0x1A))   // ^Z
-                            7  -> sendBytesToActiveTab(byteArrayOf(0x1B))   // ESC
-                            8  -> showSnippetsPickerForActiveTab()
-                            9  -> showFontSizeDialog()
-                            10 -> toggleKeyboard()
-                            11 -> toggleCustomKeyboard()
-                            12 -> shareSession()
-                            13 -> closeActiveTabConfirmed()
+                            2  -> beginSelection(x, y)
+                            3  -> showFindDialog()
+                            4  -> showSendTextDialog()
+                            5  -> sendBytesToActiveTab(byteArrayOf(0x03))   // ^C
+                            6  -> sendBytesToActiveTab(byteArrayOf(0x04))   // ^D
+                            7  -> sendBytesToActiveTab(byteArrayOf(0x1A))   // ^Z
+                            8  -> sendBytesToActiveTab(byteArrayOf(0x1B))   // ESC
+                            9  -> showSnippetsPickerForActiveTab()
+                            10 -> showFontSizeDialog()
+                            11 -> toggleKeyboard()
+                            12 -> toggleCustomKeyboard()
+                            13 -> shareSession()
+                            14 -> closeActiveTabConfirmed()
                         }
                     }
                     .setNegativeButton("Cancel", null)
@@ -984,6 +986,70 @@ class TabTerminalActivity : AppCompatActivity() {
             android.content.ClipData.newPlainText("Terminal", visible)
         )
         Toast.makeText(this, "Terminal screen copied", Toast.LENGTH_SHORT).show()
+    }
+
+    /**
+     * Drag-to-select range copy (issue #73). Driven from the long-press
+     * context menu's "Select text…" item: enter selection mode on the
+     * active TerminalView at the long-press point, then start a
+     * floating ActionMode with a Copy button. Single shared
+     * `selectionActionMode` reference so `exitSelection` can finish
+     * the bar from any code path (tap-outside, tab switch, activity
+     * teardown).
+     */
+    private var selectionActionMode: android.view.ActionMode? = null
+
+    private fun beginSelection(x: Float, y: Float) {
+        val view = getActiveTerminalView() ?: run {
+            Toast.makeText(this, "No active session", Toast.LENGTH_SHORT).show()
+            return
+        }
+        view.enterSelectionMode(x, y)
+        startTerminalSelectionActionMode(view)
+    }
+
+    private fun startTerminalSelectionActionMode(view: TerminalView) {
+        // Dismiss any stale bar first — guards against the user
+        // entering selection twice without finishing the previous one
+        // (e.g. switching tabs while a bar is still up).
+        selectionActionMode?.finish()
+
+        val callback = object : android.view.ActionMode.Callback {
+            override fun onCreateActionMode(mode: android.view.ActionMode, menu: Menu): Boolean {
+                mode.title = "Select"
+                menu.add(0, 1, 0, "Copy")
+                    .setIcon(android.R.drawable.ic_menu_set_as)
+                    .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                return true
+            }
+            override fun onPrepareActionMode(mode: android.view.ActionMode, menu: Menu) = false
+            override fun onActionItemClicked(mode: android.view.ActionMode, item: MenuItem): Boolean {
+                if (item.itemId == 1) {
+                    val text = view.getSelectedText()
+                    if (text.isNullOrEmpty()) {
+                        Toast.makeText(this@TabTerminalActivity, "Nothing selected", Toast.LENGTH_SHORT).show()
+                    } else {
+                        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        clipboard.setPrimaryClip(
+                            android.content.ClipData.newPlainText("Terminal selection", text)
+                        )
+                        Toast.makeText(this@TabTerminalActivity, "Copied ${text.length} chars", Toast.LENGTH_SHORT).show()
+                    }
+                    mode.finish()
+                    return true
+                }
+                return false
+            }
+            override fun onDestroyActionMode(mode: android.view.ActionMode) {
+                view.exitSelectionMode()
+                if (selectionActionMode === mode) selectionActionMode = null
+            }
+        }
+        selectionActionMode = if (android.os.Build.VERSION.SDK_INT >= 23) {
+            view.startActionMode(callback, android.view.ActionMode.TYPE_FLOATING)
+        } else {
+            view.startActionMode(callback)
+        }
     }
 
     /**

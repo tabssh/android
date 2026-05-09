@@ -192,14 +192,17 @@ class VMConsoleActivity : AppCompatActivity() {
 
         // Wire long-press → context menu (was missing — VM console had
         // no way to copy/paste/send Ctrl keys; only the SSH terminal did).
-        terminalView.onContextMenuRequested = { _, _ ->
-            showVmConsoleContextMenu()
+        // x,y forwarded so the "Select text…" item can anchor selection
+        // mode at the long-press point.
+        terminalView.onContextMenuRequested = { x, y ->
+            showVmConsoleContextMenu(x, y)
         }
     }
 
-    private fun showVmConsoleContextMenu() {
+    private fun showVmConsoleContextMenu(x: Float, y: Float) {
         val items = arrayOf(
             "Copy screen",
+            "Select text…",
             "Paste",
             "Send Ctrl+C",
             "Send Ctrl+D",
@@ -216,15 +219,16 @@ class VMConsoleActivity : AppCompatActivity() {
             .setItems(items) { _, which ->
                 when (which) {
                     0 -> copyScreenToClipboard()
-                    1 -> pasteFromClipboard()
-                    2 -> sendBytes(byteArrayOf(0x03))                  // ETX
-                    3 -> sendBytes(byteArrayOf(0x04))                  // EOT
-                    4 -> sendBytes(byteArrayOf(0x1A))                  // SUB
-                    5 -> sendBytes(byteArrayOf(0x1B))                  // ESC
-                    6 -> sendBytes(byteArrayOf(0x09))                  // TAB
-                    7 -> sendBytes(byteArrayOf(0x0D))                  // CR
-                    8 -> showSendTextDialog()
-                    9 -> {
+                    1 -> beginSelection(x, y)
+                    2 -> pasteFromClipboard()
+                    3 -> sendBytes(byteArrayOf(0x03))                  // ETX
+                    4 -> sendBytes(byteArrayOf(0x04))                  // EOT
+                    5 -> sendBytes(byteArrayOf(0x1A))                  // SUB
+                    6 -> sendBytes(byteArrayOf(0x1B))                  // ESC
+                    7 -> sendBytes(byteArrayOf(0x09))                  // TAB
+                    8 -> sendBytes(byteArrayOf(0x0D))                  // CR
+                    9 -> showSendTextDialog()
+                    10 -> {
                         // toggleSoftInput(SHOW_FORCED, …) is deprecated.
                         // Use the WindowInsetsController IME toggle which
                         // works against the active focus and supports the
@@ -236,7 +240,7 @@ class VMConsoleActivity : AppCompatActivity() {
                         val ic = androidx.core.view.WindowCompat.getInsetsController(window, view)
                         if (visible) ic.hide(imeType) else ic.show(imeType)
                     }
-                    10 -> confirmDisconnectThenFinish()
+                    11 -> confirmDisconnectThenFinish()
                 }
             }
             .setNegativeButton("Cancel", null)
@@ -252,6 +256,61 @@ class VMConsoleActivity : AppCompatActivity() {
             return
         }
         sendBytes(text.toByteArray(Charsets.UTF_8))
+    }
+
+    /**
+     * Drag-to-select range copy for the VM console (issue #73).
+     * Mirrors the SSH-terminal flow: enter selection mode at the
+     * long-press point, then start a floating ActionMode with a Copy
+     * item. Single shared `selectionActionMode` so we can finish() it
+     * from any code path.
+     */
+    private var selectionActionMode: android.view.ActionMode? = null
+
+    private fun beginSelection(x: Float, y: Float) {
+        terminalView.enterSelectionMode(x, y)
+        startTerminalSelectionActionMode()
+    }
+
+    private fun startTerminalSelectionActionMode() {
+        selectionActionMode?.finish()
+        val callback = object : android.view.ActionMode.Callback {
+            override fun onCreateActionMode(mode: android.view.ActionMode, menu: android.view.Menu): Boolean {
+                mode.title = "Select"
+                menu.add(0, 1, 0, "Copy")
+                    .setIcon(android.R.drawable.ic_menu_set_as)
+                    .setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS)
+                return true
+            }
+            override fun onPrepareActionMode(mode: android.view.ActionMode, menu: android.view.Menu) = false
+            override fun onActionItemClicked(mode: android.view.ActionMode, item: android.view.MenuItem): Boolean {
+                if (item.itemId == 1) {
+                    val text = terminalView.getSelectedText()
+                    if (text.isNullOrEmpty()) {
+                        Toast.makeText(this@VMConsoleActivity, "Nothing selected", Toast.LENGTH_SHORT).show()
+                    } else {
+                        val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                            as android.content.ClipboardManager
+                        clipboard.setPrimaryClip(
+                            android.content.ClipData.newPlainText("VM Console selection", text)
+                        )
+                        Toast.makeText(this@VMConsoleActivity, "Copied ${text.length} chars", Toast.LENGTH_SHORT).show()
+                    }
+                    mode.finish()
+                    return true
+                }
+                return false
+            }
+            override fun onDestroyActionMode(mode: android.view.ActionMode) {
+                terminalView.exitSelectionMode()
+                if (selectionActionMode === mode) selectionActionMode = null
+            }
+        }
+        selectionActionMode = if (android.os.Build.VERSION.SDK_INT >= 23) {
+            terminalView.startActionMode(callback, android.view.ActionMode.TYPE_FLOATING)
+        } else {
+            terminalView.startActionMode(callback)
+        }
     }
 
     /**

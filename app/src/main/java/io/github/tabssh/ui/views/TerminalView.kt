@@ -134,6 +134,51 @@ class TerminalView @JvmOverloads constructor(
     var onEdgeSwipe: ((direction: Int) -> Unit)? = null
     private val edgeSwipeDp = 24
 
+    // ─────────────────────────────────────────────────────────────────
+    // Drag-to-select range copy (issue #73)
+    //
+    // Long-press → context menu → "Select text…" calls
+    // `enterSelectionMode(x, y)`, which sets both anchor and focus to
+    // the touched cell and notifies the host to start a floating
+    // ActionMode with a Copy item. While `selectionActive` is true,
+    // single-finger drags update the focus endpoint and the
+    // gestureDetector's tap/double-tap/URL paths are bypassed. Tapping
+    // outside the highlight calls `exitSelectionMode`, which the host
+    // is also expected to call from `ActionMode.onDestroyActionMode`.
+    //
+    // Coordinates are screen-cell coords (col ∈ [0, terminalCols),
+    // row ∈ [0, terminalRows)). v1 is visible-screen-only — no
+    // scrollback selection. The user must scroll to bring older lines
+    // into view BEFORE entering selection mode.
+    // ─────────────────────────────────────────────────────────────────
+    private var selectionActive = false
+    private var selectionAnchorCol = 0
+    private var selectionAnchorRow = 0
+    private var selectionFocusCol = 0
+    private var selectionFocusRow = 0
+    /** -1 = none, 0 = anchor handle being dragged, 1 = focus handle. */
+    private var selectionDragHandle = -1
+    private val selectionPaint = Paint().apply {
+        color = 0x55_4FC3F7.toInt()        // translucent light-blue
+        style = Paint.Style.FILL
+        isAntiAlias = false
+    }
+    private val selectionHandlePaint = Paint().apply {
+        color = 0xFF_4FC3F7.toInt()        // solid light-blue
+        style = Paint.Style.FILL
+        isAntiAlias = true
+    }
+    /** Hit radius for handle drag detection, in pixels. ~24dp. */
+    private val handleHitRadiusPx by lazy { 24f * resources.displayMetrics.density }
+    /** Visual radius for the handle bubble, in pixels. */
+    private val handleDrawRadiusPx by lazy { 8f * resources.displayMetrics.density }
+
+    /**
+     * Host activities subscribe to know when to start the floating
+     * ActionMode. Fires once each time the user enters selection mode.
+     */
+    var onSelectionStarted: (() -> Unit)? = null
+
     init {
         // Enable focus and touch
         isFocusable = true
@@ -936,6 +981,11 @@ class TerminalView @JvmOverloads constructor(
             }
         }
 
+        // Selection overlay sits between glyphs and cursor — text below
+        // remains readable through the translucent fill, and the cursor
+        // still draws on top.
+        drawSelectionOverlay(canvas)
+
         // Draw cursor based on style (0=block, 1=underline, 2=bar/I-beam)
         if (cursorVisible && cursorRow in 0 until rows && cursorCol in 0 until cols) {
             val cursorX = startX + cursorCol * cellWidth
@@ -1084,6 +1134,11 @@ class TerminalView @JvmOverloads constructor(
                 return true
             }
         }
+
+        // Selection mode swallows single-finger taps + drags so the
+        // gesture detector doesn't fire keyboard-toggle / double-tap-
+        // word-select / URL-detect while the user is shaping a range.
+        if (handleSelectionTouch(event)) return true
 
         // Handle single-finger gestures (scroll, tap, long press)
         if (!isScaling) {
@@ -1470,6 +1525,217 @@ class TerminalView @JvmOverloads constructor(
      * Callback for font size changes (from pinch-to-zoom)
      */
     var onFontSizeChanged: ((Float) -> Unit)? = null
+
+    // ─────────────────────────────────────────────────────────────────
+    // Drag-to-select range copy — public API
+    // ─────────────────────────────────────────────────────────────────
+
+    /**
+     * Convert a touch pixel position to a (col, row) cell, clamped to
+     * the visible viewport. Used by both selection entry and drag.
+     */
+    private fun pixelToCell(x: Float, y: Float): Pair<Int, Int> {
+        val col = ((x - paddingLeft) / cellWidth).toInt()
+            .coerceIn(0, (terminalCols - 1).coerceAtLeast(0))
+        val row = ((y - paddingTop) / cellHeight).toInt()
+            .coerceIn(0, (terminalRows - 1).coerceAtLeast(0))
+        return col to row
+    }
+
+    /**
+     * Enter selection mode anchored at the cell under the given pixel
+     * coordinates. Initial focus = anchor (single-cell selection).
+     * Triggers `onSelectionStarted` so the host activity can start its
+     * floating ActionMode.
+     */
+    fun enterSelectionMode(x: Float, y: Float) {
+        val (col, row) = pixelToCell(x, y)
+        selectionAnchorCol = col
+        selectionAnchorRow = row
+        selectionFocusCol = col
+        selectionFocusRow = row
+        selectionActive = true
+        selectionDragHandle = -1
+        invalidate()
+        onSelectionStarted?.invoke()
+    }
+
+    /**
+     * Clear the selection state and redraw. Called by the host activity
+     * from `ActionMode.onDestroyActionMode`, and from
+     * `onTouch` when the user taps outside the highlight.
+     */
+    fun exitSelectionMode() {
+        if (!selectionActive) return
+        selectionActive = false
+        selectionDragHandle = -1
+        invalidate()
+    }
+
+    /**
+     * Read the currently-selected text from the Termux buffer. Returns
+     * null if no buffer or selection is empty. The range is normalised
+     * (anchor and focus may be in any order) and converted to the
+     * line-by-line rectangle the user sees on screen.
+     */
+    fun getSelectedText(): String? {
+        if (!selectionActive) return null
+        val buffer = termuxBridge?.getScreen() ?: termuxBuffer ?: return null
+        val (startRow, startCol, endRow, endCol) = normalisedSelection()
+        return try {
+            // Termux's getSelectedText takes (col1, row1, col2, row2) and
+            // reads line-by-line through the rectangle. We pass through
+            // the user-visible cells; +1 on the trailing column / row
+            // would over-include, so use the same inclusive convention
+            // the existing scrollback-extraction path uses.
+            buffer.getSelectedText(startCol, startRow, endCol, endRow)
+        } catch (e: Exception) {
+            Logger.w("TerminalView", "getSelectedText failed: ${e.message}")
+            null
+        }?.takeIf { it.isNotEmpty() }
+    }
+
+    /**
+     * Normalise the (anchor, focus) pair into (startRow, startCol,
+     * endRow, endCol) so that startRow ≤ endRow, and on a single-row
+     * selection startCol ≤ endCol. Returns a 4-int destructurable
+     * tuple — Kotlin's compiler-generated component1..N over a data
+     * class is overkill here, so we use a private inline value class.
+     */
+    private fun normalisedSelection(): SelectionRange {
+        val a = selectionAnchorRow
+        val b = selectionFocusRow
+        return if (a < b || (a == b && selectionAnchorCol <= selectionFocusCol)) {
+            SelectionRange(a, selectionAnchorCol, b, selectionFocusCol)
+        } else {
+            SelectionRange(b, selectionFocusCol, a, selectionAnchorCol)
+        }
+    }
+
+    private data class SelectionRange(
+        val startRow: Int, val startCol: Int,
+        val endRow: Int, val endCol: Int
+    )
+
+    /**
+     * Hit-test the touch against the two selection handles. Returns
+     * 0 for anchor, 1 for focus, -1 for neither.
+     */
+    private fun hitTestHandle(x: Float, y: Float): Int {
+        if (!selectionActive) return -1
+        val anchorPx = cellCenterPx(selectionAnchorCol, selectionAnchorRow + 1)
+        val focusPx = cellCenterPx(selectionFocusCol, selectionFocusRow + 1)
+        val dxA = x - anchorPx.first; val dyA = y - anchorPx.second
+        val dxF = x - focusPx.first;  val dyF = y - focusPx.second
+        val da = dxA * dxA + dyA * dyA
+        val df = dxF * dxF + dyF * dyF
+        val r2 = handleHitRadiusPx * handleHitRadiusPx
+        return when {
+            da <= r2 && da <= df -> 0
+            df <= r2             -> 1
+            else                 -> -1
+        }
+    }
+
+    /** Pixel-center of the bottom edge of a given cell (where handles sit). */
+    private fun cellCenterPx(col: Int, row: Int): Pair<Float, Float> {
+        val px = paddingLeft + col * cellWidth + cellWidth / 2f
+        val py = paddingTop + row * cellHeight
+        return px to py
+    }
+
+    /**
+     * Draw the highlight rectangles + handle bubbles for the active
+     * selection. Called from `renderTermuxBuffer` after the row glyphs
+     * are drawn so the highlight overlays — alpha is low enough that
+     * text underneath remains readable.
+     */
+    private fun drawSelectionOverlay(canvas: Canvas) {
+        if (!selectionActive || cellWidth <= 0f || cellHeight <= 0f) return
+        val (startRow, startCol, endRow, endCol) = normalisedSelection()
+        val startX = paddingLeft.toFloat()
+        val startY = paddingTop.toFloat()
+
+        for (row in startRow..endRow) {
+            val colA = if (row == startRow) startCol else 0
+            val colB = if (row == endRow) endCol else (terminalCols - 1)
+            val left = startX + colA * cellWidth
+            val right = startX + (colB + 1) * cellWidth
+            val top = startY + row * cellHeight
+            val bottom = top + cellHeight
+            canvas.drawRect(left, top, right, bottom, selectionPaint)
+        }
+
+        val (ax, ay) = cellCenterPx(selectionAnchorCol, selectionAnchorRow + 1)
+        val (fx, fy) = cellCenterPx(selectionFocusCol, selectionFocusRow + 1)
+        canvas.drawCircle(ax, ay, handleDrawRadiusPx, selectionHandlePaint)
+        canvas.drawCircle(fx, fy, handleDrawRadiusPx, selectionHandlePaint)
+    }
+
+    /**
+     * Selection-aware portion of touch dispatch. Called from `onTouch`
+     * BEFORE the gestureDetector / scaleGestureDetector paths so we
+     * can swallow taps and drags while the user is shaping a
+     * selection. Returns true if the event was handled here and
+     * should not be forwarded to the gesture detectors.
+     */
+    private fun handleSelectionTouch(event: MotionEvent): Boolean {
+        if (!selectionActive) return false
+        // Only react to single-finger touches; two-finger gestures
+        // (pinch/zoom) handled upstream.
+        if (event.pointerCount > 1) return false
+
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                val handle = hitTestHandle(event.x, event.y)
+                if (handle >= 0) {
+                    selectionDragHandle = handle
+                    return true
+                }
+                // Touch on a non-handle cell: did the user tap inside
+                // the existing highlight (do nothing — let the action
+                // mode stay) or outside (exit selection mode)?
+                val (col, row) = pixelToCell(event.x, event.y)
+                val (sr, sc, er, ec) = normalisedSelection()
+                val insideRow = row in sr..er
+                val insideCol = when {
+                    sr == er         -> col in sc..ec
+                    row == sr        -> col >= sc
+                    row == er        -> col <= ec
+                    else             -> insideRow
+                }
+                if (!(insideRow && insideCol)) {
+                    exitSelectionMode()
+                    return true
+                }
+                // Tap inside selection — claim the focus handle so a
+                // drag from inside expands the selection naturally.
+                selectionDragHandle = 1
+                selectionFocusCol = col
+                selectionFocusRow = row
+                invalidate()
+                return true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (selectionDragHandle < 0) return false
+                val (col, row) = pixelToCell(event.x, event.y)
+                if (selectionDragHandle == 0) {
+                    selectionAnchorCol = col
+                    selectionAnchorRow = row
+                } else {
+                    selectionFocusCol = col
+                    selectionFocusRow = row
+                }
+                invalidate()
+                return true
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                selectionDragHandle = -1
+                return true
+            }
+        }
+        return false
+    }
 
     /**
      * Select word at touch position (for double-tap gesture)
