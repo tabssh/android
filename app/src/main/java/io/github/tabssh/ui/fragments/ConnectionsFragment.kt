@@ -68,12 +68,13 @@ class ConnectionsFragment : Fragment() {
     private var allIdentities = listOf<Identity>()
     private var currentSearchQuery = ""
     private var currentSortOption = SortOption.NAME_ASC
+    private var currentGroupSortOption = GroupSortOption.NAME_ASC
     private var useGroupedView = true // Default to grouped view
 
     // Multi-select mode
     private var isSelectionMode = false
     private val selectedConnections = mutableSetOf<String>() // Connection IDs
-    
+
     enum class SortOption(val displayName: String) {
         NAME_ASC("Name (A-Z)"),
         NAME_DESC("Name (Z-A)"),
@@ -83,6 +84,12 @@ class ConnectionsFragment : Fragment() {
         LEAST_USED("Least Used"),
         RECENTLY_CONNECTED("Recently Connected"),
         OLDEST_CONNECTED("Oldest Connected")
+    }
+
+    enum class GroupSortOption(val displayName: String) {
+        NAME_ASC("Name (A-Z)"),
+        NAME_DESC("Name (Z-A)"),
+        CUSTOM("Custom (drag order)")
     }
 
     override fun onCreateView(
@@ -137,9 +144,22 @@ class ConnectionsFragment : Fragment() {
     }
     
     private fun showSortDialog() {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Sort")
+            .setItems(arrayOf("Sort connections", "Sort groups")) { _, which ->
+                when (which) {
+                    0 -> showConnectionSortDialog()
+                    1 -> showGroupSortDialog()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showConnectionSortDialog() {
         val options = SortOption.values().map { it.displayName }.toTypedArray()
         val currentIndex = currentSortOption.ordinal
-        
+
         AlertDialog.Builder(requireContext())
             .setTitle("Sort Connections")
             .setSingleChoiceItems(options, currentIndex) { dialog, which ->
@@ -151,18 +171,43 @@ class ConnectionsFragment : Fragment() {
             .setNegativeButton("Cancel", null)
             .show()
     }
-    
+
+    private fun showGroupSortDialog() {
+        val options = GroupSortOption.values().map { it.displayName }.toTypedArray()
+        val currentIndex = currentGroupSortOption.ordinal
+
+        AlertDialog.Builder(requireContext())
+            .setTitle("Sort Groups")
+            .setSingleChoiceItems(options, currentIndex) { dialog, which ->
+                currentGroupSortOption = GroupSortOption.values()[which]
+                saveGroupSortPreference()
+                applySortAndFilter()
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     private fun saveSortPreference() {
         requireContext().getSharedPreferences("TabSSH", android.content.Context.MODE_PRIVATE)
             .edit()
             .putString("connections_sort", currentSortOption.name)
             .apply()
     }
-    
+
+    private fun saveGroupSortPreference() {
+        requireContext().getSharedPreferences("TabSSH", android.content.Context.MODE_PRIVATE)
+            .edit()
+            .putString("groups_sort", currentGroupSortOption.name)
+            .apply()
+    }
+
     private fun loadSortPreference() {
-        val prefName = requireContext().getSharedPreferences("TabSSH", android.content.Context.MODE_PRIVATE)
-            .getString("connections_sort", SortOption.NAME_ASC.name)
-        currentSortOption = SortOption.entries.find { it.name == prefName } ?: SortOption.NAME_ASC
+        val prefs = requireContext().getSharedPreferences("TabSSH", android.content.Context.MODE_PRIVATE)
+        val connectionsPref = prefs.getString("connections_sort", SortOption.NAME_ASC.name)
+        currentSortOption = SortOption.entries.find { it.name == connectionsPref } ?: SortOption.NAME_ASC
+        val groupsPref = prefs.getString("groups_sort", GroupSortOption.NAME_ASC.name)
+        currentGroupSortOption = GroupSortOption.entries.find { it.name == groupsPref } ?: GroupSortOption.NAME_ASC
     }
 
     private fun setupSearchView() {
@@ -1024,7 +1069,14 @@ class ConnectionsFragment : Fragment() {
         val items = mutableListOf<ConnectionListItem>()
         
         // Add grouped connections
-        for (group in allGroups.sortedBy { it.sortOrder }) {
+        val sortedGroups = when (currentGroupSortOption) {
+            GroupSortOption.NAME_ASC -> allGroups.sortedBy { it.name.lowercase() }
+            GroupSortOption.NAME_DESC -> allGroups.sortedByDescending { it.name.lowercase() }
+            GroupSortOption.CUSTOM -> allGroups.sortedWith(
+                compareBy({ it.sortOrder }, { it.name.lowercase() })
+            )
+        }
+        for (group in sortedGroups) {
             val groupConnections = allConnections.filter { it.groupId == group.id }
             if (groupConnections.isNotEmpty()) {
                 // Add group header

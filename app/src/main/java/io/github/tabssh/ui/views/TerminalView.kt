@@ -581,11 +581,18 @@ class TerminalView @JvmOverloads constructor(
         return when {
             pendingCtrl -> {
                 val upper = c.uppercaseChar()
-                if (upper in 'A'..'Z') {
-                    sendText(((upper.code - 'A'.code + 1).toChar()).toString())
-                } else {
-                    sendText(c.toString())
+                val ctrlChar: Char = when {
+                    upper in 'A'..'Z' -> (upper.code - 'A'.code + 1).toChar()
+                    c == ' ' || c == '@' -> '\u0000'
+                    c == '[' -> '\u001B'
+                    c == '\\' -> '\u001C'
+                    c == ']' -> '\u001D'
+                    c == '^' -> '\u001E'
+                    c == '_' -> '\u001F'
+                    c == '?' -> '\u007F'
+                    else -> c
                 }
+                sendText(ctrlChar.toString())
                 consumePendingModifier()
                 true
             }
@@ -924,7 +931,7 @@ class TerminalView @JvmOverloads constructor(
                 val x = startX + col * cellWidth
 
                 // Get character at this position
-                val char = if (charIndex < lineChars.size) lineChars[charIndex] else ' '
+                val char = if (charIndex < lineChars.size) lineChars[charIndex] else '\u0000'
 
                 // Handle surrogate pairs for Unicode characters
                 val codePoint: Int
@@ -957,7 +964,7 @@ class TerminalView @JvmOverloads constructor(
                 }
 
                 // Draw character if visible
-                if (codePoint != 0 && codePoint != ' '.code) {
+                if (codePoint != 0 && codePoint != '\u0000'.code) {
                     textPaint.color = termuxColorToAndroid(fg)
 
                     // Apply text effects
