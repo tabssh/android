@@ -238,4 +238,25 @@ object HypervisorPasswordStore {
             Logger.w(TAG, "clearPassword threw", e)
         }
     }
+
+    /**
+     * Drop the Keystore aliases an OCI hypervisor uses
+     * (`oci_private_key_${id}` and `oci_passphrase_${id}`). Mirror of
+     * [clear] for OCI's API-key auth — call from the delete path so a
+     * future row id collision can't leak the previous owner's PEM.
+     * No-op for missing aliases; logs (but does not throw) on Keystore
+     * exceptions.
+     */
+    fun clearOciSecrets(context: Context, id: Long) {
+        val app = context.applicationContext as? TabSSHApplication ?: return
+        val pm = app.securePasswordManager
+        val aliases = listOf("oci_private_key_$id", "oci_passphrase_$id")
+        for (alias in aliases) {
+            try {
+                pm.clearPassword(alias)
+            } catch (e: Exception) {
+                Logger.w(TAG, "clearOciSecrets($alias) threw", e)
+            }
+        }
+    }
 }

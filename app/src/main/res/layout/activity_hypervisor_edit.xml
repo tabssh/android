@@ -74,6 +74,7 @@
 
             <!-- Host -->
             <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/layout_host"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_md"
@@ -91,6 +92,7 @@
 
             <!-- Port -->
             <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/layout_port"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_md"
@@ -105,6 +107,31 @@
                     android:maxLines="1" />
 
             </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- OCI: shown only when type=OCI. Replaces host/port/username/
+                 password/realm with the Path A wizard. -->
+            <LinearLayout
+                android:id="@+id/layout_oci"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="@dimen/space_md"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="OCI hosts use API-key auth — import a config + .pem via the wizard."
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:layout_marginBottom="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/button_configure_oci"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Configure OCI credentials…" />
+
+            </LinearLayout>
 
             <!-- Username -->
             <!-- Optional reusable account. When set, overrides the

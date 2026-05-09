@@ -15,11 +15,15 @@ import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.crypto.storage.HypervisorPasswordStore
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.HypervisorType
+import io.github.tabssh.hypervisor.oci.OciApiClient
+import io.github.tabssh.hypervisor.oci.OciKeyMaterial
 import io.github.tabssh.hypervisor.proxmox.ProxmoxApiClient
 import io.github.tabssh.hypervisor.xcpng.XCPngApiClient
 import io.github.tabssh.hypervisor.vmware.VMwareApiClient
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import io.github.tabssh.utils.showError
 
 class HypervisorEditActivity : AppCompatActivity() {
@@ -36,6 +40,10 @@ class HypervisorEditActivity : AppCompatActivity() {
     private lateinit var layoutRealm: LinearLayout
     private lateinit var layoutUsername: com.google.android.material.textfield.TextInputLayout
     private lateinit var layoutPassword: com.google.android.material.textfield.TextInputLayout
+    private lateinit var layoutHost: com.google.android.material.textfield.TextInputLayout
+    private lateinit var layoutPort: com.google.android.material.textfield.TextInputLayout
+    private lateinit var layoutOci: LinearLayout
+    private lateinit var buttonConfigureOci: MaterialButton
     private lateinit var switchVerifySsl: SwitchMaterial
     private lateinit var layoutApiType: com.google.android.material.textfield.TextInputLayout
     private lateinit var dropdownApiType: AutoCompleteTextView
@@ -154,6 +162,10 @@ class HypervisorEditActivity : AppCompatActivity() {
         layoutRealm = findViewById(R.id.layout_realm)
         layoutUsername = findViewById(R.id.layout_username)
         layoutPassword = findViewById(R.id.layout_password)
+        layoutHost = findViewById(R.id.layout_host)
+        layoutPort = findViewById(R.id.layout_port)
+        layoutOci = findViewById(R.id.layout_oci)
+        buttonConfigureOci = findViewById(R.id.button_configure_oci)
         switchVerifySsl = findViewById(R.id.switch_verify_ssl)
         layoutApiType = findViewById(R.id.layout_api_type)
         dropdownApiType = findViewById(R.id.dropdown_api_type)
@@ -210,18 +222,21 @@ class HypervisorEditActivity : AppCompatActivity() {
     }
 
     private fun setupSpinner() {
-        val types = arrayOf("Proxmox", "XCP-ng", "VMware")
+        // Order MUST match HypervisorType ordinals (PROXMOX=0, XCPNG=1,
+        // VMWARE=2, OCI=3) — `loadHypervisor()` calls
+        // `spinnerType.setSelection(hypervisor.type.ordinal)`.
+        val types = arrayOf("Proxmox", "XCP-ng", "VMware", "OCI")
         val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, types)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         spinnerType.adapter = adapter
-        
+
         spinnerType.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 updateUIForType(position)
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
-        
+
         // Set default ports
         updateUIForType(0)
     }
@@ -251,6 +266,24 @@ class HypervisorEditActivity : AppCompatActivity() {
 
         buttonImportHost.setOnClickListener {
             showImportFromExistingHostDialog()
+        }
+
+        buttonConfigureOci.setOnClickListener {
+            // OCI hosts are created (and credentials stored) via the
+            // Path A onboarding wizard. We launch it here, then close
+            // this activity on success — the wizard creates its own row.
+            ociWizardLauncher.launch(
+                android.content.Intent(this, OciOnboardingActivity::class.java)
+            )
+        }
+    }
+
+    private val ociWizardLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            Toast.makeText(this, "OCI hypervisor saved", Toast.LENGTH_SHORT).show()
+            finish()
         }
     }
 
@@ -344,6 +377,18 @@ class HypervisorEditActivity : AppCompatActivity() {
     }
 
     private fun updateUIForType(typePosition: Int) {
+        // OCI uses a separate auth model (API-key + RSA HTTP signatures)
+        // and the host/port/username/password/realm fields don't apply.
+        // For non-OCI types, restore the standard widget set.
+        val isOci = typePosition == HypervisorType.OCI.ordinal
+        layoutHost.visibility = if (isOci) View.GONE else View.VISIBLE
+        layoutPort.visibility = if (isOci) View.GONE else View.VISIBLE
+        layoutAccount.visibility = if (isOci) View.GONE else View.VISIBLE
+        layoutUsername.visibility = if (isOci) View.GONE else View.VISIBLE
+        layoutPassword.visibility = if (isOci) View.GONE else View.VISIBLE
+        switchVerifySsl.visibility = if (isOci) View.GONE else View.VISIBLE
+        layoutOci.visibility = if (isOci) View.VISIBLE else View.GONE
+
         when (typePosition) {
             0 -> { // Proxmox
                 if (editPort.text.toString().isEmpty()) editPort.setText("8006")
@@ -365,6 +410,11 @@ class HypervisorEditActivity : AppCompatActivity() {
                 layoutApiType.visibility = View.VISIBLE
                 textApiTypeHint.visibility = View.VISIBLE
                 textApiTypeHint.text = "Auto: Try vCenter → ESXi\nDirect: ESXi host\nCentralized: vCenter/vSphere"
+            }
+            3 -> { // OCI
+                layoutRealm.visibility = View.GONE
+                layoutApiType.visibility = View.GONE
+                textApiTypeHint.visibility = View.GONE
             }
         }
     }
@@ -466,14 +516,7 @@ class HypervisorEditActivity : AppCompatActivity() {
                         val client = VMwareApiClient(host, username, password, verifySsl)
                         client.authenticate()
                     }
-                    HypervisorType.OCI -> {
-                        // Phase 1 placeholder: OciApiClient lands in Phase 3,
-                        // OCI spinner option lands in Phase 6. Until then this
-                        // arm is unreachable from the UI; kept here only for
-                        // `when (type)` exhaustiveness so kotlinc compiles.
-                        Logger.w("HypervisorEditActivity", "OCI test-connection not yet wired (Phase 3)")
-                        false
-                    }
+                    HypervisorType.OCI -> testOciConnection()
                 }
                 
                 if (success) {
@@ -492,10 +535,39 @@ class HypervisorEditActivity : AppCompatActivity() {
 
     private fun saveHypervisor() {
         if (!validateFields()) return
-        
+
         lifecycleScope.launch {
             try {
                 val type = HypervisorType.values()[spinnerType.selectedItemPosition]
+
+                // OCI: brand-new rows must go through the Path A wizard
+                // (host/port/username/password don't apply, and credentials
+                // live in the Keystore which the wizard writes). Editing an
+                // existing OCI row only touches name + notes — every other
+                // OCI column is preserved verbatim.
+                if (type == HypervisorType.OCI) {
+                    val existing = editingHypervisor
+                    if (existing == null) {
+                        Toast.makeText(
+                            this@HypervisorEditActivity,
+                            "Use \"Configure OCI credentials\" to add an OCI hypervisor.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        return@launch
+                    }
+                    val updated = existing.copy(
+                        name = editName.text.toString(),
+                        notes = editNotes.text.toString().takeIf { it.isNotBlank() }
+                    )
+                    app.database.hypervisorDao().update(updated)
+                    Toast.makeText(
+                        this@HypervisorEditActivity,
+                        "Updated ${updated.name}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    finish()
+                    return@launch
+                }
 
                 // Get API type override value
                 val apiTypeEntries = resources.getStringArray(R.array.api_type_entries)
@@ -578,10 +650,74 @@ class HypervisorEditActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Test path for OCI rows — only meaningful when editing an existing
+     * row that already has Keystore-backed credentials (the wizard wrote
+     * them on save). Brand-new OCI rows go through the wizard's own Test
+     * button instead. Returns true on a 200 from `users/{user}`.
+     */
+    private suspend fun testOciConnection(): Boolean {
+        val existing = editingHypervisor
+            ?: hypervisorId?.let {
+                withContext(Dispatchers.IO) { app.database.hypervisorDao().getById(it) }
+            }
+        if (existing == null || existing.type != HypervisorType.OCI) {
+            Toast.makeText(
+                this, "Save with the OCI wizard first", Toast.LENGTH_LONG
+            ).show()
+            return false
+        }
+        val tenancy = existing.ociTenancyOcid
+        val user = existing.ociUserOcid
+        val region = existing.ociRegion
+        val fingerprint = existing.ociFingerprint
+        if (tenancy.isNullOrBlank() || user.isNullOrBlank() ||
+            region.isNullOrBlank() || fingerprint.isNullOrBlank()
+        ) {
+            Toast.makeText(
+                this, "Row is missing OCI fields — re-run the wizard",
+                Toast.LENGTH_LONG
+            ).show()
+            return false
+        }
+        val pm = app.securePasswordManager
+        val pem = withContext(Dispatchers.IO) {
+            pm.retrievePassword("oci_private_key_${existing.id}")
+        }
+        if (pem.isNullOrBlank()) {
+            Toast.makeText(
+                this, "Private key not in Keystore — re-run the wizard",
+                Toast.LENGTH_LONG
+            ).show()
+            return false
+        }
+        val passphrase = withContext(Dispatchers.IO) {
+            pm.retrievePassword("oci_passphrase_${existing.id}")?.takeIf { it.isNotEmpty() }
+        }
+        return try {
+            val km = withContext(Dispatchers.Default) {
+                OciKeyMaterial.fromPem(pem, passphrase?.toCharArray())
+            }
+            val client = OciApiClient(tenancy, user, fingerprint, region, km,
+                verifySsl = existing.verifySsl,
+                pinnedCertSha256 = existing.pinnedCertSha256)
+            client.validateCredentials()
+        } catch (e: Exception) {
+            Logger.e("HypervisorEditActivity", "OCI test failed", e)
+            false
+        }
+    }
+
     private fun validateFields(): Boolean {
         if (editName.text.toString().isBlank()) {
             editName.error = "Name is required"
             return false
+        }
+        // OCI fields are populated by the wizard, not from this screen — we
+        // skip the host/port/username/password validation. Test/save for OCI
+        // is gated on the existing row carrying the right OCI columns.
+        if (spinnerType.selectedItemPosition == HypervisorType.OCI.ordinal) {
+            return true
         }
         if (editHost.text.toString().isBlank()) {
             editHost.error = "Host is required"
@@ -599,13 +735,13 @@ class HypervisorEditActivity : AppCompatActivity() {
             editPassword.error = "Password is required"
             return false
         }
-        
+
         val port = editPort.text.toString().toIntOrNull()
         if (port == null || port !in 1..65535) {
             editPort.error = "Invalid port"
             return false
         }
-        
+
         return true
     }
 

@@ -231,6 +231,14 @@
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- OCI manager (list / start / stop instances) -->
+        <activity
+            android:name=".ui.activities.OciManagerActivity"
+            android:exported="false"
+            android:label="OCI Manager"
+            android:parentActivityName=".ui.activities.MainActivity"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- SFTP file browser activity -->
         <activity
             android:name=".ui.activities.SFTPActivity"

@@ -20,6 +20,7 @@ import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.ui.activities.HypervisorEditActivity
+import io.github.tabssh.ui.activities.OciManagerActivity
 import io.github.tabssh.ui.activities.ProxmoxManagerActivity
 import io.github.tabssh.ui.activities.VMwareManagerActivity
 import io.github.tabssh.ui.activities.XCPngManagerActivity
@@ -162,9 +163,7 @@ class HypervisorsFragment : Fragment() {
             HypervisorType.PROXMOX -> Intent(requireContext(), ProxmoxManagerActivity::class.java)
             HypervisorType.VMWARE -> Intent(requireContext(), VMwareManagerActivity::class.java)
             HypervisorType.XCPNG -> Intent(requireContext(), XCPngManagerActivity::class.java)
-            // OCI: placeholder route until Phase 5 (OciManagerActivity) ships.
-            // Unreachable today — type spinner exposes OCI in Phase 6.
-            HypervisorType.OCI -> Intent(requireContext(), HypervisorEditActivity::class.java)
+            HypervisorType.OCI -> Intent(requireContext(), OciManagerActivity::class.java)
         }
         intent.putExtra("hypervisor_id", hypervisor.id)
         startActivity(intent)
@@ -216,6 +215,14 @@ class HypervisorsFragment : Fragment() {
                         // alias doesn't dangle if the row id ever gets reused.
                         io.github.tabssh.crypto.storage.HypervisorPasswordStore
                             .clear(requireContext(), hypervisor.id)
+                        // OCI rows store the PEM + (optional) passphrase
+                        // under their own Keystore aliases — drop those too
+                        // so a row-id collision can't leak the prior owner's
+                        // private key.
+                        if (hypervisor.type == HypervisorType.OCI) {
+                            io.github.tabssh.crypto.storage.HypervisorPasswordStore
+                                .clearOciSecrets(requireContext(), hypervisor.id)
+                        }
                         if (!isAdded) return@launch
                         Toast.makeText(
                             requireContext(),

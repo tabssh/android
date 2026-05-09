@@ -632,11 +632,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             HypervisorType.PROXMOX -> Intent(this, ProxmoxManagerActivity::class.java)
             HypervisorType.XCPNG -> Intent(this, XCPngManagerActivity::class.java)
             HypervisorType.VMWARE -> Intent(this, VMwareManagerActivity::class.java)
-            // OCI: placeholder route until Phase 5 (OciManagerActivity) ships.
-            // Unreachable today — the type spinner doesn't expose OCI yet
-            // (Phase 6). Routing to the edit screen lets a manually-inserted
-            // OCI row at least open without crashing.
-            HypervisorType.OCI -> Intent(this, HypervisorEditActivity::class.java)
+            HypervisorType.OCI -> Intent(this, OciManagerActivity::class.java)
         }
         intent.putExtra("hypervisor_id", hypervisor.id)
         startActivity(intent)
