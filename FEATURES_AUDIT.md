@@ -234,6 +234,7 @@
 | XCP-ng / Xen Server | ✅ | — | — | 🆕 |
 | Xen Orchestra (REST + WS live updates) | ✅ | — | — | 🆕 |
 | VMware ESXi/vCenter | 🟡 | — | — | API works, console wiring deferred. **MEDIUM** |
+| Oracle Cloud Infrastructure (OCI Compute) | ✅ | — | — | Path A onboarding + signed REST. Console deferred. 🆕 |
 | VM serial console via hypervisor (no VM network) | ✅ | — | — | 🆕 |
 | AWS EC2 auto-import | ❌ | ✅ Pro | ✅ Pro | **🚫 unless explicitly wanted — cloud privacy** |
 | GCP / DO / Azure auto-import | ❌ | — | ✅ Pro | Same — opt-in only |

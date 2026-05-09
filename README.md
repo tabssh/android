@@ -69,12 +69,13 @@
 - ☁️ **Cloud Sync** - Storage Access Framework (works with **any** provider — Google Drive, Dropbox, OneDrive, Nextcloud, local storage), AES-256-GCM encryption with PBKDF2, and 3-way merge with conflict UI. **No Google services dependency** — runs on de-Googled ROMs.
 - 📝 **Custom Fonts** - 8 monospace fonts: Cascadia Code, Fira Code, JetBrains Mono, and more
 - 🏠 **Home Screen Widgets** - Quick connect from home screen
-- 🌐 **Hypervisor Management** - Proxmox VE, VMware vSphere, XCP-ng, **Xen Orchestra** (REST API + WebSocket)
+- 🌐 **Hypervisor Management** - Proxmox VE, VMware vSphere, XCP-ng, **Xen Orchestra** (REST API + WebSocket), Oracle Cloud Infrastructure (OCI Compute)
   - **Xen Orchestra** - Full REST API + WebSocket ⚡ real-time updates
   - Toggle between XO and direct XCP-ng connections
   - VM management with live state changes
   - Snapshot & backup operations
   - Pool and host information
+  - **OCI** - Path A onboarding (import `~/.oci/config` + `.pem` via SAF), RSA-SHA256 HTTP signed requests, list/start/stop/softstop/reset/softreset Compute instances, public/private IP via VNIC walk. No console (deferred). API-key only — `security_token_file=` configs are rejected
 - 🖥️ **VM Serial Console** - Connect to VMs via hypervisor serial console (no VM network required; works during OS install)
 - 🔗 **Identity Abstraction** - Reusable credentials across multiple connections
 - 📂 **Connection Groups** - Organize connections into folders with expand/collapse
@@ -524,7 +525,7 @@ If you find TabSSH useful, please consider starring the repository! It helps oth
 - 📝 **Snippets Library** - Quick access to common commands
 - 🆔 **Identity Abstraction** - Reusable credential profiles
 - 🔍 **Search & Sort** - Real-time filtering with 8 sort options
-- 🌐 **Hypervisor Management** - Proxmox VE, VMware vSphere, XCP-ng support
+- 🌐 **Hypervisor Management** - Proxmox VE, VMware vSphere, XCP-ng, Xen Orchestra, Oracle Cloud Infrastructure (OCI)
 - 📊 **Comprehensive Logging** - 4 logging types with rotation
 
 ---

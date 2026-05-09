@@ -42,8 +42,8 @@
 - ✅ **201 Kotlin source files** (~61,668 lines of code) under `app/src/main/`
 - ✅ **0 compilation errors** (verified: 2026-04-28)
 - ✅ **5 APK variants** built: `tabssh-android-{arch}.apk` (arch = `arm64` / `arm` / `amd64` / `x86` / `universal`)
-- ✅ **Database Version 26** — migrations v1 → v26 (latest: v23 `cloud_accounts`, v24 `connections.remote_command`, v25 `connections.ip_mode`, v26 `macros` table)
-- ✅ **30 Activities, 7 Fragments, 1 Service** (`SSHConnectionService`)
+- ✅ **Database Version 29** — migrations v1 → v29 (latest: v26 `macros`, v27 `hypervisor_accounts` + `hypervisors.account_id`, v28 `hypervisors.pinned_cert_sha256`, v29 OCI columns + `hypervisors.auth_type`)
+- ✅ **34 Activities, 7 Fragments, 1 Service** (`SSHConnectionService`) — adds `HypervisorAccountsActivity`, `ImportFromQrActivity`, `OciOnboardingActivity`, `OciManagerActivity`
 - 📦 **APKs Ready for Testing** - Located in `./binaries/`
 - ✅ **Complete Settings UI** - All preferences functional, build-aware debug logging
 - ✅ **Universal Cloud Sync** - SAF-based, works with any storage provider (Google Drive, Dropbox, OneDrive, Nextcloud, local storage)
@@ -148,9 +148,12 @@ This is the bridge between the old 2026-02-11 "Feature Complete" snapshot and to
 | v23  | v24 | 9.X | `connections.remote_command` (Issue #37: SSH config RemoteCommand support) |
 | v24  | v25 | #6  | `connections.ip_mode` (auto / ipv4 / ipv6 — Issue #6) |
 | v25  | v26 | #173 | new `macros` table (recordable macros — Issue #173) |
+| v26  | v27 | accts | new `hypervisor_accounts` table + `hypervisors.account_id` (reusable hypervisor credentials) |
+| v27  | v28 | pin   | `hypervisors.pinned_cert_sha256` (TOFU TLS pinning for hypervisor REST APIs) |
+| v28  | v29 | OCI   | OCI Phase 1 — `auth_type` discriminator + 5 nullable OCI columns on `hypervisors` (`oci_tenancy_ocid`, `oci_user_ocid`, `oci_region`, `oci_fingerprint`, `oci_compartment_ocid`) |
 
-### Activities now present (30)
-AuditLogViewer, CloudAccounts, ClusterCommand, ConnectionEdit, ConnectionHistory, CrashReport, GroupManagement, HypervisorEdit, IdentityManagement, KeyboardCustomization, KeyManagement, LogViewer, **Main**, MultiHostDashboard, PinLock, PortForwarding, ProxmoxManager, RemoteFileEditor, **Settings**, SFTP, SnippetManager, SyncSettings, **TabTerminal**, ThemeEditor, TranscriptViewer, VMConsole, VMwareManager, WhatsNew, WidgetConfiguration, XCPngManager.
+### Activities now present (34)
+AuditLogViewer, CloudAccounts, ClusterCommand, ConnectionEdit, ConnectionHistory, CrashReport, GroupManagement, HypervisorAccounts, HypervisorEdit, IdentityManagement, ImportFromQr, KeyboardCustomization, KeyManagement, LogViewer, **Main**, MultiHostDashboard, OciManager, OciOnboarding, PinLock, PortForwarding, ProxmoxManager, RemoteFileEditor, **Settings**, SFTP, SnippetManager, SyncSettings, **TabTerminal**, ThemeEditor, TranscriptViewer, VMConsole, VMwareManager, WhatsNew, WidgetConfiguration, XCPngManager.
 
 ### Known gaps (per `FEATURES_AUDIT.md`)
 Tier 1: ❌ FIDO2 / hardware key auth, ❌ SSH cert auth UI complete (entity exists v19), 🟡 SSH agent forwarding (UI exists, runtime not wired). Tier 2: ❌ Custom theme GUI editor (we have JSON I/O + the new ThemeEditorActivity GUI — verify completeness), ❌ Snippet variables `{?password}`, 🟡 Bluetooth keyboard polish + AltGr. Out of scope (do not implement): AI command generation, AWS/GCP/Azure auto-import (DO/Hetzner/Linode/Vultr ARE done because they're explicit-token), Team Vault, SAML/SCIM, CLI companion, plugin SDK.

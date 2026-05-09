@@ -221,7 +221,8 @@ Top-level config: `android:name=".TabSSHApplication"`, `android:allowBackup="fal
 | `LogViewerActivity`, `AuditLogViewerActivity` | View app/audit logs | — |
 | `KeyboardCustomizationActivity` | Build custom on-screen keyboard layout | — |
 | `HypervisorEditActivity` | CRUD `HypervisorProfile` | — |
-| `ProxmoxManagerActivity`, `XCPngManagerActivity`, `VMwareManagerActivity` | Per-hypervisor VM list & actions | hypervisor id |
+| `ProxmoxManagerActivity`, `XCPngManagerActivity`, `VMwareManagerActivity`, `OciManagerActivity` | Per-hypervisor VM/instance list & actions | hypervisor id |
+| `OciOnboardingActivity` | Path A OCI importer (config + .pem via SAF) | — |
 | `VMConsoleActivity` | Hypervisor serial console (no SSH) | hypervisor + VM ids |
 | `WidgetConfigurationActivity` | Configure quick-connect widgets | widget id |
 | `TranscriptViewerActivity` | Replay recorded sessions | transcript id |
@@ -445,7 +446,7 @@ If the Keystore is unavailable (e.g. broken ROM), the manager auto-degrades to `
 | `Snippet` | `snippets` | `command`, `category`, `tags`, `usageCount`, `isFavorite`, `{var}` placeholders | `entities/Snippet.kt` |
 | `Identity` | `identities` | `username`, `authType`, `keyId`, encrypted `password` | `entities/Identity.kt` |
 | `AuditLogEntry` | `audit_log` | per-event row with `eventType`, `command`, `output`, `exitCode` | `entities/AuditLogEntry.kt` |
-| `HypervisorProfile` | `hypervisors` | `type` (`PROXMOX`/`XCPNG`/`VMWARE`), credentials, `realm`, `verifySsl`, `apiTypeOverride` (`auto`/`direct`/`centralized`), `linkedConnectionId` | `entities/HypervisorProfile.kt` |
+| `HypervisorProfile` | `hypervisors` | `type` (`PROXMOX`/`XCPNG`/`VMWARE`/`OCI`), credentials, `realm`, `verifySsl`, `apiTypeOverride` (`auto`/`direct`/`centralized`), `linkedConnectionId`. OCI rows additionally carry `authType="oci_api_key"` plus `ociTenancyOcid`, `ociUserOcid`, `ociRegion`, `ociFingerprint`, `ociCompartmentOcid` (PEM + passphrase live in Keystore under `oci_private_key_${id}` / `oci_passphrase_${id}` — never in DB) | `entities/HypervisorProfile.kt` |
 | `Workspace` | `workspaces` | named tab groups, `connectionIds` (JSON array) | `entities/Workspace.kt` |
 | `CloudAccount` | `cloud_accounts` | `provider`, `enabled`, `lastRefreshAt`, `lastCount` (token in Keystore, **not** in DB) | `entities/CloudAccount.kt` |
 | `Macro` | `macros` | recordable raw byte sequence (`sequence_b64`), `usageCount` | `entities/Macro.kt` |
@@ -458,7 +459,7 @@ Fifteen DAOs in `storage/database/dao/`. Notable queries:
 - `AuditLogDao`: range queries by date, by connection, by session; cleanup queries.
 - All write APIs use `OnConflictStrategy.REPLACE`.
 
-### 8.4 Migrations (`v1 → v26`)
+### 8.4 Migrations (`v1 → v29`)
 
 | Step | Change |
 |---|---|
@@ -487,6 +488,9 @@ Fifteen DAOs in `storage/database/dao/`. Notable queries:
 | 23→24 | Add `remote_command` to connections (Issue #37 SSH config RemoteCommand) |
 | 24→25 | Add `ip_mode` to connections (`auto` / `ipv4` / `ipv6`, Issue #6) |
 | 25→26 | Create `macros` table (Issue #173 recordable byte sequences) |
+| 26→27 | Create `hypervisor_accounts` (reusable hypervisor credentials) + add `account_id` FK to `hypervisors` |
+| 27→28 | Add `pinned_cert_sha256` to `hypervisors` (TOFU TLS pinning for hypervisor REST APIs) |
+| 28→29 | Add `auth_type` discriminator (default `'password'`) + 5 nullable OCI columns to `hypervisors` (`oci_tenancy_ocid`, `oci_user_ocid`, `oci_region`, `oci_fingerprint`, `oci_compartment_ocid`) — OCI Phase 1 |
 
 ### 8.5 Preferences
 
@@ -666,7 +670,63 @@ Realm format `user@pam` / `user@pve`. Optional SSL bypass.
 - Detects vCenter vs standalone ESXi by probing `/api/vcenter/datacenter`.
 - **Console support: not yet implemented.**
 
-### 11.5 `HypervisorConsoleManager` and `ConsoleWebSocketClient`
+### 11.5 Oracle Cloud Infrastructure (OCI)
+
+`hypervisor/oci/` — REST + RSA-SHA256 HTTP signed requests
+(draft-cavage-http-signatures-08, OCI variant).
+
+- **Auth model:** API-key only. No session tokens — `~/.oci/config`
+  profiles carrying `security_token_file=` are rejected during import
+  (1-hour CLI-renewable, no upload renewal path).
+- **Onboarding:** Path A only (`OciOnboardingActivity`). User picks
+  the config file via SAF, picks the `.pem` private key via SAF,
+  enters the passphrase if encrypted; the imported key's MD5
+  fingerprint of `SubjectPublicKeyInfo DER` (formatted as colon-hex
+  pairs) is round-tripped against the config's `fingerprint=` line
+  before save.
+- **Endpoints:** Identity at `https://identity.<region>.oci.oraclecloud.com`,
+  Compute / Networking at `https://iaas.<region>.oraclecloud.com`. Region
+  is selected from a `MaterialAutoCompleteTextView` seeded with the 34
+  current commercial regions (free-text always allowed — Oracle adds
+  regions quarterly).
+- **Files:**
+  - `OciKeyMaterial.kt` — PEM parser (PKCS#1 / PKCS#8 / encrypted),
+    fingerprint computation, RSA private/public key extraction.
+    Networking-free, BouncyCastle-only.
+  - `OciSigner.kt` — cavage HTTP signing primitive. Builds the
+    canonical `(request-target)\nhost\ndate[\nx-content-sha256\ncontent-type\ncontent-length]`
+    string, signs with `SHA256withRSA`, emits
+    `Authorization: Signature version="1",keyId="…",algorithm="rsa-sha256",headers="…",signature="<b64>"`.
+    Exposes `asInterceptor()` for OkHttp.
+  - `OciApiClient.kt` — Compute v1 client: `validateCredentials()`
+    (`GET /20160918/users/{userOcid}` against Identity),
+    `listInstances(compartmentOcid)`, `getInstance(id)`,
+    `instanceAction(id, action)` for START / STOP / SOFTSTOP / RESET /
+    SOFTRESET, `getInstancePublicIp()` via VNIC walk
+    (`/vnicAttachments?instanceId=…` → `/vnics/{id}` for the primary
+    VNIC). Reuses `HypervisorTrustManagerFactory` so OCI inherits
+    the same TLS pinning behaviour as the other hypervisors.
+  - `OciInstance.kt` — Compute Instance data class +
+    `OciInstanceAction` enum.
+  - `OciConfigParser.kt` — zero-dep INI parser for `~/.oci/config`,
+    handles `[DEFAULT]` + named sections, rejects session-token
+    profiles up front.
+- **UI:** `OciOnboardingActivity` (Path A wizard) and
+  `OciManagerActivity` (instance list with start/stop/softstop/
+  reset/softreset; no console — deferred). When the user picks "OCI"
+  in `HypervisorEditActivity`'s type spinner the host/port/account/
+  username/password/realm/api-type/ssl rows hide and a "Configure
+  OCI credentials…" button launches the onboarding wizard.
+- **Secrets:** PEM private key + optional passphrase live in
+  `SecurePasswordManager` under `oci_private_key_${id}` /
+  `oci_passphrase_${id}`. Cleared on row delete via
+  `HypervisorPasswordStore.clearOciSecrets`.
+- **Out of scope (v1):** Instance Console Connection (separate
+  bastion-over-SSH flow), multi-region per profile, compartment
+  browser (paste OCID instead), `ListInstances` pagination, identity
+  domains, anything outside Compute.
+
+### 11.6 `HypervisorConsoleManager` and `ConsoleWebSocketClient`
 
 `hypervisor/console/`:
 - `HypervisorConsoleManager` exposes `connectProxmoxConsole`, `connectXCPngConsole`, `connectXenOrchestraConsole`. Each returns a `ConsoleConnection` with bidirectional piped streams.
@@ -676,11 +736,11 @@ Realm format `user@pam` / `user@pve`. Optional SSL bypass.
   - `XCPNG`, `XO`, `VMWARE`: pass-through.
 - `wireToTerminal(connection, bridge: TermuxBridge)` connects the piped streams to the terminal — same `TermuxBridge` used for SSH, so the user gets identical terminal behavior.
 
-### 11.6 UI
+### 11.7 UI
 
 - `HypervisorsFragment` (RecyclerView, FAB → `HypervisorEditActivity`, long-press for edit/delete, click → manager activity).
-- `HypervisorEditActivity` + `dialog_add_hypervisor.xml` — dynamic field visibility (Proxmox shows realm, XCP-ng/VMware show API-type dropdown), default ports (Proxmox 8006, XCP-ng/VMware 443), "Import from SSH connection" pre-fill, `testConnection()` validation.
-- Type-specific manager activities: `ProxmoxManagerActivity`, `XCPngManagerActivity`, `VMwareManagerActivity`. They show VM lists with power/snapshot/backup actions and route to `VMConsoleActivity` for serial console.
+- `HypervisorEditActivity` + `dialog_add_hypervisor.xml` — dynamic field visibility (Proxmox shows realm, XCP-ng/VMware show API-type dropdown, OCI hides every connection field and shows a "Configure OCI credentials…" button that launches `OciOnboardingActivity`), default ports (Proxmox 8006, XCP-ng/VMware 443), "Import from SSH connection" pre-fill, `testConnection()` validation. For OCI rows, save updates only `name` + `notes` and refuses brand-new rows (the wizard is the only entry point).
+- Type-specific manager activities: `ProxmoxManagerActivity`, `XCPngManagerActivity`, `VMwareManagerActivity`, `OciManagerActivity`. They show VM/instance lists with power/snapshot/backup actions and route to `VMConsoleActivity` for serial console (OCI has no console — deferred).
 
 ---
 

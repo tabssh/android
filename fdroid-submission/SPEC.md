@@ -49,7 +49,7 @@ TabSSH is a modern, open-source SSH client for Android that provides a true tabb
 - All features included (no premium version)
 - Complete open source transparency
 - Enterprise-grade security on mobile
-- Hypervisor management: Proxmox VE, XCP-ng, Xen Orchestra (REST + WebSocket), VMware
+- Hypervisor management: Proxmox VE, XCP-ng, Xen Orchestra (REST + WebSocket), VMware, Oracle Cloud Infrastructure (OCI Compute)
 - VM serial console access via hypervisor API (no VM network required)
 - Full terminal emulation via Termux TerminalEmulator (vim, htop, tmux work correctly)
 - Cloud sync: Universal SAF-based sync (works with any installed storage provider — Google Drive, Dropbox, OneDrive, Nextcloud, local) with AES-256-GCM encryption and 3-way merge
@@ -102,7 +102,9 @@ app/src/main/java/io/github/tabssh/
 ├── hypervisor/             # Hypervisor management
 │   ├── proxmox/            # Proxmox VE REST API client + manager activity
 │   ├── xcpng/              # XCP-ng XML-RPC + Xen Orchestra REST/WebSocket
-│   └── vmware/             # VMware vSphere
+│   ├── vmware/             # VMware vSphere
+│   ├── oci/                # Oracle Cloud Infrastructure (Compute v1, signed REST)
+│   └── console/            # Hypervisor serial console manager + WebSocket client
 ├── sftp/                   # SFTP file browser + SCPClient (device → server)
 ├── themes/                 # Theme system (parser, validator, definitions)
 ├── accessibility/          # TalkBack, high contrast, keyboard navigation
@@ -1511,9 +1513,15 @@ The following summarises the primary tables. All entities are Kotlin data classe
 - first_seen, last_verified, trust_level
 
 **hypervisors** — Hypervisor connection profiles
-- id (PK), name, host, port, username, api_type (PROXMOX/XCPNG/VMWARE)
+- id (PK), name, host, port, username, api_type (PROXMOX/XCPNG/VMWARE/OCI)
 - is_xen_orchestra (toggle: use Xen Orchestra REST API vs direct XCP-ng XML-RPC)
 - auth_token, created_at, last_connected
+- pinned_cert_sha256 (TOFU TLS pinning for hypervisor REST APIs, v28)
+- account_id (FK to hypervisor_accounts; reusable credentials, v27)
+- auth_type ("password" or "oci_api_key", v29) + 5 OCI columns
+  (oci_tenancy_ocid, oci_user_ocid, oci_region, oci_fingerprint,
+  oci_compartment_ocid). OCI PEM + passphrase live in Keystore under
+  `oci_private_key_${id}` / `oci_passphrase_${id}` — never in DB.
 
 **connection_groups** — Folders for organizing connections
 - id (PK), name, color, icon, is_expanded, sort_order, created_at
