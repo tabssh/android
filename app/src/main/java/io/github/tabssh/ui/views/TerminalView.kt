@@ -931,7 +931,7 @@ class TerminalView @JvmOverloads constructor(
                 val x = startX + col * cellWidth
 
                 // Get character at this position
-                val char = if (charIndex < lineChars.size) lineChars[charIndex] else '\u0000'
+                val char = if (charIndex < lineChars.size) lineChars[charIndex] else ' '
 
                 // Handle surrogate pairs for Unicode characters
                 val codePoint: Int
@@ -964,7 +964,7 @@ class TerminalView @JvmOverloads constructor(
                 }
 
                 // Draw character if visible
-                if (codePoint != 0 && codePoint != '\u0000'.code) {
+                if (codePoint != 0 && codePoint != ' '.code) {
                     textPaint.color = termuxColorToAndroid(fg)
 
                     // Apply text effects

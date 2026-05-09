@@ -1136,15 +1136,15 @@ class TabTerminalActivity : AppCompatActivity() {
             }
         }
 
-        // Function-key row visibility — the existing custom keyboard view
-        // doubles as the function-key row, so toggle that container.
-        val showFnKeys = prefs.getBoolean("ui_show_function_keys", true)
-        try {
-            binding.multiRowKeyboard.visibility =
-                if (showFnKeys) android.view.View.VISIBLE else android.view.View.GONE
-        } catch (e: Exception) {
-            Logger.w("TabTerminalActivity", "Function-key visibility apply failed: ${e.message}")
-        }
+        // Custom keyboard bar is always visible — it carries CTL/ALT/ESC/
+        // arrows/symbols that the system IME does not provide and the user
+        // expects in every terminal. Earlier code gated this on
+        // `ui_show_function_keys`, but that pref's stated purpose
+        // ("Show Function Key Row" = F1-F12 row) is a different element
+        // (`function_keys_container` in the layout, currently unbound).
+        // Toggling the pref hid the whole bar instead of just F-keys —
+        // confusing UX. Manual show/hide is still available via
+        // showCustomKeyboardBar / hideCustomKeyboardBar (toolbar action).
 
         // Line-spacing — applies to whichever TerminalView is active (swipe
         // mode or classic). Stored 100–200, default 120 = 1.2× tight.
@@ -3178,6 +3178,13 @@ class TabTerminalActivity : AppCompatActivity() {
         // this we'd keep showing the layout that was current when the
         // terminal activity was created.
         setupCustomKeyboard()
+
+        // Re-apply terminal-screen prefs (Fullscreen Terminal, Show
+        // Function Key Row, Line Spacing, Word Wrap). These are toggled
+        // in Settings and need to take effect on return without a full
+        // recreate. Was previously only in onCreate, so toggling
+        // Fullscreen had no visible effect until app restart.
+        applyTerminalUiPrefs()
 
         // Restore active tab if needed
         val activeTab = tabManager.getActiveTab()
