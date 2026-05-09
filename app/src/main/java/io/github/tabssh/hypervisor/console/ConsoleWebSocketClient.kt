@@ -95,6 +95,14 @@ class ConsoleWebSocketClient(
      */
     @Volatile private var sendFailureFired = false
 
+    // Set true by disconnect() so the inevitable post-close EOF/onFailure
+    // from OkHttp's reader thread doesn't get reported up as a real error.
+    // Without this, a clean user-initiated disconnect on Android 16 crashes
+    // the activity: WebSocket close → reader EOF → connectionListener.onError
+    // → VMConsoleActivity.showError → AlertDialog.show on a finishing
+    // activity → BadTokenException.
+    @Volatile private var userInitiatedClose = false
+
     /**
      * Wrapper around `webSocket.send(...)` that turns a `false` return
      * (queue full / socket already closed) into a real connection-lost
@@ -274,6 +282,12 @@ class ConsoleWebSocketClient(
                 override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                     Logger.w(TAG, "Console WebSocket closed: code=$code reason='$reason'")
                     isConnected = false
+                    if (userInitiatedClose) {
+                        // We initiated this — don't fire onDisconnected; the
+                        // activity is on its way down.
+                        cleanup()
+                        return
+                    }
                     // Notify with detailed reason
                     val detailedReason = if (reason.isBlank()) "Connection closed (code $code)" else reason
                     connectionListener?.onDisconnected(detailedReason)
@@ -284,6 +298,13 @@ class ConsoleWebSocketClient(
                     val errorMsg = "WebSocket failure: ${t.message}" + if (response != null) " (HTTP ${response.code})" else ""
                     Logger.e(TAG, errorMsg, t)
                     isConnected = false
+                    if (userInitiatedClose) {
+                        // EOFException from the reader thread is expected
+                        // when we close the socket ourselves — don't escalate
+                        // it to the listener, the activity is finishing.
+                        cleanup()
+                        return
+                    }
                     connectionListener?.onError(t)
                     cleanup()
                 }
@@ -435,6 +456,7 @@ class ConsoleWebSocketClient(
      */
     fun disconnect() {
         Logger.i(TAG, "Disconnecting console WebSocket")
+        userInitiatedClose = true
         isConnected = false
         keepaliveThread?.interrupt()
         keepaliveThread = null

@@ -42,17 +42,70 @@
 -keep class javax.annotation.** { *; }
 -keep class javax.annotation.concurrent.** { *; }
 
-# Keep model classes for serialization
--keep class com.tabssh.model.** { *; }
-
 # Keep enum classes
 -keepclassmembers enum * {
     public static **[] values();
     public static ** valueOf(java.lang.String);
 }
 
-# Keep terminal emulation classes
--keep class com.tabssh.terminal.** { *; }
+# ----------------------------------------------------------------------------
+# kotlinx.serialization
+#
+# kotlinx-serialization generates a synthetic `$$serializer` class plus a
+# `Companion.serializer()` (or `INSTANCE.serializer()` on @Serializable
+# objects) for every `@Serializable` class. Both are looked up reflectively
+# at runtime by `serializer<T>()` / `Json.encodeToString(payload)`. R8 in the
+# release build strips them as unused, which manifests as:
+#
+#     kotlinx.serialization.SerializationException:
+#       Serializer for class 'SyncDataPackage' is not found.
+#
+# These rules are the official set from
+# https://github.com/Kotlin/kotlinx.serialization/blob/master/rules/common.pro
+# Without them, sync upload/download fails on every release build.
+# ----------------------------------------------------------------------------
 
-# Keep SSH classes
--keep class com.tabssh.ssh.** { *; }
+# Annotations are read by the runtime reflection lookups.
+-keepattributes RuntimeVisibleAnnotations,AnnotationDefault
+
+# Keep `Companion` object fields of @Serializable classes.
+-if @kotlinx.serialization.Serializable class **
+-keepclassmembers class <1> {
+    static <1>$Companion Companion;
+}
+
+# Keep `serializer()` on companion objects (default + named).
+-if @kotlinx.serialization.Serializable class ** {
+    static **$* *;
+}
+-keepclassmembers class <2>$<3> {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+
+# Keep `INSTANCE.serializer()` of @Serializable objects.
+-if @kotlinx.serialization.Serializable class ** {
+    public static ** INSTANCE;
+}
+-keepclassmembers class <1> {
+    public static <1> INSTANCE;
+    kotlinx.serialization.KSerializer serializer(...);
+}
+
+# kotlinx-serialization-json declares its own runtime reflection lookups.
+-keepclassmembers class kotlinx.serialization.json.** {
+    *** Companion;
+}
+-keepclasseswithmembers class kotlinx.serialization.json.** {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+
+# Belt-and-braces: every TabSSH @Serializable model lives under one of these
+# packages. Even with the rules above, having explicit class keeps documents
+# the dependency and survives any kotlinx-serialization rule changes.
+-keep,includedescriptorclasses class io.github.tabssh.sync.models.** { *; }
+-keep,includedescriptorclasses class io.github.tabssh.themes.definitions.** { *; }
+-keep,includedescriptorclasses class io.github.tabssh.pairing.** { *; }
+# Note: previous rules referenced `com.tabssh.*` which was the wrong package
+# (actual package: `io.github.tabssh.*`). Those rules have always been
+# matching nothing — leaving them out rather than fixing them in place
+# because the kotlinx.serialization rules above are what actually fix sync.

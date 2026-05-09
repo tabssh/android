@@ -199,6 +199,7 @@ class VMConsoleActivity : AppCompatActivity() {
 
     private fun showVmConsoleContextMenu() {
         val items = arrayOf(
+            "Copy screen",
             "Paste",
             "Send Ctrl+C",
             "Send Ctrl+D",
@@ -214,15 +215,16 @@ class VMConsoleActivity : AppCompatActivity() {
             .setTitle("VM Console")
             .setItems(items) { _, which ->
                 when (which) {
-                    0 -> pasteFromClipboard()
-                    1 -> sendBytes(byteArrayOf(0x03))                  // ETX
-                    2 -> sendBytes(byteArrayOf(0x04))                  // EOT
-                    3 -> sendBytes(byteArrayOf(0x1A))                  // SUB
-                    4 -> sendBytes(byteArrayOf(0x1B))                  // ESC
-                    5 -> sendBytes(byteArrayOf(0x09))                  // TAB
-                    6 -> sendBytes(byteArrayOf(0x0D))                  // CR
-                    7 -> showSendTextDialog()
-                    8 -> {
+                    0 -> copyScreenToClipboard()
+                    1 -> pasteFromClipboard()
+                    2 -> sendBytes(byteArrayOf(0x03))                  // ETX
+                    3 -> sendBytes(byteArrayOf(0x04))                  // EOT
+                    4 -> sendBytes(byteArrayOf(0x1A))                  // SUB
+                    5 -> sendBytes(byteArrayOf(0x1B))                  // ESC
+                    6 -> sendBytes(byteArrayOf(0x09))                  // TAB
+                    7 -> sendBytes(byteArrayOf(0x0D))                  // CR
+                    8 -> showSendTextDialog()
+                    9 -> {
                         // toggleSoftInput(SHOW_FORCED, …) is deprecated.
                         // Use the WindowInsetsController IME toggle which
                         // works against the active focus and supports the
@@ -234,7 +236,7 @@ class VMConsoleActivity : AppCompatActivity() {
                         val ic = androidx.core.view.WindowCompat.getInsetsController(window, view)
                         if (visible) ic.hide(imeType) else ic.show(imeType)
                     }
-                    9 -> confirmDisconnectThenFinish()
+                    10 -> confirmDisconnectThenFinish()
                 }
             }
             .setNegativeButton("Cancel", null)
@@ -250,6 +252,34 @@ class VMConsoleActivity : AppCompatActivity() {
             return
         }
         sendBytes(text.toByteArray(Charsets.UTF_8))
+    }
+
+    /**
+     * Copy the visible VM-console screen + recent scrollback to the
+     * system clipboard. VMConsoleActivity previously had no copy path
+     * at all (only Paste / Send keys / Disconnect in its long-press
+     * menu), so users couldn't pull boot-time output / serial-console
+     * messages off the device.
+     */
+    private fun copyScreenToClipboard() {
+        val bridge = termuxBridge
+        if (bridge == null) {
+            Toast.makeText(this, "Console not connected", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val screen = try { bridge.getScreenContent() } catch (e: Exception) { "" }
+        val scrollback = try { bridge.getScrollbackContent() } catch (e: Exception) { "" }
+        val text = if (scrollback.isNotEmpty()) "$scrollback\n$screen" else screen
+        if (text.isBlank()) {
+            Toast.makeText(this, "Nothing on screen to copy", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+            as android.content.ClipboardManager
+        clipboard.setPrimaryClip(
+            android.content.ClipData.newPlainText("VM Console", text)
+        )
+        Toast.makeText(this, "Console screen copied", Toast.LENGTH_SHORT).show()
     }
 
     private fun showSendTextDialog() {
@@ -469,6 +499,18 @@ class VMConsoleActivity : AppCompatActivity() {
     }
 
     private fun showError(message: String) {
+        // Defense-in-depth: an async listener (WebSocket reader thread)
+        // can fire onError after the user already tapped Disconnect — by
+        // the time the runOnUiThread lambda runs, the activity may be
+        // finishing and our window token is dead. Showing an AlertDialog
+        // then throws BadTokenException and crashes the process.
+        // ConsoleWebSocketClient.disconnect() now suppresses post-close
+        // failures, but there are still hypervisor-side error paths that
+        // can race with finish(); guard here too.
+        if (isFinishing || isDestroyed) {
+            Logger.w(TAG, "showError suppressed (activity finishing): $message")
+            return
+        }
         progressBar.visibility = View.GONE
         statusText.visibility = View.VISIBLE
         statusText.text = "Error: $message"

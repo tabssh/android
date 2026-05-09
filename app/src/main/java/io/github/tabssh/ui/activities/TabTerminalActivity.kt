@@ -277,6 +277,28 @@ class TabTerminalActivity : AppCompatActivity() {
                 Handler(Looper.getMainLooper()).post {
                     removeTabFromUI(index)
 
+                    // Release the SSH session in SSHSessionManager once
+                    // the last tab for this profile is gone. Without
+                    // this, the foreground-service "N active sessions"
+                    // notification stays stuck — `SSHTab.disconnect()`
+                    // closes only the per-tab channel; the underlying
+                    // Session is owned by SSHSessionManager and lives
+                    // on until something explicitly calls
+                    // closeConnection(). closeConnection() fires both
+                    // onConnectionClosed (service recomputes count)
+                    // AND onConnectionStateChanged(..., DISCONNECTED)
+                    // (wireGlobalNotifications swaps the "Connected to
+                    // X" toast for "Disconnected from X").
+                    val profileId = tab.profile.id
+                    val anyRemaining = tabManager.getAllTabs().any { it.profile.id == profileId }
+                    if (!anyRemaining) {
+                        try {
+                            app.sshSessionManager.closeConnection(profileId)
+                        } catch (e: Exception) {
+                            Logger.w("TabTerminalActivity", "Failed to release SSH session for $profileId on tab close", e)
+                        }
+                    }
+
                     // Close activity if no tabs remain — UNLESS we're
                     // mid-reconnect, in which case a new tab is about to
                     // be created. See `isReconnecting` doc.
@@ -3136,8 +3158,25 @@ class TabTerminalActivity : AppCompatActivity() {
         }
         keyboardLayoutListener = null
 
+        // Snapshot profile ids of any still-open tabs BEFORE cleanup so we
+        // can release their SSH sessions afterwards. tabManager.cleanup()
+        // calls SSHTab.disconnect() per tab (channel-only) and does NOT
+        // fire onTabClosed, so without this snapshot the SSHSessionManager
+        // would keep these connections in activeConnections and the
+        // foreground-service notification would stay stuck on the old
+        // count even though the activity (and all its tabs) is gone.
+        val openProfileIds = tabManager.getAllTabs().map { it.profile.id }.toSet()
+
         Logger.d("TabTerminalActivity", "Terminal activity destroyed")
         tabManager.cleanup()
+
+        openProfileIds.forEach { profileId ->
+            try {
+                app.sshSessionManager.closeConnection(profileId)
+            } catch (e: Exception) {
+                Logger.w("TabTerminalActivity", "Failed to release SSH session for $profileId on destroy", e)
+            }
+        }
     }
     
     /**

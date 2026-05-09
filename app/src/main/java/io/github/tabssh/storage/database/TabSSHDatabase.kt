@@ -30,7 +30,7 @@ import io.github.tabssh.utils.logging.Logger
         Macro::class,
         io.github.tabssh.storage.database.entities.HypervisorAccount::class
     ],
-    version = 28,
+    version = 29,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -308,7 +308,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     MIGRATION_24_25,
                     MIGRATION_25_26,
                     MIGRATION_26_27,
-                    MIGRATION_27_28
+                    MIGRATION_27_28,
+                    MIGRATION_28_29
                 )
                 .build()
                 INSTANCE = instance
@@ -607,6 +608,31 @@ data class DatabaseStats(
                     "ALTER TABLE hypervisors ADD COLUMN pinned_cert_sha256 TEXT"
                 )
                 Logger.i("Database", "Migration 27->28: Added hypervisors.pinned_cert_sha256")
+            }
+        }
+
+        /**
+         * v28 → v29 — OCI hypervisor support (Phase 1, data layer only).
+         * Purely additive: 1 discriminator column (`auth_type`, defaulted to
+         * "password" so every existing row keeps its current semantics) and
+         * 5 nullable OCI-only columns. Existing rows look identical to
+         * pre-migration; no UI exposes OCI yet (Phase 6 will).
+         *
+         * Secrets (PEM private key + optional passphrase) live in
+         * SecurePasswordManager under `oci_private_key_${id}` /
+         * `oci_passphrase_${id}` — never in this table.
+         */
+        val MIGRATION_28_29 = object : Migration(28, 29) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE hypervisors ADD COLUMN auth_type TEXT NOT NULL DEFAULT 'password'"
+                )
+                database.execSQL("ALTER TABLE hypervisors ADD COLUMN oci_tenancy_ocid TEXT")
+                database.execSQL("ALTER TABLE hypervisors ADD COLUMN oci_user_ocid TEXT")
+                database.execSQL("ALTER TABLE hypervisors ADD COLUMN oci_region TEXT")
+                database.execSQL("ALTER TABLE hypervisors ADD COLUMN oci_fingerprint TEXT")
+                database.execSQL("ALTER TABLE hypervisors ADD COLUMN oci_compartment_ocid TEXT")
+                Logger.i("Database", "Migration 28->29: Added auth_type + 5 OCI columns to hypervisors")
             }
         }
 

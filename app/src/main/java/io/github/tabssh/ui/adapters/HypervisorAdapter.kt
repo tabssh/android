@@ -77,6 +77,7 @@ class HypervisorAdapter(
                 HypervisorType.PROXMOX -> "🌐"
                 HypervisorType.XCPNG -> "☁️"
                 HypervisorType.VMWARE -> "📦"
+                HypervisorType.OCI -> "🏛️"
             }
 
             // Set name
@@ -87,6 +88,7 @@ class HypervisorAdapter(
                 HypervisorType.PROXMOX -> "Proxmox"
                 HypervisorType.XCPNG -> "XCP-ng"
                 HypervisorType.VMWARE -> "VMware"
+                HypervisorType.OCI -> "OCI"
             }
 
             // Set host and port

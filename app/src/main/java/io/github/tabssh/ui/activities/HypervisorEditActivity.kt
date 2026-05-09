@@ -18,6 +18,7 @@ import io.github.tabssh.storage.database.entities.HypervisorType
 import io.github.tabssh.hypervisor.proxmox.ProxmoxApiClient
 import io.github.tabssh.hypervisor.xcpng.XCPngApiClient
 import io.github.tabssh.hypervisor.vmware.VMwareApiClient
+import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.launch
 import io.github.tabssh.utils.showError
 
@@ -464,6 +465,14 @@ class HypervisorEditActivity : AppCompatActivity() {
                         // VMware uses REST API
                         val client = VMwareApiClient(host, username, password, verifySsl)
                         client.authenticate()
+                    }
+                    HypervisorType.OCI -> {
+                        // Phase 1 placeholder: OciApiClient lands in Phase 3,
+                        // OCI spinner option lands in Phase 6. Until then this
+                        // arm is unreachable from the UI; kept here only for
+                        // `when (type)` exhaustiveness so kotlinc compiles.
+                        Logger.w("HypervisorEditActivity", "OCI test-connection not yet wired (Phase 3)")
+                        false
                     }
                 }
                 

@@ -71,8 +71,9 @@ class FrequentConnectionsFragment : Fragment() {
     
     private fun openConnection(connection: ConnectionProfile) {
         Logger.d("FrequentConnectionsFragment", "Opening connection: ${connection.name}")
-        val intent = TabTerminalActivity.createIntent(requireContext(), connection, autoConnect = true)
-        startActivity(intent)
+        // Prompt to reattach if a tab already exists for this profile —
+        // ConnectionLauncher handles the dialog + the no-existing-tab fast path.
+        io.github.tabssh.ui.utils.ConnectionLauncher.launch(requireContext(), connection)
     }
     
     private fun showConnectionMenu(connection: ConnectionProfile) {

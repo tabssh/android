@@ -147,6 +147,33 @@ Re-verified 2026-05-02 against `SSHConnection.applyAdvancedSettings`:
 
 ---
 
+### ☁️ OCI (Oracle Cloud Infrastructure) hypervisor support
+- **Status:** 🔧 Phase 1 of 7 done (uncommitted in working tree as of 2026-05-08).
+- **Priority:** MEDIUM (user-requested feature; 4th hypervisor target alongside Proxmox / XCP-ng / VMware).
+- **Auth model:** OCI REST API + RSA-SHA256 HTTP request signing (per `draft-cavage-http-signatures-08`). API-key only — `key_file` lives until rotated by the user, no hourly expiry.
+- **Onboarding:** Path A only — import `~/.oci/config` + `.pem` via SAF. **No** in-app keypair generation (Path B was explicitly dropped). **Reject** configs with `security_token_file=` (1-hour session tokens; CLI-only renewal).
+- **Out of scope for v1:** Instance Console Connection (separate bastion-over-SSH flow), multi-region per profile, compartment browser (paste OCID instead), `ListInstances` pagination, identity domains, anything outside Compute.
+
+**Phasing — every commit ships green and changes nothing user-visible until Phase 6:**
+
+| Phase | Status | What it does | Files |
+|---|---|---|---|
+| 1 — DB v28→v29 + `HypervisorType.OCI` | ✅ done (uncommitted) | `auth_type` discriminator (defaulted `'password'`) + 5 nullable OCI columns on `hypervisors`. Adds `OCI` to enum, fixes `when()` exhaustiveness across HypervisorAdapter / MainActivity / HypervisorsFragment / HypervisorEditActivity (all OCI cases route to placeholders since type spinner doesn't expose OCI yet). | `HypervisorProfile.kt`, `TabSSHDatabase.kt` (`MIGRATION_28_29`), `HypervisorAdapter.kt`, `MainActivity.kt`, `HypervisorsFragment.kt`, `HypervisorEditActivity.kt` |
+| 2 — `OciSigner` + `OciKeyMaterial` | pending | Standalone RSA-SHA256 HTTP signing primitive. PEM parse + fingerprint round-trip via existing BouncyCastle. No networking, no Android deps beyond JDK + BC. Pattern source: `cloud/AwsEc2Client.kt` (canonical-request → string-to-sign → signature) and `cloud/GcpComputeClient.kt` (`signRs256`/`pemToDer`). | new `hypervisor/oci/OciSigner.kt`, `hypervisor/oci/OciKeyMaterial.kt` |
+| 3 — `OciApiClient` (Compute v1) | pending | OkHttp client mirroring `ProxmoxApiClient` shape: `validateCredentials()` → `GET /20160918/users/{userOcid}`; `listInstances`, `getInstance`, `instanceAction` (START / STOP / SOFTSTOP / RESET / SOFTRESET), `getInstancePublicIp` via VNIC walk. Reuses `HypervisorTrustManagerFactory`. | new `hypervisor/oci/OciApiClient.kt`, `hypervisor/oci/OciInstance.kt` |
+| 4 — OCI config importer (Path A) | pending | 3-step linear importer activity: SAF pick `config` → multi-profile dialog if `[DEFAULT]` + others → SAF pick `.pem` (basename hint from `key_file=`) → passphrase prompt if encrypted → fingerprint round-trip self-test → live `validateCredentials()` → save. Region: `MaterialAutoCompleteTextView` with ~25 seeded regions + free-text. Compartment defaults to tenancy OCID. Reject `security_token_file=`. | new `hypervisor/oci/OciConfigParser.kt`, `ui/activities/OciOnboardingActivity.kt`, layouts, manifest entry |
+| 5 — `OciManagerActivity` | pending | Mirror of `ProxmoxManagerActivity`: list instances, status + region + IP, start/stop/softstop/reboot/reset buttons. **No console** (deferred). Activity registered but not yet routed from production. | new `ui/activities/OciManagerActivity.kt`, layouts, manifest entry |
+| 6 — Wire production routing | pending | Add "OCI" to type spinner; type=OCI hides host/port/username/password/realm and shows "Configure OCI credentials" → launches `OciOnboardingActivity`. `validateFields()` gates by `type`. `testConnection()` for OCI uses `OciApiClient`. `MainActivity` + `HypervisorsFragment` route OCI to `OciManagerActivity` (replacing Phase 1 placeholder). | edits to `HypervisorEditActivity.kt`, `MainActivity.kt`, `HypervisorsFragment.kt`, `HypervisorAdapter.kt` |
+| 7 — Polish | pending | `HypervisorPasswordStore.clearOciSecrets(context, id)` helper; `HypervisorsFragment.deleteHypervisor` extended to clear `oci_private_key_${id}` + `oci_passphrase_${id}` from Keystore on OCI row delete. Final user-facing copy. | edits to `HypervisorPasswordStore.kt`, `HypervisorsFragment.kt`, `strings.xml` |
+
+**Secrets storage:** PEM private key + optional passphrase in `SecurePasswordManager` under `oci_private_key_${id}` / `oci_passphrase_${id}` — never in the DB. Same pattern as `cloud_token_${id}`.
+
+**Region seed list (Phase 4):** `us-ashburn-1`, `us-phoenix-1`, `us-chicago-1`, `us-sanjose-1`, `ca-toronto-1`, `ca-montreal-1`, `sa-saopaulo-1`, `sa-vinhedo-1`, `sa-santiago-1`, `uk-london-1`, `uk-cardiff-1`, `eu-frankfurt-1`, `eu-amsterdam-1`, `eu-zurich-1`, `eu-stockholm-1`, `eu-marseille-1`, `eu-milan-1`, `eu-madrid-1`, `eu-paris-1`, `me-jeddah-1`, `me-dubai-1`, `me-abudhabi-1`, `ap-tokyo-1`, `ap-osaka-1`, `ap-seoul-1`, `ap-sydney-1`, `ap-melbourne-1`, `ap-mumbai-1`, `ap-hyderabad-1`, `ap-singapore-1`, `af-johannesburg-1`, `il-jerusalem-1`, `mx-queretaro-1`, `mx-monterrey-1`. Custom entry always allowed (Oracle adds regions regularly).
+
+**No new Gradle deps** — BouncyCastle (SSH key parser) and OkHttp (everywhere) already in the build.
+
+---
+
 ## 📚 Reference
 
 - `CLAUDE.md` — project tracker, current state, recent waves

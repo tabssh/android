@@ -162,6 +162,9 @@ class HypervisorsFragment : Fragment() {
             HypervisorType.PROXMOX -> Intent(requireContext(), ProxmoxManagerActivity::class.java)
             HypervisorType.VMWARE -> Intent(requireContext(), VMwareManagerActivity::class.java)
             HypervisorType.XCPNG -> Intent(requireContext(), XCPngManagerActivity::class.java)
+            // OCI: placeholder route until Phase 5 (OciManagerActivity) ships.
+            // Unreachable today — type spinner exposes OCI in Phase 6.
+            HypervisorType.OCI -> Intent(requireContext(), HypervisorEditActivity::class.java)
         }
         intent.putExtra("hypervisor_id", hypervisor.id)
         startActivity(intent)
