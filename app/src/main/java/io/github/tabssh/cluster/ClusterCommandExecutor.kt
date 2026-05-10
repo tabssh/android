@@ -106,6 +106,16 @@ class ClusterCommandExecutor(private val app: TabSSHApplication) {
             withTimeout(timeoutMs) {
                 val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
                 val connection = SSHConnection(profile, scope, app)
+                // Inherit the app-wide host-key callbacks (set on
+                // SSHSessionManager by TabSSHApplication). Without them
+                // JSch rejects any host whose fingerprint isn't already
+                // pinned in host_keys, which made cluster commands fail
+                // for any not-yet-trusted server in the list. Now the
+                // standard "host key changed" / "first time seeing this
+                // host" dialog fires inline and the user can accept on
+                // the spot — same UX as a normal connect.
+                connection.hostKeyChangedCallback = app.sshSessionManager.hostKeyChangedCallback
+                connection.newHostKeyCallback = app.sshSessionManager.newHostKeyCallback
                 connection.connect()
                 val output = connection.executeCommand(command)
                 connection.disconnect()
