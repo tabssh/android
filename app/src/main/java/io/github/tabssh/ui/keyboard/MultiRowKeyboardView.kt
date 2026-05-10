@@ -290,8 +290,11 @@ class MultiRowKeyboardView @JvmOverloads constructor(
          *   • Page navigation (HOME/END/PGUP/PGDN) lives on row 2.
          *   • The IME-toggle (⌨) was dropped — back-key dismisses the
          *     soft keyboard, no dedicated affordance needed.
-         *   • PASTE (📋) only appears in 3+ row layouts where there's
-         *     room without crowding the modifiers.
+         *   • MENU (☰) only appears in 3+ row layouts where there's
+         *     room without crowding the modifiers. Opens the bottom-
+         *     sheet terminal menu (tabs, paste, snippets, etc.). Paste
+         *     is reachable from inside the menu so a dedicated paste
+         *     key would be redundant.
          */
         fun getDefaultRowLayouts(rowCount: Int): List<List<KeyboardKey>> {
             return when (rowCount) {
@@ -355,7 +358,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
                         KeyboardKey("PGUP", "PGUP", "\u001B[5~"),
                         KeyboardKey("PGDN", "PGDN", "\u001B[6~"),
                         KeyboardKey("ENTER", "ENT", "\n"),
-                        KeyboardKey("PASTE", "📋", "", KeyboardKey.KeyCategory.ACTION)
+                        KeyboardKey("MENU", "☰", "", KeyboardKey.KeyCategory.ACTION)
                     ),
                     // Row 3: coding/shell symbols Android keyboard buries
                     // 2 taps deep. Bash + vim flavour: pipe, redirect,
@@ -395,7 +398,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
                         KeyboardKey("PGUP", "PGUP", "\u001B[5~"),
                         KeyboardKey("PGDN", "PGDN", "\u001B[6~"),
                         KeyboardKey("ENTER", "ENT", "\n"),
-                        KeyboardKey("PASTE", "📋", "", KeyboardKey.KeyCategory.ACTION)
+                        KeyboardKey("MENU", "☰", "", KeyboardKey.KeyCategory.ACTION)
                     ),
                     // Row 3: coding symbols
                     listOf(
@@ -442,7 +445,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
                         KeyboardKey("PGUP", "PGUP", "\u001B[5~"),
                         KeyboardKey("PGDN", "PGDN", "\u001B[6~"),
                         KeyboardKey("ENTER", "ENT", "\n"),
-                        KeyboardKey("PASTE", "📋", "", KeyboardKey.KeyCategory.ACTION)
+                        KeyboardKey("MENU", "☰", "", KeyboardKey.KeyCategory.ACTION)
                     ),
                     // Row 3: coding symbols
                     listOf(

@@ -402,12 +402,14 @@ class TabTerminalActivity : AppCompatActivity() {
     }
     
     private fun showMenuFabTemporarily() {
-        // Legacy entry point: the FAB is now permanent (see layout note),
-        // so just ensure it's visible. Edge taps on the top-left still
-        // route here from setupTerminalGestures; we kept the call site in
-        // case the user edits the layout to hide the FAB and falls back
-        // to the gesture.
+        // Fallback for users who've hidden the multi-row keyboard bar
+        // (the primary menu entry is the ☰ key there). Edge tap on the
+        // top-left reveals the FAB for 3 seconds; tapping the FAB opens
+        // the same bottom-sheet menu the keyboard key opens.
         binding.fabMenu.visibility = View.VISIBLE
+        Handler(Looper.getMainLooper()).postDelayed({
+            binding.fabMenu.visibility = View.GONE
+        }, 3000)
     }
     
     private fun toggleBottomActionBar() {
@@ -3319,8 +3321,15 @@ class TabTerminalActivity : AppCompatActivity() {
 
         when (key.id) {
             "PASTE" -> {
+                // Retained for users on older keyboard customisations that
+                // still ship the legacy PASTE key. Default 3+ row layouts
+                // emit "MENU" now (which contains Paste).
                 Logger.d("TabTerminalActivity", "Paste action")
                 pasteFromClipboard()
+            }
+            "MENU" -> {
+                Logger.d("TabTerminalActivity", "Menu key — opening terminal bottom sheet")
+                showTerminalMenu()
             }
             "TOGGLE" -> {
                 Logger.d("TabTerminalActivity", "Toggle keyboard action")

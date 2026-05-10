@@ -65,10 +65,11 @@
             app:showScrollbar="true"
             app:scrollbackLines="1000" />
 
-        <!-- Menu FAB. Always visible so users have a discoverable, one-tap
-             entry into the bottom-sheet menu (tab list + new/close/disconnect-
-             all + copy/paste). Previously visibility="gone" with a 3-second
-             "tap top-left edge to reveal" gesture, which was unfindable. -->
+        <!-- Menu FAB. Hidden by default — the primary entry is the
+             "☰" key on the multi-row keyboard bar (already always
+             visible at the bottom). The FAB is retained as a fallback
+             reachable via the top-left edge tap gesture for users who
+             hide the custom keyboard bar entirely. -->
         <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:id="@+id/fab_menu"
             android:layout_width="wrap_content"
@@ -81,7 +82,8 @@
             app:fabSize="mini"
             app:backgroundTint="?attr/colorSecondaryContainer"
             app:tint="?attr/colorOnSecondaryContainer"
-            app:elevation="6dp" />
+            app:elevation="6dp"
+            android:visibility="gone" />
 
         <!-- Multiplexer Status Indicator -->
         <com.google.android.material.chip.Chip
