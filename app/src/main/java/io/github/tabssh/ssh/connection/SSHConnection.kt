@@ -31,10 +31,36 @@ data class SSHConnectionErrorInfo(
  * Represents a single SSH connection with its session and channels
  */
 class SSHConnection(
-    private val profile: ConnectionProfile,
+    val profile: ConnectionProfile,
     private val scope: CoroutineScope,
     private val context: android.content.Context
 ) {
+    /**
+     * Last terminal title parsed by Termux from the OSC 0/1/2 escape
+     * sequences (the value most shells set on every prompt — e.g.
+     * `user@host:cwd`). Set by [SSHTab] from its TermuxBridgeListener.
+     * Read by the foreground service when rebuilding per-host
+     * notification text.
+     */
+    @Volatile var terminalTitle: String? = null
+
+    /**
+     * Optional callback fired when host-level metadata that the
+     * notification depends on (terminal title, …) changes after
+     * connect. Wired by [SSHSessionManager] so the service-side
+     * listener can rebuild the per-host notification without a
+     * dedicated event type.
+     */
+    var metadataChangedCallback: (() -> Unit)? = null
+
+    /**
+     * Notify metadata-change listeners. Cheap, idempotent — the service
+     * just re-renders the per-host notification using the latest
+     * `terminalTitle`.
+     */
+    fun notifyMetadataChanged() {
+        try { metadataChangedCallback?.invoke() } catch (_: Exception) {}
+    }
     private var session: Session? = null
     // Issue #37 — May hold either a `ChannelShell` (the default — login
     // shell) or a `ChannelExec` (when `profile.remoteCommand` is set, for

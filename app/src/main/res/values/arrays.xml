@@ -284,6 +284,14 @@
         <item>zellij</item>
     </string-array>
 
+    <!-- Per-host notification alert modes. Maps to ConnectionProfile
+         notifSoundMode / notifVibrateMode (0=NEVER, 1=ALWAYS, 2=ON_ERROR). -->
+    <string-array name="notif_alert_mode_entries">
+        <item>Silent (default)</item>
+        <item>Always</item>
+        <item>Only on error</item>
+    </string-array>
+
     <!-- Multiplexer mode options (per-connection) -->
     <string-array name="multiplexer_mode_entries">
         <item>Disabled</item>

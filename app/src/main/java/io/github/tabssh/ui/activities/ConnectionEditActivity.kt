@@ -494,6 +494,27 @@ class ConnectionEditActivity : AppCompatActivity() {
         binding.switchX11Forwarding.isChecked = profile.x11Forwarding
         binding.switchUseMosh.isChecked = profile.useMosh
 
+        // Per-host notification alert modes
+        val notifAlertEntries = resources.getStringArray(R.array.notif_alert_mode_entries)
+        binding.spinnerNotifSound.setAdapter(
+            android.widget.ArrayAdapter(
+                this, android.R.layout.simple_dropdown_item_1line, notifAlertEntries
+            )
+        )
+        binding.spinnerNotifVibrate.setAdapter(
+            android.widget.ArrayAdapter(
+                this, android.R.layout.simple_dropdown_item_1line, notifAlertEntries
+            )
+        )
+        binding.spinnerNotifSound.setText(
+            notifAlertEntries.getOrNull(profile.notifSoundMode.coerceIn(0, 2)) ?: notifAlertEntries[0],
+            false
+        )
+        binding.spinnerNotifVibrate.setText(
+            notifAlertEntries.getOrNull(profile.notifVibrateMode.coerceIn(0, 2)) ?: notifAlertEntries[0],
+            false
+        )
+
         // Multiplexer settings
         val modeEntries = resources.getStringArray(R.array.multiplexer_mode_entries)
         val modeValues = resources.getStringArray(R.array.multiplexer_mode_values)
@@ -751,6 +772,15 @@ class ConnectionEditActivity : AppCompatActivity() {
             } else null
         } else null
 
+        // Per-host notification alert modes — index of selected entry
+        // maps directly to NotificationAlertMode int (0=NEVER/silent,
+        // 1=ALWAYS, 2=ON_ERROR).
+        val notifAlertEntries = resources.getStringArray(R.array.notif_alert_mode_entries)
+        val notifSoundMode = notifAlertEntries.indexOf(binding.spinnerNotifSound.text.toString())
+            .takeIf { it >= 0 } ?: 0
+        val notifVibrateMode = notifAlertEntries.indexOf(binding.spinnerNotifVibrate.text.toString())
+            .takeIf { it >= 0 } ?: 0
+
         return existingProfile?.copy(
             name = name,
             host = host,
@@ -781,7 +811,9 @@ class ConnectionEditActivity : AppCompatActivity() {
             proxyUsername = proxyUsername,
             proxyAuthType = proxyAuthType,
             proxyKeyId = proxyKeyId,
-            colorTag = colorTag
+            colorTag = colorTag,
+            notifSoundMode = notifSoundMode,
+            notifVibrateMode = notifVibrateMode
         ) ?: ConnectionProfile(
             name = name,
             host = host,
@@ -811,7 +843,9 @@ class ConnectionEditActivity : AppCompatActivity() {
             proxyPort = proxyPort,
             proxyUsername = proxyUsername,
             proxyAuthType = proxyAuthType,
-            proxyKeyId = proxyKeyId
+            proxyKeyId = proxyKeyId,
+            notifSoundMode = notifSoundMode,
+            notifVibrateMode = notifVibrateMode
         )
     }
 

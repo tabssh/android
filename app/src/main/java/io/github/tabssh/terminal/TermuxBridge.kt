@@ -240,7 +240,13 @@ class TermuxBridge(
         }
 
         override fun onTitleChanged(changedSession: TerminalSession) {
-            // Handled by TerminalOutput.titleChanged()
+            // Termux parses OSC 0/1/2 → title; surface it to listeners
+            // so the foreground service can rebuild the per-host
+            // notification ("Connected to {host}:{title}").
+            val newTitle = try { changedSession.title ?: "" } catch (_: Exception) { "" }
+            runOnMain {
+                listeners.forEach { it.onTitleChanged(newTitle) }
+            }
         }
 
         override fun onSessionFinished(finishedSession: TerminalSession) {

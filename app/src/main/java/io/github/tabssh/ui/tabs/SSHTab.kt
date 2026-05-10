@@ -162,6 +162,15 @@ class SSHTab(
                     titleSetByTerminal = false
                     _title.value = generateDefaultTitle()
                 }
+                // Stash on the SSHConnection so the foreground service
+                // can read it when rebuilding the per-host notification
+                // text. Triggers a state-change re-broadcast so the
+                // SessionManagerListener pipeline (which the service
+                // listens on) refreshes without a new event type.
+                connection?.let { conn ->
+                    conn.terminalTitle = title.takeIf { it.isNotBlank() }
+                    conn.notifyMetadataChanged()
+                }
                 Logger.d("SSHTab", "Tab title changed to: $title")
             }
 

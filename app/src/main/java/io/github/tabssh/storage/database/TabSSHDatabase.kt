@@ -30,7 +30,7 @@ import io.github.tabssh.utils.logging.Logger
         Macro::class,
         io.github.tabssh.storage.database.entities.HypervisorAccount::class
     ],
-    version = 29,
+    version = 30,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -309,7 +309,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     MIGRATION_25_26,
                     MIGRATION_26_27,
                     MIGRATION_27_28,
-                    MIGRATION_28_29
+                    MIGRATION_28_29,
+                    MIGRATION_29_30
                 )
                 .build()
                 INSTANCE = instance
@@ -633,6 +634,26 @@ data class DatabaseStats(
                 database.execSQL("ALTER TABLE hypervisors ADD COLUMN oci_fingerprint TEXT")
                 database.execSQL("ALTER TABLE hypervisors ADD COLUMN oci_compartment_ocid TEXT")
                 Logger.i("Database", "Migration 28->29: Added auth_type + 5 OCI columns to hypervisors")
+            }
+        }
+
+        /**
+         * v29 → v30 — Per-host notification alert prefs. Two new columns
+         * on `connections` for sound + vibrate modes (0=NEVER, 1=ALWAYS,
+         * 2=ON_ERROR). The persistent per-host status notification always
+         * stays on the silent channel; these prefs gate a separate one-shot
+         * alert on `ssh_alerts` channel when the matching state event fires
+         * (default disconnect, error exit, etc.).
+         */
+        val MIGRATION_29_30 = object : Migration(29, 30) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE connections ADD COLUMN notif_sound_mode INTEGER NOT NULL DEFAULT 0"
+                )
+                database.execSQL(
+                    "ALTER TABLE connections ADD COLUMN notif_vibrate_mode INTEGER NOT NULL DEFAULT 0"
+                )
+                Logger.i("Database", "Migration 29->30: Added notif_sound_mode + notif_vibrate_mode to connections")
             }
         }
 

@@ -177,6 +177,21 @@ data class ConnectionProfile(
     @ColumnInfo(name = "advanced_settings")
     val advancedSettings: String? = null, // JSON string
 
+    /**
+     * Per-host notification alert prefs. NotificationAlertMode values:
+     *   0 = NEVER (silent), 1 = ALWAYS, 2 = ON_ERROR.
+     * The persistent per-host status notification always uses the
+     * `ssh_silent` channel; these only control whether the *additional*
+     * one-shot alert (on `ssh_alerts` channel) fires on a state event.
+     * Defaults to NEVER for both — no surprise sound out of the box.
+     * DB v29 → v30.
+     */
+    @ColumnInfo(name = "notif_sound_mode")
+    val notifSoundMode: Int = 0,
+
+    @ColumnInfo(name = "notif_vibrate_mode")
+    val notifVibrateMode: Int = 0,
+
     // Sync metadata fields
     @ColumnInfo(name = "last_synced_at")
     val lastSyncedAt: Long = 0,

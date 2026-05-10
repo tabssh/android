@@ -39,6 +39,18 @@ class SSHConnectionService : Service() {
     // (the screen still turns off — that's PROXIMITY/SCREEN locks, not
     // this one). Released when activeConnections drops to zero.
     private var wakeLock: PowerManager.WakeLock? = null
+
+    // Per-host notification bookkeeping. Android requires a foreground
+    // service to keep at least one ongoing notification while alive
+    // ("the FG anchor") — we pick one of the per-host notifications and
+    // call startForeground(id, notif). When that host disconnects we
+    // swap the anchor to another live host (if any), otherwise we stop
+    // the service.
+    @Volatile private var fgAnchorProfileId: String? = null
+
+    // Tracks profile ids we've already auto-finished as "disconnected"
+    // so a duplicate state-change event doesn't re-post.
+    private val disconnectedProfiles = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     
     companion object {
         private const val NOTIFICATION_ID = 1001
@@ -113,17 +125,34 @@ class SSHConnectionService : Service() {
     }
     
     private fun startForegroundService() {
-        val notification = createNotification()
-        startForeground(NOTIFICATION_ID, notification)
-        
+        // The foreground-service contract requires *some* notification
+        // to be live before startForeground returns. If we already have
+        // an active connection, anchor on it; otherwise post a transient
+        // placeholder (cleared as soon as the first session connects).
+        val activeProfile = try {
+            app.sshSessionManager.getActiveConnections().firstOrNull()
+        } catch (_: Exception) { null }
+
+        if (activeProfile != null) {
+            val notif = io.github.tabssh.utils.NotificationHelper.buildHostStatusNotification(
+                this, activeProfile.profile, activeProfile.connectionState.value, activeProfile.terminalTitle
+            )
+            val id = io.github.tabssh.utils.NotificationHelper.perHostNotificationId(activeProfile.profile.id)
+            startForeground(id, notif)
+            fgAnchorProfileId = activeProfile.profile.id
+        } else {
+            // Placeholder anchor, swapped out on first onConnectionEstablished.
+            startForeground(NOTIFICATION_ID, buildPlaceholderNotification())
+        }
+
         Logger.i("SSHConnectionService", "Started foreground service")
-        
+
         // Start connection monitoring
         serviceScope.launch {
             startConnectionMonitoring()
         }
     }
-    
+
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -136,118 +165,181 @@ class SSHConnectionService : Service() {
                 enableVibration(false)
                 setSound(null, null)
             }
-            
+
             val notificationManager = getSystemService(NotificationManager::class.java)
             notificationManager.createNotificationChannel(channel)
         }
     }
-    
-    private fun createNotification(): Notification {
-        // Tapping the notification opens the terminal directly when there's
-        // at least one active session (so users can resume their session in
-        // one tap instead of going through MainActivity → tab list). With
-        // zero sessions we shouldn't be showing this notification at all,
-        // but if we do somehow, fall back to MainActivity.
-        val tapTarget = if (activeConnections > 0) {
-            Intent(this, io.github.tabssh.ui.activities.TabTerminalActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-            }
-        } else {
-            Intent(this, MainActivity::class.java)
-        }
+
+    /**
+     * Transient placeholder used as the FG-service anchor when the
+     * service starts before any session has connected. Swapped out the
+     * moment a per-host notification is available. Same channel as the
+     * legacy aggregate notification (low importance, silent).
+     */
+    private fun buildPlaceholderNotification(): Notification {
+        val tapTarget = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
-            this,
-            0,
-            tapTarget,
+            this, 0, tapTarget,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-
-        val disconnectIntent = PendingIntent.getService(
-            this,
-            1,
-            Intent(this, SSHConnectionService::class.java).apply { action = ACTION_STOP_SERVICE },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val contentText = when (activeConnections) {
-            0 -> "Ready for SSH connections"
-            1 -> "1 active SSH session — tap to open"
-            else -> "$activeConnections active SSH sessions — tap to open"
-        }
-
-        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+        return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("TabSSH")
-            .setContentText(contentText)
+            .setContentText("Starting SSH session…")
             .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setOnlyAlertOnce(true)            // never re-buzz on update
-            .setSilent(true)                   // explicit: no sound or haptic
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
             .setShowWhen(false)
-            .setAutoCancel(false)
+            .build()
+    }
 
-        if (activeConnections > 0) {
-            builder.addAction(
-                R.drawable.ic_disconnect,
-                "Disconnect all",
-                disconnectIntent
-            )
+    /**
+     * Render or update the per-host status notification for [profileId]
+     * on the silent channel. Also keeps the foreground-service anchor
+     * pointed at a live host (swaps if the current anchor disconnected,
+     * adopts on the first connect).
+     *
+     * `disconnectingState` is true when this is a terminal "Disconnected"
+     * render — the notification flips to the auto-cleared variant and
+     * we *don't* leave it as the FG anchor (Android won't auto-clear an
+     * ongoing FG notification while service is alive).
+     */
+    private fun renderHostNotification(profileId: String, disconnectingState: Boolean = false) {
+        val conn = app.sshSessionManager.getConnection(profileId) ?: return
+        val state = conn.connectionState.value
+        val effectiveState = if (disconnectingState)
+            ConnectionState.DISCONNECTED else state
+        val cleanExit = (conn.getShellExitStatus() == 0)
 
-            // Expanded view lists every active session by display name so the
-            // user can see which servers are live without opening the app.
-            val active = try {
-                app.sshSessionManager.getActiveConnections()
-                    .filter { it.connectionState.value == ConnectionState.CONNECTED }
-                    .map { "• ${it.displayName}" }
-            } catch (e: Exception) {
-                emptyList()
+        // Terminal title comes from Termux's OSC 0 parsing — falls back
+        // to the schema-with-port if the shell hasn't set one yet.
+        val title = conn.terminalTitle
+
+        val notif = io.github.tabssh.utils.NotificationHelper.buildHostStatusNotification(
+            this, conn.profile, effectiveState, title, cleanExit
+        )
+        val nid = io.github.tabssh.utils.NotificationHelper.perHostNotificationId(profileId)
+
+        // FG-anchor management: if the live anchor is this profile, the
+        // FG notification IS this notification — call startForeground to
+        // refresh the OS-side reference. If we're disconnecting and this
+        // is the anchor, swap to another live host first (or release FG
+        // entirely if no other host is alive).
+        if (!disconnectingState && state == ConnectionState.CONNECTED) {
+            if (fgAnchorProfileId == null || fgAnchorProfileId == profileId) {
+                startForeground(nid, notif)
+                fgAnchorProfileId = profileId
+                return
             }
-            val bigTextStyle = NotificationCompat.BigTextStyle()
-                .setBigContentTitle(
-                    if (activeConnections == 1) "TabSSH — 1 active session"
-                    else "TabSSH — $activeConnections active sessions"
+        }
+        if (disconnectingState && fgAnchorProfileId == profileId) {
+            val nextLive = app.sshSessionManager.getActiveConnections()
+                .firstOrNull { it.profile.id != profileId &&
+                               it.connectionState.value == ConnectionState.CONNECTED }
+            if (nextLive != null) {
+                val nextNotif = io.github.tabssh.utils.NotificationHelper.buildHostStatusNotification(
+                    this, nextLive.profile, nextLive.connectionState.value, nextLive.terminalTitle
                 )
-                .bigText(
-                    if (active.isEmpty()) "Sessions running in background.\nTap to open."
-                    else active.joinToString("\n") + "\n\nTap to open."
-                )
-            builder.setStyle(bigTextStyle)
+                val nextId = io.github.tabssh.utils.NotificationHelper.perHostNotificationId(nextLive.profile.id)
+                startForeground(nextId, nextNotif)
+                fgAnchorProfileId = nextLive.profile.id
+            } else {
+                // No live host to anchor on — detach FG so the timeout-
+                // after-30s on the disconnect notification can take effect.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    stopForeground(STOP_FOREGROUND_DETACH)
+                } else {
+                    @Suppress("DEPRECATION")
+                    stopForeground(false)
+                }
+                fgAnchorProfileId = null
+            }
         }
 
-        return builder.build()
-    }
-    
-    private fun updateNotification() {
-        val notification = createNotification()
-        val notificationManager = getSystemService(NotificationManager::class.java)
-        notificationManager.notify(NOTIFICATION_ID, notification)
+        // Final post for the per-host notification (CONNECTED update,
+        // CONNECTING refresh, ERROR, or the terminal DISCONNECTED).
+        val nm = getSystemService(NotificationManager::class.java)
+        nm.notify(nid, notif)
     }
     
     private fun setupSessionManagerListener() {
         val listener = object : SessionManagerListener {
             override fun onConnectionEstablished(profileId: String) {
                 updateConnectionCount()
+                disconnectedProfiles.remove(profileId)
+                serviceScope.launch(Dispatchers.Main) {
+                    renderHostNotification(profileId, disconnectingState = false)
+                    val conn = app.sshSessionManager.getConnection(profileId)
+                    if (conn != null) {
+                        // Connect alert — only fires for ALWAYS mode
+                        // since this isn't an error.
+                        io.github.tabssh.utils.NotificationHelper.maybeAlertForHost(
+                            this@SSHConnectionService,
+                            conn.profile,
+                            "Connected to ${conn.profile.host}",
+                            isError = false
+                        )
+                    }
+                }
             }
 
             override fun onConnectionClosed(profileId: String) {
-                updateConnectionCount()
+                if (!disconnectedProfiles.add(profileId)) return
+                serviceScope.launch(Dispatchers.Main) {
+                    val conn = app.sshSessionManager.getConnection(profileId)
+                    val isError = conn?.let {
+                        val s = it.getShellExitStatus()
+                        s != 0  // -1 (drop) or non-zero (abnormal exit)
+                    } ?: true
+                    // Render the auto-clearing "Disconnected" status,
+                    // swapping FG anchor away if needed.
+                    renderHostNotification(profileId, disconnectingState = true)
+                    if (conn != null) {
+                        io.github.tabssh.utils.NotificationHelper.maybeAlertForHost(
+                            this@SSHConnectionService,
+                            conn.profile,
+                            if (isError) "Disconnected (error)" else "Disconnected",
+                            isError = isError
+                        )
+                    }
+                    updateConnectionCount()
+                }
             }
 
             override fun onConnectionStateChanged(profileId: String, state: ConnectionState) {
                 updateConnectionCount()
+                serviceScope.launch(Dispatchers.Main) {
+                    when (state) {
+                        ConnectionState.CONNECTED -> {
+                            disconnectedProfiles.remove(profileId)
+                            renderHostNotification(profileId, disconnectingState = false)
+                        }
+                        ConnectionState.CONNECTING,
+                        ConnectionState.ERROR -> {
+                            renderHostNotification(profileId, disconnectingState = false)
+                        }
+                        ConnectionState.DISCONNECTED -> {
+                            // Handled by onConnectionClosed (which de-dups
+                            // via disconnectedProfiles).
+                        }
+                        else -> {}
+                    }
+                }
             }
 
             override fun onAllConnectionsClosed() {
                 updateConnectionCount()
-                // Consider stopping service if no connections remain
                 if (activeConnections == 0) {
                     serviceScope.launch {
-                        delay(30000) // Wait 30 seconds before stopping
-                        if (activeConnections == 0) {
-                            stopSelf()
-                        }
+                        // Give the per-host disconnect notifications their
+                        // 30s auto-clear window before tearing the service
+                        // down (which would otherwise nuke them).
+                        delay(31_000)
+                        if (activeConnections == 0) stopSelf()
                     }
                 }
             }
@@ -255,35 +347,24 @@ class SSHConnectionService : Service() {
         sessionListener = listener
         app.sshSessionManager.addListener(listener)
     }
-    
+
     private fun updateConnectionCount() {
         val stats = app.sshSessionManager.getConnectionStatistics()
         activeConnections = stats.connectedConnections
 
         if (activeConnections == 0) {
-            // No live sessions → kill the service so the persistent
-            // notification disappears immediately. Previously we'd sit on
-            // a "Ready for SSH connections" notification forever, which
-            // the user (rightly) flagged as noise.
-            Logger.i("SSHConnectionService", "No active connections — stopping service")
+            // Last session disconnected. Don't tear the service down
+            // immediately — the per-host "Disconnected" notifications
+            // need their 30s timeout-after to actually display. The
+            // delayed stop is scheduled in onAllConnectionsClosed; we
+            // just release the wake lock here.
             releaseWakeLock()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                stopForeground(STOP_FOREGROUND_REMOVE)
-            } else {
-                @Suppress("DEPRECATION")
-                stopForeground(true)
-            }
-            stopSelf()
             return
         }
 
         // We have at least one live session — keep the CPU awake so SSH
         // keepalives don't miss their slot when the screen turns off.
         acquireWakeLock()
-
-        serviceScope.launch(Dispatchers.Main) {
-            updateNotification()
-        }
 
         Logger.d("SSHConnectionService", "Active connections: $activeConnections")
     }

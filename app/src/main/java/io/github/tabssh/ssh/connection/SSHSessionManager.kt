@@ -89,6 +89,17 @@ class SSHSessionManager(private val context: Context) {
         connection.hostKeyChangedCallback = hostKeyChangedCallback
         connection.newHostKeyCallback = newHostKeyCallback
 
+        // Per-host metadata pings (terminal title etc.) re-broadcast as a
+        // fake state-change of the current state. The foreground service's
+        // listener uses onConnectionStateChanged as its sole "rebuild the
+        // per-host notification" trigger; reusing it here keeps the
+        // listener interface narrow.
+        connection.metadataChangedCallback = {
+            notifyListeners {
+                onConnectionStateChanged(profile.id, connection.connectionState.value)
+            }
+        }
+
         // Add connection listener to track state changes
         connection.addConnectionListener(object : ConnectionListener {
             override fun onConnecting(connectionId: String) {
