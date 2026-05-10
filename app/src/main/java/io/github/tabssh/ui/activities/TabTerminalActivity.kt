@@ -561,6 +561,15 @@ class TabTerminalActivity : AppCompatActivity() {
                     showTextContextMenu(x, y)
                 }
 
+                // Wired once at view setup so the floating Copy ActionMode
+                // appears any time selection enters (currently only via the
+                // SEL key + drag flow). Without this the user's drag would
+                // highlight text but they'd have no way to copy it.
+                val viewRef = this
+                onSelectionStarted = {
+                    startTerminalSelectionActionMode(viewRef)
+                }
+
                 // Issue #168 — edge-swipe tab switching. Acts as a backup
                 // path for users who turned off ViewPager2 swipe-mode and
                 // would otherwise have no touch gesture for tab switching.
@@ -643,12 +652,15 @@ class TabTerminalActivity : AppCompatActivity() {
     }
 
     /**
-     * Show dialog for detected URL with options to open or copy
+     * Show dialog for detected URL with explicit Open/Copy/Cancel
+     * confirmation. The user may have long-pressed by accident (terminals
+     * are touch-noisy), so we never auto-launch — they have to tap Open.
      */
     private fun showUrlDialog(url: String) {
+        if (isFinishing || isDestroyed) return
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("URL Detected")
-            .setMessage(url)
+            .setTitle("Open this URL?")
+            .setMessage("$url\n\nThis will open in your browser. Tap Open only if you meant to follow this link.")
             .setPositiveButton("Open") { _, _ ->
                 openUrl(url)
             }
@@ -1569,13 +1581,11 @@ class TabTerminalActivity : AppCompatActivity() {
                             Logger.e("TabTerminalActivity", "Failed to update connection stats", e)
                         }
 
-                        // Show connection success notification
-                        io.github.tabssh.utils.NotificationHelper.showConnectionSuccess(
-                            this,
-                            profile.getDisplayName(),
-                            profile.username,
-                            profile.id
-                        )
+                        // Per-host status notification is owned by
+                        // SSHConnectionService (one notification per active
+                        // host, dynamic title). Don't post the legacy
+                        // "Connected to … Logged in as root" toast-style one
+                        // here — it'd duplicate the service-posted row.
                     } else {
                         Logger.e("TabTerminalActivity", "Failed to connect terminal to SSH for ${profile.getDisplayName()}")
                         showError("Failed to connect terminal", "Error")
@@ -1704,9 +1714,9 @@ class TabTerminalActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e("TabTerminalActivity", "Failed to update telnet connection stats", e)
             }
-            io.github.tabssh.utils.NotificationHelper.showConnectionSuccess(
-                this, profile.getDisplayName(), profile.username, profile.id
-            )
+            // Per-host status notification is owned by SSHConnectionService
+            // (also for telnet — the service tracks the wrapper state). No
+            // legacy showConnectionSuccess here.
         } else {
             showError("Telnet connection to ${profile.host}:${profile.port} failed", "Connection Error")
             io.github.tabssh.utils.NotificationHelper.showConnectionError(
@@ -1796,7 +1806,8 @@ class TabTerminalActivity : AppCompatActivity() {
                 multiplexerType,
                 customPrefix,
                 commandCallback,
-                onContextMenuRequested = { x, y -> showTextContextMenu(x, y) }
+                onContextMenuRequested = { x, y -> showTextContextMenu(x, y) },
+                onSelectionStarted = { tv -> startTerminalSelectionActionMode(tv) }
             )
             viewPager?.adapter = pagerAdapter
 
@@ -1827,7 +1838,8 @@ class TabTerminalActivity : AppCompatActivity() {
                 multiplexerType,
                 customPrefix,
                 commandCallback,
-                onContextMenuRequested = { x, y -> showTextContextMenu(x, y) }
+                onContextMenuRequested = { x, y -> showTextContextMenu(x, y) },
+                onSelectionStarted = { tv -> startTerminalSelectionActionMode(tv) }
             )
             viewPager?.adapter = pagerAdapter
 
@@ -3280,25 +3292,18 @@ class TabTerminalActivity : AppCompatActivity() {
         }
         keyboardLayoutListener = null
 
-        // Snapshot profile ids of any still-open tabs BEFORE cleanup so we
-        // can release their SSH sessions afterwards. tabManager.cleanup()
-        // calls SSHTab.disconnect() per tab (channel-only) and does NOT
-        // fire onTabClosed, so without this snapshot the SSHSessionManager
-        // would keep these connections in activeConnections and the
-        // foreground-service notification would stay stuck on the old
-        // count even though the activity (and all its tabs) is gone.
-        val openProfileIds = tabManager.getAllTabs().map { it.profile.id }.toSet()
-
         Logger.d("TabTerminalActivity", "Terminal activity destroyed")
         tabManager.cleanup()
 
-        openProfileIds.forEach { profileId ->
-            try {
-                app.sshSessionManager.closeConnection(profileId)
-            } catch (e: Exception) {
-                Logger.w("TabTerminalActivity", "Failed to release SSH session for $profileId on destroy", e)
-            }
-        }
+        // Intentionally do NOT close SSH sessions here. The foreground
+        // service owns connection lifecycle. Earlier code closed every
+        // open profile's session in onDestroy so the FG notification
+        // wouldn't show stale counts — but that meant pressing the
+        // Android back button (or the system killing this activity to
+        // reclaim memory) would tear down live connections. Now each
+        // host has its own notification (see SSHConnectionService), so
+        // staleness isn't an issue, and the connections survive a back-
+        // out exactly as the user expects.
     }
     
     /**

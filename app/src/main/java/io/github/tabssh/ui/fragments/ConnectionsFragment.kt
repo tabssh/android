@@ -356,15 +356,25 @@ class ConnectionsFragment : Fragment() {
                 openConnection(connection)
             }
         )
-        
+
         // Long click for context menu
         adapter.setOnItemLongClickListener { connection ->
             showConnectionMenu(connection)
             true
         }
-        
+
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
         recyclerView.adapter = adapter
+
+        // Re-bind rows whenever the SSH session manager's connection-state
+        // map changes — adapter reads `isConnectionActive(id)` at bind
+        // time, and without this the active dot never updates.
+        viewLifecycleOwner.lifecycleScope.launch {
+            app.sshSessionManager.connectionStates.collect {
+                adapter.notifyDataSetChanged()
+                groupedAdapter?.notifyDataSetChanged()
+            }
+        }
     }
     
     private fun openConnection(connection: ConnectionProfile) {

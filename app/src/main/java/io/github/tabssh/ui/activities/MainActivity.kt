@@ -509,27 +509,98 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         }
 
         val logs = Logger.getAllLogs()
-        // Copy to clipboard
-        val clipboard = getSystemService(android.content.ClipboardManager::class.java)
-        clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("TabSSH Debug Logs", logs))
-
-        // Show dialog with options
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Debug Logs Copied")
-            .setMessage("${logs.length} characters copied to clipboard.\n\nYou can paste this into a message or share it.")
-            .setPositiveButton("OK", null)
-            .setNeutralButton("Share") { _, _ ->
-                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_SUBJECT, "TabSSH Debug Logs")
-                    putExtra(Intent.EXTRA_TEXT, logs)
-                }
-                startActivity(Intent.createChooser(shareIntent, "Share Debug Logs"))
-            }
-            .setNegativeButton("Clear Logs") { _, _ ->
+        offerLogShareOrCopy(
+            title = "Debug Logs",
+            clipLabel = "TabSSH Debug Logs",
+            shareSubject = "TabSSH Debug Logs",
+            logs = logs,
+            onClear = {
                 Logger.clearLogs()
                 android.widget.Toast.makeText(this, "Logs cleared", android.widget.Toast.LENGTH_SHORT).show()
             }
+        )
+    }
+
+    /**
+     * Show a log and offer Copy/Share/Clear. Routes around the Android
+     * clipboard's binder transaction limit (~1MB) — large logs go straight
+     * to Share so the clipboard write doesn't TransactionTooLargeException
+     * the app to death. Clipboard write itself is also try/catch'd because
+     * OEM clipboard services have been known to throw on perfectly normal
+     * sizes too.
+     */
+    private fun offerLogShareOrCopy(
+        title: String,
+        clipLabel: String,
+        shareSubject: String,
+        logs: String,
+        onClear: () -> Unit
+    ) {
+        // Empirical safe cap. Real binder limit is ~1MB across all parcels
+        // in the call; clipboard service adds metadata, so 256KB leaves
+        // plenty of headroom even on cranky OEM builds.
+        val clipboardCapBytes = 256 * 1024
+        val logsBytes = logs.toByteArray(Charsets.UTF_8).size
+        val tooBigForClipboard = logsBytes > clipboardCapBytes
+
+        val shareAction: () -> Unit = {
+            try {
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_SUBJECT, shareSubject)
+                    putExtra(Intent.EXTRA_TEXT, logs)
+                }
+                startActivity(Intent.createChooser(shareIntent, "Share $title"))
+            } catch (e: Exception) {
+                Logger.e("MainActivity", "Share failed for $title", e)
+                android.widget.Toast.makeText(
+                    this,
+                    "Share failed: ${e.message ?: "unknown error"}",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+
+        if (tooBigForClipboard) {
+            // Don't even attempt clipboard — large strings have crashed
+            // here before (TransactionTooLargeException) and there's no
+            // sane way to recover mid-binder-call.
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("$title — too large to copy")
+                .setMessage(
+                    "Log is ${logsBytes / 1024} KB, which exceeds the system " +
+                    "clipboard limit (~256 KB). Use Share to send it to a " +
+                    "file, email, or chat app instead."
+                )
+                .setPositiveButton("Share") { _, _ -> shareAction() }
+                .setNeutralButton("Clear") { _, _ -> onClear() }
+                .setNegativeButton("Cancel", null)
+                .show()
+            return
+        }
+
+        val copied = try {
+            val clipboard = getSystemService(android.content.ClipboardManager::class.java)
+            clipboard?.setPrimaryClip(android.content.ClipData.newPlainText(clipLabel, logs))
+            true
+        } catch (e: Throwable) {
+            // RemoteException / TransactionTooLargeException / OEM weirdness.
+            // Don't crash the app — just fall through to Share.
+            Logger.e("MainActivity", "Clipboard write failed for $title (${logsBytes} bytes)", e)
+            false
+        }
+
+        val msg = if (copied) {
+            "${logs.length} characters copied to clipboard.\n\nYou can paste this into a message or share it."
+        } else {
+            "Clipboard write failed — log may be too large or the system clipboard rejected it. Use Share instead."
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(if (copied) "$title Copied" else title)
+            .setMessage(msg)
+            .setPositiveButton("OK", null)
+            .setNeutralButton("Share") { _, _ -> shareAction() }
+            .setNegativeButton("Clear") { _, _ -> onClear() }
             .show()
     }
 
@@ -554,28 +625,16 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         }
 
         val logs = Logger.getAppLog()
-        // Copy to clipboard
-        val clipboard = getSystemService(android.content.ClipboardManager::class.java)
-        clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("TabSSH App Log", logs))
-
-        // Show dialog with options
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("App Log Copied")
-            .setMessage("${logs.length} characters copied to clipboard.\n\n⚠️ This log is SAFE TO SHARE PUBLICLY.\nAll sensitive info (IPs, hostnames, usernames) has been anonymized.")
-            .setPositiveButton("OK", null)
-            .setNeutralButton("Share") { _, _ ->
-                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_SUBJECT, "TabSSH App Log")
-                    putExtra(Intent.EXTRA_TEXT, logs)
-                }
-                startActivity(Intent.createChooser(shareIntent, "Share App Log"))
-            }
-            .setNegativeButton("Clear") { _, _ ->
+        offerLogShareOrCopy(
+            title = "App Log",
+            clipLabel = "TabSSH App Log",
+            shareSubject = "TabSSH App Log",
+            logs = logs,
+            onClear = {
                 Logger.clearAppLog()
                 android.widget.Toast.makeText(this, "App log cleared", android.widget.Toast.LENGTH_SHORT).show()
             }
-            .show()
+        )
     }
 
     /**

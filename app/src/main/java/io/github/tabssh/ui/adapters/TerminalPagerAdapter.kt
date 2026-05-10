@@ -27,7 +27,14 @@ class TerminalPagerAdapter(
     // setupTerminalView() in TabTerminalActivity only sets the field
     // on the SINGLE classic-mode TerminalView; pass it through here
     // so the swipe-mode pages get it too.
-    private val onContextMenuRequested: ((Float, Float) -> Unit)? = null
+    private val onContextMenuRequested: ((Float, Float) -> Unit)? = null,
+    /**
+     * Invoked when the user enters selection mode on a per-page
+     * TerminalView (e.g. via the SEL key + drag). Receives the
+     * TerminalView so the host activity can start the floating
+     * Copy ActionMode against the right view.
+     */
+    private val onSelectionStarted: ((TerminalView) -> Unit)? = null
 ) : RecyclerView.Adapter<TerminalPagerAdapter.TerminalViewHolder>() {
 
     // Track bound view holders for theme updates
@@ -65,7 +72,8 @@ class TerminalPagerAdapter(
             multiplexerType,
             customPrefix,
             onCommandSent,
-            onContextMenuRequested
+            onContextMenuRequested,
+            onSelectionStarted
         )
     }
 
@@ -103,7 +111,8 @@ class TerminalPagerAdapter(
         private val multiplexerType: io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType,
         private val customPrefix: String?,
         private val onCommandSent: ((ByteArray) -> Unit)?,
-        private val onContextMenuRequested: ((Float, Float) -> Unit)?
+        private val onContextMenuRequested: ((Float, Float) -> Unit)?,
+        private val onSelectionStarted: ((TerminalView) -> Unit)? = null
     ) : RecyclerView.ViewHolder(terminalView) {
 
         fun bind(tab: SSHTab) {
@@ -126,6 +135,12 @@ class TerminalPagerAdapter(
             // silently no-ops in swipe mode.
             if (onContextMenuRequested != null) {
                 terminalView.onContextMenuRequested = onContextMenuRequested
+            }
+
+            // Selection-mode entered (from SEL key + drag) → activity
+            // starts the floating Copy ActionMode against this view.
+            onSelectionStarted?.let { cb ->
+                terminalView.onSelectionStarted = { cb(terminalView) }
             }
 
             // Set up gesture support

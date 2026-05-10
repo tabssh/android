@@ -144,7 +144,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Pick the .pem private key the config's key_file= line points at. Encrypted keys will prompt for a passphrase."
+                android:text="Pick the .pem private key the config's key_file= line points at. Only the private key (.pem) is needed — the matching public key is already on Oracle's side. A passphrase prompt appears only if your PEM is encrypted (file contains `Proc-Type: 4,ENCRYPTED` or starts with `BEGIN ENCRYPTED PRIVATE KEY`); if neither line is present, no prompt should appear."
                 android:textAppearance="?attr/textAppearanceBodySmall"
                 android:layout_marginBottom="8dp" />
 

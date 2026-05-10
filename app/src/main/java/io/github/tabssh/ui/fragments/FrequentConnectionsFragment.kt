@@ -40,15 +40,26 @@ class FrequentConnectionsFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        
+
         app = requireActivity().application as TabSSHApplication
-        
+
         recyclerView = view.findViewById(R.id.recycler_frequent)
         emptyLayout = view.findViewById(R.id.layout_empty_frequent)
-        
+
         setupRecyclerView()
         loadFrequentConnections()
-        
+
+        // Re-bind rows whenever the SSH session manager's connection-state
+        // map changes — the adapter reads `isConnectionActive(id)` at bind
+        // time, but the DB Flow only ticks on lastConnected/count updates
+        // (not on state transitions), so without this the active dot
+        // never flipped to green or back to grey.
+        viewLifecycleOwner.lifecycleScope.launch {
+            app.sshSessionManager.connectionStates.collect {
+                adapter.notifyDataSetChanged()
+            }
+        }
+
         Logger.d("FrequentConnectionsFragment", "Fragment created")
     }
 

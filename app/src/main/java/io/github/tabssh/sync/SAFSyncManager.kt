@@ -235,18 +235,22 @@ class SAFSyncManager(private val context: Context) {
 
         try {
             // Serialize payload to JSON
+            Logger.d(TAG, "upload: starting JSON serialize")
             val jsonData = json.encodeToString(payload)
-            Logger.d(TAG, "Serialized payload: ${jsonData.length} chars")
+            Logger.d(TAG, "upload: serialized JSON, ${jsonData.length} chars")
 
             // Compress with GZIP
+            Logger.d(TAG, "upload: starting GZIP compression")
             val compressed = compress(jsonData.toByteArray(Charsets.UTF_8))
-            Logger.d(TAG, "Compressed to ${compressed.size} bytes")
+            Logger.d(TAG, "upload: compressed to ${compressed.size} bytes")
 
             // Encrypt
+            Logger.d(TAG, "upload: starting AES-GCM encrypt (PBKDF2 100k iters)")
             val encrypted = encryptor.encrypt(compressed, password)
-            Logger.d(TAG, "Encrypted to ${encrypted.size} bytes")
+            Logger.d(TAG, "upload: encrypted to ${encrypted.size} bytes")
 
             // Write to URI
+            Logger.d(TAG, "upload: opening output stream for $uri")
             context.contentResolver.openOutputStream(uri, "wt")?.use { output ->
                 output.write(encrypted)
                 output.flush()
