@@ -190,8 +190,14 @@ class TerminalView @JvmOverloads constructor(
         gestureDetector = GestureDetector(context, TerminalGestureListener())
         scaleGestureDetector = ScaleGestureDetector(context, PinchZoomListener())
 
-        // Setup default text paint
-        textPaint.typeface = Typeface.MONOSPACE
+        // Setup default text paint. Init with the bundled JetBrains Mono
+        // Nerd Font (better hinting than the system mono on most OEM ROMs).
+        // The host activity calls `setFont(prefValue)` shortly after — this
+        // is just so a TerminalView shown before that read still draws with
+        // a decent typeface instead of the previous Typeface.MONOSPACE.
+        textPaint.typeface = io.github.tabssh.utils.FontManager.getTypeface(
+            context, "jetbrains_mono_nerd"
+        )
         textPaint.textSize = 14f * resources.displayMetrics.density
         textPaint.color = Color.WHITE
 

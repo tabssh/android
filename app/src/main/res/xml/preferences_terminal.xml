@@ -31,7 +31,7 @@
             android:summary="Monospace font family"
             android:entries="@array/terminal_font_entries"
             android:entryValues="@array/terminal_font_values"
-            android:defaultValue="cascadia_code"
+            android:defaultValue="jetbrains_mono_nerd"
             app:useSimpleSummaryProvider="true" />
 
         <SeekBarPreference

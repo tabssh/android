@@ -402,12 +402,12 @@ class TabTerminalActivity : AppCompatActivity() {
     }
     
     private fun showMenuFabTemporarily() {
+        // Legacy entry point: the FAB is now permanent (see layout note),
+        // so just ensure it's visible. Edge taps on the top-left still
+        // route here from setupTerminalGestures; we kept the call site in
+        // case the user edits the layout to hide the FAB and falls back
+        // to the gesture.
         binding.fabMenu.visibility = View.VISIBLE
-        
-        // Auto-hide after 3 seconds
-        Handler(Looper.getMainLooper()).postDelayed({
-            binding.fabMenu.visibility = View.GONE
-        }, 3000)
     }
     
     private fun toggleBottomActionBar() {
@@ -545,7 +545,7 @@ class TabTerminalActivity : AppCompatActivity() {
             // Set up terminal view
             binding.terminalView.apply {
                 // Load font from preferences
-                val fontValue = app.preferencesManager.getString("terminal_font", "monospace")
+                val fontValue = app.preferencesManager.getString("terminal_font", "jetbrains_mono_nerd")
                 setFont(fontValue)
 
                 // Load font size from preferences
@@ -1700,7 +1700,7 @@ class TabTerminalActivity : AppCompatActivity() {
 
         // Get font preferences
         val fontSize = app.preferencesManager.getInt("terminal_font_size", 14)
-        val fontValue = app.preferencesManager.getString("terminal_font", "monospace")
+        val fontValue = app.preferencesManager.getString("terminal_font", "jetbrains_mono_nerd")
 
         // Create URL detection callback if enabled
         val urlDetectionCallback = if (app.preferencesManager.getBoolean("detect_urls", true)) {

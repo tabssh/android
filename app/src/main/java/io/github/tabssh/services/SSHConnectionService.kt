@@ -11,6 +11,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
@@ -30,6 +31,14 @@ class SSHConnectionService : Service() {
 
     private var activeConnections = 0
     private var sessionListener: SessionManagerListener? = null
+
+    // Partial wake lock held while we have at least one live SSH session.
+    // Without it, when the screen turns off the OS aggressively suspends
+    // the network stack and the JSch session keepalives miss their slot,
+    // dropping the connection. With PARTIAL_WAKE_LOCK the CPU stays awake
+    // (the screen still turns off — that's PROXIMITY/SCREEN locks, not
+    // this one). Released when activeConnections drops to zero.
+    private var wakeLock: PowerManager.WakeLock? = null
     
     companion object {
         private const val NOTIFICATION_ID = 1001
@@ -93,6 +102,7 @@ class SSHConnectionService : Service() {
         Logger.d("SSHConnectionService", "Service destroyed")
 
         serviceScope.cancel()
+        releaseWakeLock()
         // Don't tear down the manager here — its lifecycle is the
         // Application's, not the service's. The service is allowed to
         // stop and restart (e.g. when there are zero active sessions),
@@ -256,6 +266,7 @@ class SSHConnectionService : Service() {
             // a "Ready for SSH connections" notification forever, which
             // the user (rightly) flagged as noise.
             Logger.i("SSHConnectionService", "No active connections — stopping service")
+            releaseWakeLock()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 stopForeground(STOP_FOREGROUND_REMOVE)
             } else {
@@ -266,11 +277,40 @@ class SSHConnectionService : Service() {
             return
         }
 
+        // We have at least one live session — keep the CPU awake so SSH
+        // keepalives don't miss their slot when the screen turns off.
+        acquireWakeLock()
+
         serviceScope.launch(Dispatchers.Main) {
             updateNotification()
         }
 
         Logger.d("SSHConnectionService", "Active connections: $activeConnections")
+    }
+
+    private fun acquireWakeLock() {
+        if (wakeLock?.isHeld == true) return
+        try {
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            val wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "TabSSH:SshSession")
+            wl.setReferenceCounted(false)
+            wl.acquire()
+            wakeLock = wl
+            Logger.i("SSHConnectionService", "Wake lock acquired")
+        } catch (e: Exception) {
+            Logger.w("SSHConnectionService", "Failed to acquire wake lock", e)
+        }
+    }
+
+    private fun releaseWakeLock() {
+        try {
+            wakeLock?.takeIf { it.isHeld }?.release()
+            Logger.i("SSHConnectionService", "Wake lock released")
+        } catch (e: Exception) {
+            Logger.w("SSHConnectionService", "Failed to release wake lock", e)
+        } finally {
+            wakeLock = null
+        }
     }
     
     private suspend fun startConnectionMonitoring() {

@@ -45,6 +45,12 @@ class SSHConnection(
     // public `Channel` base type and dispatch on the concrete subclass at
     // call sites that need session-only methods (see `resizeActiveChannelPty`).
     private var shellChannel: Channel? = null
+    // Last observed shell channel exit-status (0 = clean `exit`, -1 = no
+    // exit-status message, e.g. abrupt drop). Captured at channel close
+    // because `shellChannel` is nulled before the DISCONNECTED state
+    // observer reads it — without this snapshot the reconnect-prompt
+    // gate always saw -1 and prompted even on a clean `exit`.
+    @Volatile private var lastShellExitStatus: Int = -1
     // Issue #163 — track every channel we've opened on this Session so that
     // (a) multiple tabs can each hold their own ChannelShell against one
     // Session (real multiplexing — opening the same profile twice no longer
@@ -1223,6 +1229,13 @@ class SSHConnection(
      */
     fun closeChannel(channel: Channel) {
         if (openChannels.remove(channel)) {
+            // Snapshot exit-status BEFORE disconnect — once shellChannel
+            // is repointed (or nulled), the reconnect-dialog gate has no
+            // way to see the value. JSch sets exitStatus when the remote
+            // sends SSH_MSG_CHANNEL_REQUEST exit-status, which arrives
+            // before close on a clean `exit`.
+            val exit = try { channel.exitStatus } catch (_: Exception) { -1 }
+            if (exit >= 0) lastShellExitStatus = exit
             try { channel.disconnect() } catch (_: Exception) {}
             // Keep the legacy [shellChannel] pointer pointing at SOMETHING
             // valid if it was the one we just closed — pick any remaining
@@ -1230,7 +1243,7 @@ class SSHConnection(
             if (shellChannel === channel) {
                 shellChannel = openChannels.toList().firstOrNull()
             }
-            Logger.d("SSHConnection", "Channel closed (remaining: ${openChannels.size})")
+            Logger.d("SSHConnection", "Channel closed (remaining: ${openChannels.size}, exit=$exit)")
         }
     }
 
@@ -1357,7 +1370,14 @@ class SSHConnection(
         hadSuccessfulConnect = false
 
         // Issue #163 — close every channel a tab opened against this session,
-        // not just the legacy single shellChannel pointer.
+        // not just the legacy single shellChannel pointer. Snapshot the
+        // most-recent shell exit-status before disconnecting so the
+        // reconnect-dialog gate can still distinguish clean exit (0) from
+        // abrupt drop (-1) after this method returns.
+        run {
+            val exit = try { shellChannel?.exitStatus ?: -1 } catch (_: Exception) { -1 }
+            if (exit >= 0) lastShellExitStatus = exit
+        }
         openChannels.toList().forEach {
             try { it.disconnect() } catch (_: Exception) {}
         }
@@ -1730,7 +1750,10 @@ class SSHConnection(
      * which is exactly the discriminator the UI wants for "clean exit
      * vs unexpected disconnect — should we offer reconnect?".
      */
-    fun getShellExitStatus(): Int = shellChannel?.exitStatus ?: -1
+    fun getShellExitStatus(): Int {
+        val live = try { shellChannel?.exitStatus ?: -1 } catch (_: Exception) { -1 }
+        return if (live >= 0) live else lastShellExitStatus
+    }
     
     /**
      * Check if connection is active

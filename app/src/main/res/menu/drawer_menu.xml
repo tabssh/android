@@ -124,10 +124,6 @@
                 android:id="@+id/nav_theme_editor"
                 android:icon="@drawable/ic_settings"
                 android:title="Theme Editor" />
-            <item
-                android:id="@+id/nav_whats_new"
-                android:icon="@drawable/ic_info"
-                android:title="What's New" />
         </menu>
     </item>
 
@@ -141,6 +137,10 @@
                 android:id="@+id/nav_copy_debug_logs"
                 android:icon="@android:drawable/ic_menu_info_details"
                 android:title="Copy Debug Logs (Developer)" />
+            <item
+                android:id="@+id/nav_whats_new"
+                android:icon="@drawable/ic_info"
+                android:title="What's New" />
             <item
                 android:id="@+id/nav_help"
                 android:icon="@drawable/ic_help"

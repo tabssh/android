@@ -141,14 +141,16 @@ class ConnectionAdapter(
         }
         
         private fun updateStatusIndicator(connection: ConnectionProfile) {
-            // This would check if connection is currently active
-            // For now, show disconnected state
-            binding.indicatorStatus.setBackgroundResource(io.github.tabssh.R.drawable.connection_status_disconnected)
-            
-            // In a real implementation, this would:
-            // 1. Check SSHSessionManager for active connections
-            // 2. Update indicator color based on connection state
-            // 3. Show connecting/connected/error states
+            // Green when SSHSessionManager has a live channel for this
+            // profile id, grey otherwise. Pulled off the singleton on
+            // the application object — no DI here.
+            val app = binding.root.context.applicationContext
+                as? io.github.tabssh.TabSSHApplication
+            val active = app?.sshSessionManager?.isConnectionActive(connection.id) == true
+            binding.indicatorStatus.setBackgroundResource(
+                if (active) io.github.tabssh.R.drawable.connection_status_indicator
+                else        io.github.tabssh.R.drawable.connection_status_disconnected
+            )
         }
     }
 
