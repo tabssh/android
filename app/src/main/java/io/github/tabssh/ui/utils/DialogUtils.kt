@@ -1,5 +1,6 @@
 package io.github.tabssh.ui.utils
 
+import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -8,7 +9,18 @@ import androidx.appcompat.app.AlertDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 object DialogUtils {
-    
+
+    /**
+     * Returns true if the dialog cannot safely attach — e.g. the host
+     * Activity is finishing/destroyed because a coroutine continuation
+     * fired after the user backed out. Without this guard
+     * `MaterialAlertDialogBuilder.show()` throws `BadTokenException`.
+     */
+    private fun isContextDead(context: Context): Boolean {
+        val activity = context as? Activity ?: return false
+        return activity.isFinishing || activity.isDestroyed
+    }
+
     /**
      * Shows an error dialog with a copy button to copy the error message to clipboard
      */
@@ -18,6 +30,7 @@ object DialogUtils {
         message: String,
         onDismiss: (() -> Unit)? = null
     ) {
+        if (isContextDead(context)) return
         MaterialAlertDialogBuilder(context)
             .setTitle(title)
             .setMessage(message)
@@ -32,7 +45,7 @@ object DialogUtils {
             .setCancelable(true)
             .show()
     }
-    
+
     /**
      * Shows a success dialog
      */
@@ -42,6 +55,7 @@ object DialogUtils {
         message: String,
         onDismiss: (() -> Unit)? = null
     ) {
+        if (isContextDead(context)) return
         MaterialAlertDialogBuilder(context)
             .setTitle(title)
             .setMessage(message)
@@ -52,7 +66,7 @@ object DialogUtils {
             .setCancelable(true)
             .show()
     }
-    
+
     /**
      * Shows a confirmation dialog with Yes/No buttons
      */
@@ -65,6 +79,7 @@ object DialogUtils {
         onConfirm: () -> Unit,
         onCancel: (() -> Unit)? = null
     ) {
+        if (isContextDead(context)) return
         MaterialAlertDialogBuilder(context)
             .setTitle(title)
             .setMessage(message)
@@ -79,7 +94,7 @@ object DialogUtils {
             .setCancelable(false)
             .show()
     }
-    
+
     /**
      * Shows a dialog with a copy button for any text content
      */
@@ -89,6 +104,7 @@ object DialogUtils {
         message: String,
         onDismiss: (() -> Unit)? = null
     ) {
+        if (isContextDead(context)) return
         MaterialAlertDialogBuilder(context)
             .setTitle(title)
             .setMessage(message)

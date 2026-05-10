@@ -197,15 +197,14 @@ class SecurePasswordManager(private val context: Context) {
             if (storageLevel == StorageLevel.NEVER) {
                 return null
             }
-            
-            // Check if password has expired
-            val timestamp = sharedPrefs.getLong("$PREF_TIMESTAMP_PREFIX$connectionId", 0)
-            if (timestamp > 0 && System.currentTimeMillis() - timestamp > passwordTTL) {
-                Logger.d("SecurePasswordManager", "Password expired for $connectionId")
-                clearPassword(connectionId)
-                return null
-            }
-            
+
+            // No TTL expiry on locally-stored encrypted credentials.
+            // The previous 24-hour expiry silently deleted hypervisor and
+            // SSH passwords a day after they were saved, surfacing as
+            // "password not persisting" reports. The Keystore key is
+            // already bound to device-unlock; expiring on top of that
+            // adds friction without a security gain.
+
             // Retrieve encrypted password
             retrieveEncryptedPassword(connectionId, storageLevel == StorageLevel.BIOMETRIC)
             

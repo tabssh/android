@@ -376,6 +376,21 @@ class HypervisorEditActivity : AppCompatActivity() {
         ).show()
     }
 
+    /**
+     * Set the port field to a type-default, but only if the current value
+     * is empty or equals one of the other types' defaults — i.e. the user
+     * hasn't typed a custom port. The previous behaviour gated the update
+     * on `isEmpty()`, which meant flipping the type spinner from Proxmox
+     * (8006) to XCP-ng/VMware never replaced 8006 with 443.
+     */
+    private val typeDefaultPorts = setOf("8006", "443")
+    private fun applyTypeDefaultPort(default: String) {
+        val current = editPort.text.toString()
+        if (current.isEmpty() || current in typeDefaultPorts) {
+            editPort.setText(default)
+        }
+    }
+
     private fun updateUIForType(typePosition: Int) {
         // OCI uses a separate auth model (API-key + RSA HTTP signatures)
         // and the host/port/username/password/realm fields don't apply.
@@ -391,21 +406,21 @@ class HypervisorEditActivity : AppCompatActivity() {
 
         when (typePosition) {
             0 -> { // Proxmox
-                if (editPort.text.toString().isEmpty()) editPort.setText("8006")
+                applyTypeDefaultPort("8006")
                 layoutRealm.visibility = View.VISIBLE
                 if (editRealm.text.toString().isEmpty()) editRealm.setText("pam")
                 layoutApiType.visibility = View.GONE
                 textApiTypeHint.visibility = View.GONE
             }
             1 -> { // XCP-ng
-                if (editPort.text.toString().isEmpty()) editPort.setText("443")
+                applyTypeDefaultPort("443")
                 layoutRealm.visibility = View.GONE
                 layoutApiType.visibility = View.VISIBLE
                 textApiTypeHint.visibility = View.VISIBLE
                 textApiTypeHint.text = "Auto: Try XO REST → XCP-ng XML-RPC\nDirect: XCP-ng host (XML-RPC)\nCentralized: Xen Orchestra (REST API)"
             }
             2 -> { // VMware
-                if (editPort.text.toString().isEmpty()) editPort.setText("443")
+                applyTypeDefaultPort("443")
                 layoutRealm.visibility = View.GONE
                 layoutApiType.visibility = View.VISIBLE
                 textApiTypeHint.visibility = View.VISIBLE
