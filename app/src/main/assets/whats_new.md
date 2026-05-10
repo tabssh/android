@@ -1,5 +1,28 @@
 # What's New
 
+## Wave 10 — Oracle Cloud Infrastructure (OCI) hypervisor support
+- Fourth hypervisor target alongside Proxmox / XCP-ng / VMware. Path A
+  onboarding only — import your existing `~/.oci/config` + `.pem`
+  private key via the system file picker. Encrypted PEMs prompt for a
+  passphrase; the imported key's MD5 fingerprint is round-tripped
+  against the config's `fingerprint=` line before save so a
+  mismatched key can never reach the API.
+- Every request is signed with RSA-SHA256 per
+  draft-cavage-http-signatures-08 (the variant Oracle's SDKs use). PEM
+  + optional passphrase live in the Android Keystore under
+  `oci_private_key_${id}` / `oci_passphrase_${id}` — never in the
+  database.
+- Manager screen lists Compute instances per tenancy: lifecycle state,
+  shape, availability domain, public/private IP (resolved via the
+  primary VNIC). Buttons: Start, Stop, Soft Stop, Reset, Reboot. No
+  console — that needs OCI's bastion-over-SSH path which is its own
+  thing.
+- Region picker is seeded with the 34 current commercial regions
+  (free-text always allowed; Oracle adds regions quarterly).
+- Reject path: configs carrying `security_token_file=` are refused
+  during import — those are 1-hour CLI-renewable session tokens with
+  no upload renewal path.
+
 ## Wave 9 — Real Mosh via Termux
 - The Mosh handoff dialog now detects **Termux** and offers a one-tap
   **"Open in Termux"** button. TabSSH dispatches `mosh-client` directly
