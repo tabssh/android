@@ -962,11 +962,16 @@ class TerminalView @JvmOverloads constructor(
                 val bg = com.termux.terminal.TextStyle.decodeBackColor(style)
                 val effect = com.termux.terminal.TextStyle.decodeEffect(style)
 
-                // Draw background if not default
+                // Draw background if not default. After painting the
+                // per-cell colour, restore backgroundPaint to the theme's
+                // default background so the next row's `drawRect` (line ~913)
+                // paints with the right colour. Previously hardcoded to
+                // Color.BLACK which forced every theme back to a black row
+                // background.
                 if (bg != com.termux.terminal.TextStyle.COLOR_INDEX_BACKGROUND) {
                     backgroundPaint.color = termuxColorToAndroid(bg)
                     canvas.drawRect(x, rowTop, x + cellWidth, rowBottom, backgroundPaint)
-                    backgroundPaint.color = Color.BLACK
+                    backgroundPaint.color = currentTheme?.background ?: Color.BLACK
                 }
 
                 // Draw character if visible
@@ -1003,7 +1008,7 @@ class TerminalView @JvmOverloads constructor(
         if (cursorVisible && cursorRow in 0 until rows && cursorCol in 0 until cols) {
             val cursorX = startX + cursorCol * cellWidth
             val cursorY = startY + cursorRow * cellHeight
-            cursorPaint.color = Color.WHITE
+            cursorPaint.color = currentTheme?.cursor ?: Color.WHITE
             cursorPaint.alpha = 200
 
             when (bridge.getCursorStyle()) {
@@ -1042,13 +1047,27 @@ class TerminalView @JvmOverloads constructor(
      */
     private fun termuxColorToAndroid(colorIndex: Int): Int {
         return when {
-            colorIndex == com.termux.terminal.TextStyle.COLOR_INDEX_FOREGROUND -> Color.WHITE
-            colorIndex == com.termux.terminal.TextStyle.COLOR_INDEX_BACKGROUND -> Color.BLACK
-            colorIndex == com.termux.terminal.TextStyle.COLOR_INDEX_CURSOR -> Color.WHITE
+            // Theme-driven defaults. `currentTheme` is set by `applyTheme()`;
+            // when null (no theme loaded yet) fall back to white-on-black so
+            // the first frame renders sanely. Previously these were hardcoded
+            // Color.WHITE / Color.BLACK / Color.WHITE which made the 23 built-in
+            // themes look identical for COLOR_INDEX_FOREGROUND/BACKGROUND/CURSOR
+            // cells (i.e. nearly every cell in a typical session).
+            colorIndex == com.termux.terminal.TextStyle.COLOR_INDEX_FOREGROUND ->
+                currentTheme?.foreground ?: Color.WHITE
+            colorIndex == com.termux.terminal.TextStyle.COLOR_INDEX_BACKGROUND ->
+                currentTheme?.background ?: Color.BLACK
+            colorIndex == com.termux.terminal.TextStyle.COLOR_INDEX_CURSOR ->
+                currentTheme?.cursor ?: Color.WHITE
             // True-color (alpha byte set to 0xFF). Cover both signed and the
             // unsigned interpretation defensively.
             (colorIndex and 0xFF000000.toInt()) == 0xFF000000.toInt() -> colorIndex
-            colorIndex < 16 -> defaultColors[colorIndex]
+            colorIndex < 16 ->
+                // ANSI 0-15. Theme.ansiColors is the per-theme palette; fall
+                // back to the hardcoded defaults if the theme's palette has
+                // fewer entries than expected (defensive against custom theme
+                // JSON with a short array).
+                currentTheme?.ansiColors?.getOrNull(colorIndex) ?: defaultColors[colorIndex]
             colorIndex < 256 -> {
                 // 256-color palette
                 if (colorIndex < 232) {
