@@ -489,15 +489,8 @@ class TabTerminalActivity : AppCompatActivity() {
             disconnectAllTabs()
         }
 
-        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_copy)?.setOnClickListener {
-            bottomSheet.dismiss()
-            copyTerminalScreen()
-        }
-
-        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_paste)?.setOnClickListener {
-            bottomSheet.dismiss()
-            pasteFromClipboard()
-        }
+        // Copy / Paste no longer in this sheet — those moved to dedicated
+        // SEL + PASTE keys on the multi-row keyboard bar.
 
         view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_port_forwarding)?.setOnClickListener {
             bottomSheet.dismiss()
@@ -820,16 +813,16 @@ class TabTerminalActivity : AppCompatActivity() {
      * connection info, close the current tab.
      */
     private fun showTextContextMenu(x: Float, y: Float) {
+        // Terminal-focused long-press menu. Copy / Paste have moved to
+        // dedicated keys on the multi-row keyboard bar; selection has
+        // its own arm-then-drag flow (SEL key); tabs/navigation lives
+        // under the ☰ key. Everything left here is terminal behaviour.
+        // "Cluster…" sends a typed command to every open session (with
+        // a confirm step) — useful for broadcasting `apt update`, etc.
         val items = arrayOf(
-            "Paste",
             "Copy screen",
-            "Select text…",
             "Find in scrollback…",
-            "Send text…",
-            "Send Ctrl+C",
-            "Send Ctrl+D",
-            "Send Ctrl+Z",
-            "Send Esc",
+            "Cluster: send to all sessions…",
             "Snippets…",
             "Font size…",
             "Toggle keyboard",
@@ -856,21 +849,15 @@ class TabTerminalActivity : AppCompatActivity() {
                     .setTitle("Terminal")
                     .setItems(items) { _, which ->
                         when (which) {
-                            0  -> pasteFromClipboard()
-                            1  -> copyTerminalScreen()
-                            2  -> beginSelection(x, y)
-                            3  -> showFindDialog()
-                            4  -> showSendTextDialog()
-                            5  -> sendBytesToActiveTab(byteArrayOf(0x03))   // ^C
-                            6  -> sendBytesToActiveTab(byteArrayOf(0x04))   // ^D
-                            7  -> sendBytesToActiveTab(byteArrayOf(0x1A))   // ^Z
-                            8  -> sendBytesToActiveTab(byteArrayOf(0x1B))   // ESC
-                            9  -> showSnippetsPickerForActiveTab()
-                            10 -> showFontSizeDialog()
-                            11 -> toggleKeyboard()
-                            12 -> toggleCustomKeyboard()
-                            13 -> shareSession()
-                            14 -> closeActiveTabConfirmed()
+                            0 -> copyTerminalScreen()
+                            1 -> showFindDialog()
+                            2 -> showClusterBroadcastDialog()
+                            3 -> showSnippetsPickerForActiveTab()
+                            4 -> showFontSizeDialog()
+                            5 -> toggleKeyboard()
+                            6 -> toggleCustomKeyboard()
+                            7 -> shareSession()
+                            8 -> closeActiveTabConfirmed()
                         }
                     }
                     .setNegativeButton("Cancel", null)
@@ -882,6 +869,66 @@ class TabTerminalActivity : AppCompatActivity() {
                 Logger.e("TabTerminalActivity", "Failed to show context menu", e)
             }
         }
+    }
+
+    /**
+     * Cluster broadcast — prompts for a command, then sends it (with a
+     * trailing newline so it actually executes) to every open SSH tab
+     * after a confirm step. Distinct from ClusterCommandActivity, which
+     * targets stored profiles rather than the currently-open tabs.
+     */
+    private fun showClusterBroadcastDialog() {
+        val tabs = tabManager.getAllTabs()
+        if (tabs.isEmpty()) {
+            Toast.makeText(this, "No active sessions", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val input = android.widget.EditText(this).apply {
+            hint = "Command to broadcast"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            setSingleLine(true)
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Cluster broadcast")
+            .setMessage("Send the same command to all ${tabs.size} open session(s).")
+            .setView(input)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Next") { _, _ ->
+                val cmd = input.text.toString()
+                if (cmd.isBlank()) {
+                    Toast.makeText(this, "Empty command", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                // Confirm step — the user explicitly asked for it. Lists
+                // the host names so a slip ("did I really pick prod?") is
+                // catchable before the keys hit the wire.
+                val hostList = tabs.joinToString("\n") { "• ${it.profile.getDisplayName()}" }
+                androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("Confirm broadcast")
+                    .setMessage(
+                        "Send to ${tabs.size} session(s)?\n\n" +
+                        "Command: $cmd\n\n" +
+                        hostList
+                    )
+                    .setNegativeButton("Cancel", null)
+                    .setPositiveButton("Send to all") { _, _ ->
+                        val payload = (cmd + "\n").toByteArray(Charsets.UTF_8)
+                        var sent = 0
+                        tabs.forEach { tab ->
+                            try {
+                                tab.connection?.getOutputStream()?.let { os ->
+                                    os.write(payload); os.flush(); sent++
+                                }
+                            } catch (e: Exception) {
+                                Logger.w("TabTerminalActivity", "Cluster send to ${tab.profile.getDisplayName()} failed", e)
+                            }
+                        }
+                        Toast.makeText(this, "Sent to $sent / ${tabs.size}", Toast.LENGTH_SHORT).show()
+                    }
+                    .show()
+            }
+            .show()
     }
 
     private fun sendBytesToActiveTab(bytes: ByteArray) {
@@ -3330,6 +3377,15 @@ class TabTerminalActivity : AppCompatActivity() {
             "MENU" -> {
                 Logger.d("TabTerminalActivity", "Menu key — opening terminal bottom sheet")
                 showTerminalMenu()
+            }
+            "SEL" -> {
+                Logger.d("TabTerminalActivity", "Select key — arming drag-select on next touch")
+                getActiveTerminalView()?.armSelectionForNextDrag()
+                Toast.makeText(
+                    this,
+                    "Drag on the terminal to select. Tap Copy when done.",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
             "TOGGLE" -> {
                 Logger.d("TabTerminalActivity", "Toggle keyboard action")

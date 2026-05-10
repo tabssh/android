@@ -174,6 +174,25 @@ class TerminalView @JvmOverloads constructor(
     private val handleDrawRadiusPx by lazy { 8f * resources.displayMetrics.density }
 
     /**
+     * When true, the next ACTION_DOWN on the terminal starts selection
+     * mode at the touch point (instead of scrolling / toggling the
+     * keyboard). Armed via the SEL key on the multi-row keyboard bar
+     * and consumed on the first touch — single-shot, so an accidental
+     * SEL tap doesn't leave the view stuck in a non-scroll state.
+     */
+    private var selectionArmed = false
+
+    /** Called by the host activity when the SEL key fires. */
+    fun armSelectionForNextDrag() {
+        selectionArmed = true
+        // Tiny visual hint that something will happen on next touch —
+        // background tint shift is too disruptive, so we just bump the
+        // drag-handle highlight colour briefly. The host activity also
+        // shows a toast; this is a belt-and-suspenders affordance.
+        invalidate()
+    }
+
+    /**
      * Host activities subscribe to know when to start the floating
      * ActionMode. Fires once each time the user enters selection mode.
      */
@@ -1152,6 +1171,18 @@ class TerminalView @JvmOverloads constructor(
     }
 
     override fun onTouch(v: View, event: MotionEvent): Boolean {
+        // SEL key armed → consume the next touch sequence as a selection
+        // drag. ACTION_DOWN enters selection mode at the touch point and
+        // sets the focus-handle drag flag so the rest of the gesture
+        // extends the selection (via handleSelectionTouch's MOVE path).
+        if (selectionArmed && event.actionMasked == MotionEvent.ACTION_DOWN &&
+            event.pointerCount == 1) {
+            selectionArmed = false
+            enterSelectionMode(event.x, event.y)
+            selectionDragHandle = 1  // pre-grab focus handle
+            return true
+        }
+
         // Handle pinch-to-zoom first (multi-touch)
         if (event.pointerCount >= 2) {
             scaleGestureDetector.onTouchEvent(event)

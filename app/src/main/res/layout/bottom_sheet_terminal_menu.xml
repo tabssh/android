@@ -82,39 +82,9 @@
         android:layout_marginTop="8dp"
         android:layout_marginBottom="8dp" />
 
-    <!-- Clipboard -->
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Clipboard"
-        android:textSize="14sp"
-        android:textStyle="bold"
-        android:textColor="?android:attr/textColorSecondary"
-        android:paddingBottom="8dp" />
-
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btn_copy"
-        style="@style/Widget.Material3.Button.TextButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Copy"
-        app:icon="@drawable/ic_copy"
-        app:iconGravity="start" />
-
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btn_paste"
-        style="@style/Widget.Material3.Button.TextButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Paste"
-        app:icon="@drawable/ic_paste"
-        app:iconGravity="start" />
-
-    <com.google.android.material.divider.MaterialDivider
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:layout_marginBottom="8dp" />
+    <!-- Copy / Paste removed: dedicated SEL + PASTE keys live on the
+         multi-row keyboard bar now, so the bottom-sheet is purely for
+         tab / session navigation. -->
 
     <!-- More Options -->
     <TextView

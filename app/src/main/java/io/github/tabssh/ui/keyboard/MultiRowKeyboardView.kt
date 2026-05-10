@@ -290,11 +290,11 @@ class MultiRowKeyboardView @JvmOverloads constructor(
          *   • Page navigation (HOME/END/PGUP/PGDN) lives on row 2.
          *   • The IME-toggle (⌨) was dropped — back-key dismisses the
          *     soft keyboard, no dedicated affordance needed.
-         *   • MENU (☰) only appears in 3+ row layouts where there's
-         *     room without crowding the modifiers. Opens the bottom-
-         *     sheet terminal menu (tabs, paste, snippets, etc.). Paste
-         *     is reachable from inside the menu so a dedicated paste
-         *     key would be redundant.
+         *   • Row 2 of 3+ row layouts ends with SEL (arms drag-select),
+         *     PASTE (📋, paste clipboard), and MENU (☰, tabs/sessions
+         *     bottom-sheet) — three discrete entry points so the user
+         *     never has to dig through nested menus to copy, paste, or
+         *     switch tabs.
          */
         fun getDefaultRowLayouts(rowCount: Int): List<List<KeyboardKey>> {
             return when (rowCount) {
@@ -358,6 +358,8 @@ class MultiRowKeyboardView @JvmOverloads constructor(
                         KeyboardKey("PGUP", "PGUP", "\u001B[5~"),
                         KeyboardKey("PGDN", "PGDN", "\u001B[6~"),
                         KeyboardKey("ENTER", "ENT", "\n"),
+                        KeyboardKey("SEL", "SEL", "", KeyboardKey.KeyCategory.ACTION),
+                        KeyboardKey("PASTE", "📋", "", KeyboardKey.KeyCategory.ACTION),
                         KeyboardKey("MENU", "☰", "", KeyboardKey.KeyCategory.ACTION)
                     ),
                     // Row 3: coding/shell symbols Android keyboard buries
@@ -398,6 +400,8 @@ class MultiRowKeyboardView @JvmOverloads constructor(
                         KeyboardKey("PGUP", "PGUP", "\u001B[5~"),
                         KeyboardKey("PGDN", "PGDN", "\u001B[6~"),
                         KeyboardKey("ENTER", "ENT", "\n"),
+                        KeyboardKey("SEL", "SEL", "", KeyboardKey.KeyCategory.ACTION),
+                        KeyboardKey("PASTE", "📋", "", KeyboardKey.KeyCategory.ACTION),
                         KeyboardKey("MENU", "☰", "", KeyboardKey.KeyCategory.ACTION)
                     ),
                     // Row 3: coding symbols
@@ -445,6 +449,8 @@ class MultiRowKeyboardView @JvmOverloads constructor(
                         KeyboardKey("PGUP", "PGUP", "\u001B[5~"),
                         KeyboardKey("PGDN", "PGDN", "\u001B[6~"),
                         KeyboardKey("ENTER", "ENT", "\n"),
+                        KeyboardKey("SEL", "SEL", "", KeyboardKey.KeyCategory.ACTION),
+                        KeyboardKey("PASTE", "📋", "", KeyboardKey.KeyCategory.ACTION),
                         KeyboardKey("MENU", "☰", "", KeyboardKey.KeyCategory.ACTION)
                     ),
                     // Row 3: coding symbols
