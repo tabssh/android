@@ -3,6 +3,7 @@ package io.github.tabssh.storage.database.entities
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import kotlinx.serialization.Serializable
 
 /**
  * Hypervisor connection profile
@@ -11,6 +12,7 @@ import androidx.room.PrimaryKey
  * for non-password auth, by `authType` (see below).
  */
 @Entity(tableName = "hypervisors")
+@Serializable
 data class HypervisorProfile(
     @PrimaryKey(autoGenerate = true)
     @ColumnInfo(name = "id")
@@ -125,6 +127,7 @@ data class HypervisorProfile(
     val ociCompartmentOcid: String? = null
 )
 
+@Serializable
 enum class HypervisorType {
     PROXMOX,
     XCPNG,

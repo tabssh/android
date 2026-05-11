@@ -3,6 +3,7 @@ package io.github.tabssh.storage.database.entities
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import kotlinx.serialization.Serializable
 import java.util.UUID
 
 /**
@@ -10,6 +11,7 @@ import java.util.UUID
  * Snippets are quick-access commands that can be inserted into terminal
  */
 @Entity(tableName = "snippets")
+@Serializable
 data class Snippet(
     @PrimaryKey
     val id: String = UUID.randomUUID().toString(),

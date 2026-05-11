@@ -293,9 +293,16 @@ class PreferenceManager(private val context: Context) {
     fun isNotificationVibrateEnabled(): Boolean =
         areNotificationsEnabled() && getBoolean(KEY_NOTIFICATION_VIBRATE, true)
 
-    // UI preferences
-    fun getMaxTabs(): Int = getInt(KEY_MAX_TABS, 10)
-    fun setMaxTabs(maxTabs: Int) = setInt(KEY_MAX_TABS, maxTabs)
+    // UI preferences.
+    // max_tabs is exposed in Settings as an EditTextPreference with
+    // inputType="number", which stores the value as a String (the
+    // androidx Preference layer doesn't auto-convert). Reading via
+    // getInt() against a String slot blows up with ClassCastException
+    // — surfaced by SyncDataCollector's first call after upgrade.
+    // Route through getStringAsInt(), same shape as getDefaultPort /
+    // getConnectTimeout.
+    fun getMaxTabs(): Int = getStringAsInt(KEY_MAX_TABS, 10)
+    fun setMaxTabs(maxTabs: Int) = setString(KEY_MAX_TABS, maxTabs.toString())
     
     fun isConfirmTabClose(): Boolean = getBoolean(KEY_CONFIRM_TAB_CLOSE, true)
     fun setConfirmTabClose(confirm: Boolean) = setBoolean(KEY_CONFIRM_TAB_CLOSE, confirm)

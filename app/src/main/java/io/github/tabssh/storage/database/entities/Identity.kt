@@ -4,16 +4,18 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import io.github.tabssh.ssh.auth.AuthType
+import kotlinx.serialization.Serializable
 
 /**
  * Identity entity - Reusable credential set
  * Allows users to create named identities with username and authentication method
  * that can be shared across multiple connections
- * 
+ *
  * Example: "work-admin" identity with username "admin" and specific SSH key
  * can be used for 20 different servers
  */
 @Entity(tableName = "identities")
+@Serializable
 data class Identity(
     @PrimaryKey
     @ColumnInfo(name = "id")

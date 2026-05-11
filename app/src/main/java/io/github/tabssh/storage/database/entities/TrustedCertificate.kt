@@ -1,6 +1,7 @@
 package io.github.tabssh.storage.database.entities
 
 import androidx.room.*
+import kotlinx.serialization.Serializable
 
 /**
  * Entity representing a trusted SSL/TLS certificate
@@ -14,6 +15,7 @@ import androidx.room.*
         Index(value = ["hostname", "port"], unique = true)
     ]
 )
+@Serializable
 data class TrustedCertificate(
     @PrimaryKey
     @ColumnInfo(name = "id")

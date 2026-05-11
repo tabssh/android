@@ -3,12 +3,14 @@ package io.github.tabssh.storage.database.entities
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import kotlinx.serialization.Serializable
 import java.util.UUID
 
 /**
  * Database entity representing a connection group/folder for organizing connections
  */
 @Entity(tableName = "connection_groups")
+@Serializable
 data class ConnectionGroup(
     @PrimaryKey
     val id: String = UUID.randomUUID().toString(),

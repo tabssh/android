@@ -1,8 +1,11 @@
 package io.github.tabssh.ssh.auth
 
+import kotlinx.serialization.Serializable
+
 /**
  * SSH authentication types supported by TabSSH
  */
+@Serializable
 enum class AuthType(val displayName: String, val description: String) {
     PASSWORD("Password", "Username and password authentication"),
     PUBLIC_KEY("Public Key", "SSH key-based authentication"),
