@@ -1,9 +1,15 @@
 # TabSSH TODO
 
-**Last Updated:** 2026-05-12 (added post-2026-05-02 shipped commits; doc consolidation: AI.md spec gaps filled, CLAUDE.md slimmed, .agent/ created)
+**Last Updated:** 2026-05-12
 **Version:** 0.0.9 (pinned via `release.txt` — DO NOT MODIFY without coordinated bump in `app/build.gradle` + F-Droid metadata)
 
-> Treat `CLAUDE.md` and `FEATURES_AUDIT.md` as the authoritative state-of-the-app docs. This file tracks open issues + planned work that hasn't been implemented yet.
+> **Usage rules for AI agents:**
+> 1. Open this file at the start of every session that touches 2 or more tasks.
+> 2. Update status as you go — mark items shipped the moment they land in a commit.
+> 3. Add every bug fix, feature, and doc change to ✅ Recently Shipped with its commit hash.
+> 4. Never let this file go more than one session stale.
+>
+> **Source of truth hierarchy:** `AI.md` (architecture) → `TODO.AI.md` (open work) → `CLAUDE.md` (operating rules). This file tracks what has shipped and what needs to be done.
 
 ---
 
@@ -194,6 +200,6 @@ Re-verified 2026-05-02 against `SSHConnection.applyAdvancedSettings`:
 - `.agent/state.json` — current task state
 - `.agent/changelog.md` — session change log
 - `FEATURES_AUDIT.md` — have/want/drop matrix vs JuiceSSH and Termius
-- `fdroid-submission/SPEC.md` — historical marketing-oriented spec
+- `fdroid-submission/SPEC.md` — F-Droid formatted app description (not the architecture spec)
 - `AI.md §18` — design spec for desktop→mobile QR pairing (desktop copy at `tabssh/desktop/QR_PAIRING.md`)
 - `release.txt` — single-line version pin, source of truth for `versionName` (currently `0.0.9`)

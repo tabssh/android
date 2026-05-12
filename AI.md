@@ -170,8 +170,7 @@ android/
 ├── config/dependency-check-suppressions.xml
 ├── keystore.jks (dev keystore — do NOT use for production)
 ├── Makefile, build.sh
-├── README.md, CHANGELOG.md, SPEC.md (symlink → fdroid-submission/SPEC.md),
-│ CLAUDE.md, TODO.AI.md, AI.md (this file), LICENSE.md
+├── README.md, CHANGELOG.md, CLAUDE.md, TODO.AI.md, AI.md (this file), LICENSE.md
 └── .github/                      # workflows, templates, CONTRIBUTING.md
 ```
 
@@ -320,9 +319,27 @@ Both used to be defined-but-not-wired. The two flows now share one path; multipl
 
 `ssh/config/SSHConfigParser.kt` parses `~/.ssh/config` syntax: `Host`, `HostName`, `User`, `Port`, `IdentityFile`, `ProxyJump`, `ProxyCommand`, `Compression`, `ServerAliveInterval`, `ConnectTimeout`, `Ciphers`, `Macs`. Each matched `Host` block becomes a `ConnectionProfile`.
 
+### 5.4.1 Bulk import
+
+`ssh/config/BulkImportParser.kt` — auto-detects and parses four formats from a single text blob or SAF-picked file:
+
+| Format | Detection heuristic | What it extracts |
+|---|---|---|
+| CSV | First non-blank line contains `host` or `hostname` header (case-insensitive) | `host`, `port`, `username`, `name`, `auth_type`, `group` columns |
+| JSON | Starts with `[` | Array of objects with the same field names as CSV |
+| PuTTY `.reg` | First line contains `REGEDIT4` or `Windows Registry Editor` | Session entries under `[HKEY_CURRENT_USER\Software\SimonTatham\PuTTY\Sessions\...]` |
+| Terraform `.tf` | Contains `resource "aws_instance"` or `resource "google_compute_instance"` | `public_ip`/`public_dns`, `connection.user`, `connection.port` from resource blocks |
+
+Returns `ParseResult(format, hosts: List<ConnectionProfile>, warnings: List<String>)`. Unknown format returns a single-warning list with a "Supported: CSV, JSON, PuTTY .reg, Terraform .tf" message. UI entry point is `ConnectionsFragment`'s import action.
+
 ### 5.5 SFTP
 
 `sftp/SFTPManager.kt` opens `ChannelSftp` from an existing `SSHConnection`. `TransferTask` provides progress, cancellation, and (when the server supports it) resume. Default buffer 32 KB. UI: `SFTPActivity` (dual-pane), `FileAdapter`, `TransferAdapter`. Progress also surfaces through `NotificationHelper.showFileTransferProgress` (channel `file_transfer`).
+
+Additional SFTP capabilities:
+- **Remote file editor** — inline text editor inside `SFTPActivity` for files ≤ 1 MiB. Downloads to a temp `InputStream` buffer, presents an `EditText`, uploads the modified bytes on save. Prevents opening binary files by checking for null bytes in the first 8 KB.
+- **chmod** — `SFTPManager.setPermissions(path, permissions: Int)` calls `channel.chmod(permissions, path)`. `SFTPActivity` surfaces rwx checkboxes per category (owner/group/other) with a live octal display; maps to the integer before calling `setPermissions`.
+- **SCP fallback** (`sftp/SCPClient.kt`) — device → server upload via `ssh remote 'scp -t /target'` for systems that serve SSH but have no SFTP subsystem. Speaks the `scp -t` wire protocol directly over `ChannelExec`. Invoked by `SFTPActivity` when `ChannelSftp` open fails with "subsystem" error.
 
 ---
 
@@ -362,6 +379,7 @@ The same bridge is used by `VMConsoleActivity` — a `ConsoleWebSocketClient` ex
 - `KeyboardHandler` translates Android key events into ANSI control sequences.
 - `view_custom_keyboard.xml` + `KeyboardKeyAdapter` implement an on-screen SSH keyboard (Esc, Tab, Ctrl, Alt, arrows, Fn keys, customizable rows 1–5).
 - `GestureCommandMapper` + `TerminalGestureHandler` bind multi-touch gestures (2/3-finger swipes, pinch in/out — 10 mappings) to tmux/screen/zellij command sequences with configurable prefix.
+- **Find-in-scrollback** — `TabTerminalActivity.showFindDialog()` (line 1010) opens an `AlertDialog` with an `EditText`. On submit it calls `TermuxBridge.findInScrollback(query)` which scans the Termux buffer rows for the query string (case-insensitive), highlights matches by temporarily inverting their cell colours, and scrolls to the first hit. Accessible from the terminal context menu ("Find in scrollback…") and the palette dialog.
 
 ### 6.5 Recording
 
@@ -1248,4 +1266,4 @@ Failure-mode UI text:
 
 ---
 
-*End of AI.md. For build commands, day-to-day workflows, and policies see `CLAUDE.md`. For the public-facing feature list see `README.md`. The historical/marketing-oriented spec is preserved at `fdroid-submission/SPEC.md` (also reachable via the root `SPEC.md` symlink).*
+*End of AI.md. For operating rules and AI.md navigation pointers see `CLAUDE.md`. For the public-facing feature list see `README.md`. For open work and task tracking see `TODO.AI.md`. The F-Droid formatted spec lives at `fdroid-submission/SPEC.md`.*

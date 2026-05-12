@@ -1,9 +1,71 @@
-# TabSSH Android — Runbook
+# TabSSH Android — Agent Rules
 
-**Version:** 0.0.9 (pinned via `release.txt`; bump only with explicit user approval)
-**Database:** v29 — full migration chain and entity list in `AI.md §8.4`
-**Architecture, features, packages:** see `AI.md` (the authoritative source of truth)
-**Tasks / roadmap:** see `TODO.AI.md`; agent state in `.agent/`
+> **Read `AI.md` before writing any code.** It is the single source of architectural truth for this project. This file contains operating rules and pointers into `AI.md`. `TODO.AI.md` tracks all open/planned work — use it for every session that touches 2 or more tasks.
+
+---
+
+## How to navigate AI.md
+
+| You need to know about… | Read AI.md section |
+|---|---|
+| App identity, design pillars, SDK versions | §1 |
+| High-level architecture diagram, threading model, state propagation | §2 |
+| Build types, APK variants, ABI→arch mapping, all dependencies | §3 |
+| Activities, fragments, services, canonical user flows | §4 |
+| SSH connection lifecycle, jump hosts, auth, keepalive, per-tab channels | §5.1 |
+| Host key verification (TOFU dialog, trust levels) | §5.2 |
+| Port forwarding and proxies | §5.3 |
+| `~/.ssh/config` import | §5.4 |
+| Bulk import (CSV / JSON / PuTTY .reg / Terraform) | §5.4.1 |
+| SFTP, remote file editor, chmod, SCP fallback | §5.5 |
+| Terminal emulator (`TermuxBridge`, `TerminalView`) | §6.1–6.2 |
+| Tab management (`TabManager`, `SSHTab`), keyboard shortcuts | §6.3 |
+| On-screen keyboard, gesture bindings, find-in-scrollback | §6.4 |
+| Session recording and replay | §6.5 |
+| SSH key types, parsing, generation, fingerprints | §7.1–7.2 |
+| Key storage (Android Keystore, AES-GCM) | §7.3 |
+| Password storage levels, biometric unlock, TTL | §7.4 |
+| Screenshot protection, clipboard auto-clear, password lifecycle | §7.5 |
+| Room database version, full migration chain (v17→v29) | §8.1–8.4 |
+| All 15 entities and their notable fields | §8.2 |
+| Preference keys and defaults by category | §8.6 |
+| SAF sync wire format, encryption, 3-way merge, conflict resolution | §9 |
+| Sync coverage matrix (what syncs, what doesn't, and why) | §9.4 |
+| Backup/restore ZIP format | §10 |
+| Proxmox / XCP-ng / Xen Orchestra / VMware / OCI APIs | §11 |
+| Hypervisor console WebSocket framing | §11.6 |
+| Settings XML files and hosting fragments | §12.1 |
+| Themes (23 built-ins, `Theme.kt` fields, contrast validation) | §12.2 |
+| Accessibility (TalkBack, high-contrast, keyboard nav, motor) | §12.3 |
+| Notification channels | §13.1 |
+| Build targets (`make` commands), Docker setup | §14.1–14.2 |
+| CI workflows (android-ci, dev builds, release) | §14.3 |
+| ProGuard / R8 keep rules | §14.6 |
+| Full package map (`io.github.tabssh.*`) | §15 |
+| Known stubs and unimplemented features | §16 |
+| Rules for AI agents editing this codebase | §17 |
+| QR pairing wire format, encryption, mobile implementation status | §18 |
+
+---
+
+## Mandatory rules
+
+**TODO.AI.md** — open it at the start of any session touching 2+ tasks. Update status as you go. Every shipped feature and every bug fix must be logged there. Do not let it go stale.
+
+**Commits** — use `/usr/local/bin/gitcommit <command>`. Plain `git commit` and `git push` are both sandbox-denied. Steps:
+1. `git status --porcelain` — verify scope
+2. Write `.git/COMMIT_MESS`; re-read it before running the wrapper
+3. `gitcommit all` (or `new` / `improved` / `fixes` / `docs` / `release`)
+
+Format: `{emoji} Title ≤64 chars {emoji}` + blank line + body + `- file: what changed` bullets. No AI attribution. Emoji: 🐛 fix · ✨ feat · 📚 docs · ♻️ refactor · ⚡ perf · ✅ test · 🔒 security · 🗃️ db · 🚀 release · 🔧 chore.
+
+**Green build = commit immediately** — `make check` exit 0 means commit without asking.
+
+**Database changes** — bump `TabSSHDatabase` version, add `Migration` object, update `app/schemas/`, document in `AI.md §8.4`. Never destructive-migrate.
+
+**Sync surface** — new persisted entities that should sync must be added to `SyncDataCollector` / `SyncDataApplier`; update `AI.md §9` sync coverage matrix.
+
+**Secrets** — never commit. Passwords/keys → `SecurePasswordManager`; cloud tokens → Keystore; OCI PEM → `SecurePasswordManager` under `oci_private_key_${id}`.
 
 ---
 
@@ -11,36 +73,12 @@
 
 | Goal | Command |
 |---|---|
-| Debug build → `./binaries/` | `make build` |
-| Compile-only error check | `make check` |
-| Install debug APK on device | `make install` |
-| Tail device logs | `make logs` |
-| Build Docker image | `make image` |
-| Clean build artifacts | `make clean` |
-| Production release + GitHub | `make release` |
-
-Docker run bind-mounts the repo to `/workspace`, sets `ANDROID_HOME=/opt/android-sdk` and `GRADLE_USER_HOME=/workspace/.gradle`.
-
-## APK naming
-
-Output: `tabssh-android-{arch}.apk` where `{arch}` is `arm64` / `arm` / `amd64` / `x86` / `universal`. `-dev` suffix on CI prerelease builds. See `AI.md §3.2` for the full ABI→arch mapping.
-
-## Build times (reference)
-
-| Task | Cached | Cold |
-|---|---|---|
-| `make check` | ~2 min | ~3 min |
-| `make build` | ~5 min | ~12 min |
-| `make release` | ~10 min | ~15 min |
-
-## Test emulators (`scripts/android-emulator.sh`)
-
-```
-scripts/android-emulator.sh [phone|tablet|fold|tv] [small|large]
-scripts/android-emulator.sh stop | delete <type> | clean | list
-```
-
-One AVD per (type, size); one running emulator at a time. Idempotent — re-running `start` on an already-running AVD is a no-op. Installs missing SDK pieces via `sdkmanager` automatically.
+| Compile-only check | `make check` (~2 min cached) |
+| Debug APKs → `./binaries/` | `make build` (~5 min cached) |
+| Install on device | `make install` |
+| Tail logcat | `make logs` |
+| Production release | `make release` |
+| Clean artifacts | `make clean` |
 
 ## File locations
 
@@ -48,53 +86,18 @@ One AVD per (type, size); one running emulator at a time. Idempotent — re-runn
 |---|---|
 | Debug APKs | `./binaries/` |
 | Release APKs | `./releases/` |
-| Temp files (all) | `/tmp/tabssh-android/` |
+| All temp files | `/tmp/tabssh-android/` |
 | Room schemas | `app/schemas/` |
-| Dev keystore | `keystore.jks` (checked-in dev key only) |
 
 **Never** create temp files in the project root or `app/build/`.
 
-## Policies
+## Screenshots
 
-**Git commits** — use `/usr/local/bin/gitcommit <command>` (reads `.git/COMMIT_MESS`, signs, commits, pushes in one step). Plain `git commit` and `git push` are both sandbox-denied. Workflow:
-1. `git status --porcelain` — verify what changed.
-2. Write `.git/COMMIT_MESS` with the correct message.
-3. Re-read `.git/COMMIT_MESS` before running the wrapper.
-4. `gitcommit all` (or `new` / `improved` / `fixes` / `docs` / `release`).
-
-Commit style: `{emoji} Title ≤64 chars {emoji}` + blank line + body + `- file: what changed` bullets. No `Co-Authored-By` or AI attribution. Emoji map: 🐛 fix · ✨ feat · 📚 docs · ♻️ refactor · ⚡ perf · ✅ test · 🔒 security · 🗃️ db · 🚀 release · 🔧 chore.
-
-**Green build = commit immediately** — for this project, a clean `make check` exit means commit without asking.
-
-**Database changes** — bump `TabSSHDatabase` version, add a `Migration` object, update `app/schemas/`. Document the change in `AI.md §8.4`.
-
-**Sync surface** — any new persisted entity that should sync must be added to `SyncDataCollector` / `SyncDataApplier`; update `AI.md §9` sync coverage matrix.
-
-**Secrets** — never commit passwords, tokens, or private keys. OCI PEM + Proxmox/hypervisor credentials live in `SecurePasswordManager` under namespaced keys, never in the DB. Cloud provider tokens live in the Keystore, not in `cloud_accounts`.
-
-**Screenshot reading** — Android screenshots are 1080×2400+. Downscale before `Read`: `python3 /tmp/tabssh-android/resize.py <src>.png /tmp/tabssh-android/screenshots/<name>-small.png`.
-
-## Docker conventions
-
-| Concern | Location |
-|---|---|
-| Android SDK, Gradle, JDK | `Dockerfile` rootfs (baked-in, not volume-mounted) |
-| `GRADLE_USER_HOME` cache | named compose volume (must match path set in Dockerfile) |
-| Source code | compose bind-mount to `/workspace` |
-| AVD / emulator state | named compose volume |
-
-Do not volume-mount `/opt/android-sdk` — that overlays the baked SDK with an empty directory.
-
-## Downscale screenshots helper
-
+Android screenshots are 1080×2400+. Downscale before `Read`:
 ```bash
 python3 /tmp/tabssh-android/resize.py <src>.png /tmp/tabssh-android/screenshots/<name>-small.png
 ```
 
-## See also
+## Docker
 
-- `AI.md` — architecture, packages, DB schema, sync, crypto, hypervisors, QR pairing
-- `TODO.AI.md` — open issues, roadmap items, wave tracking
-- `.agent/state.json` — current agent task state
-- `README.md` — public-facing overview
-- `SPEC.md` (→ `fdroid-submission/SPEC.md`) — historical marketing spec
+Do not volume-mount `/opt/android-sdk` — that overlays the baked SDK. Source → `/workspace` bind-mount; `GRADLE_USER_HOME` and AVD state → named compose volumes.

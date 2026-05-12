@@ -1,1 +1,0 @@
-fdroid-submission/SPEC.md
