@@ -2,9 +2,9 @@
 
 > **Audience:** AI coding assistants (Claude Code, Copilot, Gemini, etc.) and human contributors who need an accurate, code-grounded picture of how this project is actually built. **CLAUDE.md** is the operational/runbook document; this file is the architectural ground truth derived from a full source survey.
 >
-> **Generated:** 2026-04-25 from a parallel survey of 166 Kotlin sources, all Gradle/Docker/CI configs, and every preference/layout/menu XML.
+> **Generated:** 2026-04-25; updated 2026-05-12 from a parallel survey of ~201 Kotlin sources, all Gradle/Docker/CI configs, and every preference/layout/menu XML.
 >
-> **Last verified against:** `versionCode 9` / `versionName 0.0.9`, database `v24` (Wave 9.X; v17 → v18 env_vars+agent_forwarding → v19 stored_keys.certificate → v20 connections.protocol → v21 workspaces table → v22 connections.color_tag → v23 cloud_accounts table → v24 connections.remote_command), JSch `mwiede:2.27.7`, Termux `terminal-emulator:0.118.1`, AGP 8.7.3, Kotlin 2.0.21, Gradle 8.11.1.
+> **Last verified against:** `versionCode 9` / `versionName 0.0.9`, database `v29` (full chain: v17→v18 env_vars+agent_forwarding → v19 stored_keys.certificate → v20 connections.protocol → v21 workspaces → v22 connections.color_tag → v23 cloud_accounts → v24 connections.remote_command → v25 connections.ip_mode → v26 macros → v27 hypervisor_accounts+account_id → v28 hypervisors.pinned_cert_sha256 → v29 OCI auth_type+5 OCI columns), JSch `mwiede:2.27.7`, Termux `terminal-emulator:0.118.1`, AGP 8.7.3, Kotlin 2.0.21, Gradle 8.11.1.
 >
 > **Format conventions:**
 > - File paths are repo-relative unless prefixed with `/`.
@@ -423,6 +423,19 @@ Cipher: `AES/GCM/NoPadding`, 12-byte IV, 128-bit tag. SharedPreferences file `ta
 
 If the Keystore is unavailable (e.g. broken ROM), the manager auto-degrades to `SESSION_ONLY`.
 
+### 7.5 Privacy and data protection
+
+**Screenshot prevention.** `TabSSHApplication.registerActivityLifecycleCallbacks` applies `FLAG_SECURE` globally to every window when `security_prevent_screenshots` is `true` (`PreferenceManager.KEY_PREVENT_SCREENSHOTS`). The flag is set on `onActivityStarted` and cleared on `onActivityStopped`. `PinLockActivity` additionally hard-codes `FLAG_SECURE` unconditionally — the PIN entry screen is never screenshottable regardless of the preference.
+
+**Clipboard auto-clear.** `utils/ClipboardHelper.kt` wraps every clipboard write. After writing, it schedules a coroutine on the main thread to check whether the primary clip still matches and, if so, clear it. Delay is `security_clear_clipboard_timeout` (seconds; `0` = disabled, default). `ClipDescription.MIMETYPE_TEXT_SENSITIVE` is set so Android 13+ suppresses the clipboard content preview chip.
+
+**In-memory password lifecycle.** `SecurePasswordManager.clearPassword(connectionId)` zeros the in-memory cache entry. Call sites:
+- `SSHConnection`: called immediately on auth failure so the wrong credential is never retried silently.
+- `SSHConnectionService` / `TabManager`: called when a connection's `SSHTab` is removed (connection count hits zero).
+- Biometric TTL expiry path: when a `BIOMETRIC`-level password's TTL has elapsed, `clearPassword` is called before the next connect attempt forces a fresh `BiometricPrompt`.
+
+`SESSION_ONLY` passwords are cleared when the process exits (they are never persisted). There is no explicit `Arrays.fill` zeroing of `CharArray`/`ByteArray` at present — password material is held as `String`, which the JVM GC reclaims on its own schedule.
+
 ---
 
 ## 8. Storage and database
@@ -512,7 +525,27 @@ Fifteen DAOs in `storage/database/dao/`. Notable queries:
 
 **SAF sync uses a separate file** `saf_sync_prefs` with `KEY_SYNC_URI` (persisted DocumentsProvider URI), `KEY_SYNC_PASSWORD_SET`, `sync_last_time`.
 
-### 8.6 File storage
+### 8.6 Preference System Architecture
+
+`storage/preferences/PreferenceManager.kt` is the single typed accessor for all `SharedPreferences` keys. It uses the app's default `SharedPreferences` file (plus `saf_sync_prefs` for sync state — see §8.5). All key constants are `private const val` in the companion object; external code calls typed getters/setters, never raw string keys.
+
+Key groupings and representative defaults (compile-time constants from `PreferenceManager`):
+
+| Group | Selected keys | Defaults |
+|---|---|---|
+| General | `general_startup_behavior`, `general_auto_backup`, `general_backup_frequency`, `app_language` | `last_tab`, `false`, — |
+| Security | `security_password_storage_level`, `biometric_auth`, `security_password_ttl_hours`, `security_auto_lock_background`, `security_auto_lock_timeout`, `strict_host_key_checking`, `security_prevent_screenshots`, `security_clear_clipboard_timeout` | `encrypted`, `false`, `24`, `true`, `300` s, `false`, `false`, `0` |
+| Terminal | `terminal_theme`, `terminal_font`, `terminal_font_size`, `terminal_line_spacing`, `terminal_cursor_style`, `terminal_cursor_blink`, `terminal_scrollback`, `terminal_word_wrap`, `terminal_copy_on_select`, `terminal_bell`, `terminal_bell_vibrate`, `terminal_bell_visual` | `dracula`, `monospace`, `14.0`, `1.0`, `block`, `true`, `1000`, `false`, `false`, `true`, `false`, `false` |
+| Keyboard | `keyboard_row_count`, `keyboard_layout_json` | `2`, `null` |
+| UI | `ui_max_tabs`, `ui_confirm_tab_close`, `ui_show_function_keys`, `ui_fullscreen_mode`, `keep_screen_on`, `app_theme`, `ui_dynamic_colors` | `10`, `true`, `true`, `false`, `false`, `system`, `false` |
+| Notifications | `notifications_enabled`, `show_connection_notifications`, `show_error_notifications`, `show_file_transfer_notifications`, `notification_vibrate` | `true`, `true`, `true`, `true`, `false` |
+| Connection defaults | `default_username`, `default_port`, `connect_timeout`, `auto_reconnect`, `compression_enabled` | `root`, `22`, `30` s, `true`, `false` |
+| Accessibility | `accessibility_high_contrast`, `accessibility_large_touch_targets`, `accessibility_screen_reader` | `false`, `false`, `false` |
+| Multiplexer | `multiplexer_custom_prefix_tmux`, `multiplexer_custom_prefix_screen`, `multiplexer_custom_prefix_zellij` | `C-b`, `C-a`, `C-Space` |
+
+`migrateIntToStringPreference(KEY_KEYBOARD_ROW_COUNT)` is run on first load to handle a legacy type change.
+
+### 8.7 File storage
 
 `storage/files/FileManager.kt` manages app-internal directories: `ssh_keys/` (mode 600 enforced), `temp/`, `downloads/`, `backups/`. Also handles temp file cleanup with TTL.
 
@@ -769,7 +802,7 @@ Realm format `user@pam` / `user@pve`. Optional SSL bypass.
 - `BuiltInThemes.kt` — **23** built-ins: System Default / Dark / Light, Dracula, Solarized Dark/Light, Nord, One Dark, Monokai, Gruvbox Dark/Light, Tomorrow Night, GitHub Light, Atom One Dark, Material Dark, Tokyo Night/Light, Catppuccin Mocha, Rose Pine, Everforest, Kanagawa, Night Owl, Cobalt2.
 - `ThemeManager.kt` — caching, current theme `StateFlow`, switching, listeners.
 - `ThemeParser.kt` — JSON serialization (kotlinx.serialization), VS Code theme format compatibility, hex conversions.
-- `ThemeValidator.kt` — WCAG 2.1 AA/AAA contrast ratio checks (4.5 : 1 minimum), color-blindness validation, auto-fix recommendations.
+- `ThemeValidator.kt` — validates WCAG 2.1 AA (`MIN_CONTRAST_AA = 4.5`) and AAA (`MIN_CONTRAST_AAA = 7.0`) contrast ratios for terminal text vs background, cursor vs background, and each of the 16 ANSI palette entries vs background. Returns a `ValidationResult` with `ValidationIssue` objects (`category`, `severity`, `description`, `autoFixAvailable`). Issues below AA are `severity = ERROR`; below AAA are `severity = WARNING`. Also runs color-blindness simulation (protanopia, deuteranopia, tritanopia) and flags palette entries whose simulated luminance distance is too small. Auto-fix recommendations bump foreground luminance until the target ratio is met. The `ThemeEditorActivity` surfaces issues in real time as the user edits colors.
 
 ### 12.3 Accessibility
 
@@ -777,7 +810,9 @@ Realm format `user@pam` / `user@pve`. Optional SSL bypass.
 - `AccessibilityManager.kt` — `setupTerminalAccessibility(view, buffer)` adds `READ_SCREEN` and `READ_LINE` actions, scroll announcements, connection-state announcements.
 - `TalkBackHelper.kt` — strips ANSI escapes before TalkBack reads terminal output; tab/connection state descriptions; keyboard-shortcut hints.
 - `HighContrastHelper.kt` — pure 16-color high-contrast palette for users who toggle `accessibility_high_contrast`.
-- `KeyboardNavigationHelper.kt` — Tab / arrow-key / Enter / Escape navigation; Ctrl+T / Ctrl+W / Ctrl+Tab / Ctrl+C / Ctrl+V / F11 shortcuts; visible focus indicators.
+- `KeyboardNavigationHelper.kt` — Tab / arrow-key / Enter / Escape navigation; Ctrl+T / Ctrl+W / Ctrl+Tab / Ctrl+C / Ctrl+V / F11 shortcuts; visible focus indicators. `setupKeyboardNavigation(rootView)` installs the delegator on the root view tree so focus movement flows through every child.
+- **Motor / switch-access affordances:** `accessibility_large_touch_targets` enlarges interactive hit targets. The custom on-screen keyboard (`KeyboardCustomizationActivity`) supports user-defined row count (1–5 rows, `keyboard_row_count` pref) and full key remapping persisted as JSON (`keyboard_layout_json`). Hardware-keyboard arrow keys receive modifier awareness in `TabTerminalActivity.onKeyDown` — Shift+arrows send ANSI cursor sequences, Ctrl+arrows send word-skip sequences — allowing switch-access and USB keyboard users to navigate without a mouse.
+- **Contrast enforcement at runtime:** `HighContrastHelper` swaps the active theme's palette with a pure 16-color high-contrast palette when `accessibility_high_contrast` is `true`. This is applied as an overlay in `ThemeManager` after the base theme is loaded, so it works with both built-in and custom themes.
 
 ### 12.4 Internationalization
 

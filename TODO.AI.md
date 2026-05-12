@@ -1,6 +1,6 @@
 # TabSSH TODO
 
-**Last Updated:** 2026-05-02 (full re-verification pass against the codebase — every previously-listed audit item was diff'd against current code; entries that have actually shipped are now ~~struck through~~ with the verifying file:line citations)
+**Last Updated:** 2026-05-12 (added post-2026-05-02 shipped commits; doc consolidation: AI.md spec gaps filled, CLAUDE.md slimmed, .agent/ created)
 **Version:** 0.0.9 (pinned via `release.txt` — DO NOT MODIFY without coordinated bump in `app/build.gradle` + F-Droid metadata)
 
 > Treat `CLAUDE.md` and `FEATURES_AUDIT.md` as the authoritative state-of-the-app docs. This file tracks open issues + planned work that hasn't been implemented yet.
@@ -8,6 +8,19 @@
 ---
 
 ## ✅ Recently Shipped
+
+### Post-2026-05-02 commits (May 2 – May 12, 2026)
+
+- **`3f4dc8c`** 🐛 Session reattach fix — `TabTerminalActivity` now uses Application-scoped `TabManager` (`app.tabManager`) so tabs survive activity destruction. Added `onNewIntent()` override (singleTop was silently dropping re-launch intents). Added `finish()` to `handleBackToMainActivity()` so the back-press cycle doesn't stack duplicate instances. `onDestroy()` no longer calls `tabManager.cleanup()`.
+- **`1c8ff4d`** 🐛 Sync upload + `max_tabs` type cast — enabled Kotlin serialization Gradle plugin, annotated `SyncDataPackage` + members `@Serializable`. Fixed `max_tabs` `Int`→`String` SharedPreferences migration that caused `ClassCastException` after process restart.
+- **`ca421975`** 🐛 UX batch — back keeps sessions, status dot in tab strip, SEL key + drag range-copy, URL long-press confirmation dialog, log-copy fixed (file existence check instead of placeholder-string sniff).
+- **`a696a179`** 🎨 Terminal menu split into 3 flows — copy/paste actions, tab management, terminal control — replacing one long unsorted list.
+- **`563b99a8`** 🎨 Terminal menu moved off-canvas — new ☰ key in the keyboard bar opens a bottom sheet so the terminal canvas stays full-height.
+- **`ed7528dd`** 🐛 Cluster commands now prompt for unknown host keys — `ClusterCommandExecutor` was bypassing `HostKeyVerifier`; fixed so the TOFU dialog fires on first-ever cluster target.
+- **`c4525bf3`** 🔔 Per-host SSH notifications with optional alert-on-output — new `per_host_notifications` preference; banner + optional sound when a backgrounded tab produces output.
+- **`19f81e65`** 🎨 Themes wired end-to-end — `applySavedAppTheme()` reads `app_theme` pref and calls `AppCompatDelegate.setDefaultNightMode`; system fonts fetched from Google Fonts at build time (not committed to repo).
+- **`9909e19c`** 🐛 UX batch — discoverable tabs (tab strip always visible), font loader, status dot, exit-prompt on last tab close, `KEEP_SCREEN_ON` wakelock wired to pref.
+- **`30fe70b6`** 🐛 3 fixes — hypervisor default ports (Proxmox 8006, XCP-ng/VMware 443 pre-filled), `BadToken` dialog crash on disconnect, 24 h password TTL enforced at unlock rather than only at connect.
 
 ### "25 fixes" + "6 features" merges (Apr 30 / May 1, 2026)
 - **Commits:** `482c2a04` ("25 fixes") and the follow-on 6-feature batch.
@@ -176,8 +189,11 @@ Re-verified 2026-05-02 against `SSHConnection.applyAdvancedSettings`:
 
 ## 📚 Reference
 
-- `CLAUDE.md` — project tracker, current state, recent waves
+- `AI.md` — architecture, packages, DB schema, sync, crypto, hypervisors, QR pairing (authoritative ground truth)
+- `CLAUDE.md` — operational runbook (build commands, commit policy, file locations)
+- `.agent/state.json` — current task state
+- `.agent/changelog.md` — session change log
 - `FEATURES_AUDIT.md` — have/want/drop matrix vs JuiceSSH and Termius
-- `fdroid-submission/SPEC.md` — technical specification (architecture, schema, build)
-- `AI.md` §18 — design spec for desktop→mobile QR pairing (folded in from the standalone `QR_PAIRING.md`; the desktop project carries its own copy at `tabssh/desktop/QR_PAIRING.md` for cross-repo reference)
+- `fdroid-submission/SPEC.md` — historical marketing-oriented spec
+- `AI.md §18` — design spec for desktop→mobile QR pairing (desktop copy at `tabssh/desktop/QR_PAIRING.md`)
 - `release.txt` — single-line version pin, source of truth for `versionName` (currently `0.0.9`)
