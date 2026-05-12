@@ -139,10 +139,20 @@ class TabTerminalActivity : AppCompatActivity() {
 
         // Handle intent
         handleIntent(intent)
-        
+
         Logger.i("TabTerminalActivity", "Terminal activity created")
     }
-    
+
+    // singleTop: new intent arrives while this instance is at the top of the
+    // stack (e.g. notification tap, widget tap, or MainActivity re-launching
+    // while the terminal is already visible). Route through handleIntent() so
+    // the reattach short-circuit in connectToProfile() fires as usual.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
     // Track if keyboard is visible for back button handling
     private var isKeyboardVisible = false
 
@@ -167,15 +177,17 @@ class TabTerminalActivity : AppCompatActivity() {
     }
 
     /**
-     * BACK behaviour: hide IME if shown, otherwise surface MainActivity
-     * **without finishing TabTerminalActivity**. Keeping this activity in
-     * the task is what preserves the live SSH channel + Termux scrollback —
-     * if we `finish()` here, `onDestroy()` triggers `tabManager.cleanup()`
-     * which calls `SSHTab.disconnect()` on every tab and tears the shell
-     * channel down, even though SSHSessionManager would otherwise pool the
-     * Session. MainActivity is `singleTop` and we use REORDER_TO_FRONT so
-     * the existing instance comes forward; pressing BACK from MainActivity
-     * returns to the live terminal exactly where the user left it.
+     * BACK behaviour: hide IME if shown, otherwise surface MainActivity and
+     * finish this activity. SSH tabs and their TermuxBridges survive because
+     * onDestroy() no longer calls tabManager.cleanup() — the TabManager is
+     * Application-scoped and outlives any individual activity instance. The
+     * next TabTerminalActivity (started from MainActivity or a notification)
+     * picks the tabs back up in setupTabManager() and rebinds the ViewPager.
+     *
+     * REORDER_TO_FRONT on the MainActivity intent handles the edge case where
+     * MainActivity is not already in the back stack (e.g. launched from a
+     * widget) — it brings or creates a MainActivity instead of leaving a
+     * blank back stack after finish().
      */
     private fun handleBackToMainActivity() {
         val terminalView = getActiveTerminalView()
@@ -196,13 +208,13 @@ class TabTerminalActivity : AppCompatActivity() {
 
         Logger.i(
             "TabTerminalActivity",
-            "BACK: surfacing MainActivity, keeping ${tabManager.getTabCount()} live tabs"
+            "BACK: finishing activity, ${tabManager.getTabCount()} tab(s) survive in TabManager"
         )
         val intent = Intent(this, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
         }
         startActivity(intent)
-        // Intentionally NO finish() — see kdoc above.
+        finish()
     }
 
     private fun hideKeyboard() {
@@ -254,12 +266,21 @@ class TabTerminalActivity : AppCompatActivity() {
     }
     
     private fun setupTabManager() {
-        // `ui_max_tabs` pref (default 20). Stored as String by
-        // EditTextPreference; coerced via the tolerant int reader.
-        val maxTabs = app.preferencesManager
-            .getStringAsInt("ui_max_tabs", 20)
-            .coerceIn(1, 100)
-        tabManager = TabManager(maxTabs = maxTabs)
+        // Use the Application-scoped TabManager so tabs survive activity
+        // destruction. Back-button finishes the activity but the SSH
+        // session was already pooled in SSHSessionManager (prior fix), so
+        // the only thing missing for true reattach was a TabManager that
+        // also outlives the activity. Now the activity is a *view* over
+        // the shared tab list, not its owner — recreating the activity
+        // rebinds existing TermuxBridges to fresh TerminalViews, and the
+        // emulator buffer (which lives on the bridge) shows up restored.
+        //
+        // `ui_max_tabs` pref is read by the app-scoped manager at first
+        // construction; the per-activity coerce is no longer applied
+        // here (the lazy {} block in TabSSHApplication uses the default
+        // 10, which matches the historical behaviour before this pref
+        // was wired up — fine for now, can be reworked if users hit it).
+        tabManager = app.tabManager
 
         // Stored as a field (not anonymous-inline) so onDestroy can call
         // tabManager.removeListener(it). Anonymous listeners hold an
@@ -321,8 +342,30 @@ class TabTerminalActivity : AppCompatActivity() {
             }
         }
         tabManager.addListener(tabManagerListener!!)
+
+        // Pick up tabs that already exist in the shared manager — they
+        // were created by a previous activity instance and outlived its
+        // destruction. The listener's onTabCreated only fires for NEW
+        // tabs (post-addListener), so existing ones need an explicit
+        // rebuild or the ViewPager renders empty until the user creates
+        // one. Calling updateViewPagerAdapter() once is enough — it
+        // pulls the whole tab list from the shared manager.
+        //
+        // Posted (not called inline) so the ViewPager + TabLayout are
+        // fully attached to the window first; addTabToUI's update path
+        // touches both.
+        val existingTabs = tabManager.getAllTabs()
+        if (existingTabs.isNotEmpty()) {
+            Logger.i(
+                "TabTerminalActivity",
+                "Reattaching to ${existingTabs.size} existing tab(s) from shared TabManager"
+            )
+            Handler(Looper.getMainLooper()).post {
+                updateViewPagerAdapter()
+            }
+        }
     }
-    
+
     private fun setupMenuFab() {
         binding.fabMenu.setOnClickListener {
             showTerminalMenu()
@@ -1421,6 +1464,41 @@ class TabTerminalActivity : AppCompatActivity() {
     
     private suspend fun connectToProfile(profile: ConnectionProfile) {
         try {
+            // Reattach short-circuit: if the shared TabManager already
+            // has a live tab for this profile, surface it instead of
+            // dialing a new SSH session + opening a fresh shell channel.
+            // The existing SSHTab still owns its TermuxBridge (read loop
+            // running, emulator buffer intact), so just switching the
+            // pager to that index and re-binding its bridge to a new
+            // TerminalView restores the user's scrollback.
+            //
+            // Match on profile.id + still-connected. A disconnected stale
+            // tab falls through to the normal connect path so a fresh
+            // session is opened — that's the "exited the shell, tap to
+            // reconnect" path which should NOT reuse the dead bridge.
+            val existing = tabManager.getAllTabs().firstOrNull {
+                it.profile.id == profile.id && it.isConnected()
+            }
+            if (existing != null) {
+                Logger.i(
+                    "TabTerminalActivity",
+                    "Reattaching to existing live tab for ${profile.getDisplayName()}"
+                )
+                val idx = tabManager.getAllTabs().indexOf(existing)
+                runOnUiThread {
+                    if (idx >= 0) {
+                        tabManager.setActiveTab(idx)
+                        switchToTab(idx)
+                    }
+                    android.widget.Toast.makeText(
+                        this,
+                        "Reattached to ${profile.name}",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+                return
+            }
+
             Logger.i("TabTerminalActivity", "🚀 Starting connection to ${profile.getDisplayName()}")
             runOnUiThread {
                 android.widget.Toast.makeText(this, "Connecting to ${profile.name}...", android.widget.Toast.LENGTH_SHORT).show()
@@ -3293,17 +3371,22 @@ class TabTerminalActivity : AppCompatActivity() {
         keyboardLayoutListener = null
 
         Logger.d("TabTerminalActivity", "Terminal activity destroyed")
-        tabManager.cleanup()
 
-        // Intentionally do NOT close SSH sessions here. The foreground
-        // service owns connection lifecycle. Earlier code closed every
-        // open profile's session in onDestroy so the FG notification
-        // wouldn't show stale counts — but that meant pressing the
-        // Android back button (or the system killing this activity to
-        // reclaim memory) would tear down live connections. Now each
-        // host has its own notification (see SSHConnectionService), so
-        // staleness isn't an issue, and the connections survive a back-
-        // out exactly as the user expects.
+        // Intentionally do NOT call tabManager.cleanup() here — the
+        // TabManager is Application-scoped (see setupTabManager), so its
+        // tabs + TermuxBridges + read loops survive this activity's
+        // destruction. cleanup() would disconnect every tab across every
+        // profile, defeating the back-button reattach guarantee.
+        //
+        // Intentionally do NOT close SSH sessions here either. The
+        // foreground service owns connection lifecycle. Earlier code
+        // closed every open profile's session in onDestroy so the FG
+        // notification wouldn't show stale counts — but that meant
+        // pressing the Android back button (or the system killing this
+        // activity to reclaim memory) would tear down live connections.
+        // Now each host has its own notification (see
+        // SSHConnectionService), so staleness isn't an issue, and the
+        // connections survive a back-out exactly as the user expects.
     }
     
     /**
