@@ -1252,13 +1252,8 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
 
     override fun onResume() {
         super.onResume()
-        // Wave 3.2 — PIN gate. Triggered once per process launch and after
-        // every onPause where the activity actually went to background.
-        maybePromptPinLock()
         // Fragments will handle their own data refreshing
     }
-
-    private var pinUnlocked = false
 
     /** Wave 4.b — toggle a sidebar-locked-open mode (used by tablet + foldable). */
     private fun applySidebarMode(toggle: ActionBarDrawerToggle) {
@@ -1307,30 +1302,8 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     }
 
     // Modern result API — replaces startActivityForResult/onActivityResult.
-    // Registered at field-init so it's bound before the activity reaches
-    // STARTED (registerForActivityResult requires this).
-    private val pinVerifyLauncher = registerForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == RESULT_OK) {
-            pinUnlocked = true
-        } else {
-            finishAffinity() // user couldn't / wouldn't unlock
-        }
-    }
-
-    private fun maybePromptPinLock() {
-        if (pinUnlocked) return
-        val enabled = app.preferencesManager.getBoolean(PinLockActivity.PREF_PIN_ENABLED, false)
-        val hash = app.preferencesManager.getString(PinLockActivity.PREF_PIN_HASH, "")
-        if (!enabled || hash.isBlank()) return
-        pinVerifyLauncher.launch(PinLockActivity.verifyIntent(this))
-    }
-
     override fun onPause() {
         super.onPause()
-        // Re-lock when we're sent to background.
-        if (isFinishing.not()) pinUnlocked = false
     }
 
     /**

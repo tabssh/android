@@ -184,9 +184,8 @@ class PinLockActivity : AppCompatActivity() {
         pinInput.setText("")
         if (attempts >= MAX_ATTEMPTS) {
             status.text = "Too many wrong attempts."
-            Toast.makeText(this, "App locked — quit and try later", Toast.LENGTH_LONG).show()
-            setResult(Activity.RESULT_CANCELED)
-            finish()
+            Toast.makeText(this, "Too many wrong attempts — closing app", Toast.LENGTH_LONG).show()
+            finishAffinity()
             return
         }
         status.text = "Incorrect — try again (${MAX_ATTEMPTS - attempts} left)"

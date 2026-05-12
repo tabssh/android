@@ -74,6 +74,7 @@ class TabSSHApplication : Application() {
 
     // Track the current foreground activity for showing dialogs from background threads
     private var currentActivityRef: WeakReference<Activity>? = null
+    private var foregroundActivityCount = 0
 
     /**
      * Get the current foreground Activity.
@@ -149,6 +150,7 @@ class TabSSHApplication : Application() {
                 applyWindowSecurityFlags(activity)
             }
             override fun onActivityStarted(activity: Activity) {
+                foregroundActivityCount++
                 maybeRequireUnlock(activity)
             }
             override fun onActivityResumed(activity: Activity) {
@@ -163,11 +165,17 @@ class TabSSHApplication : Application() {
                 }
             }
             override fun onActivityStopped(activity: Activity) {
-                // Track when the app was last visible so the unlock check
-                // on next foreground knows how long we were in background.
-                val prefs = androidx.preference.PreferenceManager
-                    .getDefaultSharedPreferences(this@TabSSHApplication)
-                prefs.edit().putLong("ui_last_backgrounded_at", System.currentTimeMillis()).apply()
+                foregroundActivityCount--
+                // Only stamp the background time when the ENTIRE app goes to
+                // background (no activities left in the Started state). Stamping
+                // on every individual activity stop would reset the clock on
+                // normal in-app transitions (A starts B → A.onStop fires while
+                // B is already started) and make the timeout never accumulate.
+                if (foregroundActivityCount == 0) {
+                    val prefs = androidx.preference.PreferenceManager
+                        .getDefaultSharedPreferences(this@TabSSHApplication)
+                    prefs.edit().putLong("ui_last_backgrounded_at", System.currentTimeMillis()).apply()
+                }
             }
             override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
             override fun onActivityDestroyed(activity: Activity) {}
