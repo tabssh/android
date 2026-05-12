@@ -1431,6 +1431,9 @@ class SSHConnection(
             jumpHostLocalPort = 0
         }
 
+        cachedPassword = null
+        cachedPassphrase = null
+
         _connectionState.value = ConnectionState.DISCONNECTED
         _errorMessage.value = null
 

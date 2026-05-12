@@ -175,6 +175,10 @@ class TabSSHApplication : Application() {
                     val prefs = androidx.preference.PreferenceManager
                         .getDefaultSharedPreferences(this@TabSSHApplication)
                     prefs.edit().putLong("ui_last_backgrounded_at", System.currentTimeMillis()).apply()
+                    // Clear SESSION_ONLY in-memory passwords when the whole app
+                    // goes to background. ENCRYPTED/BIOMETRIC-level passwords
+                    // are not touched — only the volatile sessionPasswords map.
+                    securePasswordManager.clearSensitiveData()
                 }
             }
             override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
@@ -380,6 +384,7 @@ class TabSSHApplication : Application() {
             val intent = io.github.tabssh.ui.activities.PinLockActivity
                 .verifyIntent(activity)
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NO_ANIMATION)
             activity.startActivity(intent)
         } catch (e: Exception) {
             Logger.w("TabSSHApplication", "maybeRequireUnlock failed: ${e.message}")
