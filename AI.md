@@ -201,7 +201,7 @@ Top-level config: `android:name=".TabSSHApplication"`, `android:allowBackup="fal
 
 **Exported components:** `MainActivity` (LAUNCHER), `TaskerIntentService` (Tasker plug-in), `QuickConnectWidgetProvider`. Everything else is `exported="false"`.
 
-### 4.3 Activities (23)
+### 4.3 Activities (32)
 
 | Activity | Purpose | Notable extras |
 |---|---|---|
@@ -226,6 +226,15 @@ Top-level config: `android:name=".TabSSHApplication"`, `android:allowBackup="fal
 | `WidgetConfigurationActivity` | Configure quick-connect widgets | widget id |
 | `TranscriptViewerActivity` | Replay recorded sessions | transcript id |
 | `CrashReportActivity` | Debug crash dump UI (debug builds) | — |
+| `CloudAccountsActivity` | CRUD `CloudAccount` entities; select cloud provider (AWS / Azure / GCP / DigitalOcean / Hetzner / Linode / Vultr); tokens live in `SecurePasswordManager`, never in DB | Wave 5.1 |
+| `ConnectionHistoryActivity` | Lists connections where `lastConnected > 0`, sorted most-recent-first; tap to reconnect | Wave 3.5 |
+| `HypervisorAccountsActivity` | CRUD reusable hypervisor credentials (`HypervisorAccount`); mirrors `IdentityManagementActivity` pattern; secrets via `HypervisorPasswordStore` | — |
+| `ImportFromQrActivity` | QR pairing inbound — camera scan, 6-digit code entry, Argon2id+AES-GCM decrypt, confirm + import; 3-attempt limit; state machine §18.7 | Wave QR |
+| `MultiHostDashboardActivity` | Multi-host real-time performance dashboard; uses `MetricsCollector` per active `SSHConnection`; 5 s polling | — |
+| `PinLockActivity` | App-lock PIN entry; `EXTRA_MODE` = `"set"` / `"verify"`; `MAX_ATTEMPTS = 5`; stores SHA-256 hash in `app_lock_pin_hash` pref; unconditional `FLAG_SECURE` | Wave 3.2 |
+| `RemoteFileEditorActivity` | Inline text editor for remote files ≤ 1 MiB; download → `EditText` → upload via `SFTPManager`; binary-file guard (null-byte scan in first 8 KB) | Wave 1.7 |
+| `ThemeEditorActivity` | Custom theme builder; live WCAG AA/AAA contrast feedback via `ThemeValidator`; imports `Theme` and `BuiltInThemes` for base selection | — |
+| `WhatsNewActivity` | Reads `assets/whats_new.md` and renders in a `WebView`; accessible from Settings / About; **not** shown automatically on upgrade | Wave 3.6 |
 
 `MainActivity` and `TabTerminalActivity` are `singleTop`. All have `parentActivityName` set for back navigation. `VMConsoleActivity` runs fullscreen (no action bar).
 
@@ -252,6 +261,22 @@ Top-level config: `android:name=".TabSSHApplication"`, `android:allowBackup="fal
 **File transfer:** `TabTerminalActivity` menu → `SFTPActivity` (uses the existing SSH session) → upload/download via `SFTPManager`.
 
 **Hypervisor console:** `MainActivity` (Hypervisors tab) → manager activity → VM row → `VMConsoleActivity` → `HypervisorConsoleManager` opens `ConsoleWebSocketClient` and pipes its streams into `TermuxBridge`.
+
+### 4.7 Performance monitoring
+
+`performance/PerformanceManager.kt` — app-scoped manager; `performance/MetricsCollector.kt` — per-connection SSH metrics collector.
+
+**`MetricsCollector`** runs on the IO dispatcher. For each active `SSHConnection` it issues SSH exec commands (`sshConnection.executeCommand(...)`) to gather:
+- **CPU:** reads `/proc/stat`; computes `CpuMetrics(userPercent, systemPercent, idlePercent, iowaitPercent, totalPercent)` by diffing successive snapshots.
+- **Memory:** reads `/proc/meminfo`; produces `MemoryMetrics(totalMB, usedMB, freeMB, availableMB, buffersAndCacheMB, usedPercent)`.
+- **Disk:** `df -h /` output parsed into usage percent and free bytes.
+- **Network:** delta of `/proc/net/dev` counters → `NetworkStats(rxBytesPerSec, txBytesPerSec)`; `previousNetworkStats: Pair<Long, Long>` is kept between ticks.
+- **Load average:** first line of `/proc/loadavg` → `loadAverage` (1/5/15 min).
+- **Platform:** `uname -a` + `cat /etc/os-release` parsed into `PlatformInfo`; cached in `cachedPlatformInfo` (doesn't change per session).
+
+All fields are wrapped in `PerformanceMetrics(timestamp, cpuUsage, memoryUsage, diskUsage, networkStats, loadAverage, platformInfo)`.
+
+**History window:** 60 data points at 5-second intervals (5 minutes of rolling history) per connection. Consumed by `PerformanceFragment` (charts) and `PerformanceOverlayView` (draggable HUD in `TabTerminalActivity`). `MultiHostDashboardActivity` runs its own polling loop against multiple connections in parallel.
 
 ---
 
@@ -307,6 +332,26 @@ Supporting API on `SSHConnection`:
 
 Both used to be defined-but-not-wired. The two flows now share one path; multiplexer command runs first, postConnectScript after.
 
+### 5.1.3 `SSHSessionManager` — connection pool and listeners
+
+`ssh/session/SSHSessionManager.kt` is the app-scoped registry for all active connections. It wraps `SSHConnection` so the UI never creates connections directly.
+
+**Storage:**
+- `activeConnections: ConcurrentHashMap<String, SSHConnection>` — connections currently open (keyed by `connectionId`).
+- `connectionPool: ConcurrentHashMap<String, SSHConnection>` — recently-closed connections held for reuse (same key space).
+- `_connectionStates: MutableStateFlow<Map<String, ConnectionState>>` — reactive state map consumed by the tab strip and `SSHConnectionService`.
+
+**Pool double-check logic.** `createConnection(profile)` checks the pool before opening a new JSch session:
+1. Look up `connectionPool[profile.id]`.
+2. If found, validate via **both** `entry.state == ConnectionState.CONNECTED` AND `entry.isConnected()` (session heartbeat).
+3. If both pass → reuse; if either fails → log `"Discarding stale pool entry (stateOk=…, sessionOk=…)"` and discard, then open fresh.
+
+This double-check prevents silent reuse of a connection whose JSch session dropped (keepalive timeout, network change) while the state field still showed `CONNECTED`.
+
+**Listener pattern.** `mutableListOf<SessionManagerListener>` holds UI observers. Events fired: `onConnectionStateChanged(id, state)`, `onConnectionError(id, error)`, `onAllConnectionsClosed()`. `SSHConnectionService` registers as a listener to update the persistent notification count. Tab strip collects `connectionStates` flow directly.
+
+**Host key callbacks.** `hostKeyChangedCallback` and `newHostKeyCallback` are `var` properties wired to `HostKeyVerifier` (§5.2) at initialization time; they must be set before the first `createConnection()` call or host-key dialogs won't appear.
+
 ### 5.2 Host key verification
 
 `ssh/connection/HostKeyVerifier.kt` implements JSch's `HostKeyRepository`. Outcomes: `ACCEPTED`, `NEW_HOST`, `CHANGED_KEY`. Backed by `HostKeyDao` and shows `dialog_new_host_key.xml` or `dialog_host_key_changed.xml` with a SHA-256 fingerprint (and a visual "emoji fingerprint"). Trust levels persisted to the `host_keys` table: `UNKNOWN` / `ACCEPTED` / `VERIFIED`.
@@ -340,6 +385,20 @@ Additional SFTP capabilities:
 - **Remote file editor** — inline text editor inside `SFTPActivity` for files ≤ 1 MiB. Downloads to a temp `InputStream` buffer, presents an `EditText`, uploads the modified bytes on save. Prevents opening binary files by checking for null bytes in the first 8 KB.
 - **chmod** — `SFTPManager.setPermissions(path, permissions: Int)` calls `channel.chmod(permissions, path)`. `SFTPActivity` surfaces rwx checkboxes per category (owner/group/other) with a live octal display; maps to the integer before calling `setPermissions`.
 - **SCP fallback** (`sftp/SCPClient.kt`) — device → server upload via `ssh remote 'scp -t /target'` for systems that serve SSH but have no SFTP subsystem. Speaks the `scp -t` wire protocol directly over `ChannelExec`. Invoked by `SFTPActivity` when `ChannelSftp` open fails with "subsystem" error.
+
+### 5.6 Telnet
+
+`protocols/telnet/TelnetConnection.kt` — **fully implemented** RFC 854 Telnet client; **not a stub**.
+
+Wired into `SSHConnection`'s auth path when `ConnectionProfile.protocol == Protocol.TELNET` (DB v20, migration 19→20). The `TelnetConnection` replaces `SSHConnection` in `SSHSessionManager.createConnection()` for Telnet profiles.
+
+**Negotiation options implemented:**
+- `ECHO` (option 1) — server-echo mode; client suppresses local echo when server sends `WILL ECHO`.
+- `SGA` (option 3) — Suppress Go Ahead; negotiated to keep the stream half-duplex friendly.
+- `TERMINAL-TYPE` (option 24) — responds with `xterm-256color` when the server requests terminal type.
+- `NAWS` (option 31) — Negotiate About Window Size; sends `{cols, rows}` in network byte order when the terminal is resized.
+
+`TelnetConnection` exposes the same `InputStream`/`OutputStream` pair as `SSHConnection`, so `TermuxBridge` wires to it identically. The IAC command parser strips Telnet control bytes from the data stream before bytes reach the terminal emulator.
 
 ---
 
@@ -446,6 +505,14 @@ If the Keystore is unavailable (e.g. broken ROM), the manager auto-degrades to `
 **Screenshot prevention.** `TabSSHApplication.registerActivityLifecycleCallbacks` applies `FLAG_SECURE` globally to every window when `security_prevent_screenshots` is `true` (`PreferenceManager.KEY_PREVENT_SCREENSHOTS`). The flag is set on `onActivityStarted` and cleared on `onActivityStopped`. `PinLockActivity` additionally hard-codes `FLAG_SECURE` unconditionally — the PIN entry screen is never screenshottable regardless of the preference.
 
 **Clipboard auto-clear.** `utils/ClipboardHelper.kt` wraps every clipboard write. After writing, it schedules a coroutine on the main thread to check whether the primary clip still matches and, if so, clear it. Delay is `security_clear_clipboard_timeout` (seconds; `0` = disabled, default). `ClipDescription.MIMETYPE_TEXT_SENSITIVE` is set so Android 13+ suppresses the clipboard content preview chip.
+
+**PIN lock.** `ui/activities/PinLockActivity.kt` (Wave 3.2) is a separate full-screen activity for app-lock PIN management.
+
+- `EXTRA_MODE`: `"set"` (first-time PIN creation / change) or `"verify"` (unlock gate on resume).
+- `MAX_ATTEMPTS = 5`: after 5 failed verify attempts the activity finishes and the app lock state is reset to require re-entry of the PIN (effectively a lockout that requires a new PIN set).
+- Storage: SHA-256 hash of the PIN stored in `app_lock_pin_hash` SharedPreferences key; enable flag at `app_lock_enabled`.
+- Trigger: `security_auto_lock_background` pref triggers a `startActivity(PinLockActivity, mode=verify)` from `TabSSHApplication.registerActivityLifecycleCallbacks` when the app returns to foreground after being backgrounded longer than `security_auto_lock_timeout` seconds (default 300 s).
+- `FLAG_SECURE` is set unconditionally in `PinLockActivity.onCreate()` regardless of the `security_prevent_screenshots` preference — the PIN entry screen is never screenshottable.
 
 **In-memory password lifecycle.** `SecurePasswordManager.clearPassword(connectionId)` zeros the in-memory cache entry. Call sites:
 - `SSHConnection`: called immediately on auth failure so the wrong credential is never retried silently.
@@ -566,6 +633,33 @@ Key groupings and representative defaults (compile-time constants from `Preferen
 ### 8.7 File storage
 
 `storage/files/FileManager.kt` manages app-internal directories: `ssh_keys/` (mode 600 enforced), `temp/`, `downloads/`, `backups/`. Also handles temp file cleanup with TTL.
+
+### 8.8 `AuditLogManager`
+
+`audit/AuditLogManager.kt` writes `AuditLogEntry` rows to Room and enforces size/age cleanup.
+
+**Preference keys (all in default SharedPreferences):**
+
+| Key | Default | Notes |
+|---|---|---|
+| `PREF_AUDIT_ENABLED` | `false` | master on/off |
+| `PREF_AUDIT_MAX_SIZE_MB` | `100` | rolling max log file size |
+| `PREF_AUDIT_MAX_AGE_DAYS` | `30` | entries older than this are pruned |
+| `PREF_AUDIT_LOG_COMMANDS` | `false` | gate for `EVENT_COMMAND` entries |
+| `PREF_AUDIT_LOG_OUTPUT` | `false` | capture terminal output per command |
+| `PREF_AUDIT_AUTO_CLEANUP` | `true` | run cleanup on each app start |
+
+**API:**
+
+| Method | Event type written | Notes |
+|---|---|---|
+| `logConnect(connectionId, sessionId, success, errorMsg)` | `EVENT_AUTH_SUCCESS` or `EVENT_AUTH_FAILURE` | `errorMsg` non-null on failure |
+| `logDisconnect(connectionId, sessionId, durationMs)` | `EVENT_DISCONNECT` | |
+| `logCommand(connectionId, sessionId, command, output, exitCode)` | `EVENT_COMMAND` | gated by `PREF_AUDIT_LOG_COMMANDS` |
+
+**Cleanup** (`checkAndCleanup()`): deletes rows older than `PREF_AUDIT_MAX_AGE_DAYS` first, then if the total byte size of remaining rows still exceeds `PREF_AUDIT_MAX_SIZE_MB × 1 MiB`, deletes the oldest rows in batches until under budget. Called automatically at app start when `PREF_AUDIT_AUTO_CLEANUP` is `true`.
+
+UI: `AuditLogViewerActivity` + `AuditLogAdapter` + `audit_log_menu.xml`. `preferences_audit.xml` exposes all pref keys above.
 
 ---
 
@@ -793,6 +887,24 @@ Realm format `user@pam` / `user@pve`. Optional SSL bypass.
 - `HypervisorEditActivity` + `dialog_add_hypervisor.xml` — dynamic field visibility (Proxmox shows realm, XCP-ng/VMware show API-type dropdown, OCI hides every connection field and shows a "Configure OCI credentials…" button that launches `OciOnboardingActivity`), default ports (Proxmox 8006, XCP-ng/VMware 443), "Import from SSH connection" pre-fill, `testConnection()` validation. For OCI rows, save updates only `name` + `notes` and refuses brand-new rows (the wizard is the only entry point).
 - Type-specific manager activities: `ProxmoxManagerActivity`, `XCPngManagerActivity`, `VMwareManagerActivity`, `OciManagerActivity`. They show VM/instance lists with power/snapshot/backup actions and route to `VMConsoleActivity` for serial console (OCI has no console — deferred).
 
+### 11.8 Cloud account integration
+
+Package `cloud/` (separate from `hypervisor/`). Manages SSH-accessible cloud VM inventories rather than hypervisor-level control. Managed via `CloudAccountsActivity` (§4.3).
+
+**Supported providers and clients:**
+
+| Provider | Client class | Scope |
+|---|---|---|
+| AWS | `AwsEc2Client` | EC2 instance list, public IP |
+| Azure | `AzureVmClient` | VM list |
+| GCP | `GcpComputeClient` | Compute instance list |
+| DigitalOcean | `DigitalOceanClient` | Droplet list |
+| Hetzner | `HetznerClient` | Server list |
+| Linode | `LinodeClient` | Linode instance list |
+| Vultr | `VultrClient` | VPS list |
+
+**Secret storage pattern.** Cloud API tokens are stored in `SecurePasswordManager` under the key `cloud_token_${accountId}`. The `CloudAccount` DB entity stores only metadata (`provider`, `enabled`, `lastRefreshAt`, `lastCount`); the token is **never** written to the `cloud_accounts` table (see §9.4 sync matrix — cloud accounts are not synced for this reason).
+
 ---
 
 ## 12. UI, theming, accessibility, i18n
@@ -1001,13 +1113,14 @@ Keystore is decoded from the `KEYSTORE_BASE64` secret. Gradle cache key is `${{ 
 | `terminal` | `TermuxBridge`, `TerminalManager`, `SessionRecorder`, `TranscriptManager` |
 | `terminal.emulator` | `ANSIParser`, `TerminalBuffer`, `TerminalRenderer` (legacy/secondary path) |
 | `themes` | `Theme`, `ThemeManager`, `ThemeParser`, `ThemeValidator`, `BuiltInThemes` |
-| `ui.activities` | 23 activities |
+| `cloud` | `CloudAccountsActivity`, cloud provider clients (Aws/Azure/Gcp/DigitalOcean/Hetzner/Linode/Vultr) |
+| `ui.activities` | 32 activities |
 | `ui.adapters` | RecyclerView adapters (13) |
 | `ui.fragments` | 7 fragments |
 | `ui.tabs` | `TabManager`, `SSHTab` |
 | `ui.views` | `TerminalView`, `PerformanceOverlayView` |
 | `ui.widgets` | quick-connect / connection widgets |
-| `utils` | `Logger`, `NotificationHelper`, `DialogUtils`, helpers |
+| `utils` | `Logger`, `NotificationHelper`, `DialogUtils`, `ClipboardHelper`, `ActivityExtensions`, `FontManager`, `AnrWatchdog`, `ValidationHelper`, helpers |
 | `widget` | `WidgetConfigurationActivity` |
 
 ---
@@ -1024,6 +1137,8 @@ These exist in source but are **not** wired into a working user-facing flow. Tre
 - **Connection groups in flat list** — full group infrastructure exists (`ConnectionGroup`, `ConnectionGroupDao`, `GroupedConnectionAdapter`, `GroupManagementActivity`); some list surfaces still render flat.
 - **Chinese / Japanese strings** — listed in `arrays.xml` but `values-zh/` and `values-ja/` translation files are absent.
 - **HypervisorProfile.isXenOrchestra** — flag is still in the schema (added in v12) but superseded by `apiTypeOverride` (added in v17). Keep both for compatibility; new code should write `apiTypeOverride` only.
+- **FIDO2 / hardware security keys** — detection only; **no CTAP2 authentication**. `crypto/fido/Fido2Manager.kt` (or equivalent) detects whether a FIDO2-capable device is present: checks USB host-mode for known FIDO2 vendor/product IDs, and checks NFC capability via `android.nfc.NfcAdapter`. There is no CTAP2 assertion or attestation flow — the implementation does not authenticate via FIDO2. This is roadmap work (Wave future).
+- **Note — Telnet is NOT a stub.** `TelnetConnection` (§5.6) is fully implemented (RFC 854, ECHO/SGA/TERMINAL-TYPE/NAWS) and wired into `SSHSessionManager` for `protocol == TELNET` profiles. Do not treat it as unfinished.
 
 ---
 

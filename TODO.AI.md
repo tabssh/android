@@ -15,6 +15,19 @@
 
 ## ✅ Recently Shipped
 
+### AI.md full source audit + gap fills (2026-05-12)
+
+- **`(this session)`** 📚 AI.md gap-fill — 10 items from a parallel source survey applied:
+  - §4.3 activities table updated from 23 → 32 (9 missing activities added: CloudAccountsActivity, ConnectionHistoryActivity, HypervisorAccountsActivity, ImportFromQrActivity, MultiHostDashboardActivity, PinLockActivity, RemoteFileEditorActivity, ThemeEditorActivity, WhatsNewActivity)
+  - §4.7 new section: Performance monitoring (MetricsCollector, metrics model fields, 60-point history, 5 s polling)
+  - §5.1.3 new section: SSHSessionManager pool + double-check logic + listeners
+  - §5.6 new section: Telnet — corrected from stub to fully-implemented RFC 854 (ECHO/SGA/TERMINAL-TYPE/NAWS)
+  - §7.5 PIN lock detail added (Wave 3.2, EXTRA_MODE, MAX_ATTEMPTS=5, pref keys, trigger)
+  - §8.8 new section: AuditLogManager (event types, API, cleanup policy, pref keys)
+  - §11.8 new section: Cloud account integration (7 providers, token storage pattern)
+  - §15 package map: added `cloud` package row; expanded `utils` entry; updated activity count
+  - §16: FIDO2 scope clarified (detection-only, no CTAP2); Telnet not-a-stub note added
+
 ### Post-2026-05-02 commits (May 2 – May 12, 2026)
 
 - **`3f4dc8c`** 🐛 Session reattach fix — `TabTerminalActivity` now uses Application-scoped `TabManager` (`app.tabManager`) so tabs survive activity destruction. Added `onNewIntent()` override (singleTop was silently dropping re-launch intents). Added `finish()` to `handleBackToMainActivity()` so the back-press cycle doesn't stack duplicate instances. `onDestroy()` no longer calls `tabManager.cleanup()`.
