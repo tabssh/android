@@ -66,7 +66,11 @@ class OciKeyMaterial private constructor(
                         .setProvider("BC").build(pp)
                     converter.getKeyPair(obj.decryptKeyPair(decryptor))
                 }
-                is PEMKeyPair -> converter.getKeyPair(obj)
+                is PEMKeyPair -> try {
+                    converter.getKeyPair(obj)
+                } catch (e: Exception) {
+                    throw IllegalArgumentException("Failed to load key: ${e.message}", e)
+                }
                 is PKCS8EncryptedPrivateKeyInfo -> {
                     val pp = passphrase ?: throw IllegalArgumentException(
                         "Key is passphrase-protected"
@@ -76,7 +80,13 @@ class OciKeyMaterial private constructor(
                     val info = obj.decryptPrivateKeyInfo(decryptor)
                     privateKeyInfoToKeyPair(info, converter)
                 }
-                is PrivateKeyInfo -> privateKeyInfoToKeyPair(obj, converter)
+                is PrivateKeyInfo -> try {
+                    privateKeyInfoToKeyPair(obj, converter)
+                } catch (e: IllegalArgumentException) {
+                    throw e
+                } catch (e: Exception) {
+                    throw IllegalArgumentException("Failed to load key: ${e.message}", e)
+                }
                 else -> throw IllegalArgumentException(
                     "Unsupported PEM object: ${obj::class.java.simpleName}"
                 )

@@ -259,11 +259,23 @@ class OciOnboardingActivity : AppCompatActivity() {
                     .show()
                 return null
             } catch (e: Exception) {
-                // Wrong passphrase typically surfaces as a BC exception, not
-                // an IllegalArgumentException — treat as a re-prompt.
+                // BouncyCastle PKCSException / OperatorException for wrong passphrase
+                // on encrypted keys are not IllegalArgumentException — re-prompt only
+                // if we already supplied a passphrase (meaning an encrypted key was
+                // being decrypted). Without a prior passphrase there is nothing to
+                // retry; surface as an error instead.
                 Logger.w("OciOnboarding", "PEM parse threw ${e.javaClass.simpleName}: ${e.message}")
-                val pp = promptPassphrase("Wrong passphrase. Try again:") ?: return null
-                passphrase = pp.toCharArray()
+                if (passphrase != null) {
+                    val pp = promptPassphrase("Wrong passphrase. Try again:") ?: return null
+                    passphrase = pp.toCharArray()
+                } else {
+                    AlertDialog.Builder(this@OciOnboardingActivity)
+                        .setTitle("Could not load key")
+                        .setMessage(e.message ?: "Unknown PEM parse error")
+                        .setPositiveButton("OK", null)
+                        .show()
+                    return null
+                }
             }
         }
     }
