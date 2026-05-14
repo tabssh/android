@@ -27,8 +27,7 @@ object NotificationHelper {
     
     // Notification IDs
     const val NOTIFICATION_ID_SERVICE = 1001
-    const val NOTIFICATION_ID_CONNECTION = 2001
-    const val NOTIFICATION_ID_FILE_TRANSFER = 3001
+const val NOTIFICATION_ID_FILE_TRANSFER = 3001
     const val NOTIFICATION_ID_ERROR = 4001
 
     // Per-host notifications occupy a dedicated id range. The id is
@@ -352,52 +351,6 @@ object NotificationHelper {
     }
     
     /**
-     * Show connection success notification
-     */
-    fun showConnectionSuccess(context: Context, serverName: String, username: String, connectionId: String? = null) {
-        // Check if connection notifications are enabled
-        val prefManager = PreferenceManager(context)
-        if (!prefManager.showConnectionNotifications()) {
-            Logger.d("NotificationHelper", "Connection notifications disabled, skipping")
-            return
-        }
-
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-        // Create intent to open the connection when notification is clicked
-        val intent = if (connectionId != null) {
-            Intent(context, io.github.tabssh.ui.activities.TabTerminalActivity::class.java).apply {
-                putExtra(io.github.tabssh.ui.activities.TabTerminalActivity.EXTRA_CONNECTION_PROFILE_ID, connectionId)
-                putExtra(io.github.tabssh.ui.activities.TabTerminalActivity.EXTRA_AUTO_CONNECT, false)
-                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            }
-        } else {
-            Intent(context, MainActivity::class.java)
-        }
-
-        val pendingIntent = PendingIntent.getActivity(
-            context,
-            connectionId?.hashCode() ?: 0, // Use unique request code per connection
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val notification = NotificationCompat.Builder(context, CHANNEL_CONNECTION)
-            .setContentTitle("Connected to $serverName")
-            .setContentText("Logged in as $username")
-            .setSmallIcon(R.drawable.ic_connected)
-            .setContentIntent(pendingIntent)
-            .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setSilent(true)
-            .setCategory(NotificationCompat.CATEGORY_STATUS)
-            .build()
-
-        notificationManager.notify(NOTIFICATION_ID_CONNECTION, notification)
-        Logger.d("NotificationHelper", "Showed connection success notification")
-    }
-    
-    /**
      * Show connection error notification
      */
     fun showConnectionError(context: Context, serverName: String, errorMessage: String) {
@@ -430,47 +383,6 @@ object NotificationHelper {
 
         notificationManager.notify(NOTIFICATION_ID_ERROR, notification)
         Logger.d("NotificationHelper", "Showed connection error notification")
-    }
-    
-    /**
-     * Show disconnection notification
-     */
-    fun showDisconnected(context: Context, serverName: String, reason: String? = null) {
-        // Check if connection notifications are enabled
-        val prefManager = PreferenceManager(context)
-        if (!prefManager.showConnectionNotifications()) {
-            Logger.d("NotificationHelper", "Connection notifications disabled, skipping")
-            return
-        }
-
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-        val pendingIntent = PendingIntent.getActivity(
-            context,
-            0,
-            Intent(context, MainActivity::class.java),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val contentText = if (reason != null) {
-            "Disconnected: $reason"
-        } else {
-            "Disconnected"
-        }
-
-        val notification = NotificationCompat.Builder(context, CHANNEL_CONNECTION)
-            .setContentTitle("Disconnected from $serverName")
-            .setContentText(contentText)
-            .setSmallIcon(R.drawable.ic_disconnect)
-            .setContentIntent(pendingIntent)
-            .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setSilent(true)
-            .setCategory(NotificationCompat.CATEGORY_STATUS)
-            .build()
-
-        notificationManager.notify(NOTIFICATION_ID_CONNECTION, notification)
-        Logger.d("NotificationHelper", "Showed disconnection notification")
     }
     
     /**
