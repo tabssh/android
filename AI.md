@@ -1131,8 +1131,8 @@ These exist in source but are **not** wired into a working user-facing flow. Tre
 
 - **Mosh** (`protocols/mosh/MoshConnection.kt`) — UDP session, prediction engine, and heartbeat are scaffolded; no production launch path. The `use_mosh` flag on `ConnectionProfile` is persisted (DB v11) and exposed in `ConnectionEditActivity` but does not currently switch the runtime to Mosh.
 - **X11 forwarding** (`protocols/x11/X11ForwardingManager.kt`) — virtual display + Unix socket framework only; no rendering. The `x11_forwarding` flag is persisted (DB v7) and surfaced in the UI.
-- **VMware console** — `VMwareApiClient` covers list / start / stop / reset only; `VMwareManagerActivity` does not yet route to `VMConsoleActivity`.
-- **Frequently-used UI** — backend (`ConnectionDao.getFrequentlyUsedConnections()`) is wired; the Frequent tab works but is read-only by design.
+- **VMware console** — `VMwareApiClient` and `VMwareManagerActivity` fully route to `VMConsoleActivity`; list / start / stop / reset / console all implemented.
+- **Frequently-used UI** — fully interactive: top-10 connections loaded, tap to connect, swipe-right for delete/duplicate/edit actions.
 - **Devkeystore** — `keystore.jks` is checked in for development; production releases must override `KEYSTORE_BASE64` via GitHub Secrets.
 - **Connection groups in flat list** — full group infrastructure exists (`ConnectionGroup`, `ConnectionGroupDao`, `GroupedConnectionAdapter`, `GroupManagementActivity`); some list surfaces still render flat.
 - **Chinese / Japanese strings** — listed in `arrays.xml` but `values-zh/` and `values-ja/` translation files are absent.

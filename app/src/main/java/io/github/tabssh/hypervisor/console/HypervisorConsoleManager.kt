@@ -6,6 +6,7 @@ import io.github.tabssh.hypervisor.xcpng.XenOrchestraApiClient
 import io.github.tabssh.terminal.TermuxBridge
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.InputStream
 import java.io.OutputStream
@@ -70,11 +71,6 @@ class HypervisorConsoleManager {
 
             // Get termproxy ticket and WebSocket URL
             val termProxy = client.getTermProxy(node, vmid, type)
-            if (termProxy == null) {
-                Logger.e(TAG, "Failed to get termproxy ticket")
-                listener?.onError("Failed to get console access ticket")
-                return@withContext null
-            }
 
             Logger.d(TAG, "Got termproxy ticket, connecting to WebSocket")
 
@@ -136,7 +132,7 @@ class HypervisorConsoleManager {
             }
 
             // Wait a moment for connection to establish
-            Thread.sleep(500)
+            delay(500)
 
             val inputStream = client.getInputStream()
             val outputStream = client.getOutputStream()
@@ -155,7 +151,16 @@ class HypervisorConsoleManager {
             )
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to connect Proxmox console", e)
-            listener?.onError(e.message ?: "Connection failed")
+            val msg = e.message ?: "Connection failed"
+            if (msg.contains("serial", ignoreCase = true)) {
+                listener?.onError(
+                    "This VM has no serial console device.\n\n" +
+                    "In Proxmox, open the VM → Hardware → Add → Serial Port → set to 'socket'.\n" +
+                    "Then restart the VM and try again."
+                )
+            } else {
+                listener?.onError(msg)
+            }
             null
         }
     }
@@ -217,7 +222,7 @@ class HypervisorConsoleManager {
                 }
 
                 override fun onError(error: Throwable) {
-                    Logger.e(TAG, "XCP-ng console error", error)
+                    Logger.d(TAG, "XCP-ng console error forwarded: ${error.message}")
                     listener?.onError(error.message ?: "Unknown error")
                 }
             })
@@ -311,7 +316,7 @@ class HypervisorConsoleManager {
                 }
 
                 override fun onError(error: Throwable) {
-                    Logger.e(TAG, "Xen Orchestra console error", error)
+                    Logger.d(TAG, "Xen Orchestra console error forwarded: ${error.message}")
                     listener?.onError(error.message ?: "Unknown error")
                 }
             })

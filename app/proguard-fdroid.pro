@@ -9,10 +9,10 @@
 -keepattributes !SourceFile,!LineNumberTable
 
 # Keep version information
--keep class com.tabssh.BuildConfig { *; }
+-keep class io.github.tabssh.BuildConfig { *; }
 
 # F-Droid specific keeps
--keep class com.tabssh.TabSSHApplication { *; }
+-keep class io.github.tabssh.TabSSHApplication { *; }
 
 # Ensure consistent naming for reproducible builds
 -useuniqueclassmembernames

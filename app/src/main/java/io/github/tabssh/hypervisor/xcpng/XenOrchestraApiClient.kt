@@ -291,27 +291,6 @@ class XenOrchestraApiClient(
     }
     
     /**
-     * Parse JSON response to data object
-     */
-    private inline fun <reified T> parseJsonResponse(response: Response): T? {
-        return try {
-            val body = response.body?.string()
-            if (body != null && response.isSuccessful) {
-                // TODO: Implement JSON parsing based on type T
-                // For now, return null to allow compilation
-                Logger.d(TAG, "Response: ${body.take(200)}")
-                null
-            } else {
-                Logger.e(TAG, "Failed to parse response: HTTP ${response.code}")
-                null
-            }
-        } catch (e: Exception) {
-            Logger.e(TAG, "Error parsing JSON: ${e.message}", e)
-            null
-        }
-    }
-    
-    /**
      * Handle API error responses
      */
     private fun handleApiError(response: Response) {

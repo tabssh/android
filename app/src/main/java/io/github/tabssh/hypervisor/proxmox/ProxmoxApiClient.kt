@@ -295,9 +295,10 @@ class ProxmoxApiClient(
      * @param node Proxmox node name
      * @param vmid VM ID
      * @param type VM type: "qemu" or "lxc"
-     * @return TermProxyResult with ticket and WebSocket URL, or null on failure
+     * @return TermProxyResult with ticket and WebSocket URL
+     * @throws Exception on API failure (message contains Proxmox error detail)
      */
-    suspend fun getTermProxy(node: String, vmid: Int, type: String = "qemu"): TermProxyResult? = withContext(Dispatchers.IO) {
+    suspend fun getTermProxy(node: String, vmid: Int, type: String = "qemu"): TermProxyResult = withContext(Dispatchers.IO) {
         try {
             // Use termproxy for serial console (text-based, mobile-friendly)
             val endpoint = if (type == "lxc") {
@@ -334,12 +335,11 @@ class ProxmoxApiClient(
                     websocketUrl = websocketUrl
                 )
             } else {
-                Logger.e("ProxmoxAPI", "No data in termproxy response")
-                null
+                throw IOException("No data in termproxy response")
             }
         } catch (e: Exception) {
             Logger.e("ProxmoxAPI", "Failed to get termproxy", e)
-            null
+            throw e
         }
     }
 

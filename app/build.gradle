@@ -76,9 +76,9 @@ android {
     signingConfigs {
         release {
             storeFile file("../keystore.jks")
-            storePassword "tabssh123"
-            keyAlias "tabssh"
-            keyPassword "tabssh123"
+            storePassword System.getenv("KEYSTORE_PASSWORD") ?: "tabssh123"
+            keyAlias System.getenv("KEYSTORE_ALIAS") ?: "tabssh"
+            keyPassword System.getenv("KEY_PASSWORD") ?: "tabssh123"
         }
     }
 

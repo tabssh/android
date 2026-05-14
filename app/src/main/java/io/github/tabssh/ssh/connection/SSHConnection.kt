@@ -1151,9 +1151,13 @@ class SSHConnection(
     }
 
     /**
-     * Open a shell channel for terminal access
+     * Open a shell channel for terminal access.
+     *
+     * @param forceShell When true, always opens a ChannelShell regardless of
+     *   [ConnectionProfile.remoteCommand]. Used for post-init reconnects (e.g.
+     *   SourceForge: `create` runs as exec, then we reopen as a plain shell).
      */
-    suspend fun openShellChannel(): Channel? = withContext(Dispatchers.IO) {
+    suspend fun openShellChannel(forceShell: Boolean = false): Channel? = withContext(Dispatchers.IO) {
         val currentSession = session
         if (currentSession == null || !currentSession.isConnected) {
             Logger.e("SSHConnection", "Cannot open shell channel: session not connected")
@@ -1179,7 +1183,8 @@ class SSHConnection(
             // We branch with two parallel blocks rather than a generic
             // `ChannelSession` variable because that class is package-private
             // in JSch (see field declaration above).
-            val remoteCmd = profile.remoteCommand?.trim()?.takeIf { it.isNotEmpty() }
+            val remoteCmd = if (forceShell) null
+                           else profile.remoteCommand?.trim()?.takeIf { it.isNotEmpty() }
 
             if (remoteCmd != null) {
                 val exec = currentSession.openChannel("exec") as ChannelExec

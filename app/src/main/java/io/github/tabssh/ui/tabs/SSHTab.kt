@@ -14,6 +14,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -128,6 +129,37 @@ class SSHTab(
                     // keep working.
                     ownChannel?.let { conn.closeChannel(it) }
                     ownChannel = null
+
+                    // SourceForge shell init — `create` runs as a ChannelExec,
+                    // provisions the shell environment, then exits. The SSH
+                    // session is still alive; reopen a plain ChannelShell after
+                    // a short delay so the user gets an interactive prompt
+                    // without having to manually reconnect.
+                    if (profile.remoteCommand?.trim() == "create" && conn.isSessionAlive()) {
+                        connectionScope.launch {
+                            Logger.i("SSHTab", "SourceForge shell init complete — reopening plain shell in 2s")
+                            delay(2000)
+                            if (!conn.isSessionAlive()) return@launch
+                            val newChannel = conn.openShellChannel(forceShell = true)
+                            if (newChannel != null) {
+                                ownChannel = newChannel
+                                val inp = newChannel.inputStream
+                                val out = newChannel.outputStream
+                                if (inp != null && out != null) {
+                                    termuxBridge.onResizeCallback = { cols, rows ->
+                                        conn.resizePtyOf(newChannel, cols, rows)
+                                    }
+                                    termuxBridge.connect(inp, out)
+                                } else {
+                                    Logger.e("SSHTab", "SourceForge reconnect: null streams on new channel")
+                                }
+                            } else {
+                                Logger.e("SSHTab", "SourceForge reconnect: failed to open shell channel")
+                            }
+                        }
+                        return
+                    }
+
                     // Cascade only if the underlying Session is gone — that's
                     // the case where every sibling is also dead and we want
                     // the global disconnect notification to fire. If only the

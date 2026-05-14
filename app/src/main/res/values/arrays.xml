@@ -29,11 +29,11 @@
          and the last entry as "show custom field". -->
     <string-array name="remote_command_entries">
         <item>Default — login shell</item>
-        <item>create  (SourceForge shell.sourceforge.net)</item>
         <item>sftp  (SFTP-only accounts)</item>
         <item>internal-sftp  (OpenSSH SFTP subsystem)</item>
         <item>tmux attach -d || tmux new  (auto-attach to tmux)</item>
         <item>screen -DR  (auto-attach to screen)</item>
+        <item>create  (SourceForge shell.sourceforge.net)</item>
         <item>Custom…</item>
     </string-array>
     <!-- Parallel values array — index N matches `remote_command_entries[N]`.
@@ -41,11 +41,11 @@
          empty — the activity reads the EditText instead. -->
     <string-array name="remote_command_values">
         <item></item>
-        <item>create</item>
         <item>sftp</item>
         <item>internal-sftp</item>
         <item>tmux attach -d || tmux new</item>
         <item>screen -DR</item>
+        <item>create</item>
         <item></item>
     </string-array>
 
