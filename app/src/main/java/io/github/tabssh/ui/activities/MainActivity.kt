@@ -100,19 +100,18 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             R.string.navigation_drawer_open, R.string.navigation_drawer_close
         )
         drawerLayout.addDrawerListener(toggle)
-        toggle.syncState()
 
-        // Wave 4.c — Tablet sidebar mode. On sw>=720dp the drawer locks open
-        // as a permanent sidebar; the hamburger is hidden and the user can't
-        // swipe it shut. Phones unchanged (off-canvas overlay).
-        if (resources.getBoolean(R.bool.is_tablet)) {
-            applySidebarMode(toggle)
-        }
-        // Wave 4.b — Foldable book mode. On a foldable that's HALF_OPENED with
-        // a vertical hinge (book posture), unfold gives us "tablet-shaped"
-        // real estate even though sw720dp may still be false on the inner
-        // display. Lock the drawer open while in that state; restore overlay
-        // mode when device is folded again.
+        // Always start in overlay mode: drawer is closed, hamburger visible.
+        // The old Wave 4.c tablet sidebar (LOCK_MODE_LOCKED_OPEN) auto-opened
+        // the drawer on launch and hid the hamburger indicator — bad UX on
+        // every screen size. We now use the same overlay mode everywhere;
+        // larger screens just get more content space alongside the drawer when
+        // it's manually opened.
+        applyPhoneOverlayMode(toggle)
+
+        // Wave 4.b — Foldable book mode observer kept for state-change events,
+        // but we no longer auto-open on initial layout; applyPhoneOverlayMode
+        // above already set the correct closed state.
         observeFoldingFeature(toggle)
 
         // Setup ViewPager2 + TabLayout
@@ -1271,8 +1270,6 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
 
     /** Wave 4.b — observe FoldingFeature; flip drawer mode on hinge state changes. */
     private fun observeFoldingFeature(toggle: ActionBarDrawerToggle) {
-        // Skip when we're already locked open from is_tablet.
-        if (resources.getBoolean(R.bool.is_tablet)) return
         val tracker = androidx.window.layout.WindowInfoTracker.getOrCreate(this)
         lifecycleScope.launch {
             try {
@@ -1280,10 +1277,11 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                     val fold = info.displayFeatures
                         .filterIsInstance<androidx.window.layout.FoldingFeature>()
                         .firstOrNull()
-                    val bookMode = fold != null &&
-                        fold.state == androidx.window.layout.FoldingFeature.State.HALF_OPENED &&
-                        fold.orientation == androidx.window.layout.FoldingFeature.Orientation.VERTICAL
-                    if (bookMode) applySidebarMode(toggle) else applyPhoneOverlayMode(toggle)
+                    // Foldable state changes may affect layout but we always
+                    // stay in overlay mode — never lock the drawer open.
+                    // applyPhoneOverlayMode ensures hamburger stays visible
+                    // regardless of posture.
+                    applyPhoneOverlayMode(toggle)
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e

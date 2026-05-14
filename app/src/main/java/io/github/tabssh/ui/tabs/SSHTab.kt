@@ -181,9 +181,20 @@ class SSHTab(
                         conn.disconnect()
                     }
                 } else {
-                    // No SSH connection (Telnet/Mosh/standalone) — still notify.
-                    _connectionState.value = ConnectionState.DISCONNECTED
-                    updateTitleWithStatus(ConnectionState.DISCONNECTED)
+                    // No SSH connection (Telnet/Mosh/standalone) — still notify,
+                    // BUT only if we haven't already transitioned to a new
+                    // connection. The mosh handoff path calls tab.disconnect()
+                    // (clears connection=null) then tab.connectMosh() (sets
+                    // state=CONNECTED). TermuxBridge.disconnect() posts
+                    // onDisconnected() to the main thread asynchronously, so it
+                    // may arrive AFTER connectMosh() finishes. Clobbering the
+                    // CONNECTED state here would kill the mosh session from the
+                    // user's perspective — the tab would show Disconnected while
+                    // mosh-client is still running fine.
+                    if (_connectionState.value != ConnectionState.CONNECTED) {
+                        _connectionState.value = ConnectionState.DISCONNECTED
+                        updateTitleWithStatus(ConnectionState.DISCONNECTED)
+                    }
                 }
             }
 
