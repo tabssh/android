@@ -1,14 +1,17 @@
 package io.github.tabssh.ui.activities
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
+import android.widget.EditText
 import android.widget.ProgressBar
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -19,6 +22,7 @@ import io.github.tabssh.hypervisor.oci.OciApiClient
 import io.github.tabssh.hypervisor.oci.OciInstance
 import io.github.tabssh.hypervisor.oci.OciInstanceAction
 import io.github.tabssh.hypervisor.oci.OciKeyMaterial
+import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.HypervisorType
 import io.github.tabssh.utils.logging.Logger
@@ -230,9 +234,11 @@ class OciManagerActivity : AppCompatActivity() {
 
                 instances.clear()
                 instances.addAll(withIps)
-                recyclerView.adapter = InstanceAdapter(instances) { inst, action ->
-                    handleAction(inst, action)
-                }
+                recyclerView.adapter = InstanceAdapter(
+                    instances,
+                    onAction = { inst, action -> handleAction(inst, action) },
+                    onSshConnect = { inst -> handleSshConnect(inst) }
+                )
                 statusText.text = "Found ${instances.size} instance${if (instances.size == 1) "" else "s"}"
                 progressBar.visibility = View.GONE
             } catch (e: Exception) {
@@ -271,11 +277,50 @@ class OciManagerActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * SSH Connect — prompted with a username dialog (defaults to "opc",
+     * the standard OCI Oracle Linux user; Ubuntu images use "ubuntu").
+     * Creates a temporary ConnectionProfile from the instance's public IP
+     * and opens TabTerminalActivity, mirroring the quick-connect flow.
+     */
+    private fun handleSshConnect(inst: OciInstance) {
+        val publicIp = inst.publicIp
+        if (publicIp.isNullOrBlank()) {
+            Toast.makeText(this, "Instance has no public IP address", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val usernameInput = EditText(this).apply {
+            hint = "SSH username"
+            setText("opc")
+            setSingleLine()
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Connect to ${inst.displayName}")
+            .setMessage("SSH to $publicIp")
+            .setView(usernameInput)
+            .setPositiveButton("Connect") { _, _ ->
+                val username = usernameInput.text.toString().trim().ifBlank { "opc" }
+                val profile = ConnectionProfile(
+                    name = "OCI: ${inst.displayName}",
+                    host = publicIp,
+                    port = 22,
+                    username = username
+                )
+                Logger.i("OciManager", "Launching SSH to $username@$publicIp for ${inst.displayName}")
+                val intent = TabTerminalActivity.createIntent(this, profile, autoConnect = true)
+                startActivity(intent)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     // ---------- Adapter -----------------------------------------------
 
     private class InstanceAdapter(
         private val items: List<OciInstance>,
-        private val onAction: (OciInstance, OciInstanceAction) -> Unit
+        private val onAction: (OciInstance, OciInstanceAction) -> Unit,
+        private val onSshConnect: (OciInstance) -> Unit
     ) : RecyclerView.Adapter<InstanceAdapter.VH>() {
 
         class VH(view: View) : RecyclerView.ViewHolder(view) {
@@ -288,6 +333,7 @@ class OciManagerActivity : AppCompatActivity() {
             val softStop: Button = view.findViewById(R.id.softstop_button)
             val reset: Button = view.findViewById(R.id.reset_button)
             val softReset: Button = view.findViewById(R.id.softreset_button)
+            val sshConnect: Button = view.findViewById(R.id.ssh_connect_button)
         }
 
         override fun onCreateViewHolder(parent: android.view.ViewGroup, viewType: Int): VH {
@@ -350,6 +396,17 @@ class OciManagerActivity : AppCompatActivity() {
             holder.softStop.setOnClickListener { onAction(inst, OciInstanceAction.SOFTSTOP) }
             holder.reset.setOnClickListener { onAction(inst, OciInstanceAction.RESET) }
             holder.softReset.setOnClickListener { onAction(inst, OciInstanceAction.SOFTRESET) }
+
+            // SSH Connect — only meaningful for RUNNING instances that have
+            // a resolved public IP. Hidden when the instance is stopped or
+            // the VNIC walk didn't find a public address.
+            val isRunning = inst.lifecycleState.equals("RUNNING", ignoreCase = true)
+            if (isRunning && !inst.publicIp.isNullOrBlank()) {
+                holder.sshConnect.visibility = View.VISIBLE
+                holder.sshConnect.setOnClickListener { onSshConnect(inst) }
+            } else {
+                holder.sshConnect.visibility = View.GONE
+            }
         }
     }
 }

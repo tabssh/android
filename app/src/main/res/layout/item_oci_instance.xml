@@ -110,6 +110,16 @@
 
         </LinearLayout>
 
+        <!-- SSH Connect — shown only for RUNNING instances with a public IP. -->
+        <Button
+            android:id="@+id/ssh_connect_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="SSH Connect"
+            android:visibility="gone"
+            style="@style/Widget.Material3.Button" />
+
     </LinearLayout>
 
 </com.google.android.material.card.MaterialCardView>

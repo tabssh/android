@@ -88,8 +88,8 @@ Confirmed bugs reported by the user on 2026-05-14. Fix in order listed.
 | B-5 | Exit=0 still prompts to reconnect — race: `onDisconnected` emitted DISCONNECTED before `closeChannel()` captured exit status, so `getShellExitStatus()` always returned -1. | ✅ `b6c3386` | `SSHTab.kt` |
 | B-6 | Disconnect notifications not self-removing — notification update via `nm.notify()` on the same ID that was the foreground anchor retained the ongoing flag; `setTimeoutAfter` was ignored. | ✅ `d2238f7` | `SSHConnectionService.kt` |
 | B-7 | Mosh not working — `mosh-client` binary missing from jniLibs; fallback to SSH is silent (no user notice). | ⬜ Queued | `TabTerminalActivity.kt` |
-| B-8 | Proxmox console serial interface error — HTTP 200 `{"data":null,"errors":"...serial..."}` not detected; friendly message never shown. | ✅ `pending` | `ProxmoxApiClient.kt` |
-| B-9 | OCI VMs — no console access (stub). Instance control may also be broken. | ⬜ Queued | `OciApiClient.kt`, `OciManagerActivity.kt` |
+| B-8 | Proxmox console serial interface error — HTTP 200 `{"data":null,"errors":"...serial..."}` not detected; friendly message never shown. | ✅ `44122f1` | `ProxmoxApiClient.kt` |
+| B-9 | OCI VMs — no console access (stub). Instance control may also be broken. | ✅ `pending` | `OciManagerActivity.kt`, `item_oci_instance.xml` |
 
 ---
 
