@@ -1630,6 +1630,16 @@ class TabTerminalActivity : AppCompatActivity() {
                     if (connected) {
                         Logger.i("TabTerminalActivity", "TERMINAL CONNECTED SUCCESSFULLY to ${profile.getDisplayName()}")
 
+                        // Auto-switch to the newly connected tab so the user lands
+                        // on it immediately. createTab() already advanced the
+                        // TabManager's activeTabIndex; we just need to reflect that
+                        // in the UI. Use indexOf(tab) rather than getActiveTabIndex()
+                        // in case another tab was added concurrently.
+                        val newIdx = tabManager.getAllTabs().indexOf(tab)
+                        runOnUiThread {
+                            if (newIdx >= 0) switchToTab(newIdx)
+                        }
+
                         // Wave 9.2 — auto-mosh path. When `useMosh` is true on the
                         // profile AND we have a bundled native mosh-client, run
                         // mosh-server over the just-opened SSH session, then swap

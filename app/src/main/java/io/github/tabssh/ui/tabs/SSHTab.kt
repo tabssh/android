@@ -119,16 +119,28 @@ class SSHTab(
             }
 
             override fun onDisconnected() {
-                _connectionState.value = ConnectionState.DISCONNECTED
-                updateTitleWithStatus(ConnectionState.DISCONNECTED)
                 Logger.i("SSHTab", "Terminal disconnected for ${profile.getDisplayName()}")
                 val conn = connection
                 if (conn != null) {
                     // Issue #163 — close THIS tab's channel only. Sibling tabs
                     // (same profile, separate channels on the same Session)
                     // keep working.
+                    //
+                    // IMPORTANT: closeChannel() snapshots the JSch exit-status
+                    // into SSHConnection.lastShellExitStatus. This MUST happen
+                    // BEFORE we emit DISCONNECTED — if we emit first, the
+                    // TabTerminalActivity observer runs getShellExitStatus()
+                    // while lastShellExitStatus is still -1 (the default), and
+                    // the reconnect-prompt gate incorrectly treats a clean exit
+                    // (status 0) as an unexpected drop.
                     ownChannel?.let { conn.closeChannel(it) }
                     ownChannel = null
+
+                    // Emit DISCONNECTED after exit status has been captured so
+                    // the reconnect-dialog gate in TabTerminalActivity reads the
+                    // correct status (0 = clean exit, -1 = unexpected drop).
+                    _connectionState.value = ConnectionState.DISCONNECTED
+                    updateTitleWithStatus(ConnectionState.DISCONNECTED)
 
                     // SourceForge shell init — `create` runs as a ChannelExec,
                     // provisions the shell environment, then exits. The SSH
@@ -168,6 +180,10 @@ class SSHTab(
                     if (!conn.isSessionAlive()) {
                         conn.disconnect()
                     }
+                } else {
+                    // No SSH connection (Telnet/Mosh/standalone) — still notify.
+                    _connectionState.value = ConnectionState.DISCONNECTED
+                    updateTitleWithStatus(ConnectionState.DISCONNECTED)
                 }
             }
 
