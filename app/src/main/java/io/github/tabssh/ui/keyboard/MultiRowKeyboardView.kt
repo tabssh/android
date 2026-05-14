@@ -410,9 +410,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
                         KeyboardKey("PGUP", "PGUP", "\u001B[5~"),
                         KeyboardKey("PGDN", "PGDN", "\u001B[6~"),
                         KeyboardKey("ENTER", "ENT", "\n"),
-                        KeyboardKey("SEL", "SEL", "", KeyboardKey.KeyCategory.ACTION),
-                        KeyboardKey("PASTE", "📋", "", KeyboardKey.KeyCategory.ACTION),
-                        KeyboardKey("MENU", "☰", "", KeyboardKey.KeyCategory.ACTION)
+                        KeyboardKey("PASTE", "📋", "", KeyboardKey.KeyCategory.ACTION)
                     ),
                     // Row 3: coding/shell symbols Android keyboard buries
                     // 2 taps deep. Bash + vim flavour: pipe, redirect,
@@ -427,7 +425,9 @@ class MultiRowKeyboardView @JvmOverloads constructor(
                         KeyboardKey("DOLLAR", "$", "$", KeyboardKey.KeyCategory.SYMBOL),
                         KeyboardKey("STAR", "*", "*", KeyboardKey.KeyCategory.SYMBOL),
                         KeyboardKey("LT", "<", "<", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("GT", ">", ">", KeyboardKey.KeyCategory.SYMBOL)
+                        KeyboardKey("GT", ">", ">", KeyboardKey.KeyCategory.SYMBOL),
+                        KeyboardKey("SEL", "SEL", "", KeyboardKey.KeyCategory.ACTION),
+                        KeyboardKey("MENU", "☰", "", KeyboardKey.KeyCategory.ACTION)
                     )
                 )
                 4 -> listOf(
@@ -452,9 +452,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
                         KeyboardKey("PGUP", "PGUP", "\u001B[5~"),
                         KeyboardKey("PGDN", "PGDN", "\u001B[6~"),
                         KeyboardKey("ENTER", "ENT", "\n"),
-                        KeyboardKey("SEL", "SEL", "", KeyboardKey.KeyCategory.ACTION),
-                        KeyboardKey("PASTE", "📋", "", KeyboardKey.KeyCategory.ACTION),
-                        KeyboardKey("MENU", "☰", "", KeyboardKey.KeyCategory.ACTION)
+                        KeyboardKey("PASTE", "📋", "", KeyboardKey.KeyCategory.ACTION)
                     ),
                     // Row 3: coding symbols
                     listOf(
@@ -467,7 +465,9 @@ class MultiRowKeyboardView @JvmOverloads constructor(
                         KeyboardKey("DOLLAR", "$", "$", KeyboardKey.KeyCategory.SYMBOL),
                         KeyboardKey("STAR", "*", "*", KeyboardKey.KeyCategory.SYMBOL),
                         KeyboardKey("LT", "<", "<", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("GT", ">", ">", KeyboardKey.KeyCategory.SYMBOL)
+                        KeyboardKey("GT", ">", ">", KeyboardKey.KeyCategory.SYMBOL),
+                        KeyboardKey("SEL", "SEL", "", KeyboardKey.KeyCategory.ACTION),
+                        KeyboardKey("MENU", "☰", "", KeyboardKey.KeyCategory.ACTION)
                     ),
                     // Row 4: F1-F6
                     listOf(
@@ -501,9 +501,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
                         KeyboardKey("PGUP", "PGUP", "\u001B[5~"),
                         KeyboardKey("PGDN", "PGDN", "\u001B[6~"),
                         KeyboardKey("ENTER", "ENT", "\n"),
-                        KeyboardKey("SEL", "SEL", "", KeyboardKey.KeyCategory.ACTION),
-                        KeyboardKey("PASTE", "📋", "", KeyboardKey.KeyCategory.ACTION),
-                        KeyboardKey("MENU", "☰", "", KeyboardKey.KeyCategory.ACTION)
+                        KeyboardKey("PASTE", "📋", "", KeyboardKey.KeyCategory.ACTION)
                     ),
                     // Row 3: coding symbols
                     listOf(
@@ -516,7 +514,9 @@ class MultiRowKeyboardView @JvmOverloads constructor(
                         KeyboardKey("DOLLAR", "$", "$", KeyboardKey.KeyCategory.SYMBOL),
                         KeyboardKey("STAR", "*", "*", KeyboardKey.KeyCategory.SYMBOL),
                         KeyboardKey("LT", "<", "<", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("GT", ">", ">", KeyboardKey.KeyCategory.SYMBOL)
+                        KeyboardKey("GT", ">", ">", KeyboardKey.KeyCategory.SYMBOL),
+                        KeyboardKey("SEL", "SEL", "", KeyboardKey.KeyCategory.ACTION),
+                        KeyboardKey("MENU", "☰", "", KeyboardKey.KeyCategory.ACTION)
                     ),
                     // Row 4: F1-F6
                     listOf(

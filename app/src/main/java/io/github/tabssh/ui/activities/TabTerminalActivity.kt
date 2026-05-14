@@ -2976,9 +2976,31 @@ class TabTerminalActivity : AppCompatActivity() {
     }
     
     private fun showConnectionSelector() {
-        // This would show a dialog or start ConnectionEditActivity
-        val intent = Intent(this, ConnectionEditActivity::class.java)
-        startActivity(intent)
+        lifecycleScope.launch {
+            val connections = try {
+                app.database.connectionDao().getRecentConnections(50)
+            } catch (e: Exception) {
+                Logger.e("TabTerminalActivity", "Failed to load connections for picker", e)
+                emptyList()
+            }
+            runOnUiThread {
+                val labels = connections.map { it.getDisplayName() }.toTypedArray()
+                val items = arrayOf("+ Add new connection…") + labels
+
+                androidx.appcompat.app.AlertDialog.Builder(this@TabTerminalActivity)
+                    .setTitle("Open new tab")
+                    .setItems(items) { _, which ->
+                        if (which == 0) {
+                            startActivity(Intent(this@TabTerminalActivity, ConnectionEditActivity::class.java))
+                        } else {
+                            val profile = connections[which - 1]
+                            lifecycleScope.launch { connectToProfile(profile) }
+                        }
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+        }
     }
 
     /**

@@ -922,6 +922,9 @@ class TerminalView @JvmOverloads constructor(
         val startX = paddingLeft.toFloat()
         val startY = paddingTop.toFloat()
 
+        // Convert pixel scroll offset to row offset (negative = into scrollback).
+        val scrollRows = if (cellHeight > 0f) (scrollY / cellHeight).toInt() else 0
+
         // Draw all rows using direct TerminalRow access
         for (row in 0 until rows) {
             val rowTop = startY + row * cellHeight
@@ -931,9 +934,9 @@ class TerminalView @JvmOverloads constructor(
             // Clear row background
             canvas.drawRect(startX, rowTop, width.toFloat(), rowBottom, backgroundPaint)
 
-            // Get the TerminalRow using proper Termux API
+            // Negative externalRow values index into the scrollback transcript.
             val internalRow = try {
-                buffer.externalToInternalRow(row)
+                buffer.externalToInternalRow(row - scrollRows)
             } catch (e: Exception) {
                 continue
             }
@@ -1023,8 +1026,9 @@ class TerminalView @JvmOverloads constructor(
         // still draws on top.
         drawSelectionOverlay(canvas)
 
-        // Draw cursor based on style (0=block, 1=underline, 2=bar/I-beam)
-        if (cursorVisible && cursorRow in 0 until rows && cursorCol in 0 until cols) {
+        // Draw cursor based on style (0=block, 1=underline, 2=bar/I-beam).
+        // Hide it when scrolled into scrollback — the cursor belongs to the live screen.
+        if (cursorVisible && scrollRows == 0 && cursorRow in 0 until rows && cursorCol in 0 until cols) {
             val cursorX = startX + cursorCol * cellWidth
             val cursorY = startY + cursorRow * cellHeight
             cursorPaint.color = currentTheme?.cursor ?: Color.WHITE
@@ -1491,7 +1495,7 @@ class TerminalView @JvmOverloads constructor(
     private inner class TerminalGestureListener : GestureDetector.SimpleOnGestureListener() {
 
         override fun onScroll(e1: MotionEvent?, e2: MotionEvent, distanceX: Float, distanceY: Float): Boolean {
-            scrollY = (scrollY + distanceY).coerceAtLeast(0f).toInt()
+            scrollY = (scrollY + distanceY).coerceIn(0f, maxScrollYPx().toFloat()).toInt()
             invalidate()
             return true
         }
@@ -1515,8 +1519,7 @@ class TerminalView @JvmOverloads constructor(
                     return true
                 }
             }
-            scroller.fling(0, scrollY, 0, -velocityY.toInt(), 0, 0, 0,
-                terminalBuffer?.getScrollbackSize() ?: 0)
+            scroller.fling(0, scrollY, 0, -velocityY.toInt(), 0, 0, 0, maxScrollYPx())
             invalidate()
             return true
         }
@@ -1854,6 +1857,18 @@ class TerminalView @JvmOverloads constructor(
             scrollY = scroller.currY
             invalidate()
         }
+    }
+
+    /**
+     * Maximum scrollY in pixels — backed by the Termux transcript (SSH path)
+     * or the custom TerminalBuffer scrollback (standalone path).
+     */
+    private fun maxScrollYPx(): Int {
+        if (cellHeight <= 0f) return 0
+        val rows = termuxBridge?.getScreen()?.activeTranscriptRows
+            ?: terminalBuffer?.getScrollbackSize()
+            ?: 0
+        return (rows * cellHeight).toInt()
     }
 
     override fun onDetachedFromWindow() {
