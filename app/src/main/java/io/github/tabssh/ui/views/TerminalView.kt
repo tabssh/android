@@ -1175,16 +1175,17 @@ class TerminalView @JvmOverloads constructor(
     }
 
     override fun onTouch(v: View, event: MotionEvent): Boolean {
-        // SEL key armed → consume the next touch sequence as a selection
-        // drag. ACTION_DOWN enters selection mode at the touch point and
-        // sets the focus-handle drag flag so the rest of the gesture
-        // extends the selection (via handleSelectionTouch's MOVE path).
-        if (selectionArmed && event.actionMasked == MotionEvent.ACTION_DOWN &&
-            event.pointerCount == 1) {
+        // SEL key armed → consume the next single-finger ACTION_DOWN as the
+        // start of a selection drag. On multi-touch just disarm silently so
+        // the flag never persists through a pinch gesture.
+        if (selectionArmed && event.actionMasked == MotionEvent.ACTION_DOWN) {
             selectionArmed = false
-            enterSelectionMode(event.x, event.y)
-            selectionDragHandle = 1  // pre-grab focus handle
-            return true
+            if (event.pointerCount == 1) {
+                enterSelectionMode(event.x, event.y)
+                selectionDragHandle = 1  // pre-grab focus handle
+                return true
+            }
+            // Multi-touch DOWN: fall through to normal handling.
         }
 
         // Handle pinch-to-zoom first (multi-touch)
@@ -1622,6 +1623,10 @@ class TerminalView @JvmOverloads constructor(
         selectionFocusRow = row
         selectionActive = true
         selectionDragHandle = -1
+        // Reclaim focus so IME input keeps coming to the terminal. The SEL
+        // key button steals focus when tapped; without this the keyboard is
+        // visible but keystrokes go nowhere.
+        requestFocus()
         invalidate()
         onSelectionStarted?.invoke()
     }
@@ -1635,6 +1640,9 @@ class TerminalView @JvmOverloads constructor(
         if (!selectionActive) return
         selectionActive = false
         selectionDragHandle = -1
+        // Restore focus so typing works immediately after dismissing the
+        // selection (e.g. tap-outside-to-cancel, ActionMode dismissed).
+        requestFocus()
         invalidate()
     }
 
