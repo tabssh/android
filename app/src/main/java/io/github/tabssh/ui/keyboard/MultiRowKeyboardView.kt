@@ -1,6 +1,7 @@
 package io.github.tabssh.ui.keyboard
 
 import android.content.Context
+import android.content.res.Configuration
 import android.util.AttributeSet
 import android.widget.LinearLayout
 import io.github.tabssh.utils.logging.Logger
@@ -27,6 +28,12 @@ class MultiRowKeyboardView @JvmOverloads constructor(
     private var onModifierChangedListener: ((String?) -> Unit)? = null
     private var numberOfRows = DEFAULT_ROWS
 
+    /** User's configured row count (portrait baseline). */
+    private var portraitRowCount = DEFAULT_ROWS
+
+    /** Full layout across all configured rows — preserved across orientation changes. */
+    private var fullLayout: List<List<KeyboardKey>>? = null
+
     /** Currently latched modifier ("CTL", "ALT") or null. FN is handled via row swap. */
     private var currentModifier: String? = null
 
@@ -42,28 +49,63 @@ class MultiRowKeyboardView @JvmOverloads constructor(
     }
 
     /**
-     * Set number of keyboard rows (1-5)
+     * Set number of keyboard rows (1-5). This is the portrait baseline; in
+     * landscape the count is automatically capped to [LANDSCAPE_MAX_ROWS].
      */
     fun setRowCount(count: Int) {
-        numberOfRows = count.coerceIn(MIN_ROWS, MAX_ROWS)
+        portraitRowCount = count.coerceIn(MIN_ROWS, MAX_ROWS)
+        numberOfRows = effectiveRowCount()
         rebuildRows()
     }
 
     /**
-     * Get current number of rows
+     * Get the currently displayed row count (orientation-adjusted).
      */
     fun getRowCount(): Int = numberOfRows
 
     /**
-     * Set layout for all rows
-     * Each inner list represents one row of keys
+     * Row count capped to [LANDSCAPE_MAX_ROWS] when in landscape.
+     */
+    private fun effectiveRowCount(): Int {
+        val isLandscape =
+            resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        return if (isLandscape) minOf(portraitRowCount, LANDSCAPE_MAX_ROWS)
+        else portraitRowCount
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        val newEffective = if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE)
+            minOf(portraitRowCount, LANDSCAPE_MAX_ROWS)
+        else portraitRowCount
+        if (newEffective == numberOfRows) return
+
+        numberOfRows = newEffective
+        rebuildRows()
+        val layout = fullLayout
+        if (layout != null) {
+            for ((idx, keys) in layout.take(numberOfRows).withIndex()) {
+                if (idx < keyboardRows.size) keyboardRows[idx].setKeys(keys)
+            }
+        } else {
+            applyDefaultKeys()
+        }
+        applyModifierHighlight()
+    }
+
+    /**
+     * Set layout for all rows. The full layout is remembered so that
+     * all rows can be restored when rotating back to portrait even if
+     * landscape capped the visible count.
      */
     fun setLayout(rows: List<List<KeyboardKey>>) {
-        numberOfRows = rows.size.coerceIn(MIN_ROWS, MAX_ROWS)
-        Logger.d(TAG, "setLayout called with ${rows.size} rows")
+        portraitRowCount = rows.size.coerceIn(MIN_ROWS, MAX_ROWS)
+        fullLayout = rows.take(portraitRowCount)
+        numberOfRows = effectiveRowCount()
+        Logger.d(TAG, "setLayout: ${rows.size} rows supplied, portrait=$portraitRowCount effective=$numberOfRows")
         rebuildRows()
 
-        rows.take(numberOfRows).forEachIndexed { index, keys ->
+        fullLayout!!.take(numberOfRows).forEachIndexed { index, keys ->
             Logger.d(TAG, "Setting row $index with ${keys.size} keys: ${keys.map { it.label }}")
             if (index < keyboardRows.size) {
                 keyboardRows[index].setKeys(keys)
@@ -72,7 +114,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
             }
         }
 
-        Logger.d(TAG, "Layout set with $numberOfRows rows, total keys: ${rows.sumOf { it.size }}")
+        Logger.d(TAG, "Layout set: $numberOfRows rows visible, ${rows.sumOf { it.size }} total keys")
     }
 
     /**
@@ -258,13 +300,16 @@ class MultiRowKeyboardView @JvmOverloads constructor(
     }
 
     /**
-     * Reset to default layout
+     * Reset to default layout. Preserves the configured portrait row count;
+     * visible rows are still capped in landscape.
      */
     fun resetToDefault() {
         fnMode = false
         savedLayout = null
+        fullLayout = null
         currentModifier = null
-        numberOfRows = DEFAULT_ROWS
+        if (portraitRowCount == 0) portraitRowCount = DEFAULT_ROWS
+        numberOfRows = effectiveRowCount()
         rebuildRows()
         applyDefaultKeys()
         onModifierChangedListener?.invoke(null)
@@ -274,6 +319,8 @@ class MultiRowKeyboardView @JvmOverloads constructor(
         const val MIN_ROWS = 1
         const val MAX_ROWS = 5
         const val DEFAULT_ROWS = 3
+        /** Maximum rows shown in landscape to preserve terminal vertical space. */
+        const val LANDSCAPE_MAX_ROWS = 2
         private const val TAG = "MultiRowKeyboardView"
 
         /**
