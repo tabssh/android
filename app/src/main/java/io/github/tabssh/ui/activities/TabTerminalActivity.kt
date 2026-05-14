@@ -537,8 +537,11 @@ class TabTerminalActivity : AppCompatActivity() {
             disconnectAllTabs()
         }
 
-        // Copy / Paste no longer in this sheet — those moved to dedicated
-        // SEL + PASTE keys on the multi-row keyboard bar.
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_select_text)?.setOnClickListener {
+            bottomSheet.dismiss()
+            getActiveTerminalView()?.armSelectionForNextDrag()
+            Toast.makeText(this, "Drag on the terminal to select text, then tap Copy.", Toast.LENGTH_LONG).show()
+        }
 
         view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_port_forwarding)?.setOnClickListener {
             bottomSheet.dismiss()
@@ -1633,7 +1636,13 @@ class TabTerminalActivity : AppCompatActivity() {
                         // the tab's I/O from SSH to mosh-client. The SSH stays open
                         // briefly so the bootstrap completes; mosh-server detaches
                         // and continues listening on UDP independently.
-                        if (profile.useMosh && io.github.tabssh.protocols.mosh.MoshNativeClient.resolveBinary(this) != null) {
+                        if (profile.useMosh && io.github.tabssh.protocols.mosh.MoshNativeClient.resolveBinary(this) == null) {
+                            // Native mosh-client binary not bundled — offer the
+                            // server-side handoff (Termux / manual copy) instead
+                            // of silently falling back to plain SSH with no notice.
+                            showToast("Connected to ${profile.getDisplayName()}")
+                            runOnUiThread { showMoshHandoff() }
+                        } else if (profile.useMosh) {
                             val handoff = io.github.tabssh.protocols.mosh.MoshHandoff.bootstrap(
                                 sshConnection, profile.username, profile.host
                             )
@@ -3310,6 +3319,11 @@ class TabTerminalActivity : AppCompatActivity() {
             dialog.show()
         }
     
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        binding.multiRowKeyboard.notifyConfigurationChanged(newConfig)
+    }
+
     override fun onResume() {
         super.onResume()
 

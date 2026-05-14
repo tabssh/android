@@ -1,6 +1,6 @@
 # TabSSH TODO
 
-**Last Updated:** 2026-05-12
+**Last Updated:** 2026-05-14
 **Version:** 0.0.9 (pinned via `release.txt` — DO NOT MODIFY without coordinated bump in `app/build.gradle` + F-Droid metadata)
 
 > **Usage rules for AI agents:**
@@ -74,6 +74,19 @@
 ---
 
 ## 📝 Open / Planned Work
+
+### 🐛 Active Bug Queue — 2026-05-14
+
+These are confirmed bugs reported by the user on 2026-05-14. Fix in order; all are in progress.
+
+| # | Bug | Status | Files |
+|---|-----|--------|-------|
+| B-1 | Proxmox console error "OKunable to find a serial interface" — Proxmox returns HTTP 200 with `{"data":null,"errors":"...serial..."}` instead of 500; `getTermProxy()` throws "No data in termproxy response" which doesn't contain "serial" so the friendly serial-device message is never shown. Also: `apiPost()` only does `take(200)` on the raw body, losing structured `errors` field. | 🔧 In progress | `ProxmoxApiClient.kt`, `HypervisorConsoleManager.kt` |
+| B-2 | Mosh not working — `useMosh=true` but bundled `libmosh-client.so` binary doesn't exist in jniLibs. Auto-mosh block at `TabTerminalActivity.kt:1636` silently falls through to SSH with no notice to user. | 🔧 In progress | `TabTerminalActivity.kt` |
+| B-3 | Copy/paste UX — ☰ MENU bottom sheet has no text-selection entry point. SEL key exists on the keyboard but user doesn't know to use it. Menu should include "Select text" that arms the drag-select and explains the flow. | 🔧 In progress | `bottom_sheet_terminal_menu.xml`, `TabTerminalActivity.kt` |
+| B-4 | Keyboard doesn't dynamically adjust on rotation — `TabTerminalActivity` has no `android:configChanges` in manifest so Activity recreates on every rotation (flicker + re-init). Also: keys are `WRAP_CONTENT` and don't fill the wider landscape screen; `LANDSCAPE_MAX_ROWS=2` cap works but key width leaves dead space. | 🔧 In progress | `AndroidManifest.xml`, `TabTerminalActivity.kt`, `KeyboardRowView.kt` |
+
+---
 
 ### ✅ Audit progress — 2026-05-02
 

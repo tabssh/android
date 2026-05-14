@@ -82,9 +82,21 @@
         android:layout_marginTop="8dp"
         android:layout_marginBottom="8dp" />
 
-    <!-- Copy / Paste removed: dedicated SEL + PASTE keys live on the
-         multi-row keyboard bar now, so the bottom-sheet is purely for
-         tab / session navigation. -->
+    <!-- Text Selection -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_select_text"
+        style="@style/Widget.Material3.Button.TextButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Select Text…"
+        app:icon="@drawable/ic_copy"
+        app:iconGravity="start" />
+
+    <com.google.android.material.divider.MaterialDivider
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp" />
 
     <!-- More Options -->
     <TextView

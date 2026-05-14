@@ -335,7 +335,10 @@ class ProxmoxApiClient(
                     websocketUrl = websocketUrl
                 )
             } else {
-                throw IOException("No data in termproxy response")
+                val errMsg = json.optString("errors", "").takeIf { it.isNotBlank() }
+                    ?: json.optJSONObject("errors")?.toString()?.takeIf { it.isNotBlank() }
+                    ?: "No data in termproxy response"
+                throw IOException(errMsg)
             }
         } catch (e: Exception) {
             Logger.e("ProxmoxAPI", "Failed to get termproxy", e)
@@ -432,8 +435,15 @@ class ProxmoxApiClient(
         if (response.isSuccessful && responseBody != null) {
             return JSONObject(responseBody)
         } else {
-            val errorDetail = responseBody?.take(200) ?: ""
-            throw IOException("API request failed: ${response.code} $errorDetail")
+            val errorDetail = try {
+                val body = JSONObject(responseBody ?: "{}")
+                body.optString("errors", "").takeIf { it.isNotBlank() }
+                    ?: body.optJSONObject("errors")?.toString()
+                    ?: responseBody?.take(200) ?: ""
+            } catch (_: Exception) {
+                responseBody?.take(200) ?: ""
+            }
+            throw IOException(if (errorDetail.isBlank()) "API request failed: ${response.code}" else errorDetail)
         }
     }
 }

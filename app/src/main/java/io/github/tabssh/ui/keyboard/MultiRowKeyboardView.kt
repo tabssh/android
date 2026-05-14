@@ -93,6 +93,11 @@ class MultiRowKeyboardView @JvmOverloads constructor(
         applyModifierHighlight()
     }
 
+    /** Public entry point so the hosting Activity can forward its own onConfigurationChanged. */
+    fun notifyConfigurationChanged(newConfig: android.content.res.Configuration) {
+        onConfigurationChanged(newConfig)
+    }
+
     /**
      * Set layout for all rows. The full layout is remembered so that
      * all rows can be restored when rotating back to portrait even if

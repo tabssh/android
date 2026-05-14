@@ -103,6 +103,7 @@
             android:name=".ui.activities.TabTerminalActivity"
             android:exported="false"
             android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|keyboardHidden"
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
