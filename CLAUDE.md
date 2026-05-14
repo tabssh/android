@@ -52,12 +52,12 @@
 
 **TODO.AI.md** — open it at the start of any session touching 2+ tasks. Update status as you go. Every shipped feature and every bug fix must be logged there. Do not let it go stale.
 
-**Commits** — use `/usr/local/bin/gitcommit <command>`. Plain `git commit` and `git push` are both sandbox-denied. Steps:
-1. `git status --porcelain` — verify scope
-2. Write `.git/COMMIT_MESS`; re-read it before running the wrapper
-3. `gitcommit all` (or `new` / `improved` / `fixes` / `docs` / `release`)
+**Commits** — `git commit` and `git push` are denied. Use `gitcommit --dir {project_root} all`. Steps:
+1. `git status --porcelain` + `git diff --stat` — verify scope
+2. Write `.git/COMMIT_MESS`; re-read before running
+3. `gitcommit --dir /root/Projects/github/tabssh/android all`
 
-Format: `{emoji} Title ≤64 chars {emoji}` + blank line + body + `- file: what changed` bullets. No AI attribution. Emoji: 🐛 fix · ✨ feat · 📚 docs · ♻️ refactor · ⚡ perf · ✅ test · 🔒 security · 🗃️ db · 🚀 release · 🔧 chore.
+Format: `{emoji} Title ≤64 chars {emoji}` + blank line + body + `- file: what changed` bullets. No AI attribution. Emoji: 🐛 fix · ✨ feat · 📝 docs · ♻️ refactor · ⚡ perf · ✅ test · 🔒 security · 🗃️ db · 🚀 release · 🔧 chore.
 
 **Green build = commit immediately** — `make check` exit 0 means commit without asking.
 
