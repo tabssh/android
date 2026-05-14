@@ -1,5 +1,5 @@
-#!/bin/bash
-# Clean and rebuild - Full clean of all build artifacts
+#!/usr/bin/env bash
+# scripts/clean-build.sh — full clean of build artefacts then rebuild.
 
 echo "🧹 TabSSH Clean Build"
 echo "====================="

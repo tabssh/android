@@ -1,5 +1,5 @@
-#!/bin/bash
-# Install TabSSH APK to connected Android device via ADB
+#!/usr/bin/env bash
+# scripts/install-to-device.sh — install TabSSH APK to a connected device via ADB.
 
 echo "📱 TabSSH APK Installer"
 echo "========================"

@@ -177,3 +177,10 @@ app/src/main/jniLibs/*/libmosh-client.so
 # compress poorly under git pack, so we keep them out of repo history
 # and let the script cache them locally.
 app/src/main/assets/fonts/*.ttf
+
+# Claude agent working files — never commit these
+.claude/
+.agent/
+
+# Core dumps
+core.*

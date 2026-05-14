@@ -206,14 +206,16 @@ start_avd() {
   local serial="emulator-$emu_port"
 
   echo "🚀 Booting $name on $serial …"
+  local logdir="${TMPDIR:-/tmp}/tabssh-android"
+  mkdir -p "$logdir"
   nohup "$EMU" \
     -avd "$name" \
     -port "$emu_port" \
     -no-window -no-audio -no-boot-anim -no-snapshot \
     -gpu swiftshader_indirect \
     -accel auto \
-    >"/tmp/${name}.log" 2>&1 &
-  echo "  pid=$! log=/tmp/${name}.log"
+    >"$logdir/${name}.log" 2>&1 &
+  echo "  pid=$! log=$logdir/${name}.log"
 
   echo -n "⏳ Waiting for $serial "
   for _ in $(seq 1 60); do
