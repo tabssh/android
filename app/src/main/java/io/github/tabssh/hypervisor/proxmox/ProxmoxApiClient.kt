@@ -335,9 +335,21 @@ class ProxmoxApiClient(
                     websocketUrl = websocketUrl
                 )
             } else {
+                // Proxmox returns {"data":null} when the VM has no serial device
+                // configured (termproxy requires a serial interface). Extract the
+                // actual error text from whichever field Proxmox used. The errors
+                // field is typically a JSONObject keyed by endpoint; pull the first
+                // value so downstream callers can do a simple string match.
                 val errMsg = json.optString("errors", "").takeIf { it.isNotBlank() }
-                    ?: json.optJSONObject("errors")?.toString()?.takeIf { it.isNotBlank() }
-                    ?: "No data in termproxy response"
+                    ?: json.optJSONObject("errors")?.let { errObj ->
+                        val key = errObj.keys().takeIf { it.hasNext() }?.next()
+                        key?.let { errObj.optString(it, "").takeIf { v -> v.isNotBlank() } }
+                            ?: errObj.toString().takeIf { it.isNotBlank() }
+                    }
+                    ?: json.optString("message", "").takeIf { it.isNotBlank() }
+                    // Null data with no error text still means no serial device —
+                    // use a message that triggers the friendly hint downstream.
+                    ?: "termproxy: serial interface not defined"
                 throw IOException(errMsg)
             }
         } catch (e: Exception) {
@@ -437,8 +449,15 @@ class ProxmoxApiClient(
         } else {
             val errorDetail = try {
                 val body = JSONObject(responseBody ?: "{}")
+                // errors may be a flat string or a JSONObject keyed by endpoint
+                // (e.g. {"vmid":"serial interface not defined"}). Extract the
+                // actual text so callers can do simple string matching.
                 body.optString("errors", "").takeIf { it.isNotBlank() }
-                    ?: body.optJSONObject("errors")?.toString()
+                    ?: body.optJSONObject("errors")?.let { errObj ->
+                        val key = errObj.keys().takeIf { it.hasNext() }?.next()
+                        key?.let { errObj.optString(it, "").takeIf { v -> v.isNotBlank() } }
+                            ?: errObj.toString().takeIf { it.isNotBlank() }
+                    }
                     ?: responseBody?.take(200) ?: ""
             } catch (_: Exception) {
                 responseBody?.take(200) ?: ""

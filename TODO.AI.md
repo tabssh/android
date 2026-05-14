@@ -81,14 +81,14 @@ Confirmed bugs reported by the user on 2026-05-14. Fix in order listed.
 
 | # | Bug | Status | Files |
 |---|-----|--------|-------|
-| B-1 | Keyboard landscape expansion unwanted — `distributeKeyWidths()` expands keys to fill landscape row width. User wants CSS/HTML natural-size behavior: keys stay WRAP_CONTENT in both orientations; landscape just gives more horizontal space (scrollable). | ⬜ Next | `KeyboardRowView.kt` |
-| B-2 | SEL key freezes terminal — `armSelectionForNextDrag()` arms drag-select mode. If user doesn't immediately drag, the armed flag is never cleared → terminal stops accepting typed input. Fix: clear armed state on any non-drag touch event (tap, key press, focus loss). | ⬜ Queued | `TerminalView.kt` |
-| B-3 | Scrollback reversed + laggy — scroll direction inverted; `renderTermuxBuffer` called on every scroll frame is expensive. | ⬜ Queued | `TerminalView.kt` |
-| B-4 | New-tab picker doesn't switch to new tab — after connecting via quick-connect picker the app stays on the previous tab. Should auto-switch to the newly connected tab. | ⬜ Queued | `TabTerminalActivity.kt` |
-| B-5 | Exit=0 still prompts to reconnect — reconnect dialog should only appear for non-clean exits (exit≠0, exit=-1 connection drop). Clean `exit` command triggers it incorrectly. | ⬜ Queued | `TabTerminalActivity.kt` |
-| B-6 | Disconnect notifications not self-removing — per-host DISCONNECTED notification has `setTimeoutAfter(30_000L)` but notifications persist on screen indefinitely. | ⬜ Queued | `NotificationHelper.kt`, `SSHConnectionService.kt` |
+| B-1 | Keyboard landscape expansion unwanted — `distributeKeyWidths()` expands keys to fill landscape row width. User wants CSS/HTML natural-size behavior: keys stay WRAP_CONTENT in both orientations; landscape just gives more horizontal space (scrollable). | ✅ `c0bb3e4` | `KeyboardRowView.kt` |
+| B-2 | SEL key freezes terminal — `armSelectionForNextDrag()` arms drag-select mode. If user doesn't immediately drag, the armed flag is never cleared → terminal stops accepting typed input. Fix: clear armed state on any non-drag touch event (tap, key press, focus loss). | ✅ `576fc36` | `TerminalView.kt` |
+| B-3 | Scrollback reversed + laggy — scroll direction inverted; `renderTermuxBuffer` called on every scroll frame is expensive. | ✅ `df29e34` | `TerminalView.kt` |
+| B-4 | New-tab picker doesn't switch to new tab — after connecting via quick-connect picker the app stays on the previous tab. Should auto-switch to the newly connected tab. | ✅ `b6c3386` | `TabTerminalActivity.kt` |
+| B-5 | Exit=0 still prompts to reconnect — race: `onDisconnected` emitted DISCONNECTED before `closeChannel()` captured exit status, so `getShellExitStatus()` always returned -1. | ✅ `b6c3386` | `SSHTab.kt` |
+| B-6 | Disconnect notifications not self-removing — notification update via `nm.notify()` on the same ID that was the foreground anchor retained the ongoing flag; `setTimeoutAfter` was ignored. | ✅ `d2238f7` | `SSHConnectionService.kt` |
 | B-7 | Mosh not working — `mosh-client` binary missing from jniLibs; fallback to SSH is silent (no user notice). | ⬜ Queued | `TabTerminalActivity.kt` |
-| B-8 | Proxmox console serial interface error — HTTP 200 `{"data":null,"errors":"...serial..."}` not detected; friendly message never shown. | ⬜ Queued | `ProxmoxApiClient.kt`, `HypervisorConsoleManager.kt` |
+| B-8 | Proxmox console serial interface error — HTTP 200 `{"data":null,"errors":"...serial..."}` not detected; friendly message never shown. | ✅ `pending` | `ProxmoxApiClient.kt` |
 | B-9 | OCI VMs — no console access (stub). Instance control may also be broken. | ⬜ Queued | `OciApiClient.kt`, `OciManagerActivity.kt` |
 
 ---
