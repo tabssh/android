@@ -58,8 +58,6 @@ class KeyboardRowView @JvmOverloads constructor(
         super.onConfigurationChanged(newConfig)
         layoutParams = layoutParams.also { it.height = rowHeightPx() }
         requestLayout()
-        // Re-distribute key widths after layout has a fresh measured width.
-        post { distributeKeyWidths() }
     }
 
     private fun rowHeightPx(): Int =
@@ -103,29 +101,6 @@ class KeyboardRowView @JvmOverloads constructor(
                 modifierButtons[key.id] = button
             }
         }
-        // In landscape the row is wider — fill available width rather than
-        // letting keys bunch up with WRAP_CONTENT.
-        post { distributeKeyWidths() }
-    }
-
-    /**
-     * In landscape, expand keys to fill the row width. In portrait keep
-     * WRAP_CONTENT so the row is scrollable without clipping labels.
-     */
-    private fun distributeKeyWidths() {
-        if (keys.isEmpty() || width == 0) return
-        val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-        if (!isLandscape) return
-        val totalMargins = keys.size * dpToPx(KEY_MARGIN_DP)
-        val keyWidth = (width - paddingStart - paddingEnd - totalMargins) / keys.size
-        if (keyWidth <= 0) return
-        for (i in 0 until keyContainer.childCount) {
-            keyContainer.getChildAt(i)?.layoutParams?.also { lp ->
-                lp.width = keyWidth
-                keyContainer.getChildAt(i)?.layoutParams = lp
-            }
-        }
-        keyContainer.requestLayout()
     }
 
     /**
