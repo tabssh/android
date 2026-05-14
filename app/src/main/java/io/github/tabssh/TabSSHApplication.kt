@@ -224,15 +224,11 @@ class TabSSHApplication : Application() {
     }
 
     private fun wireGlobalNotifications() {
-        sshSessionManager.addListener(object : io.github.tabssh.ssh.connection.SessionManagerListener {
-            override fun onConnectionStateChanged(profileId: String, state: io.github.tabssh.ssh.connection.ConnectionState) {
-                if (state != io.github.tabssh.ssh.connection.ConnectionState.DISCONNECTED) return
-                applicationScope.launch {
-                    val name = database.connectionDao().getConnectionById(profileId)?.getDisplayName() ?: return@launch
-                    io.github.tabssh.utils.NotificationHelper.showDisconnected(this@TabSSHApplication, name)
-                }
-            }
-        })
+        // Per-host connect/disconnect notifications are handled entirely by
+        // SSHConnectionService via renderHostNotification(). Posting a
+        // second showDisconnected() here produced a duplicate notification
+        // for the same host — the legacy aggregate ID 2001 shadowing the
+        // per-host silent channel notification. Nothing to do here now.
     }
 
     private fun wireGlobalHostKeyCallbacks() {
