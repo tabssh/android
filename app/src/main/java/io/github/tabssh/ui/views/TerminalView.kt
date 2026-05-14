@@ -61,6 +61,9 @@ class TerminalView @JvmOverloads constructor(
     private val scroller: OverScroller
     private var scrollY = 0
 
+    // Reusable buffer for drawText — avoids one String allocation per glyph per frame.
+    private val charBuf = CharArray(2)
+
     // Pinch-to-zoom state
     private var isScaling = false
     private var minFontSize = 8f
@@ -1005,8 +1008,9 @@ class TerminalView @JvmOverloads constructor(
                     textPaint.textSkewX = if ((effect and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0) -0.25f else 0f
                     textPaint.isUnderlineText = (effect and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE) != 0
 
-                    val charStr = String(Character.toChars(codePoint))
-                    canvas.drawText(charStr, x, y, textPaint)
+                    // Reuse charBuf to avoid a String allocation per glyph.
+                    val charCount = Character.toChars(codePoint, charBuf, 0)
+                    canvas.drawText(charBuf, 0, charCount, x, y, textPaint)
 
                     // Reset effects
                     textPaint.isFakeBoldText = false
@@ -1496,8 +1500,14 @@ class TerminalView @JvmOverloads constructor(
     private inner class TerminalGestureListener : GestureDetector.SimpleOnGestureListener() {
 
         override fun onScroll(e1: MotionEvent?, e2: MotionEvent, distanceX: Float, distanceY: Float): Boolean {
-            scrollY = (scrollY + distanceY).coerceIn(0f, maxScrollYPx().toFloat()).toInt()
-            invalidate()
+            // distanceY > 0 when the finger moved UP. Mobile convention is
+            // swipe-DOWN to reach older scrollback, so we negate distanceY:
+            // finger down → distanceY < 0 → -distanceY > 0 → scrollY grows.
+            scrollY = (scrollY - distanceY).coerceIn(0f, maxScrollYPx().toFloat()).toInt()
+            // postInvalidateOnAnimation schedules one redraw per vsync frame,
+            // preventing multiple expensive re-renders within a single frame
+            // when onScroll fires faster than the display can refresh.
+            postInvalidateOnAnimation()
             return true
         }
 
@@ -1520,8 +1530,10 @@ class TerminalView @JvmOverloads constructor(
                     return true
                 }
             }
-            scroller.fling(0, scrollY, 0, -velocityY.toInt(), 0, 0, 0, maxScrollYPx())
-            invalidate()
+            // velocityY > 0 = finger was moving DOWN. With swipe-down-for-older
+            // convention that should increase scrollY, so pass +velocityY.
+            scroller.fling(0, scrollY, 0, velocityY.toInt(), 0, 0, 0, maxScrollYPx())
+            postInvalidateOnAnimation()
             return true
         }
 
