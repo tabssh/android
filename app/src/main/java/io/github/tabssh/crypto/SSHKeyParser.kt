@@ -227,7 +227,7 @@ object SSHKeyParser {
             keyTypeName.startsWith("ssh-rsa") -> {
                 val e = readMPInt(buffer)
                 val n = readMPInt(buffer)
-                val keyFactory = KeyFactory.getInstance("RSA", "BC")
+                val keyFactory = KeyFactory.getInstance("RSA")
                 val pubSpec = java.security.spec.RSAPublicKeySpec(n, e)
                 Pair(keyFactory.generatePublic(pubSpec), KeyType.RSA)
             }
@@ -674,7 +674,7 @@ object SSHKeyParser {
                     privateKey.modulus,
                     privateKey.publicExponent
                 )
-                val keyFactory = KeyFactory.getInstance("RSA", "BC")
+                val keyFactory = KeyFactory.getInstance("RSA")
                 keyFactory.generatePublic(spec)
             }
             is DSAPrivateKey -> {

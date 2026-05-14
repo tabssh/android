@@ -3,6 +3,8 @@ package io.github.tabssh
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
+import org.bouncycastle.jce.provider.BouncyCastleProvider
+import java.security.Security
 import io.github.tabssh.storage.database.TabSSHDatabase
 import java.lang.ref.WeakReference
 import io.github.tabssh.crypto.storage.SecurePasswordManager
@@ -85,6 +87,12 @@ class TabSSHApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         INSTANCE = this
+
+        // Android ships a stripped "BC" provider that is missing KeyFactory/RSA
+        // and other algorithms. Replace it with the full external BouncyCastle
+        // before any crypto code runs so every subsequent BC lookup is correct.
+        Security.removeProvider("BC")
+        Security.insertProviderAt(BouncyCastleProvider(), 1)
 
         // Logger init policy:
         //   - debug builds (BuildConfig.DEBUG_MODE = true) auto-enable

@@ -89,13 +89,7 @@ class KeyStorage(private val context: Context) {
     
     private var isInitialized = false
     
-    // Add BouncyCastle provider for enhanced cryptographic support
-    init {
-        if (Security.getProvider(BouncyCastleProvider.PROVIDER_NAME) == null) {
-            Security.addProvider(BouncyCastleProvider())
-            Logger.d("KeyStorage", "Added BouncyCastle security provider")
-        }
-    }
+    // BC provider is installed by TabSSHApplication.onCreate(); no-op here.
     
     fun initialize() {
         if (isInitialized) return

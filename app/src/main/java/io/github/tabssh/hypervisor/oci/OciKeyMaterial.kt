@@ -36,10 +36,17 @@ class OciKeyMaterial private constructor(
 
     companion object {
         init {
-            // BouncyCastle is already on the classpath via the SSH key parser.
-            // Add the provider lazily — multiple addProvider() calls are no-ops.
-            if (java.security.Security.getProvider("BC") == null) {
-                java.security.Security.addProvider(org.bouncycastle.jce.provider.BouncyCastleProvider())
+            // TabSSHApplication.onCreate() installs the full external BC provider
+            // at app startup. This guard is a safety net for unit tests or any
+            // context where Application.onCreate() hasn't run yet.
+            if (java.security.Security.getProvider("BC")
+                    ?.javaClass?.name
+                    ?.contains("bouncycastle") == false
+            ) {
+                java.security.Security.removeProvider("BC")
+                java.security.Security.insertProviderAt(
+                    org.bouncycastle.jce.provider.BouncyCastleProvider(), 1
+                )
             }
         }
 
