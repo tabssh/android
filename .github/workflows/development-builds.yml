@@ -104,6 +104,11 @@ jobs:
         chmod +x scripts/fetch-mosh-binaries.sh
         TABSSH_REPO="${{ github.repository }}" scripts/fetch-mosh-binaries.sh
 
+    - name: Fetch Nerd Fonts
+      run: |
+        chmod +x scripts/fetch-fonts.sh
+        scripts/fetch-fonts.sh
+
     - name: Build debug APKs
       run: ./gradlew assembleDebug --no-daemon
 

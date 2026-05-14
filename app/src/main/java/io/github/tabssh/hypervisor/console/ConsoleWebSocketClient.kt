@@ -295,16 +295,17 @@ class ConsoleWebSocketClient(
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                    val errorMsg = "WebSocket failure: ${t.message}" + if (response != null) " (HTTP ${response.code})" else ""
-                    Logger.e(TAG, errorMsg, t)
                     isConnected = false
                     if (userInitiatedClose) {
-                        // EOFException from the reader thread is expected
-                        // when we close the socket ourselves — don't escalate
-                        // it to the listener, the activity is finishing.
+                        // EOFException after a local close is expected — OkHttp's
+                        // reader thread sees EOF when we tear down the socket.
+                        Logger.d(TAG, "WebSocket EOF after user-initiated disconnect (expected)")
                         cleanup()
                         return
                     }
+                    val errorMsg = "WebSocket failure: ${t.message}" +
+                        if (response != null) " (HTTP ${response.code})" else ""
+                    Logger.e(TAG, errorMsg, t)
                     connectionListener?.onError(t)
                     cleanup()
                 }
