@@ -1,11 +1,13 @@
 package io.github.tabssh.ui.keyboard
 
 import android.content.Context
+import android.content.res.Configuration
 import android.util.AttributeSet
 import android.view.Gravity
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import com.google.android.material.button.MaterialButton
+import io.github.tabssh.R
 
 /**
  * Single row of the multi-row keyboard
@@ -23,7 +25,6 @@ class KeyboardRowView @JvmOverloads constructor(
 
     companion object {
         private const val TAG = "KeyboardRowView"
-        private const val ROW_HEIGHT_DP = 42
         private const val KEY_PADDING_DP = 12
         private const val KEY_MARGIN_DP = 4
         private const val KEY_TEXT_SIZE_SP = 12f
@@ -50,9 +51,17 @@ class KeyboardRowView @JvmOverloads constructor(
         }
         addView(keyContainer)
 
-        // Set row height
-        layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(ROW_HEIGHT_DP))
+        layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, rowHeightPx())
     }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        layoutParams = layoutParams.also { it.height = rowHeightPx() }
+        requestLayout()
+    }
+
+    private fun rowHeightPx(): Int =
+        resources.getDimensionPixelSize(R.dimen.keyboard_row_height)
 
     /**
      * Set keys for this row

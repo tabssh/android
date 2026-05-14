@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Landscape overrides: keyboard rows are shorter to leave more terminal
+         space on the compact vertical dimension of a landscape phone screen. -->
+    <dimen name="keyboard_row_height">32dp</dimen>
+</resources>

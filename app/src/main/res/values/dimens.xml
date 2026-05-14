@@ -89,6 +89,9 @@
     <dimen name="keyboard_height_compact">160dp</dimen>
     <dimen name="keyboard_key_height">40dp</dimen>
     <dimen name="keyboard_key_spacing">2dp</dimen>
+    <!-- Per-row height of MultiRowKeyboardView. Overridden in values-land/ to
+         save vertical space when the screen is short. -->
+    <dimen name="keyboard_row_height">42dp</dimen>
     
     <!-- Accessibility dimensions -->
     <dimen name="accessibility_min_touch_target">48dp</dimen>
