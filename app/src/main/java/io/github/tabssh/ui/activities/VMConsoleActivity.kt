@@ -78,10 +78,12 @@ class VMConsoleActivity : AppCompatActivity() {
     private var consoleManager: HypervisorConsoleManager? = null
     private var termuxBridge: TermuxBridge? = null
     private var isConnected = false
+    private var isRecreated = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_vm_console)
+        isRecreated = savedInstanceState != null
 
         app = application as TabSSHApplication
 
@@ -520,7 +522,9 @@ class VMConsoleActivity : AppCompatActivity() {
         override fun onConnected(vmName: String) {
             runOnUiThread {
                 hideProgress()
-                Toast.makeText(this@VMConsoleActivity, "Connected to $vmName", Toast.LENGTH_SHORT).show()
+                if (!isRecreated) {
+                    Toast.makeText(this@VMConsoleActivity, "Connected to $vmName", Toast.LENGTH_SHORT).show()
+                }
             }
         }
 

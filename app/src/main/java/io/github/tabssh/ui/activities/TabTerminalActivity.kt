@@ -87,6 +87,10 @@ class TabTerminalActivity : AppCompatActivity() {
      */
     @Volatile private var isReconnecting = false
 
+    // True when this onCreate invocation is a config-change recreation (e.g. rotation).
+    // Used to suppress "Reattached" toasts that would fire on every rotate.
+    private var isRecreated = false
+
     // Held as a field so onDestroy can call tabManager.removeListener — see
     // setupTabManager() for the construction site and the leak rationale.
     private var tabManagerListener: TabManagerListener? = null
@@ -115,7 +119,8 @@ class TabTerminalActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         
         Logger.d("TabTerminalActivity", "onCreate")
-        
+        isRecreated = savedInstanceState != null
+
         app = application as TabSSHApplication
         binding = ActivityTabTerminalBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -1490,11 +1495,13 @@ class TabTerminalActivity : AppCompatActivity() {
                         tabManager.setActiveTab(idx)
                         switchToTab(idx)
                     }
-                    android.widget.Toast.makeText(
-                        this,
-                        "Reattached to ${profile.name}",
-                        android.widget.Toast.LENGTH_SHORT
-                    ).show()
+                    if (!isRecreated) {
+                        android.widget.Toast.makeText(
+                            this,
+                            "Reattached to ${profile.name}",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
                 }
                 return
             }

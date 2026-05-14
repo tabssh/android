@@ -123,7 +123,8 @@ class HypervisorConsoleManager {
                 }
 
                 override fun onError(error: Throwable) {
-                    Logger.e(TAG, "Proxmox console error", error)
+                    // ConsoleWebSocketClient already logged this at ERROR level; avoid duplicate stack trace.
+                    Logger.d(TAG, "Proxmox console error forwarded: ${error.message}")
                     listener?.onError(error.message ?: "Unknown error")
                 }
             })
