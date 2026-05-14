@@ -246,6 +246,7 @@ class MultiHostDashboardActivity : AppCompatActivity() {
                 if (r.isSuccess) card.update(r.getOrThrow())
                 else card.setError(r.exceptionOrNull()?.message ?: "error")
             }
+            if (r.isFailure && !ssh.isConnected()) return
             delay(REFRESH_MS)
         }
     }

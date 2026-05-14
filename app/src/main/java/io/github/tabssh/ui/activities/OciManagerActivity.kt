@@ -177,6 +177,18 @@ class OciManagerActivity : AppCompatActivity() {
 
                 app.database.hypervisorDao()
                     .updateLastConnected(profile.id, System.currentTimeMillis())
+
+                // Persist any cert pin captured during validateCredentials() so
+                // subsequent API calls in this session (and future sessions) skip
+                // the TOFU dialog.
+                val capturedPin = currentClient?.getCapturedCertSha256()
+                if (capturedPin != null) {
+                    withContext(Dispatchers.IO) {
+                        app.database.hypervisorDao().updatePinnedCertSha256(profile.id, capturedPin)
+                    }
+                    currentProfile = currentProfile?.copy(pinnedCertSha256 = capturedPin)
+                }
+
                 statusText.text = "Connected to ${profile.name}"
                 refreshInstances()
             } catch (e: Exception) {

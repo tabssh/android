@@ -124,9 +124,11 @@ object HypervisorTrustManagerFactory {
                 }
                 val presented = sha256Hex(chain[0].encoded)
 
-                // Pin matches → silent OK.
-                if (!pinnedSha256.isNullOrBlank() &&
-                    pinnedSha256.equals(presented, ignoreCase = true)) {
+                // Pin matches → silent OK. Also accept if the user already
+                // accepted this cert in the current session (ACCEPT_AND_PIN
+                // sets captured.sha256 before it can be persisted to the DB).
+                if ((!pinnedSha256.isNullOrBlank() && pinnedSha256.equals(presented, ignoreCase = true)) ||
+                    (!captured.sha256.isNullOrBlank() && captured.sha256.equals(presented, ignoreCase = true))) {
                     Logger.d(TAG, "Cert pin match — leaf SHA-256: $presented")
                     return
                 }

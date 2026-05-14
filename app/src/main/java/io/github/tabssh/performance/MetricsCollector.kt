@@ -20,6 +20,9 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
      * Collect all performance metrics
      */
     suspend fun collectMetrics(): Result<PerformanceMetrics> = withContext(Dispatchers.IO) {
+        if (!sshConnection.isConnected()) {
+            return@withContext Result.failure(IllegalStateException("Not connected"))
+        }
         try {
             val cpuMetrics = collectCpuMetrics()
             val memoryMetrics = collectMemoryMetrics()
@@ -53,7 +56,7 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
             val output = sshConnection.executeCommand("cat /proc/stat | head -1")
             parseCpuStats(output)
         } catch (e: Exception) {
-            Logger.e("MetricsCollector", "Failed to collect CPU metrics", e)
+            Logger.d("MetricsCollector", "CPU metrics unavailable: ${e.message}")
             CpuMetrics.empty()
         }
     }
@@ -92,7 +95,7 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
             val output = sshConnection.executeCommand("cat /proc/meminfo | head -20")
             parseMemoryInfo(output)
         } catch (e: Exception) {
-            Logger.e("MetricsCollector", "Failed to collect memory metrics", e)
+            Logger.d("MetricsCollector", "Memory metrics unavailable: ${e.message}")
             MemoryMetrics.empty()
         }
     }
@@ -144,7 +147,7 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
             val output = sshConnection.executeCommand("df -BG / | tail -1")
             parseDiskUsage(output)
         } catch (e: Exception) {
-            Logger.e("MetricsCollector", "Failed to collect disk metrics", e)
+            Logger.d("MetricsCollector", "Disk metrics unavailable: ${e.message}")
             DiskMetrics.empty()
         }
     }
@@ -180,7 +183,7 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
             val output = sshConnection.executeCommand("cat /proc/net/dev | grep -E 'eth0|ens|enp' | head -1")
             parseNetworkStats(output)
         } catch (e: Exception) {
-            Logger.e("MetricsCollector", "Failed to collect network metrics", e)
+            Logger.d("MetricsCollector", "Network metrics unavailable: ${e.message}")
             NetworkMetrics.empty()
         }
     }
@@ -245,7 +248,7 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
             val uptimeOutput = sshConnection.executeCommand("cat /proc/uptime | cut -d' ' -f1")
             parseLoadMetrics(loadOutput, uptimeOutput)
         } catch (e: Exception) {
-            Logger.e("MetricsCollector", "Failed to collect load metrics", e)
+            Logger.d("MetricsCollector", "Load metrics unavailable: ${e.message}")
             LoadMetrics.empty()
         }
     }
