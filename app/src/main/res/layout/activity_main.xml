@@ -26,7 +26,6 @@
                 android:background="@color/primary_500"
                 app:titleTextColor="@color/white"
                 app:titleTextAppearance="@style/TextAppearance.TabSSH.Toolbar.Title"
-                app:contentInsetStartWithNavigation="0dp"
                 app:popupTheme="@style/ThemeOverlay.Material3.Light" />
 
             <com.google.android.material.tabs.TabLayout
