@@ -263,6 +263,15 @@ class SSHConnectionService : Service() {
         // Final post for the per-host notification (CONNECTED update,
         // CONNECTING refresh, ERROR, or the terminal DISCONNECTED).
         val nm = getSystemService(NotificationManager::class.java)
+
+        // For DISCONNECTED: cancel the existing notification (which may
+        // still carry the "managed by foreground service" flag from when
+        // it was the startForeground anchor), then post a fresh one.
+        // This prevents Android from ignoring setTimeoutAfter/setAutoCancel
+        // on what it still considers an ongoing foreground notification.
+        if (disconnectingState) {
+            nm.cancel(nid)
+        }
         nm.notify(nid, notif)
     }
     
