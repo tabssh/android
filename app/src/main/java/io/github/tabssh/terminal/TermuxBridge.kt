@@ -63,6 +63,11 @@ class TermuxBridge(
     // Termux emulator instance
     private var emulator: TerminalEmulator? = null
 
+    // Wave 9.2 B-12 — when non-null, mosh-client is running inside a
+    // PTY-backed TerminalSession. Writes are routed through the session
+    // instead of outputStream; resize calls updateSize() on the PTY.
+    private var moshSession: TerminalSession? = null
+
     // I/O streams from SSH
     private var inputStream: InputStream? = null
     private var outputStream: OutputStream? = null
@@ -419,10 +424,25 @@ class TermuxBridge(
     }
 
     /**
-     * Write data to SSH (user input)
+     * Write data to SSH (user input), or to the mosh-client PTY when in
+     * mosh mode. The mosh path bypasses the SSH outputStream entirely.
      */
     fun write(data: ByteArray) {
-        terminalOutput.write(data, 0, data.size)
+        val ms = moshSession
+        if (ms != null) {
+            writeScope.launch {
+                writeLock.withLock {
+                    try {
+                        ms.write(data, 0, data.size)
+                        Logger.d(TAG, "Sent ${data.size} bytes to mosh-client PTY")
+                    } catch (e: Exception) {
+                        Logger.e(TAG, "Error writing to mosh session", e)
+                    }
+                }
+            }
+        } else {
+            terminalOutput.write(data, 0, data.size)
+        }
     }
 
     /**
@@ -627,34 +647,43 @@ class TermuxBridge(
         if (newColumns != currentColumns || newRows != currentRows) {
             currentColumns = newColumns
             currentRows = newRows
-            emulator?.resize(newColumns, newRows)
             Logger.d(TAG, "Resized to ${newColumns}x${newRows}")
 
-            // SSH-side window-change MUST share the writeLock with the
-            // keystroke writes — both produce packets on the same JSch
-            // session and a concurrent send corrupts the GCM cipher
-            // state, ending in `ssh_dispatch_run_fatal: message
-            // authentication code incorrect` server-side and an EOF
-            // back to us. Symptom: open keyboard (resize fires) →
-            // type a char → server EOF within 1s.
-            //
-            // The callback usually invokes `Channel.setPtySize`
-            // synchronously, which JSch will route through its own
-            // session writer. By acquiring `writeLock` first we
-            // guarantee no in-flight keystroke is mid-encrypt when
-            // the resize packet goes out, and vice versa.
-            //
-            // We launch on `writeScope` (Dispatchers.IO) for the same
-            // reason keystroke writes do — `setPtySize` blocks on
-            // socket I/O and we MUST NOT do that from the UI thread.
-            val cb = onResizeCallback
-            if (cb != null) {
-                writeScope.launch {
-                    writeLock.withLock {
-                        try {
-                            cb(newColumns, newRows)
-                        } catch (e: Exception) {
-                            Logger.w(TAG, "Resize callback failed: ${e.message}")
+            val ms = moshSession
+            if (ms != null) {
+                // In mosh mode: updateSize() resizes both the TerminalEmulator
+                // and the PTY (via ioctl TIOCSWINSZ → SIGWINCH to mosh-client).
+                // No SSH resize callback is needed.
+                try { ms.updateSize(newColumns, newRows) } catch (_: Exception) {}
+            } else {
+                emulator?.resize(newColumns, newRows)
+
+                // SSH-side window-change MUST share the writeLock with the
+                // keystroke writes — both produce packets on the same JSch
+                // session and a concurrent send corrupts the GCM cipher
+                // state, ending in `ssh_dispatch_run_fatal: message
+                // authentication code incorrect` server-side and an EOF
+                // back to us. Symptom: open keyboard (resize fires) →
+                // type a char → server EOF within 1s.
+                //
+                // The callback usually invokes `Channel.setPtySize`
+                // synchronously, which JSch will route through its own
+                // session writer. By acquiring `writeLock` first we
+                // guarantee no in-flight keystroke is mid-encrypt when
+                // the resize packet goes out, and vice versa.
+                //
+                // We launch on `writeScope` (Dispatchers.IO) for the same
+                // reason keystroke writes do — `setPtySize` blocks on
+                // socket I/O and we MUST NOT do that from the UI thread.
+                val cb = onResizeCallback
+                if (cb != null) {
+                    writeScope.launch {
+                        writeLock.withLock {
+                            try {
+                                cb(newColumns, newRows)
+                            } catch (e: Exception) {
+                                Logger.w(TAG, "Resize callback failed: ${e.message}")
+                            }
                         }
                     }
                 }
@@ -675,7 +704,7 @@ class TermuxBridge(
      */
     fun disconnect() {
         val wasConnected = _isConnected.value
-        if (!wasConnected && inputStream == null && outputStream == null && readJob == null) {
+        if (!wasConnected && inputStream == null && outputStream == null && readJob == null && moshSession == null) {
             // Already torn down — nothing to do, don't re-fire listeners.
             return
         }
@@ -702,6 +731,11 @@ class TermuxBridge(
             Logger.w(TAG, "Error closing output stream", e)
         }
         outputStream = null
+
+        // Mosh PTY session — finishIfRunning() sends SIGHUP to the child
+        // process and closes the master PTY fd.
+        try { moshSession?.finishIfRunning() } catch (_: Exception) {}
+        moshSession = null
 
         if (wasConnected) {
             runOnMain {
@@ -745,6 +779,88 @@ class TermuxBridge(
         } else {
             mainHandler.post(action)
         }
+    }
+
+    /**
+     * Wave 9.2 B-12 — Connect via a PTY-backed TerminalSession for
+     * mosh-client. mosh-client calls tcgetattr() on stdin at startup and
+     * exits immediately with ENOTTY when stdin is a plain pipe (the old
+     * ProcessBuilder path). TerminalSession uses JNI forkpty() so the child
+     * process gets a real TTY as its controlling terminal.
+     *
+     * The bridge delegates emulation to the session's own TerminalEmulator so
+     * getBuffer()/getEmulator() return live mosh-client screen state for the
+     * TerminalView. All screen callbacks continue to route through
+     * [sessionClient] → [TermuxBridgeListener] as normal.
+     *
+     * @return true if the mosh-client binary is bundled for this ABI and
+     *         the PTY was created, false if no binary is available.
+     */
+    fun connectMoshClient(
+        context: android.content.Context,
+        host: String,
+        port: Int,
+        moshKeyBase64: String
+    ): Boolean {
+        val binary = io.github.tabssh.protocols.mosh.MoshNativeClient.resolveBinary(context)
+            ?: run {
+                Logger.w(TAG, "mosh-client binary not bundled — cannot create PTY session")
+                return false
+            }
+
+        // Cancel any existing stream-based connection first.
+        readJob?.cancel()
+        readJob = null
+        inputStream = null
+        outputStream = null
+
+        val envList = arrayOf(
+            "MOSH_KEY=$moshKeyBase64",
+            "TERM=xterm-256color",
+            "HOME=${context.filesDir.absolutePath}",
+            "TMPDIR=${context.cacheDir.absolutePath}"
+        )
+
+        Logger.i(TAG, "Creating PTY TerminalSession for mosh-client $host:$port")
+        val session = TerminalSession(
+            binary.absolutePath,
+            context.filesDir.absolutePath,
+            // argv[0] = program name, argv[1..] = arguments passed to execvp
+            arrayOf(binary.absolutePath, host, port.toString()),
+            envList,
+            transcriptRows,
+            sessionClient   // wire our callbacks immediately — no race
+        )
+
+        connectSession(session)
+        return true
+    }
+
+    /**
+     * Wire a [TerminalSession] (PTY-backed) as this bridge's active terminal.
+     * Initializes the emulator if the constructor hasn't already done so,
+     * then replaces [emulator] with the session's own emulator so rendering
+     * picks up the PTY output.
+     */
+    private fun connectSession(session: TerminalSession) {
+        // If the TerminalSession constructor deferred initialization, start it.
+        // If it already auto-initialized (constructor called initializeEmulator),
+        // skip to avoid a second fork; just resize to current dimensions.
+        if (session.getEmulator() == null) {
+            session.initializeEmulator(currentColumns, currentRows)
+        } else {
+            try { session.updateSize(currentColumns, currentRows) } catch (_: Exception) {}
+        }
+
+        // Delegate rendering to the session's TerminalEmulator.
+        emulator = session.getEmulator()
+        moshSession = session
+        _isConnected.value = true
+
+        runOnMain {
+            listeners.forEach { it.onConnected() }
+        }
+        Logger.i(TAG, "Connected via PTY TerminalSession (mosh-client)")
     }
 
     /**

@@ -407,16 +407,25 @@ class SSHTab(
         moshKeyBase64: String
     ): Boolean {
         return try {
-            Logger.i("SSHTab", "=== CONNECTING MOSH TAB for ${profile.getDisplayName()} ($host:$port) ===")
+            Logger.i("SSHTab", "=== CONNECTING MOSH TAB (PTY) for ${profile.getDisplayName()} ($host:$port) ===")
             _connectionState.value = ConnectionState.CONNECTING
-            val session = io.github.tabssh.protocols.mosh.MoshNativeClient.spawn(
-                context, host, port, moshKeyBase64
-            )
-            moshSession = session
-            termuxBridge.connect(session.input, session.output)
+            // B-12 — use the PTY-backed path via TermuxBridge.connectMoshClient()
+            // instead of ProcessBuilder. mosh-client calls tcgetattr() at startup;
+            // a plain pipe would cause ENOTTY and immediate exit. The JNI forkpty()
+            // inside TerminalSession gives mosh-client a real TTY.
+            val ok = termuxBridge.connectMoshClient(context, host, port, moshKeyBase64)
+            if (!ok) {
+                Logger.e("SSHTab", "mosh-client binary not available for this ABI")
+                _hasError.value = true
+                _connectionState.value = ConnectionState.ERROR
+                return false
+            }
+            // moshSession (MoshNativeClient.Session) is not used in the PTY path —
+            // the TerminalSession is owned by TermuxBridge.
+            moshSession = null
             _connectionState.value = ConnectionState.CONNECTED
             updateTitleWithStatus(ConnectionState.CONNECTED)
-            Logger.i("SSHTab", "=== MOSH TAB WIRED for ${profile.getDisplayName()} ===")
+            Logger.i("SSHTab", "=== MOSH TAB WIRED (PTY) for ${profile.getDisplayName()} ===")
             true
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e

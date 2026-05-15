@@ -17,7 +17,7 @@ import kotlinx.coroutines.withContext
  * of LOC and the wire format is non-trivial).
  *
  * What this DOES do, end to end:
- *  1. Run `mosh-server new -s -l LANG=en_US.UTF-8` over the existing SSH
+ *  1. Run `mosh-server new -l LANG=en_US.UTF-8` over the existing SSH
  *     `exec` channel.
  *  2. Parse the canonical line `MOSH CONNECT <udp-port> <base64-key>`.
  *  3. Return [MoshHandoffInfo] so the UI can show the user the
@@ -66,8 +66,13 @@ object MoshHandoff {
         commandOverride: String? = null
     ): Result = withContext(Dispatchers.IO) {
         val session = grabSession(ssh) ?: return@withContext Result.Error("SSH session not connected")
+        // Do NOT use -s here. The -s flag tells mosh-server to read its
+        // session key from stdin; since we never write to the exec channel's
+        // stdin, mosh-server blocks indefinitely and the 8-second deadline
+        // fires with empty output. Without -s, mosh-server generates its own
+        // key and immediately prints "MOSH CONNECT <port> <key>".
         val cmd = commandOverride?.takeIf { it.isNotBlank() }
-            ?: "mosh-server new -s -l LANG=en_US.UTF-8"
+            ?: "mosh-server new -l LANG=en_US.UTF-8"
 
         var ch: ChannelExec? = null
         try {
