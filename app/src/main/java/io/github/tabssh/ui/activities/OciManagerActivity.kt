@@ -400,6 +400,7 @@ class OciManagerActivity : AppCompatActivity() {
                 val profile = (existing ?: ConnectionProfile(
                     name = "OCI: ${inst.displayName}",
                     host = publicIp,
+                    username = username,
                     ociInstanceId = inst.id
                 )).copy(
                     name = "OCI: ${inst.displayName}",

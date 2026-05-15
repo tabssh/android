@@ -80,12 +80,12 @@ class HypervisorConsoleManager {
         // Phase 1: obtain a console ticket. Try termproxy; fall back to
         // vncproxy when the VM has no serial interface.
         Logger.i(TAG, "Connecting to Proxmox console: $vmName (vmid=$vmid)")
-        val ticket: ProxmoxApiClient.TermProxyResult
-        val protocol: ConsoleWebSocketClient.ConsoleProtocol
-        try {
-            ticket = client.getTermProxy(node, vmid, type)
-            protocol = ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_TERM
+        // Kotlin doesn't allow val re-assignment across try/catch branches, so
+        // wrap the fallback logic in a single expression that produces the pair.
+        val (ticket, protocol) = try {
+            val t = client.getTermProxy(node, vmid, type)
             Logger.d(TAG, "Got termproxy ticket for $vmName")
+            Pair(t, ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_TERM)
         } catch (termEx: Exception) {
             val msg = termEx.message ?: ""
             val isSerialError = msg.contains("serial", ignoreCase = true) ||
@@ -106,9 +106,8 @@ class HypervisorConsoleManager {
                 )
                 return@withContext null
             }
-            ticket = vnc
-            protocol = ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_VNC
             Logger.d(TAG, "Got vncproxy ticket for $vmName (fallback)")
+            Pair(vnc, ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_VNC)
         }
 
         // Phase 2: open the WebSocket console connection.
