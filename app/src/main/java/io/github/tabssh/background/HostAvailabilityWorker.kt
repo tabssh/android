@@ -135,7 +135,8 @@ class HostAvailabilityWorker(
         Logger.i(TAG, "Checking ${slots.size} monitored host(s)")
 
         for (slot in slots) {
-            val profile = db.connectionDao().getConnectionById(slot.connectionId) ?: run {
+            val profile = db.connectionDao().getConnectionById(slot.connectionId)
+            if (profile == null) {
                 Logger.w(TAG, "Slot ${slot.id}: profile ${slot.connectionId} not found, skipping")
                 continue
             }

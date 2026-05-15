@@ -47,8 +47,10 @@ fetch-mosh: ## Fetch mosh-client binaries from latest GH release
 fetch-fonts: ## Fetch Nerd Fonts (skip-if-present, --force to refresh)
 	@scripts/fetch-fonts.sh
 
-check: _ensure-image ## Check for errors
-	@$(DOCKER_RUN) $(BUILD_IMAGE) ./gradlew compileDebugKotlin --no-daemon 2>&1 | grep "^e:" || echo -e "$(GREEN)✅ No errors$(NC)"
+check: _ensure-image ## Check for errors (KSP + compile, mirrors GH build)
+	@$(DOCKER_RUN) $(BUILD_IMAGE) ./gradlew kspDebugKotlin compileDebugKotlin --no-daemon \
+		&& echo -e "$(GREEN)✅ No errors$(NC)" \
+		|| { echo -e "$(YELLOW)❌ Errors found$(NC)"; exit 1; }
 
 clean: ## Clean build artifacts
 	@rm -rf $(BINARIES)/*.apk app/build/ .gradle/

@@ -66,7 +66,7 @@ import kotlinx.coroutines.withContext
  */
 class MultiHostDashboardActivity : AppCompatActivity() {
 
-    private companion object {
+    companion object {
         private const val TAG = "MultiHostDash"
         private const val MENU_ADD_GROUP  = 1001
         private const val MENU_PICK_HOSTS = 1002
@@ -237,14 +237,14 @@ class MultiHostDashboardActivity : AppCompatActivity() {
                         memoryThreshold       = sbMem.progress.takeIf { it > 0 },
                         diskThreshold         = sbDisk.progress.takeIf { it > 0 }
                     )
-                    app.applicationScope().launch(Dispatchers.IO) {
+                    app.applicationScope.launch(Dispatchers.IO) {
                         app.database.monitorSlotDao().insertOrReplace(updated)
                         withContext(Dispatchers.Main) { onSaved(updated) }
                     }
                 }
                 .setNeutralButton("Remove") { _, _ ->
                     if (existing != null) {
-                        app.applicationScope().launch(Dispatchers.IO) {
+                        app.applicationScope.launch(Dispatchers.IO) {
                             app.database.monitorSlotDao().delete(existing)
                             withContext(Dispatchers.Main) { onSaved(existing.copy(enabled = false)) }
                         }
