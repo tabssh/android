@@ -342,6 +342,24 @@
         <item>sync_operations</item>
     </string-array>
 
+    <!-- Monitoring alert cooldown options -->
+    <string-array name="monitoring_cooldown_labels">
+        <item>15 minutes</item>
+        <item>30 minutes</item>
+        <item>1 hour</item>
+        <item>2 hours</item>
+        <item>4 hours</item>
+        <item>12 hours</item>
+    </string-array>
+    <string-array name="monitoring_cooldown_values">
+        <item>15</item>
+        <item>30</item>
+        <item>60</item>
+        <item>120</item>
+        <item>240</item>
+        <item>720</item>
+    </string-array>
+
     <!-- Hypervisor API Type Override -->
     <string-array name="api_type_entries">
         <item>Auto-detect (recommended)</item>

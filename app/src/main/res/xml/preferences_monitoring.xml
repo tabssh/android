@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Master on/off switch for the background availability worker. -->
+    <SwitchPreferenceCompat
+        android:key="monitoring_enabled"
+        android:title="Background monitoring"
+        android:summary="Periodically probe all monitored hosts for reachability"
+        android:defaultValue="true" />
+
+    <!-- Battery optimization exemption status + action button. -->
+    <Preference
+        android:key="monitoring_battery_status"
+        android:title="Battery optimization"
+        android:summary="Checking…"
+        android:icon="@android:drawable/ic_menu_info_details" />
+
+    <!-- OEM-specific battery settings shortcut (Samsung, Xiaomi, etc.). -->
+    <Preference
+        android:key="monitoring_oem_battery"
+        android:title="Device battery settings"
+        android:summary="Open your device's battery management screen to allow background activity"
+        android:icon="@android:drawable/ic_menu_manage" />
+
+    <PreferenceCategory android:title="Notification alerts">
+
+        <!-- Global notification on/off. Per-host flags live in MonitorSlot. -->
+        <SwitchPreferenceCompat
+            android:key="monitoring_notify_down"
+            android:title="Alert when host goes down"
+            android:defaultValue="true" />
+
+        <SwitchPreferenceCompat
+            android:key="monitoring_notify_recovery"
+            android:title="Alert when host recovers"
+            android:defaultValue="true" />
+
+        <ListPreference
+            android:key="monitoring_alert_cooldown_minutes"
+            android:title="Alert cooldown"
+            android:summary="%s between repeated 'still down' notifications"
+            android:entries="@array/monitoring_cooldown_labels"
+            android:entryValues="@array/monitoring_cooldown_values"
+            android:defaultValue="60" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="Default thresholds">
+
+        <SeekBarPreference
+            android:key="monitoring_default_cpu_threshold"
+            android:title="CPU load alert threshold (%)"
+            android:summary="Alert when 5-minute load average exceeds this percentage"
+            android:defaultValue="85"
+            android:min="10"
+            android:max="100"
+            />
+
+        <SeekBarPreference
+            android:key="monitoring_default_memory_threshold"
+            android:title="Memory usage alert threshold (%)"
+            android:summary="Alert when memory used exceeds this percentage"
+            android:defaultValue="90"
+            android:min="10"
+            android:max="100"
+            />
+
+        <SeekBarPreference
+            android:key="monitoring_default_disk_threshold"
+            android:title="Disk usage alert threshold (%)"
+            android:summary="Alert when disk used exceeds this percentage"
+            android:defaultValue="80"
+            android:min="10"
+            android:max="100"
+            />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="Advanced">
+
+        <SwitchPreferenceCompat
+            android:key="monitoring_run_in_battery_saver"
+            android:title="Run in battery saver mode"
+            android:summary="Continue probing hosts when Android Battery Saver is active (uses more power)"
+            android:defaultValue="false" />
+
+        <Preference
+            android:key="monitoring_open_notification_channel"
+            android:title="Notification channel settings"
+            android:summary="Manage sound, vibration, and importance for monitoring alerts"
+            android:icon="@android:drawable/ic_menu_manage" />
+
+    </PreferenceCategory>
+
+</PreferenceScreen>

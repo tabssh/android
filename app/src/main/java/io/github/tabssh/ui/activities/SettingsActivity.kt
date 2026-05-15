@@ -936,3 +936,125 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
     }
 }
 
+/**
+ * Monitoring settings screen.
+ *
+ * Covers the background host-availability worker: the global on/off toggle,
+ * battery optimization exemption status (updated live in onResume so the user
+ * immediately sees the result of tapping through to the system prompt), OEM
+ * battery settings shortcut, default performance thresholds, and notification
+ * channel access.
+ */
+class MonitoringSettingsFragment : androidx.preference.PreferenceFragmentCompat() {
+
+    override fun onCreatePreferences(savedInstanceState: android.os.Bundle?, rootKey: String?) {
+        setPreferencesFromResource(R.xml.preferences_monitoring, rootKey)
+
+        // Master toggle — schedule or cancel the background worker.
+        findPreference<androidx.preference.SwitchPreferenceCompat>("monitoring_enabled")
+            ?.setOnPreferenceChangeListener { _, newValue ->
+                val enabled = newValue as? Boolean ?: false
+                val ctx = requireContext()
+                if (enabled) {
+                    io.github.tabssh.background.HostAvailabilityWorker.schedule(ctx)
+                    // Prompt for battery optimization if not already exempt.
+                    io.github.tabssh.background.BatteryOptimizationHelper
+                        .requestExemptionIfNeeded(ctx) {
+                            io.github.tabssh.background.BatteryOptimizationHelper
+                                .showManufacturerGuidanceIfNeeded(ctx)
+                        }
+                } else {
+                    io.github.tabssh.background.HostAvailabilityWorker.cancel(ctx)
+                }
+                // Persist immediately so the BootReceiver and Application.onCreate
+                // can read the same key on cold start.
+                androidx.preference.PreferenceManager
+                    .getDefaultSharedPreferences(ctx)
+                    .edit()
+                    .putBoolean("monitoring_enabled", enabled)
+                    .apply()
+                true
+            }
+
+        // Battery optimization action — opens the system exemption prompt.
+        findPreference<androidx.preference.Preference>("monitoring_battery_status")
+            ?.setOnPreferenceClickListener {
+                val ctx = requireContext()
+                if (io.github.tabssh.background.BatteryOptimizationHelper.isExempt(ctx)) {
+                    android.widget.Toast.makeText(
+                        ctx,
+                        "Battery optimization is already disabled for TabSSH.",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                } else {
+                    io.github.tabssh.background.BatteryOptimizationHelper
+                        .requestExemptionIfNeeded(ctx)
+                }
+                true
+            }
+
+        // OEM battery settings shortcut.
+        findPreference<androidx.preference.Preference>("monitoring_oem_battery")
+            ?.setOnPreferenceClickListener {
+                io.github.tabssh.background.BatteryOptimizationHelper
+                    .showManufacturerGuidanceIfNeeded(requireContext())
+                true
+            }
+
+        // Notification channel deep-link (API 26+).
+        findPreference<androidx.preference.Preference>("monitoring_open_notification_channel")
+            ?.setOnPreferenceClickListener {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    val intent = android.content.Intent(
+                        android.provider.Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS
+                    ).apply {
+                        putExtra(
+                            android.provider.Settings.EXTRA_APP_PACKAGE,
+                            requireContext().packageName
+                        )
+                        putExtra(
+                            android.provider.Settings.EXTRA_CHANNEL_ID,
+                            io.github.tabssh.utils.NotificationHelper.CHANNEL_HOST_MONITORING
+                        )
+                    }
+                    try {
+                        startActivity(intent)
+                    } catch (e: android.content.ActivityNotFoundException) {
+                        android.widget.Toast.makeText(
+                            requireContext(),
+                            "Cannot open notification settings on this device.",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                } else {
+                    android.widget.Toast.makeText(
+                        requireContext(),
+                        "Notification channels require Android 8.0+.",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+                true
+            }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Refresh the battery status summary whenever the fragment becomes
+        // visible — covers the case where the user taps through to the system
+        // prompt, grants the exemption, and presses Back.
+        updateBatteryStatusSummary()
+    }
+
+    private fun updateBatteryStatusSummary() {
+        val ctx = requireContext()
+        val exempt = io.github.tabssh.background.BatteryOptimizationHelper.isExempt(ctx)
+        findPreference<androidx.preference.Preference>("monitoring_battery_status")?.apply {
+            summary = if (exempt) {
+                "Exempt — background monitoring will run reliably"
+            } else {
+                "Not exempt — tap to disable battery optimization for reliable alerts"
+            }
+        }
+    }
+}
+

@@ -10,8 +10,10 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import java.util.Collections
 import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.chip.ChipGroup
 import com.google.android.material.tabs.TabLayout
@@ -93,6 +95,7 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
         }
         binding.recyclerCurrentRow.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         binding.recyclerCurrentRow.adapter = currentRowAdapter
+        setupDragToReorder()
 
         // Setup available keys adapter
         availableKeysAdapter = KeyAdapter(mutableListOf(), KeyAdapterMode.ADD) { key ->
@@ -103,6 +106,49 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
 
         // FAB save
         binding.fabSave.setOnClickListener { saveLayout() }
+    }
+
+    /**
+     * Attaches an [ItemTouchHelper] to [binding.recyclerCurrentRow] that lets
+     * the user long-press and drag a key left or right to reorder it.
+     *
+     * [ItemTouchHelper.SimpleCallback] handles the drag gesture; [KeyAdapter.moveKey]
+     * swaps the items in the adapter list, and [updatePreview] syncs the static
+     * preview strip below the RecyclerView once the drag is released.
+     */
+    private fun setupDragToReorder() {
+        val callback = object : ItemTouchHelper.SimpleCallback(
+            ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT,   // drag directions
+            0                                                 // no swipe-to-dismiss
+        ) {
+            override fun onMove(
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder,
+                target: RecyclerView.ViewHolder
+            ): Boolean {
+                val from = viewHolder.bindingAdapterPosition
+                val to = target.bindingAdapterPosition
+                if (from == RecyclerView.NO_ID.toInt() || to == RecyclerView.NO_ID.toInt()) return false
+                // Swap in the adapter and the backing data simultaneously so they
+                // stay in sync even if the user saves without completing a drag.
+                currentRowAdapter.moveKey(from, to)
+                if (selectedRowIndex < keyboardLayout.size) {
+                    Collections.swap(keyboardLayout[selectedRowIndex], from, to)
+                }
+                return true
+            }
+
+            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
+                // Swipe-to-dismiss is disabled; this callback is never reached.
+            }
+
+            /** Refresh the static preview once the user lifts their finger. */
+            override fun clearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
+                super.clearView(recyclerView, viewHolder)
+                updatePreview()
+            }
+        }
+        ItemTouchHelper(callback).attachToRecyclerView(binding.recyclerCurrentRow)
     }
 
     private fun loadCurrentLayout() {
@@ -365,6 +411,12 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
         fun updateKeys(newKeys: List<KeyboardKey>) {
             keys = newKeys.toMutableList()
             notifyDataSetChanged()
+        }
+
+        /** Swap the keys at [from] and [to] and notify the RecyclerView. */
+        fun moveKey(from: Int, to: Int) {
+            Collections.swap(keys, from, to)
+            notifyItemMoved(from, to)
         }
 
         override fun onCreateViewHolder(parent: android.view.ViewGroup, viewType: Int): KeyViewHolder {

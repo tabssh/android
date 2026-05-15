@@ -34,6 +34,13 @@
         android:title="Sync"
         android:summary="Sync data across devices (Google Drive, WebDAV, Nextcloud)"
         android:icon="@android:drawable/ic_menu_rotate" />
+
+    <Preference
+        android:key="monitoring_settings"
+        android:title="Monitoring"
+        android:summary="Background host availability checks and performance alerts"
+        android:icon="@android:drawable/ic_menu_compass"
+        android:fragment="io.github.tabssh.ui.activities.MonitoringSettingsFragment" />
     
     <Preference
         android:key="logging_settings"
