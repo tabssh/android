@@ -271,6 +271,18 @@ const val NOTIFICATION_ID_FILE_TRANSFER = 3001
             builder.setAutoCancel(true)
         }
 
+        // Safety-net for CONNECTED / CONNECTING: if the service is killed
+        // by the OOM killer without running onDestroy(), these ongoing
+        // notifications would otherwise linger in the shade forever.
+        // The SSHConnectionService heartbeat (every 30s) resets this clock
+        // via nm.notify(), so the timeout only fires if the service is
+        // actually gone. 20 minutes is ~40 missed heartbeats — ample margin
+        // while still not forcing users to manually dismiss stale entries.
+        if (state == io.github.tabssh.ssh.connection.ConnectionState.CONNECTED ||
+            state == io.github.tabssh.ssh.connection.ConnectionState.CONNECTING) {
+            builder.setTimeoutAfter(20 * 60 * 1000L)
+        }
+
         return builder.build()
     }
 
@@ -412,6 +424,11 @@ const val NOTIFICATION_ID_FILE_TRANSFER = 3001
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_ERROR)
             .setStyle(NotificationCompat.BigTextStyle().bigText(errorMessage))
+            // Auto-clear after 5 minutes — connection errors are actionable
+            // in the moment but become noise once the session is retried or
+            // abandoned. AutoCancel only fires on tap; the timeout handles
+            // the case where the user never opens the notification.
+            .setTimeoutAfter(5 * 60 * 1000L)
             .build()
 
         notificationManager.notify(NOTIFICATION_ID_ERROR, notification)

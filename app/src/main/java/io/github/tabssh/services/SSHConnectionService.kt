@@ -81,12 +81,15 @@ class SSHConnectionService : Service() {
     
     override fun onCreate() {
         super.onCreate()
-        
+
         Logger.d("SSHConnectionService", "Service created")
-        
+
         app = application as TabSSHApplication
-        
+
         createNotificationChannel()
+        // Sweep any per-host notifications that are stale from a previous
+        // service lifetime (e.g. process killed by OOM without onDestroy).
+        sweepPerHostNotifications(cancelAll = false)
         setupSessionManagerListener()
     }
     
@@ -113,6 +116,10 @@ class SSHConnectionService : Service() {
 
         Logger.d("SSHConnectionService", "Service destroyed")
 
+        // Cancel all per-host notifications before tearing down — prevents
+        // stale "Connected to …" entries lingering in the notification shade
+        // after a graceful service stop.
+        sweepPerHostNotifications(cancelAll = true)
         serviceScope.cancel()
         releaseWakeLock()
         // Don't tear down the manager here — its lifecycle is the
@@ -194,6 +201,10 @@ class SSHConnectionService : Service() {
             .setOnlyAlertOnce(true)
             .setSilent(true)
             .setShowWhen(false)
+            // Safety net: if the service dies before a real session connects
+            // (e.g. OOM kill after a cold start), this placeholder auto-clears
+            // after 5 minutes so it doesn't linger forever.
+            .setTimeoutAfter(5 * 60 * 1000L)
             .build()
     }
 
@@ -405,28 +416,93 @@ class SSHConnectionService : Service() {
     
     private suspend fun startConnectionMonitoring() {
         Logger.d("SSHConnectionService", "Starting connection monitoring")
-        
+
         while (serviceScope.isActive) {
             try {
                 // Perform connection maintenance
                 app.sshSessionManager.performMaintenance()
-                
+
                 // Update connection count
                 updateConnectionCount()
-                
+
                 // Check for network changes and handle reconnections
                 handleNetworkChanges()
-                
+
+                // Heartbeat-refresh all active per-host notifications. Each
+                // nm.notify() call resets the setTimeoutAfter clock, so the
+                // safety-net timeout only fires if this loop stops running
+                // (i.e. service was killed without onDestroy).
+                withContext(Dispatchers.Main) { refreshAllHostNotifications() }
+
                 // Wait before next check
-                delay(30000) // Check every 30 seconds
-                
+                delay(30_000L)
+
             } catch (e: Exception) {
                 Logger.e("SSHConnectionService", "Error in connection monitoring", e)
-                delay(60000) // Wait longer on error
+                delay(60_000L)
             }
         }
     }
+
+    /**
+     * Re-post the status notification for every currently-connected host.
+     * This acts as a heartbeat that resets the [setTimeoutAfter] clock on
+     * the CONNECTED/CONNECTING notifications. Must be called on the main
+     * thread (Android notification API is safe from any thread, but
+     * [renderHostNotification] accesses [fgAnchorProfileId] which is
+     * `@Volatile` and written only on Main).
+     */
+    private fun refreshAllHostNotifications() {
+        try {
+            app.sshSessionManager.getActiveConnections().forEach { conn ->
+                val s = conn.connectionState.value
+                if (s == ConnectionState.CONNECTED || s == ConnectionState.CONNECTING) {
+                    renderHostNotification(conn.profile.id, disconnectingState = false)
+                }
+            }
+        } catch (e: Exception) {
+            Logger.w("SSHConnectionService", "Failed to refresh host notifications", e)
+        }
+    }
     
+    /**
+     * Cancel stale per-host notifications that no longer correspond to a
+     * live SSH session.
+     *
+     * On API 23+ we can enumerate the app's active notifications and filter
+     * to the per-host id range `[10_000, 100_000)`, keeping only the ids
+     * that belong to currently-connected sessions (unless [cancelAll] is
+     * true, in which case all are cancelled — used from [onDestroy]).
+     *
+     * On older APIs we can't list active notifications. [cancelAll]=true
+     * cancels every id derived from known active connections; [cancelAll]=false
+     * is a no-op (the [setTimeoutAfter] safety net covers those devices).
+     */
+    private fun sweepPerHostNotifications(cancelAll: Boolean) {
+        val nm = getSystemService(NotificationManager::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val liveIds: Set<Int> = if (cancelAll) emptySet() else {
+                try {
+                    app.sshSessionManager.getActiveConnections()
+                        .map { io.github.tabssh.utils.NotificationHelper.perHostNotificationId(it.profile.id) }
+                        .toSet()
+                } catch (_: Exception) { emptySet() }
+            }
+            nm.activeNotifications
+                .filter { it.id in 10_000..99_999 && it.id !in liveIds }
+                .forEach { nm.cancel(it.id) }
+        } else {
+            // Pre-M: cancel only what we know about.
+            if (cancelAll) {
+                try {
+                    app.sshSessionManager.getActiveConnections().forEach { conn ->
+                        nm.cancel(io.github.tabssh.utils.NotificationHelper.perHostNotificationId(conn.profile.id))
+                    }
+                } catch (_: Exception) { /* nothing */ }
+            }
+        }
+    }
+
     private suspend fun handleNetworkChanges() {
         // This would implement network change detection and reconnection logic
         // For now, just log that we're checking
