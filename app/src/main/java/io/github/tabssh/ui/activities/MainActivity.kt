@@ -6,7 +6,6 @@ import android.view.MenuItem
 import android.view.View
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
-import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
@@ -85,34 +84,10 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         app = application as TabSSHApplication
         backupManager = io.github.tabssh.backup.BackupManager(this)
 
-        // Setup toolbar
-        val toolbar = findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
-        setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayShowTitleEnabled(false)
-
-        // Setup drawer
+        // Setup drawer (hamburger removed — edge-swipe opens it)
         drawerLayout = findViewById(R.id.drawer_layout)
         val navView = findViewById<NavigationView>(R.id.nav_view)
         navView.setNavigationItemSelectedListener(this)
-
-        val toggle = ActionBarDrawerToggle(
-            this, drawerLayout, toolbar,
-            R.string.navigation_drawer_open, R.string.navigation_drawer_close
-        )
-        drawerLayout.addDrawerListener(toggle)
-
-        // Always start in overlay mode: drawer is closed, hamburger visible.
-        // The old Wave 4.c tablet sidebar (LOCK_MODE_LOCKED_OPEN) auto-opened
-        // the drawer on launch and hid the hamburger indicator — bad UX on
-        // every screen size. We now use the same overlay mode everywhere;
-        // larger screens just get more content space alongside the drawer when
-        // it's manually opened.
-        applyPhoneOverlayMode(toggle)
-
-        // Wave 4.b — Foldable book mode observer kept for state-change events,
-        // but we no longer auto-open on initial layout; applyPhoneOverlayMode
-        // above already set the correct closed state.
-        observeFoldingFeature(toggle)
 
         // Setup ViewPager2 + TabLayout
         viewPager = findViewById(R.id.view_pager)
@@ -1243,50 +1218,6 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         // Fragments will handle their own data refreshing
     }
 
-    /** Wave 4.b — toggle a sidebar-locked-open mode (used by tablet + foldable). */
-    private fun applySidebarMode(toggle: ActionBarDrawerToggle) {
-        drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_OPEN)
-        drawerLayout.openDrawer(GravityCompat.START)
-        supportActionBar?.setDisplayHomeAsUpEnabled(false)
-        toggle.isDrawerIndicatorEnabled = false
-        toggle.syncState()
-    }
-
-    /** Wave 4.b — restore phone overlay mode (used when folding back). */
-    private fun applyPhoneOverlayMode(toggle: ActionBarDrawerToggle) {
-        drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED)
-        drawerLayout.closeDrawer(GravityCompat.START)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        toggle.isDrawerIndicatorEnabled = true
-        // Without syncState() after re-enabling the indicator, the toolbar
-        // can be left displaying the back-arrow drawable from a previous
-        // state instead of the hamburger lines. syncState() recomputes the
-        // drawable based on isDrawerIndicatorEnabled + drawer-open progress.
-        toggle.syncState()
-    }
-
-    /** Wave 4.b — observe FoldingFeature; flip drawer mode on hinge state changes. */
-    private fun observeFoldingFeature(toggle: ActionBarDrawerToggle) {
-        val tracker = androidx.window.layout.WindowInfoTracker.getOrCreate(this)
-        lifecycleScope.launch {
-            try {
-                tracker.windowLayoutInfo(this@MainActivity).collect { info ->
-                    val fold = info.displayFeatures
-                        .filterIsInstance<androidx.window.layout.FoldingFeature>()
-                        .firstOrNull()
-                    // Foldable state changes may affect layout but we always
-                    // stay in overlay mode — never lock the drawer open.
-                    // applyPhoneOverlayMode ensures hamburger stays visible
-                    // regardless of posture.
-                    applyPhoneOverlayMode(toggle)
-                }
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Logger.w("MainActivity", "FoldingFeature observation failed: ${e.message}")
-            }
-        }
-    }
 
     // Modern result API — replaces startActivityForResult/onActivityResult.
     override fun onPause() {

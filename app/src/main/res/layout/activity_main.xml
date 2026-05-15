@@ -18,16 +18,6 @@
             android:layout_height="wrap_content"
             android:background="@color/primary_500">
 
-            <androidx.appcompat.widget.Toolbar
-                android:id="@+id/toolbar"
-                android:layout_width="match_parent"
-                android:layout_height="40dp"
-                android:minHeight="40dp"
-                android:background="@color/primary_500"
-                app:titleTextColor="@color/white"
-                app:titleTextAppearance="@style/TextAppearance.TabSSH.Toolbar.Title"
-                app:popupTheme="@style/ThemeOverlay.Material3.Light" />
-
             <com.google.android.material.tabs.TabLayout
                 android:id="@+id/tab_layout"
                 android:layout_width="match_parent"
