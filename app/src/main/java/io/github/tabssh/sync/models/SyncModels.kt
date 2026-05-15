@@ -36,10 +36,13 @@ data class SyncItemCounts(
     val identities: Int = 0,     // Wave 5.4
     val groups: Int = 0,         // Wave 5.4
     val hypervisors: Int = 0,    // Wave 7.1
-    val certificates: Int = 0    // Wave 7.1
+    val certificates: Int = 0,   // Wave 7.1
+    val macros: Int = 0,         // Wave 11
+    val monitorSlots: Int = 0    // Wave 11
 ) {
     fun total(): Int = connections + keys + themes + preferences + hostKeys +
-        workspaces + snippets + identities + groups + hypervisors + certificates
+        workspaces + snippets + identities + groups + hypervisors + certificates +
+        macros + monitorSlots
 }
 
 /**
@@ -115,7 +118,10 @@ data class SyncDataPackage(
      *  Mitigation: typical users have ≤ 5 hypervisors and rarely sync mid-edit.
      *  Documented in AI.md §9.4. */
     val hypervisors: List<io.github.tabssh.storage.database.entities.HypervisorProfile> = emptyList(),
-    val certificates: List<io.github.tabssh.storage.database.entities.TrustedCertificate> = emptyList()
+    val certificates: List<io.github.tabssh.storage.database.entities.TrustedCertificate> = emptyList(),
+    /** Wave 11 — macros / monitor_slots, last-write-wins. */
+    val macros: List<io.github.tabssh.storage.database.entities.Macro> = emptyList(),
+    val monitorSlots: List<io.github.tabssh.storage.database.entities.MonitorSlot> = emptyList()
 )
 
 /**

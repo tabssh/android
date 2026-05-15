@@ -4,6 +4,7 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import java.util.UUID
+import kotlinx.serialization.Serializable
 
 /**
  * Issue #173 — recordable macro: an opaque byte sequence captured from
@@ -23,6 +24,7 @@ import java.util.UUID
  * persist binary safely as TEXT (Room's default for ByteArray would
  * also work but base64 round-trips through sync export cleanly).
  */
+@Serializable
 @Entity(tableName = "macros")
 data class Macro(
     @PrimaryKey

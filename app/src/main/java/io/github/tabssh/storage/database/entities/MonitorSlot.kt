@@ -4,6 +4,7 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import java.util.UUID
+import kotlinx.serialization.Serializable
 
 /**
  * Per-host background monitoring configuration and runtime state.
@@ -26,6 +27,7 @@ import java.util.UUID
  *
  * DB: added in v32 (migration from v31).
  */
+@Serializable
 @Entity(tableName = "monitor_slots")
 data class MonitorSlot(
 

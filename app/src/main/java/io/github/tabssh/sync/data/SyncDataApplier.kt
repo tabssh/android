@@ -157,6 +157,24 @@ class SyncDataApplier {
                 }
             }
 
+            // Wave 11 — macros / monitor_slots, REPLACE on PK conflict.
+            data.macros.forEach { m ->
+                try {
+                    database.macroDao().insertMacro(m)
+                    appliedCount++
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Failed to apply macro: ${m.id}", e)
+                }
+            }
+            data.monitorSlots.forEach { slot ->
+                try {
+                    database.monitorSlotDao().insertOrReplace(slot)
+                    appliedCount++
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Failed to apply monitor slot: ${slot.id}", e)
+                }
+            }
+
             Logger.i(TAG, "Applied $appliedCount items from sync data")
             ApplyResult.Success(appliedCount)
         } catch (e: Exception) {

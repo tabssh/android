@@ -11,6 +11,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
+import androidx.core.content.ContextCompat
 import androidx.core.view.setPadding
 import androidx.lifecycle.lifecycleScope
 import io.github.tabssh.R
@@ -161,7 +162,7 @@ class HostDetailActivity : AppCompatActivity() {
     private fun sectionHeader(text: String): TextView = TextView(this).apply {
         this.text = text
         textSize = 12f
-        setTextColor(0xFF888888.toInt())
+        setTextColor(ContextCompat.getColor(this@HostDetailActivity, R.color.on_surface_variant))
         val lp = LinearLayout.LayoutParams(MATCH, WRAP)
         lp.topMargin = dp(16)
         lp.bottomMargin = dp(4)
@@ -180,18 +181,18 @@ class HostDetailActivity : AppCompatActivity() {
             val lp = LinearLayout.LayoutParams(MATCH, WRAP)
             lp.bottomMargin = dp(4)
             layoutParams = lp
-            setBackgroundColor(0xFF1E1E1E.toInt())
+            setBackgroundColor(ContextCompat.getColor(this@HostDetailActivity, R.color.surface_variant))
             setPadding(dp(12), dp(8), dp(12), dp(8))
         }
         val labelTv = TextView(this).apply {
             text = label
-            setTextColor(0xFFAAAAAA.toInt())
+            setTextColor(ContextCompat.getColor(this@HostDetailActivity, R.color.on_surface_variant))
             textSize = 14f
             layoutParams = LinearLayout.LayoutParams(0, WRAP, 0.4f)
         }
         val valueTv = TextView(this).apply {
             text = initial
-            setTextColor(0xFFFFFFFF.toInt())
+            setTextColor(ContextCompat.getColor(this@HostDetailActivity, R.color.on_surface))
             textSize = 14f
             layoutParams = LinearLayout.LayoutParams(0, WRAP, 0.6f)
         }
@@ -235,20 +236,20 @@ class HostDetailActivity : AppCompatActivity() {
         val slot = monitorSlot
         if (slot == null) {
             tvStatus.text = "Not monitored"
-            tvStatus.setTextColor(0xFF888888.toInt())
+            tvStatus.setTextColor(ContextCompat.getColor(this, R.color.on_surface_variant))
             tvLastChecked.text = "—"
             tvLastSeenUp.text = "—"
             return
         }
         if (!slot.enabled) {
             tvStatus.text = "Disabled"
-            tvStatus.setTextColor(0xFF888888.toInt())
+            tvStatus.setTextColor(ContextCompat.getColor(this, R.color.on_surface_variant))
         } else if (slot.isCurrentlyDown) {
             tvStatus.text = "DOWN — ${slot.consecutiveFailures} consecutive failure(s)"
-            tvStatus.setTextColor(0xFFFF4444.toInt())
+            tvStatus.setTextColor(ContextCompat.getColor(this, R.color.error))
         } else {
             tvStatus.text = "UP"
-            tvStatus.setTextColor(0xFF44FF44.toInt())
+            tvStatus.setTextColor(ContextCompat.getColor(this, R.color.success))
         }
         tvLastChecked.text = if (slot.lastCheckedAt > 0) dateFmt.format(Date(slot.lastCheckedAt)) else "Never"
         tvLastSeenUp.text  = if (slot.lastSeenUp  > 0) dateFmt.format(Date(slot.lastSeenUp))    else "Unknown"

@@ -78,6 +78,8 @@ class SyncDataCollector {
         val groups = collectGroups()          // Wave 5.4
         val hypervisors = collectHypervisors()  // Wave 7.1
         val certificates = collectCertificates() // Wave 7.1
+        val macros = collectMacros()             // Wave 11
+        val monitorSlots = collectMonitorSlots() // Wave 11
 
         val itemCounts = SyncItemCounts(
             connections = connections.size,
@@ -90,7 +92,9 @@ class SyncDataCollector {
             identities = identities.size,
             groups = groups.size,
             hypervisors = hypervisors.size,
-            certificates = certificates.size
+            certificates = certificates.size,
+            macros = macros.size,
+            monitorSlots = monitorSlots.size
         )
 
         val metadata = metadataManager.createSyncMetadata(itemCounts)
@@ -109,7 +113,9 @@ class SyncDataCollector {
             identities = identities,
             groups = groups,
             hypervisors = hypervisors,
-            certificates = certificates
+            certificates = certificates,
+            macros = macros,
+            monitorSlots = monitorSlots
         )
     }
 
@@ -171,6 +177,27 @@ class SyncDataCollector {
         }
     }
 
+    /** Wave 11 — command macros (reusable multi-step sequences). */
+    private suspend fun collectMacros(): List<io.github.tabssh.storage.database.entities.Macro> {
+        return try {
+            database.macroDao().getAllMacrosList()
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to collect macros", e)
+            emptyList()
+        }
+    }
+
+    /** Wave 11 — per-host monitoring configuration (alert thresholds, intervals).
+     *  MonitorSlot has no modifiedAt column so full-table sync is used. */
+    private suspend fun collectMonitorSlots(): List<io.github.tabssh.storage.database.entities.MonitorSlot> {
+        return try {
+            database.monitorSlotDao().getAllSlots().first()
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to collect monitor slots", e)
+            emptyList()
+        }
+    }
+
     /**
      * Collect data changed since timestamp
      */
@@ -190,6 +217,10 @@ class SyncDataCollector {
         // so include them all in delta payloads — cheap, never wrong.
         val hypervisors = collectHypervisors()
         val certificates = collectCertificates()
+        // Wave 11 — Macro has modifiedAt; MonitorSlot does not (low-volume,
+        // always include in full).
+        val macros = collectMacros().filter { it.modifiedAt > timestamp }
+        val monitorSlots = collectMonitorSlots()
 
         val preferences = if (hasPreferencesChanged(timestamp)) {
             collectPreferences()
@@ -208,7 +239,9 @@ class SyncDataCollector {
             identities = identities.size,
             groups = groups.size,
             hypervisors = hypervisors.size,
-            certificates = certificates.size
+            certificates = certificates.size,
+            macros = macros.size,
+            monitorSlots = monitorSlots.size
         )
 
         val metadata = metadataManager.createSyncMetadata(itemCounts)
@@ -227,7 +260,9 @@ class SyncDataCollector {
             identities = identities,
             groups = groups,
             hypervisors = hypervisors,
-            certificates = certificates
+            certificates = certificates,
+            macros = macros,
+            monitorSlots = monitorSlots
         )
     }
 

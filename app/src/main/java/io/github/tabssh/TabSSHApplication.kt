@@ -226,6 +226,17 @@ class TabSSHApplication : Application() {
             // port-forward, multi-host dashboard, SFTP, performance.
             wireGlobalHostKeyCallbacks()
             wireGlobalNotifications()
+            // Re-register periodic sync work on every cold start. WorkManager's
+            // DB survives process death but can be wiped by reinstall or system
+            // maintenance. Re-registering is idempotent when
+            // ExistingPeriodicWorkPolicy.KEEP is used.
+            val syncEnabled = androidx.preference.PreferenceManager
+                .getDefaultSharedPreferences(this@TabSSHApplication)
+                .getBoolean("sync_enabled", false)
+            if (syncEnabled) {
+                io.github.tabssh.sync.worker.SyncWorkScheduler(this@TabSSHApplication)
+                    .schedulePeriodicSync()
+            }
             Logger.i("TabSSHApplication", "Application initialized successfully (background)")
         }
     }

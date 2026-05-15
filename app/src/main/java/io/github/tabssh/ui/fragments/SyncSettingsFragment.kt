@@ -288,16 +288,23 @@ class SyncSettingsFragment : PreferenceFragmentCompat() {
                                     showToast("Sync enabled")
                                 }
                                 SyncFileStatus.FILE_NOT_FOUND -> {
+                                    // File is genuinely gone — revert the toggle
                                     showSetupError("File not found", "The sync file no longer exists. Please reconfigure.")
                                     isChecked = false
                                 }
                                 SyncFileStatus.NO_PERMISSION -> {
-                                    showSetupError("Permission denied", "Cannot access sync file. Please reconfigure.")
-                                    isChecked = false
+                                    // SAF URI permission temporarily unavailable — leave toggle ON,
+                                    // the next sync attempt will retry when the permission is restored
+                                    workScheduler.schedulePeriodicSync()
+                                    updateSyncStatus()
+                                    showToast("Sync enabled (permission check failed — will retry)")
                                 }
                                 else -> {
-                                    showSetupError("Error", "Could not verify sync file: $status")
-                                    isChecked = false
+                                    // Transient error — leave toggle ON so the user doesn't have to
+                                    // re-enable manually every time the app restarts
+                                    workScheduler.schedulePeriodicSync()
+                                    updateSyncStatus()
+                                    showToast("Sync enabled (could not verify file: $status)")
                                 }
                             }
                         }
