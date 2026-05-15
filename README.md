@@ -43,10 +43,11 @@
 
 ### Modern UI/UX
 - 🎨 **Material Design 3** - Beautiful, modern interface following Google's latest design guidelines
-- 🌈 **Built-in Themes** - Dracula, Solarized (Light/Dark), Nord, Monokai, One Dark, Tokyo Night, Gruvbox
-- 🎨 **Custom Themes** - Import/export JSON theme definitions, plus a GUI theme editor
-- ⌨️ **Custom Keyboard** - SSH-optimized 1–5 row on-screen keyboard. Default rows reordered for vim/tmux/coding (ESC + CTL/ALT/FN + `:` + `/` + arrows on row 1, navigation on row 2, coding symbols `| \ - _ ~ \` $ * < >` on row 3)
+- 🌈 **23 Built-in Themes** - Dracula, Solarized (Light/Dark), Nord, Monokai, One Dark, Tokyo Night, Gruvbox, and 16 more
+- 🎨 **Custom Theme Editor** - Full GUI editor in Settings → General → Appearance; import/export JSON theme definitions with WCAG 2.1 contrast validation
+- ⌨️ **Custom Keyboard** - SSH-optimized 1–5 row on-screen keyboard. Default rows reordered for vim/tmux/coding (ESC + CTL/ALT/FN + `:` + `/` + arrows on row 1, navigation on row 2, coding symbols `| \ - _ ~ $ * < >` on row 3). **Drag-to-reorder** keys within any row directly in the keyboard editor
 - ⌨️ **Hardware keyboard polish** - AltGr distinguished from real Alt; xterm-style modifier-encoded arrows / HOME / END / PG family (e.g. ESC `[1;5C` for Ctrl-Right) for tmux pane nav, vim word-jump, bash readline word-delete
+- 🗂️ **Tabs at top** - TabBar sits flush at the top of the screen (no toolbar chrome); navigation drawer reachable via left-edge swipe
 - 👆 **Edge-swipe tab switching** - Single-finger fling within 24dp of the left/right edge switches tabs (backup path for users who turned off ViewPager2 swipe-mode)
 - 🔁 **Active Sessions strip** - Top of the Connections tab shows running tabs with dynamic terminal title (OSC 0/2) and connection-state dot; tap to focus
 - 💡 **Smart Tooltips** - Helpful hints for settings and configuration options
@@ -62,6 +63,7 @@
 - 🌐 **Multi-Language** - English, Spanish, French, German (automatic detection)
 
 ### Advanced Features
+- 📡 **Background Host Monitoring** - Settings → Monitoring: periodic TCP reachability probes with down/recovery notifications, configurable alert cooldown (15 min–12 h), CPU/memory/disk threshold alerts via existing SSH sessions, OEM battery-saver guidance
 - 📱 **Mosh Protocol** - Mobile shell for unstable connections with roaming support
 - 💾 **Backup & Restore** - Export/import all settings and connections as encrypted ZIP
 - 🔄 **Session Persistence** - Resume sessions after app restart or reboot
@@ -308,7 +310,7 @@ We will respond within 48 hours and work with you to resolve the issue responsib
 
 ## 🎨 Themes
 
-TabSSH includes 10+ professionally designed themes:
+TabSSH includes **23 professionally designed themes**:
 
 - 🦇 **Dracula** - Dark theme with vibrant colors
 - ☀️ **Solarized Light** - Precision colors for readability
@@ -319,10 +321,11 @@ TabSSH includes 10+ professionally designed themes:
 - 🌃 **Tokyo Night** - Clean, dark Tokyo-inspired theme
 - 🏔️ **Gruvbox** - Retro groove warm theme
 - ♿ **High Contrast** - Maximum accessibility
+- … and 14 more built-in options
 
-### Custom Themes
+### Custom Theme Editor
 
-Create and share your own themes! Export theme JSON from Settings → Terminal → Themes.
+Create and share your own themes via the full GUI editor: **Settings → General → Appearance → Theme Editor**. Import/export JSON with automatic WCAG 2.1 contrast validation.
 
 Example theme structure:
 ```json
@@ -429,11 +432,9 @@ A: Any Android 5.0+ device (covers 99%+ of active Android devices).
 A: Settings → Security → SSH Keys → Import. Supports OpenSSH, PEM, PKCS#8, and PuTTY formats.
 
 **Q: Can I sync settings across devices?**
-A: Yes! Settings → Google Drive Sync (or WebDAV Sync for degoogled devices).
+A: Yes! Settings → Sync. Uses Android's Storage Access Framework — works with any provider (Google Drive, Dropbox, OneDrive, Nextcloud, local storage). No Google services dependency; runs perfectly on de-Googled ROMs.
 
 ---
-
-## 🙏 Acknowledgments
 
 ## 🙏 Acknowledgments
 
@@ -476,16 +477,20 @@ TabSSH is built on the shoulders of giants:
 ### Current Focus (v0.0.9)
 - [x] Terminal output rendering fixes
 - [x] Copy button on all error messages
-- [x] Full-screen terminal with edge gestures
+- [x] Full-screen terminal with edge gestures (tabs flush at top, no toolbar chrome)
 - [x] CI/CD keystore handling
+- [x] Keyboard drag-to-reorder in the key editor
+- [x] Background host monitoring with alerts
+- [x] SSH connect concurrency control + exponential backoff
+- [x] Stale / ghost notification fixes
 - [ ] Complete testing and bug fixes
 
 ### Future Versions
-- [ ] Tmux/Screen integration
+- [ ] Mosh protocol full integration
 - [ ] Bluetooth keyboard enhancements
-- [ ] Script automation and macros
-- [ ] Advanced terminal customization
-- [ ] Performance optimizations
+- [ ] Session recording and replay UI
+- [ ] Advanced port-forwarding manager
+- [ ] Performance profiling pass
 
 See [GitHub Issues](https://github.com/tabssh/android/issues) and [CLAUDE.md](CLAUDE.md) for detailed roadmap.
 
@@ -513,20 +518,15 @@ If you find TabSSH useful, please consider starring the repository! It helps oth
 ## 🎊 Latest Updates
 
 ### Recent Improvements
-- ✅ **Copy Button on All Errors** - 72 error messages now have copy buttons for easy debugging
-- ✅ **Full-Screen Terminal** - Menu and toolbars hidden by default, accessible via edge taps
-- ✅ **CI/CD Signing Fixed** - Consistent APK signing across all build sources
-- ✅ **Cloud Sync** - SAF-based universal sync (Google Drive, Dropbox, OneDrive, Nextcloud, local) with AES-256-GCM encryption + 3-way conflict merge
-- ✅ **SSH Key Management** - Universal parser for all key formats (OpenSSH, PEM, PKCS#8, PuTTY)
-- ✅ **Mobile UX** - Swipe between tabs, volume keys font control, URL detection
-
-### Future v1.0.0 Goals
-- 📁 **Connection Groups/Folders** - Organize servers efficiently
-- 📝 **Snippets Library** - Quick access to common commands
-- 🆔 **Identity Abstraction** - Reusable credential profiles
-- 🔍 **Search & Sort** - Real-time filtering with 8 sort options
-- 🌐 **Hypervisor Management** - Proxmox VE, VMware vSphere, XCP-ng, Xen Orchestra, Oracle Cloud Infrastructure (OCI)
-- 📊 **Comprehensive Logging** - 4 logging types with rotation
+- ✅ **Background Host Monitoring** - TCP reachability probes, down/recovery alerts, CPU/memory/disk thresholds, configurable cooldown
+- ✅ **Keyboard Drag-to-Reorder** - Drag keys within any row directly in the key editor preview
+- ✅ **Tabs at Top** - Toolbar chrome removed; TabBar is now flush at top of screen
+- ✅ **SSH Connect Reliability** - Semaphore (10 concurrent handshakes) + exponential backoff reconnect in MultiHost dashboard
+- ✅ **Notification Fixes** - Stale "Connected to [host]" notifications properly cancelled on disconnect and force-close
+- ✅ **23 Built-in Themes** + GUI theme editor in Settings → General → Appearance
+- ✅ **Cloud Sync** - SAF-based universal sync (any provider) with AES-256-GCM + 3-way conflict merge
+- ✅ **Hypervisor Management** - Proxmox VE, VMware vSphere, XCP-ng, Xen Orchestra, OCI Compute
+- ✅ **Copy Button on All Errors** - Every error dialog has a Copy button for clean bug reports
 
 ---
 

@@ -50,8 +50,9 @@ Description: |
     * NOTE: F-Droid build uses WebDAV only (no Google Drive dependency)
 
     🎨 THEMES & CUSTOMIZATION:
-    * 12 beautiful built-in themes (Dracula, Solarized, Nord, Monokai, One Dark, etc.)
-    * Custom theme creation and import with WCAG 2.1 accessibility validation
+    * 23 beautiful built-in themes (Dracula, Solarized, Nord, Monokai, One Dark, etc.)
+    * Full GUI theme editor with WCAG 2.1 contrast validation (Settings → General → Appearance)
+    * Custom theme creation, import, and export
     * High contrast mode and color blind friendly themes
     * Font customization and size adjustment
 
@@ -66,6 +67,11 @@ Description: |
     * Mosh protocol for mobile-optimized connections with roaming support
     * X11 forwarding for running remote GUI applications
     * Background connection persistence and app switching support
+    * Background host monitoring — TCP reachability probes with down/recovery
+      notifications, configurable alert cooldown, CPU/memory/disk thresholds
+    * Hypervisor management — Proxmox VE, XCP-ng, Xen Orchestra, OCI Compute
+      (list/start/stop/reset instances, VM serial console)
+    * Keyboard drag-to-reorder: rearrange keys within any row in the key editor
 
     🔒 SECURITY & PRIVACY:
     * Hardware-backed encryption for all sensitive data
