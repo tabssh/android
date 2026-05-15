@@ -50,6 +50,20 @@
          set `allow-external-apps=true` in ~/.termux/termux.properties. -->
     <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
 
+    <!-- Background host monitoring ──────────────────────────────────────────
+         RECEIVE_BOOT_COMPLETED: lets MonitoringBootReceiver re-register the
+         WorkManager periodic task after a device reboot or app update. OEM
+         ROMs (Samsung, Xiaomi, Huawei, …) can wipe the WorkManager DB; the
+         receiver is the safety net that brings it back.
+
+         REQUEST_IGNORE_BATTERY_OPTIMIZATIONS: places the app in the
+         "unrestricted" App Standby bucket so Android Doze mode does not defer
+         WorkManager beyond maintenance windows. This is the same exemption
+         used by email, alarm, and health-monitoring apps. The user is shown a
+         rationale dialog before the system prompt is displayed. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <!-- Termux package visibility (Android 11+ requires explicit package query). -->
     <queries>
         <package android:name="com.termux" />
@@ -465,6 +479,21 @@
             android:exported="false"
             android:excludeFromRecents="true"
             android:theme="@style/Theme.TabSSH" />
+
+        <!-- Background monitoring boot/update receiver.
+             Re-registers the HostAvailabilityWorker periodic task after a
+             device reboot or app update. Required because OEM ROMs can wipe
+             the WorkManager DB during aggressive battery optimisation passes.
+             exported=false: no external component needs to trigger this. -->
+        <receiver
+            android:name=".background.MonitoringBootReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
     </application>
 

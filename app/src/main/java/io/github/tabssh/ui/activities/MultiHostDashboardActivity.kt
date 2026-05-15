@@ -35,6 +35,7 @@ import io.github.tabssh.performance.MetricsCollector
 import io.github.tabssh.performance.PerformanceMetrics
 import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.background.BatteryOptimizationHelper
 import io.github.tabssh.storage.database.entities.MonitorSlot
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.CoroutineScope
@@ -262,7 +263,18 @@ class MultiHostDashboardActivity : AppCompatActivity() {
                     )
                     app.applicationScope.launch(Dispatchers.IO) {
                         app.database.monitorSlotDao().insertOrReplace(updated)
-                        withContext(Dispatchers.Main) { onSaved(updated) }
+                        withContext(Dispatchers.Main) {
+                            onSaved(updated)
+                            // If the user just enabled monitoring, check battery
+                            // optimization so alerts actually arrive when the
+                            // app is closed. Show once per save — not on disabling.
+                            if (updated.enabled) {
+                                BatteryOptimizationHelper.requestExemptionIfNeeded(context) {
+                                    // Already exempt — check for OEM restrictions
+                                    BatteryOptimizationHelper.showManufacturerGuidanceIfNeeded(context)
+                                }
+                            }
+                        }
                     }
                 }
                 .setNeutralButton("Remove") { _, _ ->

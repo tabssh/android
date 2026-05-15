@@ -127,9 +127,10 @@ data class MonitorSlot(
     val consecutiveFailures: Int = 0
 ) {
     /** Interval clamped to the range Android WorkManager will actually honour.
-     *  Minimum 15 min (system PeriodicWork floor); maximum 60 min. */
+     *  Minimum 15 min (system PeriodicWork floor for background work);
+     *  maximum 720 min (12 h, matching the longest option in the UI picker). */
     val effectiveIntervalMinutes: Int
-        get() = checkIntervalMinutes.coerceIn(15, 60)
+        get() = checkIntervalMinutes.coerceIn(15, 720)
 
     /** True if enough time has elapsed since the last probe to warrant a new
      *  check, given this slot's configured interval. */
