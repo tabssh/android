@@ -115,7 +115,7 @@ class MultiHostDashboardActivity : AppCompatActivity() {
          *  auth) is CPU- and network-heavy; blasting all hosts at once causes
          *  some to time out while others succeed. 5 concurrent handshakes
          *  keeps the network stack comfortable even on cellular. */
-        private const val MAX_CONCURRENT_CONNECTS = 5
+        private const val MAX_CONCURRENT_CONNECTS = 10
 
         /** Initial backoff after a failed connect attempt (ms). */
         private const val CONNECT_BACKOFF_INITIAL_MS = 5_000L

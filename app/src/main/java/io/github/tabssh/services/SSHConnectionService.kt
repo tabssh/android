@@ -113,7 +113,13 @@ class SSHConnectionService : Service() {
             }
         }
         
-        return START_STICKY // Restart if killed by system
+        // NOT_STICKY: if the system kills this service (OOM, force-stop, etc.)
+        // there is nothing to restore — all SSH sessions are dead. The app
+        // restarts the service itself via startService() on the next connect.
+        // START_STICKY caused the service to revive with stale "Connected to"
+        // notifications still in the shade and a spurious "Starting SSH
+        // session…" placeholder on every process restart.
+        return START_NOT_STICKY
     }
     
     override fun onBind(intent: Intent?): IBinder? = null
@@ -231,7 +237,28 @@ class SSHConnectionService : Service() {
      * ongoing FG notification while service is alive).
      */
     private fun renderHostNotification(profileId: String, disconnectingState: Boolean = false) {
-        val conn = app.sshSessionManager.getConnection(profileId) ?: return
+        val conn = app.sshSessionManager.getConnection(profileId)
+        if (conn == null) {
+            // Session was already removed from the manager (race between the
+            // listener callback and the session teardown).  If this is the
+            // disconnect render, still cancel the notification so it doesn't
+            // linger in the shade.
+            if (disconnectingState) {
+                val nid = io.github.tabssh.utils.NotificationHelper.perHostNotificationId(profileId)
+                getSystemService(NotificationManager::class.java).cancel(nid)
+                // If this was the FG anchor, detach so Android releases the pin.
+                if (fgAnchorProfileId == profileId) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        stopForeground(STOP_FOREGROUND_DETACH)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        stopForeground(false)
+                    }
+                    fgAnchorProfileId = null
+                }
+            }
+            return
+        }
         val state = conn.connectionState.value
         val effectiveState = if (disconnectingState)
             ConnectionState.DISCONNECTED else state
