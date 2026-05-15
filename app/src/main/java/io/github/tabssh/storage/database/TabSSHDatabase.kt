@@ -30,7 +30,7 @@ import io.github.tabssh.utils.logging.Logger
         Macro::class,
         io.github.tabssh.storage.database.entities.HypervisorAccount::class
     ],
-    version = 30,
+    version = 31,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -310,7 +310,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     MIGRATION_26_27,
                     MIGRATION_27_28,
                     MIGRATION_28_29,
-                    MIGRATION_29_30
+                    MIGRATION_29_30,
+                    MIGRATION_30_31
                 )
                 .build()
                 INSTANCE = instance
@@ -654,6 +655,21 @@ data class DatabaseStats(
                     "ALTER TABLE connections ADD COLUMN notif_vibrate_mode INTEGER NOT NULL DEFAULT 0"
                 )
                 Logger.i("Database", "Migration 29->30: Added notif_sound_mode + notif_vibrate_mode to connections")
+            }
+        }
+
+        /**
+         * v30 → v31 — OCI instance SSH binding.
+         * Adds `oci_instance_id` to `connections` so the OCI Manager can store
+         * and retrieve per-instance SSH settings (username, port, auth method,
+         * key) without requiring the user to reconfigure on every connect.
+         */
+        val MIGRATION_30_31 = object : Migration(30, 31) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE connections ADD COLUMN oci_instance_id TEXT"
+                )
+                Logger.i("Database", "Migration 30->31: Added oci_instance_id to connections")
             }
         }
 

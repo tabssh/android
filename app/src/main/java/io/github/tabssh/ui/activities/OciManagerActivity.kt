@@ -6,7 +6,6 @@ import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
-import android.widget.EditText
 import android.widget.ProgressBar
 import android.widget.Spinner
 import android.widget.TextView
@@ -16,15 +15,18 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.textfield.TextInputEditText
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.hypervisor.oci.OciApiClient
 import io.github.tabssh.hypervisor.oci.OciInstance
 import io.github.tabssh.hypervisor.oci.OciInstanceAction
 import io.github.tabssh.hypervisor.oci.OciKeyMaterial
+import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.HypervisorType
+import io.github.tabssh.storage.database.entities.StoredKey
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.showError
 import kotlinx.coroutines.Dispatchers
@@ -278,10 +280,14 @@ class OciManagerActivity : AppCompatActivity() {
     }
 
     /**
-     * SSH Connect — prompted with a username dialog (defaults to "opc",
-     * the standard OCI Oracle Linux user; Ubuntu images use "ubuntu").
-     * Creates a temporary ConnectionProfile from the instance's public IP
-     * and opens TabTerminalActivity, mirroring the quick-connect flow.
+     * SSH Connect — shows a persistent configuration dialog pre-filled with
+     * any previously saved SSH settings for this OCI instance. On Connect the
+     * settings are written to (or updated in) the local DB so the next tap
+     * remembers them. Supports password auth and key-based auth via any key
+     * stored in the SSH key store.
+     *
+     * The default username is "opc" (Oracle Linux) but users running Ubuntu
+     * images should change it to "ubuntu"; the saved value will stick.
      */
     private fun handleSshConnect(inst: OciInstance) {
         val publicIp = inst.publicIp
@@ -290,26 +296,132 @@ class OciManagerActivity : AppCompatActivity() {
             return
         }
 
-        val usernameInput = EditText(this).apply {
-            hint = "SSH username"
-            setText("opc")
-            setSingleLine()
+        // Load existing profile + key list from DB, then show the config dialog.
+        lifecycleScope.launch {
+            val existing = withContext(Dispatchers.IO) {
+                app.database.connectionDao().getByOciInstanceId(inst.id)
+            }
+            val storedKeys = withContext(Dispatchers.IO) {
+                app.database.keyDao().getAllKeysList()
+            }
+            showSshConfigDialog(inst, publicIp, existing, storedKeys)
         }
+    }
+
+    /**
+     * Inflate and show the SSH config dialog for the given OCI instance.
+     * [existing] is the previously saved [ConnectionProfile] for this instance
+     * (null on first connect). [storedKeys] is the full list of SSH keys from
+     * the key store.
+     */
+    private fun showSshConfigDialog(
+        inst: OciInstance,
+        publicIp: String,
+        existing: ConnectionProfile?,
+        storedKeys: List<StoredKey>
+    ) {
+        val view = layoutInflater.inflate(R.layout.dialog_oci_ssh_config, null)
+
+        val instanceLabel = view.findViewById<TextView>(R.id.oci_ssh_instance_label)
+        val usernameField = view.findViewById<TextInputEditText>(R.id.oci_ssh_username)
+        val portField = view.findViewById<TextInputEditText>(R.id.oci_ssh_port)
+        val authSpinner = view.findViewById<Spinner>(R.id.oci_ssh_auth_method)
+        val keyLabel = view.findViewById<TextView>(R.id.oci_ssh_key_label)
+        val keySpinner = view.findViewById<Spinner>(R.id.oci_ssh_key_spinner)
+        val noKeysHint = view.findViewById<TextView>(R.id.oci_ssh_no_keys_hint)
+
+        instanceLabel.text = "SSH to $publicIp"
+
+        // Pre-fill from saved profile or sensible defaults.
+        usernameField.setText(existing?.username ?: "opc")
+        portField.setText((existing?.port ?: 22).toString())
+
+        // Auth method spinner — Password and Public Key only; keyboard-interactive
+        // is essentially password-prompt on OCI hosts and adds confusion.
+        val authOptions = listOf(AuthType.PASSWORD, AuthType.PUBLIC_KEY)
+        val authAdapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_item,
+            authOptions.map { it.displayName }
+        ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        authSpinner.adapter = authAdapter
+
+        val savedAuth = existing?.getAuthTypeEnum() ?: AuthType.PASSWORD
+        authSpinner.setSelection(authOptions.indexOf(savedAuth).coerceAtLeast(0))
+
+        // Key spinner — populated from key store.
+        val keyAdapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_item,
+            storedKeys.map { "${it.name} (${it.keyType})" }
+        ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        keySpinner.adapter = keyAdapter
+
+        // Restore previously selected key by keyId.
+        val savedKeyIndex = existing?.keyId
+            ?.let { id -> storedKeys.indexOfFirst { it.keyId == id } }
+            ?.takeIf { it >= 0 } ?: 0
+        if (storedKeys.isNotEmpty()) keySpinner.setSelection(savedKeyIndex)
+
+        // Show/hide key picker based on selected auth method.
+        fun updateKeyVisibility(authType: AuthType) {
+            val needsKey = authType == AuthType.PUBLIC_KEY
+            keyLabel.visibility = if (needsKey) View.VISIBLE else View.GONE
+            if (needsKey && storedKeys.isEmpty()) {
+                keySpinner.visibility = View.GONE
+                noKeysHint.visibility = View.VISIBLE
+            } else {
+                keySpinner.visibility = if (needsKey) View.VISIBLE else View.GONE
+                noKeysHint.visibility = View.GONE
+            }
+        }
+        updateKeyVisibility(savedAuth)
+
+        authSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, v: View?, pos: Int, id: Long) {
+                updateKeyVisibility(authOptions[pos])
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
         AlertDialog.Builder(this)
-            .setTitle("Connect to ${inst.displayName}")
-            .setMessage("SSH to $publicIp")
-            .setView(usernameInput)
+            .setTitle("SSH: ${inst.displayName}")
+            .setView(view)
             .setPositiveButton("Connect") { _, _ ->
-                val username = usernameInput.text.toString().trim().ifBlank { "opc" }
-                val profile = ConnectionProfile(
+                val username = usernameField.text.toString().trim().ifBlank { "opc" }
+                val port = portField.text.toString().toIntOrNull()?.coerceIn(1, 65535) ?: 22
+                val authType = authOptions[authSpinner.selectedItemPosition]
+                val keyId = if (authType == AuthType.PUBLIC_KEY && storedKeys.isNotEmpty()) {
+                    storedKeys[keySpinner.selectedItemPosition].keyId
+                } else null
+
+                // Build the ConnectionProfile — reuse existing ID to update
+                // in place rather than accumulate orphan rows.
+                val profile = (existing ?: ConnectionProfile(
                     name = "OCI: ${inst.displayName}",
                     host = publicIp,
-                    port = 22,
-                    username = username
+                    ociInstanceId = inst.id
+                )).copy(
+                    name = "OCI: ${inst.displayName}",
+                    host = publicIp,
+                    port = port,
+                    username = username,
+                    authType = authType.name,
+                    keyId = keyId,
+                    ociInstanceId = inst.id,
+                    modifiedAt = System.currentTimeMillis()
                 )
-                Logger.i("OciManager", "Launching SSH to $username@$publicIp for ${inst.displayName}")
-                val intent = TabTerminalActivity.createIntent(this, profile, autoConnect = true)
-                startActivity(intent)
+
+                // Persist in background, then launch.
+                lifecycleScope.launch {
+                    withContext(Dispatchers.IO) {
+                        app.database.connectionDao().insertConnection(profile)
+                    }
+                    Logger.i("OciManager", "Launching SSH to $username@$publicIp " +
+                        "(auth=${authType.name}, key=$keyId) for ${inst.displayName}")
+                    val intent = TabTerminalActivity.createIntent(this@OciManagerActivity, profile, autoConnect = true)
+                    startActivity(intent)
+                }
             }
             .setNegativeButton("Cancel", null)
             .show()

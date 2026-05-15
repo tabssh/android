@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SSH configuration dialog for OCI Compute instances.
+  Shown every time the user taps "SSH Connect" on an instance row;
+  values are pre-filled from the saved ConnectionProfile (if any) and
+  persisted on Connect so subsequent taps remember the settings.
+-->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingStart="8dp"
+    android:paddingEnd="8dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="8dp">
+
+        <!-- Instance label -->
+        <TextView
+            android:id="@+id/oci_ssh_instance_label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+
+        <!-- Username -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:hint="Username">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/oci_ssh_username"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="textNoSuggestions"
+                android:singleLine="true" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Port -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:hint="Port">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/oci_ssh_port"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:singleLine="true"
+                android:text="22" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Auth method label -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="4dp"
+            android:text="Authentication"
+            android:textAppearance="?attr/textAppearanceLabelMedium" />
+
+        <!-- Auth method spinner -->
+        <Spinner
+            android:id="@+id/oci_ssh_auth_method"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Key picker (shown only when auth = PUBLIC_KEY) -->
+        <TextView
+            android:id="@+id/oci_ssh_key_label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="4dp"
+            android:text="Identity key"
+            android:textAppearance="?attr/textAppearanceLabelMedium"
+            android:visibility="gone" />
+
+        <Spinner
+            android:id="@+id/oci_ssh_key_spinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone" />
+
+        <!-- No-keys hint -->
+        <TextView
+            android:id="@+id/oci_ssh_no_keys_hint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:text="No SSH keys stored. Add a key in Settings → SSH Keys first."
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:textColor="?attr/colorError"
+            android:visibility="gone" />
+
+    </LinearLayout>
+</ScrollView>

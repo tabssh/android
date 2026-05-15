@@ -203,7 +203,20 @@ data class ConnectionProfile(
     val modifiedAt: Long = System.currentTimeMillis(),
 
     @ColumnInfo(name = "sync_device_id")
-    val syncDeviceId: String = ""
+    val syncDeviceId: String = "",
+
+    /**
+     * DB v30 → v31 — OCI instance binding.
+     *
+     * When non-null this profile was created via the OCI Manager "SSH Connect"
+     * flow and is linked to the OCI Compute instance with this OCID. Used to
+     * look up and re-use the saved SSH settings (username, port, auth method,
+     * key) the next time the user taps SSH Connect for the same instance.
+     *
+     * Null for every profile created through the normal add-connection flow.
+     */
+    @ColumnInfo(name = "oci_instance_id")
+    val ociInstanceId: String? = null
 ) {
     fun getAuthTypeEnum(): AuthType {
         return try {

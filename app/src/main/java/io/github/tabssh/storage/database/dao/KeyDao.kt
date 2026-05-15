@@ -13,7 +13,10 @@ interface KeyDao {
     
     @Query("SELECT * FROM stored_keys ORDER BY name")
     fun getAllKeys(): Flow<List<StoredKey>>
-    
+
+    @Query("SELECT * FROM stored_keys ORDER BY name")
+    suspend fun getAllKeysList(): List<StoredKey>
+
     @Query("SELECT * FROM stored_keys ORDER BY name")
     fun getAllKeysLiveData(): LiveData<List<StoredKey>>
     

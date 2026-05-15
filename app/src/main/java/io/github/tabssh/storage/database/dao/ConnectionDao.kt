@@ -105,4 +105,11 @@ interface ConnectionDao {
      */
     @Query("UPDATE connections SET identity_id = NULL WHERE identity_id = :identityId")
     suspend fun removeIdentityFromAllConnections(identityId: String)
+
+    /**
+     * Look up the SSH profile saved for a specific OCI Compute instance.
+     * Returns null when no profile has been saved for this instance yet.
+     */
+    @Query("SELECT * FROM connections WHERE oci_instance_id = :ociInstanceId LIMIT 1")
+    suspend fun getByOciInstanceId(ociInstanceId: String): ConnectionProfile?
 }
