@@ -57,6 +57,12 @@ const val NOTIFICATION_ID_FILE_TRANSFER = 3001
     // posted notification carries setTimeoutAfter so the OS auto-clears
     // it after a brief window.
     private const val CHANNEL_SSH_ALERTS = "ssh_alerts_v3"
+
+    // Background host monitoring — down/recovery alerts.
+    internal const val CHANNEL_HOST_MONITORING = "host_monitoring_v1"
+
+    // Background host metric threshold alerts (CPU/mem/disk).
+    internal const val CHANNEL_HOST_METRICS = "host_metrics_v1"
     
     /**
      * Create all notification channels (Android 8+)
@@ -143,16 +149,43 @@ const val NOTIFICATION_ID_FILE_TRANSFER = 3001
                 enableVibration(true)
             }
 
+            // Host monitoring — down/recovery alerts. HIGH so they surface
+            // as heads-up banners; sound + vibration on by default.
+            val hostMonitoring = NotificationChannel(
+                CHANNEL_HOST_MONITORING,
+                "Host Monitoring",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Alerts when a monitored host goes down or recovers"
+                setShowBadge(true)
+                enableVibration(true)
+            }
+
+            // Metric threshold — CPU/memory/disk over threshold. DEFAULT so
+            // it doesn't intrude as aggressively as a full outage alert.
+            val hostMetrics = NotificationChannel(
+                CHANNEL_HOST_METRICS,
+                "Host Metrics",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Alerts when CPU, memory, or disk exceed configured thresholds"
+                setShowBadge(true)
+                enableVibration(false)
+                setSound(null, null)
+            }
+
             notificationManager.createNotificationChannels(listOf(
                 serviceChannel,
                 connectionChannel,
                 fileTransferChannel,
                 errorChannel,
                 sshSilent,
-                sshAlerts
+                sshAlerts,
+                hostMonitoring,
+                hostMetrics
             ))
 
-            Logger.d("NotificationHelper", "Created 6 notification channels")
+            Logger.d("NotificationHelper", "Created 8 notification channels")
         }
     }
 
@@ -490,5 +523,117 @@ const val NOTIFICATION_ID_FILE_TRANSFER = 3001
     fun cancelAllNotifications(context: Context) {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.cancelAll()
+    }
+
+    // ── Host monitoring notifications ─────────────────────────────────────────
+
+    /**
+     * Post a "host is down" alert for a monitored connection.
+     * Opens [MultiHostDashboardActivity] on tap.
+     */
+    fun notifyHostDown(
+        context: Context,
+        profile: io.github.tabssh.storage.database.entities.ConnectionProfile
+    ) {
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val pi = dashboardPendingIntent(context)
+        val n = NotificationCompat.Builder(context, CHANNEL_HOST_MONITORING)
+            .setSmallIcon(R.drawable.ic_error)
+            .setContentTitle("Host unreachable: ${profile.getDisplayName()}")
+            .setContentText("${profile.host}:${profile.port} is not responding")
+            .setContentIntent(pi)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_ERROR)
+            .build()
+        nm.notify(monitoringNotificationId(profile.id, "down"), n)
+    }
+
+    /**
+     * Post a "host recovered" alert for a monitored connection.
+     */
+    fun notifyHostRecovered(
+        context: Context,
+        profile: io.github.tabssh.storage.database.entities.ConnectionProfile
+    ) {
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        // Cancel any lingering "down" notification first.
+        nm.cancel(monitoringNotificationId(profile.id, "down"))
+        val pi = dashboardPendingIntent(context)
+        val n = NotificationCompat.Builder(context, CHANNEL_HOST_MONITORING)
+            .setSmallIcon(R.drawable.ic_connected)
+            .setContentTitle("Host recovered: ${profile.getDisplayName()}")
+            .setContentText("${profile.host}:${profile.port} is back online")
+            .setContentIntent(pi)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setTimeoutAfter(120_000L)
+            .build()
+        nm.notify(monitoringNotificationId(profile.id, "up"), n)
+    }
+
+    /**
+     * Post a "still down" repeat alert respecting the configured cooldown.
+     * Only called by [HostAvailabilityWorker] after cooldown has elapsed.
+     */
+    fun notifyHostStillDown(
+        context: Context,
+        profile: io.github.tabssh.storage.database.entities.ConnectionProfile,
+        consecutiveFailures: Int
+    ) {
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val pi = dashboardPendingIntent(context)
+        val n = NotificationCompat.Builder(context, CHANNEL_HOST_MONITORING)
+            .setSmallIcon(R.drawable.ic_error)
+            .setContentTitle("Host still unreachable: ${profile.getDisplayName()}")
+            .setContentText("${profile.host}:${profile.port} — $consecutiveFailures consecutive failures")
+            .setContentIntent(pi)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_ERROR)
+            .build()
+        nm.notify(monitoringNotificationId(profile.id, "down"), n)
+    }
+
+    /**
+     * Post a metric threshold breach alert (CPU/memory/disk/load).
+     * Uses the quieter [CHANNEL_HOST_METRICS] channel to avoid alarm fatigue.
+     */
+    fun notifyMetricThreshold(
+        context: Context,
+        profile: io.github.tabssh.storage.database.entities.ConnectionProfile,
+        metric: String,
+        currentValue: String,
+        threshold: String
+    ) {
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val pi = dashboardPendingIntent(context)
+        val n = NotificationCompat.Builder(context, CHANNEL_HOST_METRICS)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("${profile.getDisplayName()}: $metric threshold exceeded")
+            .setContentText("$metric is $currentValue (threshold: $threshold)")
+            .setContentIntent(pi)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setTimeoutAfter(300_000L)
+            .build()
+        nm.notify(monitoringNotificationId(profile.id, "metric_$metric"), n)
+    }
+
+    /** Stable notification ID for a given profile + alert type pair. */
+    private fun monitoringNotificationId(profileId: String, type: String): Int {
+        val base = 200_000
+        return base + ((profileId + type).hashCode().toLong() and 0x7FFFFFFFL % 90_000).toInt()
+    }
+
+    private fun dashboardPendingIntent(context: Context): PendingIntent {
+        val intent = Intent(context, io.github.tabssh.ui.activities.MultiHostDashboardActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        return PendingIntent.getActivity(
+            context, 0, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
     }
 }

@@ -28,6 +28,18 @@
   - §15 package map: added `cloud` package row; expanded `utils` entry; updated activity count
   - §16: FIDO2 scope clarified (detection-only, no CTAP2); Telnet not-a-stub note added
 
+### Multi-host Dashboard v2 + background monitoring (2026-05-14)
+
+- **`(pending)`** ✨ Multi-host Dashboard v2: group add/rename, card tap → HostDetailActivity, per-host monitor config, battery-aware WorkManager background monitoring.
+  - DB v31→v32: new `monitor_slots` table (`MonitorSlot` entity, `MonitorSlotDao`)
+  - `HostAvailabilityWorker`: WorkManager 15 min periodic, TCP-only probes, respects battery saver + `monitoring_enabled` pref, emits down/recovery/still-down notifications
+  - `NotificationHelper`: two new channels — `host_monitoring_v1` (HIGH, down/recovery) + `host_metrics_v1` (DEFAULT, threshold breaches); 4 new notification functions
+  - `MultiHostDashboardActivity` rewrite: toolbar "Add group" menu, group header long-press = rename, status dot per card (green/red/grey from `MonitorSlot`), 🔔 bell per card + long-press = monitor config dialog, card tap = `HostDetailActivity`
+  - `HostDetailActivity` (new): single-host live metrics (CPU/mem/disk/load/net/platform) + monitoring status + Connect + Monitor settings
+  - `TabSSHApplication.applicationScope` made `val` (was `private val`) to allow companion-fun dialog access
+  - `HostAvailabilityWorker.schedule()` called from `TabSSHApplication.initializeCoreComponents()`
+  - AI.md: §4.5 HostAvailabilityWorker row, §4.8 new background monitoring section, §8.1 version 32, §8.2 MonitorSlot entity row, §8.4 migrations v29→32, §13.1 channel table updated
+
 ### Post-2026-05-02 commits (May 2 – May 12, 2026)
 
 - **`3f4dc8c`** 🐛 Session reattach fix — `TabTerminalActivity` now uses Application-scoped `TabManager` (`app.tabManager`) so tabs survive activity destruction. Added `onNewIntent()` override (singleTop was silently dropping re-launch intents). Added `finish()` to `handleBackToMainActivity()` so the back-press cycle doesn't stack duplicate instances. `onDestroy()` no longer calls `tabManager.cleanup()`.

@@ -248,6 +248,7 @@ Top-level config: `android:name=".TabSSHApplication"`, `android:allowBackup="fal
 |---|---|---|
 | `SSHConnectionService` | foreground (`dataSync`) | Holds SSH sessions while app is backgrounded; `START_STICKY`; auto-stops 30 s after last connection closes |
 | `TaskerIntentService` | exported intent service | Tasker plug-in actions: `CONNECT`, `DISCONNECT`, `SEND_COMMAND`, `SEND_KEYS` |
+| `HostAvailabilityWorker` | `CoroutineWorker` (WorkManager) | Battery-aware background TCP probes for monitored hosts; 15 min periodic; constraints: network + not-low-battery |
 | `QuickConnectWidgetProvider` | `AppWidgetProvider` | 1×1 launcher widget |
 | `ConnectionWidgetProvider` (+ `Widget2x1`, `Widget4x2`, `Widget4x4`) | `AppWidgetProvider` | Multi-size connection widgets |
 | `FileProvider` | content provider | Shares logs / transcripts via `app/src/main/res/xml/file_paths.xml` |
@@ -277,6 +278,33 @@ Top-level config: `android:name=".TabSSHApplication"`, `android:allowBackup="fal
 All fields are wrapped in `PerformanceMetrics(timestamp, cpuUsage, memoryUsage, diskUsage, networkStats, loadAverage, platformInfo)`.
 
 **History window:** 60 data points at 5-second intervals (5 minutes of rolling history) per connection. Consumed by `PerformanceFragment` (charts) and `PerformanceOverlayView` (draggable HUD in `TabTerminalActivity`). `MultiHostDashboardActivity` runs its own polling loop against multiple connections in parallel.
+
+### 4.8 Background host monitoring
+
+**Two-tier model:**
+
+| Tier | When active | Transport | Cost |
+|---|---|---|---|
+| **Availability** | Always (background) | TCP connect to `host:port` (5 s timeout) | One TCP SYN per host per check — battery-friendly at hundreds of hosts |
+| **Performance** | Opt-in per host (`MonitorSlot.enablePerformanceChecks`) | SSH `MetricsCollector` | Only runs if a live session already exists; never opens new SSH sessions from background |
+
+**`HostAvailabilityWorker`** (`background/HostAvailabilityWorker.kt`) — WorkManager `CoroutineWorker`. Scheduled at 15-min intervals (Android minimum for periodic work). Constraints: `CONNECTED` network + `requiresBatteryNotLow`. Honours `PowerManager.isPowerSaveMode` and `monitoring_run_in_battery_saver` pref. Processes all enabled `MonitorSlot` rows in one Worker run (one network wake-up for N hosts, not N separate jobs). Emits notifications via `NotificationHelper.notifyHostDown/notifyHostRecovered/notifyHostStillDown`.
+
+**`MonitorSlot`** (DB entity, v32) — per-host config + runtime state:
+- `enabled`, `alertOnDown`, `alertOnRecovery`
+- `cpuThreshold`, `memoryThreshold`, `diskThreshold`, `loadThreshold` (nullable — null means disabled)
+- `enablePerformanceChecks` — opt-in SSH metric checks (battery trade-off)
+- `checkIntervalMinutes` (desired; WorkManager enforces ≥ 15 min)
+- `alertCooldownMinutes` — min gap between repeat "still down" alerts
+- State: `isCurrentlyDown`, `consecutiveFailures`, `lastCheckedAt`, `lastSeenUp`, `lastNotifiedDownAt`
+
+**Notification channels (added in v32):**
+- `host_monitoring_v1` — HIGH — host down/recovery (audible + vibration)
+- `host_metrics_v1` — DEFAULT — CPU/memory/disk threshold breaches (silent)
+
+**UI entry points:**
+- `MultiHostDashboardActivity` — groups (add/rename/collapse), host cards with status dot (green/red/grey), card tap → `HostDetailActivity`, card long-press or 🔔 icon → monitor config dialog
+- `HostDetailActivity` — single-host live metrics (CPU/mem/disk/load/network/platform) + monitoring status + "Connect" / "Monitor settings" actions
 
 ---
 
@@ -527,7 +555,7 @@ If the Keystore is unavailable (e.g. broken ROM), the manager auto-degrades to `
 
 ### 8.1 Room database
 
-`storage/database/TabSSHDatabase.kt` — **version 26**, schema exported to `app/schemas/`.
+`storage/database/TabSSHDatabase.kt` — **version 32**, schema exported to `app/schemas/`.
 
 ### 8.2 Entities (15)
 
@@ -548,6 +576,7 @@ If the Keystore is unavailable (e.g. broken ROM), the manager auto-degrades to `
 | `Workspace` | `workspaces` | named tab groups, `connectionIds` (JSON array) | `entities/Workspace.kt` |
 | `CloudAccount` | `cloud_accounts` | `provider`, `enabled`, `lastRefreshAt`, `lastCount` (token in Keystore, **not** in DB) | `entities/CloudAccount.kt` |
 | `Macro` | `macros` | recordable raw byte sequence (`sequence_b64`), `usageCount` | `entities/Macro.kt` |
+| `MonitorSlot` | `monitor_slots` | per-host background monitoring config + state: `enabled`, `alertOnDown/Recovery`, `cpuThreshold`, `memoryThreshold`, `diskThreshold`, `loadThreshold`, `enablePerformanceChecks`, `checkIntervalMinutes`, `alertCooldownMinutes`, `isCurrentlyDown`, `consecutiveFailures`, `lastCheckedAt`, `lastSeenUp`, `lastNotifiedDownAt` | `entities/MonitorSlot.kt` |
 
 ### 8.3 DAOs
 
@@ -557,7 +586,7 @@ Fifteen DAOs in `storage/database/dao/`. Notable queries:
 - `AuditLogDao`: range queries by date, by connection, by session; cleanup queries.
 - All write APIs use `OnConflictStrategy.REPLACE`.
 
-### 8.4 Migrations (`v1 → v29`)
+### 8.4 Migrations (`v1 → v32`)
 
 | Step | Change |
 |---|---|
@@ -589,6 +618,9 @@ Fifteen DAOs in `storage/database/dao/`. Notable queries:
 | 26→27 | Create `hypervisor_accounts` (reusable hypervisor credentials) + add `account_id` FK to `hypervisors` |
 | 27→28 | Add `pinned_cert_sha256` to `hypervisors` (TOFU TLS pinning for hypervisor REST APIs) |
 | 28→29 | Add `auth_type` discriminator (default `'password'`) + 5 nullable OCI columns to `hypervisors` (`oci_tenancy_ocid`, `oci_user_ocid`, `oci_region`, `oci_fingerprint`, `oci_compartment_ocid`) — OCI Phase 1 |
+| 29→30 | Add `display_host` + `display_port` to `hypervisors` (tunnel / VPN display addresses) |
+| 30→31 | Add `oci_instance_id` to `connections` (OCI SSH persistent config linking) |
+| 31→32 | Create `monitor_slots` table (background host monitoring: availability + metric thresholds) |
 
 ### 8.5 Preferences
 
@@ -980,12 +1012,16 @@ Package `cloud/` (separate from `hypervisor/`). Manages SSH-accessible cloud VM 
 
 | Channel ID | Importance | Use |
 |---|---|---|
-| `ssh_service` | LOW | persistent foreground notification for `SSHConnectionService` |
-| `ssh_connection` | DEFAULT | connect / disconnect / error events |
-| `file_transfer` | LOW | SFTP progress (ongoing, BigText for completion) |
-| `errors` | HIGH | actionable errors |
+| `ssh_service_v2` | LOW | persistent foreground notification for `SSHConnectionService` |
+| `ssh_connection_v2` | LOW | connect / disconnect / error events (silent) |
+| `file_transfer_v2` | LOW | SFTP progress (ongoing, BigText for completion) |
+| `errors_v2` | HIGH | actionable errors |
+| `ssh_silent_v3` | LOW | per-host persistent session status (silent) |
+| `ssh_alerts_v3` | HIGH | per-host audible/vibrating session events (controlled by `notifSoundMode`/`notifVibrateMode`) |
+| `host_monitoring_v1` | HIGH | host down/recovery alerts from background `HostAvailabilityWorker` |
+| `host_metrics_v1` | DEFAULT | CPU/memory/disk threshold breach alerts (silent) |
 
-Per-channel toggles: `notifications_enabled`, `show_connection_notifications`, `show_error_notifications`, `show_file_transfer_notifications`, `notification_vibrate`.
+Per-channel toggles: `notifications_enabled`, `show_connection_notifications`, `show_error_notifications`, `show_file_transfer_notifications`, `notification_vibrate`. Master switch for monitoring: `monitoring_enabled` pref.
 
 ### 13.2 Foreground service
 

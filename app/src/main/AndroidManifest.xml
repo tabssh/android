@@ -291,6 +291,13 @@
             android:label="Multi-host Dashboard"
             android:parentActivityName=".ui.activities.MainActivity" />
 
+        <!-- Single-host detail / monitoring view (launched from dashboard cards) -->
+        <activity
+            android:name=".ui.activities.HostDetailActivity"
+            android:exported="false"
+            android:label="Host Detail"
+            android:parentActivityName=".ui.activities.MultiHostDashboardActivity" />
+
         <!-- Wave 5.1 — Cloud accounts (DigitalOcean inventory etc.) -->
         <activity
             android:name=".ui.activities.CloudAccountsActivity"

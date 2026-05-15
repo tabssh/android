@@ -70,7 +70,7 @@ class TabSSHApplication : Application() {
      *
      * No need to ever cancel this scope — it dies with the process.
      */
-    private val applicationScope = kotlinx.coroutines.CoroutineScope(
+    val applicationScope = kotlinx.coroutines.CoroutineScope(
         kotlinx.coroutines.Dispatchers.Default + kotlinx.coroutines.SupervisorJob()
     )
 
@@ -351,6 +351,14 @@ class TabSSHApplication : Application() {
         // open + migrations on the main thread. Touching writableDatabase
         // forces SupportSQLiteOpenHelper to run the migration chain now.
         tryInit("Database")     { database.openHelper.writableDatabase }
+
+        // Schedule background host availability checks via WorkManager.
+        // Uses ExistingPeriodicWorkPolicy.KEEP — idempotent, safe to call on
+        // every cold start. The master "monitoring_enabled" pref is checked
+        // inside the worker itself so we don't need to conditionalize here.
+        tryInit("HostMonitor") {
+            io.github.tabssh.background.HostAvailabilityWorker.schedule(this)
+        }
 
         Logger.d("TabSSHApplication", "Core components initialized")
     }

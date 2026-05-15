@@ -28,9 +28,10 @@ import io.github.tabssh.utils.logging.Logger
         Workspace::class,
         CloudAccount::class,
         Macro::class,
-        io.github.tabssh.storage.database.entities.HypervisorAccount::class
+        io.github.tabssh.storage.database.entities.HypervisorAccount::class,
+        MonitorSlot::class
     ],
-    version = 31,
+    version = 32,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -52,6 +53,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
     abstract fun cloudAccountDao(): CloudAccountDao
     abstract fun macroDao(): MacroDao
     abstract fun hypervisorAccountDao(): io.github.tabssh.storage.database.dao.HypervisorAccountDao
+    abstract fun monitorSlotDao(): MonitorSlotDao
 
     companion object {
         @Volatile
@@ -311,7 +313,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     MIGRATION_27_28,
                     MIGRATION_28_29,
                     MIGRATION_29_30,
-                    MIGRATION_30_31
+                    MIGRATION_30_31,
+                    MIGRATION_31_32
                 )
                 .build()
                 INSTANCE = instance
@@ -670,6 +673,39 @@ data class DatabaseStats(
                     "ALTER TABLE connections ADD COLUMN oci_instance_id TEXT"
                 )
                 Logger.i("Database", "Migration 30->31: Added oci_instance_id to connections")
+            }
+        }
+
+        /**
+         * v31 → v32 — Background host monitoring (MonitorSlot).
+         * - New `monitor_slots` table: per-host TCP availability + metric
+         *   threshold configuration and runtime state.
+         */
+        val MIGRATION_31_32 = object : Migration(31, 32) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """CREATE TABLE IF NOT EXISTS monitor_slots (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        connection_id TEXT NOT NULL,
+                        enabled INTEGER NOT NULL DEFAULT 1,
+                        alert_on_down INTEGER NOT NULL DEFAULT 1,
+                        alert_on_recovery INTEGER NOT NULL DEFAULT 1,
+                        cpu_threshold INTEGER,
+                        memory_threshold INTEGER,
+                        disk_threshold INTEGER,
+                        load_threshold REAL,
+                        enable_performance_checks INTEGER NOT NULL DEFAULT 0,
+                        check_interval_minutes INTEGER NOT NULL DEFAULT 15,
+                        alert_cooldown_minutes INTEGER NOT NULL DEFAULT 60,
+                        last_checked_at INTEGER NOT NULL DEFAULT 0,
+                        last_seen_up INTEGER NOT NULL DEFAULT 0,
+                        last_notified_down_at INTEGER NOT NULL DEFAULT 0,
+                        last_notified_up_at INTEGER NOT NULL DEFAULT 0,
+                        is_currently_down INTEGER NOT NULL DEFAULT 0,
+                        consecutive_failures INTEGER NOT NULL DEFAULT 0
+                    )"""
+                )
+                Logger.i("Database", "Migration 31->32: Created monitor_slots table")
             }
         }
 
