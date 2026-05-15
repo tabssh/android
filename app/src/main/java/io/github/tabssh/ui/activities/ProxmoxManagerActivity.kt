@@ -15,6 +15,9 @@ import io.github.tabssh.crypto.storage.HypervisorPasswordStore
 import io.github.tabssh.hypervisor.proxmox.ProxmoxApiClient
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.HypervisorType
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import io.github.tabssh.utils.showError
 
@@ -150,20 +153,28 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                 
                 val vmList = currentClient?.getAllVMs() ?: emptyList()
                 
-                // Fetch IP addresses for running VMs (in parallel)
-                val vmsWithIPs = vmList.map { vm ->
-                    if (vm.status == "running") {
-                        // Try to get IP address
-                        val ip = try {
-                            currentClient?.getVMIPAddress(vm.node, vm.vmid, vm.type)
-                        } catch (e: Exception) {
-                            Logger.d("ProxmoxManager", "Could not get IP for VM ${vm.vmid}: ${e.message}")
-                            null
+                // Fetch IP addresses for running VMs in parallel. Without
+                // coroutineScope + async, this was sequential: each guest-agent
+                // query blocked ~3–4 s when QEMU agent isn't running (Proxmox
+                // returns HTTP 500 after a short timeout). With N running VMs,
+                // total wait was N × 3–4 s. Now all requests fire concurrently
+                // and the list appears as soon as the slowest one resolves.
+                val vmsWithIPs = coroutineScope {
+                    vmList.map { vm ->
+                        async {
+                            if (vm.status == "running") {
+                                val ip = try {
+                                    currentClient?.getVMIPAddress(vm.node, vm.vmid, vm.type)
+                                } catch (e: Exception) {
+                                    Logger.d("ProxmoxManager", "Could not get IP for VM ${vm.vmid}: ${e.message}")
+                                    null
+                                }
+                                vm.copy(ipAddress = ip)
+                            } else {
+                                vm
+                            }
                         }
-                        vm.copy(ipAddress = ip)
-                    } else {
-                        vm
-                    }
+                    }.awaitAll()
                 }
                 
                 vms.clear()

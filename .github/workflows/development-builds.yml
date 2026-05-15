@@ -64,9 +64,32 @@ jobs:
       run: chmod +x gradlew
 
     - name: Decode and setup keystore
+      env:
+        KEYSTORE_B64: ${{ secrets.KEYSTORE_BASE64 }}
       run: |
-        echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
-        echo "✅ Keystore decoded and ready"
+        # KEYSTORE_BASE64 is optional for dev builds. When set, decode it
+        # so APKs are signed with the real release key (required for OTA
+        # updates). When absent (e.g. a fork or first-time contributor),
+        # generate an ephemeral self-signed keystore so the build doesn't
+        # fail — the APK will be installable but won't match production
+        # signatures (install via `adb install -r` or fresh install).
+        if [ -n "$KEYSTORE_B64" ]; then
+          echo "$KEYSTORE_B64" | base64 -d > keystore.jks
+          echo "✅ Keystore decoded from KEYSTORE_BASE64 secret"
+        else
+          echo "⚠️  KEYSTORE_BASE64 not set — generating ephemeral self-signed keystore for dev build"
+          keytool -genkeypair \
+            -keystore keystore.jks \
+            -alias tabssh \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 365 \
+            -storepass tabssh123 \
+            -keypass tabssh123 \
+            -dname "CN=TabSSH Dev Build, OU=Dev, O=TabSSH, L=Unknown, ST=Unknown, C=US" \
+            -noprompt
+          echo "✅ Ephemeral debug keystore generated"
+        fi
 
     - name: Compute development version label
       id: version
