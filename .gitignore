@@ -181,4 +181,5 @@ app/src/main/assets/fonts/*.ttf
 .agent/
 
 # Core dumps
+core
 core.*
