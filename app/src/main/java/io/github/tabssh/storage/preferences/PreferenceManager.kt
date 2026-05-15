@@ -16,8 +16,14 @@ class PreferenceManager(private val context: Context) {
     }
 
     init {
-        // Migrate old Integer preferences to String for ListPreference compatibility
+        // Migrate old Integer preferences to String for ListPreference compatibility.
+        // These keys are backed by ListPreference which always stores a String; any
+        // slot that was previously written as an Int (via setInt / setAutoLockTimeout
+        // / setClearClipboardTimeout) must be converted so that (a) getStringAsInt
+        // can read them and (b) the ListPreference UI shows the correct selection.
         migrateIntToStringPreference(KEY_KEYBOARD_ROW_COUNT)
+        migrateIntToStringPreference(KEY_AUTO_LOCK_TIMEOUT)
+        migrateIntToStringPreference(KEY_CLEAR_CLIPBOARD_TIMEOUT)
     }
 
     private fun migrateIntToStringPreference(key: String) {
@@ -160,8 +166,10 @@ class PreferenceManager(private val context: Context) {
     fun isAutoLockOnBackground(): Boolean = getBoolean(KEY_AUTO_LOCK_ON_BACKGROUND, false)
     fun setAutoLockOnBackground(enabled: Boolean) = setBoolean(KEY_AUTO_LOCK_ON_BACKGROUND, enabled)
 
-    fun getAutoLockTimeout(): Int = getInt(KEY_AUTO_LOCK_TIMEOUT, 300)
-    fun setAutoLockTimeout(timeout: Int) = setInt(KEY_AUTO_LOCK_TIMEOUT, timeout)
+    // KEY_AUTO_LOCK_TIMEOUT is a ListPreference — it always stores a String.
+    // getInt() throws ClassCastException when it finds a String in SharedPreferences.
+    fun getAutoLockTimeout(): Int = getStringAsInt(KEY_AUTO_LOCK_TIMEOUT, 300)
+    fun setAutoLockTimeout(timeout: Int) = setString(KEY_AUTO_LOCK_TIMEOUT, timeout.toString())
 
     fun isStrictHostKeyChecking(): Boolean = getBoolean(KEY_STRICT_HOST_KEY_CHECKING, true)
     fun setStrictHostKeyChecking(enabled: Boolean) = setBoolean(KEY_STRICT_HOST_KEY_CHECKING, enabled)
@@ -169,8 +177,10 @@ class PreferenceManager(private val context: Context) {
     fun isPreventScreenshots(): Boolean = getBoolean(KEY_PREVENT_SCREENSHOTS, false)
     fun setPreventScreenshots(prevent: Boolean) = setBoolean(KEY_PREVENT_SCREENSHOTS, prevent)
     
-    fun getClearClipboardTimeout(): Int = getInt(KEY_CLEAR_CLIPBOARD_TIMEOUT, 60)
-    fun setClearClipboardTimeout(seconds: Int) = setInt(KEY_CLEAR_CLIPBOARD_TIMEOUT, seconds)
+    // KEY_CLEAR_CLIPBOARD_TIMEOUT is a ListPreference — it always stores a String.
+    // getInt() throws ClassCastException when it finds a String in SharedPreferences.
+    fun getClearClipboardTimeout(): Int = getStringAsInt(KEY_CLEAR_CLIPBOARD_TIMEOUT, 60)
+    fun setClearClipboardTimeout(seconds: Int) = setString(KEY_CLEAR_CLIPBOARD_TIMEOUT, seconds.toString())
     
     // Terminal preferences
     fun getTheme(): String = getString(KEY_THEME, DEFAULT_THEME)
