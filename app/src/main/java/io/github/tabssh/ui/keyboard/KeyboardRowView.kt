@@ -41,7 +41,7 @@ class KeyboardRowView @JvmOverloads constructor(
     init {
         // Setup scroll view
         isHorizontalScrollBarEnabled = false
-        isFillViewport = false
+        isFillViewport = true
 
         // Create key container
         keyContainer = LinearLayout(context).apply {
@@ -110,8 +110,9 @@ class KeyboardRowView @JvmOverloads constructor(
         val button = MaterialButton(context, null, com.google.android.material.R.attr.materialButtonOutlinedStyle)
 
         val params = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-            LinearLayout.LayoutParams.MATCH_PARENT
+            0,
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            1f
         )
         params.marginEnd = dpToPx(KEY_MARGIN_DP)
         button.layoutParams = params

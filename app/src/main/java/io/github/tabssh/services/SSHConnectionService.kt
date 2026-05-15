@@ -254,6 +254,14 @@ class SSHConnectionService : Service() {
         if (!disconnectingState && state == ConnectionState.CONNECTED) {
             if (fgAnchorProfileId == null || fgAnchorProfileId == profileId) {
                 startForeground(nid, notif)
+                // If the FG anchor was previously the placeholder (null →
+                // NOTIFICATION_ID 1001 on the legacy channel), cancel it
+                // explicitly — Android won't remove the old anchor
+                // notification when startForeground is called with a
+                // different id.
+                if (fgAnchorProfileId == null) {
+                    getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
+                }
                 fgAnchorProfileId = profileId
                 return
             }

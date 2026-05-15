@@ -642,7 +642,7 @@ const val NOTIFICATION_ID_FILE_TRANSFER = 3001
     /** Stable notification ID for a given profile + alert type pair. */
     private fun monitoringNotificationId(profileId: String, type: String): Int {
         val base = 200_000
-        return base + ((profileId + type).hashCode().toLong() and 0x7FFFFFFFL % 90_000).toInt()
+        return base + (((profileId + type).hashCode().toLong() and 0x7FFFFFFFL) % 90_000).toInt()
     }
 
     private fun dashboardPendingIntent(context: Context): PendingIntent {
