@@ -9,6 +9,11 @@ import io.github.tabssh.performance.MetricsCollector
 import io.github.tabssh.utils.NotificationHelper
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -65,6 +70,12 @@ class HostAvailabilityWorker(
 
         /** TCP probe timeout in milliseconds. */
         private const val TCP_TIMEOUT_MS = 5_000
+
+        /** Maximum concurrent TCP probes. Limits open file descriptors and ensures
+         *  the worker finishes quickly even for large fleets (e.g., 300 hosts at
+         *  30 concurrent = ~10 batches × avg ~100ms = well under 5 seconds for
+         *  reachable hosts; worst-case all-down = 10 × 5 s = 50 s, not 25 min). */
+        private const val MAX_PARALLEL_PROBES = 30
 
         /**
          * Enqueue (or keep) the periodic worker. Safe to call multiple times —
@@ -125,81 +136,99 @@ class HostAvailabilityWorker(
 
         val app = TabSSHApplication.get()
         val db = app.database
-        val slots = db.monitorSlotDao().getEnabledSlots()
+        val allSlots = db.monitorSlotDao().getEnabledSlots()
 
-        if (slots.isEmpty()) {
+        if (allSlots.isEmpty()) {
             Logger.d(TAG, "No enabled monitor slots — nothing to check")
             return Result.success()
         }
 
-        Logger.i(TAG, "Checking ${slots.size} monitored host(s)")
+        // Per-slot interval gating: skip slots that were checked recently enough.
+        // The global worker fires every 15 min; slots configured at 30 or 60 min
+        // are skipped on runs that fall within their interval window.
+        val now = System.currentTimeMillis()
+        val dueSlots = allSlots.filter { it.isDue(now) }
 
-        for (slot in slots) {
-            val profile = db.connectionDao().getConnectionById(slot.connectionId)
-            if (profile == null) {
-                Logger.w(TAG, "Slot ${slot.id}: profile ${slot.connectionId} not found, skipping")
-                continue
-            }
+        if (dueSlots.isEmpty()) {
+            Logger.d(TAG, "All ${allSlots.size} slot(s) checked recently — nothing due")
+            return Result.success()
+        }
 
-            val now = System.currentTimeMillis()
-            val isReachable = tcpProbe(profile.host, profile.port)
-            val wasDown = slot.isCurrentlyDown
+        Logger.i(TAG, "Checking ${dueSlots.size}/${allSlots.size} monitored host(s) (${allSlots.size - dueSlots.size} skipped, interval not elapsed)")
 
-            if (!isReachable) {
-                // Host is down.
-                val firstFailure = !wasDown
-                val cooldownMs = slot.alertCooldownMinutes * 60_000L
-                val cooldownExpired = now - slot.lastNotifiedDownAt > cooldownMs
-
-                val stampDown = (firstFailure || cooldownExpired) && slot.alertOnDown
-                db.monitorSlotDao().updateProbeResult(
-                    slotId = slot.id,
-                    now = now,
-                    isDown = true,
-                    stampDown = stampDown,
-                    stampUp = false
-                )
-
-                if (slot.alertOnDown) {
-                    when {
-                        firstFailure -> {
-                            Logger.i(TAG, "${profile.host}: went down (first failure)")
-                            NotificationHelper.notifyHostDown(appContext, profile)
+        // Parallel TCP probes bounded by MAX_PARALLEL_PROBES.
+        // supervisorScope ensures one probe failure does not cancel others.
+        val semaphore = Semaphore(MAX_PARALLEL_PROBES)
+        supervisorScope {
+            dueSlots.map { slot ->
+                async(Dispatchers.IO) {
+                    semaphore.withPermit {
+                        val profile = db.connectionDao().getConnectionById(slot.connectionId)
+                        if (profile == null) {
+                            Logger.w(TAG, "Slot ${slot.id}: profile ${slot.connectionId} not found, skipping")
+                            return@withPermit
                         }
-                        cooldownExpired -> {
-                            val failures = slot.consecutiveFailures + 1
-                            Logger.i(TAG, "${profile.host}: still down ($failures failures)")
-                            NotificationHelper.notifyHostStillDown(appContext, profile, failures)
+
+                        val probeTime = System.currentTimeMillis()
+                        val isReachable = tcpProbe(profile.host, profile.port)
+                        val wasDown = slot.isCurrentlyDown
+
+                        if (!isReachable) {
+                            val firstFailure = !wasDown
+                            val cooldownMs = slot.alertCooldownMinutes * 60_000L
+                            val cooldownExpired = probeTime - slot.lastNotifiedDownAt > cooldownMs
+
+                            val stampDown = (firstFailure || cooldownExpired) && slot.alertOnDown
+                            db.monitorSlotDao().updateProbeResult(
+                                slotId = slot.id,
+                                now = probeTime,
+                                isDown = true,
+                                stampDown = stampDown,
+                                stampUp = false
+                            )
+
+                            if (slot.alertOnDown) {
+                                when {
+                                    firstFailure -> {
+                                        Logger.i(TAG, "${profile.host}: went down (first failure)")
+                                        NotificationHelper.notifyHostDown(appContext, profile)
+                                    }
+                                    cooldownExpired -> {
+                                        val failures = slot.consecutiveFailures + 1
+                                        Logger.i(TAG, "${profile.host}: still down ($failures failures)")
+                                        NotificationHelper.notifyHostStillDown(appContext, profile, failures)
+                                    }
+                                }
+                            }
+                        } else {
+                            val justRecovered = wasDown
+
+                            db.monitorSlotDao().updateProbeResult(
+                                slotId = slot.id,
+                                now = probeTime,
+                                isDown = false,
+                                stampDown = false,
+                                stampUp = justRecovered && slot.alertOnRecovery
+                            )
+
+                            if (justRecovered && slot.alertOnRecovery) {
+                                Logger.i(TAG, "${profile.host}: recovered")
+                                NotificationHelper.notifyHostRecovered(appContext, profile)
+                            }
+
+                            // Optional SSH metrics check — only if user opted in AND a
+                            // live session already exists (no new connections from background).
+                            if (slot.enablePerformanceChecks) {
+                                checkMetrics(app, slot.copy(
+                                    lastCheckedAt = probeTime,
+                                    isCurrentlyDown = false,
+                                    consecutiveFailures = 0
+                                ), profile)
+                            }
                         }
                     }
                 }
-            } else {
-                // Host is reachable.
-                val justRecovered = wasDown
-
-                db.monitorSlotDao().updateProbeResult(
-                    slotId = slot.id,
-                    now = now,
-                    isDown = false,
-                    stampDown = false,
-                    stampUp = justRecovered && slot.alertOnRecovery
-                )
-
-                if (justRecovered && slot.alertOnRecovery) {
-                    Logger.i(TAG, "${profile.host}: recovered")
-                    NotificationHelper.notifyHostRecovered(appContext, profile)
-                }
-
-                // Optional SSH metrics check — only if user opted in AND a
-                // live session already exists (no new connections from background).
-                if (slot.enablePerformanceChecks) {
-                    checkMetrics(app, slot.copy(
-                        lastCheckedAt = now,
-                        isCurrentlyDown = false,
-                        consecutiveFailures = 0
-                    ), profile)
-                }
-            }
+            }.awaitAll()
         }
 
         Logger.d(TAG, "Availability check complete")
@@ -233,12 +262,15 @@ class HostAvailabilityWorker(
         val result = runCatching { MetricsCollector(ssh).collectMetrics() }
         val metrics = result.getOrNull()?.getOrNull() ?: return
 
-        // CPU threshold
+        // CPU threshold — uses 5-minute load average normalised by core count so
+        // momentary spikes don't trigger alerts. load5min / coreCount × 100 gives
+        // "what fraction of total CPU capacity was busy on average over 5 minutes."
         slot.cpuThreshold?.let { threshold ->
-            val value = metrics.cpuUsage.totalPercent
+            val cores = metrics.cpuUsage.coreCount.coerceAtLeast(1)
+            val value = (metrics.loadAverage.load5min / cores) * 100f
             if (value > threshold) {
                 NotificationHelper.notifyMetricThreshold(
-                    appContext, profile, "CPU",
+                    appContext, profile, "CPU (5 min avg)",
                     "%.0f%%".format(value), "$threshold%"
                 )
             }

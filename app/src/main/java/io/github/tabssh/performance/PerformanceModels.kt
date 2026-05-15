@@ -25,10 +25,11 @@ data class CpuMetrics(
     val systemPercent: Float,     // System/kernel CPU %
     val idlePercent: Float,       // Idle CPU %
     val iowaitPercent: Float,     // I/O wait %
-    val totalPercent: Float       // Total usage % (100 - idle)
+    val totalPercent: Float,      // Total usage % (100 - idle)
+    val coreCount: Int = 1        // Logical CPU core count (from nproc / /proc/cpuinfo)
 ) {
     companion object {
-        fun empty() = CpuMetrics(0f, 0f, 100f, 0f, 0f)
+        fun empty() = CpuMetrics(0f, 0f, 100f, 0f, 0f, coreCount = 1)
     }
 }
 

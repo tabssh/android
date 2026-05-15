@@ -53,8 +53,16 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
      */
     private suspend fun collectCpuMetrics(): CpuMetrics {
         return try {
-            val output = sshConnection.executeCommand("cat /proc/stat | head -1")
-            parseCpuStats(output)
+            val statOutput = sshConnection.executeCommand("cat /proc/stat | head -1")
+            // nproc is available on all modern Linux distros; fall back to counting
+            // processor entries in /proc/cpuinfo on minimal/embedded systems.
+            val coreOutput = try {
+                sshConnection.executeCommand(
+                    "nproc 2>/dev/null || grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo 1"
+                )
+            } catch (_: Exception) { "1" }
+            val coreCount = coreOutput.trim().toIntOrNull()?.coerceAtLeast(1) ?: 1
+            parseCpuStats(statOutput, coreCount)
         } catch (e: Exception) {
             Logger.d("MetricsCollector", "CPU metrics unavailable: ${e.message}")
             CpuMetrics.empty()
@@ -62,10 +70,16 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
     }
 
     /**
-     * Parse /proc/stat output
+     * Parse /proc/stat output.
      * Format: cpu user nice system idle iowait irq softirq steal guest guest_nice
+     *
+     * Note: reading /proc/stat once gives cumulative counters since boot, which
+     * represents a long-running average rather than a point-in-time snapshot.
+     * For instantaneous CPU%, two reads with a short delay would be needed, but
+     * for monitoring purposes the 5-minute load average (from /proc/loadavg) is
+     * the better spike-resistant metric and is used by [HostAvailabilityWorker].
      */
-    private fun parseCpuStats(output: String): CpuMetrics {
+    private fun parseCpuStats(output: String, coreCount: Int = 1): CpuMetrics {
         val parts = output.trim().split("\\s+".toRegex())
         if (parts.size < 5) return CpuMetrics.empty()
 
@@ -83,7 +97,8 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
             systemPercent = (system * 100f / total),
             idlePercent = (idle * 100f / total),
             iowaitPercent = (iowait * 100f / total),
-            totalPercent = ((total - idle) * 100f / total)
+            totalPercent = ((total - idle) * 100f / total),
+            coreCount = coreCount
         )
     }
 

@@ -56,32 +56,41 @@ data class MonitorSlot(
     // ── Performance thresholds (null = disabled) ─────────────────────────────
     // These apply only when enablePerformanceChecks = true.
 
-    /** Alert if CPU% exceeds this value (1–100). */
+    /** Alert if sustained CPU% exceeds this value (1–100).
+     *  The worker compares against the 5-minute load average normalised by CPU
+     *  core count, so momentary spikes do not trigger alerts. Default 85%. */
     @ColumnInfo(name = "cpu_threshold")
-    val cpuThreshold: Int? = null,
+    val cpuThreshold: Int? = 85,
 
-    /** Alert if memory used% exceeds this value (1–100). */
+    /** Alert if memory used% exceeds this value (1–100). Default 90%. */
     @ColumnInfo(name = "memory_threshold")
-    val memoryThreshold: Int? = null,
+    val memoryThreshold: Int? = 90,
 
-    /** Alert if disk used% exceeds this value (1–100). */
+    /** Alert if disk used% exceeds this value (1–100). Default 80%
+     *  (matches the traditional "df -h" warning watermark). */
     @ColumnInfo(name = "disk_threshold")
-    val diskThreshold: Int? = null,
+    val diskThreshold: Int? = 80,
 
-    /** Alert if 1-minute load average exceeds this value. */
+    /** Alert if 1-minute load average exceeds this value (advanced users).
+     *  null = disabled. Most users should rely on [cpuThreshold] instead. */
     @ColumnInfo(name = "load_threshold")
     val loadThreshold: Float? = null,
 
     /** When true, the background worker runs a full SSH metrics check
      *  (CPU/mem/disk) in addition to the TCP availability probe. Consumes
-     *  more battery; off by default. */
+     *  more battery; off by default. Enable only if you want threshold
+     *  alerts — TCP reachability monitoring never requires this. */
     @ColumnInfo(name = "enable_performance_checks")
     val enablePerformanceChecks: Boolean = false,
 
     // ── Scheduling ───────────────────────────────────────────────────────────
 
-    /** Desired check interval. WorkManager enforces a minimum of 15 min;
-     *  values below that are rounded up. Stored in minutes. */
+    /** Desired check interval in minutes. Android's WorkManager enforces a
+     *  15-minute floor for background PeriodicWork; [effectiveIntervalMinutes]
+     *  clamps this to [15, 60]. The global worker fires every 15 min and
+     *  skips slots whose last check is still within their interval window,
+     *  so mixed intervals across a large fleet are supported without extra
+     *  work requests. */
     @ColumnInfo(name = "check_interval_minutes")
     val checkIntervalMinutes: Int = 15,
 
@@ -116,4 +125,14 @@ data class MonitorSlot(
      *  Resets to 0 on the first successful probe. */
     @ColumnInfo(name = "consecutive_failures")
     val consecutiveFailures: Int = 0
-)
+) {
+    /** Interval clamped to the range Android WorkManager will actually honour.
+     *  Minimum 15 min (system PeriodicWork floor); maximum 60 min. */
+    val effectiveIntervalMinutes: Int
+        get() = checkIntervalMinutes.coerceIn(15, 60)
+
+    /** True if enough time has elapsed since the last probe to warrant a new
+     *  check, given this slot's configured interval. */
+    fun isDue(nowMs: Long): Boolean =
+        lastCheckedAt == 0L || nowMs - lastCheckedAt >= effectiveIntervalMinutes * 60_000L
+}
