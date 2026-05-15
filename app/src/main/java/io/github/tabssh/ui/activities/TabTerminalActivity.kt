@@ -2037,7 +2037,12 @@ class TabTerminalActivity : AppCompatActivity() {
                         // them to reconnect is friction. The reconnect dialog
                         // is for *unexpected* disconnects (status -1 = no
                         // exit-status message, or non-zero = abnormal exit).
-                        val exitStatus = tab.connection?.getShellExitStatus() ?: -1
+                        // SSH connection exit status takes precedence.
+                        // For mosh/telnet/standalone (connection == null) fall back
+                        // to the PTY session exit code captured in TermuxBridge.
+                        // Exit 0 = user explicitly exited; non-zero = unexpected.
+                        val exitStatus = tab.connection?.getShellExitStatus()
+                            ?: tab.termuxBridge.moshLastExitCode
                         Logger.i("TabTerminalActivity",
                             "Tab ${tab.tabId} disconnected (exit=$exitStatus)")
                         runOnUiThread {

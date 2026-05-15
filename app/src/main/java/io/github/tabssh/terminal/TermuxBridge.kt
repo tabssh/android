@@ -68,6 +68,14 @@ class TermuxBridge(
     // instead of outputStream; resize calls updateSize() on the PTY.
     private var moshSession: TerminalSession? = null
 
+    /** Exit code of the most recently finished mosh PTY session.
+     *  -1 = not yet finished / no mosh session ran.
+     *  0  = clean exit (user typed exit/logout).
+     *  >0 = abnormal termination.
+     *  Read by TabTerminalActivity to decide reconnect-dialog vs auto-close. */
+    var moshLastExitCode: Int = -1
+        private set
+
     // I/O streams from SSH
     private var inputStream: InputStream? = null
     private var outputStream: OutputStream? = null
@@ -255,7 +263,9 @@ class TermuxBridge(
         }
 
         override fun onSessionFinished(finishedSession: TerminalSession) {
-            Logger.i(TAG, "Session finished")
+            val code = finishedSession.getExitStatus()
+            moshLastExitCode = code
+            Logger.i(TAG, "Session finished (exit=$code)")
             runOnMain {
                 listeners.forEach { it.onDisconnected() }
             }
