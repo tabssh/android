@@ -199,4 +199,46 @@
 
     </PreferenceCategory>
 
+    <!-- Issue Reporting / Paste Service -->
+    <PreferenceCategory
+        android:title="Issue Reporting"
+        android:icon="@android:drawable/ic_menu_send">
+
+        <ListPreference
+            android:key="paste_service"
+            android:title="Paste Service"
+            android:summary="Service used to upload logs when reporting issues"
+            android:entries="@array/paste_service_labels"
+            android:entryValues="@array/paste_service_values"
+            android:defaultValue="microbin" />
+
+        <EditTextPreference
+            android:key="paste_microbin_url"
+            android:title="MicroBin Server"
+            android:defaultValue="https://mb.pste.us"
+            android:summary="%s"
+            android:inputType="textUri" />
+
+        <EditTextPreference
+            android:key="paste_lenpaste_url"
+            android:title="Lenpaste Server"
+            android:defaultValue="https://lp.pste.us"
+            android:summary="%s"
+            android:inputType="textUri" />
+
+        <EditTextPreference
+            android:key="paste_stikked_url"
+            android:title="Stikked Server"
+            android:defaultValue="https://pste.us"
+            android:summary="%s"
+            android:inputType="textUri" />
+
+        <EditTextPreference
+            android:key="paste_pastebin_api_key"
+            android:title="Pastebin API Key"
+            android:summary="Required only when paste service is set to pastebin.com"
+            android:inputType="textPassword" />
+
+    </PreferenceCategory>
+
 </PreferenceScreen>

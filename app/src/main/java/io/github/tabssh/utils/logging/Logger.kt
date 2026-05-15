@@ -260,6 +260,9 @@ object Logger {
         currentFile.renameTo(File(parent, "$baseName.1"))
     }
 
+    /** Public entry-point for masking sensitive data before uploading a log. */
+    fun sanitize(text: String): String = sanitizeForPublic(text)
+
     /**
      * Sanitize message for public sharing
      * Removes/redacts: hostnames, usernames, IPs, passwords, keys

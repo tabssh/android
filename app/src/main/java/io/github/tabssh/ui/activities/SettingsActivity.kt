@@ -821,6 +821,11 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
                         clipboard.setPrimaryClip(clip)
                         android.widget.Toast.makeText(requireContext(), "Log copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
                     }
+                    .setNegativeButton("Open Issue") { _, _ ->
+                        io.github.tabssh.ui.dialogs.ReportIssueDialog
+                            .create(displayContent, logType)
+                            .show(parentFragmentManager, "report_issue")
+                    }
                     .show()
 
             } catch (e: Exception) {

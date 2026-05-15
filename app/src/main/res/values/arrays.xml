@@ -360,6 +360,20 @@
         <item>720</item>
     </string-array>
 
+    <!-- Paste service options for issue reporting -->
+    <string-array name="paste_service_labels">
+        <item>MicroBin (default)</item>
+        <item>Lenpaste</item>
+        <item>Stikked</item>
+        <item>pastebin.com</item>
+    </string-array>
+    <string-array name="paste_service_values">
+        <item>microbin</item>
+        <item>lenpaste</item>
+        <item>stikked</item>
+        <item>pastebin</item>
+    </string-array>
+
     <!-- Hypervisor API Type Override -->
     <string-array name="api_type_entries">
         <item>Auto-detect (recommended)</item>
