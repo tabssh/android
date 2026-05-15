@@ -99,6 +99,7 @@ class HypervisorConsoleManager {
             Logger.i(TAG, "termproxy unavailable for $vmName ($msg) — falling back to vncproxy")
             val vnc = client.getVNCProxy(node, vmid, type)
             if (vnc == null) {
+                Logger.e(TAG, "vncproxy fallback also failed for $vmName (vmid=$vmid)")
                 listener?.onError(
                     "This VM has no serial console and the VNC fallback also failed.\n\n" +
                     "To enable serial console: open the VM in Proxmox → Hardware → " +
@@ -155,8 +156,7 @@ class HypervisorConsoleManager {
                 }
 
                 override fun onError(error: Throwable) {
-                    // ConsoleWebSocketClient already logged this at ERROR level.
-                    Logger.d(TAG, "Proxmox console error forwarded: ${error.message}")
+                    Logger.e(TAG, "Proxmox console WebSocket error: ${error.message}")
                     listener?.onError(error.message ?: "Unknown error")
                 }
             })
@@ -249,12 +249,13 @@ class HypervisorConsoleManager {
                 }
 
                 override fun onError(error: Throwable) {
-                    Logger.d(TAG, "XCP-ng console error forwarded: ${error.message}")
+                    Logger.e(TAG, "XCP-ng console WebSocket error: ${error.message}")
                     listener?.onError(error.message ?: "Unknown error")
                 }
             })
 
             if (!connected) {
+                Logger.e(TAG, "XCP-ng WebSocket connect returned false for $vmName")
                 listener?.onError("Failed to establish WebSocket connection")
                 return@withContext null
             }
@@ -343,12 +344,13 @@ class HypervisorConsoleManager {
                 }
 
                 override fun onError(error: Throwable) {
-                    Logger.d(TAG, "Xen Orchestra console error forwarded: ${error.message}")
+                    Logger.e(TAG, "Xen Orchestra console WebSocket error: ${error.message}")
                     listener?.onError(error.message ?: "Unknown error")
                 }
             })
 
             if (!connected) {
+                Logger.e(TAG, "Xen Orchestra WebSocket connect returned false for $vmName")
                 listener?.onError("Failed to establish WebSocket connection")
                 return@withContext null
             }

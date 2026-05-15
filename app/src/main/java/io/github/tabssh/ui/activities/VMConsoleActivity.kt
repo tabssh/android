@@ -409,9 +409,16 @@ class VMConsoleActivity : AppCompatActivity() {
                         refreshFloatingControls()  // refresh Disconnect/Reconnect visibility
                         Logger.i(TAG, "Console connected for $vmName")
                     }
-                } else {
-                    showError("Failed to connect to console")
                 }
+                // Do NOT show a generic "Failed to connect" here. Every code path
+                // that returns null from connectProxmox / connectXCPng /
+                // connectXenOrchestra has already called listener?.onError() or
+                // showError() with a specific message. Adding a second error here
+                // caused a double-dialog race: the specific message (queued via
+                // runOnUiThread from the IO thread) arrived *after* the generic one
+                // (posted directly on main), so users saw "Failed to connect" first,
+                // dismissed it ("shows ok"), and then the real "serial interface"
+                // error appeared — making it look like the error wasn't being caught.
             } catch (e: Exception) {
                 Logger.e(TAG, "Console connection error", e)
                 showError("Connection failed: ${e.message}")
@@ -420,12 +427,28 @@ class VMConsoleActivity : AppCompatActivity() {
     }
 
     private suspend fun connectProxmox(vmId: String, vmName: String): HypervisorConsoleManager.ConsoleConnection? {
-        val host = intent.getStringExtra(EXTRA_HOST) ?: return null
+        val host = intent.getStringExtra(EXTRA_HOST) ?: run {
+            Logger.e(TAG, "connectProxmox: missing EXTRA_HOST in intent")
+            showError("Missing host — cannot connect to Proxmox console")
+            return null
+        }
         val port = intent.getIntExtra(EXTRA_PORT, 8006)
-        val username = intent.getStringExtra(EXTRA_USERNAME) ?: return null
-        val password = intent.getStringExtra(EXTRA_PASSWORD) ?: return null
+        val username = intent.getStringExtra(EXTRA_USERNAME) ?: run {
+            Logger.e(TAG, "connectProxmox: missing EXTRA_USERNAME in intent")
+            showError("Missing username — cannot connect to Proxmox console")
+            return null
+        }
+        val password = intent.getStringExtra(EXTRA_PASSWORD) ?: run {
+            Logger.e(TAG, "connectProxmox: missing EXTRA_PASSWORD in intent")
+            showError("Missing password — cannot connect to Proxmox console")
+            return null
+        }
         val realm = intent.getStringExtra(EXTRA_REALM) ?: "pam"
-        val node = intent.getStringExtra(EXTRA_VM_NODE) ?: return null
+        val node = intent.getStringExtra(EXTRA_VM_NODE) ?: run {
+            Logger.e(TAG, "connectProxmox: missing EXTRA_VM_NODE in intent")
+            showError("Missing VM node — cannot connect to Proxmox console")
+            return null
+        }
         val vmType = intent.getStringExtra(EXTRA_VM_TYPE) ?: "qemu"
         val verifySsl = intent.getBooleanExtra(EXTRA_VERIFY_SSL, false)
         val pinnedSha = intent.getStringExtra(EXTRA_PINNED_CERT_SHA256)?.takeIf { it.isNotBlank() }
@@ -473,7 +496,13 @@ class VMConsoleActivity : AppCompatActivity() {
             }
 
             // Get VM reference if not provided
-            val ref = vmRef ?: client.getVMRefByUUID(vmId) ?: return@withContext null
+            val ref = vmRef ?: client.getVMRefByUUID(vmId) ?: run {
+                Logger.e(TAG, "connectXCPng: could not resolve VM ref for vmId=$vmId")
+                withContext(Dispatchers.Main) {
+                    showError("Could not find VM reference on XCP-ng host")
+                }
+                return@withContext null
+            }
 
             consoleManager?.connectXCPngConsole(
                 client = client,
