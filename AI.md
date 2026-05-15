@@ -1129,7 +1129,7 @@ Keystore is decoded from the `KEYSTORE_BASE64` secret. Gradle cache key is `${{ 
 
 These exist in source but are **not** wired into a working user-facing flow. Treat them as roadmap items.
 
-- **Mosh** (`protocols/mosh/MoshConnection.kt`) — UDP session, prediction engine, and heartbeat are scaffolded; no production launch path. The `use_mosh` flag on `ConnectionProfile` is persisted (DB v11) and exposed in `ConnectionEditActivity` but does not currently switch the runtime to Mosh.
+- **Mosh** — fully wired. `MoshHandoff.kt` bootstraps via an SSH exec channel (`mosh-server` on the remote), parses the `MOSH CONNECT <port> <key>` response, then calls `TermuxBridge.connectMoshClient()` which launches the bundled native `mosh-client` binary through `TerminalSession` (JNI `forkpty()`). The binary handles all UDP/SSP/AES-128-OCB transport natively — no user action required. The `use_mosh` flag on `ConnectionProfile` (DB v11) switches the connection path in `SSHTab`. `MoshConnection.kt` scaffolding is superseded by this architecture.
 - **X11 forwarding** (`protocols/x11/X11ForwardingManager.kt`) — virtual display + Unix socket framework only; no rendering. The `x11_forwarding` flag is persisted (DB v7) and surfaced in the UI.
 - **VMware console** — `VMwareApiClient` and `VMwareManagerActivity` fully route to `VMConsoleActivity`; list / start / stop / reset / console all implemented.
 - **Frequently-used UI** — fully interactive: top-10 connections loaded, tap to connect, swipe-right for delete/duplicate/edit actions.
