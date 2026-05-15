@@ -64,20 +64,37 @@ class MultiRowKeyboardView @JvmOverloads constructor(
     fun getRowCount(): Int = numberOfRows
 
     /**
-     * Row count capped to [LANDSCAPE_MAX_ROWS] when in landscape.
+     * Compute the row count to actually display, considering both orientation
+     * and physical screen size. [portraitRowCount] is the user's preferred
+     * maximum — this function may return a smaller value on large screens so
+     * the keyboard bar stays proportionate to the available terminal area.
+     *
+     * Screen-size caps (portrait):
+     *   sw < 600dp  → honour user setting up to [MAX_ROWS]  (phone)
+     *   sw ≥ 600dp  → cap at [TABLET_PORTRAIT_MAX_ROWS]     (7" tablet / large phone)
+     *   sw ≥ 720dp  → cap at [LARGE_TABLET_PORTRAIT_MAX_ROWS] (10"+ tablet)
+     *
+     * Landscape always caps at [LANDSCAPE_MAX_ROWS] regardless of screen size.
+     * [config] defaults to the current resource configuration so call sites
+     * that have a fresh Configuration (e.g. onConfigurationChanged) can pass
+     * it directly and avoid a stale read.
      */
-    private fun effectiveRowCount(): Int {
-        val isLandscape =
-            resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-        return if (isLandscape) minOf(portraitRowCount, LANDSCAPE_MAX_ROWS)
-        else portraitRowCount
+    private fun effectiveRowCount(config: Configuration = resources.configuration): Int {
+        val isLandscape = config.orientation == Configuration.ORIENTATION_LANDSCAPE
+        if (isLandscape) return minOf(portraitRowCount, LANDSCAPE_MAX_ROWS)
+
+        val sw = config.smallestScreenWidthDp
+        val portraitCap = when {
+            sw >= 720 -> LARGE_TABLET_PORTRAIT_MAX_ROWS
+            sw >= 600 -> TABLET_PORTRAIT_MAX_ROWS
+            else      -> MAX_ROWS
+        }
+        return minOf(portraitRowCount, portraitCap).coerceAtLeast(MIN_ROWS)
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        val newEffective = if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE)
-            minOf(portraitRowCount, LANDSCAPE_MAX_ROWS)
-        else portraitRowCount
+        val newEffective = effectiveRowCount(newConfig)
         if (newEffective == numberOfRows) return
 
         numberOfRows = newEffective
@@ -326,6 +343,18 @@ class MultiRowKeyboardView @JvmOverloads constructor(
         const val DEFAULT_ROWS = 3
         /** Maximum rows shown in landscape to preserve terminal vertical space. */
         const val LANDSCAPE_MAX_ROWS = 2
+        /**
+         * Portrait caps for tablet-class screens. The user's setting is always
+         * a ceiling — these values only kick in when the screen is large enough
+         * that the default row height would eat a disproportionate amount of
+         * the terminal area.
+         *
+         * Threshold          smallestScreenWidthDp    example device
+         * 7" / large phone   ≥ 600 dp                 Galaxy Tab A, Pixel Fold
+         * 10"+ tablet        ≥ 720 dp                 Galaxy Tab S, iPad-class
+         */
+        const val TABLET_PORTRAIT_MAX_ROWS = 3
+        const val LARGE_TABLET_PORTRAIT_MAX_ROWS = 2
         private const val TAG = "MultiRowKeyboardView"
 
         /**
