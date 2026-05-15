@@ -24,6 +24,12 @@
             android:defaultValue="en"
             app:useSimpleSummaryProvider="true" />
 
+        <Preference
+            android:key="open_theme_editor"
+            android:title="Theme Editor"
+            android:summary="Create and customize terminal color themes"
+            android:icon="@drawable/ic_settings" />
+
     </PreferenceCategory>
 
     <PreferenceCategory

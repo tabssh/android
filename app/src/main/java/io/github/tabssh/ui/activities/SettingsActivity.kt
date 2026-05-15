@@ -133,6 +133,12 @@ class GeneralSettingsFragment : PreferenceFragmentCompat() {
             true
         }
 
+        // Open Theme Editor
+        findPreference<Preference>("open_theme_editor")?.setOnPreferenceClickListener {
+            startActivity(ThemeEditorActivity.createIntent(requireContext()))
+            true
+        }
+
         // Open system notification settings
         findPreference<Preference>("open_system_notification_settings")?.setOnPreferenceClickListener {
             openSystemNotificationSettings()

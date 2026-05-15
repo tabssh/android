@@ -77,6 +77,7 @@ data class KeyboardKey(
             KeyboardKey("F12", "F12", "\u001B[24~", KeyCategory.FUNCTION),
             
             // Symbols
+            KeyboardKey("COLON", ":", ":", KeyCategory.SYMBOL),
             KeyboardKey("SLASH", "/", "/", KeyCategory.SYMBOL),
             KeyboardKey("BACKSLASH", "\\", "\\", KeyCategory.SYMBOL),
             KeyboardKey("PIPE", "|", "|", KeyCategory.SYMBOL),
@@ -86,14 +87,19 @@ data class KeyboardKey(
             KeyboardKey("UNDERSCORE", "_", "_", KeyCategory.SYMBOL),
             KeyboardKey("TILDE", "~", "~", KeyCategory.SYMBOL),
             KeyboardKey("BACKTICK", "`", "`", KeyCategory.SYMBOL),
-            
+            KeyboardKey("DOLLAR", "$", "$", KeyCategory.SYMBOL),
+            KeyboardKey("STAR", "*", "*", KeyCategory.SYMBOL),
+            KeyboardKey("LT", "<", "<", KeyCategory.SYMBOL),
+            KeyboardKey("GT", ">", ">", KeyCategory.SYMBOL),
+
             // Modifiers
             KeyboardKey("CTL", "CTL", "", KeyCategory.MODIFIER),
             KeyboardKey("ALT", "ALT", "", KeyCategory.MODIFIER),
             KeyboardKey("FN", "FN", "", KeyCategory.MODIFIER),
-            
+
             // Actions
             KeyboardKey("PASTE", "📋", "", KeyCategory.ACTION),
+            KeyboardKey("SEL", "SEL", "", KeyCategory.ACTION),
             KeyboardKey("TOGGLE", "⌨", "", KeyCategory.ACTION)
         )
     }
