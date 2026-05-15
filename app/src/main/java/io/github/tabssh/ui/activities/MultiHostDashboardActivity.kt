@@ -45,6 +45,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -108,6 +110,17 @@ class MultiHostDashboardActivity : AppCompatActivity() {
         private const val KEY_GROUPS      = "dash_groups_json"
         private const val KEY_HOSTS_PFX   = "dash_hosts_"
         private const val REFRESH_MS      = 5_000L
+
+        /** Max simultaneous SSH handshakes. A full SSH connect (key exchange +
+         *  auth) is CPU- and network-heavy; blasting all hosts at once causes
+         *  some to time out while others succeed. 5 concurrent handshakes
+         *  keeps the network stack comfortable even on cellular. */
+        private const val MAX_CONCURRENT_CONNECTS = 5
+
+        /** Initial backoff after a failed connect attempt (ms). */
+        private const val CONNECT_BACKOFF_INITIAL_MS = 5_000L
+        /** Maximum backoff between retries (ms). */
+        private const val CONNECT_BACKOFF_MAX_MS     = 60_000L
 
         private const val VT_GROUP_HEADER    = 0
         private const val VT_UNGROUPED_HDR   = 1
@@ -319,6 +332,10 @@ class MultiHostDashboardActivity : AppCompatActivity() {
     private val pumpScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val jobs          = mutableMapOf<String, Job>()
     private val ownedSessions = mutableMapOf<String, SSHConnection>()
+
+    /** Limits simultaneous SSH handshakes so we don't overwhelm the network
+     *  stack when the dashboard loads many hosts at once. */
+    private val connectSemaphore = Semaphore(MAX_CONCURRENT_CONNECTS)
 
     private lateinit var adapter: DashboardAdapter
 
@@ -689,39 +706,61 @@ class MultiHostDashboardActivity : AppCompatActivity() {
     }
 
     private suspend fun runHostPump(profile: ConnectionProfile) {
-        val ssh = openOrReuseSession(profile)
-        if (ssh == null) {
-            withContext(Dispatchers.Main) { errorMap[profile.id] = "connect failed"; notifyHostCard(profile.id) }
-            return
-        }
-        val collector = MetricsCollector(ssh)
+        var backoffMs = CONNECT_BACKOFF_INITIAL_MS
         while (true) {
-            if (!ssh.isConnected()) {
-                withContext(Dispatchers.Main) { errorMap[profile.id] = "disconnected"; notifyHostCard(profile.id) }
-                return
-            }
-            val r = runCatching { collector.collectMetrics() }
-            withContext(Dispatchers.Main) {
-                if (r.isSuccess) {
-                    r.getOrNull()?.let { result ->
-                        result
-                            .onSuccess { m ->
-                                metricsMap[profile.id] = m
-                                errorMap.remove(profile.id)
-                                notifyHostCard(profile.id)
-                            }
-                            .onFailure { e ->
-                                errorMap[profile.id] = e.message ?: "error"
-                                notifyHostCard(profile.id)
-                            }
-                    }
-                } else {
-                    errorMap[profile.id] = r.exceptionOrNull()?.message ?: "error"
+            // Acquire connect slot — serialises handshakes so the network
+            // stack isn't flooded when many hosts start at the same time.
+            val ssh = connectSemaphore.withPermit { openOrReuseSession(profile) }
+            if (ssh == null) {
+                // Transient failure (timeout, auth retry race, etc.).
+                // Show the error and retry after a backoff; don't give up.
+                withContext(Dispatchers.Main) {
+                    errorMap[profile.id] = "connecting…"
                     notifyHostCard(profile.id)
                 }
+                delay(backoffMs)
+                backoffMs = (backoffMs * 2).coerceAtMost(CONNECT_BACKOFF_MAX_MS)
+                continue
             }
-            if (r.isFailure && !ssh.isConnected()) return
-            delay(REFRESH_MS)
+            // Connected — reset backoff for the next reconnect cycle.
+            backoffMs = CONNECT_BACKOFF_INITIAL_MS
+
+            val collector = MetricsCollector(ssh)
+            // Metrics collection loop — runs until the session drops.
+            while (true) {
+                if (!ssh.isConnected()) {
+                    withContext(Dispatchers.Main) {
+                        errorMap[profile.id] = "reconnecting…"
+                        notifyHostCard(profile.id)
+                    }
+                    break   // fall back to the outer reconnect loop
+                }
+                val r = runCatching { collector.collectMetrics() }
+                withContext(Dispatchers.Main) {
+                    if (r.isSuccess) {
+                        r.getOrNull()?.let { result ->
+                            result
+                                .onSuccess { m ->
+                                    metricsMap[profile.id] = m
+                                    errorMap.remove(profile.id)
+                                    notifyHostCard(profile.id)
+                                }
+                                .onFailure { e ->
+                                    errorMap[profile.id] = e.message ?: "error"
+                                    notifyHostCard(profile.id)
+                                }
+                        }
+                    } else {
+                        errorMap[profile.id] = r.exceptionOrNull()?.message ?: "error"
+                        notifyHostCard(profile.id)
+                    }
+                }
+                if (r.isFailure && !ssh.isConnected()) break
+                delay(REFRESH_MS)
+            }
+            // Brief pause before reconnecting so we don't spin tight on
+            // a host that keeps dropping immediately after connect.
+            delay(CONNECT_BACKOFF_INITIAL_MS)
         }
     }
 
