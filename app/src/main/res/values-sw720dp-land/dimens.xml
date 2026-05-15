@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 10"+ tablet landscape.
+         Minimal row height — landscape on a large tablet gives the most
+         terminal real estate; keyboard bar should be as unobtrusive as
+         possible. Combined with LANDSCAPE_MAX_ROWS=2. -->
+    <dimen name="keyboard_row_height">26dp</dimen>
+</resources>

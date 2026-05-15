@@ -14,4 +14,9 @@
     <!-- Connection list rows can afford to breathe more. -->
     <dimen name="list_item_padding">20dp</dimen>
     <dimen name="connection_item_height">64dp</dimen>
+
+    <!-- Keyboard bar rows are slimmer on 10"+ tablets (portrait).
+         Combined with the LARGE_TABLET_PORTRAIT_MAX_ROWS=2 cap this keeps
+         the keyboard bar from dominating the terminal area. -->
+    <dimen name="keyboard_row_height">36dp</dimen>
 </resources>

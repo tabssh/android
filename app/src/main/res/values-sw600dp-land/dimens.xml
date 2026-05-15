@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 7" tablet / large-phone landscape.
+         Narrower than the portrait sw600dp value; landscape priority is
+         maximising the visible terminal height. -->
+    <dimen name="keyboard_row_height">28dp</dimen>
+</resources>

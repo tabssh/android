@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 7" tablet / large-phone (sw >= 600dp) overrides.
+         Keyboard bar rows are slightly slimmer than on a phone so the
+         terminal gets more vertical space. Combined with the
+         TABLET_PORTRAIT_MAX_ROWS=3 cap in MultiRowKeyboardView. -->
+    <dimen name="keyboard_row_height">40dp</dimen>
+</resources>
