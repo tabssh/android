@@ -345,7 +345,7 @@ class MultiHostDashboardActivity : AppCompatActivity() {
                     val g = ConnectionGroup(name = name)
                     app.database.connectionGroupDao().insertGroup(g)
                     groupCache = app.database.connectionGroupDao().getAllGroups().first()
-                    runOnUiThread { toast("Group "$name" created") }
+                    runOnUiThread { toast("Group \"$name\" created") }
                 }
             }
             .setNegativeButton("Cancel", null)

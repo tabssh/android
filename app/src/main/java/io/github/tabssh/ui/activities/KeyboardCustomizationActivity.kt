@@ -19,6 +19,7 @@ import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.databinding.ActivityKeyboardCustomizationBinding
 import io.github.tabssh.ui.keyboard.KeyboardKey
+import io.github.tabssh.ui.keyboard.MultiRowKeyboardView
 import io.github.tabssh.utils.logging.Logger
 
 /**
@@ -133,36 +134,9 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
     }
 
     private fun getDefaultLayout(): List<MutableList<KeyboardKey>> {
-        return listOf(
-            mutableListOf(
-                KeyboardKey("ESC", "ESC", "\u001B"),
-                KeyboardKey("TAB", "TAB", "\t"),
-                KeyboardKey("CTL", "CTL", "", KeyboardKey.KeyCategory.MODIFIER),
-                KeyboardKey("ALT", "ALT", "", KeyboardKey.KeyCategory.MODIFIER),
-                KeyboardKey("FN", "FN", "", KeyboardKey.KeyCategory.MODIFIER),
-                KeyboardKey("ENTER", "ENT", "\n"),
-                KeyboardKey("TOGGLE", "⌨", "", KeyboardKey.KeyCategory.ACTION)
-            ),
-            mutableListOf(
-                KeyboardKey("HOME", "HOME", "\u001B[H"),
-                KeyboardKey("END", "END", "\u001B[F"),
-                KeyboardKey("PGUP", "PGUP", "\u001B[5~"),
-                KeyboardKey("PGDN", "PGDN", "\u001B[6~"),
-                KeyboardKey("UP", "↑", "\u001B[A", KeyboardKey.KeyCategory.ARROW),
-                KeyboardKey("DOWN", "↓", "\u001B[B", KeyboardKey.KeyCategory.ARROW),
-                KeyboardKey("LEFT", "←", "\u001B[D", KeyboardKey.KeyCategory.ARROW),
-                KeyboardKey("RIGHT", "→", "\u001B[C", KeyboardKey.KeyCategory.ARROW)
-            ),
-            mutableListOf(
-                KeyboardKey("SLASH", "/", "/", KeyboardKey.KeyCategory.SYMBOL),
-                KeyboardKey("BACKSLASH", "\\", "\\", KeyboardKey.KeyCategory.SYMBOL),
-                KeyboardKey("PIPE", "|", "|", KeyboardKey.KeyCategory.SYMBOL),
-                KeyboardKey("MINUS", "-", "-", KeyboardKey.KeyCategory.SYMBOL),
-                KeyboardKey("UNDERSCORE", "_", "_", KeyboardKey.KeyCategory.SYMBOL),
-                KeyboardKey("TILDE", "~", "~", KeyboardKey.KeyCategory.SYMBOL),
-                KeyboardKey("PASTE", "📋", "", KeyboardKey.KeyCategory.ACTION)
-            )
-        )
+        // Delegate to the canonical runtime default so the editor always shows
+        // the same layout as the live keyboard. Row count 3 matches the app default.
+        return MultiRowKeyboardView.getDefaultRowLayouts(3).map { it.toMutableList() }
     }
 
     private fun setupListeners() {

@@ -864,6 +864,14 @@ class TermuxBridge(
     }
 
     /**
+     * Returns true when the mosh-client PTY session is still running.
+     * Used by SSHTab to distinguish a stale SSH-teardown onDisconnected
+     * (fired during handoff while mosh is alive) from a real mosh death
+     * (process has already exited, isRunning() = false).
+     */
+    fun isMoshSessionAlive(): Boolean = moshSession?.isRunning() == true
+
+    /**
      * Get the raw emulator for advanced operations
      */
     fun getEmulator(): TerminalEmulator? = emulator

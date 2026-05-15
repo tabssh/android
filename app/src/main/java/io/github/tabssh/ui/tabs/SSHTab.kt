@@ -181,20 +181,32 @@ class SSHTab(
                         conn.disconnect()
                     }
                 } else {
-                    // No SSH connection (Telnet/Mosh/standalone) — still notify,
-                    // BUT only if we haven't already transitioned to a new
-                    // connection. The mosh handoff path calls tab.disconnect()
-                    // (clears connection=null) then tab.connectMosh() (sets
-                    // state=CONNECTED). TermuxBridge.disconnect() posts
-                    // onDisconnected() to the main thread asynchronously, so it
-                    // may arrive AFTER connectMosh() finishes. Clobbering the
-                    // CONNECTED state here would kill the mosh session from the
-                    // user's perspective — the tab would show Disconnected while
-                    // mosh-client is still running fine.
-                    if (_connectionState.value != ConnectionState.CONNECTED) {
-                        _connectionState.value = ConnectionState.DISCONNECTED
-                        updateTitleWithStatus(ConnectionState.DISCONNECTED)
+                    // No SSH connection (Telnet/Mosh/standalone).
+                    //
+                    // Two distinct events arrive here:
+                    //
+                    // 1. Stale SSH-teardown event during mosh handoff — the mosh
+                    //    handoff path calls tab.disconnect() (SSH) then
+                    //    tab.connectMosh(). TermuxBridge.disconnect() posts
+                    //    onDisconnected() to the main thread asynchronously, so it
+                    //    may arrive AFTER connectMosh() finishes with the mosh
+                    //    PTY session already alive. Clobbering CONNECTED here would
+                    //    kill the mosh session from the user's perspective.
+                    //
+                    // 2. Real mosh death — the mosh-client process exited. The PTY
+                    //    session is no longer running. We must emit DISCONNECTED so
+                    //    the reconnect dialog appears instead of leaving the user
+                    //    stranded on the "[Process completed - press Enter]" screen.
+                    //
+                    // Distinguish by checking whether the mosh PTY is still alive.
+                    // If yes → stale handoff event, ignore. If no → real death, emit.
+                    if (termuxBridge.isMoshSessionAlive()) {
+                        // Stale SSH teardown during handoff — mosh is running fine.
+                        Logger.d("SSHTab", "Ignoring stale disconnect: mosh session still alive")
+                        return
                     }
+                    _connectionState.value = ConnectionState.DISCONNECTED
+                    updateTitleWithStatus(ConnectionState.DISCONNECTED)
                 }
             }
 
