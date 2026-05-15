@@ -38,7 +38,7 @@ jobs:
       upstream_version: ${{ steps.compare.outputs.upstream_version }}
       release_tag: ${{ steps.compare.outputs.release_tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Resolve latest upstream mosh release
         id: upstream
@@ -100,10 +100,10 @@ jobs:
       matrix:
         abi: [arm64-v8a, armeabi-v7a, x86_64, x86]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Build cross-compile image
         run: |
@@ -127,7 +127,7 @@ jobs:
           cp "$binary" "artifacts/mosh-client-${{ matrix.abi }}"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: mosh-client-${{ matrix.abi }}
           path: artifacts/mosh-client-${{ matrix.abi }}
@@ -139,10 +139,10 @@ jobs:
     if: needs.check-version.outputs.should_build == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: artifacts
           merge-multiple: true
