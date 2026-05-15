@@ -51,6 +51,13 @@ class SSHConnectionService : Service() {
     // Tracks profile ids we've already auto-finished as "disconnected"
     // so a duplicate state-change event doesn't re-post.
     private val disconnectedProfiles = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    // The single active monitoring coroutine. Stored so that a second
+    // onStartCommand(ACTION_START_SERVICE) call (which can happen if the
+    // app sends multiple startForegroundService() requests before the first
+    // one is processed) replaces the old loop rather than stacking on top
+    // of it.
+    private var monitoringJob: Job? = null
     
     companion object {
         private const val NOTIFICATION_ID = 1001
@@ -154,8 +161,12 @@ class SSHConnectionService : Service() {
 
         Logger.i("SSHConnectionService", "Started foreground service")
 
-        // Start connection monitoring
-        serviceScope.launch {
+        // Start connection monitoring. Cancel any pre-existing loop first —
+        // multiple onStartCommand(ACTION_START_SERVICE) calls must not stack
+        // concurrent monitoring coroutines (symptom: maintenance fires every
+        // ~100 ms instead of every 30 s, wake-lock log floods logcat).
+        monitoringJob?.cancel()
+        monitoringJob = serviceScope.launch {
             startConnectionMonitoring()
         }
     }
@@ -405,7 +416,8 @@ class SSHConnectionService : Service() {
 
     private fun releaseWakeLock() {
         try {
-            wakeLock?.takeIf { it.isHeld }?.release()
+            val wl = wakeLock?.takeIf { it.isHeld } ?: return
+            wl.release()
             Logger.i("SSHConnectionService", "Wake lock released")
         } catch (e: Exception) {
             Logger.w("SSHConnectionService", "Failed to release wake lock", e)
