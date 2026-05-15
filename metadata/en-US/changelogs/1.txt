@@ -1,0 +1,44 @@
+🎉 Initial Release - TabSSH 1.0.0
+
+⭐ CORE FEATURES:
+• Multi-tab SSH interface with browser-style tabs
+• Complete VT100/ANSI terminal emulation (256 colors)
+• Hardware-backed encryption (Android Keystore)
+• Full SFTP file transfer with progress tracking
+• Port forwarding (local, remote, SOCKS)
+• X11 forwarding for GUI applications
+• Mosh protocol support for mobile connections
+
+🔑 SSH KEY MANAGEMENT:
+• Universal key parser - ALL formats (OpenSSH, PEM, PKCS#8, PuTTY)
+• All key types - RSA/ECDSA/Ed25519/DSA
+• In-app key generation with encryption
+• Dedicated key management UI
+• SHA-256 fingerprint display
+
+☁️ SYNC & BACKUP:
+• SAF-based sync (any provider — Google Drive, Dropbox, Nextcloud, local)
+• No Google Play Services required — works on de-Googled ROMs
+• AES-256-GCM encryption with 3-way conflict merge
+• Import/Export encrypted backups
+• Multi-device synchronization
+
+🎨 CUSTOMIZATION:
+• 23 built-in terminal themes
+• Full GUI theme editor with WCAG 2.1 contrast validation
+• Font customization
+• Accessibility features (TalkBack, high contrast)
+
+🔒 SECURITY:
+• Biometric authentication
+• Auto-lock and screenshot protection
+• Host key verification (MITM detection)
+• Zero data collection - complete privacy
+
+✨ SPECIAL:
+• Works perfectly on degoogled ROMs
+• Zero "coming soon" messages
+• 100% feature-complete
+• No ads, no tracking, no premium features
+
+Perfect for system admins, developers, and privacy-conscious users!

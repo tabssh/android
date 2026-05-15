@@ -1,0 +1,92 @@
+TabSSH is a comprehensive, open-source SSH client for Android that provides a true tabbed interface for multiple SSH sessions while maintaining enterprise-grade security and accessibility standards.
+
+⭐ CORE SSH FEATURES:
+• True browser-style tabbed interface for multiple SSH sessions
+• Complete VT100/ANSI terminal emulation with full escape sequence support
+• SSH connection management with connection pooling and auto-reconnection
+• Secure by default with hardware-backed encryption (Android Keystore)
+• Universal SSH key support - ALL formats and types
+• SSH config import with full ~/.ssh/config compatibility
+• Host key verification and known_hosts management
+
+🔑 SSH KEY MANAGEMENT:
+• Universal key parser - OpenSSH, PEM, PKCS#8, PuTTY formats
+• All key types - RSA (2048/3072/4096), ECDSA (P-256/384/521), Ed25519, DSA
+• In-app key generation with passphrase protection
+• Encrypted key import with passphrase support
+• SHA-256 fingerprint display
+• Dedicated key management UI - view, import, generate, delete keys
+• Export keys in PEM or OpenSSH format
+
+☁️ SYNC & BACKUP:
+• SAF-based sync — works with any provider (Google Drive, Dropbox, Nextcloud, local)
+• No Google Play Services dependency — runs on de-Googled ROMs
+• AES-256-GCM encryption with PBKDF2 key derivation
+• 3-way merge with conflict resolution UI
+• Multi-device synchronization
+• Import/Export connections as encrypted ZIP backups
+
+🎨 THEMES & CUSTOMIZATION:
+• 23 beautiful built-in themes (Dracula, Solarized, Nord, Monokai, One Dark, etc.)
+• Full GUI theme editor with WCAG 2.1 contrast validation (Settings → General → Appearance)
+• Custom theme creation, import, and export
+• High contrast mode and color blind friendly themes
+• Font customization and size adjustment
+
+📁 FILE MANAGEMENT:
+• Complete SFTP implementation with dual-pane file browser
+• File upload/download with progress tracking and resume capability
+• Batch file operations and permission management
+• Local and remote file browsing with bookmarks
+
+🔧 ADVANCED FEATURES:
+• Port forwarding (Local, Remote, Dynamic/SOCKS proxy)
+• Mosh protocol for mobile-optimized connections with roaming support
+• X11 forwarding for running remote GUI applications
+• Background connection persistence and app switching support
+• Background host monitoring — TCP reachability probes, down/recovery alerts,
+  CPU/memory/disk threshold notifications, configurable cooldown (15 min–12 h)
+• Hypervisor management — Proxmox VE, XCP-ng, Xen Orchestra, OCI Compute
+• Keyboard drag-to-reorder: rearrange keys in any row of the custom key editor
+
+🔒 SECURITY & PRIVACY:
+• Hardware-backed encryption for all sensitive data
+• Biometric authentication (fingerprint/face unlock)
+• Multiple password storage levels (Never, Session, Encrypted, Biometric)
+• Auto-lock functionality and screenshot protection
+• Strict host key checking and security audit logging
+• Zero data collection - complete privacy
+
+♿ ACCESSIBILITY:
+• Full TalkBack and screen reader support
+• WCAG 2.1 AA compliance with high contrast mode
+• Large touch targets (48dp+) and keyboard navigation
+• Voice control compatibility and motor accessibility features
+
+📱 PLATFORM SUPPORT:
+• Android phones, tablets, Android TV, and Chromebook optimization
+• Hardware keyboard shortcuts and D-pad navigation
+• Multi-window and split screen support
+• Responsive UI adapting to different screen sizes
+
+⚡ PERFORMANCE & BATTERY:
+• Optimized for 60fps smooth performance
+• Intelligent battery optimization with 4 power levels
+• Memory management and efficient rendering
+• Background processing optimization
+
+🎯 OPEN SOURCE EXCELLENCE:
+• MIT licensed - completely free forever
+• No premium features, ads, or tracking
+• Community-driven development
+• Full source code transparency
+• Privacy-first design with local data only
+
+TabSSH represents the ultimate mobile SSH client - everything you need for professional SSH access from Android devices, with no compromises on security, accessibility, or privacy.
+
+Perfect for:
+✓ System administrators managing remote servers
+✓ Developers accessing development environments
+✓ Privacy-conscious users on degoogled devices
+✓ Power users requiring advanced SSH features
+✓ Anyone needing reliable SSH access on the go
