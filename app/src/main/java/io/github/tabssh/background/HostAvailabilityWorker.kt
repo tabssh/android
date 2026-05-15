@@ -1,6 +1,9 @@
 package io.github.tabssh.background
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.os.Build
 import android.os.PowerManager
 import androidx.preference.PreferenceManager
 import androidx.work.*
@@ -116,7 +119,41 @@ class HostAvailabilityWorker(
         }
     }
 
+    /**
+     * Returns true only when the active network has been validated by Android
+     * (i.e., real internet is reachable, not just a connected Wi-Fi interface).
+     *
+     * WorkManager's [NetworkType.CONNECTED] constraint fires whenever any
+     * network interface is up — including captive-portal Wi-Fi and interfaces
+     * with no upstream route.  [NetworkCapabilities.NET_CAPABILITY_VALIDATED]
+     * (API 23+) reflects Android's own internet validation probe result and is
+     * the correct signal to use here.  On API 21-22 we fall back to the legacy
+     * [ConnectivityManager.activeNetworkInfo].
+     */
+    @Suppress("DEPRECATION")
+    private fun isInternetAvailable(): Boolean {
+        val cm = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val network = cm.activeNetwork ?: return false
+            val caps = cm.getNetworkCapabilities(network) ?: return false
+            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        } else {
+            cm.activeNetworkInfo?.isConnected == true
+        }
+    }
+
     override suspend fun doWork(): Result {
+        // Gate 0: validated internet access.  WorkManager's CONNECTED constraint
+        // only guarantees a network interface is up — not that the internet is
+        // reachable.  A Wi-Fi-only device on a network with no upstream route
+        // (guest network, captive portal, router without WAN) would pass the
+        // constraint but every TCP probe would fail, flooding the user with
+        // "host down" alerts for unreachable servers that are actually fine.
+        if (!isInternetAvailable()) {
+            Logger.d(TAG, "Skipping run: no validated internet connection")
+            return Result.success()
+        }
+
         // Gate 1: battery saver mode.
         val pm = appContext.getSystemService(Context.POWER_SERVICE) as PowerManager
         if (pm.isPowerSaveMode) {

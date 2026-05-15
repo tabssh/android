@@ -3,8 +3,11 @@ package io.github.tabssh.ui.activities
 import android.graphics.Color
 import android.os.Bundle
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.widget.HorizontalScrollView
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -41,6 +44,9 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
     // Adapters
     private lateinit var currentRowAdapter: KeyAdapter
     private lateinit var availableKeysAdapter: KeyAdapter
+
+    // Drag-to-reorder helper — stored so the adapter can call startDrag()
+    private var itemTouchHelper: ItemTouchHelper? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -90,17 +96,22 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
 
     private fun initViews() {
         // Setup current row adapter
-        currentRowAdapter = KeyAdapter(mutableListOf(), KeyAdapterMode.REMOVE) { key ->
-            removeKeyFromCurrentRow(key)
-        }
+        currentRowAdapter = KeyAdapter(
+            keys = mutableListOf(),
+            mode = KeyAdapterMode.REMOVE,
+            onClick = { key -> removeKeyFromCurrentRow(key) },
+            onStartDrag = { vh -> itemTouchHelper?.startDrag(vh) }
+        )
         binding.recyclerCurrentRow.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         binding.recyclerCurrentRow.adapter = currentRowAdapter
         setupDragToReorder()
 
         // Setup available keys adapter
-        availableKeysAdapter = KeyAdapter(mutableListOf(), KeyAdapterMode.ADD) { key ->
-            addKeyToCurrentRow(key)
-        }
+        availableKeysAdapter = KeyAdapter(
+            keys = mutableListOf(),
+            mode = KeyAdapterMode.ADD,
+            onClick = { key -> addKeyToCurrentRow(key) }
+        )
         binding.recyclerAvailableKeys.layoutManager = GridLayoutManager(this, 5)
         binding.recyclerAvailableKeys.adapter = availableKeysAdapter
 
@@ -148,7 +159,8 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
                 updatePreview()
             }
         }
-        ItemTouchHelper(callback).attachToRecyclerView(binding.recyclerCurrentRow)
+        itemTouchHelper = ItemTouchHelper(callback)
+        itemTouchHelper!!.attachToRecyclerView(binding.recyclerCurrentRow)
     }
 
     private fun loadCurrentLayout() {
@@ -405,7 +417,9 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
     private inner class KeyAdapter(
         private var keys: MutableList<KeyboardKey>,
         private val mode: KeyAdapterMode,
-        private val onClick: (KeyboardKey) -> Unit
+        private val onClick: (KeyboardKey) -> Unit,
+        /** Called when the user presses the drag handle; null = no drag support. */
+        private val onStartDrag: ((RecyclerView.ViewHolder) -> Unit)? = null
     ) : RecyclerView.Adapter<KeyAdapter.KeyViewHolder>() {
 
         fun updateKeys(newKeys: List<KeyboardKey>) {
@@ -419,36 +433,83 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
             notifyItemMoved(from, to)
         }
 
-        override fun onCreateViewHolder(parent: android.view.ViewGroup, viewType: Int): KeyViewHolder {
-            val view = TextView(parent.context).apply {
-                textSize = 14f
-                gravity = Gravity.CENTER
-                minWidth = (56 * resources.displayMetrics.density).toInt()
-                minHeight = (44 * resources.displayMetrics.density).toInt()
-                setPadding(12, 8, 12, 8)
-                setBackgroundResource(R.drawable.keyboard_key_background)
-                layoutParams = RecyclerView.LayoutParams(
-                    RecyclerView.LayoutParams.WRAP_CONTENT,
-                    RecyclerView.LayoutParams.WRAP_CONTENT
-                ).apply {
-                    setMargins(4, 4, 4, 4)
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): KeyViewHolder {
+            val density = resources.displayMetrics.density
+            val minH = (44 * density).toInt()
+
+            return if (mode == KeyAdapterMode.REMOVE) {
+                // Row editor: key chip with a drag-handle on the left so the user
+                // can grab and reorder without a long-press.
+                val container = LinearLayout(parent.context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    minimumHeight = minH
+                    setBackgroundResource(R.drawable.keyboard_key_background)
+                    layoutParams = RecyclerView.LayoutParams(
+                        RecyclerView.LayoutParams.WRAP_CONTENT,
+                        RecyclerView.LayoutParams.WRAP_CONTENT
+                    ).apply { setMargins(4, 4, 4, 4) }
                 }
+                val handle = ImageView(parent.context).apply {
+                    setImageResource(R.drawable.ic_sort)
+                    val p = (6 * density).toInt()
+                    setPadding(p, p, p / 2, p)
+                    contentDescription = "Drag to reorder"
+                    alpha = 0.5f
+                }
+                val label = TextView(parent.context).apply {
+                    textSize = 14f
+                    gravity = Gravity.CENTER
+                    minWidth = (44 * density).toInt()
+                    val p = (8 * density).toInt()
+                    setPadding(p / 2, p, p, p)
+                }
+                container.addView(handle)
+                container.addView(label)
+                KeyViewHolder(container, label, handle)
+            } else {
+                // Available-keys grid: plain chip, no drag handle.
+                val view = TextView(parent.context).apply {
+                    textSize = 14f
+                    gravity = Gravity.CENTER
+                    minWidth = (56 * density).toInt()
+                    minHeight = minH
+                    setPadding(12, 8, 12, 8)
+                    setBackgroundResource(R.drawable.keyboard_key_background)
+                    layoutParams = RecyclerView.LayoutParams(
+                        RecyclerView.LayoutParams.WRAP_CONTENT,
+                        RecyclerView.LayoutParams.WRAP_CONTENT
+                    ).apply { setMargins(4, 4, 4, 4) }
+                }
+                KeyViewHolder(view, view, null)
             }
-            return KeyViewHolder(view)
         }
 
         override fun onBindViewHolder(holder: KeyViewHolder, position: Int) {
-            val key = keys[position]
-            holder.bind(key)
+            holder.bind(keys[position])
         }
 
         override fun getItemCount() = keys.size
 
-        inner class KeyViewHolder(private val textView: TextView) : RecyclerView.ViewHolder(textView) {
+        inner class KeyViewHolder(
+            root: View,
+            private val label: TextView,
+            private val dragHandle: View?
+        ) : RecyclerView.ViewHolder(root) {
+
+            @Suppress("ClickableViewAccessibility")
             fun bind(key: KeyboardKey) {
-                textView.text = key.label
-                textView.setTextColor(getKeyTextColor(key))
-                textView.setOnClickListener { onClick(key) }
+                label.text = key.label
+                label.setTextColor(getKeyTextColor(key))
+                // Tap the label (or anywhere except the handle) → remove / add
+                itemView.setOnClickListener { onClick(key) }
+                // Touch the handle → start drag immediately (no long-press needed)
+                dragHandle?.setOnTouchListener { _, event ->
+                    if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                        onStartDrag?.invoke(this)
+                    }
+                    false
+                }
             }
         }
     }
