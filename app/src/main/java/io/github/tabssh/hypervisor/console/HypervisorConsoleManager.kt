@@ -49,8 +49,19 @@ class HypervisorConsoleManager {
     }
 
     /**
-     * Connect to Proxmox VM console via termproxy
-     * Works even without VM network access (serial console)
+     * Connect to Proxmox VM console.
+     *
+     * Tries termproxy first (text-based serial console). If the VM has no
+     * serial interface configured, Proxmox returns an error containing
+     * "serial"; in that case we automatically fall back to vncproxy (raw
+     * RFB over WebSocket), which works for every running VM regardless of
+     * hardware configuration. The caller sees a connected console either way.
+     *
+     * Auth differences between the two paths:
+     *  - termproxy: PVEAuthCookie in HTTP upgrade header PLUS
+     *    `<userid>:<ticket>\n` as the first WebSocket frame
+     *  - vncproxy: PVEAuthCookie in HTTP upgrade header only;
+     *    the vncticket is already encoded in the WebSocket URL
      */
     suspend fun connectProxmoxConsole(
         client: ProxmoxApiClient,
@@ -66,50 +77,76 @@ class HypervisorConsoleManager {
     ): ConsoleConnection? = withContext(Dispatchers.IO) {
         consoleListener = listener
 
+        // Phase 1: obtain a console ticket. Try termproxy; fall back to
+        // vncproxy when the VM has no serial interface.
+        Logger.i(TAG, "Connecting to Proxmox console: $vmName (vmid=$vmid)")
+        val ticket: ProxmoxApiClient.TermProxyResult
+        val protocol: ConsoleWebSocketClient.ConsoleProtocol
         try {
-            Logger.i(TAG, "Connecting to Proxmox console: $vmName (vmid=$vmid)")
+            ticket = client.getTermProxy(node, vmid, type)
+            protocol = ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_TERM
+            Logger.d(TAG, "Got termproxy ticket for $vmName")
+        } catch (termEx: Exception) {
+            val msg = termEx.message ?: ""
+            val isSerialError = msg.contains("serial", ignoreCase = true) ||
+                msg.contains("unable to find", ignoreCase = true)
+            if (!isSerialError) {
+                // Unexpected failure (auth, network, …) — surface it directly.
+                Logger.e(TAG, "termproxy failed (non-serial): $msg")
+                listener?.onError(msg.ifBlank { "Connection failed" })
+                return@withContext null
+            }
+            Logger.i(TAG, "termproxy unavailable for $vmName ($msg) — falling back to vncproxy")
+            val vnc = client.getVNCProxy(node, vmid, type)
+            if (vnc == null) {
+                listener?.onError(
+                    "This VM has no serial console and the VNC fallback also failed.\n\n" +
+                    "To enable serial console: open the VM in Proxmox → Hardware → " +
+                    "Add → Serial Port → set to 'socket', then restart the VM."
+                )
+                return@withContext null
+            }
+            ticket = vnc
+            protocol = ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_VNC
+            Logger.d(TAG, "Got vncproxy ticket for $vmName (fallback)")
+        }
 
-            // Get termproxy ticket and WebSocket URL
-            val termProxy = client.getTermProxy(node, vmid, type)
-
-            Logger.d(TAG, "Got termproxy ticket, connecting to WebSocket")
-
-            // Create WebSocket client with Proxmox termproxy protocol.
+        // Phase 2: open the WebSocket console connection.
+        try {
             // `verifySsl` + `pinnedCertSha256` thread through from the
             // per-host setting; previously hardcoded `false` silently
             // bypassed both.
             webSocketClient = ConsoleWebSocketClient(
                 verifySsl = verifySsl,
-                protocol = ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_TERM,
+                protocol = protocol,
                 pinnedCertSha256 = pinnedCertSha256,
                 displayHost = displayHost,
                 displayPort = displayPort
             )
-
-            // Build WebSocket URL
-            // Proxmox termproxy WebSocket: wss://host:port/api2/json/nodes/{node}/{type}/{vmid}/vncwebsocket?port={port}&vncticket={ticket}
-            val wsUrl = termProxy.websocketUrl
-
-            // Connect with auth headers. PVEAuthCookie is needed for the
-            // HTTP-upgrade leg; the in-frame `<userid>:<ticket>\n` handshake
-            // (see ConsoleWebSocketClient) is what termproxy actually checks
-            // before deciding to keep the WS open.
-            val headers = mapOf(
-                "Cookie" to "PVEAuthCookie=${termProxy.authCookie}"
-            )
-
-            val client = webSocketClient ?: run {
+            val wsClient = webSocketClient ?: run {
                 Logger.e(TAG, "WebSocket client not initialized")
                 listener?.onError("WebSocket client initialization failed")
                 return@withContext null
             }
-            // First-frame auth required by Proxmox vncterm/termproxy.
-            client.setProxmoxAuthFrame(termProxy.userid, termProxy.termproxyTicket)
-            val connected = client.connect(wsUrl, headers, object : ConsoleConnectionListener {
+
+            // PVEAuthCookie is needed for the HTTP-upgrade leg on both paths.
+            val headers = mapOf("Cookie" to "PVEAuthCookie=${ticket.authCookie}")
+
+            // termproxy also requires a `<userid>:<ticket>\n` first-frame
+            // handshake. vncproxy authenticates via the vncticket URL param
+            // already encoded in websocketUrl — no first frame.
+            if (protocol == ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_TERM) {
+                wsClient.setProxmoxAuthFrame(ticket.userid, ticket.termproxyTicket)
+            }
+
+            val connected = wsClient.connect(ticket.websocketUrl, headers, object : ConsoleConnectionListener {
                 override fun onConnected() {
-                    Logger.i(TAG, "Proxmox console connected")
-                    // Send initial resize for Proxmox termproxy (default 80x24)
-                    client.sendResize(80, 24)
+                    Logger.i(TAG, "Proxmox console connected (${protocol.name})")
+                    // Send initial size only for termproxy; VNC resize requires
+                    // a full RFB DesktopSize negotiation that we don't implement.
+                    if (protocol == ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_TERM) {
+                        wsClient.sendResize(80, 24)
+                    }
                     listener?.onConnected(vmName)
                 }
 
@@ -119,7 +156,7 @@ class HypervisorConsoleManager {
                 }
 
                 override fun onError(error: Throwable) {
-                    // ConsoleWebSocketClient already logged this at ERROR level; avoid duplicate stack trace.
+                    // ConsoleWebSocketClient already logged this at ERROR level.
                     Logger.d(TAG, "Proxmox console error forwarded: ${error.message}")
                     listener?.onError(error.message ?: "Unknown error")
                 }
@@ -131,11 +168,11 @@ class HypervisorConsoleManager {
                 return@withContext null
             }
 
-            // Wait a moment for connection to establish
+            // Brief pause for the WS handshake + auth frame exchange.
             delay(500)
 
-            val inputStream = client.getInputStream()
-            val outputStream = client.getOutputStream()
+            val inputStream = wsClient.getInputStream()
+            val outputStream = wsClient.getOutputStream()
 
             if (inputStream == null || outputStream == null) {
                 Logger.e(TAG, "Failed to get streams")
@@ -151,16 +188,7 @@ class HypervisorConsoleManager {
             )
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to connect Proxmox console", e)
-            val msg = e.message ?: "Connection failed"
-            if (msg.contains("serial", ignoreCase = true)) {
-                listener?.onError(
-                    "This VM has no serial console device.\n\n" +
-                    "In Proxmox, open the VM → Hardware → Add → Serial Port → set to 'socket'.\n" +
-                    "Then restart the VM and try again."
-                )
-            } else {
-                listener?.onError(msg)
-            }
+            listener?.onError(e.message ?: "Connection failed")
             null
         }
     }
