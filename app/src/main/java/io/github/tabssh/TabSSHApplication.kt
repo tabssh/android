@@ -103,10 +103,17 @@ class TabSSHApplication : Application() {
         //     `debug_logging_enabled`).
         // The app log (sanitized for public sharing) is always on regardless
         // — it's safe and cheap and powers the Copy App Log menu item.
-        val savedDebug = androidx.preference.PreferenceManager
+        val defaultPrefs = androidx.preference.PreferenceManager
             .getDefaultSharedPreferences(this)
-            .getBoolean("debug_logging_enabled", false)
+        val savedDebug = defaultPrefs.getBoolean("debug_logging_enabled", false)
         val debugLoggingActive = BuildConfig.DEBUG_MODE || savedDebug
+        // Sync the toggle pref to match the actual active state. On debug
+        // builds DEBUG_MODE forces logging on regardless of what the user
+        // last set; without this sync the Settings → Logging toggle shows
+        // "Off" even though the logger is running — misleading.
+        if (BuildConfig.DEBUG_MODE && !savedDebug) {
+            defaultPrefs.edit().putBoolean("debug_logging_enabled", true).apply()
+        }
         Logger.initialize(this, debugLoggingActive)
         setupExceptionHandler()
 

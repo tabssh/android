@@ -236,6 +236,12 @@ class PerformanceFragment : Fragment() {
         val items = mutableListOf("Select connection...")
         items.addAll(allConnections.map { "${it.name} (${it.username}@${it.host})" })
 
+        // Read the saved ID BEFORE setting the adapter. Setting the adapter
+        // fires onItemSelected(0) synchronously on some Android versions,
+        // which would call saveLastSelectedConnectionId(null) and wipe the
+        // pref before we get a chance to read it.
+        val savedId = lastSelectedConnectionId()
+
         val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, items)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         spinnerConnection.adapter = adapter
@@ -248,11 +254,14 @@ class PerformanceFragment : Fragment() {
         // (e.g. DB Flow re-emission after the user edits another row in
         // ConnectionsFragment) doesn't tear down the live SSH session and
         // reconnect.
-        val savedId = lastSelectedConnectionId()
+        //
+        // `post { }` defers the setSelection until after the adapter's
+        // layout pass completes; calling it inline can be silently ignored
+        // by Android's Spinner when the layout hasn't measured yet.
         if (savedId != null && selectedConnection == null) {
             val idx = allConnections.indexOfFirst { it.id == savedId }
             if (idx >= 0) {
-                spinnerConnection.setSelection(idx + 1, /* animate = */ false)
+                spinnerConnection.post { spinnerConnection.setSelection(idx + 1) }
             } else {
                 Logger.d("PerformanceFragment",
                     "Saved host id=$savedId is no longer in the list; clearing.")

@@ -48,6 +48,11 @@ class ConnectionEditActivity : AppCompatActivity() {
     private var isEditMode = false
     private var availableKeys: List<StoredKey> = emptyList()
     private var selectedKeyIndex: Int = -1
+    // Persists the keyId from populateFields() so setupKeySpinner() can
+    // restore the selection after the async key-list load completes, even
+    // when the two coroutines race and keys haven't loaded yet when
+    // populateFields() runs.
+    private var pendingRestoreKeyId: String? = null
     private var selectedGroupId: String? = null
     private var selectedGroupName: String = "No Group"
     private var availableIdentities: List<io.github.tabssh.storage.database.entities.Identity> = emptyList()
@@ -170,6 +175,18 @@ class ConnectionEditActivity : AppCompatActivity() {
 
                 binding.spinnerSshKey.setOnItemClickListener { _, _, position, _ ->
                     selectedKeyIndex = position
+                }
+
+                // Restore any key selection that populateFields() couldn't apply
+                // because it ran before this async block completed (the two
+                // coroutines — key-list load and connection-profile load — race).
+                pendingRestoreKeyId?.let { keyId ->
+                    pendingRestoreKeyId = null
+                    val keyIndex = availableKeys.indexOfFirst { it.keyId == keyId }
+                    if (keyIndex >= 0) {
+                        selectedKeyIndex = keyIndex + 1
+                        binding.spinnerSshKey.setText(keyNames[selectedKeyIndex], false)
+                    }
                 }
 
             } catch (e: Exception) {
@@ -465,7 +482,9 @@ class ConnectionEditActivity : AppCompatActivity() {
             updateAuthTypeUI(authTypes[authTypeIndex])
         }
         
-        // Set SSH key if applicable
+        // Set SSH key if applicable. availableKeys may still be empty if
+        // setupKeySpinner()'s async block hasn't finished — store the id as
+        // pendingRestoreKeyId so it can be applied once keys are loaded.
         if (authType == AuthType.PUBLIC_KEY && profile.keyId != null) {
             val keyIndex = availableKeys.indexOfFirst { it.keyId == profile.keyId }
             if (keyIndex >= 0) {
@@ -474,6 +493,9 @@ class ConnectionEditActivity : AppCompatActivity() {
                 if (selectedKeyIndex < keyNames.size) {
                     binding.spinnerSshKey.setText(keyNames[selectedKeyIndex], false)
                 }
+            } else {
+                // Keys not loaded yet — defer to setupKeySpinner()'s completion block.
+                pendingRestoreKeyId = profile.keyId
             }
         }
 

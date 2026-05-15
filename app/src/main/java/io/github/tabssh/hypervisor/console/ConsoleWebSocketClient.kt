@@ -43,6 +43,17 @@ class ConsoleWebSocketClient(
         private const val CONNECT_TIMEOUT_SECONDS = 30L
         private const val READ_TIMEOUT_SECONDS = 0L // No timeout for console
         private const val PROXMOX_KEEPALIVE_INTERVAL_MS = 5_000L
+
+        /**
+         * Returns true when `text` matches the Proxmox termproxy error that
+         * indicates the VM has no serial port configured. Proxmox may send
+         * this either as a plain text frame or inside a "0:N:MSG" data
+         * envelope, so we check the raw string in both contexts.
+         */
+        fun isProxmoxSerialError(text: String): Boolean =
+            text.contains("unable to find serial", ignoreCase = true) ||
+            text.contains("serial interface not", ignoreCase = true) ||
+            text.contains("no serial", ignoreCase = true)
     }
 
     enum class ConsoleProtocol {
@@ -240,14 +251,49 @@ class ConsoleWebSocketClient(
                                 if (text.startsWith("0:")) {
                                     val parts = text.split(":", limit = 3)
                                     if (parts.size == 3) {
-                                        Logger.d(TAG, "Proxmox data message: length=${parts[1]}, data='${parts[2].take(50)}'")
-                                        parts[2] // Extract the MSG part
+                                        val msg = parts[2]
+                                        Logger.d(TAG, "Proxmox data message: length=${parts[1]}, data='${msg.take(50)}'")
+                                        // Proxmox sends "unable to find serial interface" as
+                                        // a data frame when the VM has no serial port
+                                        // configured. Treat it as a fatal error rather than
+                                        // writing garbage to the terminal. The caller should
+                                        // add a serial port (socket) and restart the VM, OR
+                                        // switch to VNC mode.
+                                        if (isProxmoxSerialError(msg)) {
+                                            Logger.w(TAG, "Proxmox serial console error: $msg")
+                                            isConnected = false
+                                            connectionListener?.onError(
+                                                java.io.IOException(
+                                                    "This VM has no serial console interface.\n\n" +
+                                                    "To fix: open Proxmox → VM → Hardware → Add → Serial Port, " +
+                                                    "set type to 'socket', then restart the VM.\n\n" +
+                                                    "You can also switch to VNC by reconnecting — tap Reconnect."
+                                                )
+                                            )
+                                            return@onMessage
+                                        }
+                                        msg
                                     } else {
                                         Logger.w(TAG, "Malformed Proxmox message: $text")
                                         text
                                     }
                                 } else {
-                                    // Might be ping response or other message type
+                                    // Might be a ping response or a plain-text error frame.
+                                    // Check for the serial error here too — some Proxmox
+                                    // versions send it without the "0:N:" envelope.
+                                    if (isProxmoxSerialError(text)) {
+                                        Logger.w(TAG, "Proxmox serial error (plain frame): $text")
+                                        isConnected = false
+                                        connectionListener?.onError(
+                                            java.io.IOException(
+                                                "This VM has no serial console interface.\n\n" +
+                                                "To fix: open Proxmox → VM → Hardware → Add → Serial Port, " +
+                                                "set type to 'socket', then restart the VM.\n\n" +
+                                                "You can also switch to VNC by reconnecting — tap Reconnect."
+                                            )
+                                        )
+                                        return@onMessage
+                                    }
                                     Logger.d(TAG, "Non-data Proxmox message: $text")
                                     return@onMessage
                                 }

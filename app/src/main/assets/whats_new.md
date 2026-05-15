@@ -1,5 +1,46 @@
 # What's New
 
+## Wave 11 — Multi-host Dashboard redesign + bug fixes
+
+### Multi-host Dashboard v2
+- Completely redesigned dashboard with sysadmin-first layout. Each host
+  card now shows CPU / MEM / DISK progress bars with dynamic color coding
+  (green < 65 %, orange 65–84 %, red ≥ 85 %), live load averages
+  (1 / 5 / 15 min), uptime, per-interface network rx/tx rates, and
+  process count — everything a sysadmin needs at a glance.
+- **Dashboard groups** are now completely independent from connection
+  groups. Create named groups just for the dashboard (stored in local
+  prefs, not the database). Drag hosts between groups via long-press
+  context menu. Groups collapse/expand with a chevron.
+- FAB → New Group; per-group ⊕ Add, ✎ Rename, ✕ Delete buttons.
+- Monitor bell button on each card opens per-host alert threshold
+  configuration without leaving the dashboard.
+
+### Keyboard fixes
+- ENTER key now sends correct `\r` in all terminal modes (fixes commands
+  not executing on servers with strict line-ending requirements).
+- Removed phantom FN / MENU keys from the on-screen keyboard row that
+  were sending unintended escape sequences.
+
+### Mosh behavior
+- Mosh exit-code handling corrected — non-zero exits no longer
+  incorrectly show "connection lost" banners when the user explicitly
+  quit the remote shell.
+
+### Bug fixes
+- **Performance monitor**: last-selected host now persists correctly
+  across screen rotations and fragment re-creations (Spinner restore
+  race fixed).
+- **Debug log toggle**: Settings → Logging now shows the toggle as ON
+  for debug/dev builds where logging is always active, instead of
+  displaying "Off" even though the logger was running.
+- **SSH key auth in connection editor**: editing a connection that uses
+  SSH key auth now correctly shows the key name in the spinner instead
+  of the password field (async key-load race fixed).
+- **Proxmox serial console**: "unable to find serial interface" no
+  longer appears as terminal garbage. A clear error dialog now explains
+  exactly how to add a serial port in Proxmox Hardware settings.
+
 ## Wave 10 — Oracle Cloud Infrastructure (OCI) hypervisor support
 - Fourth hypervisor target alongside Proxmox / XCP-ng / VMware. Path A
   onboarding only — import your existing `~/.oci/config` + `.pem`

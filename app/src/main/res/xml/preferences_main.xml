@@ -55,14 +55,14 @@
         <Preference
             android:key="about_version"
             android:title="Version"
-            android:summary="TabSSH 1.1.0"
+            android:summary="Loading…"
             android:icon="@android:drawable/ic_menu_info_details"
             android:selectable="false" />
 
         <Preference
             android:key="about_build"
             android:title="Build Information"
-            android:summary="Build details"
+            android:summary="Loading…"
             android:icon="@android:drawable/ic_menu_info_details"
             android:selectable="false" />
 
