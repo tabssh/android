@@ -454,7 +454,6 @@ class MultiRowKeyboardView @JvmOverloads constructor(
                         KeyboardKey("LT", "<", "<", KeyboardKey.KeyCategory.SYMBOL),
                         KeyboardKey("GT", ">", ">", KeyboardKey.KeyCategory.SYMBOL),
                         KeyboardKey("SEL", "SEL", "", KeyboardKey.KeyCategory.ACTION),
-                        KeyboardKey("MENU", "☰", "", KeyboardKey.KeyCategory.ACTION)
                     )
                 )
                 4 -> listOf(
@@ -493,7 +492,6 @@ class MultiRowKeyboardView @JvmOverloads constructor(
                         KeyboardKey("LT", "<", "<", KeyboardKey.KeyCategory.SYMBOL),
                         KeyboardKey("GT", ">", ">", KeyboardKey.KeyCategory.SYMBOL),
                         KeyboardKey("SEL", "SEL", "", KeyboardKey.KeyCategory.ACTION),
-                        KeyboardKey("MENU", "☰", "", KeyboardKey.KeyCategory.ACTION)
                     ),
                     // Row 4: F1-F6
                     listOf(
@@ -541,7 +539,6 @@ class MultiRowKeyboardView @JvmOverloads constructor(
                         KeyboardKey("LT", "<", "<", KeyboardKey.KeyCategory.SYMBOL),
                         KeyboardKey("GT", ">", ">", KeyboardKey.KeyCategory.SYMBOL),
                         KeyboardKey("SEL", "SEL", "", KeyboardKey.KeyCategory.ACTION),
-                        KeyboardKey("MENU", "☰", "", KeyboardKey.KeyCategory.ACTION)
                     ),
                     // Row 4: F1-F6
                     listOf(
