@@ -545,7 +545,7 @@ class PreferenceManager(private val context: Context) {
         preferences.edit().putLong("preferences_last_modified", timestamp).apply()
 
     // Issue reporting — paste service
-    fun getPasteService(): String = getString("paste_service", "microbin")
+    fun getPasteService(): String = getString("paste_service", "stikked")
     fun getPasteMicrobinUrl(): String = getString("paste_microbin_url", "https://mb.pste.us").trimEnd('/')
     fun getPasteLenpasteUrl(): String = getString("paste_lenpaste_url", "https://lp.pste.us").trimEnd('/')
     fun getPasteStikkedUrl(): String = getString("paste_stikked_url", "https://pste.us").trimEnd('/')

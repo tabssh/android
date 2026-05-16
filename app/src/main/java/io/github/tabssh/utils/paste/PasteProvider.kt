@@ -3,8 +3,11 @@ package io.github.tabssh.utils.paste
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
@@ -24,9 +27,15 @@ private val sharedHttpClient: OkHttpClient by lazy {
 class MicroBinProvider(private val baseUrl: String) : PasteProvider {
     override suspend fun upload(title: String, content: String): String = withContext(Dispatchers.IO) {
         val base = baseUrl.trimEnd('/')
-        val requestBody = FormBody.Builder()
-            .add("content", content)
-            .add("title", title)
+        val textType = "text/plain".toMediaType()
+        val requestBody = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("content", null, content.toRequestBody(textType))
+            .addFormDataPart("title", null, title.toRequestBody(textType))
+            .addFormDataPart("privacy", null, "1".toRequestBody(textType))
+            .addFormDataPart("syntax_highlight", null, "text".toRequestBody(textType))
+            .addFormDataPart("expiration", null, "1d".toRequestBody(textType))
+            .addFormDataPart("burn_after", null, "0".toRequestBody(textType))
             .build()
         val request = Request.Builder()
             .url("$base/api/save")
@@ -115,7 +124,8 @@ object PasteProviderFactory {
             "lenpaste" -> LenpasteProvider(prefs.getPasteLenpasteUrl())
             "stikked"  -> StikkedProvider(prefs.getPasteStikkedUrl())
             "pastebin" -> PastebinProvider(prefs.getPastebinApiKey())
-            else       -> MicroBinProvider(prefs.getPasteMicrobinUrl()) // default
+            "microbin" -> MicroBinProvider(prefs.getPasteMicrobinUrl())
+            else       -> StikkedProvider(prefs.getPasteStikkedUrl()) // default
         }
     }
 }

@@ -210,7 +210,7 @@
             android:summary="Service used to upload logs when reporting issues"
             android:entries="@array/paste_service_labels"
             android:entryValues="@array/paste_service_values"
-            android:defaultValue="microbin" />
+            android:defaultValue="stikked" />
 
         <EditTextPreference
             android:key="paste_microbin_url"
