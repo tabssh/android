@@ -67,51 +67,53 @@ class BackupImporter(
     ): Map<String, Int> = withContext(Dispatchers.IO) {
         val out = mutableMapOf<String, Int>()
 
-        backupData[BackupExporter.FILE_CONNECTIONS]?.let {
-            out["connections"] = restoreConnections(it, overwriteExisting)
+        suspend fun <R> table(
+            key: String,
+            label: String,
+            doRestore: suspend (String) -> R,
+            onResult: (R) -> Unit
+        ) {
+            val data = backupData[key]
+            if (data == null) {
+                Logger.d(TAG, "Skipping $label — not in backup")
+            } else {
+                val result = doRestore(data)
+                onResult(result)
+            }
         }
-        backupData[BackupExporter.FILE_KEYS]?.let {
-            out["keys"] = restoreKeys(it, overwriteExisting)
-        }
+
+        table(BackupExporter.FILE_CONNECTIONS, "connections",
+            { restoreConnections(it, overwriteExisting) }) { out["connections"] = it; Logger.d(TAG, "Restored $it connections") }
+        table(BackupExporter.FILE_KEYS, "keys",
+            { restoreKeys(it, overwriteExisting) }) { out["keys"] = it; Logger.d(TAG, "Restored $it keys") }
         backupData[BackupExporter.FILE_PREFERENCES]?.let {
             restorePreferences(it); out["preferences"] = 1
-        }
-        backupData[BackupExporter.FILE_THEMES]?.let {
-            out["themes"] = restoreThemes(it, overwriteExisting)
-        }
-        backupData[BackupExporter.FILE_CERTIFICATES]?.let {
-            out["certificates"] = restoreCertificates(it, overwriteExisting)
-        }
-        backupData[BackupExporter.FILE_HOST_KEYS]?.let {
-            out["host_keys"] = restoreHostKeys(it, overwriteExisting)
-        }
-        backupData[BackupExporter.FILE_IDENTITIES]?.let {
-            out["identities"] = restoreIdentities(it, overwriteExisting)
-        }
-        backupData[BackupExporter.FILE_GROUPS]?.let {
-            out["connection_groups"] = restoreGroups(it, overwriteExisting)
-        }
-        backupData[BackupExporter.FILE_SNIPPETS]?.let {
-            out["snippets"] = restoreSnippets(it, overwriteExisting)
-        }
-        backupData[BackupExporter.FILE_HYPERVISORS]?.let {
-            out["hypervisors"] = restoreHypervisors(it, overwriteExisting)
-        }
-        backupData[BackupExporter.FILE_HYPERVISOR_ACCTS]?.let {
-            out["hypervisor_accounts"] = restoreHypervisorAccounts(it, overwriteExisting)
-        }
-        backupData[BackupExporter.FILE_WORKSPACES]?.let {
-            out["workspaces"] = restoreWorkspaces(it, overwriteExisting)
-        }
-        backupData[BackupExporter.FILE_CLOUD_ACCOUNTS]?.let {
-            out["cloud_accounts"] = restoreCloudAccounts(it, overwriteExisting)
-        }
-        backupData[BackupExporter.FILE_MACROS]?.let {
-            out["macros"] = restoreMacros(it, overwriteExisting)
-        }
-        backupData[BackupExporter.FILE_MONITOR_SLOTS]?.let {
-            out["monitor_slots"] = restoreMonitorSlots(it, overwriteExisting)
-        }
+            Logger.d(TAG, "Restored preferences")
+        } ?: Logger.d(TAG, "Skipping preferences — not in backup")
+        table(BackupExporter.FILE_THEMES, "themes",
+            { restoreThemes(it, overwriteExisting) }) { out["themes"] = it; Logger.d(TAG, "Restored $it themes") }
+        table(BackupExporter.FILE_CERTIFICATES, "certificates",
+            { restoreCertificates(it, overwriteExisting) }) { out["certificates"] = it; Logger.d(TAG, "Restored $it certificates") }
+        table(BackupExporter.FILE_HOST_KEYS, "host_keys",
+            { restoreHostKeys(it, overwriteExisting) }) { out["host_keys"] = it; Logger.d(TAG, "Restored $it host keys") }
+        table(BackupExporter.FILE_IDENTITIES, "identities",
+            { restoreIdentities(it, overwriteExisting) }) { out["identities"] = it; Logger.d(TAG, "Restored $it identities") }
+        table(BackupExporter.FILE_GROUPS, "connection_groups",
+            { restoreGroups(it, overwriteExisting) }) { out["connection_groups"] = it; Logger.d(TAG, "Restored $it connection groups") }
+        table(BackupExporter.FILE_SNIPPETS, "snippets",
+            { restoreSnippets(it, overwriteExisting) }) { out["snippets"] = it; Logger.d(TAG, "Restored $it snippets") }
+        table(BackupExporter.FILE_HYPERVISORS, "hypervisors",
+            { restoreHypervisors(it, overwriteExisting) }) { out["hypervisors"] = it; Logger.d(TAG, "Restored $it hypervisors") }
+        table(BackupExporter.FILE_HYPERVISOR_ACCTS, "hypervisor_accounts",
+            { restoreHypervisorAccounts(it, overwriteExisting) }) { out["hypervisor_accounts"] = it; Logger.d(TAG, "Restored $it hypervisor accounts") }
+        table(BackupExporter.FILE_WORKSPACES, "workspaces",
+            { restoreWorkspaces(it, overwriteExisting) }) { out["workspaces"] = it; Logger.d(TAG, "Restored $it workspaces") }
+        table(BackupExporter.FILE_CLOUD_ACCOUNTS, "cloud_accounts",
+            { restoreCloudAccounts(it, overwriteExisting) }) { out["cloud_accounts"] = it; Logger.d(TAG, "Restored $it cloud accounts") }
+        table(BackupExporter.FILE_MACROS, "macros",
+            { restoreMacros(it, overwriteExisting) }) { out["macros"] = it; Logger.d(TAG, "Restored $it macros") }
+        table(BackupExporter.FILE_MONITOR_SLOTS, "monitor_slots",
+            { restoreMonitorSlots(it, overwriteExisting) }) { out["monitor_slots"] = it; Logger.d(TAG, "Restored $it monitor slots") }
 
         out
     }
