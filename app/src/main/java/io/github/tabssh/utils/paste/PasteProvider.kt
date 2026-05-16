@@ -28,16 +28,21 @@ class MicroBinProvider(private val baseUrl: String) : PasteProvider {
     override suspend fun upload(title: String, content: String): String = withContext(Dispatchers.IO) {
         val base = baseUrl.trimEnd('/')
         val textType = "text/plain".toMediaType()
-        // MicroBin POSTs to /upload (multipart/form-data) and responds with
-        // a 302 redirect to the paste view URL. OkHttp follows the redirect
-        // automatically; the final request URL is the shareable paste URL.
+        // MicroBin: POST /upload (multipart/form-data).
+        // Server returns 302 → /upload/{slug}. OkHttp follows the redirect;
+        // response.request.url is the final view URL — that is the shareable link.
+        // expiration=0 means "never expire" (stored as Unix timestamp 0 in the DB).
+        // uploader_password must be present even when no server password is set.
+        // privacy=0 → public paste.
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart("content", null, content.toRequestBody(textType))
+            .addFormDataPart("title", null, title.toRequestBody(textType))
             .addFormDataPart("expiration", null, "0".toRequestBody(textType))
             .addFormDataPart("burn_after", null, "0".toRequestBody(textType))
             .addFormDataPart("syntax_highlight", null, "plain".toRequestBody(textType))
             .addFormDataPart("privacy", null, "0".toRequestBody(textType))
+            .addFormDataPart("uploader_password", null, "".toRequestBody(textType))
             .addFormDataPart("encrypt_client", null, "false".toRequestBody(textType))
             .addFormDataPart("encrypted_random_key", null, "".toRequestBody(textType))
             .addFormDataPart("random_key", null, "".toRequestBody(textType))
@@ -59,8 +64,9 @@ class MicroBinProvider(private val baseUrl: String) : PasteProvider {
 class LenpasteProvider(private val baseUrl: String) : PasteProvider {
     override suspend fun upload(title: String, content: String): String = withContext(Dispatchers.IO) {
         val base = baseUrl.trimEnd('/')
-        // CasPaste API (compatible with lp.pste.us): POST /api/v1/new
-        // Returns JSON: {"id":"...","url":"...","createTime":...,"deleteTime":...}
+        // Lenpaste API v1: POST /api/v1/new
+        // Returns JSON: {"id":"<pasteId>"} — NO url field.
+        // Paste view URL is constructed as ${base}/${id}.
         val requestBody = FormBody.Builder()
             .add("title", title)
             .add("body", content)
@@ -70,11 +76,12 @@ class LenpasteProvider(private val baseUrl: String) : PasteProvider {
             .post(requestBody)
             .build()
         val responseBody = sharedHttpClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw Exception("CasPaste upload failed: HTTP ${response.code}")
-            response.body?.string() ?: throw Exception("CasPaste returned empty response")
+            if (!response.isSuccessful) throw Exception("Lenpaste upload failed: HTTP ${response.code}")
+            response.body?.string() ?: throw Exception("Lenpaste returned empty response")
         }
-        JSONObject(responseBody).getString("url").also { url ->
-            if (!url.startsWith("http")) throw Exception("CasPaste returned unexpected URL: $url")
+        val id = JSONObject(responseBody).getString("id")
+        "$base/$id".also { url ->
+            if (!url.startsWith("http")) throw Exception("Lenpaste returned unexpected id: $id")
         }
     }
 }

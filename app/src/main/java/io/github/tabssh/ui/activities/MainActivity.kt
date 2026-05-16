@@ -84,10 +84,17 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         app = application as TabSSHApplication
         backupManager = io.github.tabssh.backup.BackupManager(this)
 
-        // Setup drawer (hamburger removed — edge-swipe opens it)
+        // Setup drawer with toolbar hamburger so the drawer is discoverable
         drawerLayout = findViewById(R.id.drawer_layout)
         val navView = findViewById<NavigationView>(R.id.nav_view)
         navView.setNavigationItemSelectedListener(this)
+
+        val toolbar = findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar)
+        setSupportActionBar(toolbar)
+        supportActionBar?.setDisplayHomeAsUpEnabled(false)
+        toolbar.setNavigationOnClickListener {
+            drawerLayout.openDrawer(GravityCompat.START)
+        }
 
         // Setup ViewPager2 + TabLayout
         viewPager = findViewById(R.id.view_pager)
@@ -124,27 +131,11 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             }
         })
 
-        // FAB action
+        // FAB — only active on the Hosts tab (tab 1); all other tabs manage
+        // their own in-content add actions or are read-only.
         fab.setOnClickListener {
-            val currentTab = viewPager.currentItem
-            when (currentTab) {
-                0 -> {
-                    // Frequent tab - no add action (read-only)
-                }
-                1 -> {
-                    // Connections tab - add new connection
-                    startActivity(Intent(this, ConnectionEditActivity::class.java))
-                }
-                2 -> {
-                    // Identities tab - navigate to key management
-                    startActivity(Intent(this, KeyManagementActivity::class.java))
-                }
-                3 -> {
-                    // Performance tab - placeholder
-                }
-                4 -> {
-                    // Hypervisors tab - placeholder
-                }
+            if (viewPager.currentItem == 1) {
+                startActivity(Intent(this, ConnectionEditActivity::class.java))
             }
         }
 
@@ -261,92 +252,39 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     override fun onNavigationItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             // Main actions
-            R.id.nav_quick_connect -> {
-                showQuickConnectDialog()
-            }
-            R.id.nav_connections -> {
-                viewPager.currentItem = 1 // Switch to Connections tab
-            }
-            R.id.nav_identities -> {
-                viewPager.currentItem = 2 // Switch to Identities tab
-            }
-            R.id.nav_manage_keys -> {
-                startActivity(Intent(this, KeyManagementActivity::class.java))
-            }
-            R.id.nav_snippets -> {
-                startActivity(Intent(this, SnippetManagerActivity::class.java))
-            }
-            R.id.nav_port_forwarding -> {
-                startActivity(Intent(this, PortForwardingActivity::class.java))
-            }
-            
-            // Hypervisors
-            R.id.nav_hypervisors -> {
-                viewPager.currentItem = 4 // Switch to Hypervisors tab
-            }
-            R.id.nav_hypervisor_accounts -> {
-                startActivity(Intent(this, HypervisorAccountsActivity::class.java))
-            }
-            
-            // Tools
-            R.id.nav_manage_groups -> {
-                startActivity(Intent(this, GroupManagementActivity::class.java))
-            }
-            R.id.nav_cluster_commands -> {
-                startActivity(Intent(this, ClusterCommandActivity::class.java))
-            }
-            R.id.nav_performance -> {
-                viewPager.currentItem = 3 // Switch to Performance tab
-            }
-            
-            // Import/Export
-            R.id.nav_import_ssh_config -> {
-                importSSHConfig()
-            }
-            R.id.nav_bulk_import -> {
-                bulkImportLauncher.launch(arrayOf("*/*"))
-            }
-            R.id.nav_pair_from_desktop -> {
-                startActivity(Intent(this, ImportFromQrActivity::class.java))
-            }
-            R.id.nav_export_ssh_config -> {
-                exportSshConfigLauncher.launch("ssh_config_${System.currentTimeMillis() / 1000}.txt")
-            }
-            R.id.nav_import_connections -> {
-                importConnectionsLauncher.launch(arrayOf("application/zip", "application/json"))
-            }
-            R.id.nav_export_connections -> {
-                exportConnectionsLauncher.launch("tabssh_connections_${System.currentTimeMillis()}.zip")
-            }
-            
-            // Settings & Help
-            R.id.nav_settings -> {
-                startActivity(Intent(this, SettingsActivity::class.java))
-            }
-            R.id.nav_connection_history -> {
-                startActivity(Intent(this, ConnectionHistoryActivity::class.java))
-            }
-            R.id.nav_whats_new -> {
-                startActivity(Intent(this, WhatsNewActivity::class.java))
-            }
-            R.id.nav_multi_dashboard -> {
-                startActivity(Intent(this, MultiHostDashboardActivity::class.java))
-            }
-            R.id.nav_cloud_accounts -> {
-                startActivity(Intent(this, CloudAccountsActivity::class.java))
-            }
-            R.id.nav_copy_app_log -> {
-                copyAppLog()
-            }
-            R.id.nav_copy_debug_logs -> {
-                copyDebugLogs()
-            }
-            R.id.nav_help -> {
-                showHelpDialog()
-            }
-            R.id.nav_about -> {
-                showAboutDialog()
-            }
+            // Quick
+            R.id.nav_quick_connect -> showQuickConnectDialog()
+
+            // Manage
+            R.id.nav_snippets -> startActivity(Intent(this, SnippetManagerActivity::class.java))
+            R.id.nav_manage_groups -> startActivity(Intent(this, GroupManagementActivity::class.java))
+            R.id.nav_cloud_accounts -> startActivity(Intent(this, CloudAccountsActivity::class.java))
+
+            // Connect
+            R.id.nav_port_forwarding -> startActivity(Intent(this, PortForwardingActivity::class.java))
+            R.id.nav_cluster_commands -> startActivity(Intent(this, ClusterCommandActivity::class.java))
+
+            // Insights
+            R.id.nav_multi_dashboard -> startActivity(Intent(this, MultiHostDashboardActivity::class.java))
+            R.id.nav_connection_history -> startActivity(Intent(this, ConnectionHistoryActivity::class.java))
+
+            // Import / Export
+            R.id.nav_import_ssh_config -> importSSHConfig()
+            R.id.nav_export_ssh_config -> exportSshConfigLauncher.launch("ssh_config_${System.currentTimeMillis() / 1000}.txt")
+            R.id.nav_bulk_import -> bulkImportLauncher.launch(arrayOf("*/*"))
+            R.id.nav_pair_from_desktop -> startActivity(Intent(this, ImportFromQrActivity::class.java))
+            R.id.nav_import_connections -> importConnectionsLauncher.launch(arrayOf("application/zip", "application/json"))
+            R.id.nav_export_connections -> exportConnectionsLauncher.launch("tabssh_connections_${System.currentTimeMillis()}.zip")
+
+            // Settings
+            R.id.nav_settings -> startActivity(Intent(this, SettingsActivity::class.java))
+
+            // Diagnostics
+            R.id.nav_copy_app_log -> copyAppLog()
+            R.id.nav_copy_debug_logs -> copyDebugLogs()
+            R.id.nav_whats_new -> startActivity(Intent(this, WhatsNewActivity::class.java))
+            R.id.nav_help -> showHelpDialog()
+            R.id.nav_about -> showAboutDialog()
         }
         
         drawerLayout.closeDrawer(GravityCompat.START)
