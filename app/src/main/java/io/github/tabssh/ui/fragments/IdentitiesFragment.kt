@@ -74,16 +74,20 @@ class IdentitiesFragment : Fragment() {
         val key = pendingCertKey ?: return@registerForActivityResult
         pendingCertKey = null
         uri ?: return@registerForActivityResult
+        // Capture context on the Main thread before switching to IO
+        val ctx = context ?: return@registerForActivityResult
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val text = requireContext().contentResolver
+                val text = ctx.contentResolver
                     .openInputStream(uri)?.bufferedReader()?.use { it.readText() }?.trim().orEmpty()
                 withContext(Dispatchers.Main) {
+                    if (!isAdded) return@withContext
                     if (validateCert(text)) setKeyCert(key, text, "Certificate attached")
                 }
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to read cert file", e)
                 withContext(Dispatchers.Main) {
+                    if (!isAdded) return@withContext
                     Toast.makeText(requireContext(), "Failed to read certificate: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
@@ -95,17 +99,21 @@ class IdentitiesFragment : Fragment() {
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         uri ?: return@registerForActivityResult
+        // Capture context on the Main thread before switching to IO
+        val ctx = context ?: return@registerForActivityResult
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val text = requireContext().contentResolver
+                val text = ctx.contentResolver
                     .openInputStream(uri)?.bufferedReader()?.use { it.readText() }?.trim().orEmpty()
                 withContext(Dispatchers.Main) {
+                    if (!isAdded) return@withContext
                     ociDialogPem = text
                     ociDialogPemCallback?.invoke(text)
                 }
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to read PEM file", e)
                 withContext(Dispatchers.Main) {
+                    if (!isAdded) return@withContext
                     Toast.makeText(requireContext(), "Failed to read PEM file: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
@@ -117,12 +125,15 @@ class IdentitiesFragment : Fragment() {
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         uri ?: return@registerForActivityResult
+        // Capture context on the Main thread before switching to IO
+        val ctx = context ?: return@registerForActivityResult
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val text = requireContext().contentResolver
+                val text = ctx.contentResolver
                     .openInputStream(uri)?.bufferedReader()?.use { it.readText() }.orEmpty()
                 val profiles = OciConfigParser.parse(text).filter { !it.usesSessionToken }
                 withContext(Dispatchers.Main) {
+                    if (!isAdded) return@withContext
                     when {
                         profiles.isEmpty() -> Toast.makeText(
                             requireContext(),
@@ -136,6 +147,7 @@ class IdentitiesFragment : Fragment() {
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to read OCI config file", e)
                 withContext(Dispatchers.Main) {
+                    if (!isAdded) return@withContext
                     Toast.makeText(requireContext(), "Failed to read .oci/config: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
@@ -720,6 +732,7 @@ class IdentitiesFragment : Fragment() {
                 ?.coerceToText(requireContext())?.toString().orEmpty()
             if (clip.contains("PRIVATE KEY")) {
                 ociDialogPemCallback?.invoke(clip)
+                Toast.makeText(requireContext(), "PEM key pasted from clipboard", Toast.LENGTH_SHORT).show()
             } else {
                 showPasteOciPemDialog()
             }

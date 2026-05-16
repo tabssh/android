@@ -332,15 +332,17 @@ class HypervisorEditActivity : AppCompatActivity() {
         editHost.setText(connection.host)
         editUsername.setText(connection.username)
 
-        // Try to get password from secure storage
-        lifecycleScope.launch {
+        // Try to get password from secure storage (Keystore AES-GCM — must run on IO)
+        lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val password = app.securePasswordManager.retrievePassword(connection.id)
                 if (password != null) {
-                    editPassword.setText(password)
+                    withContext(Dispatchers.Main) {
+                        editPassword.setText(password)
+                    }
                 }
             } catch (e: Exception) {
-                // Password retrieval failed, user will need to enter it
+                // Password retrieval failed; user will need to enter it manually
             }
         }
 
