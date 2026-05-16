@@ -1,6 +1,7 @@
-# TabSSH Android — Agent Rules
+# TabSSH Android
 
-> **Read `AI.md` before writing any code.** It is the single source of architectural truth for this project. This file contains operating rules and pointers into `AI.md`. `TODO.AI.md` tracks all open/planned work — use it for every session that touches 2 or more tasks.
+> **Read `AI.md` (THE HOW) and `IDEA.md` (THE WHAT) before writing any code.**
+> `SPEC.md` contains project-specific rule overrides — read it first when a rule seems ambiguous.
 
 ---
 
@@ -26,8 +27,8 @@
 | Key storage (Android Keystore, AES-GCM) | §7.3 |
 | Password storage levels, biometric unlock, TTL | §7.4 |
 | Screenshot protection, clipboard auto-clear, password lifecycle | §7.5 |
-| Room database version, full migration chain (v17→v29) | §8.1–8.4 |
-| All 15 entities and their notable fields | §8.2 |
+| Room database version, full migration chain | §8.1–8.4 |
+| All 17 entities and their notable fields | §8.2 |
 | Preference keys and defaults by category | §8.6 |
 | SAF sync wire format, encryption, 3-way merge, conflict resolution | §9 |
 | Sync coverage matrix (what syncs, what doesn't, and why) | §9.4 |
@@ -45,27 +46,6 @@
 | Known stubs and unimplemented features | §16 |
 | Rules for AI agents editing this codebase | §17 |
 | QR pairing wire format, encryption, mobile implementation status | §18 |
-
----
-
-## Mandatory rules
-
-**TODO.AI.md** — open it at the start of any session touching 2+ tasks. Update status as you go. Every shipped feature and every bug fix must be logged there. Do not let it go stale.
-
-**Commits** — `git commit` and `git push` are denied. Use `gitcommit --dir {project_root} all`. Steps:
-1. `git status --porcelain` + `git diff --stat` — verify scope
-2. Write `.git/COMMIT_MESS`; re-read before running
-3. `gitcommit --dir /root/Projects/github/tabssh/android all`
-
-Format: `{emoji} Title ≤64 chars {emoji}` + blank line + body + `- file: what changed` bullets. No AI attribution. Emoji: 🐛 fix · ✨ feat · 📝 docs · ♻️ refactor · ⚡ perf · ✅ test · 🔒 security · 🗃️ db · 🚀 release · 🔧 chore.
-
-**Green build = commit immediately** — `make check` exit 0 means commit without asking.
-
-**Database changes** — bump `TabSSHDatabase` version, add `Migration` object, update `app/schemas/`, document in `AI.md §8.4`. Never destructive-migrate.
-
-**Sync surface** — new persisted entities that should sync must be added to `SyncDataCollector` / `SyncDataApplier`; update `AI.md §9` sync coverage matrix.
-
-**Secrets** — never commit. Passwords/keys → `SecurePasswordManager`; cloud tokens → Keystore; OCI PEM → `SecurePasswordManager` under `oci_private_key_${id}`.
 
 ---
 
@@ -88,16 +68,3 @@ Format: `{emoji} Title ≤64 chars {emoji}` + blank line + body + `- file: what 
 | Release APKs | `./releases/` |
 | All temp files | `/tmp/tabssh-android/` |
 | Room schemas | `app/schemas/` |
-
-**Never** create temp files in the project root or `app/build/`.
-
-## Screenshots
-
-Android screenshots are 1080×2400+. Downscale before `Read`:
-```bash
-python3 /tmp/tabssh-android/resize.py <src>.png /tmp/tabssh-android/screenshots/<name>-small.png
-```
-
-## Docker
-
-Do not volume-mount `/opt/android-sdk` — that overlays the baked SDK. Source → `/workspace` bind-mount; `GRADLE_USER_HOME` and AVD state → named compose volumes.

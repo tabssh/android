@@ -4,7 +4,7 @@
 >
 > **Generated:** 2026-04-25; updated 2026-05-12 from a parallel survey of ~201 Kotlin sources, all Gradle/Docker/CI configs, and every preference/layout/menu XML.
 >
-> **Last verified against:** `versionCode 9` / `versionName 0.0.9`, database `v29` (full chain: v17→v18 env_vars+agent_forwarding → v19 stored_keys.certificate → v20 connections.protocol → v21 workspaces → v22 connections.color_tag → v23 cloud_accounts → v24 connections.remote_command → v25 connections.ip_mode → v26 macros → v27 hypervisor_accounts+account_id → v28 hypervisors.pinned_cert_sha256 → v29 OCI auth_type+5 OCI columns), JSch `mwiede:2.27.7`, Termux `terminal-emulator:0.118.1`, AGP 8.7.3, Kotlin 2.0.21, Gradle 8.11.1.
+> **Last verified against:** `versionCode 9` / `versionName 0.0.9`, database `v33` (full chain: v17→v18 env_vars+agent_forwarding → v19 stored_keys.certificate → v20 connections.protocol → v21 workspaces → v22 connections.color_tag → v23 cloud_accounts → v24 connections.remote_command → v25 connections.ip_mode → v26 macros → v27 hypervisor_accounts+account_id → v28 hypervisors.pinned_cert_sha256 → v29 OCI auth_type+5 OCI columns → v30 hypervisors.display_host/port → v31 connections.oci_instance_id → v32 monitor_slots → v33 OCI credentials promoted to hypervisor_accounts), JSch `mwiede:2.27.7`, Termux `terminal-emulator:0.118.1`, AGP 8.7.3, Kotlin 2.0.21, Gradle 8.11.1.
 >
 > **Format conventions:**
 > - File paths are repo-relative unless prefixed with `/`.
@@ -81,7 +81,7 @@
 │ SSH     │  │ Terminal           │  │ Storage           │
 │ ssh/*   │  │ terminal/*         │  │ storage/database/ │
 │ JSch    │  │ TermuxBridge →     │  │ Room (v17)        │
-│ 2.27.7  │  │ Termux emulator    │  │ 12 entities       │
+│ 2.27.7  │  │ Termux emulator    │  │ 17 entities       │
 └────┬────┘  └──────────┬─────────┘  └────┬──────────────┘
      │                  │                  │
 ┌────▼──────────────────▼──────────────────▼─────────────────┐
@@ -555,9 +555,9 @@ If the Keystore is unavailable (e.g. broken ROM), the manager auto-degrades to `
 
 ### 8.1 Room database
 
-`storage/database/TabSSHDatabase.kt` — **version 32**, schema exported to `app/schemas/`.
+`storage/database/TabSSHDatabase.kt` — **version 33**, schema exported to `app/schemas/`.
 
-### 8.2 Entities (15)
+### 8.2 Entities (17)
 
 | Entity | Table | Notable fields | File |
 |---|---|---|---|
@@ -572,7 +572,8 @@ If the Keystore is unavailable (e.g. broken ROM), the manager auto-degrades to `
 | `Snippet` | `snippets` | `command`, `category`, `tags`, `usageCount`, `isFavorite`, `{var}` placeholders | `entities/Snippet.kt` |
 | `Identity` | `identities` | `username`, `authType`, `keyId`, encrypted `password` | `entities/Identity.kt` |
 | `AuditLogEntry` | `audit_log` | per-event row with `eventType`, `command`, `output`, `exitCode` | `entities/AuditLogEntry.kt` |
-| `HypervisorProfile` | `hypervisors` | `type` (`PROXMOX`/`XCPNG`/`VMWARE`/`OCI`), credentials, `realm`, `verifySsl`, `apiTypeOverride` (`auto`/`direct`/`centralized`), `linkedConnectionId`. OCI rows additionally carry `authType="oci_api_key"` plus `ociTenancyOcid`, `ociUserOcid`, `ociRegion`, `ociFingerprint`, `ociCompartmentOcid` (PEM + passphrase live in Keystore under `oci_private_key_${id}` / `oci_passphrase_${id}` — never in DB) | `entities/HypervisorProfile.kt` |
+| `HypervisorProfile` | `hypervisors` | `type` (`PROXMOX`/`XCPNG`/`VMWARE`/`OCI`), credentials, `realm`, `verifySsl`, `apiTypeOverride` (`auto`/`direct`/`centralized`), `linkedConnectionId`, `accountId` FK to `hypervisor_accounts`, deprecated OCI columns left in place (source of truth moved to `HypervisorAccount` in v33) | `entities/HypervisorProfile.kt` |
+| `HypervisorAccount` | `hypervisor_accounts` | `id` (UUID), `name`, `username`, `realm`, `authType` (`password`/`oci_api_key`), OCI fields (`ociTenancyOcid`, `ociUserOcid`, `ociRegion`, `ociFingerprint`, `ociCompartmentOcid`). Passwords and PEM live in Keystore via `HypervisorPasswordStore` — never in DB. Added in v27; OCI columns added in v33. | `entities/HypervisorAccount.kt` |
 | `Workspace` | `workspaces` | named tab groups, `connectionIds` (JSON array) | `entities/Workspace.kt` |
 | `CloudAccount` | `cloud_accounts` | `provider`, `enabled`, `lastRefreshAt`, `lastCount` (token in Keystore, **not** in DB) | `entities/CloudAccount.kt` |
 | `Macro` | `macros` | recordable raw byte sequence (`sequence_b64`), `usageCount` | `entities/Macro.kt` |
@@ -586,7 +587,7 @@ Fifteen DAOs in `storage/database/dao/`. Notable queries:
 - `AuditLogDao`: range queries by date, by connection, by session; cleanup queries.
 - All write APIs use `OnConflictStrategy.REPLACE`.
 
-### 8.4 Migrations (`v1 → v32`)
+### 8.4 Migrations (`v1 → v33`)
 
 | Step | Change |
 |---|---|
@@ -621,6 +622,7 @@ Fifteen DAOs in `storage/database/dao/`. Notable queries:
 | 29→30 | Add `display_host` + `display_port` to `hypervisors` (tunnel / VPN display addresses) |
 | 30→31 | Add `oci_instance_id` to `connections` (OCI SSH persistent config linking) |
 | 31→32 | Create `monitor_slots` table (background host monitoring: availability + metric thresholds) |
+| 32→33 | Promote OCI credentials from `hypervisors` to `hypervisor_accounts`: add `auth_type` + 5 OCI columns to `hypervisor_accounts`; for each existing OCI hypervisor row create a linked account row and set `account_id`; deprecated OCI columns on `hypervisors` left in place (SQLite < 3.35 no DROP COLUMN); Keystore entries migrate lazily on first access |
 
 ### 8.5 Preferences
 
