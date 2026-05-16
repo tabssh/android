@@ -531,10 +531,10 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                 .setTitle("$title — too large to copy")
                 .setMessage(
                     "Log is ${logsBytes / 1024} KB — too large for the clipboard. " +
-                    "Use \"Open Issue\" to upload it to a paste service and file a " +
-                    "pre-filled GitHub bug report instead."
+                    "Use \"Paste / Issue\" to upload it to a paste service — you can " +
+                    "copy the URL or open a pre-filled GitHub bug report."
                 )
-                .setPositiveButton("Open Issue") { _, _ -> openIssueAction() }
+                .setPositiveButton("Paste / Issue") { _, _ -> openIssueAction() }
                 .setNeutralButton("Clear") { _, _ -> onClear() }
                 .setNegativeButton("Cancel", null)
                 .show()
@@ -552,15 +552,15 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         }
 
         val msg = if (copied) {
-            "${logs.length} characters copied to clipboard.\n\nTap \"Open Issue\" to upload the log to a paste service and file a pre-filled GitHub bug report."
+            "${logs.length} characters copied to clipboard.\n\nTap \"Paste / Issue\" to upload to a paste service — copy the URL or open a GitHub issue."
         } else {
-            "Clipboard write failed — log may be too large. Use \"Open Issue\" to upload it directly."
+            "Clipboard write failed — log may be too large. Use \"Paste / Issue\" to upload it directly."
         }
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle(if (copied) "$title Copied" else title)
             .setMessage(msg)
             .setPositiveButton("OK", null)
-            .setNeutralButton("Open Issue") { _, _ -> openIssueAction() }
+            .setNeutralButton("Paste / Issue") { _, _ -> openIssueAction() }
             .setNegativeButton("Clear") { _, _ -> onClear() }
             .show()
     }

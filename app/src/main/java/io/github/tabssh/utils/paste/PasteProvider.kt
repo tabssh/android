@@ -49,7 +49,9 @@ class MicroBinProvider(private val baseUrl: String) : PasteProvider {
             .build()
         sharedHttpClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw Exception("MicroBin upload failed: HTTP ${response.code}")
-            response.request.url.toString()
+            response.request.url.toString().also { url ->
+                if (!url.startsWith("http")) throw Exception("MicroBin returned unexpected response: $url")
+            }
         }
     }
 }
@@ -71,7 +73,9 @@ class LenpasteProvider(private val baseUrl: String) : PasteProvider {
             if (!response.isSuccessful) throw Exception("CasPaste upload failed: HTTP ${response.code}")
             response.body?.string() ?: throw Exception("CasPaste returned empty response")
         }
-        JSONObject(responseBody).getString("url")
+        JSONObject(responseBody).getString("url").also { url ->
+            if (!url.startsWith("http")) throw Exception("CasPaste returned unexpected URL: $url")
+        }
     }
 }
 
@@ -90,7 +94,9 @@ class StikkedProvider(private val baseUrl: String) : PasteProvider {
             .build()
         sharedHttpClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw Exception("Stikked upload failed: HTTP ${response.code}")
-            response.body?.string()?.trim() ?: throw Exception("Stikked returned empty response")
+            val url = response.body?.string()?.trim() ?: throw Exception("Stikked returned empty response")
+            if (!url.startsWith("http")) throw Exception("Stikked returned unexpected response: $url")
+            url
         }
     }
 }
@@ -119,13 +125,30 @@ class PastebinProvider(private val apiKey: String) : PasteProvider {
 }
 
 object PasteProviderFactory {
-    fun create(prefs: io.github.tabssh.storage.preferences.PreferenceManager): PasteProvider {
-        return when (prefs.getPasteService()) {
-            "lenpaste" -> LenpasteProvider(prefs.getPasteLenpasteUrl())
-            "stikked"  -> StikkedProvider(prefs.getPasteStikkedUrl())
-            "pastebin" -> PastebinProvider(prefs.getPastebinApiKey())
-            "microbin" -> MicroBinProvider(prefs.getPasteMicrobinUrl())
-            else       -> StikkedProvider(prefs.getPasteStikkedUrl()) // default
-        }
+    fun create(prefs: io.github.tabssh.storage.preferences.PreferenceManager): PasteProvider =
+        createForService(prefs.getPasteService(), prefs)
+
+    /** Build a provider for an explicit [serviceId] (one of "microbin", "lenpaste", "stikked", "pastebin"). */
+    fun createForService(
+        serviceId: String,
+        prefs: io.github.tabssh.storage.preferences.PreferenceManager
+    ): PasteProvider = when (serviceId) {
+        "lenpaste" -> LenpasteProvider(prefs.getPasteLenpasteUrl())
+        "stikked"  -> StikkedProvider(prefs.getPasteStikkedUrl())
+        "pastebin" -> PastebinProvider(prefs.getPastebinApiKey())
+        "microbin" -> MicroBinProvider(prefs.getPasteMicrobinUrl())
+        else       -> StikkedProvider(prefs.getPasteStikkedUrl())
+    }
+
+    /** Human-readable label shown in the service picker. */
+    fun labelForService(
+        serviceId: String,
+        prefs: io.github.tabssh.storage.preferences.PreferenceManager
+    ): String = when (serviceId) {
+        "microbin" -> "MicroBin  —  ${prefs.getPasteMicrobinUrl()}"
+        "lenpaste" -> "Lenpaste  —  ${prefs.getPasteLenpasteUrl()}"
+        "stikked"  -> "Stikked  —  ${prefs.getPasteStikkedUrl()}"
+        "pastebin" -> "pastebin.com (API key required)"
+        else       -> "Stikked  —  ${prefs.getPasteStikkedUrl()}"
     }
 }

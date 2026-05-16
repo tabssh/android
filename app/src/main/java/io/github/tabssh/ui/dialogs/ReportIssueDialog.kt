@@ -1,19 +1,28 @@
 package io.github.tabssh.ui.dialogs
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.EditText
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
+import android.widget.AutoCompleteTextView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import io.github.tabssh.BuildConfig
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.utils.logging.Logger
@@ -21,23 +30,39 @@ import io.github.tabssh.utils.paste.PasteProviderFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.lifecycle.lifecycleScope
 
+/**
+ * Bottom sheet that lets the user:
+ *  1. Pick a paste service (overrides the setting for this upload only)
+ *  2. Create Paste — upload content and display the URL to copy/share
+ *  3. Open Issue  — upload + open a pre-filled GitHub issue in the browser
+ *
+ * Call [create] to attach log content, or [createStandalone] if you want
+ * to paste arbitrary text (no pre-loaded log).
+ */
 class ReportIssueDialog : BottomSheetDialogFragment() {
 
     companion object {
         private const val ARG_LOG_CONTENT = "log_content"
-        private const val ARG_LOG_TYPE = "log_type"
+        private const val ARG_LOG_TYPE    = "log_type"
         private const val MAX_CONTENT_BYTES = 100 * 1024 // 100 KB
 
-        fun create(logContent: String, logType: String): ReportIssueDialog {
-            return ReportIssueDialog().apply {
+        private val SERVICE_IDS     = listOf("stikked", "microbin", "lenpaste", "pastebin")
+
+        /**
+         * Open the dialog pre-loaded with [logContent] (typically a debug or app log).
+         * [logType] is "debug", "app", "error", "audit", or "host".
+         */
+        fun create(logContent: String, logType: String = "app"): ReportIssueDialog =
+            ReportIssueDialog().apply {
                 arguments = Bundle().apply {
                     putString(ARG_LOG_CONTENT, logContent)
                     putString(ARG_LOG_TYPE, logType)
                 }
             }
-        }
+
+        /** Open with empty content — user can still manually paste anything they want. */
+        fun createStandalone(): ReportIssueDialog = create("", "app")
     }
 
     override fun onCreateView(
@@ -45,166 +70,257 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        val ctx = requireContext()
-        val logContent = arguments?.getString(ARG_LOG_CONTENT) ?: ""
-        val logType = arguments?.getString(ARG_LOG_TYPE) ?: "app"
+        val ctx         = requireContext()
+        val logContent  = arguments?.getString(ARG_LOG_CONTENT) ?: ""
+        val logType     = arguments?.getString(ARG_LOG_TYPE) ?: "app"
 
-        val app = requireActivity().application as TabSSHApplication
+        val app   = requireActivity().application as TabSSHApplication
         val prefs = app.preferencesManager
 
-        val serviceLabel = when (prefs.getPasteService()) {
-            "lenpaste" -> "Lenpaste at ${prefs.getPasteLenpasteUrl()}"
-            "stikked"  -> "Stikked at ${prefs.getPasteStikkedUrl()}"
-            "pastebin" -> "pastebin.com"
-            else       -> "MicroBin at ${prefs.getPasteMicrobinUrl()}"
-        }
+        // ── dimension helpers ────────────────────────────────────────────────
+        val density = ctx.resources.displayMetrics.density
+        fun dp(n: Int) = (n * density).toInt()
 
-        val dp8 = (8 * ctx.resources.displayMetrics.density).toInt()
-        val dp16 = dp8 * 2
-
-        val layout = LinearLayout(ctx).apply {
+        // ── root layout ──────────────────────────────────────────────────────
+        val root = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp16, dp16, dp16, dp16)
+            setPadding(dp(16), dp(16), dp(16), dp(24))
         }
 
-        val titleView = TextView(ctx).apply {
-            text = "Report Issue"
+        fun lp(
+            w: Int = LinearLayout.LayoutParams.MATCH_PARENT,
+            h: Int = LinearLayout.LayoutParams.WRAP_CONTENT,
+            bottomMargin: Int = dp(12)
+        ) = LinearLayout.LayoutParams(w, h).also { it.bottomMargin = bottomMargin }
+
+        // ── heading ──────────────────────────────────────────────────────────
+        root.addView(TextView(ctx).apply {
+            text = "Create Paste"
             textSize = 20f
-            setTypeface(null, android.graphics.Typeface.BOLD)
-        }
-        layout.addView(titleView, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).also { it.bottomMargin = dp8 })
+            setTypeface(null, Typeface.BOLD)
+        }, lp(bottomMargin = dp(16)))
 
-        val serviceInfoView = TextView(ctx).apply {
-            text = "Will upload to: $serviceLabel"
-            textSize = 12f
-            setTextColor(android.graphics.Color.GRAY)
+        // ── service picker ───────────────────────────────────────────────────
+        var selectedServiceId = prefs.getPasteService().let {
+            if (it in SERVICE_IDS) it else "stikked"
         }
-        layout.addView(serviceInfoView, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).also { it.bottomMargin = dp16 })
 
-        val titleEdit = EditText(ctx).apply {
-            hint = "Brief summary of the problem"
+        val serviceLabels = SERVICE_IDS.map { PasteProviderFactory.labelForService(it, prefs) }
+
+        val serviceLayout = TextInputLayout(
+            ctx,
+            null,
+            com.google.android.material.R.attr.textInputOutlinedStyle
+        ).apply {
+            hint = "Paste service"
+            endIconMode = TextInputLayout.END_ICON_DROPDOWN_MENU
+        }
+        val serviceSpinner = AutoCompleteTextView(ctx).apply {
+            setAdapter(ArrayAdapter(ctx, android.R.layout.simple_dropdown_item_1line, serviceLabels))
+            setText(PasteProviderFactory.labelForService(selectedServiceId, prefs), false)
+            onItemClickListener = AdapterView.OnItemClickListener { _, _, pos, _ ->
+                selectedServiceId = SERVICE_IDS[pos]
+            }
+        }
+        serviceLayout.addView(serviceSpinner)
+        root.addView(serviceLayout, lp())
+
+        // ── title field ──────────────────────────────────────────────────────
+        val titleLayout = TextInputLayout(
+            ctx,
+            null,
+            com.google.android.material.R.attr.textInputOutlinedStyle
+        ).apply { hint = "Title (optional for paste, required for issue)" }
+        val titleEdit = TextInputEditText(ctx).apply {
             inputType = android.text.InputType.TYPE_CLASS_TEXT or
                     android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
             maxLines = 1
             setSingleLine(true)
         }
-        layout.addView(titleEdit, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).also { it.bottomMargin = dp8 })
+        titleLayout.addView(titleEdit)
+        root.addView(titleLayout, lp())
 
-        val descriptionEdit = EditText(ctx).apply {
-            hint = "Steps to reproduce, what you expected vs what happened..."
+        // ── description field (hidden until Open Issue is tapped) ────────────
+        val descLayout = TextInputLayout(
+            ctx,
+            null,
+            com.google.android.material.R.attr.textInputOutlinedStyle
+        ).apply {
+            hint = "Describe the issue — steps to reproduce, expected vs actual"
+            visibility = View.GONE
+        }
+        val descEdit = TextInputEditText(ctx).apply {
             inputType = android.text.InputType.TYPE_CLASS_TEXT or
                     android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or
                     android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-            minLines = 5
-            maxLines = 8
+            minLines = 4
+            maxLines = 7
             gravity = android.view.Gravity.TOP or android.view.Gravity.START
-            isVerticalScrollBarEnabled = true
-            setScrollBarStyle(View.SCROLLBARS_INSIDE_INSET)
         }
-        layout.addView(descriptionEdit, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).also { it.bottomMargin = dp16 })
+        descLayout.addView(descEdit)
+        root.addView(descLayout, lp())
 
-        val progressBar = ProgressBar(ctx).apply {
-            visibility = View.INVISIBLE
+        // ── progress ─────────────────────────────────────────────────────────
+        val progress = ProgressBar(ctx).apply { visibility = View.GONE }
+        root.addView(progress, lp(
+            w = LinearLayout.LayoutParams.WRAP_CONTENT,
+            bottomMargin = dp(8)
+        ).also { it.gravity = android.view.Gravity.CENTER_HORIZONTAL })
+
+        // ── result row (URL + Copy) — hidden until upload succeeds ────────────
+        val resultRow = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            visibility  = View.GONE
         }
-        layout.addView(progressBar, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).also {
-            it.gravity = android.view.Gravity.CENTER_HORIZONTAL
-            it.bottomMargin = dp8
-        })
-
-        val uploadButton = MaterialButton(ctx).apply {
-            text = "Upload & Open Issue"
+        val resultUrl = TextView(ctx).apply {
+            textSize = 13f
+            setTextIsSelectable(true)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
-        layout.addView(uploadButton, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ))
+        val copyBtn = MaterialButton(
+            ctx,
+            null,
+            com.google.android.material.R.attr.materialButtonOutlinedStyle
+        ).apply {
+            text = "Copy"
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).also { it.marginStart = dp(8) }
+        }
+        resultRow.addView(resultUrl)
+        resultRow.addView(copyBtn)
+        root.addView(resultRow, lp(bottomMargin = dp(16)))
 
-        uploadButton.setOnClickListener {
-            val issueTitle = titleEdit.text.toString().trim()
-            val description = descriptionEdit.text.toString().trim()
+        // ── action buttons ───────────────────────────────────────────────────
+        val buttonRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
 
-            if (issueTitle.isBlank()) {
-                Toast.makeText(ctx, "Please enter an issue title", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
+        val pasteBtn = MaterialButton(ctx).apply {
+            text = "Create Paste"
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                .also { it.marginEnd = dp(8) }
+        }
+        val issueBtn = MaterialButton(
+            ctx,
+            null,
+            com.google.android.material.R.attr.materialButtonOutlinedStyle
+        ).apply {
+            text = "Open Issue"
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        buttonRow.addView(pasteBtn)
+        buttonRow.addView(issueBtn)
+        root.addView(buttonRow, lp(bottomMargin = 0))
+
+        // ── helpers ───────────────────────────────────────────────────────────
+
+        fun setUploading(uploading: Boolean) {
+            progress.visibility = if (uploading) View.VISIBLE else View.GONE
+            pasteBtn.isEnabled  = !uploading
+            issueBtn.isEnabled  = !uploading
+        }
+
+        fun showResult(url: String) {
+            resultUrl.text = url
+            resultRow.visibility = View.VISIBLE
+            copyBtn.setOnClickListener {
+                val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                cm.setPrimaryClip(ClipData.newPlainText("Paste URL", url))
+                Toast.makeText(ctx, "URL copied", Toast.LENGTH_SHORT).show()
             }
-            if (description.isBlank()) {
-                Toast.makeText(ctx, "Please describe the issue", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
+        }
+
+        fun preparedContent(): String {
+            val raw = if (logType == "debug" && logContent.isNotEmpty()) {
+                Logger.sanitize(logContent)
+            } else {
+                logContent
             }
+            val bytes = raw.toByteArray(Charsets.UTF_8)
+            return if (bytes.size > MAX_CONTENT_BYTES) {
+                String(bytes, 0, MAX_CONTENT_BYTES, Charsets.UTF_8)
+            } else {
+                raw
+            }
+        }
 
-            uploadButton.visibility = View.GONE
-            progressBar.visibility = View.VISIBLE
-
+        fun upload(
+            onSuccess: (url: String) -> Unit
+        ) {
+            setUploading(true)
             lifecycleScope.launch {
                 try {
-                    val pasteUrl = withContext(Dispatchers.IO) {
-                        val content = buildString {
-                            val rawContent = if (logType == "debug") {
-                                Logger.sanitize(logContent)
-                            } else {
-                                logContent
-                            }
-                            // Trim to 100 KB max
-                            val bytes = rawContent.toByteArray(Charsets.UTF_8)
-                            if (bytes.size > MAX_CONTENT_BYTES) {
-                                append(String(bytes, 0, MAX_CONTENT_BYTES, Charsets.UTF_8))
-                            } else {
-                                append(rawContent)
-                            }
-                        }
-                        PasteProviderFactory.create(prefs).upload(issueTitle, content)
+                    val title   = titleEdit.text.toString().trim().ifBlank { "Log" }
+                    val content = preparedContent()
+                    val url = withContext(Dispatchers.IO) {
+                        PasteProviderFactory
+                            .createForService(selectedServiceId, prefs)
+                            .upload(title, content)
                     }
-
-                    val deviceInfo = buildString {
-                        appendLine("- App: TabSSH ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
-                        appendLine("- Android: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
-                        appendLine("- Device: ${Build.MANUFACTURER} ${Build.MODEL}")
-                        append("- Log type: $logType")
-                    }
-
-                    val issueBody = buildString {
-                        appendLine("## Description")
-                        appendLine(description)
-                        appendLine()
-                        appendLine("## Log")
-                        appendLine(pasteUrl)
-                        appendLine()
-                        appendLine("## Environment")
-                        append(deviceInfo)
-                    }
-
-                    val githubUrl = "https://github.com/tabssh/android/issues/new" +
-                            "?title=${Uri.encode(issueTitle)}" +
-                            "&body=${Uri.encode(issueBody)}" +
-                            "&labels=bug"
-
-                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(githubUrl)))
-                    dismiss()
+                    setUploading(false)
+                    showResult(url)
+                    onSuccess(url)
                 } catch (e: Exception) {
-                    withContext(Dispatchers.Main) {
-                        progressBar.visibility = View.INVISIBLE
-                        uploadButton.visibility = View.VISIBLE
-                        Toast.makeText(ctx, "Upload failed: ${e.message}", Toast.LENGTH_LONG).show()
-                    }
+                    setUploading(false)
+                    Toast.makeText(ctx, "Upload failed: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
         }
 
-        return layout
+        // ── "Create Paste" ────────────────────────────────────────────────────
+        pasteBtn.setOnClickListener {
+            upload { /* just show the result row — nothing else to do */ }
+        }
+
+        // ── "Open Issue" ──────────────────────────────────────────────────────
+        issueBtn.setOnClickListener {
+            // First tap: reveal the description field so the user can fill it.
+            // Second tap (description already visible): validate and proceed.
+            if (descLayout.visibility != View.VISIBLE) {
+                descLayout.visibility = View.VISIBLE
+                issueBtn.text = "Submit Issue"
+                return@setOnClickListener
+            }
+
+            val issueTitle = titleEdit.text.toString().trim()
+            val description = descEdit.text.toString().trim()
+            if (issueTitle.isBlank()) {
+                titleLayout.error = "Title is required"
+                return@setOnClickListener
+            }
+            titleLayout.error = null
+            if (description.isBlank()) {
+                descLayout.error = "Description is required"
+                return@setOnClickListener
+            }
+            descLayout.error = null
+
+            upload { url ->
+                val deviceInfo = buildString {
+                    appendLine("- App: TabSSH ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                    appendLine("- Android: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
+                    appendLine("- Device: ${Build.MANUFACTURER} ${Build.MODEL}")
+                    append("- Log type: $logType")
+                }
+                val body = buildString {
+                    appendLine("## Description")
+                    appendLine(description)
+                    appendLine()
+                    appendLine("## Log")
+                    appendLine(url)
+                    appendLine()
+                    appendLine("## Environment")
+                    append(deviceInfo)
+                }
+                val githubUrl = "https://github.com/tabssh/android/issues/new" +
+                        "?title=${Uri.encode(issueTitle)}" +
+                        "&body=${Uri.encode(body)}" +
+                        "&labels=bug"
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(githubUrl)))
+                dismiss()
+            }
+        }
+
+        return root
     }
 }
