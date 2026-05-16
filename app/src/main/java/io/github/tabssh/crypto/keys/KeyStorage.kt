@@ -671,8 +671,6 @@ class KeyStorage(private val context: Context) {
         }
     }
     
-    // Parsing methods for different key formats (simplified implementations)
-    
     private fun parseOpenSSHKey(keyContent: String, passphrase: String?): ParseResult {
         return try {
             Logger.d("KeyStorage", "Parsing OpenSSH private key format using SSHKeyParser")

@@ -18,6 +18,7 @@ import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.ConnectionGroup
 import io.github.tabssh.utils.logging.Logger
+import androidx.room.withTransaction
 import kotlinx.coroutines.launch
 import io.github.tabssh.utils.showError
 
@@ -283,15 +284,17 @@ class GroupManagementActivity : AppCompatActivity() {
     private fun performDelete(group: ConnectionGroup) {
         lifecycleScope.launch {
             try {
-                // Unassign all connections from this group
-                val dao = app.database.connectionDao()
-                val connections = dao.getConnectionsByGroup(group.id)
-                connections.forEach { connection ->
-                    dao.updateConnection(connection.copy(groupId = null))
-                }
+                app.database.withTransaction {
+                    // Unassign all connections from this group
+                    val dao = app.database.connectionDao()
+                    val connections = dao.getConnectionsByGroup(group.id)
+                    connections.forEach { connection ->
+                        dao.updateConnection(connection.copy(groupId = null))
+                    }
 
-                // Delete the group
-                app.database.connectionGroupDao().deleteGroup(group)
+                    // Delete the group
+                    app.database.connectionGroupDao().deleteGroup(group)
+                }
 
                 runOnUiThread {
                     Toast.makeText(this@GroupManagementActivity, "Group deleted", Toast.LENGTH_SHORT).show()

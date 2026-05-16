@@ -276,8 +276,15 @@ class SSHConfigParser {
             port = host.port,
             username = username,
             authType = authType,
-            keyId = host.identityFileStr?.hashCode()?.toString(), // Will need to be resolved separately if identityFileStr is present
-            groupId = host.groupName,  // null = appears in "Ungrouped" section
+            // keyId: IdentityFile path cannot be resolved to a StoredKey UUID
+            // at parse time. The import preview dialog warns the user when
+            // identityFileStr is set so they know to import the key manually.
+            keyId = null,
+            // groupId TRANSITIONAL: carries the raw group NAME here, not a UUID.
+            // This MUST only be consumed by importSSHConfigProfiles(), which
+            // remaps every name to a real connection_groups UUID before inserting.
+            // Never persist a profile from this parser without that remapping step.
+            groupId = host.groupName,
             theme = "dracula",
             envVars = mergedEnvVars,
             remoteCommand = host.remoteCommand?.takeIf { it.isNotBlank() },
@@ -326,11 +333,10 @@ class SSHConfigParser {
     /**
      * Generate unique connection ID
      */
-    private fun generateConnectionId(host: SSHHost): String {
-        val hostname = host.hostname ?: host.hostPattern
-        val user = host.user ?: "default"
-        val port = host.port
-        return "$user@$hostname:$port".hashCode().toString()
+    private fun generateConnectionId(@Suppress("UNUSED_PARAMETER") host: SSHHost): String {
+        // Always use a UUID. The old hashCode approach produced 32-bit ids that
+        // could collide and caused REPLACE-on-conflict to silently overwrite rows.
+        return java.util.UUID.randomUUID().toString()
     }
 
     /**

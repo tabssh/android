@@ -17,6 +17,7 @@ import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.storage.database.entities.Identity
 import io.github.tabssh.ui.adapters.IdentityAdapter
 import io.github.tabssh.utils.logging.Logger
+import androidx.room.withTransaction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
@@ -221,8 +222,14 @@ class IdentityManagementActivity : AppCompatActivity() {
     
     private fun deleteIdentity(identity: Identity) {
         lifecycleScope.launch(Dispatchers.IO) {
-            app.database.identityDao().delete(identity)
-            
+            // Unlink from all connections first, then delete the row atomically
+            app.database.withTransaction {
+                app.database.connectionDao().removeIdentityFromAllConnections(identity.id)
+                app.database.identityDao().delete(identity)
+            }
+            // Clear encrypted credentials outside the transaction (not a DB op)
+            app.securePasswordManager.clearPassword("identity_${identity.id}")
+
             withContext(Dispatchers.Main) {
                 android.widget.Toast.makeText(this@IdentityManagementActivity, "Identity deleted", android.widget.Toast.LENGTH_SHORT).show()
                 Logger.d("IdentityManagementActivity", "Deleted identity: ${identity.name}")

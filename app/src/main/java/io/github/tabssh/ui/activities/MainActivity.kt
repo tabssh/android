@@ -1350,7 +1350,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
      */
     private fun quickConnect(username: String, hostname: String, port: Int, password: String? = null) {
         val quickProfile = ConnectionProfile(
-            id = "quick_${System.currentTimeMillis()}",
+            id = java.util.UUID.randomUUID().toString(),
             name = "Quick: $username@$hostname",
             host = hostname,
             port = port,

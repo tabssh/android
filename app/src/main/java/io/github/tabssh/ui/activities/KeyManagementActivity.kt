@@ -24,6 +24,7 @@ import io.github.tabssh.crypto.keys.KeyType
 import io.github.tabssh.storage.database.entities.StoredKey
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.showError
+import androidx.room.withTransaction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -543,7 +544,15 @@ class KeyManagementActivity : AppCompatActivity() {
             .setPositiveButton("Delete") { _, _ ->
                 lifecycleScope.launch {
                     try {
-                        app.database.keyDao().deleteKey(key)
+                        app.database.withTransaction {
+                            // Null out all FK references before deleting the key row
+                            app.database.connectionDao().clearKeyFromConnections(key.keyId)
+                            app.database.connectionDao().clearProxyKeyFromConnections(key.keyId)
+                            app.database.identityDao().clearKeyFromIdentities(key.keyId)
+                            app.database.keyDao().deleteKey(key)
+                        }
+                        // Clear encrypted passphrase outside the transaction (not a DB op)
+                        app.securePasswordManager.clearPassword("key_passphrase_${key.keyId}")
                         Toast.makeText(this@KeyManagementActivity, "Key deleted", Toast.LENGTH_SHORT).show()
                     } catch (e: Exception) {
                         Logger.e("KeyManagementActivity", "Failed to delete key", e)

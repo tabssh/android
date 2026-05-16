@@ -53,6 +53,9 @@ object BulkImportParser {
                 port = port,
                 username = finalUser,
                 authType = finalAuth,
+                // TRANSITIONAL: carries the raw group NAME, not a UUID.
+                // Must only be consumed by importSSHConfigProfiles() which
+                // remaps each name to a real connection_groups UUID before inserting.
                 groupId = groupName,
                 createdAt = System.currentTimeMillis()
             )

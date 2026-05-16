@@ -11,6 +11,7 @@ import io.github.tabssh.sync.models.MergeResult
 import io.github.tabssh.sync.models.MergeStrategy
 import io.github.tabssh.sync.models.SyncDataPackage
 import io.github.tabssh.utils.logging.Logger
+import androidx.room.withTransaction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonElement
@@ -60,6 +61,7 @@ class SyncDataApplier {
         try {
             var appliedCount = 0
 
+            database.withTransaction {
             // Apply connections
             data.connections.forEach { connection ->
                 try {
@@ -192,6 +194,8 @@ class SyncDataApplier {
                     Logger.w(TAG, "Failed to apply hypervisor account: ${a.name}", e)
                 }
             }
+
+            } // end withTransaction
 
             Logger.i(TAG, "Applied $appliedCount items from sync data")
             ApplyResult.Success(appliedCount)

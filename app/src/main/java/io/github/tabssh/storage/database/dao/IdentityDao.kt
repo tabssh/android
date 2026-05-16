@@ -48,6 +48,13 @@ interface IdentityDao {
     suspend fun getIdentityCount(): Int
     
     /**
+     * Clear key_id on all identities that reference the deleted key.
+     * Called inside a transaction by KeyManagementActivity.deleteKey.
+     */
+    @Query("UPDATE identities SET key_id = NULL WHERE key_id = :keyId")
+    suspend fun clearKeyFromIdentities(keyId: String)
+
+    /**
      * Update sync metadata
      */
     @Query("UPDATE identities SET last_synced_at = :timestamp, sync_version = sync_version + 1, sync_device_id = :deviceId WHERE id = :identityId")

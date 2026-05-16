@@ -445,6 +445,8 @@ class ConnectionsFragment : Fragment() {
                 lifecycleScope.launch {
                     try {
                         app.database.connectionDao().deleteConnection(connection)
+                        // Clear any stored password for this connection
+                        try { app.securePasswordManager.clearPassword(connection.id) } catch (_: Exception) {}
                         Logger.d("ConnectionsFragment", "Connection deleted: ${connection.name}")
                     } catch (e: Exception) {
                         Logger.e("ConnectionsFragment", "Failed to delete connection", e)
@@ -484,6 +486,12 @@ class ConnectionsFragment : Fragment() {
                 if (newName.isNotBlank() && newName != group.name) {
                     lifecycleScope.launch {
                         try {
+                            // Check for duplicate group name before renaming
+                            val existing = app.database.connectionGroupDao().getGroupByName(newName)
+                            if (existing != null && existing.id != group.id) {
+                                Toast.makeText(requireContext(), "A group named '$newName' already exists", Toast.LENGTH_SHORT).show()
+                                return@launch
+                            }
                             app.database.connectionGroupDao().updateGroup(
                                 group.copy(
                                     name = newName,

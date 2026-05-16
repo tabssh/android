@@ -462,7 +462,10 @@ class BackupImporter(
         applyOne: suspend (T) -> Boolean
     ): Int {
         val root = json.parseToJsonElement(data).jsonObject
-        val items = (root["items"] as? JsonArray) ?: return 0
+        val items = (root["items"] as? JsonArray) ?: run {
+            Logger.w(TAG, "v2 list root missing 'items' key")
+            return 0
+        }
         val list = json.decodeFromJsonElement(serializer, items)
         var count = 0
         for (item in list) {

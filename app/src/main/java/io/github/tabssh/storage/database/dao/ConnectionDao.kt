@@ -107,6 +107,19 @@ interface ConnectionDao {
     suspend fun removeIdentityFromAllConnections(identityId: String)
 
     /**
+     * Clear key_id on all connections that reference the deleted key.
+     * Called inside a transaction by KeyManagementActivity.deleteKey.
+     */
+    @Query("UPDATE connections SET key_id = NULL WHERE key_id = :keyId")
+    suspend fun clearKeyFromConnections(keyId: String)
+
+    /**
+     * Clear proxy_key_id on all connections that reference the deleted key.
+     */
+    @Query("UPDATE connections SET proxy_key_id = NULL WHERE proxy_key_id = :keyId")
+    suspend fun clearProxyKeyFromConnections(keyId: String)
+
+    /**
      * Look up the SSH profile saved for a specific OCI Compute instance.
      * Returns null when no profile has been saved for this instance yet.
      */
