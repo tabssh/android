@@ -1,12 +1,13 @@
 package io.github.tabssh.ui.activities
 
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -17,9 +18,6 @@ import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import java.util.Collections
-import com.google.android.material.button.MaterialButtonToggleGroup
-import com.google.android.material.chip.ChipGroup
-import com.google.android.material.tabs.TabLayout
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.databinding.ActivityKeyboardCustomizationBinding
@@ -28,64 +26,56 @@ import io.github.tabssh.ui.keyboard.MultiRowKeyboardView
 import io.github.tabssh.utils.logging.Logger
 
 /**
- * Visual keyboard layout editor with multi-row support
- * Allows customizing keys in each row with live preview
+ * Keyboard layout editor.
+ *
+ * Layout:
+ *   1. Number of rows (top toggle)
+ *   2. Preview — each row is an interactive horizontal RecyclerView.
+ *      Tap a row to select it (highlighted).  Drag ≡ handle to reorder
+ *      keys within a row.  Tap a key to remove it.
+ *   3. Available Keys — tap to add to the currently selected row.
  */
 class KeyboardCustomizationActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityKeyboardCustomizationBinding
     private lateinit var app: TabSSHApplication
 
-    // Current keyboard layout (rows of keys)
+    // Full keyboard layout (rows → keys)
     private val keyboardLayout = mutableListOf<MutableList<KeyboardKey>>()
     private var selectedRowIndex = 0
     private var currentCategory: String = "all"
 
-    // Adapters
-    private lateinit var currentRowAdapter: KeyAdapter
+    // Per-row state, rebuilt whenever rows change
+    private val rowAdapters = mutableListOf<KeyAdapter>()
+    private val rowItemTouchHelpers = mutableListOf<ItemTouchHelper>()
+    private val rowContainers = mutableListOf<LinearLayout>()
+
     private lateinit var availableKeysAdapter: KeyAdapter
 
-    // Drag-to-reorder helper — stored so the adapter can call startDrag()
-    private var itemTouchHelper: ItemTouchHelper? = null
+    // Resolved once from theme — primary color used for selected-row highlight
+    private val selectedStrokeColor: Int by lazy {
+        val tv = TypedValue()
+        theme.resolveAttribute(com.google.android.material.R.attr.colorPrimary, tv, true)
+        tv.data
+    }
+    private val selectedFillColor: Int by lazy {
+        val c = selectedStrokeColor
+        Color.argb(28, Color.red(c), Color.green(c), Color.blue(c))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Logger.d("KeyboardCustomization", "onCreate started")
+        binding = ActivityKeyboardCustomizationBinding.inflate(layoutInflater)
+        setContentView(binding.root)
 
-        try {
-            binding = ActivityKeyboardCustomizationBinding.inflate(layoutInflater)
-            setContentView(binding.root)
-            Logger.d("KeyboardCustomization", "View binding complete")
+        app = application as TabSSHApplication
 
-            app = application as TabSSHApplication
-            Logger.d("KeyboardCustomization", "Got application instance")
-
-            setupToolbar()
-            Logger.d("KeyboardCustomization", "Toolbar setup complete")
-
-            initViews()
-            Logger.d("KeyboardCustomization", "Views initialized")
-
-            loadCurrentLayout()
-            Logger.d("KeyboardCustomization", "Layout loaded: ${keyboardLayout.size} rows")
-
-            setupListeners()
-            Logger.d("KeyboardCustomization", "Listeners setup complete")
-
-            updatePreview()
-            Logger.d("KeyboardCustomization", "Preview updated")
-
-            updateCurrentRowDisplay()
-            Logger.d("KeyboardCustomization", "Current row display updated")
-
-            updateAvailableKeys()
-            Logger.d("KeyboardCustomization", "Available keys updated")
-
-            Logger.i("KeyboardCustomization", "Activity created successfully with ${keyboardLayout.size} rows")
-        } catch (e: Exception) {
-            Logger.e("KeyboardCustomization", "Failed to create activity", e)
-            throw e
-        }
+        setupToolbar()
+        initViews()
+        loadCurrentLayout()
+        setupListeners()
+        updatePreview()
+        updateAvailableKeys()
     }
 
     private fun setupToolbar() {
@@ -95,18 +85,6 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
     }
 
     private fun initViews() {
-        // Setup current row adapter
-        currentRowAdapter = KeyAdapter(
-            keys = mutableListOf(),
-            mode = KeyAdapterMode.REMOVE,
-            onClick = { key -> removeKeyFromCurrentRow(key) },
-            onStartDrag = { vh -> itemTouchHelper?.startDrag(vh) }
-        )
-        binding.recyclerCurrentRow.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
-        binding.recyclerCurrentRow.adapter = currentRowAdapter
-        setupDragToReorder()
-
-        // Setup available keys adapter
         availableKeysAdapter = KeyAdapter(
             keys = mutableListOf(),
             mode = KeyAdapterMode.ADD,
@@ -114,78 +92,19 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
         )
         binding.recyclerAvailableKeys.layoutManager = GridLayoutManager(this, 5)
         binding.recyclerAvailableKeys.adapter = availableKeysAdapter
-
-        // FAB save
         binding.fabSave.setOnClickListener { saveLayout() }
     }
 
-    /**
-     * Attaches an [ItemTouchHelper] to [binding.recyclerCurrentRow] that lets
-     * the user long-press and drag a key left or right to reorder it.
-     *
-     * [ItemTouchHelper.SimpleCallback] handles the drag gesture; [KeyAdapter.moveKey]
-     * swaps the items in the adapter list, and [updatePreview] syncs the static
-     * preview strip below the RecyclerView once the drag is released.
-     */
-    private fun setupDragToReorder() {
-        val callback = object : ItemTouchHelper.SimpleCallback(
-            ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT,   // drag directions
-            0                                                 // no swipe-to-dismiss
-        ) {
-            /**
-             * Disable the built-in long-press drag so that dragging is ONLY
-             * triggered by the explicit drag-handle touch, not by long-pressing
-             * anywhere on an item.  Without this, ItemTouchHelper's internal
-             * gesture detector races with the RecyclerView's horizontal-scroll
-             * detection and can swallow the handle's ACTION_DOWN before
-             * [startDrag] takes effect.
-             */
-            override fun isLongPressDragEnabled() = false
-
-            override fun onMove(
-                recyclerView: RecyclerView,
-                viewHolder: RecyclerView.ViewHolder,
-                target: RecyclerView.ViewHolder
-            ): Boolean {
-                val from = viewHolder.bindingAdapterPosition
-                val to = target.bindingAdapterPosition
-                if (from == RecyclerView.NO_POSITION || to == RecyclerView.NO_POSITION) return false
-                // Swap in the adapter and the backing data simultaneously so they
-                // stay in sync even if the user saves without completing a drag.
-                currentRowAdapter.moveKey(from, to)
-                if (selectedRowIndex < keyboardLayout.size) {
-                    Collections.swap(keyboardLayout[selectedRowIndex], from, to)
-                }
-                return true
-            }
-
-            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
-                // Swipe-to-dismiss is disabled; this callback is never reached.
-            }
-
-            /** Refresh the static preview once the user lifts their finger. */
-            override fun clearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
-                super.clearView(recyclerView, viewHolder)
-                updatePreview()
-            }
-        }
-        itemTouchHelper = ItemTouchHelper(callback)
-        itemTouchHelper!!.attachToRecyclerView(binding.recyclerCurrentRow)
-    }
-
     private fun loadCurrentLayout() {
-        // Load from preferences or use default
         val savedLayout = app.preferencesManager.getKeyboardLayout()
         if (savedLayout.isNotEmpty()) {
             keyboardLayout.clear()
             keyboardLayout.addAll(savedLayout.map { it.toMutableList() })
         } else {
-            // Use default layout
             keyboardLayout.clear()
             keyboardLayout.addAll(getDefaultLayout())
         }
 
-        // Set row count toggle
         val rowCount = keyboardLayout.size
         when (rowCount) {
             1 -> binding.toggleRowCount.check(R.id.btn_row_1)
@@ -195,20 +114,13 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
             5 -> binding.toggleRowCount.check(R.id.btn_row_5)
         }
 
-        // Setup row tabs
-        updateRowTabs()
-
         Logger.d("KeyboardCustomization", "Loaded layout: ${keyboardLayout.size} rows")
     }
 
-    private fun getDefaultLayout(): List<MutableList<KeyboardKey>> {
-        // Delegate to the canonical runtime default so the editor always shows
-        // the same layout as the live keyboard. Row count 3 matches the app default.
-        return MultiRowKeyboardView.getDefaultRowLayouts(3).map { it.toMutableList() }
-    }
+    private fun getDefaultLayout(): List<MutableList<KeyboardKey>> =
+        MultiRowKeyboardView.getDefaultRowLayouts(3).map { it.toMutableList() }
 
     private fun setupListeners() {
-        // Row count toggle
         binding.toggleRowCount.addOnButtonCheckedListener { _, checkedId, isChecked ->
             if (isChecked) {
                 val newRowCount = when (checkedId) {
@@ -223,17 +135,6 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
             }
         }
 
-        // Row tab selection
-        binding.tabLayoutRows.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
-            override fun onTabSelected(tab: TabLayout.Tab?) {
-                selectedRowIndex = tab?.position ?: 0
-                updateCurrentRowDisplay()
-            }
-            override fun onTabUnselected(tab: TabLayout.Tab?) {}
-            override fun onTabReselected(tab: TabLayout.Tab?) {}
-        })
-
-        // Category chips
         binding.chipGroupCategories.setOnCheckedStateChangeListener { _, checkedIds ->
             currentCategory = when {
                 checkedIds.contains(R.id.chip_all) -> "all"
@@ -248,163 +149,205 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
         }
     }
 
-    private fun adjustRowCount(newCount: Int) {
-        val currentCount = keyboardLayout.size
+    // ─── Preview (interactive row editor) ───────────────────────────────────
 
-        if (newCount > currentCount) {
-            // Add empty rows
-            repeat(newCount - currentCount) {
-                keyboardLayout.add(mutableListOf())
-            }
-        } else if (newCount < currentCount) {
-            // Remove excess rows
-            repeat(currentCount - newCount) {
-                keyboardLayout.removeLastOrNull()
-            }
-        }
-
-        // Ensure selected row is valid
-        if (selectedRowIndex >= newCount) {
-            selectedRowIndex = newCount - 1
-        }
-
-        updateRowTabs()
-        updatePreview()
-        updateCurrentRowDisplay()
-    }
-
-    private fun updateRowTabs() {
-        binding.tabLayoutRows.removeAllTabs()
-        keyboardLayout.forEachIndexed { index, _ ->
-            binding.tabLayoutRows.addTab(binding.tabLayoutRows.newTab().setText("Row ${index + 1}"))
-        }
-        if (binding.tabLayoutRows.tabCount > selectedRowIndex) {
-            binding.tabLayoutRows.getTabAt(selectedRowIndex)?.select()
-        }
-    }
-
+    /**
+     * Rebuilds the preview section. Each row becomes a horizontal RecyclerView
+     * with its own drag-to-reorder ItemTouchHelper. Rows are tappable to select.
+     */
     private fun updatePreview() {
         binding.layoutKeyboardPreview.removeAllViews()
+        rowAdapters.clear()
+        rowItemTouchHelpers.clear()
+        rowContainers.clear()
 
-        keyboardLayout.forEach { row ->
-            val rowView = HorizontalScrollView(this).apply {
+        val density = resources.displayMetrics.density
+        val vertMargin = (4 * density).toInt()
+        val innerPad = (6 * density).toInt()
+        val minRvHeight = (56 * density).toInt()
+
+        keyboardLayout.forEachIndexed { rowIndex, row ->
+            // ── outer container (tappable to select this row) ─────────────
+            val container = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { setMargins(0, 0, 0, vertMargin) }
+                setPadding(innerPad, innerPad, innerPad, innerPad)
+                setOnClickListener { selectRow(rowIndex) }
+            }
+
+            // ── "Row N" header label ───────────────────────────────────────
+            val header = TextView(this).apply {
+                text = "Row ${rowIndex + 1}"
+                textSize = 10f
+                setTextColor(Color.WHITE)
+                alpha = 0.55f
+                setPadding(0, 0, 0, (2 * density).toInt())
+            }
+
+            // ── per-row adapter ────────────────────────────────────────────
+            val rowAdapter = KeyAdapter(
+                keys = row.toMutableList(),
+                mode = KeyAdapterMode.REMOVE,
+                onClick = { key -> removeKeyFromRow(rowIndex, key) },
+                onStartDrag = { vh ->
+                    // rowItemTouchHelpers[rowIndex] exists by the time this fires
+                    rowItemTouchHelpers.getOrNull(rowIndex)?.startDrag(vh)
+                }
+            )
+
+            // ── RecyclerView for this row ──────────────────────────────────
+            val rowRv = RecyclerView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 )
+                minimumHeight = minRvHeight
+                layoutManager = LinearLayoutManager(
+                    this@KeyboardCustomizationActivity,
+                    LinearLayoutManager.HORIZONTAL,
+                    false
+                )
+                adapter = rowAdapter
             }
 
-            val rowLayout = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(4, 4, 4, 4)
+            // ── ItemTouchHelper (LEFT/RIGHT drag, no long-press) ──────────
+            val touchHelper = buildRowTouchHelper(rowIndex)
+            touchHelper.attachToRecyclerView(rowRv)
+
+            container.addView(header)
+            container.addView(rowRv)
+            binding.layoutKeyboardPreview.addView(container)
+
+            rowContainers.add(container)
+            rowAdapters.add(rowAdapter)
+            rowItemTouchHelpers.add(touchHelper)
+        }
+
+        // Restore selection highlight (clamp in case row count shrank)
+        selectRow(selectedRowIndex.coerceIn(0, (keyboardLayout.size - 1).coerceAtLeast(0)))
+    }
+
+    /**
+     * Builds an [ItemTouchHelper] for the row at [rowIndex].
+     * Long-press drag is disabled; drag is initiated only via the ≡ handle.
+     */
+    private fun buildRowTouchHelper(rowIndex: Int): ItemTouchHelper {
+        val callback = object : ItemTouchHelper.SimpleCallback(
+            ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT, 0
+        ) {
+            override fun isLongPressDragEnabled() = false
+
+            override fun onMove(
+                rv: RecyclerView,
+                from: RecyclerView.ViewHolder,
+                to: RecyclerView.ViewHolder
+            ): Boolean {
+                val fromPos = from.bindingAdapterPosition
+                val toPos = to.bindingAdapterPosition
+                if (fromPos == RecyclerView.NO_POSITION || toPos == RecyclerView.NO_POSITION) return false
+                rowAdapters.getOrNull(rowIndex)?.moveKey(fromPos, toPos)
+                if (rowIndex < keyboardLayout.size) {
+                    Collections.swap(keyboardLayout[rowIndex], fromPos, toPos)
+                }
+                return true
             }
 
-            row.forEach { key ->
-                val keyView = createKeyPreview(key)
-                rowLayout.addView(keyView)
-            }
+            override fun onSwiped(vh: RecyclerView.ViewHolder, direction: Int) {}
+        }
+        return ItemTouchHelper(callback)
+    }
 
-            rowView.addView(rowLayout)
-            binding.layoutKeyboardPreview.addView(rowView)
+    /**
+     * Highlights [index] as the active row and updates [selectedRowIndex].
+     */
+    private fun selectRow(index: Int) {
+        selectedRowIndex = index
+        val density = resources.displayMetrics.density
+        rowContainers.forEachIndexed { i, container ->
+            container.background = if (i == index) {
+                GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = 6f * density
+                    setColor(selectedFillColor)
+                    setStroke((2 * density).toInt(), selectedStrokeColor)
+                }
+            } else {
+                null
+            }
         }
     }
 
-    private fun createKeyPreview(key: KeyboardKey): View {
-        return TextView(this).apply {
-            text = key.label
-            textSize = 12f
-            setTextColor(getKeyTextColor(key))
-            setBackgroundResource(R.drawable.keyboard_key_background)
-            gravity = Gravity.CENTER
-            minWidth = (48 * resources.displayMetrics.density).toInt()
-            minHeight = (36 * resources.displayMetrics.density).toInt()
-            setPadding(8, 4, 8, 4)
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                setMargins(2, 2, 2, 2)
+    // ─── Row count ──────────────────────────────────────────────────────────
+
+    private fun adjustRowCount(newCount: Int) {
+        val currentCount = keyboardLayout.size
+        when {
+            newCount > currentCount -> repeat(newCount - currentCount) {
+                keyboardLayout.add(mutableListOf())
+            }
+            newCount < currentCount -> repeat(currentCount - newCount) {
+                keyboardLayout.removeLastOrNull()
             }
         }
+        if (selectedRowIndex >= newCount) selectedRowIndex = newCount - 1
+        updatePreview()
     }
 
-    private fun getKeyTextColor(key: KeyboardKey): Int {
-        return when (key.category) {
-            KeyboardKey.KeyCategory.MODIFIER -> Color.parseColor("#2196F3") // Blue
-            KeyboardKey.KeyCategory.ARROW -> Color.parseColor("#4CAF50") // Green
-            KeyboardKey.KeyCategory.FUNCTION -> Color.parseColor("#FF9800") // Orange
-            KeyboardKey.KeyCategory.SYMBOL -> Color.parseColor("#9C27B0") // Purple
-            KeyboardKey.KeyCategory.ACTION -> Color.parseColor("#E91E63") // Pink
-            else -> Color.WHITE
+    // ─── Key operations ─────────────────────────────────────────────────────
+
+    private fun addKeyToCurrentRow(key: KeyboardKey) {
+        if (selectedRowIndex >= keyboardLayout.size) return
+        if (keyboardLayout[selectedRowIndex].any { it.id == key.id }) {
+            Toast.makeText(this, "Key already in row ${selectedRowIndex + 1}", Toast.LENGTH_SHORT).show()
+            return
         }
+        keyboardLayout[selectedRowIndex].add(key)
+        rowAdapters.getOrNull(selectedRowIndex)?.updateKeys(keyboardLayout[selectedRowIndex])
+        Logger.d("KeyboardCustomization", "Added ${key.label} to row ${selectedRowIndex + 1}")
     }
 
-    private fun updateCurrentRowDisplay() {
-        if (selectedRowIndex < keyboardLayout.size) {
-            binding.textCurrentRowLabel.text = "Row ${selectedRowIndex + 1} Keys"
-            currentRowAdapter.updateKeys(keyboardLayout[selectedRowIndex])
-        }
+    private fun removeKeyFromRow(rowIndex: Int, key: KeyboardKey) {
+        if (rowIndex >= keyboardLayout.size) return
+        keyboardLayout[rowIndex].removeIf { it.id == key.id }
+        rowAdapters.getOrNull(rowIndex)?.updateKeys(keyboardLayout[rowIndex])
+        Logger.d("KeyboardCustomization", "Removed ${key.label} from row ${rowIndex + 1}")
     }
 
     private fun updateAvailableKeys() {
         val allKeys = KeyboardKey.getAllAvailableKeys()
-        val filteredKeys = when (currentCategory) {
-            "special" -> allKeys.filter { it.category == KeyboardKey.KeyCategory.SPECIAL }
+        val filtered = when (currentCategory) {
+            "special"    -> allKeys.filter { it.category == KeyboardKey.KeyCategory.SPECIAL }
             "navigation" -> allKeys.filter { it.id in listOf("HOME", "END", "PGUP", "PGDN", "UP", "DOWN", "LEFT", "RIGHT") }
-            "function" -> allKeys.filter { it.category == KeyboardKey.KeyCategory.FUNCTION }
-            "symbols" -> allKeys.filter { it.category == KeyboardKey.KeyCategory.SYMBOL }
-            "modifiers" -> allKeys.filter { it.category == KeyboardKey.KeyCategory.MODIFIER || it.category == KeyboardKey.KeyCategory.ACTION }
+            "function"   -> allKeys.filter { it.category == KeyboardKey.KeyCategory.FUNCTION }
+            "symbols"    -> allKeys.filter { it.category == KeyboardKey.KeyCategory.SYMBOL }
+            "modifiers"  -> allKeys.filter {
+                it.category == KeyboardKey.KeyCategory.MODIFIER ||
+                it.category == KeyboardKey.KeyCategory.ACTION
+            }
             else -> allKeys
         }
-        availableKeysAdapter.updateKeys(filteredKeys.toMutableList())
+        availableKeysAdapter.updateKeys(filtered.toMutableList())
     }
 
-    private fun addKeyToCurrentRow(key: KeyboardKey) {
-        if (selectedRowIndex < keyboardLayout.size) {
-            // Check if already in row
-            if (keyboardLayout[selectedRowIndex].any { it.id == key.id }) {
-                Toast.makeText(this, "Key already in this row", Toast.LENGTH_SHORT).show()
-                return
-            }
-
-            keyboardLayout[selectedRowIndex].add(key)
-            updateCurrentRowDisplay()
-            updatePreview()
-            Logger.d("KeyboardCustomization", "Added key ${key.label} to row ${selectedRowIndex + 1}")
-        }
-    }
-
-    private fun removeKeyFromCurrentRow(key: KeyboardKey) {
-        if (selectedRowIndex < keyboardLayout.size) {
-            keyboardLayout[selectedRowIndex].removeIf { it.id == key.id }
-            updateCurrentRowDisplay()
-            updatePreview()
-            Logger.d("KeyboardCustomization", "Removed key ${key.label} from row ${selectedRowIndex + 1}")
-        }
-    }
+    // ─── Save ────────────────────────────────────────────────────────────────
 
     private fun saveLayout() {
         try {
-            Logger.d("KeyboardCustomization", "Saving layout with ${keyboardLayout.size} rows")
-            keyboardLayout.forEachIndexed { i, row ->
-                Logger.d("KeyboardCustomization", "Row $i: ${row.size} keys - ${row.map { it.label }}")
-            }
-
             app.preferencesManager.setKeyboardLayout(keyboardLayout)
-            Logger.d("KeyboardCustomization", "Layout saved to preferences")
-
             app.preferencesManager.setKeyboardRowCount(keyboardLayout.size)
-            Logger.d("KeyboardCustomization", "Row count saved: ${keyboardLayout.size}")
-
             Toast.makeText(this, "Keyboard layout saved (${keyboardLayout.size} rows)", Toast.LENGTH_SHORT).show()
-            Logger.i("KeyboardCustomization", "Layout saved successfully")
+            Logger.i("KeyboardCustomization", "Saved layout: ${keyboardLayout.size} rows")
             finish()
         } catch (e: Exception) {
             Logger.e("KeyboardCustomization", "Failed to save layout", e)
             Toast.makeText(this, "Failed to save: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
+
+    // ─── Navigation ──────────────────────────────────────────────────────────
 
     override fun onSupportNavigateUp(): Boolean {
         finish()
@@ -413,22 +356,17 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
 
     override fun onOptionsItemSelected(item: android.view.MenuItem): Boolean {
         return when (item.itemId) {
-            android.R.id.home -> {
-                finish()
-                true
-            }
+            android.R.id.home -> { finish(); true }
             else -> super.onOptionsItemSelected(item)
         }
     }
 
-    /**
-     * Adapter for displaying keys
-     */
+    // ─── Key adapter ─────────────────────────────────────────────────────────
+
     private inner class KeyAdapter(
         private var keys: MutableList<KeyboardKey>,
         private val mode: KeyAdapterMode,
         private val onClick: (KeyboardKey) -> Unit,
-        /** Called when the user presses the drag handle; null = no drag support. */
         private val onStartDrag: ((RecyclerView.ViewHolder) -> Unit)? = null
     ) : RecyclerView.Adapter<KeyAdapter.KeyViewHolder>() {
 
@@ -437,7 +375,6 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
             notifyDataSetChanged()
         }
 
-        /** Swap the keys at [from] and [to] and notify the RecyclerView. */
         fun moveKey(from: Int, to: Int) {
             Collections.swap(keys, from, to)
             notifyItemMoved(from, to)
@@ -448,8 +385,7 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
             val minH = (44 * density).toInt()
 
             return if (mode == KeyAdapterMode.REMOVE) {
-                // Row editor: key chip with a drag-handle on the left so the user
-                // can grab and reorder without a long-press.
+                // Preview rows: drag handle + key label
                 val container = LinearLayout(parent.context).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
@@ -465,7 +401,7 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
                     val p = (6 * density).toInt()
                     setPadding(p, p, p / 2, p)
                     contentDescription = "Drag to reorder"
-                    alpha = 0.5f
+                    alpha = 0.55f
                 }
                 val label = TextView(parent.context).apply {
                     textSize = 14f
@@ -478,7 +414,7 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
                 container.addView(label)
                 KeyViewHolder(container, label, handle)
             } else {
-                // Available-keys grid: plain chip, no drag handle.
+                // Available keys grid: plain chip, no handle
                 val view = TextView(parent.context).apply {
                     textSize = 14f
                     gravity = Gravity.CENTER
@@ -511,12 +447,12 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
             fun bind(key: KeyboardKey) {
                 label.text = key.label
                 label.setTextColor(getKeyTextColor(key))
-                // Tap the label (or anywhere except the handle) → remove / add
                 itemView.setOnClickListener { onClick(key) }
-                // Touch the handle → start drag immediately (no long-press needed).
-                // Return true on ACTION_DOWN to consume the event so the horizontal
-                // RecyclerView's scroll detector does not steal the touch stream
-                // before ItemTouchHelper.startDrag() can take ownership.
+
+                // Touch the ≡ handle to start drag immediately — no long press.
+                // Returning true on ACTION_DOWN consumes the event so the
+                // horizontal RecyclerView scroll detector cannot steal the touch
+                // stream before ItemTouchHelper.startDrag() takes ownership.
                 dragHandle?.setOnTouchListener { _, event ->
                     if (event.actionMasked == MotionEvent.ACTION_DOWN) {
                         onStartDrag?.invoke(this)
@@ -530,4 +466,13 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
     }
 
     private enum class KeyAdapterMode { ADD, REMOVE }
+
+    private fun getKeyTextColor(key: KeyboardKey): Int = when (key.category) {
+        KeyboardKey.KeyCategory.MODIFIER -> Color.parseColor("#2196F3")
+        KeyboardKey.KeyCategory.ARROW    -> Color.parseColor("#4CAF50")
+        KeyboardKey.KeyCategory.FUNCTION -> Color.parseColor("#FF9800")
+        KeyboardKey.KeyCategory.SYMBOL   -> Color.parseColor("#9C27B0")
+        KeyboardKey.KeyCategory.ACTION   -> Color.parseColor("#E91E63")
+        else -> Color.WHITE
+    }
 }
