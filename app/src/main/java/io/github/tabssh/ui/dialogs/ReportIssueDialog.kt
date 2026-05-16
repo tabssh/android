@@ -231,16 +231,13 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
         }
 
         fun preparedContent(): String {
-            val raw = if (logType == "debug" && logContent.isNotEmpty()) {
-                Logger.sanitize(logContent)
-            } else {
-                logContent
-            }
-            val bytes = raw.toByteArray(Charsets.UTF_8)
+            // Both debug and app logs are sanitized at write time in Logger —
+            // no post-hoc full-blob regex pass needed here.
+            val bytes = logContent.toByteArray(Charsets.UTF_8)
             return if (bytes.size > MAX_CONTENT_BYTES) {
                 String(bytes, 0, MAX_CONTENT_BYTES, Charsets.UTF_8)
             } else {
-                raw
+                logContent
             }
         }
 
@@ -251,8 +248,6 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
             lifecycleScope.launch {
                 try {
                     val title = titleEdit.text.toString().trim().ifBlank { "Log" }
-                    // preparedContent() calls Logger.sanitize() which runs heavy regex
-                    // over the full log string — must not run on Main (ANR risk).
                     val url = withContext(Dispatchers.IO) {
                         val content = preparedContent()
                         PasteProviderFactory

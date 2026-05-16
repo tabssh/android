@@ -445,7 +445,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
      * Open Issue button as the primary action.
      *
      * @param logType  "debug" or "app" — passed to [io.github.tabssh.ui.dialogs.ReportIssueDialog]
-     *                 so it knows whether to run [Logger.sanitize] before uploading.
+     *                 to label the paste correctly (both log types are pre-sanitized at write time).
      */
     private fun offerLogShareOrCopy(
         title: String,

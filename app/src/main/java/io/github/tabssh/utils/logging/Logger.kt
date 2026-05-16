@@ -162,14 +162,19 @@ object Logger {
                     }
                 }
 
+                // Sanitize before writing — debug log is pre-sanitized at write
+                // time so the full blob never needs expensive post-hoc regex.
+                val sanitizedMessage = sanitizeForPublic(message)
+                val sanitizedStack = throwable?.let { sanitizeForPublic(Log.getStackTraceString(it)) }
+
                 // Append to log file
                 FileWriter(file, true).use { writer ->
                     val timestamp = dateFormat.format(Date())
                     val logLine = buildString {
-                        append("$timestamp $level/$TAG_PREFIX:$tag: $message")
-                        if (throwable != null) {
+                        append("$timestamp $level/$TAG_PREFIX:$tag: $sanitizedMessage")
+                        if (sanitizedStack != null) {
                             append("\n")
-                            append(Log.getStackTraceString(throwable))
+                            append(sanitizedStack)
                         }
                         append("\n")
                     }
@@ -260,9 +265,6 @@ object Logger {
         currentFile.renameTo(File(parent, "$baseName.1"))
     }
 
-    /** Public entry-point for masking sensitive data before uploading a log. */
-    fun sanitize(text: String): String = sanitizeForPublic(text)
-
     /**
      * Sanitize message for public sharing
      * Removes/redacts: hostnames, usernames, IPs, passwords, keys
@@ -328,13 +330,17 @@ object Logger {
         val timestamp = dateFormat.format(Date())
         val stackTrace = Log.getStackTraceString(throwable)
 
-        // Write to debug log if enabled
+        // Write to debug log if enabled — sanitize here too so the debug log
+        // is pre-sanitized at write time and never needs post-hoc scrubbing.
         logFile?.let { file ->
             try {
                 // Rotate if needed (Issue #36 — N-file rotation).
                 if (file.exists() && file.length() > MAX_LOG_SIZE) {
                     rotateLogFiles(file, LOG_FILE_NAME)
                 }
+
+                val sanitizedCrashStack = sanitizeForPublic(stackTrace)
+                val sanitizedCrashMsg   = sanitizeForPublic(throwable.message ?: "")
 
                 // Write crash synchronously
                 FileWriter(file, true).use { writer ->
@@ -343,9 +349,9 @@ object Logger {
                     writer.append("$timestamp WTF/$TAG_PREFIX:CRASH: UNCAUGHT EXCEPTION - APP CRASHED\n")
                     writer.append("$timestamp WTF/$TAG_PREFIX:CRASH: Thread: ${thread.name} (id=${thread.id})\n")
                     writer.append("$timestamp WTF/$TAG_PREFIX:CRASH: Exception: ${throwable.javaClass.name}\n")
-                    writer.append("$timestamp WTF/$TAG_PREFIX:CRASH: Message: ${throwable.message}\n")
+                    writer.append("$timestamp WTF/$TAG_PREFIX:CRASH: Message: $sanitizedCrashMsg\n")
                     writer.append("$timestamp WTF/$TAG_PREFIX:CRASH: ════════════════════════════════════════\n")
-                    writer.append(stackTrace)
+                    writer.append(sanitizedCrashStack)
                     writer.append("\n$timestamp WTF/$TAG_PREFIX:CRASH: ════════════════════════════════════════\n\n")
                     writer.flush()
                 }
