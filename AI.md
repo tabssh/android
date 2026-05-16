@@ -1078,6 +1078,29 @@ The Docker run wrapper bind-mounts the repo to `/workspace`, sets `ANDROID_HOME=
 
 Keystore is decoded from the `KEYSTORE_BASE64` secret. Gradle cache key is `${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}`.
 
+**`android-ci.yml` security validation — grep exclusion list (do not remove these):**
+
+The security step greps `password.*=.*"[^"]{6,}"` across `app/src/main/java/` and pipes through a chain of exclusions to suppress false positives. The following exclusions are intentional and must be preserved:
+
+| Exclusion | Reason |
+|---|---|
+| `grep -v "// "` | Commented-out code |
+| `grep -v "test-password"` | Test fixture constants |
+| `grep -v "getString"` | Reading a stored preference, not a literal |
+| `grep -v "text.toString()"` | EditText value read, not a literal |
+| `grep -v "fun set.*Password"` | Setter function signatures |
+| `grep -v "= setString"` | SharedPreferences write helpers |
+| `grep -v '\.summary = "'` | Preference summary display strings |
+| `grep -v 'Password set'` | UI success message strings |
+| `grep -v 'passwordIcon'` | Icon variable names |
+| `grep -v 'hasPassword'` | Boolean flag names |
+| `grep -v '\.hint = "'` | EditText hint strings |
+| `grep -v "Logger.kt"` | Sanitization regex in the logger |
+| `grep -v "Regex("` | Regex pattern definitions |
+| `grep -v "JsonObject\|JsonArray\|jsonObject\|jsonArray\|Map<String"` | `BackupImporter.kt`: `val passwords: Map<String, String> = (root["passwords"] as? JsonObject)` — JSON key name, not a credential |
+
+If a new file triggers a false positive, add a targeted `grep -v` to the chain and document it here with the reason.
+
 ### 14.4 Scripts
 
 `scripts/`:

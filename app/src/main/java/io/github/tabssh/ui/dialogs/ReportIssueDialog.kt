@@ -298,6 +298,7 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
             upload { url ->
                 val deviceInfo = buildString {
                     appendLine("- App: TabSSH ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                    appendLine("- Commit: ${BuildConfig.GIT_COMMIT_ID}")
                     appendLine("- Android: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
                     appendLine("- Device: ${Build.MANUFACTURER} ${Build.MODEL}")
                     append("- Log type: $logType")
