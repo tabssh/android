@@ -6,37 +6,48 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
+import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.room.withTransaction
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.crypto.storage.HypervisorPasswordStore
+import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.ssh.auth.AuthType
+import io.github.tabssh.storage.database.entities.HypervisorAccount
 import io.github.tabssh.storage.database.entities.Identity
+import io.github.tabssh.storage.database.entities.StoredKey
 import io.github.tabssh.ui.activities.KeyManagementActivity
+import io.github.tabssh.ui.adapters.HypervisorAccountAdapter
 import io.github.tabssh.ui.adapters.IdentityAdapter
+import io.github.tabssh.ui.adapters.StoredKeyAdapter
 import io.github.tabssh.utils.logging.Logger
-import androidx.room.withTransaction
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Fragment for managing users (identities) and SSH keys
- * 
- * Identities are reusable credential sets (username + auth method) that can be
- * shared across multiple connections, similar to JuiceSSH's "Identities" feature.
+ * Unified credentials screen — three sections on one scrollable page:
+ *
+ *   1. Host Identities      — SSH auth credential sets (username + auth method)
+ *   2. Virtualization Identities — Hypervisor REST credentials (Proxmox/VMware/XCP-ng/OCI)
+ *   3. SSH Keys             — Raw private keys used by host identities
  */
 class IdentitiesFragment : Fragment() {
-    
+
     private lateinit var app: TabSSHApplication
+
     private lateinit var identityAdapter: IdentityAdapter
-    
+    private lateinit var virtAdapter: HypervisorAccountAdapter
+    private lateinit var keyAdapter: StoredKeyAdapter
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -47,208 +58,156 @@ class IdentitiesFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        
         app = requireActivity().application as TabSSHApplication
-        
-        setupIdentitiesSection(view)
-        loadData()
+
+        setupHostIdentitiesSection(view)
+        setupVirtIdentitiesSection(view)
+        setupSshKeysSection(view)
+        observeData()
     }
-    
-    private fun setupIdentitiesSection(view: View) {
-        // Setup identities RecyclerView
+
+    // ─── Host Identities ────────────────────────────────────────────────────
+
+    private fun setupHostIdentitiesSection(view: View) {
         identityAdapter = IdentityAdapter(
             onEdit = { identity -> showIdentityOptionsMenu(identity) },
-            onDelete = { identity -> showDeleteConfirmation(identity) }
+            onDelete = { identity -> confirmDeleteIdentity(identity) }
         )
-        
-        val recyclerView = view.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.recycler_users)
-        recyclerView.layoutManager = LinearLayoutManager(requireContext())
-        recyclerView.adapter = identityAdapter
-        
-        // Show/hide empty state — must cover all DiffUtil callback variants.
-        // onItemRangeChanged fires when existing items update in-place; without
-        // it, going empty→empty after submitList(emptyList()) never fires any
-        // callback and the empty state stays hidden (blank screen).
-        identityAdapter.registerAdapterDataObserver(object : androidx.recyclerview.widget.RecyclerView.AdapterDataObserver() {
-            override fun onChanged() { updateEmptyState(view) }
-            override fun onItemRangeInserted(positionStart: Int, itemCount: Int) { updateEmptyState(view) }
-            override fun onItemRangeRemoved(positionStart: Int, itemCount: Int) { updateEmptyState(view) }
-            override fun onItemRangeChanged(positionStart: Int, itemCount: Int) { updateEmptyState(view) }
-            override fun onItemRangeChanged(positionStart: Int, itemCount: Int, payload: Any?) { updateEmptyState(view) }
-        })
+        val rv = view.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.recycler_identities)
+        rv.layoutManager = LinearLayoutManager(requireContext())
+        rv.adapter = identityAdapter
 
-        // Set correct initial empty-state visibility before the first Flow
-        // emission arrives. If the table is empty, submitList(emptyList())
-        // on a brand-new adapter fires no callbacks, leaving the RecyclerView
-        // visible and the empty-state hidden (blank screen).
-        updateEmptyState(view)
-        
-        // FAB shows menu with options (Create / Import / Generate). The
-        // empty-state used to also have a centred "Create Identity" tonal
-        // button but that duplicated the FAB; removed in Polish #46.
-        view.findViewById<com.google.android.material.floatingactionbutton.FloatingActionButton>(R.id.fab_add_identity).setOnClickListener {
-            showAddOptionsMenu()
+        identityAdapter.registerAdapterDataObserver(object : androidx.recyclerview.widget.RecyclerView.AdapterDataObserver() {
+            override fun onChanged() { updateIdentitiesEmptyState(view) }
+            override fun onItemRangeInserted(positionStart: Int, itemCount: Int) { updateIdentitiesEmptyState(view) }
+            override fun onItemRangeRemoved(positionStart: Int, itemCount: Int) { updateIdentitiesEmptyState(view) }
+            override fun onItemRangeChanged(positionStart: Int, itemCount: Int) { updateIdentitiesEmptyState(view) }
+            override fun onItemRangeChanged(positionStart: Int, itemCount: Int, payload: Any?) { updateIdentitiesEmptyState(view) }
+        })
+        updateIdentitiesEmptyState(view)
+
+        view.findViewById<MaterialButton>(R.id.btn_add_identity).setOnClickListener {
+            showCreateIdentityDialog()
         }
     }
-    
-    private fun updateEmptyState(view: View) {
-        val isEmpty = identityAdapter.itemCount == 0
-        view.findViewById<View>(R.id.layout_empty_state).visibility = if (isEmpty) View.VISIBLE else View.GONE
-        view.findViewById<View>(R.id.recycler_users).visibility = if (isEmpty) View.GONE else View.VISIBLE
+
+    private fun updateIdentitiesEmptyState(view: View) {
+        val empty = identityAdapter.itemCount == 0
+        view.findViewById<View>(R.id.recycler_identities).visibility = if (empty) View.GONE else View.VISIBLE
+        view.findViewById<View>(R.id.text_identities_empty).visibility = if (empty) View.VISIBLE else View.GONE
     }
-    
-    private fun showAddOptionsMenu() {
-        val options = arrayOf(
-            "➕ Add Identity",
-            "📥 Import SSH Key",
-            "🔐 Generate SSH Key"
+
+    // ─── Virtualization Identities ──────────────────────────────────────────
+
+    private fun setupVirtIdentitiesSection(view: View) {
+        virtAdapter = HypervisorAccountAdapter(
+            onEdit = { account -> showVirtAccountDialog(account) },
+            onDelete = { account -> confirmDeleteVirtAccount(account) }
         )
-        
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Create New")
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> showCreateDialog()
-                    1 -> navigateToKeyManagement(importMode = true)
-                    2 -> navigateToKeyManagement(generateMode = true)
-                }
-            }
-            .show()
-    }
-    
-    private fun navigateToKeyManagement(importMode: Boolean = false, generateMode: Boolean = false) {
-        val intent = Intent(requireContext(), KeyManagementActivity::class.java)
-        if (importMode) {
-            intent.putExtra("action", "import")
-        } else if (generateMode) {
-            intent.putExtra("action", "generate")
+        val rv = view.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.recycler_virt_identities)
+        rv.layoutManager = LinearLayoutManager(requireContext())
+        rv.adapter = virtAdapter
+
+        view.findViewById<MaterialButton>(R.id.btn_add_virt_identity).setOnClickListener {
+            showVirtAccountDialog(null)
         }
-        startActivity(intent)
     }
-    
-    private fun loadData() {
-        // Issue #158 — defer Flow subscription until STARTED so the synchronous
-        // setup doesn't pile onto the first layout pass on cold start.
+
+    private fun updateVirtEmptyState(view: View, count: Int) {
+        val empty = count == 0
+        view.findViewById<View>(R.id.recycler_virt_identities).visibility = if (empty) View.GONE else View.VISIBLE
+        view.findViewById<View>(R.id.text_virt_identities_empty).visibility = if (empty) View.VISIBLE else View.GONE
+    }
+
+    // ─── SSH Keys ────────────────────────────────────────────────────────────
+
+    private fun setupSshKeysSection(view: View) {
+        keyAdapter = StoredKeyAdapter { key -> showSshKeyOptionsMenu(key) }
+        val rv = view.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.recycler_ssh_keys)
+        rv.layoutManager = LinearLayoutManager(requireContext())
+        rv.adapter = keyAdapter
+
+        keyAdapter.registerAdapterDataObserver(object : androidx.recyclerview.widget.RecyclerView.AdapterDataObserver() {
+            override fun onChanged() { updateKeysEmptyState(view) }
+            override fun onItemRangeInserted(positionStart: Int, itemCount: Int) { updateKeysEmptyState(view) }
+            override fun onItemRangeRemoved(positionStart: Int, itemCount: Int) { updateKeysEmptyState(view) }
+            override fun onItemRangeChanged(positionStart: Int, itemCount: Int) { updateKeysEmptyState(view) }
+            override fun onItemRangeChanged(positionStart: Int, itemCount: Int, payload: Any?) { updateKeysEmptyState(view) }
+        })
+        updateKeysEmptyState(view)
+
+        view.findViewById<MaterialButton>(R.id.btn_add_ssh_key).setOnClickListener {
+            showSshKeyAddMenu()
+        }
+    }
+
+    private fun updateKeysEmptyState(view: View) {
+        val empty = keyAdapter.itemCount == 0
+        view.findViewById<View>(R.id.recycler_ssh_keys).visibility = if (empty) View.GONE else View.VISIBLE
+        view.findViewById<View>(R.id.text_ssh_keys_empty).visibility = if (empty) View.VISIBLE else View.GONE
+    }
+
+    // ─── Data observation ────────────────────────────────────────────────────
+
+    private fun observeData() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                app.database.identityDao().getAllIdentities().collect { identities ->
-                    identityAdapter.submitList(identities)
-                    Logger.d("IdentitiesFragment", "Loaded ${identities.size} identities")
+                launch {
+                    app.database.identityDao().getAllIdentities().collect { list ->
+                        identityAdapter.submitList(list)
+                        Logger.d(TAG, "Loaded ${list.size} host identities")
+                    }
+                }
+                launch {
+                    app.database.hypervisorAccountDao().getAllAccounts().collect { list ->
+                        virtAdapter.submit(list)
+                        view?.let { updateVirtEmptyState(it, list.size) }
+                        Logger.d(TAG, "Loaded ${list.size} virtualization identities")
+                    }
+                }
+                launch {
+                    app.database.keyDao().getAllKeys().collect { list ->
+                        keyAdapter.submitList(list)
+                        Logger.d(TAG, "Loaded ${list.size} SSH keys")
+                    }
                 }
             }
-        }
-
-        lifecycleScope.launch {
-            val keysCount = app.database.keyDao().getKeyCount()
-            Logger.d("IdentitiesFragment", "Found $keysCount SSH keys")
         }
     }
-    
-    private fun showCreateDialog() {
-        val dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_edit_identity, null)
-        
-        val nameInput = dialogView.findViewById<TextInputEditText>(R.id.edit_name)
-        val usernameInput = dialogView.findViewById<TextInputEditText>(R.id.edit_username)
-        val descriptionInput = dialogView.findViewById<TextInputEditText>(R.id.edit_description)
-        val authTypeSpinner = dialogView.findViewById<android.widget.AutoCompleteTextView>(R.id.spinner_auth_type)
-        val passwordLayout = dialogView.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.layout_password)
-        val passwordInput = dialogView.findViewById<TextInputEditText>(R.id.edit_password)
-        val sshKeyLayout = dialogView.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.layout_ssh_key)
-        val sshKeySpinner = dialogView.findViewById<android.widget.AutoCompleteTextView>(R.id.spinner_ssh_key)
-        
-        // Setup auth type spinner
-        val authTypes = listOf("Password", "SSH Key", "Keyboard Interactive")
-        val authAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, authTypes)
-        authTypeSpinner.setAdapter(authAdapter)
-        authTypeSpinner.setText(authTypes[0], false)
-        
-        // Load SSH keys for selector
-        var allKeysList = listOf<io.github.tabssh.storage.database.entities.StoredKey>()
-        lifecycleScope.launch(Dispatchers.IO) {
-            val keysCount = app.database.keyDao().getKeyCount()
-            allKeysList = if (keysCount > 0) {
-                app.database.keyDao().getRecentlyUsedKeys(100)
-            } else {
-                emptyList()
-            }
 
-            val keyNames = listOf("No Key") + allKeysList.map { "${it.name} (${it.keyType})" }
-            val keyAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, keyNames)
-            withContext(Dispatchers.Main) {
-                sshKeySpinner.setAdapter(keyAdapter)
-                sshKeySpinner.setText(keyNames[0], false)
-            }
-        }
+    // ─── Host Identity dialogs ───────────────────────────────────────────────
 
-        // Show/hide fields based on auth type
-        authTypeSpinner.setOnItemClickListener { _, _, position, _ ->
-            when (position) {
-                0 -> { // Password
-                    passwordLayout.visibility = View.VISIBLE
-                    sshKeyLayout.visibility = View.GONE
-                }
-                1 -> { // SSH Key
-                    passwordLayout.visibility = View.GONE
-                    sshKeyLayout.visibility = View.VISIBLE
-                }
-                2 -> { // Keyboard Interactive
-                    passwordLayout.visibility = View.GONE
-                    sshKeyLayout.visibility = View.GONE
-                }
-            }
-        }
-
-        // Default: show password field
-        passwordLayout.visibility = View.VISIBLE
-        sshKeyLayout.visibility = View.GONE
-
+    private fun showIdentityOptionsMenu(identity: Identity) {
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Create Identity")
-            .setView(dialogView)
-            .setPositiveButton("Create") { _, _ ->
-                val name = nameInput.text.toString()
-                val username = usernameInput.text.toString()
-                val description = descriptionInput.text.toString()
-                val password = passwordInput.text.toString()
-                val authTypePosition = authTypes.indexOf(authTypeSpinner.text.toString())
-                val authType = when (authTypePosition) {
-                    0 -> AuthType.PASSWORD
-                    1 -> AuthType.PUBLIC_KEY
-                    2 -> AuthType.KEYBOARD_INTERACTIVE
-                    else -> AuthType.PASSWORD
-                }
-
-                if (name.isNotBlank() && username.isNotBlank()) {
-                    // Get selected SSH key ID
-                    val selectedKeyId: String? = if (authType == AuthType.PUBLIC_KEY) {
-                        val selectedText = sshKeySpinner.text.toString()
-                        if (selectedText == "No Key") {
-                            null
-                        } else {
-                            // Find the key by matching display text
-                            allKeysList.find { "${it.name} (${it.keyType})" == selectedText }?.keyId
-                        }
-                    } else null
-
-                    createIdentity(
-                        name = name,
-                        username = username,
-                        authType = authType,
-                        password = if (authType == AuthType.PASSWORD) password.ifBlank { null } else null,
-                        keyId = selectedKeyId,
-                        description = description.ifBlank { null }
-                    )
-                } else {
-                    android.widget.Toast.makeText(requireContext(), "Name and username are required", android.widget.Toast.LENGTH_SHORT).show()
+            .setTitle(identity.getDisplayName())
+            .setItems(arrayOf(
+                "✏️ Edit",
+                "📋 Apply to Connections",
+                "🔗 View Linked Connections",
+                "🗑️ Delete"
+            )) { _, which ->
+                when (which) {
+                    0 -> showEditIdentityDialog(identity)
+                    1 -> showApplyToConnectionsDialog(identity)
+                    2 -> showLinkedConnections(identity)
+                    3 -> confirmDeleteIdentity(identity)
                 }
             }
-            .setNegativeButton("Cancel", null)
             .show()
     }
-    
-    private fun showEditDialog(identity: Identity) {
-        val dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_edit_identity, null)
-        
+
+    private fun showCreateIdentityDialog() {
+        showIdentityDialog(existing = null)
+    }
+
+    private fun showEditIdentityDialog(identity: Identity) {
+        showIdentityDialog(existing = identity)
+    }
+
+    private fun showIdentityDialog(existing: Identity?) {
+        val dialogView = LayoutInflater.from(requireContext())
+            .inflate(R.layout.dialog_edit_identity, null)
+
         val nameInput = dialogView.findViewById<TextInputEditText>(R.id.edit_name)
         val usernameInput = dialogView.findViewById<TextInputEditText>(R.id.edit_username)
         val descriptionInput = dialogView.findViewById<TextInputEditText>(R.id.edit_description)
@@ -257,128 +216,91 @@ class IdentitiesFragment : Fragment() {
         val passwordInput = dialogView.findViewById<TextInputEditText>(R.id.edit_password)
         val sshKeyLayout = dialogView.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.layout_ssh_key)
         val sshKeySpinner = dialogView.findViewById<android.widget.AutoCompleteTextView>(R.id.spinner_ssh_key)
-        
-        // Pre-fill values
-        nameInput.setText(identity.name)
-        usernameInput.setText(identity.username)
-        descriptionInput.setText(identity.description ?: "")
-        
-        // Setup auth type spinner
-        val authTypes = listOf("Password", "SSH Key", "Keyboard Interactive")
-        val authAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, authTypes)
-        authTypeSpinner.setAdapter(authAdapter)
-        val authTypeIndex = when (identity.authType) {
-            AuthType.PASSWORD -> 0
-            AuthType.PUBLIC_KEY -> 1
-            AuthType.KEYBOARD_INTERACTIVE -> 2
-            AuthType.GSSAPI -> 1
-            AuthType.FIDO2_SECURITY_KEY -> 1
+
+        existing?.let { id ->
+            nameInput.setText(id.name)
+            usernameInput.setText(id.username)
+            descriptionInput.setText(id.description ?: "")
         }
-        authTypeSpinner.setText(authTypes[authTypeIndex], false)
-        
-        // Load SSH keys and select current one if set
-        var allKeysList = listOf<io.github.tabssh.storage.database.entities.StoredKey>()
+
+        val authTypes = listOf("Password", "SSH Key", "Keyboard Interactive")
+        authTypeSpinner.setAdapter(
+            ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, authTypes)
+        )
+
+        val initAuthIndex = when (existing?.authType) {
+            AuthType.PASSWORD -> 0
+            AuthType.PUBLIC_KEY, AuthType.GSSAPI, AuthType.FIDO2_SECURITY_KEY -> 1
+            AuthType.KEYBOARD_INTERACTIVE -> 2
+            null -> 0
+        }
+        authTypeSpinner.setText(authTypes[initAuthIndex], false)
+
+        var allKeysList = listOf<StoredKey>()
         lifecycleScope.launch(Dispatchers.IO) {
-            val keysCount = app.database.keyDao().getKeyCount()
-            allKeysList = if (keysCount > 0) {
-                app.database.keyDao().getRecentlyUsedKeys(100)
-            } else {
-                emptyList()
-            }
-
+            allKeysList = app.database.keyDao().getAllKeysList()
             val keyNames = listOf("No Key") + allKeysList.map { "${it.name} (${it.keyType})" }
-            val keyAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, keyNames)
-
-            // Find the currently selected key
-            val currentKeyIndex = if (identity.keyId != null) {
-                val keyIndex = allKeysList.indexOfFirst { it.keyId == identity.keyId }
-                if (keyIndex >= 0) keyIndex + 1 else 0  // +1 because "No Key" is at index 0
-            } else {
-                0
-            }
+            val currentKeyIndex = existing?.keyId?.let { kid ->
+                val idx = allKeysList.indexOfFirst { it.keyId == kid }
+                if (idx >= 0) idx + 1 else 0
+            } ?: 0
 
             withContext(Dispatchers.Main) {
-                sshKeySpinner.setAdapter(keyAdapter)
+                sshKeySpinner.setAdapter(
+                    ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, keyNames)
+                )
                 sshKeySpinner.setText(keyNames[currentKeyIndex], false)
             }
         }
 
-        // Show/hide fields based on auth type
-        authTypeSpinner.setOnItemClickListener { _, _, position, _ ->
-            when (position) {
-                0 -> { // Password
-                    passwordLayout.visibility = View.VISIBLE
-                    sshKeyLayout.visibility = View.GONE
-                }
-                1 -> { // SSH Key
-                    passwordLayout.visibility = View.GONE
-                    sshKeyLayout.visibility = View.VISIBLE
-                }
-                2 -> { // Keyboard Interactive
-                    passwordLayout.visibility = View.GONE
-                    sshKeyLayout.visibility = View.GONE
-                }
-            }
+        fun applyAuthVisibility(position: Int) {
+            passwordLayout.visibility = if (position == 0) View.VISIBLE else View.GONE
+            sshKeyLayout.visibility = if (position == 1) View.VISIBLE else View.GONE
         }
+        applyAuthVisibility(initAuthIndex)
+        authTypeSpinner.setOnItemClickListener { _, _, pos, _ -> applyAuthVisibility(pos) }
 
-        // Set initial visibility based on current auth type
-        when (authTypeIndex) {
-            0 -> {
-                passwordLayout.visibility = View.VISIBLE
-                sshKeyLayout.visibility = View.GONE
-            }
-            1 -> {
-                passwordLayout.visibility = View.GONE
-                sshKeyLayout.visibility = View.VISIBLE
-            }
-            2 -> {
-                passwordLayout.visibility = View.GONE
-                sshKeyLayout.visibility = View.GONE
-            }
-        }
-
-        // Show password indicator if password is set (don't reveal actual password)
-        if (identity.password != null && identity.password!!.isNotEmpty()) {
-            passwordInput.setText("••••••••")  // Show dots to indicate password is set
-            passwordInput.hint = "Password is set (leave unchanged or enter new)"
+        if (existing != null && !existing.password.isNullOrEmpty()) {
+            passwordInput.setText("••••••••")
+            passwordInput.hint = "Password set — leave to keep, or type to replace"
         }
 
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Edit Identity")
+            .setTitle(if (existing == null) "Create Identity" else "Edit Identity")
             .setView(dialogView)
-            .setPositiveButton("Save") { _, _ ->
-                val name = nameInput.text.toString()
-                val username = usernameInput.text.toString()
-                val description = descriptionInput.text.toString()
+            .setPositiveButton(if (existing == null) "Create" else "Save") { _, _ ->
+                val name = nameInput.text.toString().trim()
+                val username = usernameInput.text.toString().trim()
+                val description = descriptionInput.text.toString().trim()
                 val passwordText = passwordInput.text.toString()
-                val authTypePosition = authTypes.indexOf(authTypeSpinner.text.toString())
-                val authType = when (authTypePosition) {
-                    0 -> AuthType.PASSWORD
+                val authTypePos = authTypes.indexOf(authTypeSpinner.text.toString())
+                val authType = when (authTypePos) {
                     1 -> AuthType.PUBLIC_KEY
                     2 -> AuthType.KEYBOARD_INTERACTIVE
                     else -> AuthType.PASSWORD
                 }
+                val selectedKeyId: String? = if (authType == AuthType.PUBLIC_KEY) {
+                    val sel = sshKeySpinner.text.toString()
+                    if (sel == "No Key") null
+                    else allKeysList.find { "${it.name} (${it.keyType})" == sel }?.keyId
+                } else null
 
-                if (name.isNotBlank() && username.isNotBlank()) {
-                    // Get selected SSH key ID
-                    val selectedKeyId: String? = if (authType == AuthType.PUBLIC_KEY) {
-                        val selectedText = sshKeySpinner.text.toString()
-                        if (selectedText == "No Key") {
-                            null
-                        } else {
-                            allKeysList.find { "${it.name} (${it.keyType})" == selectedText }?.keyId
-                        }
-                    } else null
+                if (name.isBlank() || username.isBlank()) {
+                    Toast.makeText(requireContext(), "Name and username are required", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
 
-                    // Handle password: keep existing if dots shown and unchanged
+                if (existing == null) {
+                    val password = if (authType == AuthType.PASSWORD) passwordText.ifBlank { null } else null
+                    createIdentity(name, username, authType, password, selectedKeyId, description.ifBlank { null })
+                } else {
                     val newPassword = when {
                         authType != AuthType.PASSWORD -> null
-                        passwordText == "••••••••" -> identity.password  // Keep existing
+                        passwordText == "••••••••" -> existing.password
                         passwordText.isBlank() -> null
-                        else -> passwordText  // Use new password
+                        else -> passwordText
                     }
-
-                    updateIdentity(identity.copy(
+                    updateIdentity(existing.copy(
                         name = name,
                         username = username,
                         authType = authType,
@@ -387,84 +309,41 @@ class IdentitiesFragment : Fragment() {
                         description = description.ifBlank { null },
                         modifiedAt = System.currentTimeMillis()
                     ))
-                } else {
-                    android.widget.Toast.makeText(requireContext(), "Name and username are required", android.widget.Toast.LENGTH_SHORT).show()
                 }
             }
             .setNegativeButton("Cancel", null)
-            .show()
-    }
-    
-    private fun showIdentityOptionsMenu(identity: Identity) {
-        val options = arrayOf(
-            "✏️ Edit Identity",
-            "📋 Apply to Connections",
-            "🔗 View Linked Connections",
-            "🗑️ Delete Identity"
-        )
-
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(identity.getDisplayName())
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> showEditDialog(identity)
-                    1 -> showApplyToConnectionsDialog(identity)
-                    2 -> showLinkedConnections(identity)
-                    3 -> showDeleteConfirmation(identity)
-                }
-            }
             .show()
     }
 
     private fun showApplyToConnectionsDialog(identity: Identity) {
         lifecycleScope.launch(Dispatchers.IO) {
             val allConnections = app.database.connectionDao().getAllConnectionsList()
-
             if (allConnections.isEmpty()) {
                 withContext(Dispatchers.Main) {
-                    android.widget.Toast.makeText(
-                        requireContext(),
-                        "No connections available",
-                        android.widget.Toast.LENGTH_SHORT
-                    ).show()
+                    Toast.makeText(requireContext(), "No connections available", Toast.LENGTH_SHORT).show()
                 }
                 return@launch
             }
-
-            // Get currently linked connections
-            val linkedConnectionIds = app.database.connectionDao()
-                .getConnectionsByIdentity(identity.id)
-                .map { it.id }
-                .toSet()
-
-            val connectionNames = allConnections.map { "${it.name} (${it.username}@${it.host})" }.toTypedArray()
-            val checkedItems = allConnections.map { it.id in linkedConnectionIds }.toBooleanArray()
+            val linked = app.database.connectionDao()
+                .getConnectionsByIdentity(identity.id).map { it.id }.toSet()
+            val names = allConnections.map { "${it.name} (${it.username}@${it.host})" }.toTypedArray()
+            val checked = allConnections.map { it.id in linked }.toBooleanArray()
 
             withContext(Dispatchers.Main) {
                 MaterialAlertDialogBuilder(requireContext())
                     .setTitle("Apply \"${identity.name}\" to:")
-                    .setMultiChoiceItems(connectionNames, checkedItems) { _, which, isChecked ->
-                        checkedItems[which] = isChecked
-                    }
+                    .setMultiChoiceItems(names, checked) { _, i, v -> checked[i] = v }
                     .setPositiveButton("Apply") { _, _ ->
-                        val selectedIds = allConnections
-                            .filterIndexed { index, _ -> checkedItems[index] }
-                            .map { it.id }
-
-                        applyIdentityToConnections(identity, selectedIds)
+                        val ids = allConnections.filterIndexed { i, _ -> checked[i] }.map { it.id }
+                        applyIdentityToConnections(identity, ids)
+                    }
+                    .setNeutralButton("Select All") { dialog, _ ->
+                        checked.fill(true)
+                        (dialog as? androidx.appcompat.app.AlertDialog)?.listView?.let { lv ->
+                            for (i in 0 until lv.count) lv.setItemChecked(i, true)
+                        }
                     }
                     .setNegativeButton("Cancel", null)
-                    .setNeutralButton("Select All") { dialog, _ ->
-                        // Select all and re-show dialog
-                        for (i in checkedItems.indices) {
-                            checkedItems[i] = true
-                        }
-                        (dialog as? androidx.appcompat.app.AlertDialog)?.listView?.let { listView ->
-                            for (i in 0 until listView.count) {
-                                listView.setItemChecked(i, true)
-                            }
-                        }
-                    }
                     .show()
             }
         }
@@ -472,59 +351,45 @@ class IdentitiesFragment : Fragment() {
 
     private fun applyIdentityToConnections(identity: Identity, connectionIds: List<String>) {
         if (connectionIds.isEmpty()) {
-            android.widget.Toast.makeText(
-                requireContext(),
-                "No connections selected",
-                android.widget.Toast.LENGTH_SHORT
-            ).show()
+            Toast.makeText(requireContext(), "No connections selected", Toast.LENGTH_SHORT).show()
             return
         }
-
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 app.database.connectionDao().applyIdentityToConnections(identity.id, connectionIds)
-
                 withContext(Dispatchers.Main) {
-                    android.widget.Toast.makeText(
+                    Toast.makeText(
                         requireContext(),
                         "Applied \"${identity.name}\" to ${connectionIds.size} connection(s)",
-                        android.widget.Toast.LENGTH_SHORT
+                        Toast.LENGTH_SHORT
                     ).show()
-                    Logger.d("IdentitiesFragment", "Applied identity ${identity.id} to ${connectionIds.size} connections")
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    android.widget.Toast.makeText(
-                        requireContext(),
-                        "Failed to apply identity: ${e.message}",
-                        android.widget.Toast.LENGTH_SHORT
-                    ).show()
+                    Toast.makeText(requireContext(), "Failed to apply identity: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
-                Logger.e("IdentitiesFragment", "Failed to apply identity", e)
+                Logger.e(TAG, "Failed to apply identity", e)
             }
         }
     }
 
     private fun showLinkedConnections(identity: Identity) {
         lifecycleScope.launch(Dispatchers.IO) {
-            val linkedConnections = app.database.connectionDao().getConnectionsByIdentity(identity.id)
-
+            val linked = app.database.connectionDao().getConnectionsByIdentity(identity.id)
             withContext(Dispatchers.Main) {
-                if (linkedConnections.isEmpty()) {
+                if (linked.isEmpty()) {
                     MaterialAlertDialogBuilder(requireContext())
                         .setTitle("Linked Connections")
-                        .setMessage("No connections are using this identity.\n\nTap \"Apply to Connections\" to link this identity to your hosts.")
+                        .setMessage("No connections are using this identity.\n\nTap \"Apply to Connections\" to link it.")
                         .setPositiveButton("OK", null)
                         .show()
                 } else {
-                    val connectionList = linkedConnections.joinToString("\n") { "• ${it.name} (${it.host})" }
+                    val list = linked.joinToString("\n") { "• ${it.name} (${it.host})" }
                     MaterialAlertDialogBuilder(requireContext())
                         .setTitle("Connections using \"${identity.name}\"")
-                        .setMessage("${linkedConnections.size} connection(s):\n\n$connectionList")
+                        .setMessage("${linked.size} connection(s):\n\n$list")
                         .setPositiveButton("OK", null)
-                        .setNeutralButton("Remove All") { _, _ ->
-                            removeIdentityFromAllConnections(identity)
-                        }
+                        .setNeutralButton("Remove All") { _, _ -> removeIdentityFromAllConnections(identity) }
                         .show()
                 }
             }
@@ -534,94 +399,229 @@ class IdentitiesFragment : Fragment() {
     private fun removeIdentityFromAllConnections(identity: Identity) {
         lifecycleScope.launch(Dispatchers.IO) {
             app.database.connectionDao().removeIdentityFromAllConnections(identity.id)
-
             withContext(Dispatchers.Main) {
-                android.widget.Toast.makeText(
-                    requireContext(),
-                    "Removed identity from all connections",
-                    android.widget.Toast.LENGTH_SHORT
-                ).show()
+                Toast.makeText(requireContext(), "Removed identity from all connections", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
-    private fun showDeleteConfirmation(identity: Identity) {
+    private fun confirmDeleteIdentity(identity: Identity) {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Delete Identity")
-            .setMessage("Delete identity \"${identity.name}\"? Connections using this identity will need to be reconfigured.")
-            .setPositiveButton("Delete") { _, _ ->
-                deleteIdentity(identity)
-            }
+            .setMessage("Delete \"${identity.name}\"? Connections using it will need to be reconfigured.")
+            .setPositiveButton("Delete") { _, _ -> deleteIdentity(identity) }
             .setNegativeButton("Cancel", null)
             .show()
     }
-    
-    private fun createIdentity(name: String, username: String, authType: AuthType, password: String?, keyId: String?, description: String?) {
+
+    private fun createIdentity(
+        name: String, username: String, authType: AuthType,
+        password: String?, keyId: String?, description: String?
+    ) {
         lifecycleScope.launch(Dispatchers.IO) {
             val identity = Identity(
                 name = name,
                 username = username,
                 authType = authType,
-                password = null, // Never store plaintext; keep in SecurePasswordManager
+                password = null,
                 keyId = keyId,
                 description = description
             )
             app.database.identityDao().insert(identity)
-
-            // Store password encrypted, outside the DB
             if (password != null) {
                 app.securePasswordManager.storePassword(
                     "identity_${identity.id}", password,
-                    io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.ENCRYPTED
+                    SecurePasswordManager.StorageLevel.ENCRYPTED
                 )
             }
-
             withContext(Dispatchers.Main) {
-                android.widget.Toast.makeText(requireContext(), "Identity \"$name\" created", android.widget.Toast.LENGTH_SHORT).show()
-                Logger.d("IdentitiesFragment", "Created identity: $name")
+                Toast.makeText(requireContext(), "Identity \"$name\" created", Toast.LENGTH_SHORT).show()
+                Logger.d(TAG, "Created identity: $name")
             }
         }
     }
 
     private fun updateIdentity(identity: Identity) {
         lifecycleScope.launch(Dispatchers.IO) {
-            // Migrate any legacy plaintext password before saving with null
             val legacyPassword = identity.password
             val updated = identity.copy(password = null)
             app.database.identityDao().update(updated)
-
             if (legacyPassword != null) {
                 app.securePasswordManager.storePassword(
                     "identity_${identity.id}", legacyPassword,
-                    io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.ENCRYPTED
+                    SecurePasswordManager.StorageLevel.ENCRYPTED
                 )
             }
-
             withContext(Dispatchers.Main) {
-                android.widget.Toast.makeText(requireContext(), "Identity updated", android.widget.Toast.LENGTH_SHORT).show()
-                Logger.d("IdentitiesFragment", "Updated identity: ${identity.name}")
+                Toast.makeText(requireContext(), "Identity updated", Toast.LENGTH_SHORT).show()
+                Logger.d(TAG, "Updated identity: ${identity.name}")
             }
         }
     }
 
     private fun deleteIdentity(identity: Identity) {
         lifecycleScope.launch(Dispatchers.IO) {
-            // Unlink from all connections first, then delete the row atomically
             app.database.withTransaction {
                 app.database.connectionDao().removeIdentityFromAllConnections(identity.id)
                 app.database.identityDao().delete(identity)
             }
-            // Clear encrypted credentials outside the transaction (not a DB op)
-            app.securePasswordManager.clearPassword("identity_${identity.id}")
-
+            try { app.securePasswordManager.clearPassword("identity_${identity.id}") } catch (_: Exception) {}
             withContext(Dispatchers.Main) {
-                android.widget.Toast.makeText(requireContext(), "Identity deleted", android.widget.Toast.LENGTH_SHORT).show()
-                Logger.d("IdentitiesFragment", "Deleted identity: ${identity.name}")
+                Toast.makeText(requireContext(), "Identity deleted", Toast.LENGTH_SHORT).show()
+                Logger.d(TAG, "Deleted identity: ${identity.name}")
             }
         }
     }
-    
+
+    // ─── Virtualization Identity dialogs ────────────────────────────────────
+
+    private fun showVirtAccountDialog(existing: HypervisorAccount?) {
+        val dialogView = LayoutInflater.from(requireContext())
+            .inflate(R.layout.dialog_edit_hypervisor_account, null)
+
+        val editName = dialogView.findViewById<TextInputEditText>(R.id.edit_name)
+        val editUsername = dialogView.findViewById<TextInputEditText>(R.id.edit_username)
+        val editPassword = dialogView.findViewById<TextInputEditText>(R.id.edit_password)
+        val editRealm = dialogView.findViewById<TextInputEditText>(R.id.edit_realm)
+
+        existing?.let {
+            editName.setText(it.name)
+            editUsername.setText(it.username)
+            editRealm.setText(it.realm ?: "")
+        }
+
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(if (existing == null) "New Virtualization Identity" else "Edit Identity")
+            .setView(dialogView)
+            .setPositiveButton("Save") { _, _ ->
+                val name = editName.text?.toString()?.trim().orEmpty()
+                val username = editUsername.text?.toString()?.trim().orEmpty()
+                val password = editPassword.text?.toString().orEmpty()
+                val realm = editRealm.text?.toString()?.trim()?.takeIf { it.isNotBlank() }
+
+                if (name.isBlank() || username.isBlank()) {
+                    Toast.makeText(requireContext(), "Name and username are required", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+
+                lifecycleScope.launch {
+                    val savedId: Long = if (existing == null) {
+                        app.database.hypervisorAccountDao().insert(
+                            HypervisorAccount(name = name, username = username, realm = realm)
+                        )
+                    } else {
+                        app.database.hypervisorAccountDao().update(
+                            existing.copy(
+                                name = name,
+                                username = username,
+                                realm = realm,
+                                modifiedAt = System.currentTimeMillis()
+                            )
+                        )
+                        existing.id
+                    }
+                    if (password.isNotEmpty() || existing == null) {
+                        HypervisorPasswordStore.storeAccountPassword(requireContext(), savedId, password)
+                    }
+                    Logger.i(TAG,
+                        if (existing == null) "Created virt identity id=$savedId ($name)"
+                        else "Updated virt identity id=$savedId ($name)"
+                    )
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun confirmDeleteVirtAccount(account: HypervisorAccount) {
+        lifecycleScope.launch {
+            val linked = try {
+                app.database.hypervisorDao().getAllList().count { it.accountId == account.id }
+            } catch (_: Exception) { 0 }
+
+            val message = if (linked > 0) {
+                "$linked hypervisor${if (linked == 1) "" else "s"} still link to \"${account.name}\". " +
+                "Unlink them in their edit screen first."
+            } else {
+                "Delete \"${account.name}\"?\n\nThe stored password will be cleared from the Keystore."
+            }
+
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle("Delete Virtualization Identity")
+                .setMessage(message)
+                .setPositiveButton("Delete") { _, _ ->
+                    if (linked > 0) return@setPositiveButton
+                    lifecycleScope.launch {
+                        app.database.hypervisorAccountDao().delete(account)
+                        HypervisorPasswordStore.clearAccountPassword(requireContext(), account.id)
+                        Logger.i(TAG, "Deleted virt identity id=${account.id} (${account.name})")
+                    }
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+    }
+
+    // ─── SSH Key dialogs ─────────────────────────────────────────────────────
+
+    private fun showSshKeyAddMenu() {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("SSH Key")
+            .setItems(arrayOf("📥 Import SSH Key", "🔐 Generate SSH Key")) { _, which ->
+                when (which) {
+                    0 -> navigateToKeyManagement(importMode = true)
+                    1 -> navigateToKeyManagement(generateMode = true)
+                }
+            }
+            .show()
+    }
+
+    private fun showSshKeyOptionsMenu(key: StoredKey) {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(key.getDisplayName())
+            .setItems(arrayOf("✏️ Manage Key", "🗑️ Delete Key")) { _, which ->
+                when (which) {
+                    0 -> navigateToKeyManagement()
+                    1 -> confirmDeleteSshKey(key)
+                }
+            }
+            .show()
+    }
+
+    private fun navigateToKeyManagement(importMode: Boolean = false, generateMode: Boolean = false) {
+        val intent = Intent(requireContext(), KeyManagementActivity::class.java)
+        if (importMode) intent.putExtra("action", "import")
+        else if (generateMode) intent.putExtra("action", "generate")
+        startActivity(intent)
+    }
+
+    private fun confirmDeleteSshKey(key: StoredKey) {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Delete SSH Key")
+            .setMessage("Delete key \"${key.name}\"?\n\nIdentities using this key will lose their key association.")
+            .setPositiveButton("Delete") { _, _ -> deleteSshKey(key) }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun deleteSshKey(key: StoredKey) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            app.database.withTransaction {
+                app.database.connectionDao().clearKeyFromConnections(key.keyId)
+                app.database.connectionDao().clearProxyKeyFromConnections(key.keyId)
+                app.database.identityDao().clearKeyFromIdentities(key.keyId)
+                app.database.keyDao().deleteKey(key)
+            }
+            try { app.securePasswordManager.clearPassword("key_passphrase_${key.keyId}") } catch (_: Exception) {}
+            withContext(Dispatchers.Main) {
+                Toast.makeText(requireContext(), "SSH key deleted", Toast.LENGTH_SHORT).show()
+                Logger.d(TAG, "Deleted SSH key: ${key.name}")
+            }
+        }
+    }
+
     companion object {
+        private const val TAG = "IdentitiesFragment"
         fun newInstance() = IdentitiesFragment()
     }
 }
