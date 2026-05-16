@@ -29,6 +29,7 @@ class SyncSettingsActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "SyncSettingsActivity"
+        private const val PREF_ENABLED       = "sync_enabled"
         private const val PREF_WIFI_ONLY     = "sync_wifi_only"
         private const val PREF_ON_CHANGE     = "sync_on_change"
         private const val PREF_CONNECTIONS   = "sync_connections"
@@ -162,8 +163,11 @@ class SyncSettingsActivity : AppCompatActivity() {
         // Password row
         findViewById<View>(R.id.row_password).setOnClickListener { showPasswordDialog() }
 
-        // Enable switch
+        // Enable switch — restore persisted state before wiring the listener
+        // so that entering and leaving the screen doesn't flip it off.
+        switchEnabled.isChecked = prefs.getBoolean(PREF_ENABLED, false)
         switchEnabled.setOnCheckedChangeListener { _, checked ->
+            prefs.edit().putBoolean(PREF_ENABLED, checked).apply()
             if (checked) {
                 lifecycleScope.launch {
                     val status = syncManager.checkSyncFile()
@@ -173,6 +177,7 @@ class SyncSettingsActivity : AppCompatActivity() {
                             refresh()
                         } else {
                             switchEnabled.isChecked = false
+                            prefs.edit().putBoolean(PREF_ENABLED, false).apply()
                             showError("File error", "Cannot access sync file: $status\nPlease reconfigure the location.")
                         }
                     }

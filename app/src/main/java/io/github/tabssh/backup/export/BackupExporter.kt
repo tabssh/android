@@ -43,6 +43,9 @@ class BackupExporter(
         // Export known host keys
         backupData["host_keys.json"] = exportHostKeys()
 
+        // Export identities (reusable credential sets)
+        backupData["identities.json"] = exportIdentities()
+
         return@withContext backupData
     }
 
@@ -214,6 +217,33 @@ class BackupExporter(
         }
 
         json.put("host_keys", hostKeysArray)
+        return json.toString(2)
+    }
+
+    private suspend fun exportIdentities(): String {
+        val identities = database.identityDao().getAllIdentitiesList()
+        val json = JSONObject()
+        val identitiesArray = JSONArray()
+
+        identities.forEach { identity ->
+            val identityJson = JSONObject().apply {
+                put("id", identity.id)
+                put("name", identity.name)
+                put("username", identity.username)
+                put("authType", identity.authType.name)
+                put("keyId", identity.keyId ?: "")
+                put("description", identity.description ?: "")
+                put("createdAt", identity.createdAt)
+                put("modifiedAt", identity.modifiedAt)
+                // Note: password field is encrypted at-rest but we omit it from
+                // backup the same way key private data is omitted — exporting an
+                // encrypted blob tied to this device's Keystore is useless on a
+                // different device.
+            }
+            identitiesArray.put(identityJson)
+        }
+
+        json.put("identities", identitiesArray)
         return json.toString(2)
     }
 }

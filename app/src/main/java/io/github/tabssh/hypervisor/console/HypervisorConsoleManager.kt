@@ -5,8 +5,12 @@ import io.github.tabssh.hypervisor.xcpng.XCPngApiClient
 import io.github.tabssh.hypervisor.xcpng.XenOrchestraApiClient
 import io.github.tabssh.terminal.TermuxBridge
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.InputStream
 import java.io.OutputStream
@@ -27,9 +31,24 @@ class HypervisorConsoleManager {
         private const val TAG = "HypervisorConsole"
     }
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     private var webSocketClient: ConsoleWebSocketClient? = null
     private var termuxBridge: TermuxBridge? = null
     private var consoleListener: ConsoleEventListener? = null
+
+    // Stored for VNC fallback when termproxy WebSocket reports a serial error
+    // after a successful API call (the API-level fallback is in connectProxmoxConsole
+    // phase 1; this covers the rare case where the API succeeds but the WS frame fails).
+    private var proxmoxVncFallbackClient: ProxmoxApiClient? = null
+    private var proxmoxVncFallbackNode: String = ""
+    private var proxmoxVncFallbackVmid: Int = 0
+    private var proxmoxVncFallbackVmName: String = ""
+    private var proxmoxVncFallbackType: String = "qemu"
+    private var proxmoxVncFallbackVerifySsl: Boolean = false
+    private var proxmoxVncFallbackPinnedCert: String? = null
+    private var proxmoxVncFallbackDisplayHost: String = ""
+    private var proxmoxVncFallbackDisplayPort: Int = 0
 
     /**
      * Console connection result
@@ -111,6 +130,18 @@ class HypervisorConsoleManager {
             Pair(vnc, ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_VNC)
         }
 
+        // Store params for the WebSocket-level VNC fallback (in case Proxmox
+        // accepts the termproxy ticket but then sends a serial-error frame).
+        proxmoxVncFallbackClient = client
+        proxmoxVncFallbackNode = node
+        proxmoxVncFallbackVmid = vmid
+        proxmoxVncFallbackVmName = vmName
+        proxmoxVncFallbackType = type
+        proxmoxVncFallbackVerifySsl = verifySsl
+        proxmoxVncFallbackPinnedCert = pinnedCertSha256
+        proxmoxVncFallbackDisplayHost = displayHost
+        proxmoxVncFallbackDisplayPort = displayPort
+
         // Phase 2: open the WebSocket console connection.
         try {
             // `verifySsl` + `pinnedCertSha256` thread through from the
@@ -158,6 +189,17 @@ class HypervisorConsoleManager {
                 override fun onError(error: Throwable) {
                     Logger.e(TAG, "Proxmox console WebSocket error: ${error.message}")
                     listener?.onError(error.message ?: "Unknown error")
+                }
+
+                override fun onSerialConsoleUnavailable() {
+                    Logger.i(TAG, "Proxmox serial console unavailable via WebSocket frame — retrying with vncproxy")
+                    // Disconnect the termproxy WebSocket and retry with vncproxy.
+                    // This is the second fallback path; the first (API-level exception)
+                    // is already handled in Phase 1 above.
+                    wsClient.disconnect()
+                    scope.launch {
+                        retryProxmoxWithVnc(listener)
+                    }
                 }
             })
 
@@ -379,6 +421,84 @@ class HypervisorConsoleManager {
     }
 
     /**
+     * VNC fallback after a WebSocket-level serial error.
+     *
+     * Called from the IO scope when Proxmox termproxy accepted the connection
+     * but then sent "unable to find serial interface" as a data frame. We get
+     * a vncproxy ticket and re-wire the terminal bridge to the new WebSocket.
+     */
+    private suspend fun retryProxmoxWithVnc(listener: ConsoleEventListener?) {
+        val client = proxmoxVncFallbackClient ?: run {
+            Logger.e(TAG, "VNC fallback: no stored Proxmox client — cannot retry")
+            listener?.onError("Serial console unavailable and VNC fallback state was lost. Please reconnect.")
+            return
+        }
+        val node = proxmoxVncFallbackNode
+        val vmid = proxmoxVncFallbackVmid
+        val vmName = proxmoxVncFallbackVmName
+        val type = proxmoxVncFallbackType
+        val verifySsl = proxmoxVncFallbackVerifySsl
+        val pinnedCert = proxmoxVncFallbackPinnedCert
+        val displayHost = proxmoxVncFallbackDisplayHost
+        val displayPort = proxmoxVncFallbackDisplayPort
+
+        Logger.i(TAG, "VNC fallback: requesting vncproxy ticket for $vmName")
+        val vnc = try {
+            client.getVNCProxy(node, vmid, type)
+        } catch (e: Exception) {
+            Logger.e(TAG, "VNC fallback: getVNCProxy threw", e)
+            null
+        }
+        if (vnc == null) {
+            Logger.e(TAG, "VNC fallback: vncproxy returned null for $vmName")
+            listener?.onError(
+                "This VM has no serial console and the VNC fallback also failed.\n\n" +
+                "To enable serial console: open the VM in Proxmox → Hardware → " +
+                "Add → Serial Port → set to 'socket', then restart the VM."
+            )
+            return
+        }
+
+        Logger.d(TAG, "VNC fallback: got vncproxy ticket for $vmName — connecting")
+        val vncClient = ConsoleWebSocketClient(
+            verifySsl = verifySsl,
+            protocol = ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_VNC,
+            pinnedCertSha256 = pinnedCert,
+            displayHost = displayHost,
+            displayPort = displayPort
+        )
+        webSocketClient = vncClient
+
+        val headers = mapOf("Cookie" to "PVEAuthCookie=${vnc.authCookie}")
+        val connected = vncClient.connect(vnc.websocketUrl, headers, object : ConsoleConnectionListener {
+            override fun onConnected() {
+                Logger.i(TAG, "VNC fallback connected for $vmName")
+                listener?.onConnected(vmName)
+                // Re-wire the terminal bridge to the new streams if it is still set.
+                val bridge = termuxBridge ?: return
+                val input = vncClient.getInputStream() ?: return
+                val output = vncClient.getOutputStream() ?: return
+                bridge.connect(input, output)
+            }
+
+            override fun onDisconnected(reason: String) {
+                Logger.i(TAG, "VNC fallback disconnected: $reason")
+                listener?.onDisconnected(reason)
+            }
+
+            override fun onError(error: Throwable) {
+                Logger.e(TAG, "VNC fallback WebSocket error: ${error.message}")
+                listener?.onError(error.message ?: "VNC connection failed")
+            }
+        })
+
+        if (!connected) {
+            Logger.e(TAG, "VNC fallback: WebSocket connect returned false for $vmName")
+            listener?.onError("VNC fallback failed to connect for $vmName")
+        }
+    }
+
+    /**
      * Wire console connection to TermuxBridge for terminal display
      */
     fun wireToTerminal(connection: ConsoleConnection, bridge: TermuxBridge) {
@@ -397,10 +517,12 @@ class HypervisorConsoleManager {
      */
     fun disconnect() {
         Logger.i(TAG, "Disconnecting console")
+        scope.coroutineContext[Job]?.cancel()
         termuxBridge?.disconnect()
         webSocketClient?.disconnect()
         termuxBridge = null
         webSocketClient = null
+        proxmoxVncFallbackClient = null
     }
 
     /**

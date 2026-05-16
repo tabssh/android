@@ -5,6 +5,7 @@ import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.database.entities.*
 import io.github.tabssh.storage.preferences.PreferenceManager
 import io.github.tabssh.utils.logging.Logger
+import io.github.tabssh.ssh.auth.AuthType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -67,6 +68,13 @@ class BackupImporter(
             val count = restoreHostKeys(data, overwriteExisting)
             restoredItems["host_keys"] = count
             Logger.d("BackupImporter", "Restored $count host keys")
+        }
+
+        // Restore identities (reusable credential sets)
+        backupData["identities.json"]?.let { data ->
+            val count = restoreIdentities(data, overwriteExisting)
+            restoredItems["identities"] = count
+            Logger.d("BackupImporter", "Restored $count identities")
         }
 
         return@withContext restoredItems
@@ -264,6 +272,45 @@ class BackupImporter(
             )
 
             database.certificateDao().insertCertificate(certificate)
+            restoredCount++
+        }
+
+        return restoredCount
+    }
+
+    private suspend fun restoreIdentities(data: String, overwriteExisting: Boolean): Int {
+        val json = JSONObject(data)
+        val identitiesArray = json.getJSONArray("identities")
+        var restoredCount = 0
+
+        for (i in 0 until identitiesArray.length()) {
+            val identityJson = identitiesArray.getJSONObject(i)
+
+            val existingIdentity = database.identityDao().getIdentityById(identityJson.getString("id"))
+            if (existingIdentity != null && !overwriteExisting) {
+                Logger.d("BackupImporter", "Skipping existing identity: ${identityJson.getString("name")}")
+                continue
+            }
+
+            val authType = try {
+                AuthType.valueOf(identityJson.getString("authType"))
+            } catch (e: IllegalArgumentException) {
+                Logger.w("BackupImporter", "Unknown authType for identity ${identityJson.getString("name")}: ${identityJson.getString("authType")}, defaulting to PASSWORD")
+                AuthType.PASSWORD
+            }
+
+            val identity = Identity(
+                id = identityJson.getString("id"),
+                name = identityJson.getString("name"),
+                username = identityJson.getString("username"),
+                authType = authType,
+                keyId = identityJson.optString("keyId").takeIf { it.isNotEmpty() },
+                description = identityJson.optString("description").takeIf { it.isNotEmpty() },
+                createdAt = identityJson.optLong("createdAt", System.currentTimeMillis()),
+                modifiedAt = identityJson.optLong("modifiedAt", System.currentTimeMillis())
+            )
+
+            database.identityDao().insert(identity)
             restoredCount++
         }
 

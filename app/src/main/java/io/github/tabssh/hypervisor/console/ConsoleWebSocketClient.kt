@@ -262,14 +262,7 @@ class ConsoleWebSocketClient(
                                         if (isProxmoxSerialError(msg)) {
                                             Logger.w(TAG, "Proxmox serial console error: $msg")
                                             isConnected = false
-                                            connectionListener?.onError(
-                                                java.io.IOException(
-                                                    "This VM has no serial console interface.\n\n" +
-                                                    "To fix: open Proxmox → VM → Hardware → Add → Serial Port, " +
-                                                    "set type to 'socket', then restart the VM.\n\n" +
-                                                    "You can also switch to VNC by reconnecting — tap Reconnect."
-                                                )
-                                            )
+                                            connectionListener?.onSerialConsoleUnavailable()
                                             return@onMessage
                                         }
                                         msg
@@ -284,14 +277,7 @@ class ConsoleWebSocketClient(
                                     if (isProxmoxSerialError(text)) {
                                         Logger.w(TAG, "Proxmox serial error (plain frame): $text")
                                         isConnected = false
-                                        connectionListener?.onError(
-                                            java.io.IOException(
-                                                "This VM has no serial console interface.\n\n" +
-                                                "To fix: open Proxmox → VM → Hardware → Add → Serial Port, " +
-                                                "set type to 'socket', then restart the VM.\n\n" +
-                                                "You can also switch to VNC by reconnecting — tap Reconnect."
-                                            )
-                                        )
+                                        connectionListener?.onSerialConsoleUnavailable()
                                         return@onMessage
                                     }
                                     Logger.d(TAG, "Non-data Proxmox message: $text")
@@ -535,4 +521,6 @@ interface ConsoleConnectionListener {
     fun onConnected()
     fun onDisconnected(reason: String)
     fun onError(error: Throwable)
+    /** Called when Proxmox termproxy reports the VM has no serial interface. */
+    fun onSerialConsoleUnavailable() {}
 }
