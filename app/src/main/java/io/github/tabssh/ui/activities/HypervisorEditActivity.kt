@@ -100,13 +100,18 @@ class HypervisorEditActivity : AppCompatActivity() {
      */
     private fun setupAccountDropdown() {
         lifecycleScope.launch {
-            availableAccounts = try {
-                app.database.hypervisorAccountDao().getAllAccountsList()
-            } catch (e: Exception) {
-                io.github.tabssh.utils.logging.Logger.w(
-                    "HypervisorEditActivity", "Failed to load accounts", e
-                )
-                emptyList()
+            // app.database access triggers getDatabase() → Room.databaseBuilder().build()
+            // which can open the SQLite connection synchronously. Force to IO so the
+            // Main thread is never blocked by database initialization or migrations.
+            availableAccounts = withContext(Dispatchers.IO) {
+                try {
+                    app.database.hypervisorAccountDao().getAllAccountsList()
+                } catch (e: Exception) {
+                    io.github.tabssh.utils.logging.Logger.w(
+                        "HypervisorEditActivity", "Failed to load accounts", e
+                    )
+                    emptyList()
+                }
             }
             val labels = mutableListOf("(none — use inline credentials)")
             labels += availableAccounts.map { it.getDisplayName() }
@@ -284,8 +289,10 @@ class HypervisorEditActivity : AppCompatActivity() {
     private fun showImportFromExistingHostDialog() {
         lifecycleScope.launch {
             try {
-                // Get all existing connections
-                val connections = app.database.connectionDao().getAllConnectionsList()
+                // app.database access can trigger lazy init — run on IO.
+                val connections = withContext(Dispatchers.IO) {
+                    app.database.connectionDao().getAllConnectionsList()
+                }
 
                 if (connections.isEmpty()) {
                     Toast.makeText(
@@ -469,7 +476,12 @@ class HypervisorEditActivity : AppCompatActivity() {
     private fun loadHypervisor(id: Long) {
         lifecycleScope.launch {
             try {
-                val hypervisor = app.database.hypervisorDao().getById(id)
+                // DB access triggers app.database lazy init — run on IO to avoid
+                // blocking the main thread (ANR). HypervisorPasswordStore.retrieve()
+                // has its own withContext(Dispatchers.IO) so it is safe here too.
+                val hypervisor = withContext(Dispatchers.IO) {
+                    app.database.hypervisorDao().getById(id)
+                }
                 if (hypervisor != null) {
                     editingHypervisor = hypervisor
                     linkedConnectionId = hypervisor.linkedConnectionId
@@ -491,13 +503,12 @@ class HypervisorEditActivity : AppCompatActivity() {
                     currentPin = hypervisor.pinnedCertSha256
                     updatePinnedCertVisibility(hypervisor.verifySsl)
 
-                    // Account dropdown — wait until availableAccounts has
-                    // been populated by setupAccountDropdown(). It's a
-                    // suspend chain in lifecycleScope so we re-fetch here
-                    // to be safe (cheap query).
-                    val accounts = try {
-                        app.database.hypervisorAccountDao().getAllAccountsList()
-                    } catch (e: Exception) { emptyList() }
+                    // Account dropdown — re-fetch on IO for the same reason.
+                    val accounts = withContext(Dispatchers.IO) {
+                        try {
+                            app.database.hypervisorAccountDao().getAllAccountsList()
+                        } catch (e: Exception) { emptyList() }
+                    }
                     availableAccounts = accounts
                     val labels = mutableListOf("(none — use inline credentials)")
                     labels += accounts.map { it.getDisplayName() }
