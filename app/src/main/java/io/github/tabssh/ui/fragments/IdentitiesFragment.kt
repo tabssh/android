@@ -261,7 +261,7 @@ class IdentitiesFragment : Fragment() {
         authTypeSpinner.setOnItemClickListener { _, _, pos, _ -> applyAuthVisibility(pos) }
 
         if (existing != null && !existing.password.isNullOrEmpty()) {
-            passwordInput.setText("••••••••")
+            passwordInput.setText(PASSWORD_MASK)
             passwordInput.hint = "Password set — leave to keep, or type to replace"
         }
 
@@ -296,7 +296,7 @@ class IdentitiesFragment : Fragment() {
                 } else {
                     val newPassword = when {
                         authType != AuthType.PASSWORD -> null
-                        passwordText == "••••••••" -> existing.password
+                        passwordText == PASSWORD_MASK -> existing.password
                         passwordText.isBlank() -> null
                         else -> passwordText
                     }
@@ -622,6 +622,7 @@ class IdentitiesFragment : Fragment() {
 
     companion object {
         private const val TAG = "IdentitiesFragment"
+        private const val PASSWORD_MASK = "••••••••"
         fun newInstance() = IdentitiesFragment()
     }
 }
