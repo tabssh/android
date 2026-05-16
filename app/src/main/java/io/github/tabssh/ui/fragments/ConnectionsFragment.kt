@@ -462,17 +462,17 @@ class ConnectionsFragment : Fragment() {
             .setTitle(groupHeader.group.name)
             .setItems(items) { _, which ->
                 when (which) {
-                    0 -> renameGroup(groupHeader.group.name)
-                    1 -> deleteGroup(groupHeader.group.name)
+                    0 -> renameGroup(groupHeader.group)
+                    1 -> deleteGroup(groupHeader.group)
                     2 -> collapseAllGroups()
                 }
             }
             .show()
     }
 
-    private fun renameGroup(oldName: String) {
+    private fun renameGroup(group: io.github.tabssh.storage.database.entities.ConnectionGroup) {
         val editText = android.widget.EditText(requireContext()).apply {
-            setText(oldName)
+            setText(group.name)
             hint = "Group name"
         }
 
@@ -480,19 +480,17 @@ class ConnectionsFragment : Fragment() {
             .setTitle("Rename Group")
             .setView(editText)
             .setPositiveButton("Rename") { _, _ ->
-                val newName = editText.text.toString()
-                if (newName.isNotBlank() && newName != oldName) {
+                val newName = editText.text.toString().trim()
+                if (newName.isNotBlank() && newName != group.name) {
                     lifecycleScope.launch {
                         try {
-                            // Update all connections in this group
-                            val connections = app.database.connectionDao().getAllConnectionsList()
-                            // Note: Groups are stored by ID, not name - this is a simplified implementation
-                            connections.filter { it.groupId == oldName }.forEach { conn ->
-                                val updated = conn.copy(groupId = newName)
-                                app.database.connectionDao().updateConnection(updated)
-                            }
+                            app.database.connectionGroupDao().updateGroup(
+                                group.copy(
+                                    name = newName,
+                                    modifiedAt = System.currentTimeMillis()
+                                )
+                            )
                             Toast.makeText(requireContext(), "Group renamed to '$newName'", Toast.LENGTH_SHORT).show()
-                            loadAllConnections()
                         } catch (e: Exception) {
                             Logger.e("ConnectionsFragment", "Failed to rename group", e)
                         }
@@ -503,21 +501,23 @@ class ConnectionsFragment : Fragment() {
             .show()
     }
 
-    private fun deleteGroup(groupName: String) {
+    private fun deleteGroup(group: io.github.tabssh.storage.database.entities.ConnectionGroup) {
         AlertDialog.Builder(requireContext())
             .setTitle("Delete Group")
-            .setMessage("Remove group '$groupName' from all connections?\n\nConnections will not be deleted, just ungrouped.")
+            .setMessage("Remove group '${group.name}'?\n\nConnections will not be deleted, just ungrouped.")
             .setPositiveButton("Delete") { _, _ ->
                 lifecycleScope.launch {
                     try {
-                        // Clear group from all connections
-                        val connections = app.database.connectionDao().getAllConnectionsList()
-                        connections.filter { it.groupId == groupName }.forEach { conn ->
-                            val updated = conn.copy(groupId = null)
-                            app.database.connectionDao().updateConnection(updated)
+                        app.database.withTransaction {
+                            // Ungroup all connections that belong to this group
+                            val connections = app.database.connectionDao().getAllConnectionsList()
+                            connections.filter { it.groupId == group.id }.forEach { conn ->
+                                app.database.connectionDao().updateConnection(conn.copy(groupId = null))
+                            }
+                            // Delete the group row
+                            app.database.connectionGroupDao().deleteGroup(group)
                         }
-                        Toast.makeText(requireContext(), "Group deleted", Toast.LENGTH_SHORT).show()
-                        loadAllConnections()
+                        Toast.makeText(requireContext(), "Group '${group.name}' deleted", Toast.LENGTH_SHORT).show()
                     } catch (e: Exception) {
                         Logger.e("ConnectionsFragment", "Failed to delete group", e)
                     }

@@ -262,13 +262,22 @@ class ConnectionEditActivity : AppCompatActivity() {
                 selectedGroupName = groupsList[position]
             }
             
-            // Set current group
+            // Set current group — also update the action bar subtitle now
+            // that we have the human-readable name.
             existingProfile?.groupId?.let { groupId ->
                 val index = groups.indexOfFirst { it.id == groupId }
                 if (index >= 0) {
                     binding.spinnerGroup.setText(groups[index].name, false)
                     selectedGroupId = groupId
                     selectedGroupName = groups[index].name
+                    supportActionBar?.subtitle = groups[index].name
+                } else {
+                    // Group row is missing (deleted, or old backup with bare name).
+                    // Treat as ungrouped so we don't persist a dangling ID.
+                    binding.spinnerGroup.setText("No Group", false)
+                    selectedGroupId = null
+                    selectedGroupName = "No Group"
+                    supportActionBar?.subtitle = null
                 }
             } ?: run {
                 binding.spinnerGroup.setText("No Group", false)
@@ -552,9 +561,11 @@ class ConnectionEditActivity : AppCompatActivity() {
         }
         profile.multiplexerSessionName?.let { binding.editMultiplexerSessionName.setText(it) }
 
-        // Group
+        // Group — selectedGroupName is resolved to the human name by
+        // setupGroupSpinner() (async). Initialise to "No Group" so the
+        // subtitle never shows a raw UUID if the spinner hasn't loaded yet.
         selectedGroupId = profile.groupId
-        selectedGroupName = profile.groupId ?: "No Group"
+        selectedGroupName = "No Group"
         if (selectedGroupId != null) {
             supportActionBar?.subtitle = selectedGroupName
         }
@@ -1604,7 +1615,8 @@ SSH Key Import - Supported Formats:
     private fun showGroupSelectionDialog() {
         val editText = android.widget.EditText(this).apply {
             hint = "Group name (e.g., Work Servers, Home Lab)"
-            setText(selectedGroupName)
+            // Show the human-readable name, not the UUID
+            setText(if (selectedGroupName == "No Group") "" else selectedGroupName)
         }
 
         androidx.appcompat.app.AlertDialog.Builder(this)
@@ -1616,13 +1628,37 @@ SSH Key Import - Supported Formats:
                 if (groupName.isEmpty()) {
                     selectedGroupId = null
                     selectedGroupName = "No Group"
+                    supportActionBar?.subtitle = null
                     showToast("Group cleared")
                 } else {
-                    selectedGroupId = groupName // For simplicity, use name as ID
-                    selectedGroupName = groupName
-                    showToast("Group set to: $groupName")
+                    // Look up the group by name, creating it if it doesn't exist.
+                    // This ensures groupId is always a real UUID from the
+                    // connection_groups table, not a bare name string.
+                    lifecycleScope.launch {
+                        try {
+                            val groupDao = app.database.connectionGroupDao()
+                            val existing = groupDao.getGroupByName(groupName)
+                            val groupId = if (existing != null) {
+                                existing.id
+                            } else {
+                                val newGroup = io.github.tabssh.storage.database.entities.ConnectionGroup(
+                                    name = groupName,
+                                    icon = "folder",
+                                    sortOrder = 0
+                                )
+                                groupDao.insertGroup(newGroup)
+                                newGroup.id
+                            }
+                            selectedGroupId = groupId
+                            selectedGroupName = groupName
+                            supportActionBar?.subtitle = groupName
+                            showToast("Group set to: $groupName")
+                        } catch (e: Exception) {
+                            Logger.e("ConnectionEditActivity", "Failed to resolve group '$groupName'", e)
+                            showToast("Failed to set group")
+                        }
+                    }
                 }
-                supportActionBar?.subtitle = selectedGroupName
             }
             .setNegativeButton("Cancel", null)
             .setNeutralButton("Clear") { _, _ ->
