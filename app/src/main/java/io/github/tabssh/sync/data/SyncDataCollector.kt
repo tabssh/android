@@ -80,6 +80,7 @@ class SyncDataCollector {
         val certificates = collectCertificates() // Wave 7.1
         val macros = collectMacros()             // Wave 11
         val monitorSlots = collectMonitorSlots() // Wave 11
+        val hypervisorAccounts = collectHypervisorAccounts() // Audit 2026-05-16
 
         val itemCounts = SyncItemCounts(
             connections = connections.size,
@@ -94,7 +95,8 @@ class SyncDataCollector {
             hypervisors = hypervisors.size,
             certificates = certificates.size,
             macros = macros.size,
-            monitorSlots = monitorSlots.size
+            monitorSlots = monitorSlots.size,
+            hypervisorAccounts = hypervisorAccounts.size
         )
 
         val metadata = metadataManager.createSyncMetadata(itemCounts)
@@ -115,8 +117,23 @@ class SyncDataCollector {
             hypervisors = hypervisors,
             certificates = certificates,
             macros = macros,
-            monitorSlots = monitorSlots
+            monitorSlots = monitorSlots,
+            hypervisorAccounts = hypervisorAccounts
         )
+    }
+
+    /** Audit 2026-05-16 — hypervisor credential metadata. The actual
+     *  password lives in SecurePasswordManager under
+     *  `hypervisor_account_${id}` and is NOT in the synced row, so the
+     *  account row arrives "unlocked-by-design" on the destination device
+     *  and the user enters the password once there. */
+    private suspend fun collectHypervisorAccounts(): List<io.github.tabssh.storage.database.entities.HypervisorAccount> {
+        return try {
+            database.hypervisorAccountDao().getAllAccountsList()
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to collect hypervisor accounts", e)
+            emptyList()
+        }
     }
 
     private suspend fun collectHypervisors(): List<io.github.tabssh.storage.database.entities.HypervisorProfile> {
@@ -221,6 +238,7 @@ class SyncDataCollector {
         // always include in full).
         val macros = collectMacros().filter { it.modifiedAt > timestamp }
         val monitorSlots = collectMonitorSlots()
+        val hypervisorAccounts = collectHypervisorAccounts().filter { it.modifiedAt > timestamp }
 
         val preferences = if (hasPreferencesChanged(timestamp)) {
             collectPreferences()
@@ -241,7 +259,8 @@ class SyncDataCollector {
             hypervisors = hypervisors.size,
             certificates = certificates.size,
             macros = macros.size,
-            monitorSlots = monitorSlots.size
+            monitorSlots = monitorSlots.size,
+            hypervisorAccounts = hypervisorAccounts.size
         )
 
         val metadata = metadataManager.createSyncMetadata(itemCounts)
@@ -262,7 +281,8 @@ class SyncDataCollector {
             hypervisors = hypervisors,
             certificates = certificates,
             macros = macros,
-            monitorSlots = monitorSlots
+            monitorSlots = monitorSlots,
+            hypervisorAccounts = hypervisorAccounts
         )
     }
 

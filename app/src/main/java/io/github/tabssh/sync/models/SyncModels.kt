@@ -38,11 +38,14 @@ data class SyncItemCounts(
     val hypervisors: Int = 0,    // Wave 7.1
     val certificates: Int = 0,   // Wave 7.1
     val macros: Int = 0,         // Wave 11
-    val monitorSlots: Int = 0    // Wave 11
+    val monitorSlots: Int = 0,   // Wave 11
+    /** Wave 12 (2026-05-16 audit) — reusable hypervisor credential metadata.
+     *  Token/password remains Keystore-bound and is NOT synced. */
+    val hypervisorAccounts: Int = 0
 ) {
     fun total(): Int = connections + keys + themes + preferences + hostKeys +
         workspaces + snippets + identities + groups + hypervisors + certificates +
-        macros + monitorSlots
+        macros + monitorSlots + hypervisorAccounts
 }
 
 /**
@@ -121,7 +124,11 @@ data class SyncDataPackage(
     val certificates: List<io.github.tabssh.storage.database.entities.TrustedCertificate> = emptyList(),
     /** Wave 11 — macros / monitor_slots, last-write-wins. */
     val macros: List<io.github.tabssh.storage.database.entities.Macro> = emptyList(),
-    val monitorSlots: List<io.github.tabssh.storage.database.entities.MonitorSlot> = emptyList()
+    val monitorSlots: List<io.github.tabssh.storage.database.entities.MonitorSlot> = emptyList(),
+    /** Wave 12 (2026-05-16 audit) — reusable hypervisor credential metadata.
+     *  Sync covers the row (name/username/realm); the password itself stays
+     *  Keystore-bound on each device under `hypervisor_account_${id}`. */
+    val hypervisorAccounts: List<io.github.tabssh.storage.database.entities.HypervisorAccount> = emptyList()
 )
 
 /**

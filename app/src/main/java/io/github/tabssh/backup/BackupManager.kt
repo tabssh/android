@@ -61,14 +61,13 @@ class BackupManager(private val context: Context) {
     )
 
     companion object {
-        private const val BACKUP_VERSION = 1
+        private const val BACKUP_VERSION = 2
         private const val METADATA_FILE = "metadata.json"
-        private const val CONNECTIONS_FILE = "connections.json"
-        private const val KEYS_FILE = "keys.json"
-        private const val PREFERENCES_FILE = "preferences.json"
-        private const val THEMES_FILE = "themes.json"
-        private const val CERTIFICATES_FILE = "certificates.json"
-        private const val HOST_KEYS_FILE = "host_keys.json"
+        // Wire-format `v` field on each entity file (set by BackupExporter).
+        // Bumped from 1 to 2 in the 2026-05-16 backup-coverage audit:
+        // every Room entity is now serialised in full so restore reproduces
+        // the exact source row. v1 backups still restore via the legacy
+        // hand-rolled path in BackupImporter.
     }
 
     /**
@@ -203,30 +202,22 @@ class BackupManager(private val context: Context) {
     private suspend fun createBackupMetadata(backupData: Map<String, String>): BackupMetadata {
         val itemCounts = mutableMapOf<String, Int>()
 
-        // Count items in each category
+        // Generic counter: every entity file the exporter writes uses
+        // either the v2 wrapper (`{"v":2,"items":[...]}`) or the legacy
+        // v1 `{"<plural>":[...]}` shape. Preferences are an object, not a
+        // list — skip those.
         backupData.forEach { (filename, data) ->
-            when (filename) {
-                CONNECTIONS_FILE -> {
-                    val json = JSONObject(data)
-                    itemCounts["connections"] = json.getJSONArray("connections").length()
+            if (filename == "preferences.json") return@forEach
+            val key = filename.removeSuffix(".json")
+            val count = try {
+                val obj = JSONObject(data)
+                when {
+                    obj.has("items") -> obj.getJSONArray("items").length()
+                    obj.has(key) -> obj.getJSONArray(key).length()
+                    else -> 0
                 }
-                KEYS_FILE -> {
-                    val json = JSONObject(data)
-                    itemCounts["keys"] = json.getJSONArray("keys").length()
-                }
-                THEMES_FILE -> {
-                    val json = JSONObject(data)
-                    itemCounts["themes"] = json.getJSONArray("themes").length()
-                }
-                CERTIFICATES_FILE -> {
-                    val json = JSONObject(data)
-                    itemCounts["certificates"] = json.getJSONArray("certificates").length()
-                }
-                HOST_KEYS_FILE -> {
-                    val json = JSONObject(data)
-                    itemCounts["host_keys"] = json.getJSONArray("host_keys").length()
-                }
-            }
+            } catch (_: Exception) { 0 }
+            itemCounts[key] = count
         }
 
         return BackupMetadata(

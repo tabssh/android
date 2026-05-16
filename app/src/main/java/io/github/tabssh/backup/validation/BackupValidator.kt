@@ -28,7 +28,10 @@ class BackupValidator {
         if (metadata == null) {
             errors.add("Missing backup metadata")
         } else {
-            if (metadata.version > 1) {
+            // Wire formats supported: v1 (legacy hand-rolled) and v2
+            // (entity-serialised — 2026-05-16 audit). Anything newer means
+            // the backup was produced by a future build we don't know yet.
+            if (metadata.version > 2) {
                 errors.add("Unsupported backup version: ${metadata.version}")
             }
         }
@@ -74,32 +77,38 @@ class BackupValidator {
 
         try {
             val json = JSONObject(data)
-            if (!json.has("connections")) {
-                errors.add("Missing connections array in connections.json")
-            } else {
-                val connections = json.getJSONArray("connections")
-                for (i in 0 until connections.length()) {
-                    val connection = connections.getJSONObject(i)
-
-                    // Validate required fields
+            // v2 wraps every entity list under "items"; v1 used the table-plural
+            // key ("connections"). Accept either.
+            val arr = when {
+                json.has("items") -> json.getJSONArray("items")
+                json.has("connections") -> json.getJSONArray("connections")
+                else -> { errors.add("Missing items array in connections.json"); null }
+            }
+            if (arr != null) {
+                for (i in 0 until arr.length()) {
+                    val connection = arr.getJSONObject(i)
                     if (!connection.has("id")) errors.add("Connection at index $i missing id")
                     if (!connection.has("name")) errors.add("Connection at index $i missing name")
                     if (!connection.has("host")) errors.add("Connection at index $i missing host")
                     if (!connection.has("port")) errors.add("Connection at index $i missing port")
                     if (!connection.has("username")) errors.add("Connection at index $i missing username")
-                    if (!connection.has("authType")) errors.add("Connection at index $i missing authType")
+                    if (!connection.has("authType") && !connection.has("auth_type"))
+                        errors.add("Connection at index $i missing authType")
 
-                    // Validate port range
                     val port = connection.optInt("port", -1)
                     if (port < 1 || port > 65535) {
                         errors.add("Connection at index $i has invalid port: $port")
                     }
-
-                    // Validate auth type
-                    val authType = connection.optString("authType")
-                    if (authType !in listOf("password", "publickey", "keyboard-interactive")) {
-                        warnings.add("Connection at index $i has unknown authType: $authType")
-                    }
+                    // v2 ConnectionProfile.authType stores AuthType.name
+                    // (PASSWORD/PUBLIC_KEY/...); v1 used SSH wire names.
+                    val authType = connection.optString("authType",
+                        connection.optString("auth_type", ""))
+                    val ok = authType in listOf(
+                        "password", "publickey", "keyboard-interactive",
+                        "PASSWORD", "PUBLIC_KEY", "KEYBOARD_INTERACTIVE",
+                        "GSSAPI", "FIDO2_SECURITY_KEY"
+                    )
+                    if (!ok) warnings.add("Connection at index $i has unknown authType: $authType")
                 }
             }
         } catch (e: Exception) {
@@ -115,20 +124,18 @@ class BackupValidator {
 
         try {
             val json = JSONObject(data)
-            if (!json.has("keys")) {
-                errors.add("Missing keys array in keys.json")
-            } else {
-                val keys = json.getJSONArray("keys")
-                for (i in 0 until keys.length()) {
-                    val key = keys.getJSONObject(i)
-
-                    // Validate required fields
+            val arr = when {
+                json.has("items") -> json.getJSONArray("items")
+                json.has("keys") -> json.getJSONArray("keys")
+                else -> { errors.add("Missing items array in keys.json"); null }
+            }
+            if (arr != null) {
+                for (i in 0 until arr.length()) {
+                    val key = arr.getJSONObject(i)
                     if (!key.has("keyId")) errors.add("Key at index $i missing keyId")
                     if (!key.has("name")) errors.add("Key at index $i missing name")
                     if (!key.has("keyType")) errors.add("Key at index $i missing keyType")
                     if (!key.has("fingerprint")) errors.add("Key at index $i missing fingerprint")
-
-                    // Validate key type
                     val keyType = key.optString("keyType")
                     if (keyType !in listOf("RSA", "DSA", "ECDSA", "Ed25519")) {
                         warnings.add("Key at index $i has unknown keyType: $keyType")
@@ -189,19 +196,22 @@ class BackupValidator {
 
         try {
             val json = JSONObject(data)
-            if (!json.has("themes")) {
-                // Themes are optional
-                warnings.add("No themes found in backup")
-            } else {
-                val themes = json.getJSONArray("themes")
-                for (i in 0 until themes.length()) {
-                    val theme = themes.getJSONObject(i)
-
-                    // Validate required fields
-                    if (!theme.has("id")) errors.add("Theme at index $i missing id")
+            val arr = when {
+                json.has("items") -> json.getJSONArray("items")
+                json.has("themes") -> json.getJSONArray("themes")
+                else -> { warnings.add("No themes found in backup"); null }
+            }
+            if (arr != null) {
+                for (i in 0 until arr.length()) {
+                    val theme = arr.getJSONObject(i)
+                    // v2 entity uses `themeId`; v1 hand-rolled used `id`.
+                    if (!theme.has("themeId") && !theme.has("id"))
+                        errors.add("Theme at index $i missing themeId")
                     if (!theme.has("name")) errors.add("Theme at index $i missing name")
                     if (!theme.has("isDark")) errors.add("Theme at index $i missing isDark")
-                    if (!theme.has("themeData")) errors.add("Theme at index $i missing themeData")
+                    // v2 carries ansiColors directly; v1 used themeData.
+                    if (!theme.has("ansiColors") && !theme.has("themeData"))
+                        warnings.add("Theme at index $i missing ansiColors")
                 }
             }
         } catch (e: Exception) {

@@ -1,17 +1,47 @@
 package io.github.tabssh.backup.import
 
 import android.content.Context
+import io.github.tabssh.backup.export.BackupExporter
+import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.storage.database.TabSSHDatabase
-import io.github.tabssh.storage.database.entities.*
+import io.github.tabssh.storage.database.entities.CloudAccount
+import io.github.tabssh.storage.database.entities.ConnectionGroup
+import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.storage.database.entities.HostKeyEntry
+import io.github.tabssh.storage.database.entities.HypervisorAccount
+import io.github.tabssh.storage.database.entities.HypervisorProfile
+import io.github.tabssh.storage.database.entities.Identity
+import io.github.tabssh.storage.database.entities.Macro
+import io.github.tabssh.storage.database.entities.MonitorSlot
+import io.github.tabssh.storage.database.entities.Snippet
+import io.github.tabssh.storage.database.entities.StoredKey
+import io.github.tabssh.storage.database.entities.ThemeDefinition
+import io.github.tabssh.storage.database.entities.TrustedCertificate
+import io.github.tabssh.storage.database.entities.Workspace
 import io.github.tabssh.storage.preferences.PreferenceManager
 import io.github.tabssh.utils.logging.Logger
-import io.github.tabssh.ssh.auth.AuthType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.json.JSONObject
 
 /**
- * Handles importing data from backup
+ * Handles importing data from backup.
+ *
+ * Reads both the v2 entity-serialised format (current — emitted by
+ * [BackupExporter]) and the v1 hand-rolled per-field format
+ * (legacy — emitted by versions before this audit). v1 is only
+ * supported for the six original tables: connections, keys, themes,
+ * certificates, host_keys, identities. All other tables (groups,
+ * snippets, hypervisors, hypervisor_accounts, workspaces, cloud_accounts,
+ * macros, monitor_slots) only exist in v2 backups.
  */
 class BackupImporter(
     private val context: Context,
@@ -19,336 +49,460 @@ class BackupImporter(
     private val preferenceManager: PreferenceManager
 ) {
 
+    companion object { private const val TAG = "BackupImporter" }
+
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
+
     /**
-     * Restore backup data
+     * Restore everything present in [backupData]. Returns a per-table count of
+     * rows inserted (skipping rows that already exist when [overwriteExisting]
+     * is false).
      */
     suspend fun restoreBackupData(
         backupData: Map<String, String>,
         overwriteExisting: Boolean
     ): Map<String, Int> = withContext(Dispatchers.IO) {
-        val restoredItems = mutableMapOf<String, Int>()
+        val out = mutableMapOf<String, Int>()
 
-        // Restore connections
-        backupData["connections.json"]?.let { data ->
-            val count = restoreConnections(data, overwriteExisting)
-            restoredItems["connections"] = count
-            Logger.d("BackupImporter", "Restored $count connections")
+        backupData[BackupExporter.FILE_CONNECTIONS]?.let {
+            out["connections"] = restoreConnections(it, overwriteExisting)
+        }
+        backupData[BackupExporter.FILE_KEYS]?.let {
+            out["keys"] = restoreKeys(it, overwriteExisting)
+        }
+        backupData[BackupExporter.FILE_PREFERENCES]?.let {
+            restorePreferences(it); out["preferences"] = 1
+        }
+        backupData[BackupExporter.FILE_THEMES]?.let {
+            out["themes"] = restoreThemes(it, overwriteExisting)
+        }
+        backupData[BackupExporter.FILE_CERTIFICATES]?.let {
+            out["certificates"] = restoreCertificates(it, overwriteExisting)
+        }
+        backupData[BackupExporter.FILE_HOST_KEYS]?.let {
+            out["host_keys"] = restoreHostKeys(it, overwriteExisting)
+        }
+        backupData[BackupExporter.FILE_IDENTITIES]?.let {
+            out["identities"] = restoreIdentities(it, overwriteExisting)
+        }
+        backupData[BackupExporter.FILE_GROUPS]?.let {
+            out["connection_groups"] = restoreGroups(it, overwriteExisting)
+        }
+        backupData[BackupExporter.FILE_SNIPPETS]?.let {
+            out["snippets"] = restoreSnippets(it, overwriteExisting)
+        }
+        backupData[BackupExporter.FILE_HYPERVISORS]?.let {
+            out["hypervisors"] = restoreHypervisors(it, overwriteExisting)
+        }
+        backupData[BackupExporter.FILE_HYPERVISOR_ACCTS]?.let {
+            out["hypervisor_accounts"] = restoreHypervisorAccounts(it, overwriteExisting)
+        }
+        backupData[BackupExporter.FILE_WORKSPACES]?.let {
+            out["workspaces"] = restoreWorkspaces(it, overwriteExisting)
+        }
+        backupData[BackupExporter.FILE_CLOUD_ACCOUNTS]?.let {
+            out["cloud_accounts"] = restoreCloudAccounts(it, overwriteExisting)
+        }
+        backupData[BackupExporter.FILE_MACROS]?.let {
+            out["macros"] = restoreMacros(it, overwriteExisting)
+        }
+        backupData[BackupExporter.FILE_MONITOR_SLOTS]?.let {
+            out["monitor_slots"] = restoreMonitorSlots(it, overwriteExisting)
         }
 
-        // Restore SSH keys
-        backupData["keys.json"]?.let { data ->
-            val count = restoreKeys(data, overwriteExisting)
-            restoredItems["keys"] = count
-            Logger.d("BackupImporter", "Restored $count keys")
-        }
-
-        // Restore preferences
-        backupData["preferences.json"]?.let { data ->
-            restorePreferences(data)
-            restoredItems["preferences"] = 1
-            Logger.d("BackupImporter", "Restored preferences")
-        }
-
-        // Restore themes
-        backupData["themes.json"]?.let { data ->
-            val count = restoreThemes(data, overwriteExisting)
-            restoredItems["themes"] = count
-            Logger.d("BackupImporter", "Restored $count themes")
-        }
-
-        // Restore certificates
-        backupData["certificates.json"]?.let { data ->
-            val count = restoreCertificates(data, overwriteExisting)
-            restoredItems["certificates"] = count
-            Logger.d("BackupImporter", "Restored $count certificates")
-        }
-
-        // Restore host keys
-        backupData["host_keys.json"]?.let { data ->
-            val count = restoreHostKeys(data, overwriteExisting)
-            restoredItems["host_keys"] = count
-            Logger.d("BackupImporter", "Restored $count host keys")
-        }
-
-        // Restore identities (reusable credential sets)
-        backupData["identities.json"]?.let { data ->
-            val count = restoreIdentities(data, overwriteExisting)
-            restoredItems["identities"] = count
-            Logger.d("BackupImporter", "Restored $count identities")
-        }
-
-        return@withContext restoredItems
+        out
     }
+
+    // ── Connections ──────────────────────────────────────────────────────────
 
     private suspend fun restoreConnections(data: String, overwriteExisting: Boolean): Int {
-        val json = JSONObject(data)
-        val connectionsArray = json.getJSONArray("connections")
-        var restoredCount = 0
-
-        for (i in 0 until connectionsArray.length()) {
-            val connectionJson = connectionsArray.getJSONObject(i)
-
-            val existingConnection = database.connectionDao().getConnection(connectionJson.getString("id"))
-            if (existingConnection != null && !overwriteExisting) {
-                Logger.d("BackupImporter", "Skipping existing connection: ${connectionJson.getString("name")}")
-                continue
-            }
-
-            val connection = ConnectionProfile(
-                id = connectionJson.getString("id"),
-                name = connectionJson.getString("name"),
-                host = connectionJson.getString("host"),
-                port = connectionJson.getInt("port"),
-                username = connectionJson.getString("username"),
-                authType = connectionJson.getString("authType"),
-                keyId = connectionJson.optString("keyId").takeIf { it.isNotEmpty() },
-                groupId = connectionJson.optString("groupId").takeIf { it.isNotEmpty() },
-                theme = connectionJson.optString("theme", "dracula"),
-                createdAt = System.currentTimeMillis(),
-                lastConnected = connectionJson.optLong("lastConnected", 0),
-                connectionCount = connectionJson.optInt("connectionCount", 0),
-                advancedSettings = connectionJson.optString("advancedSettings").takeIf { it.isNotEmpty() }
+        val root = json.parseToJsonElement(data).jsonObject
+        val v = root["v"]?.jsonPrimitive?.intOrNull ?: 1
+        var count = 0
+        if (v >= 2) {
+            val items = json.decodeFromJsonElement(
+                ListSerializer(ConnectionProfile.serializer()), root["items"] as JsonArray
             )
-
-            database.connectionDao().insertConnection(connection)
-
-            // Restore password if present
-            if (connectionJson.has("encryptedPassword")) {
-                val encryptedPassword = connectionJson.getString("encryptedPassword")
-                val password = String(android.util.Base64.decode(encryptedPassword, android.util.Base64.NO_WRAP))
-                preferenceManager.setConnectionPassword(connection.id, password)
+            val passwords: Map<String, String> = (root["passwords"] as? JsonObject)?.let { obj ->
+                obj.mapValues { it.value.jsonPrimitive.content }
+            } ?: emptyMap()
+            for (c in items) {
+                val existing = database.connectionDao().getConnection(c.id)
+                if (existing != null && !overwriteExisting) continue
+                database.connectionDao().insertConnection(c)
+                passwords[c.id]?.let { b64 ->
+                    val pw = String(android.util.Base64.decode(b64, android.util.Base64.NO_WRAP),
+                        Charsets.UTF_8)
+                    preferenceManager.setConnectionPassword(c.id, pw)
+                }
+                count++
             }
-
-            restoredCount++
+        } else {
+            // v1 legacy path — only the 12 fields the old exporter wrote.
+            val arr = JSONObject(data).getJSONArray("connections")
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                val existing = database.connectionDao().getConnection(o.getString("id"))
+                if (existing != null && !overwriteExisting) continue
+                val c = ConnectionProfile(
+                    id = o.getString("id"),
+                    name = o.getString("name"),
+                    host = o.getString("host"),
+                    port = o.getInt("port"),
+                    username = o.getString("username"),
+                    authType = o.getString("authType"),
+                    keyId = o.optString("keyId").takeIf { it.isNotEmpty() },
+                    groupId = o.optString("groupId").takeIf { it.isNotEmpty() },
+                    theme = o.optString("theme", "dracula"),
+                    createdAt = System.currentTimeMillis(),
+                    lastConnected = o.optLong("lastConnected", 0),
+                    connectionCount = o.optInt("connectionCount", 0),
+                    advancedSettings = o.optString("advancedSettings").takeIf { it.isNotEmpty() }
+                )
+                database.connectionDao().insertConnection(c)
+                if (o.has("encryptedPassword")) {
+                    val pw = String(android.util.Base64.decode(
+                        o.getString("encryptedPassword"), android.util.Base64.NO_WRAP
+                    ), Charsets.UTF_8)
+                    preferenceManager.setConnectionPassword(c.id, pw)
+                }
+                count++
+            }
         }
-
-        return restoredCount
+        return count
     }
+
+    // ── Keys ─────────────────────────────────────────────────────────────────
 
     private suspend fun restoreKeys(data: String, overwriteExisting: Boolean): Int {
-        val json = JSONObject(data)
-        val keysArray = json.getJSONArray("keys")
-        var restoredCount = 0
-
-        for (i in 0 until keysArray.length()) {
-            val keyJson = keysArray.getJSONObject(i)
-
-            val existingKey = database.keyDao().getKey(keyJson.getString("keyId"))
-            if (existingKey != null && !overwriteExisting) {
-                Logger.d("BackupImporter", "Skipping existing key: ${keyJson.getString("name")}")
-                continue
-            }
-
-            val key = StoredKey(
-                keyId = keyJson.getString("keyId"),
-                name = keyJson.getString("name"),
-                keyType = keyJson.getString("keyType"),
-                comment = keyJson.optString("comment").takeIf { it.isNotEmpty() },
-                fingerprint = keyJson.getString("fingerprint"),
-                createdAt = keyJson.getLong("createdAt"),
-                lastUsed = keyJson.optLong("lastUsed", 0),
-                requiresPassphrase = keyJson.getBoolean("requiresPassphrase")
+        val root = json.parseToJsonElement(data).jsonObject
+        val v = root["v"]?.jsonPrimitive?.intOrNull ?: 1
+        var count = 0
+        if (v >= 2) {
+            val items = json.decodeFromJsonElement(
+                ListSerializer(StoredKey.serializer()), root["items"] as JsonArray
             )
-
-            database.keyDao().insertKey(key)
-            restoredCount++
+            for (k in items) {
+                val existing = database.keyDao().getKey(k.keyId)
+                if (existing != null && !overwriteExisting) continue
+                database.keyDao().insertKey(k)
+                count++
+            }
+        } else {
+            val arr = JSONObject(data).getJSONArray("keys")
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                val existing = database.keyDao().getKey(o.getString("keyId"))
+                if (existing != null && !overwriteExisting) continue
+                database.keyDao().insertKey(
+                    StoredKey(
+                        keyId = o.getString("keyId"),
+                        name = o.getString("name"),
+                        keyType = o.getString("keyType"),
+                        comment = o.optString("comment").takeIf { it.isNotEmpty() },
+                        fingerprint = o.getString("fingerprint"),
+                        createdAt = o.getLong("createdAt"),
+                        lastUsed = o.optLong("lastUsed", 0),
+                        requiresPassphrase = o.getBoolean("requiresPassphrase")
+                    )
+                )
+                count++
+            }
         }
-
-        return restoredCount
+        return count
     }
 
-    private fun restorePreferences(data: String) {
-        val json = JSONObject(data)
-
-        // Restore general preferences
-        json.optJSONObject("general")?.let { general ->
-            preferenceManager.setAutoBackup(general.optBoolean("autoBackup", true))
-            preferenceManager.setBackupFrequency(general.optString("backupFrequency", "weekly"))
-            preferenceManager.setStartupBehavior(general.optString("startupBehavior", "last_session"))
-            preferenceManager.setLanguage(general.optString("language", "system"))
-        }
-
-        // Restore security preferences
-        json.optJSONObject("security")?.let { security ->
-            preferenceManager.setPasswordStorageLevel(security.optString("passwordStorageLevel", "encrypted"))
-            preferenceManager.setRequireBiometricForSensitive(security.optBoolean("requireBiometric", true))
-            preferenceManager.setStrictHostKeyChecking(security.optBoolean("strictHostKeyChecking", true))
-            preferenceManager.setClearClipboardTimeout(security.optInt("clearClipboardTimeout", 60))
-        }
-
-        // Restore terminal preferences
-        json.optJSONObject("terminal")?.let { terminal ->
-            preferenceManager.setTerminalTheme(terminal.optString("theme", "dracula"))
-            preferenceManager.setFontSize(terminal.optDouble("fontSize", 14.0).toFloat())
-            preferenceManager.setFontFamily(terminal.optString("fontFamily", "Roboto Mono"))
-            preferenceManager.setCursorStyle(terminal.optString("cursorStyle", "block"))
-            preferenceManager.setCursorBlink(terminal.optBoolean("cursorBlink", true))
-            preferenceManager.setScrollbackLines(terminal.optInt("scrollbackLines", 1000))
-        }
-
-        // Restore UI preferences
-        json.optJSONObject("ui")?.let { ui ->
-            preferenceManager.setMaxTabs(ui.optInt("maxTabs", 10))
-            preferenceManager.setConfirmTabClose(ui.optBoolean("confirmTabClose", true))
-            preferenceManager.setAppTheme(ui.optString("appTheme", "system"))
-            preferenceManager.setDynamicColors(ui.optBoolean("dynamicColors", true))
-        }
-    }
+    // ── Themes ───────────────────────────────────────────────────────────────
 
     private suspend fun restoreThemes(data: String, overwriteExisting: Boolean): Int {
-        val json = JSONObject(data)
-        val themesArray = json.getJSONArray("themes")
-        var restoredCount = 0
-
-        for (i in 0 until themesArray.length()) {
-            val themeJson = themesArray.getJSONObject(i)
-
-            val existingTheme = database.themeDao().getTheme(themeJson.getString("id"))
-            if (existingTheme != null && !overwriteExisting) {
-                Logger.d("BackupImporter", "Skipping existing theme: ${themeJson.getString("name")}")
-                continue
-            }
-
-            // Parse ANSI colors from JSON if available
-            val ansiColors = themeJson.optString("ansiColors", "[]")
-            val backgroundColor = themeJson.optInt("backgroundColor", 0xFF000000.toInt())
-            val foregroundColor = themeJson.optInt("foregroundColor", 0xFFFFFFFF.toInt())
-            val cursorColor = themeJson.optInt("cursorColor", 0xFFFFFFFF.toInt())
-            val selectionColor = themeJson.optInt("selectionColor", 0x80808080.toInt())
-
-            val theme = ThemeDefinition(
-                themeId = themeJson.getString("id"),
-                name = themeJson.getString("name"),
-                author = themeJson.optString("author", "Unknown"),
-                isDark = themeJson.getBoolean("isDark"),
-                isBuiltIn = false,
-                backgroundColor = backgroundColor,
-                foregroundColor = foregroundColor,
-                cursorColor = cursorColor,
-                selectionColor = selectionColor,
-                ansiColors = ansiColors,
-                createdAt = themeJson.optLong("createdAt", System.currentTimeMillis())
+        val root = json.parseToJsonElement(data).jsonObject
+        val v = root["v"]?.jsonPrimitive?.intOrNull ?: 1
+        var count = 0
+        if (v >= 2) {
+            val items = json.decodeFromJsonElement(
+                ListSerializer(ThemeDefinition.serializer()), root["items"] as JsonArray
             )
-
-            database.themeDao().insertTheme(theme)
-            restoredCount++
+            for (t in items) {
+                val existing = database.themeDao().getTheme(t.themeId)
+                if (existing != null && !overwriteExisting) continue
+                database.themeDao().insertTheme(t)
+                count++
+            }
+        } else {
+            // v1: best-effort — colors were never written by the buggy v1
+            // exporter so we accept whatever defaults the constructor uses.
+            val arr = JSONObject(data).getJSONArray("themes")
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                val existing = database.themeDao().getTheme(o.getString("id"))
+                if (existing != null && !overwriteExisting) continue
+                database.themeDao().insertTheme(
+                    ThemeDefinition(
+                        themeId = o.getString("id"),
+                        name = o.getString("name"),
+                        author = o.optString("author", "Unknown"),
+                        isDark = o.getBoolean("isDark"),
+                        isBuiltIn = false,
+                        backgroundColor = o.optInt("backgroundColor", 0xFF000000.toInt()),
+                        foregroundColor = o.optInt("foregroundColor", 0xFFFFFFFF.toInt()),
+                        cursorColor = o.optInt("cursorColor", 0xFFFFFFFF.toInt()),
+                        selectionColor = o.optInt("selectionColor", 0x80808080.toInt()),
+                        ansiColors = o.optString("ansiColors", o.optString("themeData", "[]")),
+                        createdAt = o.optLong("createdAt", System.currentTimeMillis())
+                    )
+                )
+                count++
+            }
         }
-
-        return restoredCount
+        return count
     }
+
+    // ── Certificates ─────────────────────────────────────────────────────────
 
     private suspend fun restoreCertificates(data: String, overwriteExisting: Boolean): Int {
-        val json = JSONObject(data)
-        val certificatesArray = json.getJSONArray("certificates")
-        var restoredCount = 0
-
-        for (i in 0 until certificatesArray.length()) {
-            val certJson = certificatesArray.getJSONObject(i)
-
-            val hostname = certJson.getString("hostname")
-            val port = certJson.getInt("port")
-
-            val existingCert = database.certificateDao().getCertificateByHostAndPort(hostname, port)
-            if (existingCert != null && !overwriteExisting) {
-                Logger.d("BackupImporter", "Skipping existing certificate: $hostname:$port")
-                continue
-            }
-
-            val certificate = TrustedCertificate(
-                id = "$hostname:$port",
-                hostname = hostname,
-                port = port,
-                fingerprint = certJson.getString("fingerprint"),
-                algorithm = "SHA-256",
-                certificateData = certJson.getString("certificateData"),
-                subject = certJson.getString("subject"),
-                issuer = certJson.getString("issuer"),
-                serialNumber = certJson.optString("serialNumber", "UNKNOWN"),
-                notBefore = certJson.getLong("notBefore"),
-                notAfter = certJson.getLong("notAfter"),
-                expiresAt = certJson.getLong("notAfter"),
-                createdAt = System.currentTimeMillis(),
-                lastUsed = System.currentTimeMillis()
+        val root = json.parseToJsonElement(data).jsonObject
+        val v = root["v"]?.jsonPrimitive?.intOrNull ?: 1
+        var count = 0
+        if (v >= 2) {
+            val items = json.decodeFromJsonElement(
+                ListSerializer(TrustedCertificate.serializer()), root["items"] as JsonArray
             )
-
-            database.certificateDao().insertCertificate(certificate)
-            restoredCount++
+            for (c in items) {
+                val existing = database.certificateDao().getCertificateByHostAndPort(c.hostname, c.port)
+                if (existing != null && !overwriteExisting) continue
+                database.certificateDao().insertCertificate(c)
+                count++
+            }
+        } else {
+            val arr = JSONObject(data).getJSONArray("certificates")
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                val host = o.getString("hostname"); val port = o.getInt("port")
+                val existing = database.certificateDao().getCertificateByHostAndPort(host, port)
+                if (existing != null && !overwriteExisting) continue
+                database.certificateDao().insertCertificate(
+                    TrustedCertificate(
+                        id = "$host:$port",
+                        hostname = host, port = port,
+                        fingerprint = o.getString("fingerprint"),
+                        algorithm = "SHA-256",
+                        certificateData = o.getString("certificateData"),
+                        subject = o.getString("subject"),
+                        issuer = o.getString("issuer"),
+                        serialNumber = o.optString("serialNumber", "UNKNOWN"),
+                        notBefore = o.getLong("notBefore"),
+                        notAfter = o.getLong("notAfter"),
+                        expiresAt = o.getLong("notAfter"),
+                        createdAt = System.currentTimeMillis(),
+                        lastUsed = System.currentTimeMillis()
+                    )
+                )
+                count++
+            }
         }
-
-        return restoredCount
+        return count
     }
 
-    private suspend fun restoreIdentities(data: String, overwriteExisting: Boolean): Int {
-        val json = JSONObject(data)
-        val identitiesArray = json.getJSONArray("identities")
-        var restoredCount = 0
-
-        for (i in 0 until identitiesArray.length()) {
-            val identityJson = identitiesArray.getJSONObject(i)
-
-            val existingIdentity = database.identityDao().getIdentityById(identityJson.getString("id"))
-            if (existingIdentity != null && !overwriteExisting) {
-                Logger.d("BackupImporter", "Skipping existing identity: ${identityJson.getString("name")}")
-                continue
-            }
-
-            val authType = try {
-                AuthType.valueOf(identityJson.getString("authType"))
-            } catch (e: IllegalArgumentException) {
-                Logger.w("BackupImporter", "Unknown authType for identity ${identityJson.getString("name")}: ${identityJson.getString("authType")}, defaulting to PASSWORD")
-                AuthType.PASSWORD
-            }
-
-            val identity = Identity(
-                id = identityJson.getString("id"),
-                name = identityJson.getString("name"),
-                username = identityJson.getString("username"),
-                authType = authType,
-                keyId = identityJson.optString("keyId").takeIf { it.isNotEmpty() },
-                description = identityJson.optString("description").takeIf { it.isNotEmpty() },
-                createdAt = identityJson.optLong("createdAt", System.currentTimeMillis()),
-                modifiedAt = identityJson.optLong("modifiedAt", System.currentTimeMillis())
-            )
-
-            database.identityDao().insert(identity)
-            restoredCount++
-        }
-
-        return restoredCount
-    }
+    // ── Host keys ────────────────────────────────────────────────────────────
 
     private suspend fun restoreHostKeys(data: String, overwriteExisting: Boolean): Int {
-        val json = JSONObject(data)
-        val hostKeysArray = json.getJSONArray("host_keys")
-        var restoredCount = 0
-
-        for (i in 0 until hostKeysArray.length()) {
-            val hostKeyJson = hostKeysArray.getJSONObject(i)
-
-            val hostname = hostKeyJson.getString("hostname")
-            val port = hostKeyJson.getInt("port")
-
-            val existingKey = database.hostKeyDao().getHostKey(hostname, port)
-            if (existingKey != null && !overwriteExisting) {
-                Logger.d("BackupImporter", "Skipping existing host key: $hostname:$port")
-                continue
-            }
-
-            val hostKey = HostKeyEntry(
-                id = "$hostname:$port",
-                hostname = hostname,
-                port = port,
-                keyType = hostKeyJson.getString("keyType"),
-                fingerprint = hostKeyJson.getString("fingerprint"),
-                publicKey = hostKeyJson.getString("publicKey"),
-                firstSeen = hostKeyJson.getLong("addedAt"),
-                lastVerified = hostKeyJson.getLong("lastVerified")
+        val root = json.parseToJsonElement(data).jsonObject
+        val v = root["v"]?.jsonPrimitive?.intOrNull ?: 1
+        var count = 0
+        if (v >= 2) {
+            val items = json.decodeFromJsonElement(
+                ListSerializer(HostKeyEntry.serializer()), root["items"] as JsonArray
             )
+            for (h in items) {
+                val existing = database.hostKeyDao().getHostKey(h.hostname, h.port)
+                if (existing != null && !overwriteExisting) continue
+                database.hostKeyDao().insertHostKey(h)
+                count++
+            }
+        } else {
+            val arr = JSONObject(data).getJSONArray("host_keys")
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                val host = o.getString("hostname"); val port = o.getInt("port")
+                val existing = database.hostKeyDao().getHostKey(host, port)
+                if (existing != null && !overwriteExisting) continue
+                database.hostKeyDao().insertHostKey(
+                    HostKeyEntry(
+                        id = "$host:$port",
+                        hostname = host, port = port,
+                        keyType = o.getString("keyType"),
+                        fingerprint = o.getString("fingerprint"),
+                        publicKey = o.getString("publicKey"),
+                        firstSeen = o.getLong("addedAt"),
+                        lastVerified = o.optLong("lastVerified", 0)
+                    )
+                )
+                count++
+            }
+        }
+        return count
+    }
 
-            database.hostKeyDao().insertHostKey(hostKey)
-            restoredCount++
+    // ── Identities ───────────────────────────────────────────────────────────
+
+    private suspend fun restoreIdentities(data: String, overwriteExisting: Boolean): Int {
+        val root = json.parseToJsonElement(data).jsonObject
+        val v = root["v"]?.jsonPrimitive?.intOrNull ?: 1
+        var count = 0
+        if (v >= 2) {
+            val items = json.decodeFromJsonElement(
+                ListSerializer(Identity.serializer()), root["items"] as JsonArray
+            )
+            // Note: Identity.password is null on import — the exporter strips
+            // it because it is Keystore-encrypted-at-rest and unusable cross-
+            // device. User re-enters password after restore.
+            for (id in items) {
+                val existing = database.identityDao().getIdentityById(id.id)
+                if (existing != null && !overwriteExisting) continue
+                database.identityDao().insert(id)
+                count++
+            }
+        } else {
+            val arr = JSONObject(data).getJSONArray("identities")
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                val existing = database.identityDao().getIdentityById(o.getString("id"))
+                if (existing != null && !overwriteExisting) continue
+                val authType = try { AuthType.valueOf(o.getString("authType")) }
+                catch (_: IllegalArgumentException) { AuthType.PASSWORD }
+                database.identityDao().insert(
+                    Identity(
+                        id = o.getString("id"),
+                        name = o.getString("name"),
+                        username = o.getString("username"),
+                        authType = authType,
+                        keyId = o.optString("keyId").takeIf { it.isNotEmpty() },
+                        description = o.optString("description").takeIf { it.isNotEmpty() },
+                        createdAt = o.optLong("createdAt", System.currentTimeMillis()),
+                        modifiedAt = o.optLong("modifiedAt", System.currentTimeMillis())
+                    )
+                )
+                count++
+            }
+        }
+        return count
+    }
+
+    // ── v2-only tables ───────────────────────────────────────────────────────
+
+    private suspend fun restoreGroups(data: String, overwriteExisting: Boolean): Int =
+        restoreV2List(data, ListSerializer(ConnectionGroup.serializer())) { g ->
+            val existing = database.connectionGroupDao().getGroupById(g.id)
+            if (existing != null && !overwriteExisting) return@restoreV2List false
+            database.connectionGroupDao().insertGroup(g); true
         }
 
-        return restoredCount
+    private suspend fun restoreSnippets(data: String, overwriteExisting: Boolean): Int =
+        restoreV2List(data, ListSerializer(Snippet.serializer())) { s ->
+            val existing = database.snippetDao().getSnippetById(s.id)
+            if (existing != null && !overwriteExisting) return@restoreV2List false
+            database.snippetDao().insertSnippet(s); true
+        }
+
+    private suspend fun restoreHypervisors(data: String, overwriteExisting: Boolean): Int =
+        // password column is blank on import (Keystore-bound — user re-enters
+        // in the host edit screen after restore). All other config lands.
+        restoreV2List(data, ListSerializer(HypervisorProfile.serializer())) { h ->
+            val existing = database.hypervisorDao().getById(h.id)
+            if (existing != null && !overwriteExisting) return@restoreV2List false
+            database.hypervisorDao().upsertForSync(h); true
+        }
+
+    private suspend fun restoreHypervisorAccounts(data: String, overwriteExisting: Boolean): Int =
+        restoreV2List(data, ListSerializer(HypervisorAccount.serializer())) { a ->
+            val existing = database.hypervisorAccountDao().getById(a.id)
+            if (existing != null && !overwriteExisting) return@restoreV2List false
+            database.hypervisorAccountDao().insert(a); true
+        }
+
+    private suspend fun restoreWorkspaces(data: String, overwriteExisting: Boolean): Int =
+        restoreV2List(data, ListSerializer(Workspace.serializer())) { w ->
+            val existing = database.workspaceDao().getById(w.id)
+            if (existing != null && !overwriteExisting) return@restoreV2List false
+            database.workspaceDao().upsert(w); true
+        }
+
+    private suspend fun restoreCloudAccounts(data: String, overwriteExisting: Boolean): Int =
+        // Cloud API token lives in SecurePasswordManager and is NOT in the
+        // backup; the restored CloudAccount row has no usable token until the
+        // user re-enters it.
+        restoreV2List(data, ListSerializer(CloudAccount.serializer())) { c ->
+            val existing = database.cloudAccountDao().getById(c.id)
+            if (existing != null && !overwriteExisting) return@restoreV2List false
+            database.cloudAccountDao().upsert(c); true
+        }
+
+    private suspend fun restoreMacros(data: String, overwriteExisting: Boolean): Int =
+        restoreV2List(data, ListSerializer(Macro.serializer())) { m ->
+            val existing = database.macroDao().getMacroById(m.id)
+            if (existing != null && !overwriteExisting) return@restoreV2List false
+            database.macroDao().insertMacro(m); true
+        }
+
+    private suspend fun restoreMonitorSlots(data: String, overwriteExisting: Boolean): Int =
+        restoreV2List(data, ListSerializer(MonitorSlot.serializer())) { s ->
+            val existing = database.monitorSlotDao().getById(s.id)
+            if (existing != null && !overwriteExisting) return@restoreV2List false
+            database.monitorSlotDao().insertOrReplace(s); true
+        }
+
+    private suspend fun <T> restoreV2List(
+        data: String,
+        serializer: kotlinx.serialization.KSerializer<List<T>>,
+        applyOne: suspend (T) -> Boolean
+    ): Int {
+        val root = json.parseToJsonElement(data).jsonObject
+        val items = (root["items"] as? JsonArray) ?: return 0
+        val list = json.decodeFromJsonElement(serializer, items)
+        var count = 0
+        for (item in list) {
+            try {
+                if (applyOne(item)) count++
+            } catch (e: Exception) {
+                Logger.w(TAG, "Failed to restore item from v2 list: ${e.message}")
+            }
+        }
+        return count
     }
+
+    // ── Preferences ──────────────────────────────────────────────────────────
+
+    private fun restorePreferences(data: String) {
+        val root = JSONObject(data)
+        root.optJSONObject("general")?.let { g ->
+            preferenceManager.setAutoBackup(g.optBoolean("autoBackup", true))
+            preferenceManager.setBackupFrequency(g.optString("backupFrequency", "weekly"))
+            preferenceManager.setStartupBehavior(g.optString("startupBehavior", "last_session"))
+            preferenceManager.setLanguage(g.optString("language", "system"))
+        }
+        root.optJSONObject("security")?.let { s ->
+            preferenceManager.setPasswordStorageLevel(s.optString("passwordStorageLevel", "encrypted"))
+            preferenceManager.setRequireBiometricForSensitive(s.optBoolean("requireBiometric", true))
+            preferenceManager.setStrictHostKeyChecking(s.optBoolean("strictHostKeyChecking", true))
+            preferenceManager.setClearClipboardTimeout(s.optInt("clearClipboardTimeout", 60))
+        }
+        root.optJSONObject("terminal")?.let { t ->
+            preferenceManager.setTerminalTheme(t.optString("theme", "dracula"))
+            preferenceManager.setFontSize(t.optDouble("fontSize", 14.0).toFloat())
+            preferenceManager.setFontFamily(t.optString("fontFamily", "Roboto Mono"))
+            preferenceManager.setCursorStyle(t.optString("cursorStyle", "block"))
+            preferenceManager.setCursorBlink(t.optBoolean("cursorBlink", true))
+            preferenceManager.setScrollbackLines(t.optInt("scrollbackLines", 1000))
+        }
+        root.optJSONObject("ui")?.let { u ->
+            preferenceManager.setMaxTabs(u.optInt("maxTabs", 10))
+            preferenceManager.setConfirmTabClose(u.optBoolean("confirmTabClose", true))
+            preferenceManager.setAppTheme(u.optString("appTheme", "system"))
+            preferenceManager.setDynamicColors(u.optBoolean("dynamicColors", true))
+        }
+    }
+
 }

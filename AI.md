@@ -745,6 +745,10 @@ GCM authentication tag is appended by the cipher (128 bits, embedded by Java's A
 | `audit_log` | ❌ NOT synced | per-device security trail |
 | `trusted_certificates` | ✅ last-write-wins | Wave 7.1 |
 | `hypervisor_profiles` | ✅ last-write-wins | Wave 7.1 (caveat: `id` is autogenerate Long → cross-device PK collisions could overwrite an unrelated row; users have ≤ 5 hypervisors typically so risk is low) |
+| `hypervisor_accounts` | ✅ last-write-wins | 2026-05-16 audit. Row carries `name`/`username`/`realm`/timestamps; password lives in Keystore under `hypervisor_account_${id}` per device. Same autogenerate-Long PK collision caveat as `hypervisor_profiles`. |
+| `macros` | ✅ last-write-wins | Wave 11 — base64 byte sequences |
+| `monitor_slots` | ✅ last-write-wins | Wave 11 — full table, no `modifiedAt` delta |
+| `sync_state` | ❌ NOT synced | per-device sync bookkeeping; meaningless on another device |
 
 ### 9.5 Scheduling
 

@@ -3,6 +3,7 @@ package io.github.tabssh.storage.database.entities
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import kotlinx.serialization.Serializable
 
 /**
  * Reusable hypervisor credential set — username + (Keystore-stored)
@@ -21,6 +22,7 @@ import androidx.room.PrimaryKey
  * `hypervisor_account_${id}`, mirroring the per-host pattern
  * (`hypervisor_${id}`) introduced for `HypervisorProfile`.
  */
+@Serializable
 @Entity(tableName = "hypervisor_accounts")
 data class HypervisorAccount(
     @PrimaryKey(autoGenerate = true)

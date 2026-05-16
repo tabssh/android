@@ -1,138 +1,242 @@
 package io.github.tabssh.backup.export
 
-import android.content.Context
 import io.github.tabssh.storage.database.TabSSHDatabase
+import io.github.tabssh.storage.database.entities.CloudAccount
+import io.github.tabssh.storage.database.entities.ConnectionGroup
+import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.storage.database.entities.HostKeyEntry
+import io.github.tabssh.storage.database.entities.HypervisorAccount
+import io.github.tabssh.storage.database.entities.HypervisorProfile
+import io.github.tabssh.storage.database.entities.Identity
+import io.github.tabssh.storage.database.entities.Macro
+import io.github.tabssh.storage.database.entities.MonitorSlot
+import io.github.tabssh.storage.database.entities.Snippet
+import io.github.tabssh.storage.database.entities.StoredKey
+import io.github.tabssh.storage.database.entities.ThemeDefinition
 import io.github.tabssh.storage.database.entities.TrustedCertificate
+import io.github.tabssh.storage.database.entities.Workspace
 import io.github.tabssh.storage.preferences.PreferenceManager
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import org.json.JSONArray
-import org.json.JSONObject
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import org.json.JSONObject
 
 /**
- * Handles exporting data for backup
+ * Handles exporting data for backup.
+ *
+ * Wire format v2 — written by this class on every export:
+ *
+ *     {
+ *       "v": 2,
+ *       "items": [ <full entity JSON>, ... ]
+ *     }
+ *
+ * Each entity in `items` is the kotlinx.serialization JSON of the Room
+ * `@Entity` data class, so every column round-trips losslessly. This
+ * replaces the v1 hand-rolled per-field JSON that silently dropped two
+ * dozen ConnectionProfile fields and the colour columns of
+ * ThemeDefinition on restore.
+ *
+ * BackupImporter remains backward compatible with v1.
+ *
+ * Secrets policy (mirrors §9 sync coverage matrix):
+ *   - Connection password (per-host)              — included only when the caller
+ *                                                   sets `includePasswords=true`.
+ *   - SSH private key material                    — never exported (Keystore-bound).
+ *   - StoredKey.certificate (public OpenSSH cert) — included; non-secret.
+ *   - Identity.password                           — never exported (encrypted-at-rest
+ *                                                   value is Keystore-bound to this
+ *                                                   device; unusable on another).
+ *   - CloudAccount API token                      — never exported (Keystore-bound).
+ *   - HypervisorProfile.password                  — never exported (Keystore-bound).
+ *   - OCI PEM private key                         — never exported (Keystore-bound).
+ *
+ * Tables intentionally excluded from backup:
+ *   - tab_sessions   — runtime state, regenerated on next open.
+ *   - sync_state     — per-device sync bookkeeping; meaningless on another device.
+ *   - audit_log      — device-local; can be large; user can export separately.
  */
 class BackupExporter(
-    private val context: Context,
+    private val context: android.content.Context,
     private val database: TabSSHDatabase,
     private val preferenceManager: PreferenceManager
 ) {
 
+    private val json = Json {
+        ignoreUnknownKeys = true
+        prettyPrint = false
+        encodeDefaults = true
+    }
+
+    companion object {
+        const val WIRE_VERSION = 2
+
+        // File names — these are also referenced by BackupManager. Keep in sync.
+        const val FILE_CONNECTIONS       = "connections.json"
+        const val FILE_KEYS              = "keys.json"
+        const val FILE_PREFERENCES       = "preferences.json"
+        const val FILE_THEMES            = "themes.json"
+        const val FILE_CERTIFICATES      = "certificates.json"
+        const val FILE_HOST_KEYS         = "host_keys.json"
+        const val FILE_IDENTITIES        = "identities.json"
+        const val FILE_GROUPS            = "connection_groups.json"
+        const val FILE_SNIPPETS          = "snippets.json"
+        const val FILE_HYPERVISORS       = "hypervisors.json"
+        const val FILE_HYPERVISOR_ACCTS  = "hypervisor_accounts.json"
+        const val FILE_WORKSPACES        = "workspaces.json"
+        const val FILE_CLOUD_ACCOUNTS    = "cloud_accounts.json"
+        const val FILE_MACROS            = "macros.json"
+        const val FILE_MONITOR_SLOTS     = "monitor_slots.json"
+    }
+
     /**
-     * Collect all data to be backed up
+     * Collect every backed-up table as a name→JSON map. Caller (BackupManager)
+     * decides whether to encrypt and how to write to disk.
      */
     suspend fun collectBackupData(includePasswords: Boolean): Map<String, String> = withContext(Dispatchers.IO) {
-        val backupData = mutableMapOf<String, String>()
+        val out = mutableMapOf<String, String>()
 
-        // Export connections
-        backupData["connections.json"] = exportConnections(includePasswords)
+        out[FILE_CONNECTIONS]      = exportConnections(includePasswords)
+        out[FILE_KEYS]             = exportKeys()
+        out[FILE_PREFERENCES]      = exportPreferences()
+        out[FILE_THEMES]           = exportThemes()
+        out[FILE_CERTIFICATES]     = exportCertificates()
+        out[FILE_HOST_KEYS]        = exportHostKeys()
+        out[FILE_IDENTITIES]       = exportIdentities()
+        out[FILE_GROUPS]           = exportGroups()
+        out[FILE_SNIPPETS]         = exportSnippets()
+        out[FILE_HYPERVISORS]      = exportHypervisors()
+        out[FILE_HYPERVISOR_ACCTS] = exportHypervisorAccounts()
+        out[FILE_WORKSPACES]       = exportWorkspaces()
+        out[FILE_CLOUD_ACCOUNTS]   = exportCloudAccounts()
+        out[FILE_MACROS]           = exportMacros()
+        out[FILE_MONITOR_SLOTS]    = exportMonitorSlots()
 
-        // Export SSH keys
-        backupData["keys.json"] = exportKeys()
-
-        // Export preferences
-        backupData["preferences.json"] = exportPreferences()
-
-        // Export themes
-        backupData["themes.json"] = exportThemes()
-
-        // Export trusted certificates
-        backupData["certificates.json"] = exportCertificates()
-
-        // Export known host keys
-        backupData["host_keys.json"] = exportHostKeys()
-
-        // Export identities (reusable credential sets)
-        backupData["identities.json"] = exportIdentities()
-
-        return@withContext backupData
+        out
     }
+
+    // ── Per-entity helpers ───────────────────────────────────────────────────
 
     private suspend fun exportConnections(includePasswords: Boolean): String {
-        val connectionsFlow = database.connectionDao().getAllConnections()
-        val connections = connectionsFlow.first() // Collect the Flow once
-        val json = JSONObject()
-        val connectionsArray = JSONArray()
+        val list = database.connectionDao().getAllConnections().first()
+        // Most connections need no sidecar; only when includePasswords AND the
+        // host actually has a saved password do we attach a parallel passwords map.
+        val passwordSidecar: Map<String, String>? = if (includePasswords) {
+            list.filter { it.authType.equals("password", ignoreCase = true) }
+                .mapNotNull { p ->
+                    val pw = preferenceManager.getConnectionPassword(p.id) ?: return@mapNotNull null
+                    p.id to android.util.Base64.encodeToString(
+                        pw.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP
+                    )
+                }.toMap().takeIf { it.isNotEmpty() }
+        } else null
 
-        connections.forEach { connection ->
-            val connectionJson = JSONObject().apply {
-                put("id", connection.id)
-                put("name", connection.name)
-                put("host", connection.host)
-                put("port", connection.port)
-                put("username", connection.username)
-                put("authType", connection.authType)
-                put("keyId", connection.keyId)
-                put("groupId", connection.groupId)
-                put("theme", connection.theme)
-                put("lastConnected", connection.lastConnected)
-                put("connectionCount", connection.connectionCount)
-                put("advancedSettings", connection.advancedSettings)
-
-                if (includePasswords && connection.authType == "password") {
-                    // Include encrypted password if requested
-                    val password = preferenceManager.getConnectionPassword(connection.id)
-                    if (password != null) {
-                        put("encryptedPassword", android.util.Base64.encodeToString(
-                            password.toByteArray(),
-                            android.util.Base64.NO_WRAP
-                        ))
-                    }
+        return encodeEntities(
+            ListSerializer(ConnectionProfile.serializer()),
+            list,
+            extras = passwordSidecar?.let { sidecar ->
+                buildJsonObject {
+                    put("passwords", JsonObject(sidecar.mapValues { JsonPrimitive(it.value) }))
                 }
             }
-            connectionsArray.put(connectionJson)
-        }
-
-        json.put("connections", connectionsArray)
-        return json.toString(2)
+        )
     }
 
-    private suspend fun exportKeys(): String {
-        val keysFlow = database.keyDao().getAllKeys()
-        val keys = keysFlow.first()
-        val json = JSONObject()
-        val keysArray = JSONArray()
+    private suspend fun exportKeys(): String =
+        encodeEntities(ListSerializer(StoredKey.serializer()), database.keyDao().getAllKeys().first())
 
-        keys.forEach { key ->
-            val keyJson = JSONObject().apply {
-                put("keyId", key.keyId)
-                put("name", key.name)
-                put("keyType", key.keyType)
-                put("comment", key.comment)
-                put("fingerprint", key.fingerprint)
-                put("createdAt", key.createdAt)
-                put("lastUsed", key.lastUsed)
-                put("requiresPassphrase", key.requiresPassphrase)
-                // Note: Private key data is stored separately in secure storage
-                // and would need special handling for export
-            }
-            keysArray.put(keyJson)
-        }
+    private suspend fun exportThemes(): String =
+        encodeEntities(ListSerializer(ThemeDefinition.serializer()), database.themeDao().getAllThemes().first())
 
-        json.put("keys", keysArray)
-        return json.toString(2)
-    }
+    private suspend fun exportCertificates(): String =
+        encodeEntities(ListSerializer(TrustedCertificate.serializer()),
+            database.certificateDao().getAllCertificates().first())
+
+    private suspend fun exportHostKeys(): String =
+        encodeEntities(ListSerializer(HostKeyEntry.serializer()),
+            database.hostKeyDao().getAllHostKeys().first())
+
+    private suspend fun exportIdentities(): String =
+        // Identity.password is intentionally re-set to null on the way out:
+        // it's an encrypted-at-rest blob bound to this device's Keystore; a
+        // different device cannot decrypt it. User re-enters the password
+        // on restore.
+        encodeEntities(
+            ListSerializer(Identity.serializer()),
+            database.identityDao().getAllIdentitiesList().map { it.copy(password = null) }
+        )
+
+    private suspend fun exportGroups(): String =
+        encodeEntities(ListSerializer(ConnectionGroup.serializer()),
+            database.connectionGroupDao().getAllGroups().first())
+
+    private suspend fun exportSnippets(): String =
+        encodeEntities(ListSerializer(Snippet.serializer()),
+            database.snippetDao().getAllSnippets().first())
+
+    private suspend fun exportHypervisors(): String =
+        // HypervisorProfile.password is the inline legacy fallback; with
+        // account_id introduced in v27 the live value lives in
+        // SecurePasswordManager under `hypervisor_${id}`/`hypervisor_account_${id}`.
+        // Either way, the in-table value is Keystore-encrypted-at-rest and
+        // not portable. Blank it on export.
+        encodeEntities(
+            ListSerializer(HypervisorProfile.serializer()),
+            database.hypervisorDao().getAllList().map { it.copy(password = "") }
+        )
+
+    private suspend fun exportHypervisorAccounts(): String =
+        encodeEntities(ListSerializer(HypervisorAccount.serializer()),
+            database.hypervisorAccountDao().getAllAccountsList())
+
+    private suspend fun exportWorkspaces(): String =
+        encodeEntities(ListSerializer(Workspace.serializer()),
+            database.workspaceDao().getAll())
+
+    private suspend fun exportCloudAccounts(): String =
+        // Token lives in SecurePasswordManager under `cloud_token_${id}` and
+        // is not exported. The metadata row tells the restoring device which
+        // providers were configured; user re-enters the token after restore.
+        encodeEntities(ListSerializer(CloudAccount.serializer()),
+            database.cloudAccountDao().getAll())
+
+    private suspend fun exportMacros(): String =
+        encodeEntities(ListSerializer(Macro.serializer()),
+            database.macroDao().getAllMacrosList())
+
+    private suspend fun exportMonitorSlots(): String =
+        encodeEntities(ListSerializer(MonitorSlot.serializer()),
+            database.monitorSlotDao().getAllSlots().first())
+
+    // ── Preferences ──────────────────────────────────────────────────────────
 
     private fun exportPreferences(): String {
-        val json = JSONObject()
+        // Preferences stay in v1 hand-rolled shape because they're not a Room
+        // entity. BackupImporter parses the same shape it always did.
+        val root = JSONObject()
+        root.put("v", WIRE_VERSION)
 
-        // Export all preference categories
-        json.put("general", JSONObject().apply {
+        root.put("general", JSONObject().apply {
             put("autoBackup", preferenceManager.isAutoBackupEnabled())
             put("backupFrequency", preferenceManager.getBackupFrequency())
             put("startupBehavior", preferenceManager.getStartupBehavior())
             put("language", preferenceManager.getLanguage())
         })
 
-        json.put("security", JSONObject().apply {
+        root.put("security", JSONObject().apply {
             put("passwordStorageLevel", preferenceManager.getPasswordStorageLevel())
             put("requireBiometric", preferenceManager.isRequireBiometricForSensitive())
             put("strictHostKeyChecking", preferenceManager.isStrictHostKeyChecking())
             put("clearClipboardTimeout", preferenceManager.getClearClipboardTimeout())
         })
 
-        json.put("terminal", JSONObject().apply {
+        root.put("terminal", JSONObject().apply {
             put("theme", preferenceManager.getTerminalTheme())
             put("fontSize", preferenceManager.getFontSize())
             put("fontFamily", preferenceManager.getFontFamily())
@@ -141,109 +245,29 @@ class BackupExporter(
             put("scrollbackLines", preferenceManager.getScrollbackLines())
         })
 
-        json.put("ui", JSONObject().apply {
+        root.put("ui", JSONObject().apply {
             put("maxTabs", preferenceManager.getMaxTabs())
             put("confirmTabClose", preferenceManager.isConfirmTabClose())
             put("appTheme", preferenceManager.getAppTheme())
             put("dynamicColors", preferenceManager.isDynamicColors())
         })
 
-        return json.toString(2)
+        return root.toString(2)
     }
 
-    private suspend fun exportThemes(): String {
-        val themesFlow = database.themeDao().getAllThemes()
-        val themes = themesFlow.first()
-        val json = JSONObject()
-        val themesArray = JSONArray()
+    // ── Generic v2 entity wrapper ────────────────────────────────────────────
 
-        themes.forEach { theme ->
-            val themeJson = JSONObject().apply {
-                put("id", theme.themeId)
-                put("name", theme.name)
-                put("author", theme.author)
-                put("isDark", theme.isDark)
-                put("themeData", theme.ansiColors ?: "")
-                put("isCustom", !theme.isBuiltIn)
-                put("createdAt", theme.createdAt)
-            }
-            themesArray.put(themeJson)
+    private fun <T> encodeEntities(
+        serializer: kotlinx.serialization.KSerializer<List<T>>,
+        list: List<T>,
+        extras: JsonObject? = null
+    ): String {
+        val itemsArray = json.encodeToJsonElement(serializer, list)
+        val obj = buildJsonObject {
+            put("v", WIRE_VERSION)
+            put("items", itemsArray)
+            extras?.forEach { (k, v) -> put(k, v) }
         }
-
-        json.put("themes", themesArray)
-        return json.toString(2)
-    }
-
-    private suspend fun exportCertificates(): String {
-        val certificates = database.certificateDao().getAllCertificates().first()
-        val json = JSONObject()
-        val certificatesArray = JSONArray()
-
-        certificates.forEach { cert: TrustedCertificate ->
-            val certJson = JSONObject().apply {
-                put("hostname", cert.hostname)
-                put("port", cert.port)
-                put("fingerprint", cert.fingerprint)
-                put("subject", cert.subject)
-                put("issuer", cert.issuer)
-                put("notBefore", cert.notBefore)
-                put("notAfter", cert.notAfter)
-                put("certificateData", cert.certificateData)
-            }
-            certificatesArray.put(certJson)
-        }
-
-        json.put("certificates", certificatesArray)
-        return json.toString(2)
-    }
-
-    private suspend fun exportHostKeys(): String {
-        val hostKeysFlow = database.hostKeyDao().getAllHostKeys()
-        val hostKeys = hostKeysFlow.first()
-        val json = JSONObject()
-        val hostKeysArray = JSONArray()
-
-        hostKeys.forEach { hostKey ->
-            val hostKeyJson = JSONObject().apply {
-                put("hostname", hostKey.hostname)
-                put("port", hostKey.port)
-                put("keyType", hostKey.keyType)
-                put("fingerprint", hostKey.fingerprint)
-                put("publicKey", hostKey.publicKey)
-                put("addedAt", hostKey.firstSeen)
-                put("lastVerified", hostKey.lastVerified)
-            }
-            hostKeysArray.put(hostKeyJson)
-        }
-
-        json.put("host_keys", hostKeysArray)
-        return json.toString(2)
-    }
-
-    private suspend fun exportIdentities(): String {
-        val identities = database.identityDao().getAllIdentitiesList()
-        val json = JSONObject()
-        val identitiesArray = JSONArray()
-
-        identities.forEach { identity ->
-            val identityJson = JSONObject().apply {
-                put("id", identity.id)
-                put("name", identity.name)
-                put("username", identity.username)
-                put("authType", identity.authType.name)
-                put("keyId", identity.keyId ?: "")
-                put("description", identity.description ?: "")
-                put("createdAt", identity.createdAt)
-                put("modifiedAt", identity.modifiedAt)
-                // Note: password field is encrypted at-rest but we omit it from
-                // backup the same way key private data is omitted — exporting an
-                // encrypted blob tied to this device's Keystore is useless on a
-                // different device.
-            }
-            identitiesArray.put(identityJson)
-        }
-
-        json.put("identities", identitiesArray)
-        return json.toString(2)
+        return json.encodeToString(JsonObject.serializer(), obj)
     }
 }

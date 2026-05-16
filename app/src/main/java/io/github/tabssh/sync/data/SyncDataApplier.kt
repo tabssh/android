@@ -175,6 +175,24 @@ class SyncDataApplier {
                 }
             }
 
+            // Audit 2026-05-16 — hypervisor account metadata. Password
+            // remains Keystore-bound on each device, not transferred.
+            // Cross-device Long-PK collision risk is the same as
+            // HypervisorProfile; documented in AI.md §9.4.
+            data.hypervisorAccounts.forEach { a ->
+                try {
+                    val existing = database.hypervisorAccountDao().getById(a.id)
+                    if (existing == null) {
+                        database.hypervisorAccountDao().insert(a)
+                    } else {
+                        database.hypervisorAccountDao().update(a)
+                    }
+                    appliedCount++
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Failed to apply hypervisor account: ${a.name}", e)
+                }
+            }
+
             Logger.i(TAG, "Applied $appliedCount items from sync data")
             ApplyResult.Success(appliedCount)
         } catch (e: Exception) {
