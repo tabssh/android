@@ -412,18 +412,22 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             return
         }
 
-        val logs = Logger.getAllLogs()
-        offerLogShareOrCopy(
-            title = "Debug Logs",
-            clipLabel = "TabSSH Debug Logs",
-            shareSubject = "TabSSH Debug Logs",
-            logs = logs,
-            logType = "debug",
-            onClear = {
-                Logger.clearLogs()
-                android.widget.Toast.makeText(this, "Logs cleared", android.widget.Toast.LENGTH_SHORT).show()
-            }
-        )
+        // Logger.getAllLogs() reads multiple files synchronously — must run on IO,
+        // not on Main, to avoid blocking the main thread (ANR).
+        lifecycleScope.launch {
+            val logs = withContext(Dispatchers.IO) { Logger.getAllLogs() }
+            offerLogShareOrCopy(
+                title = "Debug Logs",
+                clipLabel = "TabSSH Debug Logs",
+                shareSubject = "TabSSH Debug Logs",
+                logs = logs,
+                logType = "debug",
+                onClear = {
+                    Logger.clearLogs()
+                    android.widget.Toast.makeText(this@MainActivity, "Logs cleared", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            )
+        }
     }
 
     /**
@@ -837,15 +841,13 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     private fun importSSHConfigFromUri(uri: android.net.Uri) {
         lifecycleScope.launch {
             try {
-                val inputStream = contentResolver.openInputStream(uri)
-                    ?: throw Exception("Could not open file")
-                
-                // Read content
-                val configContent = inputStream.bufferedReader().use { it.readText() }
-                
-                // Parse config
-                val parser = io.github.tabssh.ssh.config.SSHConfigParser()
-                val profiles = parser.parseConfig(configContent)
+                // Read and parse on IO — openInputStream + readText block the calling thread.
+                val profiles = withContext(Dispatchers.IO) {
+                    val inputStream = contentResolver.openInputStream(uri)
+                        ?: throw Exception("Could not open file")
+                    val configContent = inputStream.bufferedReader().use { it.readText() }
+                    io.github.tabssh.ssh.config.SSHConfigParser().parseConfig(configContent)
+                }
                 
                 // Show import dialog
                 showSSHConfigImportDialog(profiles)

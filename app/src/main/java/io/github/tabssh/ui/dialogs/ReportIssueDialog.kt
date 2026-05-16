@@ -250,9 +250,11 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
             setUploading(true)
             lifecycleScope.launch {
                 try {
-                    val title   = titleEdit.text.toString().trim().ifBlank { "Log" }
-                    val content = preparedContent()
+                    val title = titleEdit.text.toString().trim().ifBlank { "Log" }
+                    // preparedContent() calls Logger.sanitize() which runs heavy regex
+                    // over the full log string — must not run on Main (ANR risk).
                     val url = withContext(Dispatchers.IO) {
+                        val content = preparedContent()
                         PasteProviderFactory
                             .createForService(selectedServiceId, prefs)
                             .upload(title, content)

@@ -741,8 +741,10 @@ class HypervisorEditActivity : AppCompatActivity() {
                     // Account-linked: drop any per-host password we may
                     // have left over from a previous inline configuration
                     // so a future account-detach doesn't surface a stale
-                    // ghost credential.
-                    HypervisorPasswordStore.clear(this@HypervisorEditActivity, savedId)
+                    // ghost credential. clear() does Keystore ops — must be on IO.
+                    withContext(Dispatchers.IO) {
+                        HypervisorPasswordStore.clear(this@HypervisorEditActivity, savedId)
+                    }
                 }
                 
                 finish()

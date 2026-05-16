@@ -210,18 +210,23 @@ class HypervisorsFragment : Fragment() {
             .setPositiveButton("Delete") { _, _ ->
                 lifecycleScope.launch {
                     try {
-                        app.database.hypervisorDao().delete(hypervisor)
-                        // P1: also drop the Keystore-backed password so the
-                        // alias doesn't dangle if the row id ever gets reused.
-                        io.github.tabssh.crypto.storage.HypervisorPasswordStore
-                            .clear(requireContext(), hypervisor.id)
-                        // OCI rows store the PEM + (optional) passphrase
-                        // under their own Keystore aliases — drop those too
-                        // so a row-id collision can't leak the prior owner's
-                        // private key.
-                        if (hypervisor.type == HypervisorType.OCI) {
+                        val ctx = context ?: return@launch
+                        withContext(Dispatchers.IO) {
+                            app.database.hypervisorDao().delete(hypervisor)
+                            // P1: also drop the Keystore-backed password so the
+                            // alias doesn't dangle if the row id ever gets reused.
+                            // clear() / clearOciSecrets() do Keystore operations — must be on IO.
+                            // ctx captured before IO switch — requireContext() is unsafe on IO thread.
                             io.github.tabssh.crypto.storage.HypervisorPasswordStore
-                                .clearOciSecrets(requireContext(), hypervisor.id)
+                                .clear(ctx, hypervisor.id)
+                            // OCI rows store the PEM + (optional) passphrase
+                            // under their own Keystore aliases — drop those too
+                            // so a row-id collision can't leak the prior owner's
+                            // private key.
+                            if (hypervisor.type == HypervisorType.OCI) {
+                                io.github.tabssh.crypto.storage.HypervisorPasswordStore
+                                    .clearOciSecrets(ctx, hypervisor.id)
+                            }
                         }
                         if (!isAdded) return@launch
                         Toast.makeText(
