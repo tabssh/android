@@ -132,6 +132,16 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
             ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT,   // drag directions
             0                                                 // no swipe-to-dismiss
         ) {
+            /**
+             * Disable the built-in long-press drag so that dragging is ONLY
+             * triggered by the explicit drag-handle touch, not by long-pressing
+             * anywhere on an item.  Without this, ItemTouchHelper's internal
+             * gesture detector races with the RecyclerView's horizontal-scroll
+             * detection and can swallow the handle's ACTION_DOWN before
+             * [startDrag] takes effect.
+             */
+            override fun isLongPressDragEnabled() = false
+
             override fun onMove(
                 recyclerView: RecyclerView,
                 viewHolder: RecyclerView.ViewHolder,
@@ -139,7 +149,7 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
             ): Boolean {
                 val from = viewHolder.bindingAdapterPosition
                 val to = target.bindingAdapterPosition
-                if (from == RecyclerView.NO_ID.toInt() || to == RecyclerView.NO_ID.toInt()) return false
+                if (from == RecyclerView.NO_POSITION || to == RecyclerView.NO_POSITION) return false
                 // Swap in the adapter and the backing data simultaneously so they
                 // stay in sync even if the user saves without completing a drag.
                 currentRowAdapter.moveKey(from, to)
@@ -503,12 +513,17 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
                 label.setTextColor(getKeyTextColor(key))
                 // Tap the label (or anywhere except the handle) → remove / add
                 itemView.setOnClickListener { onClick(key) }
-                // Touch the handle → start drag immediately (no long-press needed)
+                // Touch the handle → start drag immediately (no long-press needed).
+                // Return true on ACTION_DOWN to consume the event so the horizontal
+                // RecyclerView's scroll detector does not steal the touch stream
+                // before ItemTouchHelper.startDrag() can take ownership.
                 dragHandle?.setOnTouchListener { _, event ->
                     if (event.actionMasked == MotionEvent.ACTION_DOWN) {
                         onStartDrag?.invoke(this)
+                        true
+                    } else {
+                        false
                     }
-                    false
                 }
             }
         }
