@@ -28,50 +28,50 @@ class MicroBinProvider(private val baseUrl: String) : PasteProvider {
     override suspend fun upload(title: String, content: String): String = withContext(Dispatchers.IO) {
         val base = baseUrl.trimEnd('/')
         val textType = "text/plain".toMediaType()
+        // MicroBin POSTs to /upload (multipart/form-data) and responds with
+        // a 302 redirect to the paste view URL. OkHttp follows the redirect
+        // automatically; the final request URL is the shareable paste URL.
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart("content", null, content.toRequestBody(textType))
-            .addFormDataPart("title", null, title.toRequestBody(textType))
-            .addFormDataPart("privacy", null, "1".toRequestBody(textType))
-            .addFormDataPart("syntax_highlight", null, "text".toRequestBody(textType))
-            .addFormDataPart("expiration", null, "1d".toRequestBody(textType))
+            .addFormDataPart("expiration", null, "0".toRequestBody(textType))
             .addFormDataPart("burn_after", null, "0".toRequestBody(textType))
+            .addFormDataPart("syntax_highlight", null, "plain".toRequestBody(textType))
+            .addFormDataPart("privacy", null, "0".toRequestBody(textType))
+            .addFormDataPart("encrypt_client", null, "false".toRequestBody(textType))
+            .addFormDataPart("encrypted_random_key", null, "".toRequestBody(textType))
+            .addFormDataPart("random_key", null, "".toRequestBody(textType))
+            .addFormDataPart("plain_key", null, "".toRequestBody(textType))
             .build()
         val request = Request.Builder()
-            .url("$base/api/save")
+            .url("$base/upload")
             .post(requestBody)
             .build()
-        val responseBody = sharedHttpClient.newCall(request).execute().use { response ->
+        sharedHttpClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw Exception("MicroBin upload failed: HTTP ${response.code}")
-            response.body?.string() ?: throw Exception("MicroBin returned empty response")
+            response.request.url.toString()
         }
-        val json = JSONObject(responseBody)
-        if (json.has("url")) return@withContext json.getString("url")
-        val id = json.optString("id").ifBlank { throw Exception("MicroBin response missing id field") }
-        "$base/$id"
     }
 }
 
 class LenpasteProvider(private val baseUrl: String) : PasteProvider {
     override suspend fun upload(title: String, content: String): String = withContext(Dispatchers.IO) {
         val base = baseUrl.trimEnd('/')
+        // CasPaste API (compatible with lp.pste.us): POST /api/v1/new
+        // Returns JSON: {"id":"...","url":"...","createTime":...,"deleteTime":...}
         val requestBody = FormBody.Builder()
             .add("title", title)
             .add("body", content)
-            .add("lifetime", "-1")
             .build()
         val request = Request.Builder()
-            .url("$base/api/paste/create")
+            .url("$base/api/v1/new")
             .post(requestBody)
             .build()
         val responseBody = sharedHttpClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw Exception("Lenpaste upload failed: HTTP ${response.code}")
-            response.body?.string() ?: throw Exception("Lenpaste returned empty response")
+            if (!response.isSuccessful) throw Exception("CasPaste upload failed: HTTP ${response.code}")
+            response.body?.string() ?: throw Exception("CasPaste returned empty response")
         }
-        val id = JSONObject(responseBody).optString("id").ifBlank {
-            throw Exception("Lenpaste response missing id field")
-        }
-        "$base/$id"
+        JSONObject(responseBody).getString("url")
     }
 }
 
