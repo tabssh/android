@@ -64,18 +64,23 @@ class IdentitiesFragment : Fragment() {
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
         recyclerView.adapter = identityAdapter
         
-        // Show/hide empty state
+        // Show/hide empty state — must cover all DiffUtil callback variants.
+        // onItemRangeChanged fires when existing items update in-place; without
+        // it, going empty→empty after submitList(emptyList()) never fires any
+        // callback and the empty state stays hidden (blank screen).
         identityAdapter.registerAdapterDataObserver(object : androidx.recyclerview.widget.RecyclerView.AdapterDataObserver() {
-            override fun onChanged() {
-                updateEmptyState(view)
-            }
-            override fun onItemRangeInserted(positionStart: Int, itemCount: Int) {
-                updateEmptyState(view)
-            }
-            override fun onItemRangeRemoved(positionStart: Int, itemCount: Int) {
-                updateEmptyState(view)
-            }
+            override fun onChanged() { updateEmptyState(view) }
+            override fun onItemRangeInserted(positionStart: Int, itemCount: Int) { updateEmptyState(view) }
+            override fun onItemRangeRemoved(positionStart: Int, itemCount: Int) { updateEmptyState(view) }
+            override fun onItemRangeChanged(positionStart: Int, itemCount: Int) { updateEmptyState(view) }
+            override fun onItemRangeChanged(positionStart: Int, itemCount: Int, payload: Any?) { updateEmptyState(view) }
         })
+
+        // Set correct initial empty-state visibility before the first Flow
+        // emission arrives. If the table is empty, submitList(emptyList())
+        // on a brand-new adapter fires no callbacks, leaving the RecyclerView
+        // visible and the empty-state hidden (blank screen).
+        updateEmptyState(view)
         
         // FAB shows menu with options (Create / Import / Generate). The
         // empty-state used to also have a centred "Create Identity" tonal
