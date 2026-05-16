@@ -149,13 +149,6 @@
             android:parentActivityName=".ui.activities.SettingsActivity"
             android:windowSoftInputMode="adjustResize" />
 
-        <!-- SSH Key Management activity -->
-        <activity
-            android:name=".ui.activities.KeyManagementActivity"
-            android:exported="false"
-            android:parentActivityName=".ui.activities.MainActivity"
-            android:windowSoftInputMode="adjustResize" />
-
         <!-- Keyboard Customization activity -->
         <activity
             android:name=".ui.activities.KeyboardCustomizationActivity"
@@ -227,22 +220,6 @@
             android:name=".ui.activities.HypervisorEditActivity"
             android:exported="false"
             android:label="Edit Hypervisor"
-            android:parentActivityName=".ui.activities.MainActivity"
-            android:windowSoftInputMode="adjustResize" />
-
-        <!-- Hypervisor Accounts CRUD (reusable credentials) -->
-        <activity
-            android:name=".ui.activities.HypervisorAccountsActivity"
-            android:exported="false"
-            android:label="Hypervisor Accounts"
-            android:parentActivityName=".ui.activities.MainActivity"
-            android:windowSoftInputMode="adjustResize" />
-
-        <!-- OCI Path A onboarding (config + .pem importer) -->
-        <activity
-            android:name=".ui.activities.OciOnboardingActivity"
-            android:exported="false"
-            android:label="Add OCI hypervisor"
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
@@ -392,12 +369,6 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_info" />
         </receiver>
-        
-        <activity
-            android:name=".ui.activities.IdentityManagementActivity"
-            android:label="Manage Identities"
-            android:parentActivityName=".ui.activities.MainActivity"
-            android:exported="false" />
         
         <activity
             android:name=".ui.activities.TranscriptViewerActivity"

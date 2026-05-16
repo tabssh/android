@@ -2842,7 +2842,10 @@ class TabTerminalActivity : AppCompatActivity() {
             startActivity(ThemeEditorActivity.createIntent(this))
         }
         items += io.github.tabssh.ui.views.PaletteDialog.Item("SSH Keys", "Manage SSH private keys & certificates") {
-            startActivity(Intent(this, KeyManagementActivity::class.java))
+            val intent = Intent(this, MainActivity::class.java)
+            intent.putExtra("start_tab", 2)
+            intent.flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+            startActivity(intent)
         }
         items += io.github.tabssh.ui.views.PaletteDialog.Item("Snippets", "Reusable command snippets") {
             startActivity(Intent(this, SnippetManagerActivity::class.java))

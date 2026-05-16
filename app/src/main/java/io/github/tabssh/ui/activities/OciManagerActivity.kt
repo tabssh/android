@@ -27,6 +27,7 @@ import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.HypervisorType
 import io.github.tabssh.storage.database.entities.StoredKey
+import io.github.tabssh.crypto.storage.HypervisorPasswordStore
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.showError
 import kotlinx.coroutines.Dispatchers
@@ -48,9 +49,9 @@ import kotlinx.coroutines.withContext
  *   - The "host" column on the row carries the region; the API client
  *     resolves the per-service hostname itself.
  *
- * No add/edit dialog here — OCI hosts are created via
- * `OciOnboardingActivity` (Path A importer). This activity is read +
- * action only.
+ * No add/edit dialog here — OCI hosts are added/edited via
+ * `HypervisorEditActivity` with a linked OCI virtualization identity.
+ * This activity is read + action only.
  */
 class OciManagerActivity : AppCompatActivity() {
 
@@ -124,10 +125,11 @@ class OciManagerActivity : AppCompatActivity() {
     }
 
     /**
-     * Build an `OciApiClient` for the chosen profile. The PEM private
-     * key (and optional passphrase) live in the Keystore under
-     * `oci_private_key_${id}` / `oci_passphrase_${id}` — see Phase 4
-     * onboarding.
+     * Build an `OciApiClient` for the chosen profile. When the profile
+     * has a linked [HypervisorAccount] (`accountId != null`), OCI fields
+     * and the PEM live on the account row / its Keystore alias; otherwise
+     * fall back to the legacy per-profile aliases for rows created before
+     * v33 (lazy migration happens inside [HypervisorPasswordStore.retrieveOciAccountKey]).
      */
     private fun connectToHypervisor(profile: HypervisorProfile) {
         currentProfile = profile
@@ -137,20 +139,47 @@ class OciManagerActivity : AppCompatActivity() {
                 statusText.text = "Loading credentials for ${profile.name}…"
                 statusText.visibility = View.VISIBLE
 
-                val pm = app.securePasswordManager
-                val pem = withContext(Dispatchers.IO) { pm.retrievePassword("oci_private_key_${profile.id}") }
+                // Resolve OCI fields: prefer linked account, fall back to profile columns
+                val accountId = profile.accountId
+                val account = if (accountId != null) {
+                    withContext(Dispatchers.IO) {
+                        try { app.database.hypervisorAccountDao().getById(accountId) }
+                        catch (e: Exception) {
+                            android.util.Log.w("OciManager", "account load failed", e); null
+                        }
+                    }
+                } else null
+
+                val tenancy = account?.ociTenancyOcid ?: profile.ociTenancyOcid
+                val user = account?.ociUserOcid ?: profile.ociUserOcid
+                val region = account?.ociRegion ?: profile.ociRegion
+                val fingerprint = account?.ociFingerprint ?: profile.ociFingerprint
+
+                val pem = withContext(Dispatchers.IO) {
+                    if (accountId != null) {
+                        // Account-keyed alias, with lazy migration from legacy profile alias
+                        HypervisorPasswordStore.retrieveOciAccountKey(
+                            applicationContext, accountId, profile.id
+                        )
+                    } else {
+                        app.securePasswordManager.retrievePassword("oci_private_key_${profile.id}")
+                    }
+                }
                 if (pem.isNullOrBlank()) {
-                    statusText.text = "Private key not found in Keystore — re-run onboarding"
+                    statusText.text = "Private key not found — edit this OCI identity to add one"
                     progressBar.visibility = View.GONE
                     return@launch
                 }
                 val passphrase = withContext(Dispatchers.IO) {
-                    pm.retrievePassword("oci_passphrase_${profile.id}")?.takeIf { it.isNotEmpty() }
+                    if (accountId != null) {
+                        HypervisorPasswordStore.retrieveOciAccountPassphrase(
+                            applicationContext, accountId, profile.id
+                        )?.takeIf { it.isNotEmpty() }
+                    } else {
+                        app.securePasswordManager.retrievePassword("oci_passphrase_${profile.id}")
+                            ?.takeIf { it.isNotEmpty() }
+                    }
                 }
-                val tenancy = profile.ociTenancyOcid
-                val user = profile.ociUserOcid
-                val region = profile.ociRegion
-                val fingerprint = profile.ociFingerprint
                 if (tenancy.isNullOrBlank() || user.isNullOrBlank() ||
                     region.isNullOrBlank() || fingerprint.isNullOrBlank()
                 ) {

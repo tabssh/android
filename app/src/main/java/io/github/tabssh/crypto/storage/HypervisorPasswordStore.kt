@@ -30,6 +30,8 @@ object HypervisorPasswordStore {
     private const val TAG = "HypervisorPwdStore"
     private const val KEY_PREFIX = "hypervisor_"
     private const val ACCOUNT_KEY_PREFIX = "hypervisor_account_"
+    private const val OCI_KEY_ACCOUNT_PREFIX  = "oci_private_key_account_"
+    private const val OCI_PASS_ACCOUNT_PREFIX = "oci_passphrase_account_"
 
     private fun aliasFor(id: Long): String = "$KEY_PREFIX$id"
     private fun accountAliasFor(id: Long): String = "$ACCOUNT_KEY_PREFIX$id"
@@ -256,6 +258,125 @@ object HypervisorPasswordStore {
                 pm.clearPassword(alias)
             } catch (e: Exception) {
                 Logger.w(TAG, "clearOciSecrets($alias) threw", e)
+            }
+        }
+    }
+
+    // ─── OCI account-keyed Keystore operations ───────────────────────────────
+    // PEM private key and passphrase stored under `oci_private_key_account_${id}`
+    // / `oci_passphrase_account_${id}` — account-scoped rather than profile-
+    // scoped so one identity can serve multiple OCI hypervisor profiles.
+
+    /** Persist an OCI API private key PEM for an account. */
+    suspend fun storeOciAccountKey(context: Context, accountId: Long, pem: String): Boolean =
+        withContext(Dispatchers.IO) {
+            val app = context.applicationContext as? TabSSHApplication ?: return@withContext false
+            try {
+                app.securePasswordManager.storePassword(
+                    "$OCI_KEY_ACCOUNT_PREFIX$accountId", pem,
+                    SecurePasswordManager.StorageLevel.ENCRYPTED
+                )
+            } catch (e: Exception) {
+                Logger.w(TAG, "storeOciAccountKey($accountId) threw", e)
+                false
+            }
+        }
+
+    /**
+     * Retrieve an OCI API private key PEM for an account. Lazily migrates
+     * the legacy profile-keyed alias (`oci_private_key_${legacyProfileId}`)
+     * to the account alias on first hit so older installs upgrade silently.
+     */
+    suspend fun retrieveOciAccountKey(
+        context: Context,
+        accountId: Long,
+        legacyProfileId: Long? = null
+    ): String? = withContext(Dispatchers.IO) {
+        val app = context.applicationContext as? TabSSHApplication ?: return@withContext null
+        val pm = app.securePasswordManager
+        val current = try {
+            pm.retrievePassword("$OCI_KEY_ACCOUNT_PREFIX$accountId")
+        } catch (_: Exception) { null }
+        if (!current.isNullOrBlank()) return@withContext current
+        // Lazy migration from legacy profile-keyed alias
+        if (legacyProfileId != null) {
+            val legacy = try {
+                pm.retrievePassword("oci_private_key_$legacyProfileId")
+            } catch (_: Exception) { null }
+            if (!legacy.isNullOrBlank()) {
+                try {
+                    pm.storePassword(
+                        "$OCI_KEY_ACCOUNT_PREFIX$accountId", legacy,
+                        SecurePasswordManager.StorageLevel.ENCRYPTED
+                    )
+                    pm.clearPassword("oci_private_key_$legacyProfileId")
+                    Logger.i(TAG, "Migrated OCI key profile $legacyProfileId → account $accountId")
+                } catch (e: Exception) {
+                    Logger.w(TAG, "OCI key lazy-migration threw for account $accountId", e)
+                }
+                return@withContext legacy
+            }
+        }
+        null
+    }
+
+    /** Persist an OCI API key passphrase for an account. */
+    suspend fun storeOciAccountPassphrase(context: Context, accountId: Long, passphrase: String): Boolean =
+        withContext(Dispatchers.IO) {
+            val app = context.applicationContext as? TabSSHApplication ?: return@withContext false
+            try {
+                app.securePasswordManager.storePassword(
+                    "$OCI_PASS_ACCOUNT_PREFIX$accountId", passphrase,
+                    SecurePasswordManager.StorageLevel.ENCRYPTED
+                )
+            } catch (e: Exception) {
+                Logger.w(TAG, "storeOciAccountPassphrase($accountId) threw", e)
+                false
+            }
+        }
+
+    /**
+     * Retrieve an OCI API key passphrase. Lazy-migrates from the legacy
+     * profile-keyed alias (`oci_passphrase_${legacyProfileId}`).
+     */
+    suspend fun retrieveOciAccountPassphrase(
+        context: Context,
+        accountId: Long,
+        legacyProfileId: Long? = null
+    ): String? = withContext(Dispatchers.IO) {
+        val app = context.applicationContext as? TabSSHApplication ?: return@withContext null
+        val pm = app.securePasswordManager
+        val current = try {
+            pm.retrievePassword("$OCI_PASS_ACCOUNT_PREFIX$accountId")
+        } catch (_: Exception) { null }
+        if (!current.isNullOrBlank()) return@withContext current
+        if (legacyProfileId != null) {
+            val legacy = try {
+                pm.retrievePassword("oci_passphrase_$legacyProfileId")
+            } catch (_: Exception) { null }
+            if (!legacy.isNullOrBlank()) {
+                try {
+                    pm.storePassword(
+                        "$OCI_PASS_ACCOUNT_PREFIX$accountId", legacy,
+                        SecurePasswordManager.StorageLevel.ENCRYPTED
+                    )
+                    pm.clearPassword("oci_passphrase_$legacyProfileId")
+                } catch (e: Exception) {
+                    Logger.w(TAG, "OCI passphrase lazy-migration threw for account $accountId", e)
+                }
+                return@withContext legacy
+            }
+        }
+        null
+    }
+
+    /** Delete all Keystore entries for an OCI account. Call from the delete path. */
+    fun clearOciAccountSecrets(context: Context, accountId: Long) {
+        val app = context.applicationContext as? TabSSHApplication ?: return
+        val pm = app.securePasswordManager
+        listOf("$OCI_KEY_ACCOUNT_PREFIX$accountId", "$OCI_PASS_ACCOUNT_PREFIX$accountId").forEach { alias ->
+            try { pm.clearPassword(alias) } catch (e: Exception) {
+                Logger.w(TAG, "clearOciAccountSecrets($alias) threw", e)
             }
         }
     }

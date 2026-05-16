@@ -115,7 +115,10 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         val prefs = androidx.preference.PreferenceManager
             .getDefaultSharedPreferences(this)
         val startup = prefs.getString("general_startup_behavior", "connections")
-        val initialTabIndex = when (startup) {
+        // Explicit start_tab extra overrides the pref — used when another
+        // activity (e.g. the command palette) navigates here to a specific tab.
+        val explicitTab = intent.getIntExtra("start_tab", -1).takeIf { it in 0..4 }
+        val initialTabIndex = explicitTab ?: when (startup) {
             "frequent"    -> 0  // Frequent tab in MainPagerAdapter
             "last_tab"    -> prefs.getInt("ui_last_main_tab_index", 1).coerceIn(0, 4)
             else          -> 1  // Connections tab (default)
@@ -1153,6 +1156,14 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     override fun onResume() {
         super.onResume()
         // Fragments will handle their own data refreshing
+    }
+
+    /** Handle re-delivery of start_tab intent when activity is brought to front. */
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val tab = intent.getIntExtra("start_tab", -1).takeIf { it in 0..4 }
+        if (tab != null) viewPager.setCurrentItem(tab, /* smoothScroll = */ true)
     }
 
 

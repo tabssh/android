@@ -269,21 +269,12 @@ class HypervisorEditActivity : AppCompatActivity() {
         }
 
         buttonConfigureOci.setOnClickListener {
-            // OCI hosts are created (and credentials stored) via the
-            // Path A onboarding wizard. We launch it here, then close
-            // this activity on success — the wizard creates its own row.
-            ociWizardLauncher.launch(
-                android.content.Intent(this, OciOnboardingActivity::class.java)
-            )
-        }
-    }
-
-    private val ociWizardLauncher = registerForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == RESULT_OK) {
-            Toast.makeText(this, "OCI hypervisor saved", Toast.LENGTH_SHORT).show()
-            finish()
+            // Take the user to the Identities tab (tab index 2) in MainActivity
+            // to create or edit an OCI virtualization identity.
+            val intent = android.content.Intent(this, MainActivity::class.java)
+            intent.putExtra("start_tab", 2)
+            intent.flags = android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+            startActivity(intent)
         }
     }
 
@@ -392,17 +383,22 @@ class HypervisorEditActivity : AppCompatActivity() {
     }
 
     private fun updateUIForType(typePosition: Int) {
-        // OCI uses a separate auth model (API-key + RSA HTTP signatures)
-        // and the host/port/username/password/realm fields don't apply.
-        // For non-OCI types, restore the standard widget set.
+        // OCI uses API-key + HTTP signatures — host/port/username/password don't apply.
+        // Account dropdown is shown for both password-type (v32) and OCI (v33+)
+        // but filtered to the matching authType.
         val isOci = typePosition == HypervisorType.OCI.ordinal
         layoutHost.visibility = if (isOci) View.GONE else View.VISIBLE
         layoutPort.visibility = if (isOci) View.GONE else View.VISIBLE
-        layoutAccount.visibility = if (isOci) View.GONE else View.VISIBLE
         layoutUsername.visibility = if (isOci) View.GONE else View.VISIBLE
         layoutPassword.visibility = if (isOci) View.GONE else View.VISIBLE
         switchVerifySsl.visibility = if (isOci) View.GONE else View.VISIBLE
+        // Account dropdown always visible; filter changes by type
+        layoutAccount.visibility = View.VISIBLE
+        // "Open Identities" guidance button only shown for OCI
         layoutOci.visibility = if (isOci) View.VISIBLE else View.GONE
+
+        // Reload the account dropdown with the correct authType filter
+        refreshAccountDropdownForType(typePosition)
 
         when (typePosition) {
             0 -> { // Proxmox
@@ -431,6 +427,40 @@ class HypervisorEditActivity : AppCompatActivity() {
                 layoutApiType.visibility = View.GONE
                 textApiTypeHint.visibility = View.GONE
             }
+        }
+    }
+
+    /**
+     * Reload the account dropdown with accounts matching the selected type's
+     * auth model. Password-type hypervisors show `authType="password"` accounts;
+     * OCI shows `authType="oci_api_key"` accounts.
+     *
+     * Re-selects the current [selectedAccountId] if it is still in the filtered
+     * list; otherwise clears to "(none)".
+     */
+    private fun refreshAccountDropdownForType(typePosition: Int) {
+        val ociFilter = typePosition == HypervisorType.OCI.ordinal
+        val filtered = availableAccounts.filter { acc ->
+            if (ociFilter) acc.authType == "oci_api_key"
+            else acc.authType != "oci_api_key"
+        }
+        val labels = mutableListOf(
+            if (ociFilter) "(none — select OCI identity)" else "(none — use inline credentials)"
+        )
+        labels += filtered.map { it.getDisplayName() }
+        dropdownAccount.setAdapter(
+            ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, labels)
+        )
+        val currentId = selectedAccountId
+        val matchIdx = if (currentId != null) filtered.indexOfFirst { it.id == currentId }
+                           .takeIf { it >= 0 }?.plus(1) ?: 0
+                       else 0
+        dropdownAccount.setText(labels[matchIdx], false)
+        applyAccountSelection(if (matchIdx == 0) null else filtered[matchIdx - 1].id)
+
+        dropdownAccount.setOnItemClickListener { _, _, position, _ ->
+            val acc = if (position == 0) null else filtered.getOrNull(position - 1)
+            applyAccountSelection(acc?.id)
         }
     }
 
@@ -555,29 +585,67 @@ class HypervisorEditActivity : AppCompatActivity() {
             try {
                 val type = HypervisorType.values()[spinnerType.selectedItemPosition]
 
-                // OCI: brand-new rows must go through the Path A wizard
-                // (host/port/username/password don't apply, and credentials
-                // live in the Keystore which the wizard writes). Editing an
-                // existing OCI row only touches name + notes — every other
-                // OCI column is preserved verbatim.
+                // OCI: host/port/username/password don't apply. The OCI
+                // identity (account) is linked via selectedAccountId; the
+                // account row carries all OCI metadata (tenancy, user, region,
+                // fingerprint) and its Keystore alias holds the PEM key.
                 if (type == HypervisorType.OCI) {
-                    val existing = editingHypervisor
-                    if (existing == null) {
+                    val ociAccountId = selectedAccountId
+                    if (ociAccountId == null) {
                         Toast.makeText(
                             this@HypervisorEditActivity,
-                            "Use \"Configure OCI credentials\" to add an OCI hypervisor.",
+                            "Select an OCI identity from the dropdown (or create one in the Identities screen).",
                             Toast.LENGTH_LONG
                         ).show()
                         return@launch
                     }
-                    val updated = existing.copy(
+                    val ociAccount = try {
+                        app.database.hypervisorAccountDao().getById(ociAccountId)
+                    } catch (e: Exception) { null }
+                    if (ociAccount == null || ociAccount.authType != "oci_api_key") {
+                        Toast.makeText(
+                            this@HypervisorEditActivity,
+                            "Selected identity is not an OCI API key identity.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        return@launch
+                    }
+                    // Preserve OCI columns from account; region stored in `host` for display
+                    val baseRow = editingHypervisor ?: HypervisorProfile(
+                        id = 0,
                         name = editName.text.toString(),
+                        type = HypervisorType.OCI,
+                        host = ociAccount.ociRegion ?: "",
+                        port = 443,
+                        username = "",
+                        password = "",
+                        verifySsl = true,
+                        accountId = ociAccountId,
+                        ociTenancyOcid = ociAccount.ociTenancyOcid,
+                        ociUserOcid = ociAccount.ociUserOcid,
+                        ociRegion = ociAccount.ociRegion,
+                        ociFingerprint = ociAccount.ociFingerprint,
+                        ociCompartmentOcid = ociAccount.ociCompartmentOcid,
                         notes = editNotes.text.toString().takeIf { it.isNotBlank() }
                     )
-                    app.database.hypervisorDao().update(updated)
+                    val ociRow = baseRow.copy(
+                        name = editName.text.toString(),
+                        accountId = ociAccountId,
+                        ociTenancyOcid = ociAccount.ociTenancyOcid,
+                        ociUserOcid = ociAccount.ociUserOcid,
+                        ociRegion = ociAccount.ociRegion,
+                        ociFingerprint = ociAccount.ociFingerprint,
+                        ociCompartmentOcid = ociAccount.ociCompartmentOcid,
+                        notes = editNotes.text.toString().takeIf { it.isNotBlank() }
+                    )
+                    if (hypervisorId != null) {
+                        app.database.hypervisorDao().update(ociRow)
+                    } else {
+                        app.database.hypervisorDao().insert(ociRow)
+                    }
                     Toast.makeText(
                         this@HypervisorEditActivity,
-                        "Updated ${updated.name}",
+                        "${if (hypervisorId != null) "Updated" else "Added"} ${ociRow.name}",
                         Toast.LENGTH_SHORT
                     ).show()
                     finish()
@@ -666,10 +734,9 @@ class HypervisorEditActivity : AppCompatActivity() {
     }
 
     /**
-     * Test path for OCI rows — only meaningful when editing an existing
-     * row that already has Keystore-backed credentials (the wizard wrote
-     * them on save). Brand-new OCI rows go through the wizard's own Test
-     * button instead. Returns true on a 200 from `users/{user}`.
+     * Test an existing OCI row. Credentials are resolved from the linked
+     * [HypervisorAccount] when `accountId` is set (v33+), with a lazy
+     * fallback to the legacy per-profile Keystore aliases for older rows.
      */
     private suspend fun testOciConnection(): Boolean {
         val existing = editingHypervisor
@@ -677,37 +744,56 @@ class HypervisorEditActivity : AppCompatActivity() {
                 withContext(Dispatchers.IO) { app.database.hypervisorDao().getById(it) }
             }
         if (existing == null || existing.type != HypervisorType.OCI) {
-            Toast.makeText(
-                this, "Save with the OCI wizard first", Toast.LENGTH_LONG
-            ).show()
+            Toast.makeText(this, "Link an OCI identity first", Toast.LENGTH_LONG).show()
             return false
         }
-        val tenancy = existing.ociTenancyOcid
-        val user = existing.ociUserOcid
-        val region = existing.ociRegion
-        val fingerprint = existing.ociFingerprint
+
+        // Resolve OCI metadata: prefer account row, fall back to profile columns
+        val accountId = existing.accountId
+        val account = if (accountId != null) {
+            withContext(Dispatchers.IO) {
+                try { app.database.hypervisorAccountDao().getById(accountId) }
+                catch (e: Exception) { null }
+            }
+        } else null
+
+        val tenancy = account?.ociTenancyOcid ?: existing.ociTenancyOcid
+        val user = account?.ociUserOcid ?: existing.ociUserOcid
+        val region = account?.ociRegion ?: existing.ociRegion
+        val fingerprint = account?.ociFingerprint ?: existing.ociFingerprint
         if (tenancy.isNullOrBlank() || user.isNullOrBlank() ||
             region.isNullOrBlank() || fingerprint.isNullOrBlank()
         ) {
             Toast.makeText(
-                this, "Row is missing OCI fields — re-run the wizard",
+                this, "OCI identity is missing required fields — edit it in Identities",
                 Toast.LENGTH_LONG
             ).show()
             return false
         }
-        val pm = app.securePasswordManager
+
         val pem = withContext(Dispatchers.IO) {
-            pm.retrievePassword("oci_private_key_${existing.id}")
+            if (accountId != null) {
+                HypervisorPasswordStore.retrieveOciAccountKey(this@HypervisorEditActivity, accountId, existing.id)
+            } else {
+                app.securePasswordManager.retrievePassword("oci_private_key_${existing.id}")
+            }
         }
         if (pem.isNullOrBlank()) {
             Toast.makeText(
-                this, "Private key not in Keystore — re-run the wizard",
+                this, "Private key not found — add it to the OCI identity in Identities",
                 Toast.LENGTH_LONG
             ).show()
             return false
         }
         val passphrase = withContext(Dispatchers.IO) {
-            pm.retrievePassword("oci_passphrase_${existing.id}")?.takeIf { it.isNotEmpty() }
+            if (accountId != null) {
+                HypervisorPasswordStore.retrieveOciAccountPassphrase(
+                    this@HypervisorEditActivity, accountId, existing.id
+                )?.takeIf { it.isNotEmpty() }
+            } else {
+                app.securePasswordManager.retrievePassword("oci_passphrase_${existing.id}")
+                    ?.takeIf { it.isNotEmpty() }
+            }
         }
         return try {
             val km = withContext(Dispatchers.Default) {

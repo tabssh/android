@@ -31,7 +31,7 @@ import io.github.tabssh.utils.logging.Logger
         io.github.tabssh.storage.database.entities.HypervisorAccount::class,
         MonitorSlot::class
     ],
-    version = 32,
+    version = 33,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -314,7 +314,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     MIGRATION_28_29,
                     MIGRATION_29_30,
                     MIGRATION_30_31,
-                    MIGRATION_31_32
+                    MIGRATION_31_32,
+                    MIGRATION_32_33
                 )
                 .build()
                 INSTANCE = instance
@@ -706,6 +707,83 @@ data class DatabaseStats(
                     )"""
                 )
                 Logger.i("Database", "Migration 31->32: Created monitor_slots table")
+            }
+        }
+
+        /**
+         * v32 → v33 — OCI credentials move from `hypervisors` to
+         * `hypervisor_accounts`.
+         *
+         * - Adds `auth_type`, `oci_tenancy_ocid`, `oci_user_ocid`,
+         *   `oci_region`, `oci_fingerprint`, `oci_compartment_ocid` columns
+         *   to `hypervisor_accounts`.
+         * - For every existing OCI `hypervisors` row, creates a
+         *   `hypervisor_accounts` row with the copied OCI fields and links
+         *   the hypervisor to it via `account_id`.
+         * - Keystore entries (`oci_private_key_${profileId}`) migrate lazily
+         *   on first access via `HypervisorPasswordStore.retrieveOciAccountKey`.
+         * - The deprecated OCI columns on `hypervisors` are left in place
+         *   (SQLite < 3.35 does not support DROP COLUMN) but are no longer
+         *   the source of truth after this migration.
+         */
+        val MIGRATION_32_33 = object : Migration(32, 33) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Step 1 — add OCI credential columns to hypervisor_accounts.
+                database.execSQL(
+                    "ALTER TABLE hypervisor_accounts ADD COLUMN auth_type TEXT NOT NULL DEFAULT 'password'"
+                )
+                database.execSQL(
+                    "ALTER TABLE hypervisor_accounts ADD COLUMN oci_tenancy_ocid TEXT"
+                )
+                database.execSQL(
+                    "ALTER TABLE hypervisor_accounts ADD COLUMN oci_user_ocid TEXT"
+                )
+                database.execSQL(
+                    "ALTER TABLE hypervisor_accounts ADD COLUMN oci_region TEXT"
+                )
+                database.execSQL(
+                    "ALTER TABLE hypervisor_accounts ADD COLUMN oci_fingerprint TEXT"
+                )
+                database.execSQL(
+                    "ALTER TABLE hypervisor_accounts ADD COLUMN oci_compartment_ocid TEXT"
+                )
+
+                // Step 2 — for every OCI hypervisor profile that has no account
+                // linked yet, create a HypervisorAccount row and link it.
+                val cursor = database.query(
+                    "SELECT id, name, oci_tenancy_ocid, oci_user_ocid, oci_region, " +
+                    "oci_fingerprint, oci_compartment_ocid FROM hypervisors " +
+                    "WHERE auth_type = 'oci_api_key' AND account_id IS NULL"
+                )
+                cursor.use {
+                    val now = System.currentTimeMillis()
+                    while (cursor.moveToNext()) {
+                        val profileId = cursor.getLong(cursor.getColumnIndexOrThrow("id"))
+                        val name      = cursor.getString(cursor.getColumnIndexOrThrow("name")) ?: "OCI"
+                        val tenancy   = cursor.getString(cursor.getColumnIndexOrThrow("oci_tenancy_ocid"))
+                        val user      = cursor.getString(cursor.getColumnIndexOrThrow("oci_user_ocid"))
+                        val region    = cursor.getString(cursor.getColumnIndexOrThrow("oci_region"))
+                        val fp        = cursor.getString(cursor.getColumnIndexOrThrow("oci_fingerprint"))
+                        val comp      = cursor.getString(cursor.getColumnIndexOrThrow("oci_compartment_ocid"))
+                        database.execSQL(
+                            "INSERT INTO hypervisor_accounts " +
+                            "(name, username, auth_type, oci_tenancy_ocid, oci_user_ocid, " +
+                            " oci_region, oci_fingerprint, oci_compartment_ocid, " +
+                            " created_at, modified_at) " +
+                            "VALUES (?, '', 'oci_api_key', ?, ?, ?, ?, ?, ?, ?)",
+                            arrayOf(name, tenancy, user, region, fp, comp, now, now)
+                        )
+                        val newAccountId = database.query("SELECT last_insert_rowid()").use { c ->
+                            c.moveToFirst(); c.getLong(0)
+                        }
+                        database.execSQL(
+                            "UPDATE hypervisors SET account_id = ? WHERE id = ?",
+                            arrayOf(newAccountId, profileId)
+                        )
+                        Logger.i("Database", "Migration 32->33: linked OCI profile $profileId → account $newAccountId")
+                    }
+                }
+                Logger.i("Database", "Migration 32->33: OCI credentials promoted to hypervisor_accounts")
             }
         }
 

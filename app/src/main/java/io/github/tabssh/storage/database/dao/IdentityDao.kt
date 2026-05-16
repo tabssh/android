@@ -49,7 +49,7 @@ interface IdentityDao {
     
     /**
      * Clear key_id on all identities that reference the deleted key.
-     * Called inside a transaction by KeyManagementActivity.deleteKey.
+     * Called inside a transaction by IdentitiesFragment.deleteSshKey.
      */
     @Query("UPDATE identities SET key_id = NULL WHERE key_id = :keyId")
     suspend fun clearKeyFromIdentities(keyId: String)

@@ -1,12 +1,19 @@
 package io.github.tabssh.ui.fragments
 
-import android.content.Intent
+import android.content.ClipboardManager
+import android.content.Context
+import android.net.Uri
 import android.os.Bundle
+import android.text.InputType
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
+import android.widget.AutoCompleteTextView
+import android.widget.RadioGroup
+import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -18,17 +25,22 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.crypto.keys.GenerateResult
+import io.github.tabssh.crypto.keys.ImportResult
+import io.github.tabssh.crypto.keys.KeyType
 import io.github.tabssh.crypto.storage.HypervisorPasswordStore
 import io.github.tabssh.crypto.storage.SecurePasswordManager
+import io.github.tabssh.hypervisor.oci.OciConfigParser
+import io.github.tabssh.hypervisor.oci.OciConfigProfile
 import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.storage.database.entities.HypervisorAccount
 import io.github.tabssh.storage.database.entities.Identity
 import io.github.tabssh.storage.database.entities.StoredKey
-import io.github.tabssh.ui.activities.KeyManagementActivity
 import io.github.tabssh.ui.adapters.HypervisorAccountAdapter
 import io.github.tabssh.ui.adapters.IdentityAdapter
 import io.github.tabssh.ui.adapters.StoredKeyAdapter
 import io.github.tabssh.utils.logging.Logger
+import io.github.tabssh.utils.showError
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -47,6 +59,111 @@ class IdentitiesFragment : Fragment() {
     private lateinit var identityAdapter: IdentityAdapter
     private lateinit var virtAdapter: HypervisorAccountAdapter
     private lateinit var keyAdapter: StoredKeyAdapter
+
+    // ── SAF launchers — must be declared as field initializers (before onStart) ──
+
+    /** Opens a file picker for SSH key import. */
+    private val importKeyLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> uri?.let { importKeyFromFile(it) } }
+
+    /** Opens a file picker for OpenSSH certificate attachment. */
+    private val attachCertLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        val key = pendingCertKey ?: return@registerForActivityResult
+        pendingCertKey = null
+        uri ?: return@registerForActivityResult
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val text = requireContext().contentResolver
+                    .openInputStream(uri)?.bufferedReader()?.use { it.readText() }?.trim().orEmpty()
+                withContext(Dispatchers.Main) {
+                    if (validateCert(text)) setKeyCert(key, text, "Certificate attached")
+                }
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to read cert file", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(requireContext(), "Failed to read certificate: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    /** Opens a file picker for an OCI PEM private key in the virt identity dialog. */
+    private val ociPemLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri ?: return@registerForActivityResult
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val text = requireContext().contentResolver
+                    .openInputStream(uri)?.bufferedReader()?.use { it.readText() }?.trim().orEmpty()
+                withContext(Dispatchers.Main) {
+                    ociDialogPem = text
+                    ociDialogPemCallback?.invoke(text)
+                }
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to read PEM file", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(requireContext(), "Failed to read PEM file: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    /** Opens a file picker for an OCI ~/.oci/config in the virt identity dialog. */
+    private val ociConfigLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri ?: return@registerForActivityResult
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val text = requireContext().contentResolver
+                    .openInputStream(uri)?.bufferedReader()?.use { it.readText() }.orEmpty()
+                val profiles = OciConfigParser.parse(text).filter { !it.usesSessionToken }
+                withContext(Dispatchers.Main) {
+                    when {
+                        profiles.isEmpty() -> Toast.makeText(
+                            requireContext(),
+                            "No API-key profiles found in that config (session-token profiles are not supported)",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        profiles.size == 1 -> ociDialogConfigCallback?.invoke(profiles[0])
+                        else -> showOciProfilePickerDialog(profiles)
+                    }
+                }
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to read OCI config file", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(requireContext(), "Failed to read .oci/config: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    // ── State bridging SAF results back to dialog callbacks ──────────────────
+
+    /** The key currently awaiting a certificate file from [attachCertLauncher]. */
+    private var pendingCertKey: StoredKey? = null
+
+    /** PEM text staged in the virt identity dialog — reset on each open. */
+    private var ociDialogPem: String = ""
+
+    /**
+     * Callback that updates the dialog's PEM status text when a key is
+     * loaded (paste or file import). Captured from the dialog's closure;
+     * set to null when the dialog closes.
+     */
+    private var ociDialogPemCallback: ((String) -> Unit)? = null
+
+    /**
+     * Callback that populates the dialog's OCI fields from a parsed
+     * profile. Set from the dialog closure; null when not showing.
+     */
+    private var ociDialogConfigCallback: ((OciConfigProfile) -> Unit)? = null
+
+    // ── Fragment lifecycle ────────────────────────────────────────────────────
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -475,62 +592,321 @@ class IdentitiesFragment : Fragment() {
 
     // ─── Virtualization Identity dialogs ────────────────────────────────────
 
+    /**
+     * Show the create / edit dialog for a [HypervisorAccount].
+     * The dialog uses [R.layout.dialog_edit_virt_identity] which has a
+     * RadioGroup type selector at the top: "Password" or "OCI API Key".
+     * The appropriate section is shown / hidden when the user toggles.
+     *
+     * OCI PEM and passphrase are staged in [ociDialogPem] /
+     * [ociDialogPemCallback] / [ociDialogConfigCallback] so the SAF
+     * launchers (field initializers) can deliver results to the dialog
+     * without needing a direct reference to it.
+     */
     private fun showVirtAccountDialog(existing: HypervisorAccount?) {
         val dialogView = LayoutInflater.from(requireContext())
-            .inflate(R.layout.dialog_edit_hypervisor_account, null)
+            .inflate(R.layout.dialog_edit_virt_identity, null)
 
+        val radioGroupType = dialogView.findViewById<RadioGroup>(R.id.radio_group_type)
+        val sectionPassword = dialogView.findViewById<View>(R.id.section_password)
+        val sectionOci = dialogView.findViewById<View>(R.id.section_oci)
         val editName = dialogView.findViewById<TextInputEditText>(R.id.edit_name)
+
+        // Password section
         val editUsername = dialogView.findViewById<TextInputEditText>(R.id.edit_username)
         val editPassword = dialogView.findViewById<TextInputEditText>(R.id.edit_password)
         val editRealm = dialogView.findViewById<TextInputEditText>(R.id.edit_realm)
 
-        existing?.let {
-            editName.setText(it.name)
-            editUsername.setText(it.username)
-            editRealm.setText(it.realm ?: "")
+        // OCI section
+        val editOciTenancy = dialogView.findViewById<TextInputEditText>(R.id.edit_oci_tenancy)
+        val editOciUser = dialogView.findViewById<TextInputEditText>(R.id.edit_oci_user)
+        val dropdownOciRegion = dialogView.findViewById<AutoCompleteTextView>(R.id.dropdown_oci_region)
+        val editOciFingerprint = dialogView.findViewById<TextInputEditText>(R.id.edit_oci_fingerprint)
+        val editOciCompartment = dialogView.findViewById<TextInputEditText>(R.id.edit_oci_compartment)
+        val buttonPastePem = dialogView.findViewById<MaterialButton>(R.id.button_paste_pem)
+        val buttonImportPem = dialogView.findViewById<MaterialButton>(R.id.button_import_pem)
+        val buttonImportOciConfig = dialogView.findViewById<MaterialButton>(R.id.button_import_oci_config)
+        val textPemStatus = dialogView.findViewById<TextView>(R.id.text_pem_status)
+        val editOciPassphrase = dialogView.findViewById<TextInputEditText>(R.id.edit_oci_passphrase)
+
+        // Seed region autocomplete
+        dropdownOciRegion.setAdapter(
+            ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, REGION_SEED)
+        )
+
+        // Section visibility driven by type radio
+        radioGroupType.setOnCheckedChangeListener { _, checkedId ->
+            sectionPassword.visibility = if (checkedId == R.id.radio_password) View.VISIBLE else View.GONE
+            sectionOci.visibility = if (checkedId == R.id.radio_oci) View.VISIBLE else View.GONE
         }
+
+        // Reset staged PEM state for this dialog session
+        ociDialogPem = ""
+        ociDialogPemCallback = null
+        ociDialogConfigCallback = null
+
+        // Pre-fill fields if editing
+        existing?.let { acc ->
+            editName.setText(acc.name)
+            val isOci = acc.authType == "oci_api_key"
+            if (isOci) {
+                dialogView.findViewById<android.widget.RadioButton>(R.id.radio_oci).isChecked = true
+                sectionPassword.visibility = View.GONE
+                sectionOci.visibility = View.VISIBLE
+                editOciTenancy.setText(acc.ociTenancyOcid ?: "")
+                editOciUser.setText(acc.ociUserOcid ?: "")
+                dropdownOciRegion.setText(acc.ociRegion ?: "", false)
+                editOciFingerprint.setText(acc.ociFingerprint ?: "")
+                editOciCompartment.setText(acc.ociCompartmentOcid ?: "")
+                // Load PEM status from Keystore asynchronously — just show
+                // whether a key exists; never surface the PEM itself.
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val hasPem = HypervisorPasswordStore
+                        .retrieveOciAccountKey(requireContext(), acc.id)?.isNotBlank() == true
+                    withContext(Dispatchers.Main) {
+                        if (hasPem) {
+                            textPemStatus.text = "PEM key loaded — choose a new file to replace"
+                            ociDialogPem = EXISTING_PEM_SENTINEL
+                        } else {
+                            textPemStatus.text = "No key loaded"
+                        }
+                    }
+                }
+            } else {
+                editUsername.setText(acc.username)
+                editRealm.setText(acc.realm ?: "")
+                // Show mask if a password is stored, async
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val hasPw = HypervisorPasswordStore
+                        .retrieveAccountPassword(requireContext(), acc.id)?.isNotBlank() == true
+                    withContext(Dispatchers.Main) {
+                        if (hasPw) {
+                            editPassword.setText(PASSWORD_MASK)
+                            editPassword.hint = "Password set — leave to keep, or type to replace"
+                        }
+                    }
+                }
+            }
+        }
+
+        // Wire up PEM callback — updates status text and stores the PEM
+        ociDialogPemCallback = { pem ->
+            ociDialogPem = pem
+            val looksValid = pem.contains("PRIVATE KEY")
+            textPemStatus.text = if (looksValid)
+                "PEM key loaded (${pem.lines().size} lines)"
+            else
+                "⚠ Doesn't look like a private key — verify format"
+        }
+
+        // Wire up .oci/config profile callback — populates the five OCI fields
+        ociDialogConfigCallback = { profile ->
+            editOciTenancy.setText(profile.tenancyOcid ?: "")
+            editOciUser.setText(profile.userOcid ?: "")
+            dropdownOciRegion.setText(profile.region ?: "", false)
+            editOciFingerprint.setText(profile.fingerprint ?: "")
+            Toast.makeText(
+                requireContext(),
+                "Profile \"${profile.name}\" imported — add the PEM key separately",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+
+        // PEM paste: try clipboard first; fall back to manual paste dialog
+        buttonPastePem.setOnClickListener {
+            val clipboard = requireContext()
+                .getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            val clip = clipboard?.primaryClip?.getItemAt(0)
+                ?.coerceToText(requireContext())?.toString().orEmpty()
+            if (clip.contains("PRIVATE KEY")) {
+                ociDialogPemCallback?.invoke(clip)
+            } else {
+                showPasteOciPemDialog()
+            }
+        }
+        buttonImportPem.setOnClickListener { ociPemLauncher.launch(arrayOf("*/*")) }
+        buttonImportOciConfig.setOnClickListener { ociConfigLauncher.launch(arrayOf("*/*")) }
 
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(if (existing == null) "New Virtualization Identity" else "Edit Identity")
             .setView(dialogView)
             .setPositiveButton("Save") { _, _ ->
                 val name = editName.text?.toString()?.trim().orEmpty()
-                val username = editUsername.text?.toString()?.trim().orEmpty()
-                val password = editPassword.text?.toString().orEmpty()
-                val realm = editRealm.text?.toString()?.trim()?.takeIf { it.isNotBlank() }
-
-                if (name.isBlank() || username.isBlank()) {
-                    Toast.makeText(requireContext(), "Name and username are required", Toast.LENGTH_SHORT).show()
+                if (name.isBlank()) {
+                    Toast.makeText(requireContext(), "Name is required", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
-
-                lifecycleScope.launch {
-                    val savedId: Long = if (existing == null) {
-                        app.database.hypervisorAccountDao().insert(
-                            HypervisorAccount(name = name, username = username, realm = realm)
-                        )
-                    } else {
-                        app.database.hypervisorAccountDao().update(
-                            existing.copy(
-                                name = name,
-                                username = username,
-                                realm = realm,
-                                modifiedAt = System.currentTimeMillis()
-                            )
-                        )
-                        existing.id
-                    }
-                    if (password.isNotEmpty() || existing == null) {
-                        HypervisorPasswordStore.storeAccountPassword(requireContext(), savedId, password)
-                    }
-                    Logger.i(TAG,
-                        if (existing == null) "Created virt identity id=$savedId ($name)"
-                        else "Updated virt identity id=$savedId ($name)"
+                val isOciSelected = radioGroupType.checkedRadioButtonId == R.id.radio_oci
+                if (isOciSelected) {
+                    saveOciAccount(
+                        existing, name,
+                        editOciTenancy, editOciUser, dropdownOciRegion,
+                        editOciFingerprint, editOciCompartment, editOciPassphrase
                     )
+                } else {
+                    savePasswordAccount(existing, name, editUsername, editPassword, editRealm)
                 }
+            }
+            .setNegativeButton("Cancel") { _, _ ->
+                // Null callbacks so the launchers don't call into a dismissed dialog
+                ociDialogPemCallback = null
+                ociDialogConfigCallback = null
+            }
+            .show()
+    }
+
+    /** Show a multi-line paste dialog for OCI PEM keys. */
+    private fun showPasteOciPemDialog() {
+        val edit = android.widget.EditText(requireContext()).apply {
+            hint = "Paste PEM private key (-----BEGIN … PRIVATE KEY-----)"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            minLines = 6
+            maxLines = 20
+        }
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Paste PEM Private Key")
+            .setView(edit)
+            .setPositiveButton("Use Key") { _, _ ->
+                val pem = edit.text.toString().trim()
+                if (pem.isNotBlank()) ociDialogPemCallback?.invoke(pem)
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    /** Show a profile picker when the .oci/config contains multiple profiles. */
+    private fun showOciProfilePickerDialog(profiles: List<OciConfigProfile>) {
+        val names = profiles.map { p ->
+            p.name + if (!p.isComplete) " (incomplete)" else ""
+        }.toTypedArray()
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Choose OCI Profile")
+            .setItems(names) { _, which ->
+                ociDialogConfigCallback?.invoke(profiles[which])
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /** Persist a password-type [HypervisorAccount]. */
+    private fun savePasswordAccount(
+        existing: HypervisorAccount?,
+        name: String,
+        editUsername: TextInputEditText,
+        editPassword: TextInputEditText,
+        editRealm: TextInputEditText
+    ) {
+        val username = editUsername.text?.toString()?.trim().orEmpty()
+        val password = editPassword.text?.toString().orEmpty()
+        val realm = editRealm.text?.toString()?.trim()?.takeIf { it.isNotBlank() }
+
+        if (username.isBlank()) {
+            Toast.makeText(requireContext(), "Username is required", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        lifecycleScope.launch {
+            val savedId: Long = if (existing == null) {
+                app.database.hypervisorAccountDao().insert(
+                    HypervisorAccount(name = name, username = username, realm = realm)
+                )
+            } else {
+                app.database.hypervisorAccountDao().update(
+                    existing.copy(
+                        name = name,
+                        username = username,
+                        realm = realm,
+                        modifiedAt = System.currentTimeMillis()
+                    )
+                )
+                existing.id
+            }
+            // Only write to Keystore when a new password was typed (not the
+            // display mask) or when creating a new account.
+            val shouldSavePassword = when {
+                password == PASSWORD_MASK -> false   // user left the mask unchanged
+                existing == null          -> true    // new account
+                password.isNotEmpty()     -> true    // user typed a replacement
+                else                      -> false   // edit + blank → keep existing
+            }
+            if (shouldSavePassword) {
+                HypervisorPasswordStore.storeAccountPassword(requireContext(), savedId, password)
+            }
+            Logger.i(TAG, if (existing == null) "Created virt identity id=$savedId ($name)"
+                          else "Updated virt identity id=$savedId ($name)")
+        }
+    }
+
+    /** Persist an OCI API-key-type [HypervisorAccount]. */
+    private fun saveOciAccount(
+        existing: HypervisorAccount?,
+        name: String,
+        editOciTenancy: TextInputEditText,
+        editOciUser: TextInputEditText,
+        dropdownOciRegion: AutoCompleteTextView,
+        editOciFingerprint: TextInputEditText,
+        editOciCompartment: TextInputEditText,
+        editOciPassphrase: TextInputEditText
+    ) {
+        val tenancy = editOciTenancy.text?.toString()?.trim().orEmpty()
+        val user = editOciUser.text?.toString()?.trim().orEmpty()
+        val region = dropdownOciRegion.text?.toString()?.trim().orEmpty()
+        val fingerprint = editOciFingerprint.text?.toString()?.trim().orEmpty()
+        val compartment = editOciCompartment.text?.toString()?.trim()?.takeIf { it.isNotBlank() }
+        val passphrase = editOciPassphrase.text?.toString().orEmpty()
+
+        if (tenancy.isBlank() || user.isBlank() || region.isBlank() || fingerprint.isBlank()) {
+            Toast.makeText(
+                requireContext(),
+                "Tenancy, User OCID, Region, and Fingerprint are required",
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+        // Require a PEM key for new accounts; for edits the sentinel means
+        // the existing Keystore key should be kept.
+        if (existing == null && (ociDialogPem.isBlank() || ociDialogPem == EXISTING_PEM_SENTINEL)) {
+            Toast.makeText(requireContext(), "A PEM private key is required", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        lifecycleScope.launch {
+            val savedId: Long = if (existing == null) {
+                app.database.hypervisorAccountDao().insert(
+                    HypervisorAccount(
+                        name = name,
+                        authType = "oci_api_key",
+                        ociTenancyOcid = tenancy,
+                        ociUserOcid = user,
+                        ociRegion = region,
+                        ociFingerprint = fingerprint,
+                        ociCompartmentOcid = compartment
+                    )
+                )
+            } else {
+                app.database.hypervisorAccountDao().update(
+                    existing.copy(
+                        name = name,
+                        ociTenancyOcid = tenancy,
+                        ociUserOcid = user,
+                        ociRegion = region,
+                        ociFingerprint = fingerprint,
+                        ociCompartmentOcid = compartment,
+                        modifiedAt = System.currentTimeMillis()
+                    )
+                )
+                existing.id
+            }
+            // Only replace the stored PEM when a new one was loaded
+            if (ociDialogPem.isNotBlank() && ociDialogPem != EXISTING_PEM_SENTINEL) {
+                HypervisorPasswordStore.storeOciAccountKey(requireContext(), savedId, ociDialogPem)
+            }
+            if (passphrase.isNotEmpty()) {
+                HypervisorPasswordStore.storeOciAccountPassphrase(requireContext(), savedId, passphrase)
+            }
+            Logger.i(TAG, if (existing == null) "Created OCI identity id=$savedId ($name)"
+                          else "Updated OCI identity id=$savedId ($name)")
+        }
     }
 
     private fun confirmDeleteVirtAccount(account: HypervisorAccount) {
@@ -539,11 +915,12 @@ class IdentitiesFragment : Fragment() {
                 app.database.hypervisorDao().getAllList().count { it.accountId == account.id }
             } catch (_: Exception) { 0 }
 
+            val secretLabel = if (account.authType == "oci_api_key") "API key" else "password"
             val message = if (linked > 0) {
                 "$linked hypervisor${if (linked == 1) "" else "s"} still link to \"${account.name}\". " +
                 "Unlink them in their edit screen first."
             } else {
-                "Delete \"${account.name}\"?\n\nThe stored password will be cleared from the Keystore."
+                "Delete \"${account.name}\"?\n\nThe stored $secretLabel will be cleared from the Keystore."
             }
 
             MaterialAlertDialogBuilder(requireContext())
@@ -553,7 +930,11 @@ class IdentitiesFragment : Fragment() {
                     if (linked > 0) return@setPositiveButton
                     lifecycleScope.launch {
                         app.database.hypervisorAccountDao().delete(account)
-                        HypervisorPasswordStore.clearAccountPassword(requireContext(), account.id)
+                        if (account.authType == "oci_api_key") {
+                            HypervisorPasswordStore.clearOciAccountSecrets(requireContext(), account.id)
+                        } else {
+                            HypervisorPasswordStore.clearAccountPassword(requireContext(), account.id)
+                        }
                         Logger.i(TAG, "Deleted virt identity id=${account.id} (${account.name})")
                     }
                 }
@@ -566,11 +947,12 @@ class IdentitiesFragment : Fragment() {
 
     private fun showSshKeyAddMenu() {
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("SSH Key")
-            .setItems(arrayOf("📥 Import SSH Key", "🔐 Generate SSH Key")) { _, which ->
+            .setTitle("Add SSH Key")
+            .setItems(arrayOf("📥 Import from File", "📋 Paste Key", "🔑 Generate Key")) { _, which ->
                 when (which) {
-                    0 -> navigateToKeyManagement(importMode = true)
-                    1 -> navigateToKeyManagement(generateMode = true)
+                    0 -> importKeyLauncher.launch(arrayOf("*/*"))
+                    1 -> showKeyPasteDialog()
+                    2 -> showKeyGenerateDialog()
                 }
             }
             .show()
@@ -579,20 +961,321 @@ class IdentitiesFragment : Fragment() {
     private fun showSshKeyOptionsMenu(key: StoredKey) {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(key.getDisplayName())
-            .setItems(arrayOf("✏️ Manage Key", "🗑️ Delete Key")) { _, which ->
+            .setItems(arrayOf("ℹ️ Details & More…", "🗑️ Delete Key")) { _, which ->
                 when (which) {
-                    0 -> navigateToKeyManagement()
+                    0 -> showKeyDetails(key)
                     1 -> confirmDeleteSshKey(key)
                 }
             }
             .show()
     }
 
-    private fun navigateToKeyManagement(importMode: Boolean = false, generateMode: Boolean = false) {
-        val intent = Intent(requireContext(), KeyManagementActivity::class.java)
-        if (importMode) intent.putExtra("action", "import")
-        else if (generateMode) intent.putExtra("action", "generate")
-        startActivity(intent)
+    private fun showKeyDetails(key: StoredKey) {
+        val certInfo = key.certificate?.let {
+            val firstField = it.trim().substringBefore(' ')
+            "Certificate: ✓ attached ($firstField)"
+        } ?: "Certificate: — none"
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(key.name)
+            .setMessage(
+                "Type: ${key.keyType}\n" +
+                "Fingerprint: ${key.fingerprint}\n" +
+                "Created: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).format(java.util.Date(key.createdAt))}\n" +
+                (if (!key.comment.isNullOrEmpty()) "Comment: ${key.comment}\n" else "") +
+                certInfo
+            )
+            .setPositiveButton("OK", null)
+            .setNeutralButton("More…") { _, _ -> showMoreActionsDialog(key) }
+            .setNegativeButton("Delete") { _, _ -> confirmDeleteSshKey(key) }
+            .show()
+    }
+
+    private fun showMoreActionsDialog(key: StoredKey) {
+        val items = mutableListOf("Rename", "Attach certificate (paste)…", "Attach certificate (file)…")
+        if (key.certificate != null) items += "Remove certificate"
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(key.name)
+            .setItems(items.toTypedArray()) { _, which ->
+                when (items[which]) {
+                    "Rename" -> showRenameKeyDialog(key)
+                    "Attach certificate (paste)…" -> showPasteCertDialog(key)
+                    "Attach certificate (file)…" -> { pendingCertKey = key; attachCertLauncher.launch(arrayOf("*/*")) }
+                    "Remove certificate" -> setKeyCert(key, null, "Certificate removed")
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /** Show a paste dialog pre-filled with clipboard if it looks like a cert. */
+    private fun showPasteCertDialog(key: StoredKey) {
+        val edit = android.widget.EditText(requireContext()).apply {
+            hint = "Paste *-cert.pub line (e.g. ssh-rsa-cert-v01@openssh.com AAAA…)"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            minLines = 4
+            maxLines = 8
+        }
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Attach OpenSSH Certificate")
+            .setView(edit)
+            .setPositiveButton("Attach") { _, _ ->
+                val cert = edit.text.toString().trim()
+                if (validateCert(cert)) setKeyCert(key, cert, "Certificate attached")
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun validateCert(cert: String): Boolean {
+        if (!cert.contains("-cert-v01@openssh.com")) {
+            showError(
+                "Doesn't look like an OpenSSH certificate (missing '-cert-v01@openssh.com').",
+                "Invalid Certificate"
+            )
+            return false
+        }
+        return true
+    }
+
+    private fun setKeyCert(key: StoredKey, cert: String?, toastMsg: String) {
+        lifecycleScope.launch {
+            try {
+                app.database.keyDao().updateKey(key.copy(certificate = cert))
+                Toast.makeText(requireContext(), toastMsg, Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to update certificate", e)
+                showError("Failed to update certificate: ${e.message}", "Error")
+            }
+        }
+    }
+
+    private fun showRenameKeyDialog(key: StoredKey) {
+        val edit = android.widget.EditText(requireContext()).apply {
+            setText(key.name)
+            hint = "Enter new name"
+            selectAll()
+        }
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Rename SSH Key")
+            .setView(edit)
+            .setPositiveButton("Rename") { _, _ ->
+                val newName = edit.text.toString().trim()
+                if (newName.isNotBlank() && newName != key.name) renameKey(key, newName)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun renameKey(key: StoredKey, newName: String) {
+        lifecycleScope.launch {
+            try {
+                app.database.keyDao().updateKey(key.copy(name = newName))
+                Toast.makeText(requireContext(), "Key renamed to \"$newName\"", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to rename key", e)
+                showError("Failed to rename key: ${e.message}", "Rename Error")
+            }
+        }
+    }
+
+    private fun showKeyPasteDialog() {
+        val edit = android.widget.EditText(requireContext()).apply {
+            hint = "Paste your private key here (PEM format)"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            minLines = 10
+            maxLines = 20
+        }
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Paste SSH Private Key")
+            .setView(edit)
+            .setPositiveButton("Next") { _, _ ->
+                val content = edit.text.toString()
+                if (content.isNotBlank()) {
+                    promptForKeyName("Pasted Key") { name -> importKeyContent(content, name) }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showKeyGenerateDialog() {
+        val keyTypes = arrayOf("RSA 2048", "RSA 4096", "ECDSA P-256", "ECDSA P-384", "Ed25519")
+        var selectedType = 4 // Default to Ed25519
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Generate SSH Key")
+            .setSingleChoiceItems(keyTypes, selectedType) { _, which -> selectedType = which }
+            .setPositiveButton("Next") { _, _ ->
+                val nameEdit = android.widget.EditText(requireContext()).apply {
+                    hint = "Key name (e.g. my-server-key)"
+                }
+                MaterialAlertDialogBuilder(requireContext())
+                    .setTitle("Key Name")
+                    .setView(nameEdit)
+                    .setPositiveButton("Generate") { _, _ ->
+                        val keyName = nameEdit.text.toString().trim().ifBlank { "generated-key" }
+                        val (type, size) = when (selectedType) {
+                            0 -> KeyType.RSA to 2048
+                            1 -> KeyType.RSA to 4096
+                            2 -> KeyType.ECDSA to 256
+                            3 -> KeyType.ECDSA to 384
+                            else -> KeyType.ED25519 to 256
+                        }
+                        generateKey(type, size, keyName)
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun importKeyFromFile(uri: Uri) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val content = requireContext().contentResolver
+                    .openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    ?: return@launch
+                val display = resolveDisplayName(uri) ?: uri.lastPathSegment ?: "Imported Key"
+                val suggestion = extractKeyNameFromFilename(display)
+                withContext(Dispatchers.Main) {
+                    promptForKeyName(suggestion) { name -> importKeyContent(content, name) }
+                }
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to read key file", e)
+                withContext(Dispatchers.Main) {
+                    showError("Failed to read key file: ${e.message}", "Import Error")
+                }
+            }
+        }
+    }
+
+    /**
+     * Show a name-this-key dialog pre-filled with [suggestion]. On confirm,
+     * [onConfirm] receives the final non-blank name (falls back to suggestion
+     * if the user clears the field).
+     */
+    private fun promptForKeyName(suggestion: String, onConfirm: (String) -> Unit) {
+        val edit = android.widget.EditText(requireContext()).apply {
+            setText(suggestion)
+            setSelection(text.length)
+            hint = "Key name"
+        }
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Name This Key")
+            .setMessage("This label will appear in the SSH Keys list.")
+            .setView(edit)
+            .setPositiveButton("Import") { _, _ ->
+                val name = edit.text.toString().trim().ifBlank { suggestion }
+                onConfirm(name)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun importKeyContent(keyContent: String, filename: String) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val result = app.keyStorage.importKeyFromText(
+                    keyContent = keyContent,
+                    passphrase = null,
+                    keyName = extractKeyNameFromFilename(filename)
+                )
+                withContext(Dispatchers.Main) {
+                    when (result) {
+                        is ImportResult.Success -> {
+                            Logger.i(TAG, "Key imported: ${result.keyId}")
+                            Toast.makeText(requireContext(), "SSH key imported", Toast.LENGTH_SHORT).show()
+                        }
+                        is ImportResult.Error -> {
+                            if (result.message.contains("encrypted") &&
+                                result.message.contains("passphrase")
+                            ) {
+                                showPassphraseDialog(keyContent, filename)
+                            } else {
+                                showError("Key import failed:\n\n${result.message}", "Import Failed")
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Logger.e(TAG, "Key import failed", e)
+                withContext(Dispatchers.Main) {
+                    showError("Key import failed: ${e.message}", "Import Error")
+                }
+            }
+        }
+    }
+
+    private fun showPassphraseDialog(keyContent: String, filename: String) {
+        val edit = android.widget.EditText(requireContext()).apply {
+            hint = "Enter passphrase"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Encrypted Key")
+            .setMessage("This key is encrypted. Enter the passphrase to import it.")
+            .setView(edit)
+            .setPositiveButton("Import") { _, _ ->
+                val passphrase = edit.text.toString()
+                importKeyWithPassphrase(keyContent, filename, passphrase)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun importKeyWithPassphrase(keyContent: String, filename: String, passphrase: String) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val result = app.keyStorage.importKeyFromText(
+                    keyContent = keyContent,
+                    passphrase = passphrase,
+                    keyName = extractKeyNameFromFilename(filename)
+                )
+                withContext(Dispatchers.Main) {
+                    when (result) {
+                        is ImportResult.Success -> {
+                            Logger.i(TAG, "Encrypted key imported: ${result.keyId}")
+                            Toast.makeText(requireContext(), "SSH key imported", Toast.LENGTH_SHORT).show()
+                        }
+                        is ImportResult.Error -> {
+                            Logger.e(TAG, "Encrypted key import failed: ${result.message}")
+                            showError("Import failed:\n\n${result.message}", "Import Failed")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Logger.e(TAG, "Encrypted key import failed", e)
+                withContext(Dispatchers.Main) {
+                    showError("Encrypted key import failed: ${e.message}", "Import Error")
+                }
+            }
+        }
+    }
+
+    private fun generateKey(keyType: KeyType, keySize: Int, keyName: String) {
+        Toast.makeText(requireContext(), "Generating SSH key…", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val result = app.keyStorage.generateKeyPair(keyType, keySize, keyName)
+                withContext(Dispatchers.Main) {
+                    when (result) {
+                        is GenerateResult.Success ->
+                            MaterialAlertDialogBuilder(requireContext())
+                                .setTitle("Key Generated")
+                                .setMessage("\"$keyName\" generated successfully.\n\nFingerprint:\n${result.fingerprint}")
+                                .setPositiveButton("OK", null)
+                                .show()
+                        is GenerateResult.Error ->
+                            showError("Failed to generate key:\n\n${result.message}", "Generation Failed")
+                    }
+                }
+            } catch (e: Exception) {
+                Logger.e(TAG, "Key generation failed", e)
+                withContext(Dispatchers.Main) {
+                    showError("Key generation failed: ${e.message}", "Error")
+                }
+            }
+        }
     }
 
     private fun confirmDeleteSshKey(key: StoredKey) {
@@ -620,9 +1303,56 @@ class IdentitiesFragment : Fragment() {
         }
     }
 
+    // ─── Utilities ────────────────────────────────────────────────────────────
+
+    /**
+     * Resolve a SAF content:// URI to its DISPLAY_NAME, or null.
+     * Raw `lastPathSegment` for SAF URIs returns the internal document ID
+     * (e.g. "msf:1000003152"), which is not useful as a key name.
+     */
+    private fun resolveDisplayName(uri: Uri): String? = try {
+        requireContext().contentResolver.query(
+            uri,
+            arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
+            null, null, null
+        )?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+    } catch (e: Exception) {
+        Logger.w(TAG, "Display name lookup failed: ${e.message}")
+        null
+    }
+
+    /** Turn a filename like "id_ed25519.pem" into a human label "id ed25519". */
+    private fun extractKeyNameFromFilename(filename: String): String =
+        filename.replace(Regex("\\.(pem|key|pub)$"), "").replace("_", " ").trim()
+
     companion object {
         private const val TAG = "IdentitiesFragment"
+
+        /** Displayed in password fields for existing stored credentials. */
         private const val PASSWORD_MASK = "••••••••"
+
+        /**
+         * Sentinel stored in [ociDialogPem] when an edit dialog finds an
+         * existing Keystore key. Signals "leave the stored PEM unchanged".
+         */
+        private const val EXISTING_PEM_SENTINEL = " existing "
+
+        /** Seed list of OCI commercial regions. The AutoCompleteTextView
+         *  allows the user to type a custom one (Oracle adds regions periodically). */
+        private val REGION_SEED = arrayOf(
+            "us-ashburn-1", "us-phoenix-1", "us-chicago-1", "us-sanjose-1",
+            "ca-toronto-1", "ca-montreal-1",
+            "sa-saopaulo-1", "sa-vinhedo-1", "sa-santiago-1",
+            "uk-london-1", "uk-cardiff-1",
+            "eu-frankfurt-1", "eu-amsterdam-1", "eu-zurich-1", "eu-stockholm-1",
+            "eu-marseille-1", "eu-milan-1", "eu-madrid-1", "eu-paris-1",
+            "me-jeddah-1", "me-dubai-1", "me-abudhabi-1",
+            "ap-tokyo-1", "ap-osaka-1", "ap-seoul-1", "ap-sydney-1",
+            "ap-melbourne-1", "ap-mumbai-1", "ap-hyderabad-1", "ap-singapore-1",
+            "af-johannesburg-1", "il-jerusalem-1",
+            "mx-queretaro-1", "mx-monterrey-1"
+        )
+
         fun newInstance() = IdentitiesFragment()
     }
 }
