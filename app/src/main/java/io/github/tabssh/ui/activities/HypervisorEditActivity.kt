@@ -541,11 +541,28 @@ class HypervisorEditActivity : AppCompatActivity() {
                 val type = HypervisorType.values()[spinnerType.selectedItemPosition]
                 val host = editHost.text.toString()
                 val port = editPort.text.toString().toInt()
-                val username = editUsername.text.toString()
-                val password = editPassword.text.toString()
-                val realm = editRealm.text.toString()
                 val verifySsl = switchVerifySsl.isChecked
-                
+
+                // Resolve credentials: account row takes precedence over inline fields.
+                val accountId = selectedAccountId
+                val account = if (accountId != null) {
+                    withContext(Dispatchers.IO) {
+                        try { app.database.hypervisorAccountDao().getById(accountId) }
+                        catch (e: Exception) { null }
+                    }
+                } else null
+                val username = account?.username ?: editUsername.text.toString()
+                val password = if (account != null) {
+                    withContext(Dispatchers.IO) {
+                        HypervisorPasswordStore.retrieveAccountPassword(
+                            this@HypervisorEditActivity, accountId!!
+                        )
+                    } ?: ""
+                } else {
+                    editPassword.text.toString()
+                }
+                val realm = account?.realm ?: editRealm.text.toString()
+
                 val success = when (type) {
                     HypervisorType.PROXMOX -> {
                         val client = ProxmoxApiClient(host, port, username, password, realm, verifySsl)
@@ -828,13 +845,17 @@ class HypervisorEditActivity : AppCompatActivity() {
             editPort.error = "Port is required"
             return false
         }
-        if (editUsername.text.toString().isBlank()) {
-            editUsername.error = "Username is required"
-            return false
-        }
-        if (editPassword.text.toString().isBlank()) {
-            editPassword.error = "Password is required"
-            return false
+        // Skip inline credential checks when a reusable account is selected;
+        // those fields are hidden and credentials resolve from the account.
+        if (selectedAccountId == null) {
+            if (editUsername.text.toString().isBlank()) {
+                editUsername.error = "Username is required"
+                return false
+            }
+            if (editPassword.text.toString().isBlank()) {
+                editPassword.error = "Password is required"
+                return false
+            }
         }
 
         val port = editPort.text.toString().toIntOrNull()
