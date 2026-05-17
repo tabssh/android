@@ -10,13 +10,29 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 /**
- * RecyclerView adapter for displaying SSH connection profiles
+ * RecyclerView adapter for displaying SSH connection profiles.
+ *
+ * Pass [groupNames] (groupId → display name) to show a group badge on each
+ * connection card that belongs to a group. The map defaults to empty so all
+ * existing usages (widget config, frequent tab, etc.) continue to work without
+ * any change.
  */
 class ConnectionAdapter(
     private val onConnectionClick: (ConnectionProfile) -> Unit
 ) : androidx.recyclerview.widget.ListAdapter<ConnectionProfile, ConnectionAdapter.ConnectionViewHolder>(DiffCallback()) {
 
+    // Group id → display name map. When non-empty, cards belonging to a group
+    // show a badge (e.g. "• Production"). Set via [updateGroupNames]; defaults
+    // to empty so all existing usages keep working without any change.
+    private var groupNames: Map<String, String> = emptyMap()
+
     private var onItemLongClickListener: ((ConnectionProfile) -> Boolean)? = null
+
+    /** Update the group-name map and refresh visible items. */
+    fun updateGroupNames(names: Map<String, String>) {
+        groupNames = names
+        notifyItemRangeChanged(0, itemCount)
+    }
     
     fun setOnItemLongClickListener(listener: (ConnectionProfile) -> Boolean) {
         onItemLongClickListener = listener
@@ -102,9 +118,18 @@ class ConnectionAdapter(
                     colorTagStrip.visibility = android.view.View.GONE
                 }
                 
+                // Group badge — shown when connection belongs to a known group
+                val groupName = connection.groupId?.let { groupNames[it] }
+                if (groupName != null) {
+                    textGroupBadge.visibility = android.view.View.VISIBLE
+                    textGroupBadge.text = "• $groupName"
+                } else {
+                    textGroupBadge.visibility = android.view.View.GONE
+                }
+
                 // Status indicator
                 updateStatusIndicator(connection)
-                
+
                 // Accessibility
                 root.contentDescription = buildString {
                     append("Connection ${connection.getDisplayName()}")

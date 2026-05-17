@@ -23,6 +23,7 @@ import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.cluster.ClusterCommandExecutor
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -52,6 +53,7 @@ class ClusterCommandActivity : AppCompatActivity() {
     private val commandHistory = mutableListOf<String>()
     private val results = mutableListOf<ClusterCommandExecutor.ExecutionResult>()
     private var allConnections = listOf<ConnectionProfile>()
+    private var allGroupNames = emptyMap<String, String>()
     private var connectionAdapter: ConnectionSelectionAdapter? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -207,7 +209,7 @@ class ClusterCommandActivity : AppCompatActivity() {
                 connection.username.contains(query, ignoreCase = true)
             }
         }
-        connectionAdapter?.updateConnections(filtered)
+        connectionAdapter?.updateConnections(filtered, allGroupNames)
     }
 
     private fun updateSelectedCount() {
@@ -218,31 +220,38 @@ class ClusterCommandActivity : AppCompatActivity() {
 
     private fun loadConnections() {
         lifecycleScope.launch {
-            app.database.connectionDao().getAllConnections().collectLatest { connections ->
-                allConnections = connections
-                if (connections.isEmpty()) {
-                    emptyStateLayout.visibility = View.VISIBLE
-                    connectionList.visibility = View.GONE
-                } else {
-                    emptyStateLayout.visibility = View.GONE
-                    connectionList.visibility = View.VISIBLE
-                    connectionAdapter = ConnectionSelectionAdapter(
-                        connections,
-                        selectedConnections
-                    ) { profile, isSelected ->
-                        if (isSelected) {
-                            if (!selectedConnections.contains(profile)) {
-                                selectedConnections.add(profile)
-                            }
-                        } else {
-                            selectedConnections.remove(profile)
-                        }
+            combine(
+                app.database.connectionDao().getAllConnections(),
+                app.database.connectionGroupDao().getAllGroups()
+            ) { connections, groups -> Pair(connections, groups) }
+                .collectLatest { (connections, groups) ->
+                    allConnections = connections
+                    allGroupNames = groups.associate { it.id to it.name }
+                    if (connections.isEmpty()) {
+                        emptyStateLayout.visibility = View.VISIBLE
+                        connectionList.visibility = View.GONE
+                    } else {
+                        emptyStateLayout.visibility = View.GONE
+                        connectionList.visibility = View.VISIBLE
+                        connectionAdapter = ConnectionSelectionAdapter(
+                            connections,
+                            selectedConnections,
+                            onSelectionChanged = { profile, isSelected ->
+                                if (isSelected) {
+                                    if (!selectedConnections.contains(profile)) {
+                                        selectedConnections.add(profile)
+                                    }
+                                } else {
+                                    selectedConnections.remove(profile)
+                                }
+                                updateSelectedCount()
+                            },
+                            groupNames = allGroupNames
+                        )
+                        connectionList.adapter = connectionAdapter
                         updateSelectedCount()
                     }
-                    connectionList.adapter = connectionAdapter
-                    updateSelectedCount()
                 }
-            }
         }
     }
 
@@ -357,13 +366,15 @@ class ClusterCommandActivity : AppCompatActivity() {
     private class ConnectionSelectionAdapter(
         private var connections: List<ConnectionProfile>,
         private val selectedSet: MutableList<ConnectionProfile>,
-        private val onSelectionChanged: (ConnectionProfile, Boolean) -> Unit
+        private val onSelectionChanged: (ConnectionProfile, Boolean) -> Unit,
+        private var groupNames: Map<String, String> = emptyMap()
     ) : RecyclerView.Adapter<ConnectionSelectionAdapter.ViewHolder>() {
 
         class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
             val checkbox: CheckBox = view.findViewById(R.id.connection_checkbox)
             val name: TextView = view.findViewById(R.id.connection_name)
             val host: TextView = view.findViewById(R.id.connection_host)
+            val groupBadge: TextView = view.findViewById(R.id.connection_group_badge)
         }
 
         override fun onCreateViewHolder(parent: android.view.ViewGroup, viewType: Int): ViewHolder {
@@ -376,6 +387,15 @@ class ClusterCommandActivity : AppCompatActivity() {
             val connection = connections[position]
             holder.name.text = connection.name
             holder.host.text = "${connection.username}@${connection.host}:${connection.port}"
+
+            // Group badge
+            val groupName = connection.groupId?.let { groupNames[it] }
+            if (groupName != null) {
+                holder.groupBadge.visibility = android.view.View.VISIBLE
+                holder.groupBadge.text = "• $groupName"
+            } else {
+                holder.groupBadge.visibility = android.view.View.GONE
+            }
 
             // Remove listener to prevent triggering during setChecked
             holder.checkbox.setOnCheckedChangeListener(null)
@@ -392,8 +412,9 @@ class ClusterCommandActivity : AppCompatActivity() {
 
         override fun getItemCount() = connections.size
 
-        fun updateConnections(newConnections: List<ConnectionProfile>) {
+        fun updateConnections(newConnections: List<ConnectionProfile>, newGroupNames: Map<String, String> = groupNames) {
             connections = newConnections
+            groupNames = newGroupNames
             notifyDataSetChanged()
         }
 

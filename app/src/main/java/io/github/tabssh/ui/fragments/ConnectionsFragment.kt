@@ -1205,6 +1205,9 @@ class ConnectionsFragment : Fragment() {
         } else {
             recyclerView.visibility = View.VISIBLE
             emptyLayout.visibility = View.GONE
+            // Provide group name map so search results show a group badge.
+            // allGroups is already observed in the same scope; no extra DB call needed.
+            adapter.updateGroupNames(allGroups.associate { it.id to it.name })
             adapter.submitList(sorted)
         }
     }

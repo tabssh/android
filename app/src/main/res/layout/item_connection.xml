@@ -71,6 +71,20 @@
                 tools:text="Connected 42 times"
                 tools:visibility="visible" />
 
+            <!-- Group badge: shown only when the connection belongs to a group.
+                 Displays "• GroupName" in caption size, secondary color. -->
+            <TextView
+                android:id="@+id/text_group_badge"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="@dimen/text_size_caption"
+                android:textColor="?attr/colorPrimary"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:visibility="gone"
+                tools:text="• Production"
+                tools:visibility="visible" />
+
         </LinearLayout>
 
         <View

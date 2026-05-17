@@ -15,6 +15,11 @@
 
 ## ✅ Recently Shipped
 
+- **`(this batch)`** 📝 Translation drift — 10 missing keys added to `values-es/`, `values-fr/`, `values-de/` (`cluster_progress`, `navigation_drawer_open/close`, `select_connection`, `sync_password_*`, `widget_*_description`).
+- **`(this batch)`** 🔧 ProxyJump verified already wired — `SSHConfigParser.kt:299-302` populates proxy columns at parse time; `SSHConnection.setupJumpHost()` reads them. Stale TODO entry closed.
+- **`(this batch)`** 🔒 Cached SSH credential zeroing — `SSHConnection.clearCachedCredentials()` + `SSHSessionManager.clearCachedCredentials()` called from `TabSSHApplication.onActivityStopped()` when whole app backgrounds. Prevents in-memory password survival across biometric-lock events.
+- **`(this batch)`** ✨ Group badges on flat connection lists — `ConnectionAdapter` shows `"• GroupName"` badge on search result cards; `ClusterCommandActivity.ConnectionSelectionAdapter` shows group badges in multi-select picker. `item_connection.xml` and `item_cluster_connection.xml` updated.
+- **`(this batch)`** ✨ X11 forwarding proxy — `X11Proxy.kt` (`ssh/forwarding/`) binds a `ServerSocket` on port 0 and relays JSch X11 channels to Termux:X11 (Unix socket) or XServer XSDL (TCP :6000). `SSHConnection.applyForwardingFlags()` now passes the dynamic port via `session.setX11Port(proxy.port)`. Non-fatal `X11NoServerException` shown as a Snackbar in `TabTerminalActivity` via `SSHConnection.warnings` `SharedFlow`. Proxy stopped in `disconnect()`.
 - **`1d40e3f2`** 🐛 Remove spurious "Serial console unavailable" AlertDialog — VNC fallback is transparent; dialog was confusing noise. Only surface error if VNC itself fails.
 - **`1d40e3f2`** 🐛 Fix `%s` showing literally in Settings → Monitoring → Alert cooldown — removed broken `android:summary="%s…"` from XML, added programmatic `SummaryProvider` in `MonitoringSettingsFragment` producing e.g. "1 hour between repeated 'still down' notifications".
 - **`1d40e3f2`** ✨ QEMU/libvirt SSH key auth — `HypervisorProfile.sshIdentityId` (DB v34→35, `MIGRATION_34_35`), `LibvirtApiClient.connect()` loads key via `KeyStorage.retrieveJSchBytes()` + `jsch.addIdentity()`, `HypervisorEditActivity` adds SSH Key dropdown (LIBVIRT-only).
@@ -35,18 +40,13 @@
 
 ## 📋 Documented but not yet implemented
 
-These are in the codebase or spec but **not** working end-to-end. All are roadmap items, not bugs.
+These are in the codebase or spec but **not** working end-to-end. Post-v1 roadmap only.
 
 | Item | AI.md | Effort | Notes |
 |---|---|---|---|
-| **X11 forwarding rendering** | §5.3, §16 | ~40h | Toggle persisted + in UI; old in-app X server deleted as dead code. Enabling the toggle currently does nothing. Needs a real VcXsrv-style virtual display or a forwarding-only path. |
 | **FIDO2 SSH signing** | §7.1, §16 | ~80h, likely indefinite | `Fido2SshIdentity.kt` throws `JSchException("not yet implemented")`. JSch doesn't support `sk-ecdsa-sha2-nistp256` / `sk-ssh-ed25519` key types. Needs JSch fork or alternate SSH library. |
-| **Chinese / Japanese translations** | §16 | ~4h per language | `values-zh/` and `values-ja/` directories absent. English fallback works but is not acceptable for a v1 targeting those locales. |
-| **Connection groups on all list surfaces** | §16 | ~4h | `ConnectionGroup` entity + DAO + adapter all exist; some list views still render flat (no group headers). |
-| **QR Pairing — desktop side** | §18 | other repo | Mobile decoder is live. Desktop encoder WIP in `tabssh/desktop`. Wire format + interop test vectors in `AI.md §18` / `QR_PAIRING.md`. |
-| **advancedSettings `ProxyJump`** | TODO | ~1h | Parsed from `~/.ssh/config`, stored in JSON `advancedSettings`, but not wired to `proxy_host`/`proxy_port`/`proxy_username` columns. Fix: populate columns at import time. |
-| **Cached passwords not zeroed on lifecycle** | P2 | ~2h | `SecurePasswordManager` in-memory map and `SSHConnection.cachedPassword`/`cachedPassphrase` survive biometric-lock, pause, and destroy. Defense-in-depth fix: clear on `onPause()` or on biometric-lock event. |
-| **Translation drift** | §16 | ~1h | 10 keys missing from `values-es/`, `values-fr/`, `values-de/` string files (`cluster_progress`, `widget_*_description`, `sync_password_*`, `navigation_drawer_open/close`, `select_connection`). Silent English fallback at runtime. |
+| **Chinese / Japanese translations** | §16 | ~4h per language | No translators assigned. English fallback works. Post-v1 when translators are available. |
+| **QR Pairing — desktop side** | §18 | other repo | Mobile decoder is live (`ea4f687f`). Desktop encoder WIP in `tabssh/desktop`. Wire format + interop test vectors in `AI.md §18` / `QR_PAIRING.md`. |
 
 ---
 
@@ -62,16 +62,14 @@ Mobile decoder is in place and waiting for the desktop encoder and interop test 
 
 ## 🔧 `advancedSettings` — remaining SSH config directives
 
-Local/Remote/Dynamic forwards now apply at connect (`d714a7b4`). Remaining:
+Local/Remote/Dynamic forwards now apply at connect (`d714a7b4`). Status:
 
 | Directive | Parser | Stored | Applied |
 |---|---|---|---|
-| `ProxyJump` / `ProxyCommand` | ✅ | JSON | ❌ — `ProxyJump` should populate `proxy_host`/`proxy_port`/`proxy_username` at parse time. `ProxyCommand` has no JSch equivalent and would require a custom `Proxy` impl. |
+| `ProxyJump` / `ProxyCommand` | ✅ | columns | ✅ — `SSHConfigParser.kt:299-302` populates `proxy_host`/`proxy_port`/`proxy_username` at parse time. `ProxyCommand` has no JSch equivalent. |
 | `ServerAliveInterval` / `StrictHostKeyChecking` | ✅ | JSON | intentionally ignored (mobile keepalive + TOFU dialog own these) |
 | `ForwardAgent` / `ForwardX11` / `compression` / `connectTimeout` | ✅ | JSON + columns | ✅ |
 | `RequestTTY` | ✅ | JSON | 🟡 — `force` honored when `remoteCommand` set; `no`/`auto` distinctions ignored |
-
-**Fix:** For `ProxyJump`, parse `user@host:port` and populate existing proxy columns directly. ~1h.
 
 ---
 

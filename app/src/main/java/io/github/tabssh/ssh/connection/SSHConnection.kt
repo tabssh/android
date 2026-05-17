@@ -4,9 +4,14 @@ import com.jcraft.jsch.*
 import io.github.tabssh.network.NetworkAwareReconnector
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.ssh.auth.AuthType
+import io.github.tabssh.ssh.forwarding.X11NoServerException
+import io.github.tabssh.ssh.forwarding.X11Proxy
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
@@ -93,6 +98,8 @@ class SSHConnection(
     private var sftpChannel: ChannelSftp? = null
     private var jumpHostSession: Session? = null
     private var jumpHostLocalPort: Int = 0
+    // X11 forwarding proxy — non-null only while x11Forwarding is active
+    private var x11Proxy: X11Proxy? = null
 
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
@@ -105,6 +112,11 @@ class SSHConnection(
 
     private val _bytesTransferred = MutableStateFlow(0L)
     val bytesTransferred: StateFlow<Long> = _bytesTransferred.asStateFlow()
+
+    // Non-fatal advisory messages (e.g. X11 server not found). Observers can
+    // show a Snackbar or Toast without treating the event as a connection failure.
+    private val _warnings = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val warnings: SharedFlow<String> = _warnings.asSharedFlow()
 
     private var connectJob: Job? = null
 
@@ -621,17 +633,30 @@ class SSHConnection(
         }
         if (profile.x11Forwarding) {
             try {
+                // Start a local proxy that accepts JSch's X11 connections and
+                // relays them to Termux:X11 (Unix socket) or XServer XSDL (TCP).
+                // Using port 0 here so the OS assigns a free port — avoids any
+                // conflict with a locally running X server on the default :6000.
+                val proxy = X11Proxy(onNoServer = {
+                    // Non-fatal: session stays alive; user just won't see X windows.
+                    // Emit to warnings flow so TabTerminalActivity can show a Snackbar.
+                    _warnings.tryEmit(X11NoServerException().message!!)
+                })
+                proxy.start()
+                x11Proxy = proxy
                 session.setX11Host(X11_DEFAULT_HOST)
-                session.setX11Port(X11_DEFAULT_PORT)
+                session.setX11Port(proxy.port)
                 when (channel) {
                     is ChannelShell -> channel.setXForwarding(true)
                     is ChannelExec -> channel.setXForwarding(true)
                 }
-                Logger.i("SSHConnection", "Enabled X11 forwarding for ${profile.host} (target: $X11_DEFAULT_HOST:$X11_DEFAULT_PORT)")
+                Logger.i("SSHConnection", "Enabled X11 forwarding for ${profile.host} (proxy port: ${proxy.port})")
             } catch (e: Exception) {
                 Logger.w("SSHConnection", "X11 forwarding setup failed: ${e.message}")
+                x11Proxy?.stop()
+                x11Proxy = null
                 notifyListeners {
-                    onError(id, Exception("X11 forwarding setup failed (target $X11_DEFAULT_HOST:$X11_DEFAULT_PORT): ${e.message}", e))
+                    onError(id, Exception("X11 forwarding setup failed: ${e.message}", e))
                 }
             }
         }
@@ -1419,6 +1444,19 @@ class SSHConnection(
     }
     
     /**
+     * Zero in-memory credential caches without disconnecting. Called by
+     * [SSHSessionManager.clearCachedCredentials] when the app moves to the
+     * background or a biometric-lock event fires. JSch holds its own copy of
+     * the password so live sessions are unaffected; next authentication prompt
+     * (e.g. after a reconnect) will re-fetch from [SecurePasswordManager].
+     */
+    internal fun clearCachedCredentials() {
+        cachedPassword = null
+        cachedPassphrase = null
+        Logger.d("SSHConnection", "Credential cache cleared for ${profile.host}")
+    }
+
+    /**
      * Disconnect from the SSH server
      */
     fun disconnect() {
@@ -1446,6 +1484,11 @@ class SSHConnection(
 
         sftpChannel?.disconnect()
         sftpChannel = null
+
+        // Stop X11 proxy before closing the session so any in-flight relay
+        // threads see a closed socket rather than hanging on reads.
+        x11Proxy?.stop()
+        x11Proxy = null
 
         session?.disconnect()
         session = null

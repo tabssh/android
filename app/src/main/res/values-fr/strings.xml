@@ -195,5 +195,21 @@
 
     <!-- Widget -->
     <string name="widget_description">🚀 Connexion rapide à votre serveur SSH favori</string>
+    <string name="widget_1x1_description">Icône de connexion rapide</string>
+    <string name="widget_2x1_description">Informations de connexion avec bouton</string>
+    <string name="widget_4x2_description">Liste des connexions favorites</string>
+    <string name="widget_4x4_description">Liste complète des connexions</string>
+
+    <!-- Cluster -->
+    <string name="cluster_progress">%1$d/%2$d terminés (%3$d réussis, %4$d échoués)</string>
+
+    <!-- Navigation -->
+    <string name="navigation_drawer_open">Ouvrir le menu de navigation</string>
+    <string name="navigation_drawer_close">Fermer le menu de navigation</string>
+    <string name="select_connection">Sélectionner une connexion</string>
+
+    <!-- Sync -->
+    <string name="sync_password_mismatch">Les mots de passe ne correspondent pas</string>
+    <string name="sync_password_too_short">Minimum 8 caractères</string>
 
 </resources>

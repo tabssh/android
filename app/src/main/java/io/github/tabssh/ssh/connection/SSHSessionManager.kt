@@ -274,6 +274,18 @@ class SSHSessionManager(private val context: Context) {
     fun getConnectionState(profileId: String): ConnectionState {
         return activeConnections[profileId]?.connectionState?.value ?: ConnectionState.DISCONNECTED
     }
+
+    /**
+     * Zero in-memory credential caches on all active connections. Call this
+     * when the app moves to the background or a biometric-lock event fires.
+     * Sessions stay alive; cached passwords are re-fetched from
+     * [SecurePasswordManager] only if a re-authentication is needed.
+     */
+    fun clearCachedCredentials() {
+        val count = activeConnections.size
+        activeConnections.values.forEach { it.clearCachedCredentials() }
+        Logger.i("SSHSessionManager", "Cleared credential caches on $count active connection(s)")
+    }
     
     private fun updateConnectionStates() {
         val states = activeConnections.mapValues { (_, connection) ->

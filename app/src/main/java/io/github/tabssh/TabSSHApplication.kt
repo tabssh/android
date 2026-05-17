@@ -197,6 +197,12 @@ class TabSSHApplication : Application() {
                     // goes to background. ENCRYPTED/BIOMETRIC-level passwords
                     // are not touched — only the volatile sessionPasswords map.
                     securePasswordManager.clearSensitiveData()
+                    // Also zero per-connection credential caches on active SSH
+                    // sessions. JSch keeps its own reference to the password for
+                    // the live session; these cached copies only exist to service
+                    // UserInfo callbacks. Clearing here prevents them surviving a
+                    // biometric-lock event or a process cache into the background.
+                    sshSessionManager.clearCachedCredentials()
                 }
             }
             override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}

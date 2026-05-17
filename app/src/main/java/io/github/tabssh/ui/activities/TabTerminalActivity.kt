@@ -14,6 +14,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
+import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 import kotlinx.coroutines.*
@@ -1706,6 +1707,17 @@ class TabTerminalActivity : AppCompatActivity() {
                             Logger.d("TabTerminalActivity", "Updated connection count for ${profile.getDisplayName()}")
                         } catch (e: Exception) {
                             Logger.e("TabTerminalActivity", "Failed to update connection stats", e)
+                        }
+
+                        // Observe non-fatal warnings (e.g. X11 server not found).
+                        // Shown as a one-time Snackbar so as not to block the terminal.
+                        lifecycleScope.launch {
+                            sshConnection.warnings.collect { message ->
+                                runOnUiThread {
+                                    val root = window.decorView.rootView
+                                    Snackbar.make(root, message, Snackbar.LENGTH_LONG).show()
+                                }
+                            }
                         }
 
                         // Per-host status notification is owned by

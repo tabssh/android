@@ -35,6 +35,17 @@
             android:textColor="?android:attr/textColorSecondary"
             android:text="user@host:22" />
 
+        <!-- Group badge: shown only when the connection belongs to a group. -->
+        <TextView
+            android:id="@+id/connection_group_badge"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:textColor="?attr/colorPrimary"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:visibility="gone" />
+
     </LinearLayout>
 
 </LinearLayout>
