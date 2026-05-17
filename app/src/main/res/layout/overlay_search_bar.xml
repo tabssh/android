@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Find-in-scrollback overlay. Inflated inside the terminal FrameLayout,
+  positioned at the top. Managed by ScrollbackSearchController.
+-->
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/search_overlay_card"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_gravity="top"
+    android:layout_margin="8dp"
+    app:cardCornerRadius="8dp"
+    app:cardElevation="6dp"
+    app:cardBackgroundColor="?attr/colorSurface"
+    android:visibility="gone">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="12dp"
+        android:paddingEnd="4dp">
+
+        <!-- Search icon -->
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:src="@drawable/ic_search"
+            android:tint="?attr/colorOnSurfaceVariant"
+            android:layout_marginEnd="8dp"
+            android:contentDescription="@null" />
+
+        <!-- Query input -->
+        <EditText
+            android:id="@+id/search_input"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:hint="Search in scrollback…"
+            android:textSize="14sp"
+            android:textColor="?attr/colorOnSurface"
+            android:textColorHint="?attr/colorOnSurfaceVariant"
+            android:inputType="text"
+            android:imeOptions="actionSearch|flagNoFullscreen"
+            android:background="@null"
+            android:singleLine="true"
+            android:importantForAutofill="no" />
+
+        <!-- Match counter: "3 / 12" -->
+        <TextView
+            android:id="@+id/search_match_count"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:minWidth="48dp"
+            android:gravity="center"
+            android:paddingHorizontal="4dp"
+            android:visibility="gone" />
+
+        <!-- Previous match -->
+        <ImageButton
+            android:id="@+id/search_prev"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:src="@drawable/ic_arrow_up"
+            android:contentDescription="Previous match"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:tint="?attr/colorOnSurface" />
+
+        <!-- Next match -->
+        <ImageButton
+            android:id="@+id/search_next"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:src="@drawable/ic_arrow_down"
+            android:contentDescription="Next match"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:tint="?attr/colorOnSurface" />
+
+        <!-- Case-sensitive toggle — tint changes to colorPrimary when active -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/search_case_toggle"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="Aa"
+            android:textSize="13sp"
+            android:minWidth="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:contentDescription="Toggle case sensitivity" />
+
+        <!-- Close -->
+        <ImageButton
+            android:id="@+id/search_close"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:src="@drawable/ic_close"
+            android:contentDescription="Close search"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:tint="?attr/colorOnSurface" />
+
+    </LinearLayout>
+
+</com.google.android.material.card.MaterialCardView>

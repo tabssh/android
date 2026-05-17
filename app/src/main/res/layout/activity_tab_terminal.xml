@@ -65,6 +65,14 @@
             app:showScrollbar="true"
             app:scrollbackLines="1000" />
 
+        <!-- Find-in-scrollback overlay bar. Managed by ScrollbackSearchController. -->
+        <include
+            android:id="@+id/search_overlay"
+            layout="@layout/overlay_search_bar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top" />
+
         <!-- Menu FAB. Hidden by default — the primary entry is the
              "☰" key on the multi-row keyboard bar (already always
              visible at the bottom). The FAB is retained as a fallback

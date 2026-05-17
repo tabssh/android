@@ -176,6 +176,61 @@ class TerminalView @JvmOverloads constructor(
     /** Visual radius for the handle bubble, in pixels. */
     private val handleDrawRadiusPx by lazy { 8f * resources.displayMetrics.density }
 
+    // ── Find-in-scrollback search highlights ────────────────────────────────
+    private var searchMatches: List<SearchMatch> = emptyList()
+    private var searchCurrentMatchIndex: Int = -1
+    /** Translucent amber for non-active matches. */
+    private val searchHighlightPaint = Paint().apply {
+        color = 0x66_FFD740.toInt()
+        style = Paint.Style.FILL
+        isAntiAlias = false
+    }
+    /** Opaque orange for the active match (scrolled-to hit). */
+    private val searchCurrentMatchPaint = Paint().apply {
+        color = 0xCC_FF6D00.toInt()
+        style = Paint.Style.FILL
+        isAntiAlias = false
+    }
+
+    /**
+     * A single search hit in external-row space.
+     *
+     * [externalRow]: Termux external row — negative for scrollback (−1 = most
+     *                recent scrollback line), non-negative for visible screen rows.
+     * [colStart] / [colEnd]: inclusive/exclusive column bounds of the matched text.
+     */
+    data class SearchMatch(val externalRow: Int, val colStart: Int, val colEnd: Int)
+
+    /** Replace the search highlight set and repaint. */
+    fun setSearchHighlights(matches: List<SearchMatch>, currentIndex: Int) {
+        searchMatches = matches
+        searchCurrentMatchIndex = currentIndex
+        invalidate()
+    }
+
+    /** Remove all search highlights. */
+    fun clearSearchHighlights() {
+        if (searchMatches.isEmpty() && searchCurrentMatchIndex == -1) return
+        searchMatches = emptyList()
+        searchCurrentMatchIndex = -1
+        invalidate()
+    }
+
+    /**
+     * Scroll the view so that the match at [index] is vertically centred,
+     * then update the current-match pointer and repaint.
+     */
+    fun scrollToSearchMatch(index: Int) {
+        if (index !in searchMatches.indices) return
+        searchCurrentMatchIndex = index
+        val extRow = searchMatches[index].externalRow
+        val rows = termuxBridge?.getRows() ?: return
+        // Place the match at the vertical centre of the visible area.
+        val targetScrollRows = (rows / 2 - extRow).coerceAtLeast(0)
+        scrollY = (targetScrollRows * cellHeight).toInt().coerceIn(0, maxScrollYPx())
+        invalidate()
+    }
+
     /**
      * When true, the next ACTION_DOWN on the terminal starts selection
      * mode at the touch point (instead of scrolling / toggling the
@@ -1030,6 +1085,9 @@ class TerminalView @JvmOverloads constructor(
         // still draws on top.
         drawSelectionOverlay(canvas)
 
+        // Search highlights — drawn above selection so they're always visible.
+        drawSearchHighlights(canvas, scrollRows)
+
         // Draw cursor based on style (0=block, 1=underline, 2=bar/I-beam).
         // Hide it when scrolled into scrollback — the cursor belongs to the live screen.
         if (cursorVisible && scrollRows == 0 && cursorRow in 0 until rows && cursorCol in 0 until cols) {
@@ -1756,6 +1814,30 @@ class TerminalView @JvmOverloads constructor(
         val (fx, fy) = cellCenterPx(selectionFocusCol, selectionFocusRow + 1)
         canvas.drawCircle(ax, ay, handleDrawRadiusPx, selectionHandlePaint)
         canvas.drawCircle(fx, fy, handleDrawRadiusPx, selectionHandlePaint)
+    }
+
+    /**
+     * Draw amber highlights over every visible search match.
+     *
+     * [scrollRows]: how many rows above the live screen are currently scrolled
+     * into view (same value used by [renderTermuxBuffer]). A match at external
+     * row `extRow` occupies visual row `extRow + scrollRows`; only rows in
+     * `[0, terminalRows)` are visible.
+     */
+    private fun drawSearchHighlights(canvas: Canvas, scrollRows: Int) {
+        if (searchMatches.isEmpty() || cellWidth <= 0f || cellHeight <= 0f) return
+        val startX = paddingLeft.toFloat()
+        val startY = paddingTop.toFloat()
+        for ((idx, match) in searchMatches.withIndex()) {
+            val visualRow = match.externalRow + scrollRows
+            if (visualRow < 0 || visualRow >= terminalRows) continue
+            val left  = startX + match.colStart * cellWidth
+            val right = startX + match.colEnd.coerceAtMost(terminalCols) * cellWidth
+            val top   = startY + visualRow * cellHeight
+            val bottom = top + cellHeight
+            canvas.drawRect(left, top, right, bottom,
+                if (idx == searchCurrentMatchIndex) searchCurrentMatchPaint else searchHighlightPaint)
+        }
     }
 
     /**

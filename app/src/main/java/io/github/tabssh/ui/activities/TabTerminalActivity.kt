@@ -35,6 +35,7 @@ import io.github.tabssh.utils.showError
 import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.themes.definitions.BuiltInThemes
+import io.github.tabssh.terminal.search.ScrollbackSearchController
 
 /**
  * Main terminal activity with tabbed SSH sessions
@@ -115,6 +116,9 @@ class TabTerminalActivity : AppCompatActivity() {
     
     // Custom keyboard
     private var customKeyboardVisible: Boolean = true
+
+    // Find-in-scrollback
+    private var searchController: ScrollbackSearchController? = null
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -137,6 +141,7 @@ class TabTerminalActivity : AppCompatActivity() {
         setupBackPressHandler()
         setupMenuFab()
         setupBottomActionBar()  // NEW: Bottom toolbar setup
+        setupSearchOverlay()
         applyTerminalUiPrefs()
         // Host-key verification dialogs are wired application-wide via
         // TabSSHApplication.wireGlobalHostKeyCallbacks(). The previous
@@ -196,6 +201,14 @@ class TabTerminalActivity : AppCompatActivity() {
      * blank back stack after finish().
      */
     private fun handleBackToMainActivity() {
+        // Dismiss the search overlay first if it is visible.
+        val sc = searchController
+        if (sc != null && sc.isVisible) {
+            sc.dismiss()
+            Logger.d("TabTerminalActivity", "BACK: dismissed search overlay")
+            return
+        }
+
         val terminalView = getActiveTerminalView()
         val imm = getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
             as android.view.inputmethod.InputMethodManager
@@ -914,7 +927,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     .setItems(items) { _, which ->
                         when (which) {
                             0 -> copyTerminalScreen()
-                            1 -> showFindDialog()
+                            1 -> showSearchOverlay()
                             2 -> showClusterBroadcastDialog()
                             3 -> showSnippetsPickerForActiveTab()
                             4 -> showFontSizeDialog()
@@ -1016,68 +1029,28 @@ class TabTerminalActivity : AppCompatActivity() {
     }
 
     /**
-     * Wave 1.3 — Find-in-scrollback. Searches across the visible screen
-     * AND the transcript buffer. Shows matching lines with line numbers
-     * relative to the bottom (1 = newest). User can copy a selected match.
-     * (In-terminal highlighting + scroll-to-position is a future polish.)
+     * Find-in-scrollback: inflate the overlay bar on first use, then show it.
+     * Subsequent calls just show the existing overlay (preserving any query).
      */
-    private fun showFindDialog() {
-        val tab = tabManager.getActiveTab() ?: run {
+    private fun setupSearchOverlay() {
+        val overlayRoot = binding.searchOverlay.root
+        val tv = getActiveTerminalView() ?: terminalView ?: return
+        searchController = ScrollbackSearchController(
+            context         = this,
+            overlayRoot     = overlayRoot,
+            terminalView    = tv,
+            scope           = lifecycleScope,
+            activeTabProvider = { tabManager.getActiveTab() }
+        )
+    }
+
+    private fun showSearchOverlay() {
+        val controller = searchController ?: run {
+            // Activity may not have an active terminal yet (no open tab).
             Toast.makeText(this, "No active session", Toast.LENGTH_SHORT).show()
             return
         }
-        val input = android.widget.EditText(this).apply {
-            hint = "Search text"
-            inputType = android.text.InputType.TYPE_CLASS_TEXT
-            setSingleLine(true)
-        }
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Find in scrollback")
-            .setView(input)
-            .setPositiveButton("Search") { _, _ ->
-                val query = input.text?.toString().orEmpty()
-                if (query.isNotEmpty()) showFindResults(tab, query)
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    private fun showFindResults(tab: SSHTab, query: String) {
-        val haystack = buildString {
-            append(tab.getScrollbackContent())
-            if (isNotEmpty()) append('\n')
-            append(tab.getTerminalContent())
-        }
-        if (haystack.isBlank()) {
-            Toast.makeText(this, "Nothing to search yet", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val lines = haystack.split('\n')
-        val matches = lines.mapIndexedNotNull { idx, line ->
-            if (line.contains(query, ignoreCase = true)) {
-                // Number from the bottom: last line = 1, line above = 2, etc.
-                val fromBottom = lines.size - idx
-                "$fromBottom: ${line.trim().take(120)}"
-            } else null
-        }
-        if (matches.isEmpty()) {
-            Toast.makeText(this, "No matches for \"$query\"", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val items = matches.toTypedArray()
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("${matches.size} match${if (matches.size == 1) "" else "es"}")
-            .setItems(items) { _, which ->
-                // Tap a match to copy it.
-                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE)
-                    as android.content.ClipboardManager
-                clipboard.setPrimaryClip(
-                    android.content.ClipData.newPlainText("Match", items[which].substringAfter(": "))
-                )
-                Toast.makeText(this, "Match copied", Toast.LENGTH_SHORT).show()
-            }
-            .setNegativeButton("Close", null)
-            .show()
+        controller.show()
     }
 
     /**
@@ -2834,6 +2807,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     KeyEvent.KEYCODE_K -> { showCommandPalette(); return true }
                     KeyEvent.KEYCODE_J -> { showQuickSwitcher(); return true }
                     KeyEvent.KEYCODE_R -> { showHistoryPalette(); return true }
+                    KeyEvent.KEYCODE_F -> { showSearchOverlay(); return true }
                 }
             }
         }
@@ -2889,7 +2863,7 @@ class TabTerminalActivity : AppCompatActivity() {
             startActivity(Intent(this, PortForwardingActivity::class.java))
         }
         items += io.github.tabssh.ui.views.PaletteDialog.Item("Find in scrollback", "Search current tab's history") {
-            showFindDialog()
+            showSearchOverlay()
         }
         items += io.github.tabssh.ui.views.PaletteDialog.Item("Close current tab", null) { closeCurrentTab() }
         items += io.github.tabssh.ui.views.PaletteDialog.Item("Increase font size", "Ctrl+= (or Volume Up)") { adjustFontSize(+2) }
