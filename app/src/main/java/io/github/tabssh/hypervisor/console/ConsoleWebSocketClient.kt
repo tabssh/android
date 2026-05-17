@@ -49,11 +49,18 @@ class ConsoleWebSocketClient(
          * indicates the VM has no serial port configured. Proxmox may send
          * this either as a plain text frame or inside a "0:N:MSG" data
          * envelope, so we check the raw string in both contexts.
+         *
+         * The two-part check for "unable to find" + "serial" is intentional:
+         * the actual Proxmox message is "Unable to find a serial interface",
+         * and a single-phrase check like "unable to find serial" misses it
+         * because the article "a" sits between "find" and "serial".
          */
-        fun isProxmoxSerialError(text: String): Boolean =
-            text.contains("unable to find serial", ignoreCase = true) ||
-            text.contains("serial interface not", ignoreCase = true) ||
-            text.contains("no serial", ignoreCase = true)
+        fun isProxmoxSerialError(text: String): Boolean {
+            val lower = text.lowercase()
+            return (lower.contains("unable to find") && lower.contains("serial")) ||
+                lower.contains("serial interface not") ||
+                lower.contains("no serial")
+        }
     }
 
     enum class ConsoleProtocol {
@@ -299,6 +306,23 @@ class ConsoleWebSocketClient(
                 override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
                     Logger.d(TAG, "Received binary: ${bytes.size} bytes")
                     try {
+                        // For Proxmox termproxy, check if the binary frame is a
+                        // serial-unavailable error before writing to the terminal.
+                        // Some Proxmox builds send this error as a binary frame
+                        // rather than a text frame, causing raw bytes like
+                        // "0KUnable to find a serial interface" to appear on-screen.
+                        // We check both the full payload and the payload with the
+                        // first byte (Proxmox frame-type byte) stripped.
+                        if (protocol == ConsoleProtocol.PROXMOX_TERM) {
+                            val text = bytes.utf8()
+                            val stripped = if (bytes.size > 1) text.drop(1) else text
+                            if (isProxmoxSerialError(text) || isProxmoxSerialError(stripped)) {
+                                Logger.w(TAG, "Proxmox serial error (binary frame): $text")
+                                isConnected = false
+                                connectionListener?.onSerialConsoleUnavailable()
+                                return
+                            }
+                        }
                         inputPipeOut?.write(bytes.toByteArray())
                         inputPipeOut?.flush()
                     } catch (e: Exception) {

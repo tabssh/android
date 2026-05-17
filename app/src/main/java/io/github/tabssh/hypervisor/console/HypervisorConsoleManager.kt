@@ -188,7 +188,14 @@ class HypervisorConsoleManager {
 
                 override fun onError(error: Throwable) {
                     Logger.e(TAG, "Proxmox console WebSocket error: ${error.message}")
-                    listener?.onError(error.message ?: "Unknown error")
+                    // error.message is null for some low-level socket failures
+                    // (e.g. java.net.SocketException with no detail message).
+                    // Fall back through cause.message then class name so the
+                    // dialog always shows something actionable.
+                    val msg = error.message?.takeIf { it.isNotBlank() }
+                        ?: error.cause?.message?.takeIf { it.isNotBlank() }
+                        ?: "Connection failed (${error.javaClass.simpleName})"
+                    listener?.onError(msg)
                 }
 
                 override fun onSerialConsoleUnavailable() {
