@@ -268,6 +268,33 @@ class BackupExporter(
             put("dynamicColors", preferenceManager.isDynamicColors())
         })
 
+        // Notification preferences (keys from preferences_general.xml).
+        // Read from default SharedPreferences directly — these keys have no
+        // PreferenceManager wrappers beyond the computed compound methods.
+        val defaultPrefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+        root.put("notifications", JSONObject().apply {
+            put("notifications_enabled",            defaultPrefs.getBoolean("notifications_enabled", true))
+            put("show_connection_notifications",     defaultPrefs.getBoolean("show_connection_notifications", true))
+            put("show_error_notifications",          defaultPrefs.getBoolean("show_error_notifications", true))
+            put("show_file_transfer_notifications",  defaultPrefs.getBoolean("show_file_transfer_notifications", true))
+            put("notification_vibrate",              defaultPrefs.getBoolean("notification_vibrate", true))
+        })
+
+        // Monitoring preferences (keys from preferences_monitoring.xml).
+        // Per-host monitoring config (thresholds, intervals) lives in MonitorSlot
+        // rows, which are exported separately. These are the app-wide defaults
+        // and the master enable switch.
+        root.put("monitoring", JSONObject().apply {
+            put("monitoring_enabled",                     defaultPrefs.getBoolean("monitoring_enabled", true))
+            put("monitoring_run_in_battery_saver",        defaultPrefs.getBoolean("monitoring_run_in_battery_saver", false))
+            put("monitoring_notify_down",                  defaultPrefs.getBoolean("monitoring_notify_down", true))
+            put("monitoring_notify_recovery",              defaultPrefs.getBoolean("monitoring_notify_recovery", true))
+            put("monitoring_alert_cooldown_minutes",       defaultPrefs.getString("monitoring_alert_cooldown_minutes", "60"))
+            put("monitoring_default_cpu_threshold",        defaultPrefs.getString("monitoring_default_cpu_threshold", ""))
+            put("monitoring_default_memory_threshold",     defaultPrefs.getString("monitoring_default_memory_threshold", ""))
+            put("monitoring_default_disk_threshold",       defaultPrefs.getString("monitoring_default_disk_threshold", ""))
+        })
+
         return root.toString(2)
     }
 

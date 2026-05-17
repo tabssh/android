@@ -242,14 +242,21 @@ object NotificationHelper {
         terminalTitle: String?,
         cleanExit: Boolean = true
     ): Notification {
-        val protocol = if (profile.useMosh) "mosh" else "ssh"
+        // Determine the connection type label for the port suffix.
+        // Mosh takes precedence over the protocol column (a mosh connection
+        // is still SSH underneath but presents as "mosh" to the user).
+        val protocol = when {
+            profile.useMosh -> "mosh"
+            profile.protocol.equals("telnet", ignoreCase = true) -> "telnet"
+            else -> "ssh"
+        }
         val title = terminalTitle?.takeIf { it.isNotBlank() }
         val (contentTitle, contentText) = when (state) {
             io.github.tabssh.ssh.connection.ConnectionState.CONNECTED ->
-                "TabSSH" to (
-                    if (title != null) "Connected to ${profile.host}:$title"
-                    else                "Connected to ${profile.host}:${profile.port}-$protocol"
-                )
+                // Always show port so the user can distinguish two connections to
+                // the same host on different ports. Format: host:port-title or
+                // host:port-{ssh|mosh|telnet} when the shell hasn't set a title.
+                "TabSSH" to "Connected to ${profile.host}:${profile.port}-${title ?: protocol}"
             io.github.tabssh.ssh.connection.ConnectionState.CONNECTING ->
                 "TabSSH" to "Connecting to ${profile.host}:${profile.port}…"
             io.github.tabssh.ssh.connection.ConnectionState.ERROR ->

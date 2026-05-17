@@ -530,6 +530,33 @@ class BackupImporter(
             preferenceManager.setAppTheme(u.optString("appTheme", "system"))
             preferenceManager.setDynamicColors(u.optBoolean("dynamicColors", true))
         }
+
+        // Notification and monitoring preferences are stored as raw keys in
+        // the default SharedPreferences (no PreferenceManager wrappers). Write
+        // them directly via the same editor path the Preference UI uses.
+        val defaultPrefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+        root.optJSONObject("notifications")?.let { n ->
+            defaultPrefs.edit().apply {
+                putBoolean("notifications_enabled",           n.optBoolean("notifications_enabled", true))
+                putBoolean("show_connection_notifications",   n.optBoolean("show_connection_notifications", true))
+                putBoolean("show_error_notifications",        n.optBoolean("show_error_notifications", true))
+                putBoolean("show_file_transfer_notifications",n.optBoolean("show_file_transfer_notifications", true))
+                putBoolean("notification_vibrate",            n.optBoolean("notification_vibrate", true))
+            }.apply()
+        }
+        root.optJSONObject("monitoring")?.let { m ->
+            defaultPrefs.edit().apply {
+                putBoolean("monitoring_enabled",              m.optBoolean("monitoring_enabled", true))
+                putBoolean("monitoring_run_in_battery_saver", m.optBoolean("monitoring_run_in_battery_saver", false))
+                putBoolean("monitoring_notify_down",           m.optBoolean("monitoring_notify_down", true))
+                putBoolean("monitoring_notify_recovery",       m.optBoolean("monitoring_notify_recovery", true))
+                // ListPreference stores its value as String
+                putString("monitoring_alert_cooldown_minutes", m.optString("monitoring_alert_cooldown_minutes", "60"))
+                putString("monitoring_default_cpu_threshold",  m.optString("monitoring_default_cpu_threshold", ""))
+                putString("monitoring_default_memory_threshold",m.optString("monitoring_default_memory_threshold", ""))
+                putString("monitoring_default_disk_threshold", m.optString("monitoring_default_disk_threshold", ""))
+            }.apply()
+        }
     }
 
 }
