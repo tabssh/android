@@ -56,6 +56,15 @@ Update `AI.md §9.4` sync coverage matrix when the surface changes.
 
 **Never** write any of the above to the Room database. The DB columns for passwords are always empty strings for any row touched by current code.
 
+## Paste service quirks
+
+**MicroBin** (`mb.pste.us` and any self-hosted MicroBin instance) returns HTTP 404 on raw-paste URLs but still delivers the paste body. `curl -f` treats 404 as an error and discards the body. Always fetch MicroBin URLs **without `-f`**:
+
+```bash
+curl -qLs "https://mb.pste.us/raw/<id>"   # correct — no -f
+curl -q -LSsf "https://mb.pste.us/raw/<id>"  # WRONG — -f discards the body
+```
+
 ## Temp files
 
 All temporary files for this project go in `/tmp/tabssh-android/`. Never create temp files in the project root or `app/build/`.
