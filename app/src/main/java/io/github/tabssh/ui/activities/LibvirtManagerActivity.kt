@@ -118,6 +118,9 @@ class LibvirtManagerActivity : AppCompatActivity() {
             val client = LibvirtApiClient(this@LibvirtManagerActivity, profile)
             try {
                 withContext(Dispatchers.IO) { client.connect() }
+                withContext(Dispatchers.IO) {
+                    app.database.hypervisorDao().updateLastConnected(profile.id, System.currentTimeMillis())
+                }
                 apiClient = client
                 loadDomains(client)
             } catch (e: Exception) {

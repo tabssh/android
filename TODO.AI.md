@@ -15,6 +15,8 @@
 
 ## ✅ Recently Shipped
 
+- **`30ab65557db1`** 🐛 Seven bug fixes: SSH identity spinner beeping/not picking (wrong adapter layout + missing setText in both key spinners); libvirt SSH fallback opening ConnectionEditActivity for new VM profiles instead of auto-connecting with wrong credentials; ProxyJump host key not saving (JSch stored key under `localhost:ephemeralPort`, fixed with `session.setHostKeyAlias(profile.host)`); keyboard setLayout() preserving portraitRowCount and filling extra rows with defaults; notification Disconnect triggering reconnect dialog (added `markIntentionalClose()`/`closeConnectionIntentionally()`); RFB type 204 crashing VNC connection (log and continue instead of throw); VNC keyboard not appearing (added `vncView.requestFocus()` in onConnected).
+
 - **`8b98f60be8a3`** 🐛 Five bug fixes: Proxmox VNC "Pipe closed" after SetDesktopSize rejection (`canRequestResize=false` in both vncproxy paths); libvirt ProxyJump "invalid private key" (PKCS#8 DER → OpenSSH PEM via `getJSchBytesWithFallback()`); PerformanceFragment stats last-host not persisting (`selectedConnection=null` on `onDestroyView()`); status indicator dots always grey (connected=green, disconnected=red); OCI identity: blank region in account list, `.OCI/CONFIG`/`IMPORT FILE` button labels, auto-fill name from config section header, test connection works before saving profile.
 
 - **`1e20b80a0ba8`** 🐛 Keyboard layout editor: preview keys now use `width=0/weight=1` matching `KeyboardRowView` so the preview is dynamically accurate; `refreshAvailableKeys()` subtracts all in-use key IDs from the palette and is called on every `rebuildSurface()` so placed keys disappear from the picker instantly; `addKey()` guard upgraded to global.
