@@ -72,7 +72,11 @@ class PerformanceFragment : Fragment() {
     private var sshConnection: SSHConnection? = null
     private var metricsCollector: MetricsCollector? = null
     private var metricsHistory = MetricsHistory()
-    
+
+    // Observes connectionState on the active sshConnection so monitoring can
+    // auto-restart after a reconnect and auto-stop on disconnect/error.
+    private var connectionStateObserverJob: kotlinx.coroutines.Job? = null
+
     // Monitoring state
     private var isMonitoring = false
     private val handler = Handler(Looper.getMainLooper())
@@ -273,8 +277,10 @@ class PerformanceFragment : Fragment() {
     private fun onConnectionSelected() {
         val connection = selectedConnection ?: return
 
-        // Stop current monitoring if any
+        // Stop current monitoring and cancel any state observer for the old connection
         stopMonitoring()
+        connectionStateObserverJob?.cancel()
+        connectionStateObserverJob = null
 
         // Create new SSH connection
         lifecycleScope.launch {
@@ -312,6 +318,37 @@ class PerformanceFragment : Fragment() {
 
                 // Auto-start monitoring
                 startMonitoring()
+
+                // Observe connection state: stop monitoring when the connection drops
+                // and restart automatically once it reconnects (exponential backoff in
+                // SSHConnection means reconnection will eventually succeed).
+                connectionStateObserverJob = lifecycleScope.launch {
+                    newConnection.connectionState.collect { state ->
+                        when (state) {
+                            io.github.tabssh.ssh.connection.ConnectionState.CONNECTED -> {
+                                if (!isMonitoring && sshConnection === newConnection) {
+                                    Logger.d(
+                                        "PerformanceFragment",
+                                        "Connection restored — restarting monitoring for ${connection.name}"
+                                    )
+                                    metricsCollector = MetricsCollector(newConnection)
+                                    startMonitoring()
+                                }
+                            }
+                            io.github.tabssh.ssh.connection.ConnectionState.ERROR,
+                            io.github.tabssh.ssh.connection.ConnectionState.DISCONNECTED -> {
+                                if (isMonitoring) {
+                                    Logger.d(
+                                        "PerformanceFragment",
+                                        "Connection lost ($state) — pausing monitoring for ${connection.name}"
+                                    )
+                                    stopMonitoring()
+                                }
+                            }
+                            else -> {}
+                        }
+                    }
+                }
 
             } catch (e: Exception) {
                 progressLoading.visibility = View.GONE
@@ -368,11 +405,14 @@ class PerformanceFragment : Fragment() {
                 }
                 
                 result.onFailure { error ->
-                    Logger.e("PerformanceFragment", "Failed to collect metrics", error)
-                    // Stop the monitoring loop when the SSH connection is gone —
-                    // avoids a continuous stream of "Not connected" errors every 5 s.
-                    if (error is IllegalStateException && !(sshConnection?.isConnected() ?: false)) {
-                        stopMonitoring()
+                    // Only log at debug when not connected — the state observer in
+                    // onConnectionSelected() stops monitoring as soon as the state
+                    // transitions to ERROR/DISCONNECTED, so persistent spam here means
+                    // a transient race between the 5-s tick and the state callback.
+                    if (sshConnection?.isConnected() == true) {
+                        Logger.e("PerformanceFragment", "Failed to collect metrics", error)
+                    } else {
+                        Logger.d("PerformanceFragment", "Metrics skipped — connection not ready")
                     }
                 }
                 
@@ -515,7 +555,9 @@ class PerformanceFragment : Fragment() {
         super.onDestroyView()
         // Clean up
         handler.removeCallbacks(monitoringRunnable)
-        
+        connectionStateObserverJob?.cancel()
+        connectionStateObserverJob = null
+
         lifecycleScope.launch {
             try {
                 withContext(Dispatchers.IO) {
@@ -525,7 +567,7 @@ class PerformanceFragment : Fragment() {
                 Logger.e("PerformanceFragment", "Error disconnecting SSH", e)
             }
         }
-        
+
         sshConnection = null
         metricsCollector = null
     }

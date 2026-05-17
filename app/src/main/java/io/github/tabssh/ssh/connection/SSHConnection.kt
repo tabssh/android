@@ -108,7 +108,6 @@ class SSHConnection(
     private var connectJob: Job? = null
     private var reconnectJob: Job? = null
     private var reconnectAttempts = 0
-    private val maxReconnectAttempts = 3
     // Auto-reconnect should only fire after a session has been *established*
     // and then dropped — not on initial-connect failures (host unreachable,
     // wrong port, …). Without this gate the reconnect loop runs in the
@@ -1473,16 +1472,20 @@ class SSHConnection(
             Logger.i("SSHConnection", "Initial connect failed — not auto-retrying")
             return
         }
-        if (reconnectAttempts >= maxReconnectAttempts) {
-            Logger.i("SSHConnection", "Max reconnect attempts ($maxReconnectAttempts) reached")
-            return
-        }
 
+        // Exponential backoff: 5 s → 10 s → 20 s → 40 s → 80 s → 160 s → 300 s (cap).
+        // No hard retry limit — keep trying until the user explicitly disconnects or
+        // the connection succeeds. Three quick retries is not enough when a network
+        // blip is the cause; the host may be reachable again by attempt 4 or 5.
         reconnectAttempts++
-        Logger.i("SSHConnection", "Attempting reconnect $reconnectAttempts/$maxReconnectAttempts")
+        val delayMs = minOf(5_000L shl minOf(reconnectAttempts - 1, 6), 300_000L)
+        Logger.i(
+            "SSHConnection",
+            "Scheduling reconnect attempt $reconnectAttempts in ${delayMs / 1000}s"
+        )
         reconnectJob?.cancel()
         reconnectJob = scope.launch {
-            delay(5000)
+            delay(delayMs)
             connect()
         }
     }
