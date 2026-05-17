@@ -15,6 +15,7 @@
 
 ## ✅ Recently Shipped
 
+- **`61dadd4b8f6f`** 🐛 QEMU/libvirt SSH key identity not loaded for generated keys — `generateKeyPair()` never stored JSch bytes; `retrieveJSchBytes()` returned null; key silently not used; now fixed with `getJSchBytesWithFallback()` on `KeyStorage` (shared by libvirt + `SSHConnection`) and `storeJSchBytes()` called at generate time.
 - **`ae68921ee89d`** 🐛 QEMU/libvirt auth failure — `autoDeleteOnFailure` in `SecurePasswordManager` silently wiped Keystore credentials on any decryption error; `LibvirtApiClient.connect()` now fails fast with a helpful message instead of opaque SSH auth failure; `LibvirtManagerActivity` shows "Open Settings" dialog on credential miss; `validateFields()` no longer requires password when SSH key identity is selected for LIBVIRT; `saveHypervisor()` skips `store()` call when password is blank (key-only auth path).
 - **`(this batch)`** 📝 Translation drift — 10 missing keys added to `values-es/`, `values-fr/`, `values-de/` (`cluster_progress`, `navigation_drawer_open/close`, `select_connection`, `sync_password_*`, `widget_*_description`).
 - **`(this batch)`** 🔧 ProxyJump verified already wired — `SSHConfigParser.kt:299-302` populates proxy columns at parse time; `SSHConnection.setupJumpHost()` reads them. Stale TODO entry closed.
