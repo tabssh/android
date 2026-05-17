@@ -58,22 +58,22 @@ class DatabaseChangeObserver(private val context: Context) {
      * Observe all database tables
      */
     private suspend fun observeAllChanges() {
-        val connectionsFlow = database.connectionDao().getAllConnections()
-        val keysFlow = database.keyDao().getAllKeys()
-        val themesFlow = database.themeDao().getAllThemes()
-        val hostKeysFlow = database.hostKeyDao().getAllHostKeys()
+        val connectionsFlow  = database.connectionDao().getAllConnections()
+        val keysFlow         = database.keyDao().getAllKeys()
+        val themesFlow       = database.themeDao().getAllThemes()
+        val hostKeysFlow     = database.hostKeyDao().getAllHostKeys()
+        val vncHostsFlow     = database.vncHostDao().getAllHosts()
+        val vncIdentFlow     = database.vncIdentityDao().getAllIdentities()
 
-        combine(
-            connectionsFlow,
-            keysFlow,
-            themesFlow,
-            hostKeysFlow
-        ) { connections, keys, themes, hostKeys ->
+        // kotlinx combine supports ≤5 args; chain two groups.
+        val coreFlow = combine(connectionsFlow, keysFlow, themesFlow, hostKeysFlow) {
+                c, k, t, h -> (c.size + k.size + t.size + h.size).toLong()
+        }
+        val vncFlow = combine(vncHostsFlow, vncIdentFlow) { vh, vi -> (vh.size + vi.size).toLong() }
+
+        combine(coreFlow, vncFlow) { core, vnc ->
             DatabaseChangeEvent(
-                connectionCount = connections.size,
-                keyCount = keys.size,
-                themeCount = themes.size,
-                hostKeyCount = hostKeys.size,
+                totalCount = core + vnc,
                 timestamp = System.currentTimeMillis()
             )
         }.collect { event ->
@@ -85,17 +85,9 @@ class DatabaseChangeObserver(private val context: Context) {
      * Handle data change event
      */
     private fun onDataChanged(event: DatabaseChangeEvent) {
-        if (!preferenceManager.isSyncEnabled()) {
-            return
-        }
-
-        if (!preferenceManager.isSyncOnChangeEnabled()) {
-            return
-        }
-
-        Logger.d(TAG, "Database changed: ${event.connectionCount} connections, ${event.keyCount} keys, " +
-                "${event.themeCount} themes, ${event.hostKeyCount} host keys")
-
+        if (!preferenceManager.isSyncEnabled()) return
+        if (!preferenceManager.isSyncOnChangeEnabled()) return
+        Logger.d(TAG, "Database changed: ${event.totalCount} total items")
         scheduleDelayedSync()
     }
 
@@ -142,9 +134,6 @@ class DatabaseChangeObserver(private val context: Context) {
  * Database change event
  */
 private data class DatabaseChangeEvent(
-    val connectionCount: Int,
-    val keyCount: Int,
-    val themeCount: Int,
-    val hostKeyCount: Int,
+    val totalCount: Long,
     val timestamp: Long
 )

@@ -195,6 +195,25 @@ class SyncDataApplier {
                 }
             }
 
+            // Wave 13 — VNC hosts (last-write-wins REPLACE on UUID PK).
+            data.vncHosts.forEach { h ->
+                try {
+                    database.vncHostDao().insert(h)
+                    appliedCount++
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Failed to apply VNC host: ${h.name}", e)
+                }
+            }
+            // Wave 13 — VNC identity metadata (password not in row; Keystore-bound on each device).
+            data.vncIdentities.forEach { vi ->
+                try {
+                    database.vncIdentityDao().insert(vi)
+                    appliedCount++
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Failed to apply VNC identity: ${vi.name}", e)
+                }
+            }
+
             } // end withTransaction
 
             Logger.i(TAG, "Applied $appliedCount items from sync data")

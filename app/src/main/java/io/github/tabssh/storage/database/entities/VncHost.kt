@@ -3,6 +3,7 @@ package io.github.tabssh.storage.database.entities
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import kotlinx.serialization.Serializable
 
 /**
  * Direct VNC host — a VPS/bare-metal host exposing a VNC console.
@@ -10,6 +11,7 @@ import androidx.room.PrimaryKey
  * (reusing the VncIdentity Keystore slot) or directly under `vnc_host_${id}`
  * when no identity is linked.
  */
+@Serializable
 @Entity(tableName = "vnc_hosts")
 data class VncHost(
     @PrimaryKey

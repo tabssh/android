@@ -17,6 +17,8 @@ import io.github.tabssh.storage.database.entities.Snippet
 import io.github.tabssh.storage.database.entities.StoredKey
 import io.github.tabssh.storage.database.entities.ThemeDefinition
 import io.github.tabssh.storage.database.entities.TrustedCertificate
+import io.github.tabssh.storage.database.entities.VncHost
+import io.github.tabssh.storage.database.entities.VncIdentity
 import io.github.tabssh.storage.database.entities.Workspace
 import io.github.tabssh.storage.preferences.PreferenceManager
 import io.github.tabssh.utils.logging.Logger
@@ -114,6 +116,10 @@ class BackupImporter(
             { restoreMacros(it, overwriteExisting) }) { out["macros"] = it; Logger.d(TAG, "Restored $it macros") }
         table(BackupExporter.FILE_MONITOR_SLOTS, "monitor_slots",
             { restoreMonitorSlots(it, overwriteExisting) }) { out["monitor_slots"] = it; Logger.d(TAG, "Restored $it monitor slots") }
+        table(BackupExporter.FILE_VNC_HOSTS, "vnc_hosts",
+            { restoreVncHosts(it, overwriteExisting) }) { out["vnc_hosts"] = it; Logger.d(TAG, "Restored $it VNC hosts") }
+        table(BackupExporter.FILE_VNC_IDENTITIES, "vnc_identities",
+            { restoreVncIdentities(it, overwriteExisting) }) { out["vnc_identities"] = it; Logger.d(TAG, "Restored $it VNC identities") }
 
         out
     }
@@ -454,6 +460,22 @@ class BackupImporter(
             val existing = database.monitorSlotDao().getById(s.id)
             if (existing != null && !overwriteExisting) return@restoreV2List false
             database.monitorSlotDao().insertOrReplace(s); true
+        }
+
+    private suspend fun restoreVncHosts(data: String, overwriteExisting: Boolean): Int =
+        restoreV2List(data, ListSerializer(VncHost.serializer())) { h ->
+            val existing = database.vncHostDao().getById(h.id)
+            if (existing != null && !overwriteExisting) return@restoreV2List false
+            database.vncHostDao().insert(h); true
+        }
+
+    private suspend fun restoreVncIdentities(data: String, overwriteExisting: Boolean): Int =
+        // Password is NOT in this entity (it lives in Keystore); restore the metadata
+        // row as-is. User re-enters the VNC password on first connect after restore.
+        restoreV2List(data, ListSerializer(VncIdentity.serializer())) { vi ->
+            val existing = database.vncIdentityDao().getById(vi.id)
+            if (existing != null && !overwriteExisting) return@restoreV2List false
+            database.vncIdentityDao().insert(vi); true
         }
 
     private suspend fun <T> restoreV2List(

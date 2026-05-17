@@ -3,12 +3,14 @@ package io.github.tabssh.storage.database.entities
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import kotlinx.serialization.Serializable
 
 /**
  * VNC identity — stores credentials used for VNC authentication.
  * Password is stored in Android Keystore under key `vnc_identity_${id}`
  * via SecurePasswordManager; it is never held in this table.
  */
+@Serializable
 @Entity(tableName = "vnc_identities")
 data class VncIdentity(
     @PrimaryKey

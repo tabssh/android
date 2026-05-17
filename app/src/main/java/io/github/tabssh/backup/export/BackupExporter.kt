@@ -14,6 +14,8 @@ import io.github.tabssh.storage.database.entities.Snippet
 import io.github.tabssh.storage.database.entities.StoredKey
 import io.github.tabssh.storage.database.entities.ThemeDefinition
 import io.github.tabssh.storage.database.entities.TrustedCertificate
+import io.github.tabssh.storage.database.entities.VncHost
+import io.github.tabssh.storage.database.entities.VncIdentity
 import io.github.tabssh.storage.database.entities.Workspace
 import io.github.tabssh.storage.preferences.PreferenceManager
 import kotlinx.coroutines.Dispatchers
@@ -93,6 +95,8 @@ class BackupExporter(
         const val FILE_CLOUD_ACCOUNTS    = "cloud_accounts.json"
         const val FILE_MACROS            = "macros.json"
         const val FILE_MONITOR_SLOTS     = "monitor_slots.json"
+        const val FILE_VNC_HOSTS         = "vnc_hosts.json"
+        const val FILE_VNC_IDENTITIES    = "vnc_identities.json"
     }
 
     /**
@@ -117,6 +121,8 @@ class BackupExporter(
         out[FILE_CLOUD_ACCOUNTS]   = exportCloudAccounts()
         out[FILE_MACROS]           = exportMacros()
         out[FILE_MONITOR_SLOTS]    = exportMonitorSlots()
+        out[FILE_VNC_HOSTS]        = exportVncHosts()
+        out[FILE_VNC_IDENTITIES]   = exportVncIdentities()
 
         out
     }
@@ -213,6 +219,16 @@ class BackupExporter(
     private suspend fun exportMonitorSlots(): String =
         encodeEntities(ListSerializer(MonitorSlot.serializer()),
             database.monitorSlotDao().getAllSlots().first())
+
+    private suspend fun exportVncHosts(): String =
+        encodeEntities(ListSerializer(VncHost.serializer()),
+            database.vncHostDao().getAllHostsList())
+
+    private suspend fun exportVncIdentities(): String =
+        // Password lives in Keystore under `vnc_identity_${id}` — it is NOT in
+        // this entity, so no scrubbing needed. All other fields are safe to export.
+        encodeEntities(ListSerializer(VncIdentity.serializer()),
+            database.vncIdentityDao().getAllIdentitiesList())
 
     // ── Preferences ──────────────────────────────────────────────────────────
 

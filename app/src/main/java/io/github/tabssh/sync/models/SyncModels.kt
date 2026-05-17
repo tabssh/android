@@ -41,11 +41,14 @@ data class SyncItemCounts(
     val monitorSlots: Int = 0,   // Wave 11
     /** Wave 12 (2026-05-16 audit) — reusable hypervisor credential metadata.
      *  Token/password remains Keystore-bound and is NOT synced. */
-    val hypervisorAccounts: Int = 0
+    val hypervisorAccounts: Int = 0,
+    /** Wave 13 (2026-05-17) — direct VNC hosts and VNC credential metadata. */
+    val vncHosts: Int = 0,
+    val vncIdentities: Int = 0
 ) {
     fun total(): Int = connections + keys + themes + preferences + hostKeys +
         workspaces + snippets + identities + groups + hypervisors + certificates +
-        macros + monitorSlots + hypervisorAccounts
+        macros + monitorSlots + hypervisorAccounts + vncHosts + vncIdentities
 }
 
 /**
@@ -84,7 +87,10 @@ data class SyncFileData(
     val groups: List<io.github.tabssh.storage.database.entities.ConnectionGroup> = emptyList(),
     /** Wave 7.1 — last-write-wins. */
     val hypervisors: List<io.github.tabssh.storage.database.entities.HypervisorProfile> = emptyList(),
-    val certificates: List<io.github.tabssh.storage.database.entities.TrustedCertificate> = emptyList()
+    val certificates: List<io.github.tabssh.storage.database.entities.TrustedCertificate> = emptyList(),
+    /** Wave 13 — direct VNC hosts and VNC identity metadata. */
+    val vncHosts: List<io.github.tabssh.storage.database.entities.VncHost> = emptyList(),
+    val vncIdentities: List<io.github.tabssh.storage.database.entities.VncIdentity> = emptyList()
 )
 
 /**
@@ -128,7 +134,11 @@ data class SyncDataPackage(
     /** Wave 12 (2026-05-16 audit) — reusable hypervisor credential metadata.
      *  Sync covers the row (name/username/realm); the password itself stays
      *  Keystore-bound on each device under `hypervisor_account_${id}`. */
-    val hypervisorAccounts: List<io.github.tabssh.storage.database.entities.HypervisorAccount> = emptyList()
+    val hypervisorAccounts: List<io.github.tabssh.storage.database.entities.HypervisorAccount> = emptyList(),
+    /** Wave 13 (2026-05-17) — direct VNC hosts (metadata only; Keystore password not transferred)
+     *  and VNC identity metadata rows. */
+    val vncHosts: List<io.github.tabssh.storage.database.entities.VncHost> = emptyList(),
+    val vncIdentities: List<io.github.tabssh.storage.database.entities.VncIdentity> = emptyList()
 )
 
 /**

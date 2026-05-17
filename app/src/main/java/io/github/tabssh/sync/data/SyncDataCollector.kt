@@ -81,6 +81,8 @@ class SyncDataCollector {
         val macros = collectMacros()             // Wave 11
         val monitorSlots = collectMonitorSlots() // Wave 11
         val hypervisorAccounts = collectHypervisorAccounts() // Audit 2026-05-16
+        val vncHosts = collectVncHosts()         // Wave 13
+        val vncIdentities = collectVncIdentities() // Wave 13
 
         val itemCounts = SyncItemCounts(
             connections = connections.size,
@@ -96,7 +98,9 @@ class SyncDataCollector {
             certificates = certificates.size,
             macros = macros.size,
             monitorSlots = monitorSlots.size,
-            hypervisorAccounts = hypervisorAccounts.size
+            hypervisorAccounts = hypervisorAccounts.size,
+            vncHosts = vncHosts.size,
+            vncIdentities = vncIdentities.size
         )
 
         val metadata = metadataManager.createSyncMetadata(itemCounts)
@@ -118,7 +122,9 @@ class SyncDataCollector {
             certificates = certificates,
             macros = macros,
             monitorSlots = monitorSlots,
-            hypervisorAccounts = hypervisorAccounts
+            hypervisorAccounts = hypervisorAccounts,
+            vncHosts = vncHosts,
+            vncIdentities = vncIdentities
         )
     }
 
@@ -132,6 +138,27 @@ class SyncDataCollector {
             database.hypervisorAccountDao().getAllAccountsList()
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to collect hypervisor accounts", e)
+            emptyList()
+        }
+    }
+
+    /** Wave 13 — direct VNC host rows. No secrets; all columns are safe to sync. */
+    private suspend fun collectVncHosts(): List<io.github.tabssh.storage.database.entities.VncHost> {
+        return try {
+            database.vncHostDao().getAllHostsList()
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to collect VNC hosts", e)
+            emptyList()
+        }
+    }
+
+    /** Wave 13 — VNC identity metadata. Password remains Keystore-bound on each
+     *  device under `vnc_identity_${id}` and is NOT in this row. */
+    private suspend fun collectVncIdentities(): List<io.github.tabssh.storage.database.entities.VncIdentity> {
+        return try {
+            database.vncIdentityDao().getAllIdentitiesList()
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to collect VNC identities", e)
             emptyList()
         }
     }
@@ -239,6 +266,9 @@ class SyncDataCollector {
         val macros = collectMacros().filter { it.modifiedAt > timestamp }
         val monitorSlots = collectMonitorSlots()
         val hypervisorAccounts = collectHypervisorAccounts().filter { it.modifiedAt > timestamp }
+        // Wave 13 — both tables have modifiedAt; delta-filter them.
+        val vncHosts = collectVncHosts().filter { it.modifiedAt > timestamp }
+        val vncIdentities = collectVncIdentities().filter { it.modifiedAt > timestamp }
 
         val preferences = if (hasPreferencesChanged(timestamp)) {
             collectPreferences()
@@ -260,7 +290,9 @@ class SyncDataCollector {
             certificates = certificates.size,
             macros = macros.size,
             monitorSlots = monitorSlots.size,
-            hypervisorAccounts = hypervisorAccounts.size
+            hypervisorAccounts = hypervisorAccounts.size,
+            vncHosts = vncHosts.size,
+            vncIdentities = vncIdentities.size
         )
 
         val metadata = metadataManager.createSyncMetadata(itemCounts)
@@ -282,7 +314,9 @@ class SyncDataCollector {
             certificates = certificates,
             macros = macros,
             monitorSlots = monitorSlots,
-            hypervisorAccounts = hypervisorAccounts
+            hypervisorAccounts = hypervisorAccounts,
+            vncHosts = vncHosts,
+            vncIdentities = vncIdentities
         )
     }
 
