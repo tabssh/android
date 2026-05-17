@@ -15,6 +15,7 @@
 
 ## ✅ Recently Shipped
 
+- **`ae68921ee89d`** 🐛 QEMU/libvirt auth failure — `autoDeleteOnFailure` in `SecurePasswordManager` silently wiped Keystore credentials on any decryption error; `LibvirtApiClient.connect()` now fails fast with a helpful message instead of opaque SSH auth failure; `LibvirtManagerActivity` shows "Open Settings" dialog on credential miss; `validateFields()` no longer requires password when SSH key identity is selected for LIBVIRT; `saveHypervisor()` skips `store()` call when password is blank (key-only auth path).
 - **`(this batch)`** 📝 Translation drift — 10 missing keys added to `values-es/`, `values-fr/`, `values-de/` (`cluster_progress`, `navigation_drawer_open/close`, `select_connection`, `sync_password_*`, `widget_*_description`).
 - **`(this batch)`** 🔧 ProxyJump verified already wired — `SSHConfigParser.kt:299-302` populates proxy columns at parse time; `SSHConnection.setupJumpHost()` reads them. Stale TODO entry closed.
 - **`(this batch)`** 🔒 Cached SSH credential zeroing — `SSHConnection.clearCachedCredentials()` + `SSHSessionManager.clearCachedCredentials()` called from `TabSSHApplication.onActivityStopped()` when whole app backgrounds. Prevents in-memory password survival across biometric-lock events.
