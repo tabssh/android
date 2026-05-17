@@ -15,20 +15,34 @@ import io.github.tabssh.utils.logging.Logger
 
 /**
  * Notification Helper
- * Manages all app notifications with proper channels for Android 8+
- * 
- * Notification Types:
- * - Connection status (connect/disconnect/error)
- * - File transfer progress (SFTP uploads/downloads)
- * - Error notifications (connection failures, auth errors)
- * - Background service (persistent SSH connections)
+ * Manages all app notifications with proper channels for Android 8+.
+ *
+ * Channel layout:
+ * ┌─ ssh_service_v2       — FG service anchor / placeholder (low, silent)
+ * ├─ ssh_silent_v3        — per-host SSH session status (low, silent)
+ * ├─ ssh_alerts_v3        — per-host SSH events (high, audible, per-profile gated)
+ * ├─ ssh_connection_v2    — generic connect/disconnect events (low, silent)
+ * ├─ file_transfer_v2     — SFTP progress (low, silent)
+ * ├─ errors_v2            — connection errors / auth failures (high, audible)
+ * ├─ host_monitoring_v1   — host down/recovery alerts (high, audible)
+ * └─ host_metrics_v1      — CPU/mem/disk threshold breaches (default, silent)
+ *
+ * Notification group keys:
+ * - GROUP_SSH_SESSIONS   — groups all per-host SSH session notifications
+ * - GROUP_MONITORING     — groups all monitoring (down/recovery/metric) alerts
  */
 object NotificationHelper {
-    
-    // Notification IDs
+
+    // ── Notification IDs ──────────────────────────────────────────────────────
+
     const val NOTIFICATION_ID_SERVICE = 1001
-const val NOTIFICATION_ID_FILE_TRANSFER = 3001
+    const val NOTIFICATION_ID_FILE_TRANSFER = 3001
     const val NOTIFICATION_ID_ERROR = 4001
+
+    // Group summary IDs — must be outside the per-host (10_000–99_999) and
+    // monitoring (200_000–289_999) ranges so they never collide.
+    private const val NOTIFICATION_ID_SSH_GROUP = 1000
+    private const val NOTIFICATION_ID_MONITORING_GROUP = 199_999
 
     // Per-host notifications occupy a dedicated id range. The id is
     // derived from `profile.id.hashCode()` so it's stable across the
@@ -39,24 +53,37 @@ const val NOTIFICATION_ID_FILE_TRANSFER = 3001
         return 10_000 + ((profileId.hashCode().toLong() and 0x7FFFFFFFL) % 90_000).toInt()
     }
 
-    // Notification Channels — bumped to _v3 for the per-host work so
-    // any cached channel config from earlier installs gets replaced.
-    // Android caches first-create channel config and silently ignores
-    // updates to a live channel.
-    private const val CHANNEL_SERVICE = "ssh_service_v2"
-    private const val CHANNEL_CONNECTION = "ssh_connection_v2"
+    // ── Notification group keys ───────────────────────────────────────────────
+
+    // Android notification grouping: child notifications carry setGroup(key);
+    // one summary notification carries setGroup(key) + setGroupSummary(true).
+    // The OS collapses children under the summary in the notification shade
+    // when there are 4+ children (behaviour varies by launcher).
+    private const val GROUP_SSH_SESSIONS = "tabssh_ssh_sessions"
+    private const val GROUP_MONITORING   = "tabssh_monitoring"
+
+    // ── Notification channel IDs ──────────────────────────────────────────────
+
+    // Channels are bumped to _v2/_v3 after prior releases to force
+    // Android to apply new channel defaults (cached on first creation).
+
+    // Exposed so SSHConnectionService can reference it for its placeholder
+    // notification without creating a duplicate private channel.
+    internal const val CHANNEL_SERVICE = "ssh_service_v2"
+
+    private const val CHANNEL_CONNECTION  = "ssh_connection_v2"
     private const val CHANNEL_FILE_TRANSFER = "file_transfer_v2"
-    private const val CHANNEL_ERROR = "errors_v2"
+    private const val CHANNEL_ERROR       = "errors_v2"
 
     // Per-host status (persistent, silent). Default channel for the
     // ongoing per-session notification — never beeps or vibrates.
-    private const val CHANNEL_SSH_SILENT = "ssh_silent_v3"
+    private const val CHANNEL_SSH_SILENT  = "ssh_silent_v3"
 
     // Per-host alert (one-shot, audible). Used only when the connection
     // profile's notif_sound_mode / notif_vibrate_mode allow it. The
     // posted notification carries setTimeoutAfter so the OS auto-clears
     // it after a brief window.
-    private const val CHANNEL_SSH_ALERTS = "ssh_alerts_v3"
+    private const val CHANNEL_SSH_ALERTS  = "ssh_alerts_v3"
 
     // Background host monitoring — down/recovery alerts.
     internal const val CHANNEL_HOST_MONITORING = "host_monitoring_v1"
@@ -185,7 +212,7 @@ const val NOTIFICATION_ID_FILE_TRANSFER = 3001
                 hostMetrics
             ))
 
-            Logger.d("NotificationHelper", "Created 8 notification channels")
+            Logger.d("NotificationHelper", "Created notification channels (ssh_service, ssh_silent, ssh_alerts, ssh_connection, file_transfer, errors, host_monitoring, host_metrics)")
         }
     }
 
@@ -195,12 +222,18 @@ const val NOTIFICATION_ID_FILE_TRANSFER = 3001
      * posting (so the SSHConnectionService can use the same Notification
      * object as the foreground anchor via startForeground).
      *
+     * All SSH session notifications carry [GROUP_SSH_SESSIONS] so Android
+     * can collapse them under the group summary notification.
+     *
      * Schema (matches user spec):
      *   - state CONNECTED, title present:  "Connected to {host}:{title}"
      *   - state CONNECTED, no title:       "Connected to {host}:{port}-{ssh|mosh}"
      *   - state CONNECTING:                "Connecting to {host}:{port}…"
      *   - state ERROR:                     "Connection error: {host}:{port}"
      *   - state DISCONNECTED:              "Disconnected from {host}"
+     *
+     * CONNECTED notifications also include a "Disconnect" action that
+     * launches [ConfirmDisconnectActivity] for a user-confirmed close.
      */
     fun buildHostStatusNotification(
         context: Context,
@@ -261,8 +294,25 @@ const val NOTIFICATION_ID_FILE_TRANSFER = 3001
             .setOnlyAlertOnce(true)
             .setSilent(true)
             .setShowWhen(false)
+            // All SSH session notifications share one Android notification group
+            // so they collapse together under the group summary.
+            .setGroup(GROUP_SSH_SESSIONS)
             .setOngoing(state == io.github.tabssh.ssh.connection.ConnectionState.CONNECTED ||
                         state == io.github.tabssh.ssh.connection.ConnectionState.CONNECTING)
+
+        // "Disconnect" action — only shown for live CONNECTED sessions.
+        // Launches ConfirmDisconnectActivity (transparent dialog) so the
+        // user gets an explicit confirmation before the connection is torn down.
+        if (state == io.github.tabssh.ssh.connection.ConnectionState.CONNECTED) {
+            val disconnectPi = buildDisconnectPendingIntent(context, profile.id)
+            builder.addAction(
+                NotificationCompat.Action.Builder(
+                    R.drawable.ic_disconnect,
+                    "Disconnect",
+                    disconnectPi
+                ).build()
+            )
+        }
 
         // For DISCONNECTED, auto-clear after 30s so the user doesn't have
         // to swipe a stale "Disconnected from …" row.
@@ -284,6 +334,28 @@ const val NOTIFICATION_ID_FILE_TRANSFER = 3001
         }
 
         return builder.build()
+    }
+
+    /**
+     * Build the PendingIntent for the "Disconnect" notification action.
+     * Launches [ConfirmDisconnectActivity] — a transparent dialog — so the
+     * user confirms before the SSH connection is torn down.
+     */
+    private fun buildDisconnectPendingIntent(context: Context, profileId: String): PendingIntent {
+        val intent = Intent(context, io.github.tabssh.ui.activities.ConfirmDisconnectActivity::class.java).apply {
+            putExtra(io.github.tabssh.ui.activities.ConfirmDisconnectActivity.EXTRA_PROFILE_ID, profileId)
+            // FLAG_ACTIVITY_NEW_TASK required when starting an Activity from a
+            // non-Activity context (notification action fires from the OS).
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        // Use a request code distinct from the tap PendingIntent so Android
+        // does not accidentally reuse the wrong cached intent.
+        return PendingIntent.getActivity(
+            context,
+            profileId.hashCode() xor 0x1000,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
     }
 
     /**
@@ -312,6 +384,47 @@ const val NOTIFICATION_ID_FILE_TRANSFER = 3001
     fun cancelHostNotification(context: Context, profileId: String) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.cancel(perHostNotificationId(profileId))
+    }
+
+    /**
+     * Post (or update) the SSH session group summary notification.
+     *
+     * Android collapses all [GROUP_SSH_SESSIONS] child notifications under
+     * this summary in the notification shade once there are multiple active
+     * sessions. The summary itself shows a count and taps into MainActivity.
+     *
+     * Called by [SSHConnectionService] after every per-host notification
+     * render so the count stays accurate. When [connectedCount] is 0 the
+     * summary is cancelled instead of posted.
+     */
+    fun postSshGroupSummary(context: Context, connectedCount: Int) {
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (connectedCount <= 0) {
+            nm.cancel(NOTIFICATION_ID_SSH_GROUP)
+            return
+        }
+        val sessionWord = if (connectedCount == 1) "session" else "sessions"
+        val tapIntent = Intent(context, io.github.tabssh.ui.activities.MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        val pi = PendingIntent.getActivity(
+            context, 0, tapIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val summary = NotificationCompat.Builder(context, CHANNEL_SSH_SILENT)
+            .setContentTitle("TabSSH")
+            .setContentText("$connectedCount active SSH $sessionWord")
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentIntent(pi)
+            .setGroup(GROUP_SSH_SESSIONS)
+            .setGroupSummary(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setShowWhen(false)
+            .setOngoing(true)
+            .setTimeoutAfter(20 * 60 * 1000L)  // same safety-net as child notifications
+            .build()
+        nm.notify(NOTIFICATION_ID_SSH_GROUP, summary)
     }
 
     /**
@@ -562,8 +675,10 @@ const val NOTIFICATION_ID_FILE_TRANSFER = 3001
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_ERROR)
+            .setGroup(GROUP_MONITORING)
             .build()
         nm.notify(monitoringNotificationId(profile.id, "down"), n)
+        postMonitoringGroupSummary(context, nm)
     }
 
     /**
@@ -585,9 +700,11 @@ const val NOTIFICATION_ID_FILE_TRANSFER = 3001
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setGroup(GROUP_MONITORING)
             .setTimeoutAfter(120_000L)
             .build()
         nm.notify(monitoringNotificationId(profile.id, "up"), n)
+        postMonitoringGroupSummary(context, nm)
     }
 
     /**
@@ -609,8 +726,10 @@ const val NOTIFICATION_ID_FILE_TRANSFER = 3001
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_ERROR)
+            .setGroup(GROUP_MONITORING)
             .build()
         nm.notify(monitoringNotificationId(profile.id, "down"), n)
+        postMonitoringGroupSummary(context, nm)
     }
 
     /**
@@ -634,15 +753,41 @@ const val NOTIFICATION_ID_FILE_TRANSFER = 3001
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setGroup(GROUP_MONITORING)
             .setTimeoutAfter(300_000L)
             .build()
         nm.notify(monitoringNotificationId(profile.id, "metric_$metric"), n)
+        postMonitoringGroupSummary(context, nm)
     }
 
     /** Stable notification ID for a given profile + alert type pair. */
     private fun monitoringNotificationId(profileId: String, type: String): Int {
         val base = 200_000
         return base + (((profileId + type).hashCode().toLong() and 0x7FFFFFFFL) % 90_000).toInt()
+    }
+
+    /**
+     * Post (or refresh) the monitoring notification group summary.
+     *
+     * All monitoring alerts ([notifyHostDown], [notifyHostStillDown],
+     * [notifyHostRecovered], [notifyMetricThreshold]) carry [GROUP_MONITORING]
+     * and call this after posting their child. Android automatically dismisses
+     * the summary when all children are dismissed — we never need to cancel it
+     * manually; it is always posted alongside a new child.
+     */
+    private fun postMonitoringGroupSummary(context: Context, nm: NotificationManager) {
+        val pi = dashboardPendingIntent(context)
+        val summary = NotificationCompat.Builder(context, CHANNEL_HOST_MONITORING)
+            .setContentTitle("TabSSH Monitoring")
+            .setContentText("Host monitoring alerts")
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentIntent(pi)
+            .setGroup(GROUP_MONITORING)
+            .setGroupSummary(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setAutoCancel(true)
+            .build()
+        nm.notify(NOTIFICATION_ID_MONITORING_GROUP, summary)
     }
 
     private fun dashboardPendingIntent(context: Context): PendingIntent {

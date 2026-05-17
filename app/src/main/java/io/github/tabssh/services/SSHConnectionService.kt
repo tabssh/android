@@ -3,7 +3,6 @@ package io.github.tabssh.services
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
@@ -60,12 +59,14 @@ class SSHConnectionService : Service() {
     private var monitoringJob: Job? = null
     
     companion object {
+        // Placeholder notification ID — used only for the transient "Starting SSH
+        // session…" notification before the first per-host notification is live.
+        // Matches NotificationHelper.NOTIFICATION_ID_SERVICE (1001) so the service
+        // anchor stays consistent across the one place that references it by name.
         private const val NOTIFICATION_ID = 1001
-        private const val CHANNEL_ID = "ssh_connections"
-        private const val CHANNEL_NAME = "SSH Connections"
-        
+
         const val ACTION_START_SERVICE = "io.github.tabssh.START_SERVICE"
-        const val ACTION_STOP_SERVICE = "io.github.tabssh.STOP_SERVICE"
+        const val ACTION_STOP_SERVICE  = "io.github.tabssh.STOP_SERVICE"
         
         fun startService(context: Context) {
             val intent = Intent(context, SSHConnectionService::class.java).apply {
@@ -93,7 +94,10 @@ class SSHConnectionService : Service() {
 
         app = application as TabSSHApplication
 
-        createNotificationChannel()
+        // NotificationHelper.createNotificationChannels() is called once at
+        // application start (TabSSHApplication.onCreate). No duplicate channel
+        // creation needed here — the private "ssh_connections" channel has been
+        // removed; the placeholder notification now uses CHANNEL_SERVICE.
         // Sweep any per-host notifications that are stale from a previous
         // service lifetime (e.g. process killed by OOM without onDestroy).
         sweepPerHostNotifications(cancelAll = false)
@@ -177,29 +181,13 @@ class SSHConnectionService : Service() {
         }
     }
 
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "Persistent SSH connections"
-                setShowBadge(false)
-                enableVibration(false)
-                setSound(null, null)
-            }
-
-            val notificationManager = getSystemService(NotificationManager::class.java)
-            notificationManager.createNotificationChannel(channel)
-        }
-    }
-
     /**
      * Transient placeholder used as the FG-service anchor when the
      * service starts before any session has connected. Swapped out the
-     * moment a per-host notification is available. Same channel as the
-     * legacy aggregate notification (low importance, silent).
+     * moment a per-host notification is available.
+     *
+     * Uses [NotificationHelper.CHANNEL_SERVICE] — the same channel that
+     * NotificationHelper manages — instead of a private duplicate channel.
      */
     private fun buildPlaceholderNotification(): Notification {
         val tapTarget = Intent(this, MainActivity::class.java)
@@ -207,7 +195,7 @@ class SSHConnectionService : Service() {
             this, 0, tapTarget,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        return NotificationCompat.Builder(this, io.github.tabssh.utils.NotificationHelper.CHANNEL_SERVICE)
             .setContentTitle("TabSSH")
             .setContentText("Starting SSH session…")
             .setSmallIcon(R.drawable.ic_notification)
@@ -498,15 +486,21 @@ class SSHConnectionService : Service() {
      * thread (Android notification API is safe from any thread, but
      * [renderHostNotification] accesses [fgAnchorProfileId] which is
      * `@Volatile` and written only on Main).
+     *
+     * Also refreshes the SSH session group summary so its count stays
+     * accurate after sessions connect or disconnect.
      */
     private fun refreshAllHostNotifications() {
         try {
-            app.sshSessionManager.getActiveConnections().forEach { conn ->
+            val activeConns = app.sshSessionManager.getActiveConnections()
+            activeConns.forEach { conn ->
                 val s = conn.connectionState.value
                 if (s == ConnectionState.CONNECTED || s == ConnectionState.CONNECTING) {
                     renderHostNotification(conn.profile.id, disconnectingState = false)
                 }
             }
+            val connectedCount = activeConns.count { it.connectionState.value == ConnectionState.CONNECTED }
+            io.github.tabssh.utils.NotificationHelper.postSshGroupSummary(this, connectedCount)
         } catch (e: Exception) {
             Logger.w("SSHConnectionService", "Failed to refresh host notifications", e)
         }
@@ -547,6 +541,17 @@ class SSHConnectionService : Service() {
                     }
                 } catch (_: Exception) { /* nothing */ }
             }
+        }
+        // Keep the SSH group summary in sync: cancel it when sweeping all,
+        // refresh it when sweeping stale only (some may still be live).
+        if (cancelAll) {
+            io.github.tabssh.utils.NotificationHelper.postSshGroupSummary(this, 0)
+        } else {
+            try {
+                val connectedCount = app.sshSessionManager.getActiveConnections()
+                    .count { it.connectionState.value == ConnectionState.CONNECTED }
+                io.github.tabssh.utils.NotificationHelper.postSshGroupSummary(this, connectedCount)
+            } catch (_: Exception) { /* non-fatal */ }
         }
     }
 

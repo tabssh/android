@@ -245,6 +245,19 @@
         <item name="android:letterSpacing">0.08</item>
     </style>
 
+    <!-- Transparent activity theme for dialog-only activities (e.g. ConfirmDisconnectActivity).
+         The window has a clear background so the notification shade / underlying app shows
+         through while the AlertDialog is visible. backgroundDimEnabled darkens everything
+         behind it so the dialog itself stands out clearly. -->
+    <style name="Theme.TabSSH.Transparent" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:backgroundDimAmount">0.6</item>
+    </style>
+
     <style name="BulkEdit.Input" parent="Widget.MaterialComponents.TextInputLayout.OutlinedBox">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>

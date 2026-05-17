@@ -1016,24 +1016,35 @@ Package `cloud/` (separate from `hypervisor/`). Manages SSH-accessible cloud VM 
 
 ### 13.1 Notification channels
 
-`utils/NotificationHelper.kt` creates four channels (Android 8+):
+`utils/NotificationHelper.kt` manages all 8 channels. **All channels are created there** — `SSHConnectionService` no longer creates its own private channel.
 
 | Channel ID | Importance | Use |
 |---|---|---|
-| `ssh_service_v2` | LOW | persistent foreground notification for `SSHConnectionService` |
-| `ssh_connection_v2` | LOW | connect / disconnect / error events (silent) |
+| `ssh_service_v2` | LOW | FG-service anchor + placeholder notification (`SSHConnectionService`) |
+| `ssh_connection_v2` | LOW | generic connect / disconnect / error events (silent) |
 | `file_transfer_v2` | LOW | SFTP progress (ongoing, BigText for completion) |
 | `errors_v2` | HIGH | actionable errors |
-| `ssh_silent_v3` | LOW | per-host persistent session status (silent) |
+| `ssh_silent_v3` | LOW | per-host persistent session status (silent) — carries "Disconnect" action |
 | `ssh_alerts_v3` | HIGH | per-host audible/vibrating session events (controlled by `notifSoundMode`/`notifVibrateMode`) |
 | `host_monitoring_v1` | HIGH | host down/recovery alerts from background `HostAvailabilityWorker` |
 | `host_metrics_v1` | DEFAULT | CPU/memory/disk threshold breach alerts (silent) |
+
+**Notification groups** (Android 7+ notification collapsing):
+
+| Group key | Summary ID | Covers |
+|---|---|---|
+| `tabssh_ssh_sessions` | 1000 | all `ssh_silent_v3` per-host notifications |
+| `tabssh_monitoring` | 199999 | all `host_monitoring_v1` + `host_metrics_v1` alerts |
+
+`SSHConnectionService.refreshAllHostNotifications()` calls `NotificationHelper.postSshGroupSummary(count)` every 30 s (and on sweep) to keep the SSH group summary accurate. Monitoring group summary is posted inline alongside each monitoring alert.
+
+**Disconnect from notification:** every CONNECTED per-host notification carries a "Disconnect" action button. Tapping it launches `ConfirmDisconnectActivity` (transparent dialog, `Theme.TabSSH.Transparent`) which calls `SSHSessionManager.closeConnection(profileId)` on confirm.
 
 Per-channel toggles: `notifications_enabled`, `show_connection_notifications`, `show_error_notifications`, `show_file_transfer_notifications`, `notification_vibrate`. Master switch for monitoring: `monitoring_enabled` pref.
 
 ### 13.2 Foreground service
 
-`SSHConnectionService` (`services/SSHConnectionService.kt`) — `foregroundServiceType="dataSync"`, `START_STICKY`. Runs a 30-second connection-health loop, listens for `SessionManagerListener` events, updates the notification with the current connection count, auto-stops 30 s after the last connection closes.
+`SSHConnectionService` (`services/SSHConnectionService.kt`) — `foregroundServiceType="dataSync"`, `START_NOT_STICKY`. Runs a 30-second connection-health loop, listens for `SessionManagerListener` events, manages per-host + group summary notifications, auto-stops 30 s after the last connection closes.
 
 ### 13.3 Widgets
 

@@ -313,6 +313,19 @@
             android:parentActivityName=".ui.activities.TabTerminalActivity"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- Transparent confirm-disconnect dialog launched from the SSH session
+             notification action. android:excludeFromRecents prevents it from
+             appearing in the app switcher. android:taskAffinity="" keeps it out
+             of TabSSH's task stack so pressing Back after dismissal doesn't land
+             in a half-initialised task. -->
+        <activity
+            android:name=".ui.activities.ConfirmDisconnectActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TabSSH.Transparent"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:launchMode="singleInstance" />
+
         <!-- Background service for persistent connections -->
         <service
             android:name=".services.SSHConnectionService"
