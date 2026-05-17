@@ -248,10 +248,13 @@ class HypervisorConsoleManager {
             if (protocol == ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_VNC) {
                 // Graphical console: hand the streams to an RfbClient.
                 // The caller wires an RfbListener and calls rfbClient.start().
+                // ticket.termproxyTicket is the vncproxy ticket — Proxmox requires
+                // it as the VNC Auth password during the RFB handshake (security type 2).
                 ConsoleConnection.Graphical(
                     vmName = vmName,
                     hypervisorType = HypervisorType.PROXMOX,
-                    rfbClient = RfbClient(inputStream, outputStream)
+                    rfbClient = RfbClient(inputStream, outputStream,
+                        vncPassword = ticket.termproxyTicket)
                 )
             } else {
                 ConsoleConnection.Text(
@@ -515,7 +518,10 @@ class HypervisorConsoleManager {
                     listener?.onError("VNC fallback: could not get streams")
                     return
                 }
-                val rfbClient = RfbClient(input, output)
+                // vnc.termproxyTicket is the vncproxy ticket — used as the
+                // VNC Auth password in the RFB handshake (security type 2).
+                val rfbClient = RfbClient(input, output,
+                    vncPassword = vnc.termproxyTicket)
                 val graphical = ConsoleConnection.Graphical(
                     vmName = vmName,
                     hypervisorType = HypervisorType.PROXMOX,
