@@ -132,15 +132,16 @@ while [[ $# -gt 0 ]]; do
         --verbose)  VERBOSE=1 ;;
         --list)
             echo "Named tests:"
-            echo "  crash-dialog      Crash report dialog shows 'Paste / Issue' not 'Share'"
-            echo "  hypervisor-form   HypervisorEditActivity renders without ANR"
-            echo "  settings-opens    SettingsActivity main screen is navigable"
-            echo "  all               All of the above"
+            echo "  crash-dialog        Crash report dialog shows 'Paste / Issue' not 'Share'"
+            echo "  hypervisor-form     HypervisorEditActivity renders without ANR"
+            echo "  settings-opens      SettingsActivity main screen is navigable"
+            echo "  logging-navigation  Settings → Logging: all sections and key prefs visible"
+            echo "  all                 All of the above"
             echo ""
             echo "Use 'run STEPS…' for inline tests — see --help for step reference."
             exit 0 ;;
         --help|-h)  usage 0 ;;
-        all)        TESTS+=(crash-dialog hypervisor-form settings-opens) ;;
+        all)        TESTS+=(crash-dialog hypervisor-form settings-opens logging-navigation) ;;
         *)          TESTS+=("$1") ;;
     esac
     shift
@@ -478,6 +479,18 @@ ui_assert_present() {
     fi
 }
 
+# Scroll until text is visible, then assert it.  Use when the item may be
+# below the current viewport — safer than ui_assert_present for long screens.
+ui_assert_scroll() {
+    local text="$1" max="${2:-6}"
+    if ui_scroll_to "$text" "$max"; then
+        pass "Found (scrolled): \"$text\""
+    else
+        fail "Not found after scrolling: \"$text\""
+        info "Screen:"; ui_texts | sed 's/^/    /'
+    fi
+}
+
 # Assert text is NOT visible on the current screen.
 ui_assert_absent() {
     local text="$1"
@@ -654,6 +667,11 @@ run_inline() {
                 shift; ui_assert_present "$1" ;;
             --absent)
                 shift; ui_assert_absent "$1" ;;
+            --scroll-assert)
+                shift; local _satext="$1"
+                local _samax=6
+                if [[ $# -gt 1 && "${2:-}" =~ ^[0-9]+$ ]]; then shift; _samax="$1"; fi
+                ui_assert_scroll "$_satext" "$_samax" ;;
             --attr)
                 shift; local _atext="$1"; shift; local _aattr="$1"; shift; local _aval="$1"
                 ui_assert_attr "$_atext" "$_aattr" "$_aval" ;;
@@ -708,6 +726,68 @@ test_hypervisor_form() {
     ui_wait_for       "Name"
     ui_assert_present "Type"
     ui_assert_absent  "Application Not Responding"
+    ui_stop
+}
+
+# ── test: logging-navigation ─────────────────────────────────────────────────
+# Navigates Settings → Logging and scrolls through the entire screen, asserting
+# every category heading and a representative preference from each one.
+# Uses ui_assert_scroll for every item so each one is scrolled into view before
+# being checked — a single ui_scroll_to on the header is not enough because the
+# items lower in the section can still be off-screen.
+# Also confirms "Test crash dialog" is visible (debug build only behaviour).
+test_logging_navigation() {
+    ui_stop
+    ui_launch "$PKG/.ui.activities.SettingsActivity"
+    ui_wait_for "Settings"
+    ui_tap      "Logging"
+    ui_wait_for "Debug Logging"
+
+    # ── Debug Logging (at the top — assert_present is fine) ──────────────────
+    ui_assert_present "Enable Debug Logging"
+    ui_assert_present "Debug Log Level"
+    ui_assert_present "Log raw keystroke bytes (privacy risk)"
+
+    # ── Host Logging ──────────────────────────────────────────────────────────
+    ui_assert_scroll "Host Logging"
+    ui_assert_scroll "Enable Host Logging"
+    ui_assert_scroll "Log Filename Pattern"
+    ui_assert_scroll "Append to Existing Logs"
+    ui_assert_scroll "Log User Input"
+    ui_assert_scroll "Include Timestamps"
+
+    # ── Error Logging ─────────────────────────────────────────────────────────
+    ui_assert_scroll "Error Logging"
+    ui_assert_scroll "Enable Error Logging"
+    ui_assert_scroll "Include Stack Traces"
+
+    # ── Audit Logging ─────────────────────────────────────────────────────────
+    ui_assert_scroll "Audit Logging"
+    ui_assert_scroll "Enable Audit Logging"
+    ui_assert_scroll "Audit Events"
+
+    # ── View Logs ─────────────────────────────────────────────────────────────
+    ui_assert_scroll "View Logs"
+    ui_assert_scroll "View Application Log"
+    ui_assert_scroll "View Debug Log"
+    ui_assert_scroll "View Host Logs"
+    ui_assert_scroll "View Error Log"
+    ui_assert_scroll "View Audit Log"
+
+    # ── Log Management ────────────────────────────────────────────────────────
+    ui_assert_scroll "Log Management"
+    ui_assert_scroll "Export All Logs"
+    ui_assert_scroll "Clear All Logs"
+    ui_assert_scroll "Test crash dialog"   # visible only in debug builds
+
+    # ── Issue Reporting ───────────────────────────────────────────────────────
+    ui_assert_scroll "Issue Reporting"
+    ui_assert_scroll "Paste Service"
+    ui_assert_scroll "MicroBin Server"
+    ui_assert_scroll "Lenpaste Server"
+    ui_assert_scroll "Stikked Server"
+    ui_assert_scroll "Pastebin API Key"
+
     ui_stop
 }
 
