@@ -17,12 +17,15 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.crypto.storage.HypervisorPasswordStore
+import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.hypervisor.libvirt.LibvirtApiClient
 import io.github.tabssh.hypervisor.libvirt.LibvirtException
 import io.github.tabssh.hypervisor.libvirt.LibvirtVm
 import io.github.tabssh.hypervisor.vnc.VncStreamHolder
 import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -53,6 +56,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
     private lateinit var recyclerView: RecyclerView
 
     private var apiClient: LibvirtApiClient? = null
+    private var hypervisorProfile: HypervisorProfile? = null
     private val vms = mutableListOf<LibvirtVm>()
     private lateinit var adapter: VmAdapter
 
@@ -108,6 +112,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
                 showError("Hypervisor profile not found (id=$hypervisorId)")
                 return@launch
             }
+            hypervisorProfile = profile
             supportActionBar?.title = profile.name
 
             val client = LibvirtApiClient(this@LibvirtManagerActivity, profile)
@@ -289,7 +294,9 @@ class LibvirtManagerActivity : AppCompatActivity() {
             if (detectedIp != null) {
                 messageLines += "Detected IP: $detectedIp"
             }
-            messageLines += "\nConnect via SSH instead?"
+            messageLines += ""
+            messageLines += "Connect via SSH? The connection will tunnel through"
+            messageLines += "${hypervisorProfile?.host ?: "the hypervisor"} as a jump host."
 
             AlertDialog.Builder(this@LibvirtManagerActivity)
                 .setTitle("No Console Available")
@@ -304,10 +311,24 @@ class LibvirtManagerActivity : AppCompatActivity() {
 
     /**
      * Creates or updates a [ConnectionProfile] for the VM and launches
-     * [TabTerminalActivity]. Uses [ip] if non-null, otherwise the user will
-     * need to update the host in the terminal's connection settings.
+     * [TabTerminalActivity].
+     *
+     * VMs discovered via libvirt live on the hypervisor's private bridge network
+     * (typically 192.168.122.x) and are not directly reachable from Android.
+     * The hypervisor is wired as an SSH ProxyJump (jump host) so the connection
+     * tunnels Android → hypervisor → VM.
+     *
+     * Jump-host auth:
+     *  - Key-based hypervisor: `proxyAuthType = PUBLIC_KEY`, `proxyKeyId` set
+     *  - Password-based hypervisor: hypervisor password cached in [SecurePasswordManager]
+     *    for [ConnectionProfile.id] (SESSION_ONLY) so [SSHConnection.setupJumpHost]
+     *    retrieves it via [SSHConnection.getPasswordForAuthentication].
      */
     private fun launchSshToVm(vm: LibvirtVm, ip: String?) {
+        val hvProfile = hypervisorProfile ?: run {
+            showError("Hypervisor profile not loaded")
+            return
+        }
         lifecycleScope.launch {
             try {
                 val connectionName = "libvirt: ${vm.name}"
@@ -315,6 +336,12 @@ class LibvirtManagerActivity : AppCompatActivity() {
                     app.database.connectionDao().getByName(connectionName)
                 }
                 val host = ip ?: existing?.host ?: ""
+
+                // Jump-host auth mirrors the hypervisor profile's own auth method.
+                val proxyAuthType = if (hvProfile.sshIdentityId != null)
+                    AuthType.PUBLIC_KEY.name else AuthType.PASSWORD.name
+                val proxyKeyId = hvProfile.sshIdentityId
+
                 if (existing == null) {
                     existing = ConnectionProfile(
                         name = connectionName,
@@ -322,19 +349,60 @@ class LibvirtManagerActivity : AppCompatActivity() {
                         port = 22,
                         username = "root",
                         authType = AuthType.PASSWORD.name,
+                        // Route through the hypervisor as an SSH jump host so the VM's
+                        // internal bridge IP is reachable from Android.
+                        proxyType = "SSH",
+                        proxyHost = hvProfile.host,
+                        proxyPort = hvProfile.port,
+                        proxyUsername = hvProfile.username,
+                        proxyAuthType = proxyAuthType,
+                        proxyKeyId = proxyKeyId,
                         createdAt = System.currentTimeMillis(),
                         modifiedAt = System.currentTimeMillis()
                     )
-                    app.database.connectionDao().insertConnection(existing)
-                } else if (ip != null && existing.host != ip) {
-                    existing = existing.copy(host = ip, modifiedAt = System.currentTimeMillis())
-                    app.database.connectionDao().updateConnection(existing)
+                    withContext(Dispatchers.IO) {
+                        app.database.connectionDao().insertConnection(existing)
+                    }
+                } else {
+                    // Always refresh proxy fields in case the hypervisor was reconfigured.
+                    val updated = existing.copy(
+                        host = ip ?: existing.host,
+                        proxyType = "SSH",
+                        proxyHost = hvProfile.host,
+                        proxyPort = hvProfile.port,
+                        proxyUsername = hvProfile.username,
+                        proxyAuthType = proxyAuthType,
+                        proxyKeyId = proxyKeyId,
+                        modifiedAt = System.currentTimeMillis()
+                    )
+                    withContext(Dispatchers.IO) {
+                        app.database.connectionDao().updateConnection(updated)
+                    }
+                    existing = updated
                 }
+
+                // For password-based hypervisors, cache the hypervisor password in
+                // SecurePasswordManager keyed by the VM connection's UUID so that
+                // SSHConnection.setupJumpHost() can retrieve it. SESSION_ONLY: never
+                // persisted — cleared when the app process exits.
+                if (proxyKeyId == null) {
+                    val hvPassword = withContext(Dispatchers.IO) {
+                        HypervisorPasswordStore.retrieve(this@LibvirtManagerActivity, hvProfile)
+                    }
+                    if (hvPassword.isNotBlank()) {
+                        app.securePasswordManager.storePassword(
+                            existing.id,
+                            hvPassword,
+                            SecurePasswordManager.StorageLevel.SESSION_ONLY
+                        )
+                    }
+                }
+
                 val intent = TabTerminalActivity.createIntent(
                     this@LibvirtManagerActivity, existing, autoConnect = host.isNotBlank()
                 )
                 startActivity(intent)
-                Logger.i(TAG, "Launched SSH fallback for ${vm.name} → $host")
+                Logger.i(TAG, "Launched SSH fallback for ${vm.name} → $host via jump:${hvProfile.host}:${hvProfile.port}")
             } catch (e: Exception) {
                 Logger.e(TAG, "SSH fallback launch failed for ${vm.name}", e)
                 showError("Failed to open SSH: ${e.message}")
