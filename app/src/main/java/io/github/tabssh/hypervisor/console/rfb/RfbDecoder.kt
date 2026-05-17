@@ -1,5 +1,6 @@
 package io.github.tabssh.hypervisor.console.rfb
 
+import android.graphics.BitmapFactory
 import io.github.tabssh.utils.logging.Logger
 import java.io.DataInputStream
 import java.io.EOFException
@@ -10,7 +11,9 @@ import java.util.zip.Inflater
  * Decodes RFB FramebufferUpdate rectangles into ARGB_8888 pixel arrays.
  *
  * Supported encodings (advertised to the server in preference order):
+ *   Tight (7)      — TigerVNC default; Fill/Basic/JPEG/PNG sub-types
  *   ZRLE (16)      — zlib-compressed, most efficient, used by Proxmox
+ *   ZLIB (6)       — simple zlib-wrapped raw pixels
  *   Hextile (5)    — tile-based, universal server-side fallback
  *   CopyRect (1)   — cheap scroll / blit operations
  *   RRE (2)        — solid-colour region compression
@@ -19,6 +22,7 @@ import java.util.zip.Inflater
  * Pseudo-encodings decoded inline by RfbClient:
  *   DesktopSize (-223) — framebuffer resize
  *   Cursor (-239)      — software cursor (stored; composited by VncView)
+ *   LastRect (-224)    — terminates a FramebufferUpdate early
  *
  * Threading: all decode calls happen on the RfbClient reader thread.
  * Caller is responsible for synchronising access to the framebuffer.
@@ -31,10 +35,18 @@ class RfbDecoder(private val fmt: PixelFormat) {
         private const val ZRLE_BUF = 512 * 1024   // initial inflate buffer
     }
 
-    // ZRLE uses a single continuous zlib stream for the lifetime of the
-    // connection. The Inflater is reset only if the stream is corrupted.
+    // ── Zlib streams ─────────────────────────────────────────────────────────
+    //
+    // ZRLE: single continuous stream for the connection lifetime.
+    // ZLIB: single continuous stream (separate from ZRLE).
+    // Tight: four independent streams (0..3), reset on demand via cc byte.
+
     private val zrleInflater = Inflater()
     private var zrleBuf = ByteArray(ZRLE_BUF)
+
+    private val zlibInflater = Inflater()
+
+    private val tightInflaters = Array(4) { Inflater() }
 
     /**
      * Decode one rectangle from [din] into [fb].
@@ -56,10 +68,11 @@ class RfbDecoder(private val fmt: PixelFormat) {
             RfbConstants.ENC_COPY_RECT -> decodeCopyRect(din, fb, fbW, x, y, w, h)
             RfbConstants.ENC_RRE       -> decodeRre(din, fb, fbW, x, y, w, h)
             RfbConstants.ENC_HEXTILE   -> decodeHextile(din, fb, fbW, x, y, w, h)
+            RfbConstants.ENC_ZLIB      -> decodeZlib(din, fb, fbW, x, y, w, h)
             RfbConstants.ENC_ZRLE      -> decodeZrle(din, fb, fbW, x, y, w, h)
+            RfbConstants.ENC_TIGHT     -> decodeTight(din, fb, fbW, x, y, w, h)
             else -> {
                 Logger.w(TAG, "Unsupported encoding $encoding for rect $x,$y ${w}×$h — skipping")
-                // Best-effort: skip w*h*bpp bytes so the stream stays in sync
                 val skip = w.toLong() * h * fmt.bytesPerPixel
                 var remaining = skip
                 while (remaining > 0) remaining -= din.skip(remaining)
@@ -182,6 +195,43 @@ class RfbDecoder(private val fmt: PixelFormat) {
         }
     }
 
+    // ── ZLIB ────────────────────────────────────────────────────────────────
+    //
+    // Simple continuous zlib stream: 4-byte length + compressed raw pixels.
+    // Uses a separate Inflater from ZRLE so the two streams don't interfere.
+
+    private fun decodeZlib(
+        din: DataInputStream, fb: IntArray, fbW: Int,
+        x: Int, y: Int, w: Int, h: Int
+    ) {
+        val compLen = din.readInt()
+        if (compLen <= 0) return
+        val compData = ByteArray(compLen)
+        din.readFully(compData)
+
+        zlibInflater.setInput(compData)
+        val expectedSize = w * h * fmt.bytesPerPixel
+        val plain = ByteArray(expectedSize)
+        var totalOut = 0
+        try {
+            while (totalOut < expectedSize) {
+                val n = zlibInflater.inflate(plain, totalOut, expectedSize - totalOut)
+                if (n == 0) break
+                totalOut += n
+            }
+        } catch (e: DataFormatException) {
+            Logger.w(TAG, "ZLIB inflate error — resetting: ${e.message}")
+            zlibInflater.reset()
+        }
+
+        for (row in 0 until h) {
+            val base = (y + row) * fbW + x
+            for (col in 0 until w) {
+                fb[base + col] = fmt.toArgb(plain, (row * w + col) * fmt.bytesPerPixel)
+            }
+        }
+    }
+
     // ── ZRLE ────────────────────────────────────────────────────────────────
     //
     // The zlib stream is continuous across all ZRLE rectangles for the life
@@ -192,15 +242,14 @@ class RfbDecoder(private val fmt: PixelFormat) {
         din: DataInputStream, fb: IntArray, fbW: Int,
         x: Int, y: Int, w: Int, h: Int
     ) {
-        val compLen = din.readInt() and 0xFFFFFFFFL.toInt() // treat as unsigned
+        val compLen = din.readInt() and 0x7FFFFFFF
         if (compLen <= 0) return
 
         val compBuf = ByteArray(compLen)
         din.readFully(compBuf)
 
-        // Inflate the full compressed chunk.
         zrleInflater.setInput(compBuf, 0, compLen)
-        val plain = inflateAll(compLen)
+        val plain = inflateAll(zrleInflater)
         val src = java.io.ByteArrayInputStream(plain)
 
         val cp = fmt.cpixelBytes
@@ -296,12 +345,164 @@ class RfbDecoder(private val fmt: PixelFormat) {
                             pixelsLeft -= pixels
                         }
                     }
-                    // 17-127, 129: undefined — treat as solid black to stay in sync
+                    // 17..127, 129: undefined — solid black to stay in sync
                     else -> fillRect(fb, fbW, tx, ty, tileW, tileH, 0xFF000000.toInt())
                 }
                 tx += tileW
             }
             ty += tileH
+        }
+    }
+
+    // ── Tight ────────────────────────────────────────────────────────────────
+    //
+    // Tight encoding (RFC extension by Const). Compression-control byte:
+    //   bits 3..0 — reset flags for each of the 4 zlib streams
+    //   bits 7..4 — compression type
+    //     0x0..0x3 — BasicCompression, stream index = (type & 3)
+    //     0x8       — FillCompression (solid colour)
+    //     0x9       — JPEG
+    //     0xA       — PNG (extended Tight, TigerVNC ≥ 1.3)
+    //
+    // BasicCompression reads a FilterID byte:
+    //   0 (Copy)     — raw pixels, cpixelBytes each
+    //   1 (Palette)  — palette + indexed data (1 bpp if 2 colours, 8 bpp otherwise)
+    //   2 (Gradient) — delta-prediction per channel
+
+    private fun decodeTight(
+        din: DataInputStream, fb: IntArray, fbW: Int,
+        x: Int, y: Int, w: Int, h: Int
+    ) {
+        val cc = din.readUnsignedByte()
+
+        // Reset requested streams (bits 0..3)
+        for (i in 0..3) {
+            if (cc and (1 shl i) != 0) tightInflaters[i].reset()
+        }
+
+        val compType = cc ushr 4
+        val cp = fmt.cpixelBytes
+
+        when (compType) {
+            RfbConstants.TIGHT_FILL -> {
+                // Single pixel, fill the whole rect
+                val pixBuf = ByteArray(cp)
+                din.readFully(pixBuf)
+                fillRect(fb, fbW, x, y, w, h, fmt.cpixelToArgb(pixBuf))
+            }
+
+            RfbConstants.TIGHT_JPEG, RfbConstants.TIGHT_PNG -> {
+                // Entire rect as JPEG or PNG image data
+                val dataLen = readCompactLen(din)
+                val imageData = ByteArray(dataLen)
+                din.readFully(imageData)
+                val bmp = BitmapFactory.decodeByteArray(imageData, 0, dataLen)
+                if (bmp != null) {
+                    val pixels = IntArray(w * h)
+                    bmp.getPixels(pixels, 0, w, 0, 0, w, h)
+                    bmp.recycle()
+                    for (row in 0 until h) {
+                        pixels.copyInto(fb, (y + row) * fbW + x, row * w, row * w + w)
+                    }
+                } else {
+                    Logger.w(TAG, "Tight JPEG/PNG decode failed for rect $x,$y ${w}×$h")
+                }
+            }
+
+            else -> {
+                // BasicCompression: stream index = compType & 3
+                val streamIdx = compType and 0x3
+                val filterId = din.readUnsignedByte()
+
+                when (filterId) {
+                    RfbConstants.TIGHT_FILTER_COPY -> {
+                        val dataSize = w * h * cp
+                        val data = readTightData(din, streamIdx, dataSize)
+                        var idx = 0
+                        for (row in 0 until h) {
+                            val base = (y + row) * fbW + x
+                            for (col in 0 until w) {
+                                fb[base + col] = fmt.cpixelToArgb(data, idx)
+                                idx += cp
+                            }
+                        }
+                    }
+
+                    RfbConstants.TIGHT_FILTER_PALETTE -> {
+                        val numColors = din.readUnsignedByte() + 1
+                        val palette = IntArray(numColors)
+                        val pbBuf = ByteArray(cp)
+                        for (i in 0 until numColors) {
+                            din.readFully(pbBuf)
+                            palette[i] = fmt.cpixelToArgb(pbBuf)
+                        }
+                        // 2 colours → 1 bpp packed; >2 colours → 8 bpp indices
+                        val dataSize = if (numColors == 2) ((w + 7) / 8) * h else w * h
+                        val data = readTightData(din, streamIdx, dataSize)
+
+                        if (numColors == 2) {
+                            var di = 0
+                            for (row in 0 until h) {
+                                val base = (y + row) * fbW + x
+                                var col = 0
+                                while (col < w) {
+                                    val b = data[di++].toInt() and 0xFF
+                                    for (bit in 7 downTo 0) {
+                                        if (col >= w) break
+                                        fb[base + col++] = palette[(b ushr bit) and 1]
+                                    }
+                                }
+                            }
+                        } else {
+                            var di = 0
+                            for (row in 0 until h) {
+                                val base = (y + row) * fbW + x
+                                for (col in 0 until w) {
+                                    fb[base + col] = palette[data[di++].toInt() and 0xFF]
+                                }
+                            }
+                        }
+                    }
+
+                    RfbConstants.TIGHT_FILTER_GRADIENT -> {
+                        // Gradient (delta) filter: actual = raw + prediction (per channel)
+                        // Prediction = left + above − above_left, clamped [0, 255]
+                        val dataSize = w * h * cp
+                        val data = readTightData(din, streamIdx, dataSize)
+
+                        val prevRow = ByteArray(w * cp)  // previous decoded row
+                        val currRow = ByteArray(w * cp)  // current row being decoded
+
+                        for (row in 0 until h) {
+                            val srcOff = row * w * cp
+                            val dstBase = (y + row) * fbW + x
+                            for (col in 0 until w) {
+                                for (c in 0 until cp) {
+                                    val raw = data[srcOff + col * cp + c].toInt() and 0xFF
+                                    val est = when {
+                                        row == 0 && col == 0 -> 0
+                                        row == 0 -> currRow[(col - 1) * cp + c].toInt() and 0xFF
+                                        col == 0 -> prevRow[c].toInt() and 0xFF
+                                        else -> {
+                                            val left     = currRow[(col - 1) * cp + c].toInt() and 0xFF
+                                            val above    = prevRow[col * cp + c].toInt() and 0xFF
+                                            val aboveLeft = prevRow[(col - 1) * cp + c].toInt() and 0xFF
+                                            (left + above - aboveLeft).coerceIn(0, 255)
+                                        }
+                                    }
+                                    currRow[col * cp + c] = ((raw + est) and 0xFF).toByte()
+                                }
+                                fb[dstBase + col] = fmt.cpixelToArgb(currRow, col * cp)
+                            }
+                            currRow.copyInto(prevRow)
+                        }
+                    }
+
+                    else -> {
+                        Logger.w(TAG, "Unknown Tight filter $filterId for rect $x,$y ${w}×$h")
+                    }
+                }
+            }
         }
     }
 
@@ -335,28 +536,88 @@ class RfbDecoder(private val fmt: PixelFormat) {
     }
 
     /**
-     * Inflate all pending input from [zrleInflater] into a fresh byte array.
-     * Doubles the output buffer as needed. Resets the inflater on corruption.
+     * Compact-length integer used by the Tight encoding.
+     * Reads 1–3 bytes; MSB of each byte signals "more bytes follow".
      */
-    private fun inflateAll(compLen: Int): ByteArray {
-        // Estimate: compressed data expands roughly 4-10×
-        var outBuf = ByteArray(maxOf(zrleBuf.size, compLen * 8))
+    private fun readCompactLen(din: DataInputStream): Int {
+        var b = din.readUnsignedByte()
+        var len = b and 0x7F
+        if (b and 0x80 != 0) {
+            b = din.readUnsignedByte()
+            len = len or ((b and 0x7F) shl 7)
+            if (b and 0x80 != 0) {
+                b = din.readUnsignedByte()
+                len = len or (b shl 14)
+            }
+        }
+        return len
+    }
+
+    /**
+     * Read Tight BasicCompression data for [streamIdx].
+     * Data is raw (inline) when [dataSize] < TIGHT_MIN_COMPRESS_SIZE, otherwise
+     * a compact length followed by zlib-compressed bytes.
+     */
+    private fun readTightData(din: DataInputStream, streamIdx: Int, dataSize: Int): ByteArray {
+        if (dataSize < RfbConstants.TIGHT_MIN_COMPRESS_SIZE) {
+            val buf = ByteArray(dataSize)
+            din.readFully(buf)
+            return buf
+        }
+        val compLen = readCompactLen(din)
+        val compData = ByteArray(compLen)
+        din.readFully(compData)
+        return inflateTight(streamIdx, compData, dataSize)
+    }
+
+    /**
+     * Inflate [compData] using Tight stream [streamIdx] into a buffer of exactly
+     * [expectedSize] bytes. The stream is persistent (not reset here).
+     */
+    private fun inflateTight(streamIdx: Int, compData: ByteArray, expectedSize: Int): ByteArray {
+        val inflater = tightInflaters[streamIdx]
+        inflater.setInput(compData)
+        val out = ByteArray(expectedSize)
         var totalOut = 0
         try {
-            while (!zrleInflater.needsInput()) {
-                if (totalOut >= outBuf.size) outBuf = outBuf.copyOf(outBuf.size * 2)
-                val n = zrleInflater.inflate(outBuf, totalOut, outBuf.size - totalOut)
+            while (totalOut < expectedSize) {
+                val n = inflater.inflate(out, totalOut, expectedSize - totalOut)
                 if (n == 0) break
                 totalOut += n
             }
         } catch (e: DataFormatException) {
-            Logger.w(TAG, "ZRLE inflate error — resetting stream: ${e.message}")
-            zrleInflater.reset()
+            Logger.w(TAG, "Tight inflate error (stream $streamIdx) — resetting: ${e.message}")
+            inflater.reset()
         }
-        return if (totalOut == outBuf.size) outBuf else outBuf.copyOf(totalOut)
+        return out
+    }
+
+    /**
+     * Inflate all pending input from [inflater] into a fresh byte array.
+     * Doubles the output buffer as needed.
+     */
+    private fun inflateAll(inflater: Inflater): ByteArray {
+        var outBuf = ByteArray(maxOf(zrleBuf.size, 4096))
+        var totalOut = 0
+        try {
+            while (true) {
+                if (totalOut >= outBuf.size) outBuf = outBuf.copyOf(outBuf.size * 2)
+                val n = inflater.inflate(outBuf, totalOut, outBuf.size - totalOut)
+                totalOut += n
+                // inflate() returns 0 only when needsInput() or finished() —
+                // the output buffer has space (expanded above), so 0 means done.
+                if (n == 0) break
+            }
+        } catch (e: DataFormatException) {
+            Logger.w(TAG, "ZRLE inflate error — resetting stream: ${e.message}")
+            inflater.reset()
+        }
+        return outBuf.copyOf(totalOut)
     }
 
     fun reset() {
         zrleInflater.reset()
+        zlibInflater.reset()
+        for (inflater in tightInflaters) inflater.reset()
     }
 }

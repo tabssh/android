@@ -27,7 +27,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 class RfbClient(
     private val inputStream: InputStream,
-    private val outputStream: OutputStream
+    private val outputStream: OutputStream,
+    /** VNC password for SECURITY_VNC_AUTH; null means None-only connections. */
+    private val vncPassword: String? = null
 ) {
     companion object {
         private const val TAG = "RfbClient"
@@ -38,13 +40,16 @@ class RfbClient(
          * Servers pick the first one they support.
          */
         private val PREFERRED_ENCODINGS = intArrayOf(
-            RfbConstants.ENC_ZRLE,
+            RfbConstants.ENC_TIGHT,        // TigerVNC default
+            RfbConstants.ENC_ZRLE,         // Proxmox preferred
+            RfbConstants.ENC_ZLIB,
             RfbConstants.ENC_HEXTILE,
             RfbConstants.ENC_COPY_RECT,
             RfbConstants.ENC_RRE,
             RfbConstants.ENC_RAW,
             RfbConstants.ENC_DESKTOP_SIZE,
-            RfbConstants.ENC_CURSOR
+            RfbConstants.ENC_CURSOR,
+            RfbConstants.ENC_LAST_RECT
         )
     }
 
@@ -147,40 +152,70 @@ class RfbClient(
         din.readFully(types)
         Logger.d(TAG, "Security types offered: ${types.map { it.toInt() and 0xFF }}")
 
-        // Prefer None (ticket-authenticated proxies), fall back to VNC Auth
+        // Prefer None (ticket-authenticated proxies), fall back to VNC Auth if
+        // a password was supplied by the caller.
         val chosen = when {
             types.contains(RfbConstants.SECURITY_NONE.toByte()) -> RfbConstants.SECURITY_NONE
-            types.contains(RfbConstants.SECURITY_VNC_AUTH.toByte()) -> RfbConstants.SECURITY_VNC_AUTH
-            else -> throw Exception("No supported security type in ${types.toList()}")
+            types.contains(RfbConstants.SECURITY_VNC_AUTH.toByte()) && vncPassword != null ->
+                RfbConstants.SECURITY_VNC_AUTH
+            types.contains(RfbConstants.SECURITY_VNC_AUTH.toByte()) ->
+                throw Exception(
+                    "Server requires VNC password authentication but no password was provided."
+                )
+            else -> throw Exception("No supported security type in ${types.map { it.toInt() and 0xFF }}")
         }
         Logger.d(TAG, "Chose security type: $chosen")
         synchronized(outLock) { dout.writeByte(chosen); dout.flush() }
 
         when (chosen) {
-            RfbConstants.SECURITY_NONE -> Unit // server sends SecurityResult immediately
+            RfbConstants.SECURITY_NONE -> Unit // SecurityResult follows immediately
+
             RfbConstants.SECURITY_VNC_AUTH -> {
-                // Read 16-byte challenge; no password available in this context
-                // (Proxmox vncproxy uses None; VMware/other can override via subclass).
-                // If reached here without a password, bail with a clear message.
+                // Read 16-byte DES challenge, encrypt with bit-reversed password key.
                 val challenge = ByteArray(16)
                 din.readFully(challenge)
-                Logger.w(TAG, "VNC Auth challenge received but no password provider is set")
-                throw Exception(
-                    "VNC password authentication required but not supported in this context.\n" +
-                    "Configure the VM to use a ticket-based or passwordless VNC session."
-                )
+                val response = vncDesEncrypt(vncPassword!!, challenge)
+                synchronized(outLock) { dout.write(response); dout.flush() }
             }
         }
 
-        // SecurityResult (u32): 0 = OK
+        // SecurityResult (u32): 0 = OK, anything else = failure with reason string
         val result = din.readInt()
         if (result != 0) {
-            if (chosen == RfbConstants.SECURITY_NONE) return // RFB 3.8 None: no result
             val reasonLen = din.readInt()
             val reason = ByteArray(reasonLen); din.readFully(reason)
             throw Exception("Authentication failed: ${String(reason)}")
         }
         Logger.d(TAG, "Authentication OK")
+    }
+
+    /**
+     * Encrypt a 16-byte VNC DES challenge.
+     *
+     * VNC DES uses a non-standard key schedule where the bits within each byte
+     * of the password are reversed before passing to DES. The password is
+     * zero-padded or truncated to 8 bytes. The challenge is split into two
+     * 8-byte blocks each encrypted independently (ECB mode, no padding).
+     */
+    private fun vncDesEncrypt(password: String, challenge: ByteArray): ByteArray {
+        // Build 8-byte key: take up to 8 chars, zero-pad, reverse bits in each byte
+        val raw = password.toByteArray(Charsets.ISO_8859_1)
+        val key = ByteArray(8) { i -> if (i < raw.size) reverseBits(raw[i]) else 0 }
+
+        val keySpec = javax.crypto.spec.DESKeySpec(key)
+        val keyFactory = javax.crypto.SecretKeyFactory.getInstance("DES")
+        val secretKey = keyFactory.generateSecret(keySpec)
+        val cipher = javax.crypto.Cipher.getInstance("DES/ECB/NoPadding")
+        cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, secretKey)
+        return cipher.doFinal(challenge)
+    }
+
+    /** Reverse the bit order within a single byte (VNC DES key requirement). */
+    private fun reverseBits(b: Byte): Byte {
+        var x = b.toInt() and 0xFF
+        var r = 0
+        repeat(8) { r = (r shl 1) or (x and 1); x = x ushr 1 }
+        return r.toByte()
     }
 
     // ── Server init ──────────────────────────────────────────────────────
@@ -264,7 +299,9 @@ class RfbClient(
         val numRects = din.readUnsignedShort()
         Logger.d(TAG, "FramebufferUpdate: $numRects rects")
 
-        for (i in 0 until numRects) {
+        // numRects == 0xFFFF means "unlimited"; stop on ENC_LAST_RECT instead
+        var i = 0
+        while (i < numRects || numRects == 0xFFFF) {
             val rx = din.readUnsignedShort()
             val ry = din.readUnsignedShort()
             val rw = din.readUnsignedShort()
@@ -272,6 +309,11 @@ class RfbClient(
             val encoding = din.readInt()
 
             when (encoding) {
+                RfbConstants.ENC_LAST_RECT -> {
+                    // No data follows; the update is complete
+                    Logger.d(TAG, "LastRect — ending FramebufferUpdate early")
+                    break
+                }
                 RfbConstants.ENC_DESKTOP_SIZE -> {
                     // Server-side resize: rx/ry hold the new dimensions
                     Logger.i(TAG, "DesktopSize pseudo-rect: ${rx}×$ry (was ${fbWidth}×$fbHeight)")
@@ -291,6 +333,7 @@ class RfbClient(
                     }
                 }
             }
+            i++
         }
 
         // Request next incremental update immediately

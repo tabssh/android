@@ -26,6 +26,8 @@ object RfbConstants {
     const val ENC_COPY_RECT: Int = 1
     const val ENC_RRE: Int = 2
     const val ENC_HEXTILE: Int = 5
+    const val ENC_ZLIB: Int = 6
+    const val ENC_TIGHT: Int = 7
     const val ENC_ZRLE: Int = 16
 
     // ── Pseudo-encoding types ────────────────────────────────────────────────
@@ -33,6 +35,21 @@ object RfbConstants {
     const val ENC_DESKTOP_SIZE: Int = -223
     /** Server sends software cursor separately (client renders it). */
     const val ENC_CURSOR: Int = -239
+    /** No more rectangles follow in this update (TigerVNC extension). */
+    const val ENC_LAST_RECT: Int = -224
+
+    // ── Tight compression control byte top nibble ────────────────────────────
+    const val TIGHT_FILL: Int = 0x08
+    const val TIGHT_JPEG: Int = 0x09
+    const val TIGHT_PNG: Int = 0x0A   // extended Tight (newer servers)
+
+    // ── Tight filter IDs (BasicCompression) ─────────────────────────────────
+    const val TIGHT_FILTER_COPY: Int = 0x00
+    const val TIGHT_FILTER_PALETTE: Int = 0x01
+    const val TIGHT_FILTER_GRADIENT: Int = 0x02
+
+    // Minimum data length to apply zlib compression in Tight BasicCompression
+    const val TIGHT_MIN_COMPRESS_SIZE: Int = 12
 
     // ── Hextile sub-encoding flags ───────────────────────────────────────────
     const val HEXTILE_RAW: Int = 1
