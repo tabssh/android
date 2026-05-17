@@ -1,6 +1,7 @@
 package io.github.tabssh.ui.activities
 
 import android.os.Bundle
+import android.view.KeyEvent
 import android.view.View
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -12,10 +13,10 @@ import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.hypervisor.console.ConsoleEventListener
 import io.github.tabssh.hypervisor.console.HypervisorConsoleManager
 import io.github.tabssh.hypervisor.console.rfb.RfbClient
-import io.github.tabssh.hypervisor.console.rfb.RfbConstants
 import io.github.tabssh.hypervisor.proxmox.ProxmoxApiClient
 import io.github.tabssh.hypervisor.vnc.VncDirectConnector
 import io.github.tabssh.hypervisor.vnc.VncStreamHolder
+import io.github.tabssh.hypervisor.vnc.console.VncConsoleChannel
 import io.github.tabssh.hypervisor.xcpng.XCPngApiClient
 import io.github.tabssh.hypervisor.xcpng.XenOrchestraApiClient
 import io.github.tabssh.terminal.TermuxBridge
@@ -96,6 +97,12 @@ class VMConsoleActivity : AppCompatActivity() {
     private var isGraphicalMode = false
     /** Socket to close when a direct VNC host connection ends. */
     private var directVncSocket: Socket? = null
+    /**
+     * Active VNC console channel (keyboard bridge to RfbClient).
+     * Non-null whenever [isGraphicalMode] is true — all VNC paths now
+     * use console mode (VncConsoleChannel) rather than raw VncView input.
+     */
+    private var vncConsoleChannel: VncConsoleChannel? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -478,7 +485,8 @@ class VMConsoleActivity : AppCompatActivity() {
         val rfbClient = RfbClient(
             inputStream = ins,
             outputStream = out,
-            vncPassword = null
+            vncPassword = null,
+            consoleMode = true
         )
         val connection = HypervisorConsoleManager.ConsoleConnection.Graphical(
             vmName = vmName,
@@ -659,32 +667,44 @@ class VMConsoleActivity : AppCompatActivity() {
     }
 
     /**
-     * Switch the activity from text-terminal mode to graphical VNC mode.
-     * Called both from [connectToConsole] (when the API returns a graphical
-     * connection directly) and from [createConsoleListener]'s
-     * [onSwitchToGraphical] (when Proxmox falls back mid-session).
+     * Switch the activity to VNC console mode.
+     *
+     * All VNC paths use console mode: the framebuffer is rendered through
+     * [VncView] (pixel display), but keyboard input is routed through a
+     * [VncConsoleChannel] so both the custom keyboard bar and the Android
+     * system keyboard work identically to the SSH terminal.  The keyboard
+     * bar stays visible; mouse pointer events are not forwarded.
+     *
+     * Called both from [connectToConsole] (direct VNC connection) and from
+     * [createConsoleListener]'s [onSwitchToGraphical] (Proxmox fallback).
      */
     private fun switchToGraphical(connection: HypervisorConsoleManager.ConsoleConnection.Graphical) {
-        Logger.i(TAG, "Switching to graphical (VNC) console for ${connection.vmName}")
+        Logger.i(TAG, "Switching to VNC console mode for ${connection.vmName}")
         isGraphicalMode = true
         isConnected = true
 
-        // Wire VncView ↔ RfbClient
         val rfb = connection.rfbClient
-        vncView.onPointerEvent = { bx, by, mask -> rfb.sendPointerEvent(bx, by, mask) }
-        vncView.onKeyEvent = { keysym, down -> rfb.sendKeyEvent(keysym, down) }
 
+        // Build the keyboard bridge first so the initial size can be captured.
+        val channel = VncConsoleChannel(rfb)
+        vncConsoleChannel = channel
+        // TermuxBridge is constructed with columns=80, rows=24. Use those defaults
+        // for the initial SetDesktopSize; the onResizeCallback will send an updated
+        // size once the terminal view has been measured by the layout system.
+        channel.setInitialSize(80, 24)
+
+        // Wire VncView for framebuffer rendering only — no pointer or key
+        // events from VncView itself; those go through VncConsoleChannel.
         val rfbListener = vncView.asRfbListener()
-        rfb.listener = object : io.github.tabssh.hypervisor.console.rfb.RfbListener by rfbListener {
+        rfb.listener = channel.wrapListener(object : io.github.tabssh.hypervisor.console.rfb.RfbListener by rfbListener {
             override fun onConnected(width: Int, height: Int, name: String,
                                      framebuffer: IntArray) {
                 rfbListener.onConnected(width, height, name, framebuffer)
                 runOnUiThread {
                     terminalView.visibility = View.GONE
                     vncView.visibility = View.VISIBLE
-                    // Hide the text keyboard bar — mouse/touch is the input in VNC mode.
-                    // (User can still access it via context menu if needed.)
-                    findViewById<View>(R.id.multi_row_keyboard)?.visibility = View.GONE
+                    // Keep the keyboard bar visible — console mode uses keyboard
+                    // input the same way SSH does.
                     hideProgress()
                     refreshFloatingControls()
                 }
@@ -697,11 +717,16 @@ class VMConsoleActivity : AppCompatActivity() {
                 rfbListener.onDisconnected(reason)
                 runOnUiThread {
                     isConnected = false
+                    vncConsoleChannel = null
                     showStatus("Disconnected: $reason")
                     refreshFloatingControls()
                 }
             }
-        }
+        })
+
+        // Wire resize: when the terminal view changes size, update VNC too.
+        termuxBridge?.onResizeCallback = { cols, rows -> channel.resize(cols, rows) }
+
         rfb.start()
 
         runOnUiThread {
@@ -732,11 +757,33 @@ class VMConsoleActivity : AppCompatActivity() {
             runOnUiThread { showError(message) }
         }
 
+        override fun onSerialConsoleUnavailable() {
+            runOnUiThread { showSerialConsoleUnavailableBanner() }
+        }
+
         override fun onSwitchToGraphical(
             connection: HypervisorConsoleManager.ConsoleConnection.Graphical
         ) {
             runOnUiThread { switchToGraphical(connection) }
         }
+    }
+
+    /**
+     * Dismissible banner shown when Proxmox termproxy reports that the VM has
+     * no serial device configured and the console is falling back to VNC mode.
+     */
+    private fun showSerialConsoleUnavailableBanner() {
+        if (isFinishing || isDestroyed) return
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Serial console unavailable")
+            .setMessage(
+                "This VM has no serial device configured.\n\n" +
+                "To enable the serial console: open the VM in Proxmox → Hardware → " +
+                "Add → Serial Port → set type to \"socket\", then reboot the VM.\n\n" +
+                "Falling back to VNC console mode."
+            )
+            .setPositiveButton("OK", null)
+            .show()
     }
 
     private fun showProgress(message: String) {
@@ -783,6 +830,20 @@ class VMConsoleActivity : AppCompatActivity() {
         // inline status. Toasts vanish; users that want to file a bug
         // need a way to capture the exact message.
         io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(this, "VM Console Error", message)
+    }
+
+    /**
+     * Route system-keyboard input to [VncConsoleChannel] when in VNC console mode.
+     * This intercepts key events from the Android IME and hardware keyboard before
+     * the default dispatch chain so they reach the RFB layer as X11 keysyms rather
+     * than being consumed by the focused view.
+     */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val channel = vncConsoleChannel
+        if (isGraphicalMode && channel != null) {
+            if (channel.sendKeyEvent(event)) return true
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     override fun onSupportNavigateUp(): Boolean {
@@ -839,20 +900,10 @@ class VMConsoleActivity : AppCompatActivity() {
         }
         keyboard.setOnKeyClickListener { key ->
             if (isGraphicalMode) {
-                // In VNC mode, translate the key sequence to keysyms.
-                // Single printable characters are sent as Unicode keysyms;
-                // control sequences use the VncView helper.
-                val seq = key.keySequence
-                when {
-                    seq == "" -> vncView.sendKey(RfbConstants.KEY_ESCAPE, true)
-                        .also { vncView.sendKey(RfbConstants.KEY_ESCAPE, false) }
-                    seq == "\t"     -> vncView.sendKey(RfbConstants.KEY_TAB, true)
-                        .also { vncView.sendKey(RfbConstants.KEY_TAB, false) }
-                    seq == "\r" || seq == "\n" -> vncView.sendKey(RfbConstants.KEY_RETURN, true)
-                        .also { vncView.sendKey(RfbConstants.KEY_RETURN, false) }
-                    seq.length == 1 -> vncView.sendChar(seq[0])
-                    else -> seq.forEach { vncView.sendChar(it) }
-                }
+                // VNC console mode: route through VncConsoleChannel which
+                // translates sequences to X11 keysyms (same path as SSH
+                // uses ANSI sequences, but here they become RFB KeyEvents).
+                vncConsoleChannel?.sendSequence(key.keySequence)
             } else {
                 // Text console: send the byte sequence verbatim.
                 sendBytes(key.keySequence.toByteArray(Charsets.UTF_8))
@@ -883,6 +934,7 @@ class VMConsoleActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        vncConsoleChannel = null
         consoleManager?.disconnect()
         termuxBridge?.cleanup()
         vncView.recycle()

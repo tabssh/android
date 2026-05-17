@@ -26,18 +26,23 @@ object VncDirectConnector {
     /**
      * Connect to [host] and return an [RfbClient] + the underlying [Socket].
      *
-     * @param password  VNC password; may be null for None security or when
-     *                  credentials come from an attached [VncIdentity].
-     * @param username  VeNCrypt Plain username (only for vencrypt_*_plain sub-types).
+     * @param password    VNC password; may be null for None security or when
+     *                    credentials come from an attached [VncIdentity].
+     * @param username    VeNCrypt Plain username (only for vencrypt_*_plain sub-types).
+     * @param consoleMode When true, configures RfbClient for text-console mode:
+     *                    exclusive ClientInit, console-friendly encodings, and
+     *                    ExtendedDesktopSize support.  Direct VNC connections are
+     *                    always console mode per the VNC-as-console architecture.
      */
     suspend fun connect(
         host: VncHost,
         password: String?,
         username: String? = null,
-        context: Context
+        context: Context,
+        consoleMode: Boolean = true
     ): Pair<RfbClient, Socket> = withContext(Dispatchers.IO) {
         val effectivePort = host.effectivePort
-        Logger.d(TAG, "Connecting to ${host.host}:$effectivePort (security=${host.securityType})")
+        Logger.d(TAG, "Connecting to ${host.host}:$effectivePort (security=${host.securityType} consoleMode=$consoleMode)")
 
         val socket = Socket()
         socket.soTimeout = SO_TIMEOUT_MS
@@ -51,7 +56,8 @@ object VncDirectConnector {
             tlsHost = host.host,
             tlsPort = effectivePort,
             tlsVerify = host.tlsVerify,
-            vncUsername = username
+            vncUsername = username,
+            consoleMode = consoleMode
         )
         Logger.d(TAG, "Socket connected; RfbClient constructed for ${host.name}")
         Pair(rfbClient, socket)

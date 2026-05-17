@@ -254,7 +254,8 @@ class HypervisorConsoleManager {
                     vmName = vmName,
                     hypervisorType = HypervisorType.PROXMOX,
                     rfbClient = RfbClient(inputStream, outputStream,
-                        vncPassword = ticket.termproxyTicket)
+                        vncPassword = ticket.termproxyTicket,
+                        consoleMode = true)
                 )
             } else {
                 ConsoleConnection.Text(
@@ -520,13 +521,18 @@ class HypervisorConsoleManager {
                 }
                 // vnc.termproxyTicket is the vncproxy ticket — used as the
                 // VNC Auth password in the RFB handshake (security type 2).
+                // consoleMode=true: exclusive access, console encodings, resize support.
                 val rfbClient = RfbClient(input, output,
-                    vncPassword = vnc.termproxyTicket)
+                    vncPassword = vnc.termproxyTicket,
+                    consoleMode = true)
                 val graphical = ConsoleConnection.Graphical(
                     vmName = vmName,
                     hypervisorType = HypervisorType.PROXMOX,
                     rfbClient = rfbClient
                 )
+                // Notify the UI to show the serial-unavailable banner before
+                // switching to VNC console mode.
+                listener?.onSerialConsoleUnavailable()
                 listener?.onConnected(vmName)
                 listener?.onSwitchToGraphical(graphical)
             }
@@ -591,12 +597,24 @@ interface ConsoleEventListener {
     fun onError(message: String)
 
     /**
+     * Called immediately before falling back to VNC console mode because the VM
+     * has no serial device configured.  The UI should show a dismissible banner:
+     *
+     *   "Serial console unavailable — VM has no serial device.
+     *    Add serial0: socket in Proxmox → VM Hardware, then reboot the VM.
+     *    Falling back to VNC console mode."
+     *
+     * Default no-op so callers that never encounter this path need not change.
+     */
+    fun onSerialConsoleUnavailable() {}
+
+    /**
      * Called when a text console falls back to a graphical (VNC/RFB) console
      * mid-session (e.g. Proxmox termproxy reports no serial interface after
      * the WebSocket is already open).
      *
-     * The caller should detach TermuxBridge, show [VncView], attach an
-     * [io.github.tabssh.hypervisor.console.rfb.RfbListener] to the client,
+     * The caller should attach a [io.github.tabssh.hypervisor.vnc.console.VncConsoleChannel]
+     * to the RfbClient for keyboard input, keep the custom keyboard bar visible,
      * and call [HypervisorConsoleManager.ConsoleConnection.Graphical.rfbClient]`.start()`.
      *
      * Default no-op so existing callers that never use VNC don't need to change.

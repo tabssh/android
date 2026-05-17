@@ -45,14 +45,21 @@ class RfbClient(
     /** Whether to verify the server certificate during VeNCrypt TLS upgrade. */
     private val tlsVerify: Boolean = false,
     /** Username for VeNCrypt Plain sub-types. */
-    private val vncUsername: String? = null
+    private val vncUsername: String? = null,
+    /**
+     * When true, operate in text-console mode:
+     *  - ClientInit shared-flag = 0 (exclusive access)
+     *  - Advertise only console-friendly encodings (Raw, CopyRect, no Tight/ZRLE)
+     *  - Support ExtendedDesktopSize for client-initiated resize
+     */
+    val consoleMode: Boolean = false
 ) {
     companion object {
         private const val TAG = "RfbClient"
         private const val RFB_VERSION = "RFB 003.008\n"
 
         /**
-         * Encodings advertised to the server, in preference order.
+         * Encodings advertised to the server in full GUI mode, in preference order.
          * Servers pick the first one they support.
          */
         private val PREFERRED_ENCODINGS = intArrayOf(
@@ -64,6 +71,22 @@ class RfbClient(
             RfbConstants.ENC_RRE,
             RfbConstants.ENC_RAW,
             RfbConstants.ENC_DESKTOP_SIZE,
+            RfbConstants.ENC_CURSOR,
+            RfbConstants.ENC_LAST_RECT
+        )
+
+        /**
+         * Encodings for text-console mode.  Compression encodings (Tight, ZRLE,
+         * Zlib) are omitted so the Raw byte path is deterministic — important for
+         * parsing VT100/ANSI output from text-mode framebuffers.
+         * ExtendedDesktopSize is included to enable client-initiated resize via
+         * SetDesktopSize (RFB message type 251).
+         */
+        private val CONSOLE_ENCODINGS = intArrayOf(
+            RfbConstants.ENC_RAW,
+            RfbConstants.ENC_COPY_RECT,
+            RfbConstants.ENC_DESKTOP_SIZE,
+            RfbConstants.ENC_EXTENDED_DESKTOP_SIZE,
             RfbConstants.ENC_CURSOR,
             RfbConstants.ENC_LAST_RECT
         )
@@ -370,8 +393,9 @@ class RfbClient(
     // ── Server init ──────────────────────────────────────────────────────
 
     private fun serverInit() {
-        // ClientInit: shared flag (1 = allow other viewers)
-        synchronized(outLock) { dout.writeByte(1); dout.flush() }
+        // ClientInit: shared flag.  Console mode requests exclusive access (0)
+        // so the text session is not corrupted by another viewer's pointer events.
+        synchronized(outLock) { dout.writeByte(if (consoleMode) 0 else 1); dout.flush() }
 
         // ServerInit: width, height, pixel-format (16 bytes), name-length, name
         fbWidth = din.readUnsignedShort()
@@ -403,13 +427,41 @@ class RfbClient(
     }
 
     private fun sendSetEncodings() {
+        val encodings = if (consoleMode) CONSOLE_ENCODINGS else PREFERRED_ENCODINGS
         synchronized(outLock) {
             dout.writeByte(RfbConstants.C2S_SET_ENCODINGS)
             dout.writeByte(0)                              // padding
-            dout.writeShort(PREFERRED_ENCODINGS.size)
-            for (enc in PREFERRED_ENCODINGS) dout.writeInt(enc)
+            dout.writeShort(encodings.size)
+            for (enc in encodings) dout.writeInt(enc)
             dout.flush()
         }
+    }
+
+    /**
+     * Request the server to resize its framebuffer (RFB message type 251,
+     * SetDesktopSize extension).  Only meaningful when [consoleMode] is true
+     * and [RfbConstants.ENC_EXTENDED_DESKTOP_SIZE] was advertised in
+     * [sendSetEncodings].  The server acknowledges via an
+     * [RfbConstants.ENC_EXTENDED_DESKTOP_SIZE] pseudo-rectangle.
+     */
+    fun sendSetDesktopSize(width: Int, height: Int) {
+        synchronized(outLock) {
+            dout.writeByte(251)        // SetDesktopSize message type
+            dout.writeByte(0)          // padding
+            dout.writeShort(width)
+            dout.writeShort(height)
+            dout.writeShort(1)         // number of screens
+            dout.writeShort(0)         // padding
+            // Screen descriptor: id, x, y, width, height, flags
+            dout.writeInt(0)           // screen id
+            dout.writeShort(0)         // x-position
+            dout.writeShort(0)         // y-position
+            dout.writeShort(width)     // width
+            dout.writeShort(height)    // height
+            dout.writeInt(0)           // flags
+            dout.flush()
+        }
+        Logger.d(TAG, "SetDesktopSize sent: ${width}×$height")
     }
 
     private fun sendFullUpdateRequest() {
@@ -465,6 +517,25 @@ class RfbClient(
                     framebuffer = IntArray(fbWidth * fbHeight)
                     listener?.onDesktopResize(fbWidth, fbHeight, framebuffer)
                     sendUpdateRequest(0, 0, fbWidth, fbHeight, incremental = false)
+                }
+                RfbConstants.ENC_EXTENDED_DESKTOP_SIZE -> {
+                    // Client-initiated resize acknowledgement (or server-side change).
+                    // Payload: 2-byte numScreens + 2-byte padding + 16 bytes per screen.
+                    // rx = reason (0=server, 1=this client, 2=other client)
+                    // ry = status (0=OK, 1=prohibited, 2=out of resources, 3=invalid)
+                    // rw/rh = new framebuffer dimensions (valid when ry==0)
+                    val numScreens = din.readUnsignedShort()
+                    din.skipBytes(2)               // padding
+                    din.skipBytes(numScreens * 16) // screen descriptors (id, x, y, w, h, flags)
+                    if (ry == 0 && rw > 0 && rh > 0) {
+                        Logger.i(TAG, "ExtendedDesktopSize: ${rw}×$rh (reason=$rx)")
+                        fbWidth = rw; fbHeight = rh
+                        framebuffer = IntArray(fbWidth * fbHeight)
+                        listener?.onDesktopResize(fbWidth, fbHeight, framebuffer)
+                        sendUpdateRequest(0, 0, fbWidth, fbHeight, incremental = false)
+                    } else if (ry != 0) {
+                        Logger.w(TAG, "ExtendedDesktopSize rejected: reason=$rx status=$ry")
+                    }
                 }
                 RfbConstants.ENC_CURSOR -> {
                     // Software cursor: rw×rh cursor image + bitmask
