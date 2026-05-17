@@ -143,6 +143,8 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
     /**
      * Tears down and rebuilds the entire interactive keyboard surface.
      * Called on any structural change (row count, key add/remove, drag drop).
+     * Also refreshes the available-keys palette so it stays in sync with
+     * whatever is currently placed on the surface.
      */
     private fun rebuildSurface() {
         val surface = binding.layoutKeyboardPreview
@@ -174,6 +176,9 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
 
             surface.addView(rowView)
         }
+
+        // Keep the palette in sync — remove any key that is now on the surface.
+        refreshAvailableKeys()
     }
 
     private fun makeEmptyRowHint(dp: Float) = TextView(this).apply {
@@ -206,9 +211,12 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
             minWidth = (44 * dp).toInt()
             minHeight = (38 * dp).toInt()
             setPadding((10 * dp).toInt(), (5 * dp).toInt(), (10 * dp).toInt(), (5 * dp).toInt())
+            // width=0 + weight=1 mirrors how KeyboardRowView sizes keys so the
+            // preview shows exactly the proportions the user will see at runtime.
             layoutParams = LinearLayout.LayoutParams(
+                0,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
+                1f
             ).apply { setMargins((3 * dp).toInt(), (2 * dp).toInt(), (3 * dp).toInt(), (2 * dp).toInt()) }
 
             setOnTouchListener { v, ev ->
@@ -366,10 +374,9 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
 
     private fun addKey(key: KeyboardKey) {
         if (activeRow >= keyboardLayout.size) return
-        if (keyboardLayout[activeRow].any { it.id == key.id }) {
-            Toast.makeText(this, "Key already in that row", Toast.LENGTH_SHORT).show()
-            return
-        }
+        // Guard against the key being placed anywhere on the surface already
+        // (palette filtering prevents this in normal use, but be defensive).
+        if (keyboardLayout.any { row -> row.any { it.id == key.id } }) return
         keyboardLayout[activeRow].add(key)
         rebuildSurface()
     }
@@ -383,6 +390,10 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
     // ─── Available keys ───────────────────────────────────────────────────────
 
     private fun refreshAvailableKeys() {
+        // Build the set of key IDs already placed anywhere on the surface.
+        // Each key can only exist once — once placed it is no longer "available".
+        val usedIds = keyboardLayout.flatMapTo(mutableSetOf()) { row -> row.map { it.id } }
+
         val all = KeyboardKey.getAllAvailableKeys()
         val filtered = when (currentCategory) {
             "special"    -> all.filter { it.category == KeyboardKey.KeyCategory.SPECIAL }
@@ -395,7 +406,8 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
             }
             else -> all
         }
-        availableKeysAdapter.setKeys(filtered)
+        // Exclude keys already on the surface from the available pool.
+        availableKeysAdapter.setKeys(filtered.filterNot { it.id in usedIds })
     }
 
     // ─── Save ─────────────────────────────────────────────────────────────────
