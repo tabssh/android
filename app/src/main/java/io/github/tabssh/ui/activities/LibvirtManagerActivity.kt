@@ -76,7 +76,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.title = "QEMU/libvirt"
 
-        adapter = VmAdapter(vms) { vm -> onVmClicked(vm) }
+        adapter = VmAdapter(vms)
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
 
@@ -172,43 +172,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
         }
     }
 
-    // ── VM interaction ────────────────────────────────────────────────────────
-
-    private fun onVmClicked(vm: LibvirtVm) {
-        val client = apiClient ?: run {
-            Toast.makeText(this, "Not connected", Toast.LENGTH_SHORT).show()
-            return
-        }
-        when {
-            vm.state == "running"                       -> showRunningActions(vm, client)
-            vm.state == "shut off" || vm.state == "paused" -> showStoppedActions(vm, client)
-            else                                        -> showRunningActions(vm, client)
-        }
-    }
-
-    private fun showRunningActions(vm: LibvirtVm, client: LibvirtApiClient) {
-        val actions = arrayOf("🖥  Open Console", "🔄  Reboot", "⏹  Shutdown", "⚡  Hard Reset")
-        AlertDialog.Builder(this)
-            .setTitle(vm.name)
-            .setItems(actions) { _, which ->
-                when (which) {
-                    0 -> openConsole(vm, client)
-                    1 -> powerAction(vm, client, "reboot")
-                    2 -> powerAction(vm, client, "shutdown")
-                    3 -> confirmHardReset(vm, client)
-                }
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    private fun showStoppedActions(vm: LibvirtVm, client: LibvirtApiClient) {
-        AlertDialog.Builder(this)
-            .setTitle(vm.name)
-            .setItems(arrayOf("▶  Start")) { _, _ -> powerAction(vm, client, "start") }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
+    // ── VM actions ────────────────────────────────────────────────────────────
 
     private fun confirmHardReset(vm: LibvirtVm, client: LibvirtApiClient) {
         AlertDialog.Builder(this)
@@ -275,6 +239,19 @@ class LibvirtManagerActivity : AppCompatActivity() {
                 hideProgress()
                 showError("Could not open console: ${e.message}")
             }
+        }
+    }
+
+    /**
+     * Directly SSHes to a running VM by fetching its IP via virsh first,
+     * then launching [TabTerminalActivity] through the hypervisor as a jump host.
+     */
+    private fun directSshToVm(vm: LibvirtVm, client: LibvirtApiClient) {
+        lifecycleScope.launch {
+            val ip = withContext(Dispatchers.IO) {
+                try { client.getVmIpAddress(vm.name) } catch (e: Exception) { null }
+            }
+            launchSshToVm(vm, ip)
         }
     }
 
@@ -446,14 +423,20 @@ class LibvirtManagerActivity : AppCompatActivity() {
     // ── Adapter ───────────────────────────────────────────────────────────────
 
     private inner class VmAdapter(
-        private val items: List<LibvirtVm>,
-        private val onClick: (LibvirtVm) -> Unit
+        private val items: List<LibvirtVm>
     ) : RecyclerView.Adapter<VmAdapter.VH>() {
 
         inner class VH(view: View) : RecyclerView.ViewHolder(view) {
             val name: TextView = view.findViewById(R.id.vm_name)
             val state: TextView = view.findViewById(R.id.vm_state)
             val info: TextView = view.findViewById(R.id.vm_info)
+            val ip: TextView = view.findViewById(R.id.vm_ip)
+            val btnConsole: MaterialButton = view.findViewById(R.id.btn_console)
+            val btnSsh: MaterialButton = view.findViewById(R.id.btn_ssh)
+            val btnStart: MaterialButton = view.findViewById(R.id.btn_start)
+            val btnStop: MaterialButton = view.findViewById(R.id.btn_stop)
+            val btnReboot: MaterialButton = view.findViewById(R.id.btn_reboot)
+            val btnReset: MaterialButton = view.findViewById(R.id.btn_reset)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
@@ -465,24 +448,74 @@ class LibvirtManagerActivity : AppCompatActivity() {
 
         override fun onBindViewHolder(holder: VH, position: Int) {
             val vm = items[position]
+            val client = apiClient ?: return
+
             holder.name.text = vm.name
             holder.state.text = stateLabel(vm.state)
             holder.state.setTextColor(stateColor(vm.state))
             holder.info.text = if (vm.id >= 0) "ID: ${vm.id}" else "ID: —"
-            holder.itemView.setOnClickListener { onClick(vm) }
-        }
+            holder.ip.visibility = View.GONE
 
-        private fun stateLabel(state: String): String = when (state) {
-            "running"  -> "● running"
-            "shut off" -> "○ shut off"
-            "paused"   -> "⏸ paused"
-            else       -> state
+            holder.btnStop.text = "Shutdown"
+
+            // Button visibility by domain state
+            when (vm.state) {
+                "running" -> {
+                    holder.btnConsole.visibility = View.VISIBLE
+                    holder.btnSsh.visibility = View.VISIBLE
+                    holder.btnStart.visibility = View.GONE
+                    holder.btnStop.visibility = View.VISIBLE
+                    holder.btnReboot.visibility = View.VISIBLE
+                    holder.btnReset.visibility = View.VISIBLE
+                }
+                "shut off" -> {
+                    holder.btnConsole.visibility = View.GONE
+                    holder.btnSsh.visibility = View.GONE
+                    holder.btnStart.visibility = View.VISIBLE
+                    holder.btnStop.visibility = View.GONE
+                    holder.btnReboot.visibility = View.GONE
+                    holder.btnReset.visibility = View.GONE
+                }
+                "paused" -> {
+                    holder.btnConsole.visibility = View.GONE
+                    holder.btnSsh.visibility = View.GONE
+                    holder.btnStart.visibility = View.VISIBLE
+                    holder.btnStop.visibility = View.VISIBLE
+                    holder.btnReboot.visibility = View.GONE
+                    holder.btnReset.visibility = View.GONE
+                }
+                else -> {
+                    holder.btnConsole.visibility = View.GONE
+                    holder.btnSsh.visibility = View.GONE
+                    holder.btnStart.visibility = View.VISIBLE
+                    holder.btnStop.visibility = View.VISIBLE
+                    holder.btnReboot.visibility = View.GONE
+                    holder.btnReset.visibility = View.GONE
+                }
+            }
+
+            holder.btnConsole.setOnClickListener { openConsole(vm, client) }
+            holder.btnSsh.setOnClickListener { directSshToVm(vm, client) }
+            holder.btnStart.setOnClickListener { powerAction(vm, client, "start") }
+            holder.btnStop.setOnClickListener { powerAction(vm, client, "shutdown") }
+            holder.btnReboot.setOnClickListener { powerAction(vm, client, "reboot") }
+            holder.btnReset.setOnClickListener { confirmHardReset(vm, client) }
         }
 
         private fun stateColor(state: String): Int = when (state) {
-            "running"  -> 0xFF4CAF50.toInt()
-            "paused"   -> 0xFFFF9800.toInt()
-            else       -> 0xFF9E9E9E.toInt()
+            "running"    -> 0xFF4CAF50.toInt()
+            "shut off"   -> 0xFFF44336.toInt()
+            "paused"     -> 0xFFFF9800.toInt()
+            "restarting" -> 0xFFFF5722.toInt()
+            else         -> 0xFF9E9E9E.toInt()
+        }
+
+        private fun stateLabel(state: String): String = when (state) {
+            "running"    -> "Running"
+            "shut off"   -> "Stopped"
+            "paused"     -> "Paused"
+            "restarting" -> "Restarting"
+            else         -> state.replaceFirstChar { it.uppercase() }
         }
     }
 }

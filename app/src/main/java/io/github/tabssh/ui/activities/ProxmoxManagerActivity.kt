@@ -69,7 +69,7 @@ class ProxmoxManagerActivity : AppCompatActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.title = "Proxmox"
 
-        adapter = VmAdapter(vms) { vm -> onVmClicked(vm) }
+        adapter = VmAdapter(vms)
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
 
@@ -175,66 +175,28 @@ class ProxmoxManagerActivity : AppCompatActivity() {
         }
     }
 
-    // ── VM interaction ────────────────────────────────────────────────────────
-
-    private fun onVmClicked(vm: ProxmoxApiClient.ProxmoxVM) {
-        val client = currentClient ?: return
-        val profile = currentProfile ?: return
-        when (vm.status.lowercase()) {
-            "running" -> showRunningActions(vm, client, profile)
-            "stopped" -> showStoppedActions(vm, client)
-            else      -> showRunningActions(vm, client, profile)
-        }
-    }
-
-    private fun showRunningActions(
-        vm: ProxmoxApiClient.ProxmoxVM,
-        client: ProxmoxApiClient,
-        profile: HypervisorProfile
-    ) {
-        val items = arrayOf("🖥  Open Console", "🔄  Reboot", "⏹  Shutdown", "⚡  Hard Reset")
-        AlertDialog.Builder(this)
-            .setTitle("${vm.name} (${vm.vmid})")
-            .setItems(items) { _, which ->
-                when (which) {
-                    0 -> openVMConsole(vm, profile)
-                    1 -> vmAction(vm, client, "reboot")
-                    2 -> vmAction(vm, client, "shutdown")
-                    3 -> confirmHardReset(vm, client)
-                }
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    private fun showStoppedActions(vm: ProxmoxApiClient.ProxmoxVM, client: ProxmoxApiClient) {
-        AlertDialog.Builder(this)
-            .setTitle("${vm.name} (${vm.vmid})")
-            .setItems(arrayOf("▶  Start")) { _, _ -> vmAction(vm, client, "start") }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
+    // ── VM actions ────────────────────────────────────────────────────────────
 
     private fun confirmHardReset(vm: ProxmoxApiClient.ProxmoxVM, client: ProxmoxApiClient) {
         AlertDialog.Builder(this)
             .setTitle("Hard Reset ${vm.name}?")
             .setMessage("This is equivalent to pulling the power cord. Any unsaved data will be lost.")
-            .setPositiveButton("Reset") { _, _ -> vmAction(vm, client, "reset") }
+            .setPositiveButton("Reset") { _, _ -> powerAction(vm, client, "reset") }
             .setNegativeButton("Cancel", null)
             .show()
     }
 
-    private fun vmAction(vm: ProxmoxApiClient.ProxmoxVM, client: ProxmoxApiClient, action: String) {
+    private fun powerAction(vm: ProxmoxApiClient.ProxmoxVM, client: ProxmoxApiClient, action: String) {
         lifecycleScope.launch {
             showProgress("${action.replaceFirstChar { it.uppercase() }}ing ${vm.name}…")
             try {
                 val ok = withContext(Dispatchers.IO) {
                     when (action) {
-                        "start"    -> client.startVM(vm.node, vm.vmid, vm.type)
-                        "shutdown" -> client.shutdownVM(vm.node, vm.vmid, vm.type)
-                        "reboot"   -> client.rebootVM(vm.node, vm.vmid, vm.type)
-                        "reset"    -> client.resetVM(vm.node, vm.vmid, vm.type)
-                        else       -> false
+                        "start"  -> client.startVM(vm.node, vm.vmid, vm.type)
+                        "stop"   -> client.shutdownVM(vm.node, vm.vmid, vm.type)
+                        "reboot" -> client.rebootVM(vm.node, vm.vmid, vm.type)
+                        "reset"  -> client.resetVM(vm.node, vm.vmid, vm.type)
+                        else     -> false
                     }
                 }
                 if (ok) {
@@ -252,7 +214,8 @@ class ProxmoxManagerActivity : AppCompatActivity() {
         }
     }
 
-    private fun openVMConsole(vm: ProxmoxApiClient.ProxmoxVM, profile: HypervisorProfile) {
+    private fun openConsole(vm: ProxmoxApiClient.ProxmoxVM) {
+        val profile = currentProfile ?: return
         lifecycleScope.launch {
             val creds = HypervisorPasswordStore.resolveCredentials(this@ProxmoxManagerActivity, profile)
             val intent = Intent(this@ProxmoxManagerActivity, VMConsoleActivity::class.java).apply {
@@ -302,8 +265,7 @@ class ProxmoxManagerActivity : AppCompatActivity() {
     // ── Adapter ───────────────────────────────────────────────────────────────
 
     private inner class VmAdapter(
-        private val items: List<ProxmoxApiClient.ProxmoxVM>,
-        private val onClick: (ProxmoxApiClient.ProxmoxVM) -> Unit
+        private val items: List<ProxmoxApiClient.ProxmoxVM>
     ) : RecyclerView.Adapter<VmAdapter.VH>() {
 
         inner class VH(view: View) : RecyclerView.ViewHolder(view) {
@@ -311,6 +273,12 @@ class ProxmoxManagerActivity : AppCompatActivity() {
             val state: TextView = view.findViewById(R.id.vm_state)
             val info: TextView = view.findViewById(R.id.vm_info)
             val ip: TextView = view.findViewById(R.id.vm_ip)
+            val btnConsole: MaterialButton = view.findViewById(R.id.btn_console)
+            val btnSsh: MaterialButton = view.findViewById(R.id.btn_ssh)
+            val btnStart: MaterialButton = view.findViewById(R.id.btn_start)
+            val btnStop: MaterialButton = view.findViewById(R.id.btn_stop)
+            val btnReboot: MaterialButton = view.findViewById(R.id.btn_reboot)
+            val btnReset: MaterialButton = view.findViewById(R.id.btn_reset)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
@@ -322,23 +290,68 @@ class ProxmoxManagerActivity : AppCompatActivity() {
 
         override fun onBindViewHolder(holder: VH, position: Int) {
             val vm = items[position]
+            val client = currentClient ?: return
+
             holder.name.text = "${vm.name} (${vm.vmid})"
-            holder.state.text = vm.status.uppercase()
+            holder.state.text = stateLabel(vm.status)
             holder.state.setTextColor(stateColor(vm.status))
-            holder.info.text = "Node: ${vm.node} · CPU: ${(vm.cpu * 100).toInt()}% · RAM: ${vm.mem / 1024 / 1024}MB"
+            holder.info.text = "Node: ${vm.node}  ·  VMID: ${vm.vmid}  ·  CPU: ${(vm.cpu * 100).toInt()}%  ·  RAM: ${vm.mem / 1024 / 1024}MB"
             if (vm.ipAddress != null) {
                 holder.ip.text = "IP: ${vm.ipAddress}"
                 holder.ip.visibility = View.VISIBLE
             } else {
                 holder.ip.visibility = View.GONE
             }
-            holder.itemView.setOnClickListener { onClick(vm) }
+
+            // Button visibility by state
+            when (vm.status.lowercase()) {
+                "running" -> {
+                    holder.btnConsole.visibility = View.VISIBLE
+                    holder.btnSsh.visibility = View.GONE
+                    holder.btnStart.visibility = View.GONE
+                    holder.btnStop.visibility = View.VISIBLE
+                    holder.btnReboot.visibility = View.VISIBLE
+                    holder.btnReset.visibility = View.VISIBLE
+                }
+                "stopped" -> {
+                    holder.btnConsole.visibility = View.GONE
+                    holder.btnSsh.visibility = View.GONE
+                    holder.btnStart.visibility = View.VISIBLE
+                    holder.btnStop.visibility = View.GONE
+                    holder.btnReboot.visibility = View.GONE
+                    holder.btnReset.visibility = View.GONE
+                }
+                else -> {
+                    holder.btnConsole.visibility = View.GONE
+                    holder.btnSsh.visibility = View.GONE
+                    holder.btnStart.visibility = View.VISIBLE
+                    holder.btnStop.visibility = View.VISIBLE
+                    holder.btnReboot.visibility = View.GONE
+                    holder.btnReset.visibility = View.GONE
+                }
+            }
+
+            holder.btnConsole.setOnClickListener { openConsole(vm) }
+            holder.btnStart.setOnClickListener { powerAction(vm, client, "start") }
+            holder.btnStop.setOnClickListener { powerAction(vm, client, "stop") }
+            holder.btnReboot.setOnClickListener { powerAction(vm, client, "reboot") }
+            holder.btnReset.setOnClickListener { confirmHardReset(vm, client) }
         }
 
-        private fun stateColor(status: String): Int = when (status.lowercase()) {
-            "running" -> 0xFF4CAF50.toInt()
-            "stopped" -> 0xFFF44336.toInt()
-            else      -> 0xFFFF9800.toInt()
+        private fun stateColor(state: String): Int = when (state.lowercase()) {
+            "running"    -> 0xFF4CAF50.toInt()
+            "stopped"    -> 0xFFF44336.toInt()
+            "paused"     -> 0xFFFF9800.toInt()
+            "restarting" -> 0xFFFF5722.toInt()
+            else         -> 0xFF9E9E9E.toInt()
+        }
+
+        private fun stateLabel(state: String): String = when (state.lowercase()) {
+            "running"    -> "Running"
+            "stopped"    -> "Stopped"
+            "paused"     -> "Paused"
+            "restarting" -> "Restarting"
+            else         -> state.replaceFirstChar { it.uppercase() }
         }
     }
 }

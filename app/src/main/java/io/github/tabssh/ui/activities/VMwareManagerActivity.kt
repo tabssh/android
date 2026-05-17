@@ -70,7 +70,7 @@ class VMwareManagerActivity : AppCompatActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.title = "VMware"
 
-        adapter = VmAdapter(vms) { vm -> onVmClicked(vm) }
+        adapter = VmAdapter(vms)
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
 
@@ -159,49 +159,7 @@ class VMwareManagerActivity : AppCompatActivity() {
         }
     }
 
-    // ── VM interaction ────────────────────────────────────────────────────────
-
-    private fun onVmClicked(vm: VMwareApiClient.VMwareVM) {
-        val client = currentClient ?: return
-        when (vm.powerState.uppercase()) {
-            "POWERED_ON"  -> showRunningActions(vm, client)
-            "POWERED_OFF" -> showStoppedActions(vm, client)
-            else          -> showRunningActions(vm, client)
-        }
-    }
-
-    private fun showRunningActions(vm: VMwareApiClient.VMwareVM, client: VMwareApiClient) {
-        val canConnect = !vm.ipAddress.isNullOrBlank()
-        val items = buildList {
-            if (canConnect) add("🔗  SSH Connect")
-            add("🔄  Reboot")
-            add("⏹  Power Off")
-            add("⚡  Hard Reset")
-        }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle(vm.name)
-            .setItems(items) { _, which ->
-                when {
-                    canConnect && which == 0 -> openSshConsole(vm)
-                    canConnect && which == 1 -> vmAction(vm, client, "reboot")
-                    canConnect && which == 2 -> vmAction(vm, client, "stop")
-                    canConnect && which == 3 -> confirmHardReset(vm, client)
-                    !canConnect && which == 0 -> vmAction(vm, client, "reboot")
-                    !canConnect && which == 1 -> vmAction(vm, client, "stop")
-                    !canConnect && which == 2 -> confirmHardReset(vm, client)
-                }
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    private fun showStoppedActions(vm: VMwareApiClient.VMwareVM, client: VMwareApiClient) {
-        AlertDialog.Builder(this)
-            .setTitle(vm.name)
-            .setItems(arrayOf("▶  Power On")) { _, _ -> vmAction(vm, client, "start") }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
+    // ── VM actions ────────────────────────────────────────────────────────────
 
     private fun confirmHardReset(vm: VMwareApiClient.VMwareVM, client: VMwareApiClient) {
         AlertDialog.Builder(this)
@@ -304,8 +262,7 @@ class VMwareManagerActivity : AppCompatActivity() {
     // ── Adapter ───────────────────────────────────────────────────────────────
 
     private inner class VmAdapter(
-        private val items: List<VMwareApiClient.VMwareVM>,
-        private val onClick: (VMwareApiClient.VMwareVM) -> Unit
+        private val items: List<VMwareApiClient.VMwareVM>
     ) : RecyclerView.Adapter<VmAdapter.VH>() {
 
         inner class VH(view: View) : RecyclerView.ViewHolder(view) {
@@ -313,6 +270,12 @@ class VMwareManagerActivity : AppCompatActivity() {
             val state: TextView = view.findViewById(R.id.vm_state)
             val info: TextView = view.findViewById(R.id.vm_info)
             val ip: TextView = view.findViewById(R.id.vm_ip)
+            val btnConsole: MaterialButton = view.findViewById(R.id.btn_console)
+            val btnSsh: MaterialButton = view.findViewById(R.id.btn_ssh)
+            val btnStart: MaterialButton = view.findViewById(R.id.btn_start)
+            val btnStop: MaterialButton = view.findViewById(R.id.btn_stop)
+            val btnReboot: MaterialButton = view.findViewById(R.id.btn_reboot)
+            val btnReset: MaterialButton = view.findViewById(R.id.btn_reset)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
@@ -324,23 +287,69 @@ class VMwareManagerActivity : AppCompatActivity() {
 
         override fun onBindViewHolder(holder: VH, position: Int) {
             val vm = items[position]
+            val client = currentClient ?: return
+
             holder.name.text = vm.name
-            holder.state.text = vm.powerState.uppercase()
+            holder.state.text = stateLabel(vm.powerState)
             holder.state.setTextColor(stateColor(vm.powerState))
-            holder.info.text = "CPUs: ${vm.cpuCount} · RAM: ${vm.memoryMB}MB"
+            holder.info.text = "CPUs: ${vm.cpuCount}  ·  RAM: ${vm.memoryMB}MB"
             if (!vm.ipAddress.isNullOrBlank()) {
                 holder.ip.text = "IP: ${vm.ipAddress}"
                 holder.ip.visibility = View.VISIBLE
             } else {
                 holder.ip.visibility = View.GONE
             }
-            holder.itemView.setOnClickListener { onClick(vm) }
+
+            holder.btnStart.text = "Power On"
+            holder.btnStop.text = "Power Off"
+
+            // Button visibility by power state
+            when (vm.powerState.uppercase()) {
+                "POWERED_ON" -> {
+                    holder.btnConsole.visibility = View.GONE
+                    holder.btnSsh.visibility = if (!vm.ipAddress.isNullOrBlank()) View.VISIBLE else View.GONE
+                    holder.btnStart.visibility = View.GONE
+                    holder.btnStop.visibility = View.VISIBLE
+                    holder.btnReboot.visibility = View.VISIBLE
+                    holder.btnReset.visibility = View.VISIBLE
+                }
+                "POWERED_OFF" -> {
+                    holder.btnConsole.visibility = View.GONE
+                    holder.btnSsh.visibility = View.GONE
+                    holder.btnStart.visibility = View.VISIBLE
+                    holder.btnStop.visibility = View.GONE
+                    holder.btnReboot.visibility = View.GONE
+                    holder.btnReset.visibility = View.GONE
+                }
+                else -> {
+                    holder.btnConsole.visibility = View.GONE
+                    holder.btnSsh.visibility = View.GONE
+                    holder.btnStart.visibility = View.VISIBLE
+                    holder.btnStop.visibility = View.VISIBLE
+                    holder.btnReboot.visibility = View.GONE
+                    holder.btnReset.visibility = View.GONE
+                }
+            }
+
+            holder.btnSsh.setOnClickListener { openSshConsole(vm) }
+            holder.btnStart.setOnClickListener { vmAction(vm, client, "start") }
+            holder.btnStop.setOnClickListener { vmAction(vm, client, "stop") }
+            holder.btnReboot.setOnClickListener { vmAction(vm, client, "reboot") }
+            holder.btnReset.setOnClickListener { confirmHardReset(vm, client) }
         }
 
         private fun stateColor(state: String): Int = when (state.uppercase()) {
             "POWERED_ON"  -> 0xFF4CAF50.toInt()
             "POWERED_OFF" -> 0xFFF44336.toInt()
-            else          -> 0xFFFF9800.toInt()
+            "SUSPENDED"   -> 0xFFFF9800.toInt()
+            else          -> 0xFF9E9E9E.toInt()
+        }
+
+        private fun stateLabel(state: String): String = when (state.uppercase()) {
+            "POWERED_ON"  -> "Running"
+            "POWERED_OFF" -> "Stopped"
+            "SUSPENDED"   -> "Paused"
+            else          -> state.split("_").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
         }
     }
 }

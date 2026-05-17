@@ -1,6 +1,5 @@
 package io.github.tabssh.ui.activities
 
-import android.content.Intent
 import android.os.Bundle
 import android.view.MenuItem
 import android.view.View
@@ -80,7 +79,7 @@ class OciManagerActivity : AppCompatActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.title = "OCI"
 
-        adapter = InstanceAdapter(instances) { inst -> onInstanceClicked(inst) }
+        adapter = InstanceAdapter(instances)
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
 
@@ -242,51 +241,7 @@ class OciManagerActivity : AppCompatActivity() {
         }
     }
 
-    // ── Instance interaction ──────────────────────────────────────────────────
-
-    private fun onInstanceClicked(inst: OciInstance) {
-        val client = currentClient ?: return
-        when (inst.lifecycleState.uppercase()) {
-            "RUNNING"                -> showRunningActions(inst, client)
-            "STOPPED", "TERMINATED" -> showStoppedActions(inst, client)
-            else                     -> showRunningActions(inst, client)
-        }
-    }
-
-    private fun showRunningActions(inst: OciInstance, client: OciApiClient) {
-        val canSsh = !inst.publicIp.isNullOrBlank()
-        val items = buildList {
-            if (canSsh) add("🔗  SSH Connect")
-            add("🔄  Soft Reboot")
-            add("⚡  Hard Reset")
-            add("⏹  Soft Stop")
-            add("🔌  Hard Stop")
-        }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle(inst.displayName)
-            .setItems(items) { _, which ->
-                val offset = if (canSsh) 0 else 1
-                when (which + offset) {
-                    0 -> handleSshConnect(inst)
-                    1 -> instanceAction(inst, client, OciInstanceAction.SOFTRESET)
-                    2 -> instanceAction(inst, client, OciInstanceAction.RESET)
-                    3 -> instanceAction(inst, client, OciInstanceAction.SOFTSTOP)
-                    4 -> instanceAction(inst, client, OciInstanceAction.STOP)
-                }
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    private fun showStoppedActions(inst: OciInstance, client: OciApiClient) {
-        AlertDialog.Builder(this)
-            .setTitle(inst.displayName)
-            .setItems(arrayOf("▶  Start")) { _, _ ->
-                instanceAction(inst, client, OciInstanceAction.START)
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
+    // ── Instance actions ──────────────────────────────────────────────────────
 
     private fun instanceAction(inst: OciInstance, client: OciApiClient, action: OciInstanceAction) {
         lifecycleScope.launch {
@@ -469,8 +424,7 @@ class OciManagerActivity : AppCompatActivity() {
     // ── Adapter ───────────────────────────────────────────────────────────────
 
     private inner class InstanceAdapter(
-        private val items: List<OciInstance>,
-        private val onClick: (OciInstance) -> Unit
+        private val items: List<OciInstance>
     ) : RecyclerView.Adapter<InstanceAdapter.VH>() {
 
         inner class VH(view: View) : RecyclerView.ViewHolder(view) {
@@ -478,6 +432,12 @@ class OciManagerActivity : AppCompatActivity() {
             val state: TextView = view.findViewById(R.id.vm_state)
             val info: TextView = view.findViewById(R.id.vm_info)
             val ip: TextView = view.findViewById(R.id.vm_ip)
+            val btnConsole: MaterialButton = view.findViewById(R.id.btn_console)
+            val btnSsh: MaterialButton = view.findViewById(R.id.btn_ssh)
+            val btnStart: MaterialButton = view.findViewById(R.id.btn_start)
+            val btnStop: MaterialButton = view.findViewById(R.id.btn_stop)
+            val btnReboot: MaterialButton = view.findViewById(R.id.btn_reboot)
+            val btnReset: MaterialButton = view.findViewById(R.id.btn_reset)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
@@ -489,27 +449,71 @@ class OciManagerActivity : AppCompatActivity() {
 
         override fun onBindViewHolder(holder: VH, position: Int) {
             val inst = items[position]
+            val client = currentClient ?: return
+
             holder.name.text = inst.displayName
-            holder.state.text = inst.lifecycleState
+            holder.state.text = stateLabel(inst.lifecycleState)
             holder.state.setTextColor(stateColor(inst.lifecycleState))
-            holder.info.text = "${inst.shape} · ${inst.availabilityDomain}"
+            holder.info.text = "${inst.shape}  ·  ${inst.availabilityDomain}"
 
             val ipParts = mutableListOf<String>()
             inst.publicIp?.let { ipParts += "Public: $it" }
             inst.privateIp?.let { ipParts += "Private: $it" }
             if (ipParts.isNotEmpty()) {
-                holder.ip.text = ipParts.joinToString(" · ")
+                holder.ip.text = ipParts.joinToString("  ·  ")
                 holder.ip.visibility = View.VISIBLE
             } else {
                 holder.ip.visibility = View.GONE
             }
-            holder.itemView.setOnClickListener { onClick(inst) }
+
+            // OCI has no reset action — btn_reset always gone
+            holder.btnConsole.visibility = View.GONE
+            holder.btnReset.visibility = View.GONE
+
+            when (inst.lifecycleState.uppercase()) {
+                "RUNNING" -> {
+                    val hasIp = !inst.publicIp.isNullOrBlank()
+                    holder.btnSsh.visibility = if (hasIp) View.VISIBLE else View.GONE
+                    holder.btnStart.visibility = View.GONE
+                    holder.btnStop.visibility = View.VISIBLE
+                    holder.btnReboot.visibility = View.VISIBLE
+                }
+                "STOPPED" -> {
+                    holder.btnSsh.visibility = View.GONE
+                    holder.btnStart.visibility = View.VISIBLE
+                    holder.btnStop.visibility = View.GONE
+                    holder.btnReboot.visibility = View.GONE
+                }
+                else -> {
+                    // Transitional state — operation in progress; hide all
+                    holder.btnSsh.visibility = View.GONE
+                    holder.btnStart.visibility = View.GONE
+                    holder.btnStop.visibility = View.GONE
+                    holder.btnReboot.visibility = View.GONE
+                }
+            }
+
+            holder.btnSsh.setOnClickListener { handleSshConnect(inst) }
+            holder.btnStart.setOnClickListener { instanceAction(inst, client, OciInstanceAction.START) }
+            holder.btnStop.setOnClickListener { instanceAction(inst, client, OciInstanceAction.SOFTSTOP) }
+            holder.btnReboot.setOnClickListener { instanceAction(inst, client, OciInstanceAction.SOFTRESET) }
         }
 
         private fun stateColor(state: String): Int = when (state.uppercase()) {
-            "RUNNING"               -> 0xFF4CAF50.toInt()
-            "STOPPED", "TERMINATED" -> 0xFFF44336.toInt()
-            else                    -> 0xFFFF9800.toInt()
+            "RUNNING"              -> 0xFF4CAF50.toInt()
+            "STOPPED"              -> 0xFFF44336.toInt()
+            "STARTING", "REBOOTING" -> 0xFFFF5722.toInt()
+            "STOPPING"             -> 0xFFFF5722.toInt()
+            else                   -> 0xFF9E9E9E.toInt()
+        }
+
+        private fun stateLabel(state: String): String = when (state.uppercase()) {
+            "RUNNING"   -> "Running"
+            "STOPPED"   -> "Stopped"
+            "STARTING"  -> "Restarting"
+            "STOPPING"  -> "Stopping"
+            "REBOOTING" -> "Restarting"
+            else        -> state.split("_").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
         }
     }
 }
