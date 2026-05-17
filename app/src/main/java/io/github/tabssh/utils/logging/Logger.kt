@@ -59,8 +59,23 @@ object Logger {
     private val RE_APIKEY     = Regex("""(?i)api[_-]?key[=:]\s*\S+""")
     private val RE_SSH_PRIV   = Regex("""-----BEGIN[^-]+-----[\s\S]*?-----END[^-]+-----""")
     private val RE_SSH_PUB    = Regex("""ssh-(rsa|ed25519|ecdsa|dss)\s+\S+""")
-    private val RE_IPV4       = Regex("""\b(?:\d{1,3}\.){3}\d{1,3}\b""")
-    private val RE_HOSTNAME   = Regex("""\b[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.([a-zA-Z]{2,}|\d{1,3})\b""")
+    // SSH key fingerprints: SHA256:base64 or MD5:xx:xx:... (produced by ssh-keygen -l)
+    private val RE_FP_SHA256  = Regex("""SHA256:[A-Za-z0-9+/]{43}={0,1}""")
+    private val RE_FP_MD5     = Regex("""MD5:(?:[0-9a-fA-F]{2}:){15}[0-9a-fA-F]{2}""")
+    // IPv6 — four patterns to cover all RFC 4291 forms without false-positives.
+    // Order matters in sanitizeForPublic: IPv4-mapped must run before bare IPv4
+    // so the whole address is replaced as a unit.
+    // RE_IPV6_BRACKET : [addr] notation used in URIs, e.g. [::1], [fe80::1%eth0]
+    // RE_IPV6_V4MAPPED: ::ffff:d.d.d.d and x:x:x:x:x:x:d.d.d.d mixed forms
+    // RE_IPV6_FULL    : fully-expanded 8-group, no :: e.g. 2001:db8:0:0:0:0:0:1
+    // RE_IPV6_COMP    : compressed form that contains ::, e.g. ::1, fe80::1.
+    //                   The mandatory :: distinguishes it from HH:MM:SS timestamps.
+    private val RE_IPV6_BRACKET  = Regex("""\[(?:[0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}(?:%[a-zA-Z0-9._~-]+)?\]""")
+    private val RE_IPV6_V4MAPPED = Regex("""(?<![:\w])(?:[0-9a-fA-F]{1,4}:){1,6}(?:\d{1,3}\.){3}\d{1,3}(?![:\w])""")
+    private val RE_IPV6_FULL     = Regex("""(?<![:\w])(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}(?![:\w])""")
+    private val RE_IPV6_COMP     = Regex("""(?<![:\w])(?:[0-9a-fA-F]{1,4}:){0,6}::(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{0,4})?(?![:\w])""")
+    private val RE_IPV4          = Regex("""\b(?:\d{1,3}\.){3}\d{1,3}\b""")
+    private val RE_HOSTNAME      = Regex("""\b[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.([a-zA-Z]{2,}|\d{1,3})\b""")
     private val RE_USER_AT    = Regex("""([a-zA-Z0-9_.-]+)@([a-zA-Z0-9.-]+)""")
     private val RE_HOME_PATH  = Regex("""/home/[a-zA-Z0-9_-]+""")
     private val RE_USERS_PATH = Regex("""/Users/[a-zA-Z0-9_-]+""")
@@ -298,7 +313,11 @@ object Logger {
      *                                 secret, auth, api_key, …)
      *  • SSH private-key PEM blocks
      *  • SSH public keys
+     *  • SSH key fingerprints         (SHA256:… and MD5:xx:xx:… forms) → [FINGERPRINT]
      *  • user@host patterns → user1@server1 (session-consistent mapping)
+     *  • IPv6 addresses     → IP1, IP2, … (all RFC 4291 forms; bracket, v4-mapped,
+     *                         fully-expanded, and compressed; processed before IPv4
+     *                         so mixed-form addresses are replaced as a unit)
      *  • IPv4 addresses     → IP1, IP2, … (session-consistent)
      *  • private hostnames  → server1, server2, … (well-known domains kept)
      *  • /home/<name> and /Users/<name> paths
@@ -320,12 +339,32 @@ object Logger {
         s = RE_SSH_PRIV .replace(s, "[SSH KEY REDACTED]")
         s = RE_SSH_PUB  .replace(s, "[SSH PUBLIC KEY]")
 
+        // ── SSH key fingerprints ──────────────────────────────────────────
+        s = RE_FP_SHA256.replace(s, "[FINGERPRINT]")
+        s = RE_FP_MD5   .replace(s, "[FINGERPRINT]")
+
         // ── user@host (before individual IP/hostname passes to avoid double
         //    processing the same token) ────────────────────────────────────
         s = RE_USER_AT.replace(s) { match ->
             val anonUser = userMap.getOrPut(match.groupValues[1]) { "user${++userCounter}" }
             val anonHost = hostMap.getOrPut(match.groupValues[2]) { "server${++hostCounter}" }
             "$anonUser@$anonHost"
+        }
+
+        // ── IPv6 addresses (before IPv4 — mixed forms must be caught whole) ──
+        // Bracket notation first so the surrounding [ ] are included in the
+        // replacement; v4-mapped before bare IPv4 for the same reason.
+        s = RE_IPV6_BRACKET.replace(s) { match ->
+            "[${hostMap.getOrPut(match.value) { "IP${++hostCounter}" }}]"
+        }
+        s = RE_IPV6_V4MAPPED.replace(s) { match ->
+            hostMap.getOrPut(match.value) { "IP${++hostCounter}" }
+        }
+        s = RE_IPV6_FULL.replace(s) { match ->
+            hostMap.getOrPut(match.value) { "IP${++hostCounter}" }
+        }
+        s = RE_IPV6_COMP.replace(s) { match ->
+            hostMap.getOrPut(match.value) { "IP${++hostCounter}" }
         }
 
         // ── IPv4 addresses → IP1, IP2, … ─────────────────────────────────
