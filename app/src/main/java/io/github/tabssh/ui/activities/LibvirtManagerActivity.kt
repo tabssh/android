@@ -112,7 +112,27 @@ class LibvirtManagerActivity : AppCompatActivity() {
                 loadDomains(client)
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to connect to libvirt host", e)
-                showError("SSH connection failed: ${e.message}")
+                val msg = e.message ?: "Unknown error"
+                // "No credentials found" means the Keystore entry is gone —
+                // offer a shortcut to the edit screen so the user can re-enter.
+                if (msg.startsWith("No credentials found")) {
+                    runOnUiThread {
+                        progressBar.visibility = View.GONE
+                        AlertDialog.Builder(this@LibvirtManagerActivity)
+                            .setTitle("Credentials Missing")
+                            .setMessage("$msg\n\nOpen Settings to re-enter the password?")
+                            .setPositiveButton("Open Settings") { _, _ ->
+                                startActivity(
+                                    Intent(this@LibvirtManagerActivity, HypervisorEditActivity::class.java)
+                                        .putExtra("hypervisor_id", hypervisorId)
+                                )
+                            }
+                            .setNegativeButton("Cancel") { _, _ -> finish() }
+                            .show()
+                    }
+                } else {
+                    showError("SSH connection failed: $msg")
+                }
             }
         }
     }

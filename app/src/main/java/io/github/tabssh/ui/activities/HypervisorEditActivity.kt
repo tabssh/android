@@ -849,17 +849,22 @@ class HypervisorEditActivity : AppCompatActivity() {
                 }
 
                 if (accountId == null) {
-                    // Inline-credential path: persist the per-host password.
-                    val storeOk = HypervisorPasswordStore.store(
-                        this@HypervisorEditActivity, savedId, plaintextPassword
-                    )
-                    if (!storeOk) {
-                        Toast.makeText(
-                            this@HypervisorEditActivity,
-                            "⚠ Password stored insecurely (Keystore unavailable). Re-edit to retry.",
-                            Toast.LENGTH_LONG
-                        ).show()
+                    if (plaintextPassword.isNotBlank()) {
+                        // Inline-credential path: persist the per-host password.
+                        val storeOk = HypervisorPasswordStore.store(
+                            this@HypervisorEditActivity, savedId, plaintextPassword
+                        )
+                        if (!storeOk) {
+                            Toast.makeText(
+                                this@HypervisorEditActivity,
+                                "⚠ Password stored insecurely (Keystore unavailable). Re-edit to retry.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
                     }
+                    // If plaintextPassword is blank (LIBVIRT + SSH key only), leave
+                    // any existing Keystore entry intact — the user may have a
+                    // previously saved password they want to keep as a fallback.
                 } else {
                     // Account-linked: drop any per-host password we may
                     // have left over from a previous inline configuration
@@ -979,7 +984,11 @@ class HypervisorEditActivity : AppCompatActivity() {
                 editUsername.error = "Username is required"
                 return false
             }
-            if (editPassword.text.toString().isBlank()) {
+            // Password is optional for LIBVIRT when an SSH key identity is
+            // selected — the key alone is sufficient for pubkey auth.
+            val isLibvirtWithKey = spinnerType.selectedItemPosition == HypervisorType.LIBVIRT.ordinal
+                && selectedSshIdentityId != null
+            if (!isLibvirtWithKey && editPassword.text.toString().isBlank()) {
                 editPassword.error = "Password is required"
                 return false
             }

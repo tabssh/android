@@ -54,13 +54,21 @@ class LibvirtApiClient(
         val app = context.applicationContext as TabSSHApplication
         val password = HypervisorPasswordStore.retrieve(context, profile)
 
+        val keyId = profile.sshIdentityId
+        // Validate credentials before attempting the SSH handshake so the
+        // user gets a clear message instead of an opaque "Auth fail" from JSch.
+        if (password.isBlank() && keyId == null) {
+            throw LibvirtException(
+                "No credentials found for ${profile.host}. " +
+                "Re-open Hypervisor Settings and re-enter the password."
+            )
+        }
+
         val jsch = JSch()
         val config = java.util.Properties()
         // Disable strict host-key checking for hypervisor connections;
         // the hypervisor UI handles its own TLS pinning separately.
         config["StrictHostKeyChecking"] = "no"
-
-        val keyId = profile.sshIdentityId
         if (keyId != null) {
             // Load the SSH key. retrieveJSchBytes() returns JSch-native PEM bytes
             // encrypted in SharedPreferences with a Keystore-backed AES-GCM key.

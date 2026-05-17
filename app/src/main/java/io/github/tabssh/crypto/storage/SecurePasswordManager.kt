@@ -252,12 +252,11 @@ class SecurePasswordManager(private val context: Context) {
             
         } catch (e: Exception) {
             Logger.e("SecurePasswordManager", "Failed to decrypt password for $connectionId", e)
-            
-            // Handle decryption failures (e.g., key changed, corrupted data)
-            if (autoDeleteOnFailure) {
-                clearPassword(connectionId)
-            }
-            
+            // Do NOT auto-delete on decryption failure. A key-invalidation event
+            // (new biometric enrolled, screen lock changed) is transient; wiping the
+            // stored ciphertext makes the error permanent and silent. Return null so
+            // the caller can prompt the user to re-enter — the next storePassword()
+            // call will re-encrypt with a fresh key and overwrite cleanly.
             return null
         }
     }
