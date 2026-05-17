@@ -1,229 +1,260 @@
 package io.github.tabssh.ui.activities
-import io.github.tabssh.utils.logging.Logger
 
 import android.os.Bundle
+import android.view.MenuItem
 import android.view.View
-import android.widget.*
+import android.view.ViewGroup
+import android.widget.ProgressBar
+import android.widget.TextView
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.button.MaterialButton
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.crypto.storage.HypervisorPasswordStore
 import io.github.tabssh.hypervisor.vmware.VMwareApiClient
+import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HypervisorProfile
-import io.github.tabssh.storage.database.entities.HypervisorType
+import io.github.tabssh.utils.logging.Logger
+import io.github.tabssh.utils.showError
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import io.github.tabssh.utils.showError
 
+/**
+ * Displays the list of VMs on a single VMware ESXi/vCenter host. Launched by
+ * [HypervisorsFragment] / [MainActivity] with [EXTRA_HYPERVISOR_ID] set.
+ *
+ * "Open Console" creates or updates a [ConnectionProfile] for the VM's IP and
+ * launches [TabTerminalActivity] — VMware's web-based VMRC is not supported
+ * on Android; SSH to the guest is the practical alternative.
+ */
 class VMwareManagerActivity : AppCompatActivity() {
 
+    companion object {
+        private const val TAG = "VMwareManager"
+        const val EXTRA_HYPERVISOR_ID = "hypervisor_id"
+    }
+
     private lateinit var app: TabSSHApplication
-    private lateinit var serverSpinner: Spinner
-    private lateinit var refreshButton: Button
-    private lateinit var addServerButton: Button
-    private lateinit var vmRecyclerView: RecyclerView
+    private lateinit var toolbar: Toolbar
+    private lateinit var btnRefresh: MaterialButton
     private lateinit var progressBar: ProgressBar
     private lateinit var statusText: TextView
-    
-    private val hypervisors = mutableListOf<HypervisorProfile>()
+    private lateinit var recyclerView: RecyclerView
+
     private val vms = mutableListOf<VMwareApiClient.VMwareVM>()
     private var currentClient: VMwareApiClient? = null
+    private var currentProfile: HypervisorProfile? = null
+    private lateinit var adapter: VmAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_proxmox_manager)
-        
+        setContentView(R.layout.activity_vmware_manager)
+
         app = application as TabSSHApplication
-        
-        setupToolbar()
-        setupViews()
-        loadHypervisors()
-    }
 
-    private fun setupToolbar() {
-        setSupportActionBar(findViewById(R.id.toolbar))
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        supportActionBar?.title = "VMware Manager"
-    }
-
-    private fun setupViews() {
-        serverSpinner = findViewById(R.id.server_spinner)
-        refreshButton = findViewById(R.id.refresh_button)
-        addServerButton = findViewById(R.id.add_server_button)
-        vmRecyclerView = findViewById(R.id.vm_recycler_view)
+        toolbar = findViewById(R.id.toolbar)
+        btnRefresh = findViewById(R.id.btn_refresh)
         progressBar = findViewById(R.id.progress_bar)
         statusText = findViewById(R.id.status_text)
-        
-        vmRecyclerView.layoutManager = LinearLayoutManager(this)
-        
-        refreshButton.setOnClickListener { refreshVMs() }
-        addServerButton.setOnClickListener { showAddServerDialog() }
-        
-        serverSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                if (position >= 0 && position < hypervisors.size) {
-                    connectToHypervisor(hypervisors[position])
-                }
-            }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        recyclerView = findViewById(R.id.vm_recycler_view)
+
+        setSupportActionBar(toolbar)
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        supportActionBar?.title = "VMware"
+
+        adapter = VmAdapter(vms) { vm -> onVmClicked(vm) }
+        recyclerView.layoutManager = LinearLayoutManager(this)
+        recyclerView.adapter = adapter
+
+        btnRefresh.setOnClickListener { refreshVMs() }
+
+        val hypervisorId = intent.getLongExtra(EXTRA_HYPERVISOR_ID, -1L)
+        if (hypervisorId == -1L) {
+            showError("No hypervisor ID provided")
+            return
         }
+        connectAndRefresh(hypervisorId)
     }
 
-    private fun loadHypervisors() {
-        lifecycleScope.launch {
-            app.database.hypervisorDao().getByType(HypervisorType.VMWARE).let { servers ->
-                hypervisors.clear()
-                hypervisors.addAll(servers)
-                
-                if (hypervisors.isEmpty()) {
-                    statusText.text = "No VMware servers configured"
-                    statusText.visibility = View.VISIBLE
-                } else {
-                    statusText.visibility = View.GONE
-                    val adapter = ArrayAdapter(
-                        this@VMwareManagerActivity,
-                        android.R.layout.simple_spinner_item,
-                        hypervisors.map { it.name }
-                    )
-                    adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-                    serverSpinner.adapter = adapter
-                }
-            }
-        }
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        if (item.itemId == android.R.id.home) { finish(); return true }
+        return super.onOptionsItemSelected(item)
     }
 
-    private fun connectToHypervisor(profile: HypervisorProfile) {
+    // ── Connection ────────────────────────────────────────────────────────────
+
+    private fun connectAndRefresh(hypervisorId: Long) {
         lifecycleScope.launch {
+            showProgress("Connecting…")
+            val profile = withContext(Dispatchers.IO) {
+                app.database.hypervisorDao().getById(hypervisorId)
+            }
+            if (profile == null) {
+                showError("Hypervisor profile not found (id=$hypervisorId)")
+                return@launch
+            }
+            currentProfile = profile
+            supportActionBar?.title = profile.name
+
             try {
-                progressBar.visibility = View.VISIBLE
-                statusText.text = "Connecting to ${profile.name}..."
-                statusText.visibility = View.VISIBLE
-
-                val creds = io.github.tabssh.crypto.storage.HypervisorPasswordStore
-                    .resolveCredentials(this@VMwareManagerActivity, profile)
-                currentClient = VMwareApiClient(
+                val creds = HypervisorPasswordStore.resolveCredentials(this@VMwareManagerActivity, profile)
+                val client = VMwareApiClient(
                     host = profile.host,
                     username = creds.username,
                     password = creds.password,
                     verifySsl = profile.verifySsl,
                     pinnedCertSha256 = profile.pinnedCertSha256
                 )
-
-                val authenticated = currentClient?.authenticate() ?: false
-
-                if (authenticated) {
-                    io.github.tabssh.crypto.storage.HypervisorPasswordStore
-                        .persistCapturedPinIfAny(
-                            this@VMwareManagerActivity, profile,
-                            currentClient?.getCapturedCertSha256()
-                        )
-
-                    // Detect if vCenter or standalone ESXi
-                    val isVCenter = currentClient?.isVCenter() ?: false
-                    val serverType = if (isVCenter) "vCenter" else "ESXi"
-
-                    statusText.text = "Connected to ${profile.name} ($serverType)"
-                    app.database.hypervisorDao().updateLastConnected(profile.id, System.currentTimeMillis())
-                    refreshVMs()
-                } else {
-                    statusText.text = "Authentication failed - check credentials"
-                    progressBar.visibility = View.GONE
+                val ok = client.authenticate()
+                if (!ok) {
+                    showError("Authentication failed — check credentials")
+                    return@launch
                 }
-
+                HypervisorPasswordStore.persistCapturedPinIfAny(
+                    this@VMwareManagerActivity, profile, client.getCapturedCertSha256()
+                )
+                val serverType = if (client.isVCenter()) "vCenter" else "ESXi"
+                Logger.i(TAG, "Connected to ${profile.name} ($serverType)")
+                app.database.hypervisorDao().updateLastConnected(profile.id, System.currentTimeMillis())
+                currentClient = client
+                loadVMs(client)
             } catch (e: Exception) {
-                Logger.e("VMwareManager", "Connection failed", e)
-                statusText.text = "Connection error: ${e.message}"
-                progressBar.visibility = View.GONE
+                Logger.e(TAG, "Connect failed", e)
+                showError("Connection failed: ${e.message}")
             }
         }
     }
 
     private fun refreshVMs() {
-        lifecycleScope.launch {
-            try {
-                progressBar.visibility = View.VISIBLE
-                statusText.text = "Loading VMs..."
-                
-                val vmList = currentClient?.getAllVMs() ?: emptyList()
-                vms.clear()
-                vms.addAll(vmList)
-                
-                vmRecyclerView.adapter = VMAdapter(vms) { vm, action ->
-                    handleVMAction(vm, action)
-                }
-                
-                statusText.text = "Found ${vms.size} VMs"
-                progressBar.visibility = View.GONE
-                
-            } catch (e: Exception) {
-                Logger.e("VMwareManager", "Failed to load VMs", e)
-                statusText.text = "Error loading VMs"
-                progressBar.visibility = View.GONE
+        val client = currentClient ?: run {
+            Toast.makeText(this, "Not connected — please wait", Toast.LENGTH_SHORT).show()
+            return
+        }
+        lifecycleScope.launch { loadVMs(client) }
+    }
+
+    private suspend fun loadVMs(client: VMwareApiClient) {
+        showProgress("Loading VMs…")
+        try {
+            val vmList = client.getAllVMs() ?: emptyList()
+            vms.clear()
+            vms.addAll(vmList)
+            adapter.notifyDataSetChanged()
+            hideProgress()
+            if (vms.isEmpty()) {
+                statusText.visibility = View.VISIBLE
+                statusText.text = "No VMs found"
             }
+        } catch (e: Exception) {
+            Logger.e(TAG, "loadVMs failed", e)
+            showError("Could not load VMs: ${e.message}")
         }
     }
 
-    private fun handleVMAction(vm: VMwareApiClient.VMwareVM, action: String) {
+    // ── VM interaction ────────────────────────────────────────────────────────
+
+    private fun onVmClicked(vm: VMwareApiClient.VMwareVM) {
+        val client = currentClient ?: return
+        when (vm.powerState.uppercase()) {
+            "POWERED_ON"  -> showRunningActions(vm, client)
+            "POWERED_OFF" -> showStoppedActions(vm, client)
+            else          -> showRunningActions(vm, client)
+        }
+    }
+
+    private fun showRunningActions(vm: VMwareApiClient.VMwareVM, client: VMwareApiClient) {
+        val canConnect = !vm.ipAddress.isNullOrBlank()
+        val items = buildList {
+            if (canConnect) add("🔗  SSH Connect")
+            add("🔄  Reboot")
+            add("⏹  Power Off")
+            add("⚡  Hard Reset")
+        }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(vm.name)
+            .setItems(items) { _, which ->
+                when {
+                    canConnect && which == 0 -> openSshConsole(vm)
+                    canConnect && which == 1 -> vmAction(vm, client, "reboot")
+                    canConnect && which == 2 -> vmAction(vm, client, "stop")
+                    canConnect && which == 3 -> confirmHardReset(vm, client)
+                    !canConnect && which == 0 -> vmAction(vm, client, "reboot")
+                    !canConnect && which == 1 -> vmAction(vm, client, "stop")
+                    !canConnect && which == 2 -> confirmHardReset(vm, client)
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showStoppedActions(vm: VMwareApiClient.VMwareVM, client: VMwareApiClient) {
+        AlertDialog.Builder(this)
+            .setTitle(vm.name)
+            .setItems(arrayOf("▶  Power On")) { _, _ -> vmAction(vm, client, "start") }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun confirmHardReset(vm: VMwareApiClient.VMwareVM, client: VMwareApiClient) {
+        AlertDialog.Builder(this)
+            .setTitle("Hard Reset ${vm.name}?")
+            .setMessage("This is equivalent to pulling the power cord. Any unsaved data will be lost.")
+            .setPositiveButton("Reset") { _, _ -> vmAction(vm, client, "reset") }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun vmAction(vm: VMwareApiClient.VMwareVM, client: VMwareApiClient, action: String) {
         lifecycleScope.launch {
+            showProgress("${action.replaceFirstChar { it.uppercase() }}ing ${vm.name}…")
             try {
-                progressBar.visibility = View.VISIBLE
-                
-                when (action) {
-                    "console" -> {
-                        openVMConsole(vm)
-                        progressBar.visibility = View.GONE
-                        return@launch
+                val ok = withContext(Dispatchers.IO) {
+                    when (action) {
+                        "start"  -> client.startVM(vm.vm)
+                        "stop"   -> client.stopVM(vm.vm)
+                        "reboot" -> client.resetVM(vm.vm)
+                        "reset"  -> client.resetVM(vm.vm)
+                        else     -> false
                     }
                 }
-                
-                val success = when (action) {
-                    "start" -> currentClient?.startVM(vm.vm) ?: false
-                    "stop" -> currentClient?.stopVM(vm.vm) ?: false
-                    "reboot" -> currentClient?.resetVM(vm.vm) ?: false // VMware uses reset for reboot
-                    "reset" -> currentClient?.resetVM(vm.vm) ?: false  // Hard reset
-                    else -> false
-                }
-                
-                if (success) {
-                    Toast.makeText(this@VMwareManagerActivity, "VM $action successful", Toast.LENGTH_SHORT).show()
-                    kotlinx.coroutines.delay(2000)
-                    refreshVMs()
+                if (ok) {
+                    Toast.makeText(this@VMwareManagerActivity, "${vm.name}: $action sent", Toast.LENGTH_SHORT).show()
+                    delay(2000)
+                    loadVMs(client)
                 } else {
-                    progressBar.visibility = View.GONE
+                    hideProgress()
+                    showError("$action failed for ${vm.name}")
                 }
-                
             } catch (e: Exception) {
-                Logger.e("VMwareManager", "VM action failed", e)
-                progressBar.visibility = View.GONE
+                Logger.e(TAG, "$action failed for ${vm.name}", e)
+                showError("$action failed: ${e.message}")
             }
         }
     }
 
-    private fun openVMConsole(vm: VMwareApiClient.VMwareVM) {
-        if (vm.ipAddress == null) {
+    private fun openSshConsole(vm: VMwareApiClient.VMwareVM) {
+        val ip = vm.ipAddress ?: run {
             Toast.makeText(this, "VM IP address not available", Toast.LENGTH_SHORT).show()
             return
         }
-
         lifecycleScope.launch {
             try {
-                // Get or create connection profile for VM — use one-shot suspend query,
-                // not getAllConnections() which returns an infinite Flow.
-                val connectionName = "${vm.name}-console"
+                val connectionName = "VMware: ${vm.name}"
                 var connection = withContext(Dispatchers.IO) {
                     app.database.connectionDao().getByName(connectionName)
                 }
-
                 if (connection == null) {
-                    // Create new connection profile
-                    connection = io.github.tabssh.storage.database.entities.ConnectionProfile(
-                        id = java.util.UUID.randomUUID().toString(),
+                    connection = ConnectionProfile(
                         name = connectionName,
-                        host = vm.ipAddress!!,
+                        host = ip,
                         port = 22,
                         username = "root",
                         authType = io.github.tabssh.ssh.auth.AuthType.PASSWORD.name,
@@ -231,145 +262,85 @@ class VMwareManagerActivity : AppCompatActivity() {
                         modifiedAt = System.currentTimeMillis()
                     )
                     app.database.connectionDao().insertConnection(connection)
-                    Logger.i("VMwareManager", "Created connection profile for VM: ${vm.name}")
                 } else {
-                    // Update existing connection with latest IP
-                    connection = connection.copy(
-                        host = vm.ipAddress!!,
-                        modifiedAt = System.currentTimeMillis()
-                    )
+                    connection = connection.copy(host = ip, modifiedAt = System.currentTimeMillis())
                     app.database.connectionDao().updateConnection(connection)
-                    Logger.i("VMwareManager", "Updated connection profile for VM: ${vm.name}")
                 }
-
-                // Launch terminal activity
                 val intent = TabTerminalActivity.createIntent(this@VMwareManagerActivity, connection, autoConnect = false)
                 startActivity(intent)
-                
-                Toast.makeText(this@VMwareManagerActivity, "Opening console for ${vm.name}", Toast.LENGTH_SHORT).show()
+                Logger.i(TAG, "Launching SSH to $ip for ${vm.name}")
             } catch (e: Exception) {
-                Logger.e("VMwareManager", "Failed to open VM console", e)
+                Logger.e(TAG, "Failed to open SSH console for ${vm.name}", e)
                 showError("Failed to open console: ${e.message}", "Error")
             }
         }
     }
 
-    private fun showAddServerDialog() {
-        val dialogView = layoutInflater.inflate(R.layout.dialog_add_hypervisor, null)
-        val nameInput = dialogView.findViewById<EditText>(R.id.name_input)
-        val hostInput = dialogView.findViewById<EditText>(R.id.host_input)
-        val portInput = dialogView.findViewById<EditText>(R.id.port_input)
-        val usernameInput = dialogView.findViewById<EditText>(R.id.username_input)
-        val passwordInput = dialogView.findViewById<EditText>(R.id.password_input)
-        val realmInput = dialogView.findViewById<EditText>(R.id.realm_input)
-        
-        portInput.setText("443") // VMware default HTTPS port
-        realmInput.visibility = View.GONE
+    // ── UI helpers ────────────────────────────────────────────────────────────
 
-        MaterialAlertDialogBuilder(this)
-            .setTitle("Add VMware Server")
-            .setView(dialogView)
-            .setPositiveButton("Add") { _, _ ->
-                val profile = HypervisorProfile(
-                    name = nameInput.text.toString(),
-                    type = HypervisorType.VMWARE,
-                    host = hostInput.text.toString(),
-                    port = portInput.text.toString().toIntOrNull() ?: 443,
-                    username = usernameInput.text.toString(),
-                    password = "", // P1: stays in Keystore, see HypervisorPasswordStore
-                    verifySsl = false
-                )
-                val plaintextPassword = passwordInput.text.toString()
-
-                lifecycleScope.launch {
-                    val newId = app.database.hypervisorDao().insert(profile)
-                    io.github.tabssh.crypto.storage.HypervisorPasswordStore
-                        .store(this@VMwareManagerActivity, newId, plaintextPassword)
-                    loadHypervisors()
-                }
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
+    private fun showProgress(message: String) {
+        runOnUiThread {
+            progressBar.visibility = View.VISIBLE
+            statusText.visibility = View.VISIBLE
+            statusText.text = message
+        }
     }
 
-    override fun onSupportNavigateUp(): Boolean {
-        finish()
-        return true
+    private fun hideProgress() {
+        runOnUiThread {
+            progressBar.visibility = View.GONE
+            statusText.visibility = View.GONE
+        }
     }
 
-    private class VMAdapter(
-        private val vms: List<VMwareApiClient.VMwareVM>,
-        private val onAction: (VMwareApiClient.VMwareVM, String) -> Unit
-    ) : RecyclerView.Adapter<VMAdapter.ViewHolder>() {
+    private fun showError(message: String) {
+        runOnUiThread {
+            progressBar.visibility = View.GONE
+            statusText.visibility = View.VISIBLE
+            statusText.text = "Error: $message"
+        }
+    }
 
-        class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+    // ── Adapter ───────────────────────────────────────────────────────────────
+
+    private inner class VmAdapter(
+        private val items: List<VMwareApiClient.VMwareVM>,
+        private val onClick: (VMwareApiClient.VMwareVM) -> Unit
+    ) : RecyclerView.Adapter<VmAdapter.VH>() {
+
+        inner class VH(view: View) : RecyclerView.ViewHolder(view) {
             val name: TextView = view.findViewById(R.id.vm_name)
-            val status: TextView = view.findViewById(R.id.vm_status)
+            val state: TextView = view.findViewById(R.id.vm_state)
             val info: TextView = view.findViewById(R.id.vm_info)
-            val consoleButton: Button = view.findViewById(R.id.console_button)
-            val startButton: Button = view.findViewById(R.id.start_button)
-            val stopButton: Button = view.findViewById(R.id.stop_button)
-            val rebootButton: Button = view.findViewById(R.id.reboot_button)
-            val resetButton: Button = view.findViewById(R.id.reset_button)
+            val ip: TextView = view.findViewById(R.id.vm_ip)
         }
 
-        override fun onCreateViewHolder(parent: android.view.ViewGroup, viewType: Int): ViewHolder {
-            val view = android.view.LayoutInflater.from(parent.context)
-                .inflate(R.layout.item_proxmox_vm, parent, false)
-            return ViewHolder(view)
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
+            val v = layoutInflater.inflate(R.layout.item_hypervisor_vm, parent, false)
+            return VH(v)
         }
 
-        override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-            val vm = vms[position]
+        override fun getItemCount() = items.size
 
+        override fun onBindViewHolder(holder: VH, position: Int) {
+            val vm = items[position]
             holder.name.text = vm.name
-            holder.status.text = vm.powerState.uppercase()
-            holder.info.text = "CPUs: ${vm.cpuCount} | RAM: ${vm.memoryMB}MB"
-
-            holder.status.setTextColor(
-                when (vm.powerState.uppercase()) {
-                    "POWERED_ON" -> 0xFF4CAF50.toInt()
-                    "POWERED_OFF" -> 0xFFF44336.toInt()
-                    else -> 0xFFFF9800.toInt()
-                }
-            )
-
-            // Show/hide buttons based on VM status (better UX than disabled)
-            when (vm.powerState.uppercase()) {
-                "POWERED_ON" -> {
-                    // VM is running - show power controls, hide start
-                    // Note: VMware console requires IP (SSH-based)
-                    holder.consoleButton.visibility = if (vm.ipAddress != null) android.view.View.VISIBLE else android.view.View.GONE
-                    holder.startButton.visibility = android.view.View.GONE
-                    holder.stopButton.visibility = android.view.View.VISIBLE
-                    holder.rebootButton.visibility = android.view.View.VISIBLE
-                    holder.resetButton.visibility = android.view.View.VISIBLE
-                }
-                "POWERED_OFF" -> {
-                    // VM is stopped - only show start
-                    holder.consoleButton.visibility = android.view.View.GONE
-                    holder.startButton.visibility = android.view.View.VISIBLE
-                    holder.stopButton.visibility = android.view.View.GONE
-                    holder.rebootButton.visibility = android.view.View.GONE
-                    holder.resetButton.visibility = android.view.View.GONE
-                }
-                else -> {
-                    // Suspended, etc - show start/stop only
-                    holder.consoleButton.visibility = android.view.View.GONE
-                    holder.startButton.visibility = android.view.View.VISIBLE
-                    holder.stopButton.visibility = android.view.View.VISIBLE
-                    holder.rebootButton.visibility = android.view.View.GONE
-                    holder.resetButton.visibility = android.view.View.GONE
-                }
+            holder.state.text = vm.powerState.uppercase()
+            holder.state.setTextColor(stateColor(vm.powerState))
+            holder.info.text = "CPUs: ${vm.cpuCount} · RAM: ${vm.memoryMB}MB"
+            if (!vm.ipAddress.isNullOrBlank()) {
+                holder.ip.text = "IP: ${vm.ipAddress}"
+                holder.ip.visibility = View.VISIBLE
+            } else {
+                holder.ip.visibility = View.GONE
             }
-
-            holder.consoleButton.setOnClickListener { onAction(vm, "console") }
-            holder.startButton.setOnClickListener { onAction(vm, "start") }
-            holder.stopButton.setOnClickListener { onAction(vm, "stop") }
-            holder.rebootButton.setOnClickListener { onAction(vm, "reboot") }
-            holder.resetButton.setOnClickListener { onAction(vm, "reset") }
+            holder.itemView.setOnClickListener { onClick(vm) }
         }
 
-        override fun getItemCount() = vms.size
+        private fun stateColor(state: String): Int = when (state.uppercase()) {
+            "POWERED_ON"  -> 0xFF4CAF50.toInt()
+            "POWERED_OFF" -> 0xFFF44336.toInt()
+            else          -> 0xFFFF9800.toInt()
+        }
     }
 }

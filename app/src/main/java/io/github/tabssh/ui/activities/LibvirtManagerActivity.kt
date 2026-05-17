@@ -21,6 +21,8 @@ import io.github.tabssh.hypervisor.libvirt.LibvirtApiClient
 import io.github.tabssh.hypervisor.libvirt.LibvirtException
 import io.github.tabssh.hypervisor.libvirt.LibvirtVm
 import io.github.tabssh.hypervisor.vnc.VncStreamHolder
+import io.github.tabssh.ssh.auth.AuthType
+import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -31,14 +33,15 @@ import kotlinx.coroutines.withContext
  * user open a VNC console for running domains or perform power actions
  * (start / shutdown / reboot / hard-reset).
  *
+ * When a VM has no VNC display configured, the activity offers SSH to the
+ * guest as a fallback — useful for headless or console-only VMs.
+ *
  * Receives [EXTRA_HYPERVISOR_ID] (Long) in its launch intent.
  */
 class LibvirtManagerActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "LibvirtManagerActivity"
-
-        /** Long — ID of the HypervisorProfile to connect to. */
         const val EXTRA_HYPERVISOR_ID = "hypervisor_id"
     }
 
@@ -67,7 +70,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
 
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        supportActionBar?.title = "QEMU/libvirt Domains"
+        supportActionBar?.title = "QEMU/libvirt"
 
         adapter = VmAdapter(vms) { vm -> onVmClicked(vm) }
         recyclerView.layoutManager = LinearLayoutManager(this)
@@ -105,6 +108,8 @@ class LibvirtManagerActivity : AppCompatActivity() {
                 showError("Hypervisor profile not found (id=$hypervisorId)")
                 return@launch
             }
+            supportActionBar?.title = profile.name
+
             val client = LibvirtApiClient(this@LibvirtManagerActivity, profile)
             try {
                 withContext(Dispatchers.IO) { client.connect() }
@@ -113,8 +118,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to connect to libvirt host", e)
                 val msg = e.message ?: "Unknown error"
-                // "No credentials found" means the Keystore entry is gone —
-                // offer a shortcut to the edit screen so the user can re-enter.
+                // "No credentials found" → Keystore entry is gone; offer shortcut to settings.
                 if (msg.startsWith("No credentials found")) {
                     runOnUiThread {
                         progressBar.visibility = View.GONE
@@ -138,8 +142,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
     }
 
     private fun refresh() {
-        val client = apiClient
-        if (client == null) {
+        val client = apiClient ?: run {
             Toast.makeText(this, "Not connected — please wait", Toast.LENGTH_SHORT).show()
             return
         }
@@ -172,13 +175,12 @@ class LibvirtManagerActivity : AppCompatActivity() {
             return
         }
         when {
-            vm.state == "running" -> showRunningActions(vm, client)
+            vm.state == "running"                       -> showRunningActions(vm, client)
             vm.state == "shut off" || vm.state == "paused" -> showStoppedActions(vm, client)
-            else -> showRunningActions(vm, client)
+            else                                        -> showRunningActions(vm, client)
         }
     }
 
-    /** Action dialog for a running domain. */
     private fun showRunningActions(vm: LibvirtVm, client: LibvirtApiClient) {
         val actions = arrayOf("🖥  Open Console", "🔄  Reboot", "⏹  Shutdown", "⚡  Hard Reset")
         AlertDialog.Builder(this)
@@ -195,19 +197,14 @@ class LibvirtManagerActivity : AppCompatActivity() {
             .show()
     }
 
-    /** Action dialog for a shut-off / paused domain. */
     private fun showStoppedActions(vm: LibvirtVm, client: LibvirtApiClient) {
-        val actions = arrayOf("▶  Start")
         AlertDialog.Builder(this)
             .setTitle(vm.name)
-            .setItems(actions) { _, which ->
-                if (which == 0) powerAction(vm, client, "start")
-            }
+            .setItems(arrayOf("▶  Start")) { _, _ -> powerAction(vm, client, "start") }
             .setNegativeButton("Cancel", null)
             .show()
     }
 
-    /** Extra confirmation before hard reset (destructive). */
     private fun confirmHardReset(vm: LibvirtVm, client: LibvirtApiClient) {
         AlertDialog.Builder(this)
             .setTitle("Hard Reset ${vm.name}?")
@@ -229,15 +226,10 @@ class LibvirtManagerActivity : AppCompatActivity() {
                         "reset"    -> client.resetDomain(vm.name)
                     }
                 }
-                Toast.makeText(
-                    this@LibvirtManagerActivity,
-                    "${vm.name}: $action sent",
-                    Toast.LENGTH_SHORT
-                ).show()
+                Toast.makeText(this@LibvirtManagerActivity, "${vm.name}: $action sent", Toast.LENGTH_SHORT).show()
                 loadDomains(client)
             } catch (e: LibvirtException) {
                 hideProgress()
-                Logger.e(TAG, "$action failed for ${vm.name}", e)
                 showDomainError("$action failed", e.message ?: "virsh error")
             } catch (e: Exception) {
                 hideProgress()
@@ -247,9 +239,14 @@ class LibvirtManagerActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Open a VNC console for [vm]. If the domain has no VNC display configured
+     * (LibvirtException "VNC not configured"), auto-detect the VM's IP via virsh
+     * and offer SSH as a fallback.
+     */
     private fun openConsole(vm: LibvirtVm, client: LibvirtApiClient) {
         lifecycleScope.launch {
-            showProgress("Opening VNC console for ${vm.name}…")
+            showProgress("Opening console for ${vm.name}…")
             try {
                 val (ins, out) = withContext(Dispatchers.IO) { client.openVncChannel(vm.name) }
                 VncStreamHolder.set(ins, out, socket = null)
@@ -260,23 +257,89 @@ class LibvirtManagerActivity : AppCompatActivity() {
                 hideProgress()
                 startActivity(intent)
             } catch (e: LibvirtException) {
-                Logger.e(TAG, "VNC channel error for ${vm.name}", e)
+                Logger.w(TAG, "VNC unavailable for ${vm.name}: ${e.message}")
                 hideProgress()
-                showDomainError("VNC Not Available", e.message ?: "VNC error")
+                if (e.message?.contains("VNC not configured") == true) {
+                    // VNC not configured on this VM — try SSH instead.
+                    offerSshFallback(vm, client)
+                } else {
+                    showDomainError("Console Error", e.message ?: "VNC error")
+                }
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to open VNC channel for ${vm.name}", e)
                 hideProgress()
-                showError("Could not open VNC console: ${e.message}")
+                showError("Could not open console: ${e.message}")
             }
         }
     }
 
-    private fun showDomainError(title: String, message: String) {
-        AlertDialog.Builder(this)
-            .setTitle(title)
-            .setMessage(message)
-            .setPositiveButton("OK", null)
-            .show()
+    /**
+     * Called when VNC is not available. Attempts to auto-detect the VM's IP via
+     * `virsh domifaddr`, then presents a "Connect via SSH?" dialog pre-filled
+     * with that IP. The SSH profile is persisted so repeated taps don't re-ask.
+     */
+    private fun offerSshFallback(vm: LibvirtVm, client: LibvirtApiClient) {
+        lifecycleScope.launch {
+            val detectedIp = withContext(Dispatchers.IO) {
+                try { client.getVmIpAddress(vm.name) } catch (e: Exception) { null }
+            }
+
+            val messageLines = mutableListOf<String>()
+            messageLines += "This VM has no VNC display configured."
+            if (detectedIp != null) {
+                messageLines += "Detected IP: $detectedIp"
+            }
+            messageLines += "\nConnect via SSH instead?"
+
+            AlertDialog.Builder(this@LibvirtManagerActivity)
+                .setTitle("No Console Available")
+                .setMessage(messageLines.joinToString("\n"))
+                .setPositiveButton("SSH Connect") { _, _ ->
+                    launchSshToVm(vm, detectedIp)
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+    }
+
+    /**
+     * Creates or updates a [ConnectionProfile] for the VM and launches
+     * [TabTerminalActivity]. Uses [ip] if non-null, otherwise the user will
+     * need to update the host in the terminal's connection settings.
+     */
+    private fun launchSshToVm(vm: LibvirtVm, ip: String?) {
+        lifecycleScope.launch {
+            try {
+                val connectionName = "libvirt: ${vm.name}"
+                var existing = withContext(Dispatchers.IO) {
+                    app.database.connectionDao().getByName(connectionName)
+                }
+                val host = ip ?: existing?.host ?: ""
+                if (existing == null) {
+                    existing = ConnectionProfile(
+                        name = connectionName,
+                        host = host,
+                        port = 22,
+                        username = "root",
+                        authType = AuthType.PASSWORD.name,
+                        createdAt = System.currentTimeMillis(),
+                        modifiedAt = System.currentTimeMillis()
+                    )
+                    app.database.connectionDao().insertConnection(existing)
+                } else if (ip != null && existing.host != ip) {
+                    existing = existing.copy(host = ip, modifiedAt = System.currentTimeMillis())
+                    app.database.connectionDao().updateConnection(existing)
+                }
+                val intent = TabTerminalActivity.createIntent(
+                    this@LibvirtManagerActivity, existing, autoConnect = host.isNotBlank()
+                )
+                startActivity(intent)
+                Logger.i(TAG, "Launched SSH fallback for ${vm.name} → $host")
+            } catch (e: Exception) {
+                Logger.e(TAG, "SSH fallback launch failed for ${vm.name}", e)
+                showError("Failed to open SSH: ${e.message}")
+            }
+        }
     }
 
     // ── UI helpers ────────────────────────────────────────────────────────────
@@ -304,34 +367,42 @@ class LibvirtManagerActivity : AppCompatActivity() {
         }
     }
 
+    private fun showDomainError(title: String, message: String) {
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
     // ── Adapter ───────────────────────────────────────────────────────────────
 
     private inner class VmAdapter(
         private val items: List<LibvirtVm>,
         private val onClick: (LibvirtVm) -> Unit
-    ) : RecyclerView.Adapter<VmAdapter.VmViewHolder>() {
+    ) : RecyclerView.Adapter<VmAdapter.VH>() {
 
-        inner class VmViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-            val vmName: TextView = itemView.findViewById(R.id.vm_name)
-            val vmState: TextView = itemView.findViewById(R.id.vm_state)
-            val vmId: TextView = itemView.findViewById(R.id.vm_id)
+        inner class VH(view: View) : RecyclerView.ViewHolder(view) {
+            val name: TextView = view.findViewById(R.id.vm_name)
+            val state: TextView = view.findViewById(R.id.vm_state)
+            val info: TextView = view.findViewById(R.id.vm_info)
         }
 
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VmViewHolder {
-            val view = layoutInflater.inflate(R.layout.item_libvirt_vm, parent, false)
-            return VmViewHolder(view)
-        }
-
-        override fun onBindViewHolder(holder: VmViewHolder, position: Int) {
-            val vm = items[position]
-            holder.vmName.text = vm.name
-            holder.vmState.text = stateLabel(vm.state)
-            holder.vmId.text = if (vm.id >= 0) "ID: ${vm.id}" else "ID: —"
-            holder.vmState.setTextColor(stateColor(vm.state))
-            holder.itemView.setOnClickListener { onClick(vm) }
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
+            val v = layoutInflater.inflate(R.layout.item_hypervisor_vm, parent, false)
+            return VH(v)
         }
 
         override fun getItemCount(): Int = items.size
+
+        override fun onBindViewHolder(holder: VH, position: Int) {
+            val vm = items[position]
+            holder.name.text = vm.name
+            holder.state.text = stateLabel(vm.state)
+            holder.state.setTextColor(stateColor(vm.state))
+            holder.info.text = if (vm.id >= 0) "ID: ${vm.id}" else "ID: —"
+            holder.itemView.setOnClickListener { onClick(vm) }
+        }
 
         private fun stateLabel(state: String): String = when (state) {
             "running"  -> "● running"
@@ -341,9 +412,9 @@ class LibvirtManagerActivity : AppCompatActivity() {
         }
 
         private fun stateColor(state: String): Int = when (state) {
-            "running"  -> 0xFF4CAF50.toInt() // green
-            "paused"   -> 0xFFFF9800.toInt() // orange
-            else       -> 0xFF9E9E9E.toInt() // grey
+            "running"  -> 0xFF4CAF50.toInt()
+            "paused"   -> 0xFFFF9800.toInt()
+            else       -> 0xFF9E9E9E.toInt()
         }
     }
 }

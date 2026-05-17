@@ -199,6 +199,26 @@ class LibvirtApiClient(
     }
 
     /**
+     * Returns the primary IPv4 address for [domain] by running
+     * `virsh domifaddr <domain>` and extracting the first IPv4 address found.
+     * Returns null if the domain has no interfaces with a known address (e.g.
+     * the guest agent is not installed, or the VM was just started).
+     *
+     * Non-fatal — callers should treat null as "IP unknown" and still offer
+     * SSH with an empty host field for the user to fill in.
+     */
+    suspend fun getVmIpAddress(domain: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val output = runCommand("virsh domifaddr $domain 2>/dev/null")
+            // Expected line: "vnet0  52:54:00:xx:xx:xx  ipv4  192.168.1.100/24"
+            Regex("""(\d{1,3}(?:\.\d{1,3}){3})""").find(output)?.groupValues?.get(1)
+        } catch (e: Exception) {
+            Logger.d(TAG, "getVmIpAddress($domain): ${e.message}")
+            null
+        }
+    }
+
+    /**
      * Returns the VNC display number for [domain] by running
      * `virsh vncdisplay <domain>` and parsing e.g. `:1` or `localhost:1`.
      * Throws [LibvirtException] if the domain has no VNC display configured.

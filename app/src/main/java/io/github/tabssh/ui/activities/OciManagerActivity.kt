@@ -2,22 +2,26 @@ package io.github.tabssh.ui.activities
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.MenuItem
 import android.view.View
+import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
-import android.widget.Button
 import android.widget.ProgressBar
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.crypto.storage.HypervisorPasswordStore
 import io.github.tabssh.hypervisor.oci.OciApiClient
 import io.github.tabssh.hypervisor.oci.OciInstance
 import io.github.tabssh.hypervisor.oci.OciInstanceAction
@@ -25,47 +29,40 @@ import io.github.tabssh.hypervisor.oci.OciKeyMaterial
 import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HypervisorProfile
-import io.github.tabssh.storage.database.entities.HypervisorType
 import io.github.tabssh.storage.database.entities.StoredKey
-import io.github.tabssh.crypto.storage.HypervisorPasswordStore
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.showError
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Manager UI for OCI Compute instances. Mirrors `ProxmoxManagerActivity`
- * — server spinner over the list, refresh button, status text, then a
- * RecyclerView of instances with start/stop/softstop/reset/softreset
- * buttons.
+ * Displays the list of OCI Compute instances for a single tenancy. Launched by
+ * [HypervisorsFragment] / [MainActivity] with [EXTRA_HYPERVISOR_ID] set.
  *
- * Differences from Proxmox:
- *   - No console (deferred — needs the bastion-over-SSH flow OCI uses).
- *   - Auth happens per-request via the HTTP signature in `OciApiClient`,
- *     not via an upfront `authenticate()` call. We still issue a
- *     `validateCredentials()` ping so a bad config surfaces a clear
- *     error before listing instances.
- *   - The "host" column on the row carries the region; the API client
- *     resolves the per-service hostname itself.
- *
- * No add/edit dialog here — OCI hosts are added/edited via
- * `HypervisorEditActivity` with a linked OCI virtualization identity.
- * This activity is read + action only.
+ * Auth happens per-request via the HTTP signature in [OciApiClient]; a
+ * [validateCredentials] ping surfaces configuration errors up-front.
+ * There is no separate "Authenticate" call unlike Proxmox/VMware.
  */
 class OciManagerActivity : AppCompatActivity() {
 
+    companion object {
+        private const val TAG = "OciManager"
+        const val EXTRA_HYPERVISOR_ID = "hypervisor_id"
+    }
+
     private lateinit var app: TabSSHApplication
-    private lateinit var serverSpinner: Spinner
-    private lateinit var refreshButton: Button
-    private lateinit var recyclerView: RecyclerView
+    private lateinit var toolbar: Toolbar
+    private lateinit var btnRefresh: MaterialButton
     private lateinit var progressBar: ProgressBar
     private lateinit var statusText: TextView
+    private lateinit var recyclerView: RecyclerView
 
-    private val hypervisors = mutableListOf<HypervisorProfile>()
     private val instances = mutableListOf<OciInstance>()
     private var currentClient: OciApiClient? = null
     private var currentProfile: HypervisorProfile? = null
+    private lateinit var adapter: InstanceAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -73,108 +70,82 @@ class OciManagerActivity : AppCompatActivity() {
 
         app = application as TabSSHApplication
 
-        setSupportActionBar(findViewById(R.id.toolbar))
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        supportActionBar?.title = "OCI Manager"
-
-        serverSpinner = findViewById(R.id.server_spinner)
-        refreshButton = findViewById(R.id.refresh_button)
-        recyclerView = findViewById(R.id.vm_recycler_view)
+        toolbar = findViewById(R.id.toolbar)
+        btnRefresh = findViewById(R.id.btn_refresh)
         progressBar = findViewById(R.id.progress_bar)
         statusText = findViewById(R.id.status_text)
+        recyclerView = findViewById(R.id.vm_recycler_view)
 
+        setSupportActionBar(toolbar)
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        supportActionBar?.title = "OCI"
+
+        adapter = InstanceAdapter(instances) { inst -> onInstanceClicked(inst) }
         recyclerView.layoutManager = LinearLayoutManager(this)
-        refreshButton.setOnClickListener { refreshInstances() }
+        recyclerView.adapter = adapter
 
-        serverSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                if (position in 0 until hypervisors.size) connectToHypervisor(hypervisors[position])
-            }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        btnRefresh.setOnClickListener { refreshInstances() }
+
+        val hypervisorId = intent.getLongExtra(EXTRA_HYPERVISOR_ID, -1L)
+        if (hypervisorId == -1L) {
+            showError("No hypervisor ID provided")
+            return
         }
-
-        loadHypervisors()
+        connectAndRefresh(hypervisorId)
     }
 
-    override fun onSupportNavigateUp(): Boolean {
-        finish(); return true
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        if (item.itemId == android.R.id.home) { finish(); return true }
+        return super.onOptionsItemSelected(item)
     }
 
-    private fun loadHypervisors() {
+    // ── Connection ────────────────────────────────────────────────────────────
+
+    private fun connectAndRefresh(hypervisorId: Long) {
         lifecycleScope.launch {
-            val rows = withContext(Dispatchers.IO) {
-                app.database.hypervisorDao().getByType(HypervisorType.OCI)
+            showProgress("Loading credentials…")
+            val profile = withContext(Dispatchers.IO) {
+                app.database.hypervisorDao().getById(hypervisorId)
             }
-            hypervisors.clear()
-            hypervisors.addAll(rows)
-
-            if (hypervisors.isEmpty()) {
-                statusText.text = "No OCI tenancies configured"
-                statusText.visibility = View.VISIBLE
+            if (profile == null) {
+                showError("Hypervisor profile not found (id=$hypervisorId)")
                 return@launch
             }
-            statusText.visibility = View.GONE
-            val adapter = ArrayAdapter(
-                this@OciManagerActivity,
-                android.R.layout.simple_spinner_item,
-                hypervisors.map { "${it.name} (${it.ociRegion ?: "?"})" }
-            )
-            adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-            serverSpinner.adapter = adapter
-        }
-    }
+            currentProfile = profile
+            supportActionBar?.title = profile.name
 
-    /**
-     * Build an `OciApiClient` for the chosen profile. When the profile
-     * has a linked [HypervisorAccount] (`accountId != null`), OCI fields
-     * and the PEM live on the account row / its Keystore alias; otherwise
-     * fall back to the legacy per-profile aliases for rows created before
-     * v33 (lazy migration happens inside [HypervisorPasswordStore.retrieveOciAccountKey]).
-     */
-    private fun connectToHypervisor(profile: HypervisorProfile) {
-        currentProfile = profile
-        lifecycleScope.launch {
             try {
-                progressBar.visibility = View.VISIBLE
-                statusText.text = "Loading credentials for ${profile.name}…"
-                statusText.visibility = View.VISIBLE
-
-                // Resolve OCI fields: prefer linked account, fall back to profile columns
+                // Resolve OCI fields: prefer linked account, fall back to profile columns.
                 val accountId = profile.accountId
                 val account = if (accountId != null) {
                     withContext(Dispatchers.IO) {
                         try { app.database.hypervisorAccountDao().getById(accountId) }
                         catch (e: Exception) {
-                            android.util.Log.w("OciManager", "account load failed", e); null
+                            Logger.w(TAG, "account load failed: ${e.message}"); null
                         }
                     }
                 } else null
 
-                val tenancy = account?.ociTenancyOcid ?: profile.ociTenancyOcid
-                val user = account?.ociUserOcid ?: profile.ociUserOcid
-                val region = account?.ociRegion ?: profile.ociRegion
-                val fingerprint = account?.ociFingerprint ?: profile.ociFingerprint
+                val tenancy     = account?.ociTenancyOcid  ?: profile.ociTenancyOcid
+                val user        = account?.ociUserOcid      ?: profile.ociUserOcid
+                val region      = account?.ociRegion        ?: profile.ociRegion
+                val fingerprint = account?.ociFingerprint   ?: profile.ociFingerprint
 
                 val pem = withContext(Dispatchers.IO) {
                     if (accountId != null) {
-                        // Account-keyed alias, with lazy migration from legacy profile alias
-                        HypervisorPasswordStore.retrieveOciAccountKey(
-                            applicationContext, accountId, profile.id
-                        )
+                        HypervisorPasswordStore.retrieveOciAccountKey(applicationContext, accountId, profile.id)
                     } else {
                         app.securePasswordManager.retrievePassword("oci_private_key_${profile.id}")
                     }
                 }
                 if (pem.isNullOrBlank()) {
-                    statusText.text = "Private key not found — edit this OCI identity to add one"
-                    progressBar.visibility = View.GONE
+                    showError("Private key not found — edit this OCI identity to add one")
                     return@launch
                 }
                 val passphrase = withContext(Dispatchers.IO) {
                     if (accountId != null) {
-                        HypervisorPasswordStore.retrieveOciAccountPassphrase(
-                            applicationContext, accountId, profile.id
-                        )?.takeIf { it.isNotEmpty() }
+                        HypervisorPasswordStore.retrieveOciAccountPassphrase(applicationContext, accountId, profile.id)
+                            ?.takeIf { it.isNotEmpty() }
                     } else {
                         app.securePasswordManager.retrievePassword("oci_passphrase_${profile.id}")
                             ?.takeIf { it.isNotEmpty() }
@@ -183,15 +154,14 @@ class OciManagerActivity : AppCompatActivity() {
                 if (tenancy.isNullOrBlank() || user.isNullOrBlank() ||
                     region.isNullOrBlank() || fingerprint.isNullOrBlank()
                 ) {
-                    statusText.text = "Profile is missing OCI fields — re-run onboarding"
-                    progressBar.visibility = View.GONE
+                    showError("Profile is missing OCI fields — re-run onboarding")
                     return@launch
                 }
 
                 val km = withContext(Dispatchers.Default) {
                     OciKeyMaterial.fromPem(pem, passphrase?.toCharArray())
                 }
-                currentClient = OciApiClient(
+                val client = OciApiClient(
                     tenancyOcid = tenancy,
                     userOcid = user,
                     fingerprint = fingerprint,
@@ -201,91 +171,127 @@ class OciManagerActivity : AppCompatActivity() {
                     pinnedCertSha256 = profile.pinnedCertSha256
                 )
 
-                statusText.text = "Validating with OCI…"
-                val ok = currentClient?.validateCredentials() ?: false
+                showProgress("Validating with OCI…")
+                val ok = client.validateCredentials()
                 if (!ok) {
-                    statusText.text = "OCI rejected the credentials"
-                    progressBar.visibility = View.GONE
-                    showError("Authentication failed", "Error")
+                    showError("OCI rejected the credentials")
                     return@launch
                 }
 
-                app.database.hypervisorDao()
-                    .updateLastConnected(profile.id, System.currentTimeMillis())
+                app.database.hypervisorDao().updateLastConnected(profile.id, System.currentTimeMillis())
 
-                // Persist any cert pin captured during validateCredentials() so
-                // subsequent API calls in this session (and future sessions) skip
-                // the TOFU dialog.
-                val capturedPin = currentClient?.getCapturedCertSha256()
+                val capturedPin = client.getCapturedCertSha256()
                 if (capturedPin != null) {
                     withContext(Dispatchers.IO) {
                         app.database.hypervisorDao().updatePinnedCertSha256(profile.id, capturedPin)
                     }
-                    currentProfile = currentProfile?.copy(pinnedCertSha256 = capturedPin)
+                    currentProfile = profile.copy(pinnedCertSha256 = capturedPin)
                 }
 
-                statusText.text = "Connected to ${profile.name}"
+                currentClient = client
                 refreshInstances()
             } catch (e: Exception) {
-                Logger.e("OciManager", "Connection failed", e)
-                statusText.text = "Connection error: ${e.message}"
-                progressBar.visibility = View.GONE
-                showError("Connection failed: ${e.message}", "Error")
+                Logger.e(TAG, "Connect failed", e)
+                showError("Connection failed: ${e.message}")
             }
         }
     }
 
     private fun refreshInstances() {
-        val client = currentClient ?: return
+        val client = currentClient ?: run {
+            Toast.makeText(this, "Not connected — please wait", Toast.LENGTH_SHORT).show()
+            return
+        }
         val profile = currentProfile ?: return
         val compartment = profile.ociCompartmentOcid?.takeIf { it.isNotBlank() }
             ?: profile.ociTenancyOcid
-            ?: return
-        lifecycleScope.launch {
-            try {
-                progressBar.visibility = View.VISIBLE
-                statusText.text = "Loading instances…"
-
-                val raw = client.listInstances(compartment)
-
-                // Walk VNICs for IPs in parallel (cheap — one extra HTTP per
-                // running instance). Don't block on stopped instances since
-                // they have no live VNIC.
-                val withIps = raw.map { inst ->
-                    if (inst.lifecycleState.equals("RUNNING", ignoreCase = true)) {
-                        val (pub, priv) = try {
-                            client.getInstancePublicIp(inst.id, compartment)
-                        } catch (e: Exception) {
-                            Logger.d("OciManager", "VNIC walk failed for ${inst.id}: ${e.message}")
-                            null to null
-                        }
-                        inst.copy(publicIp = pub, privateIp = priv)
-                    } else inst
-                }
-
-                instances.clear()
-                instances.addAll(withIps)
-                recyclerView.adapter = InstanceAdapter(
-                    instances,
-                    onAction = { inst, action -> handleAction(inst, action) },
-                    onSshConnect = { inst -> handleSshConnect(inst) }
-                )
-                statusText.text = "Found ${instances.size} instance${if (instances.size == 1) "" else "s"}"
-                progressBar.visibility = View.GONE
-            } catch (e: Exception) {
-                Logger.e("OciManager", "Failed to load instances", e)
-                statusText.text = "Error loading instances"
-                progressBar.visibility = View.GONE
-                showError("Failed to load instances: ${e.message}", "Error")
+            ?: run {
+                showError("Compartment OCID not configured")
+                return
             }
+        lifecycleScope.launch { loadInstances(client, compartment) }
+    }
+
+    private suspend fun loadInstances(client: OciApiClient, compartment: String) {
+        showProgress("Loading instances…")
+        try {
+            val raw = client.listInstances(compartment)
+            // Walk VNICs for IPs on running instances (one extra HTTP call per instance).
+            val withIps = raw.map { inst ->
+                if (inst.lifecycleState.equals("RUNNING", ignoreCase = true)) {
+                    val (pub, priv) = try {
+                        client.getInstancePublicIp(inst.id, compartment)
+                    } catch (e: Exception) {
+                        Logger.d(TAG, "VNIC walk failed for ${inst.id}: ${e.message}")
+                        null to null
+                    }
+                    inst.copy(publicIp = pub, privateIp = priv)
+                } else inst
+            }
+            instances.clear()
+            instances.addAll(withIps)
+            adapter.notifyDataSetChanged()
+            hideProgress()
+            if (instances.isEmpty()) {
+                statusText.visibility = View.VISIBLE
+                statusText.text = "No instances found"
+            }
+        } catch (e: Exception) {
+            Logger.e(TAG, "loadInstances failed", e)
+            showError("Could not load instances: ${e.message}")
         }
     }
 
-    private fun handleAction(inst: OciInstance, action: OciInstanceAction) {
+    // ── Instance interaction ──────────────────────────────────────────────────
+
+    private fun onInstanceClicked(inst: OciInstance) {
         val client = currentClient ?: return
+        when (inst.lifecycleState.uppercase()) {
+            "RUNNING"                -> showRunningActions(inst, client)
+            "STOPPED", "TERMINATED" -> showStoppedActions(inst, client)
+            else                     -> showRunningActions(inst, client)
+        }
+    }
+
+    private fun showRunningActions(inst: OciInstance, client: OciApiClient) {
+        val canSsh = !inst.publicIp.isNullOrBlank()
+        val items = buildList {
+            if (canSsh) add("🔗  SSH Connect")
+            add("🔄  Soft Reboot")
+            add("⚡  Hard Reset")
+            add("⏹  Soft Stop")
+            add("🔌  Hard Stop")
+        }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(inst.displayName)
+            .setItems(items) { _, which ->
+                val offset = if (canSsh) 0 else 1
+                when (which + offset) {
+                    0 -> handleSshConnect(inst)
+                    1 -> instanceAction(inst, client, OciInstanceAction.SOFTRESET)
+                    2 -> instanceAction(inst, client, OciInstanceAction.RESET)
+                    3 -> instanceAction(inst, client, OciInstanceAction.SOFTSTOP)
+                    4 -> instanceAction(inst, client, OciInstanceAction.STOP)
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showStoppedActions(inst: OciInstance, client: OciApiClient) {
+        AlertDialog.Builder(this)
+            .setTitle(inst.displayName)
+            .setItems(arrayOf("▶  Start")) { _, _ ->
+                instanceAction(inst, client, OciInstanceAction.START)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun instanceAction(inst: OciInstance, client: OciApiClient, action: OciInstanceAction) {
         lifecycleScope.launch {
+            showProgress("${action.wireValue} → ${inst.displayName}…")
             try {
-                progressBar.visibility = View.VISIBLE
                 val ok = client.instanceAction(inst.id, action)
                 if (ok) {
                     Toast.makeText(
@@ -293,30 +299,27 @@ class OciManagerActivity : AppCompatActivity() {
                         "${action.wireValue} sent to ${inst.displayName}",
                         Toast.LENGTH_SHORT
                     ).show()
-                    // Give OCI a couple of seconds to flip lifecycleState.
-                    kotlinx.coroutines.delay(2000)
-                    refreshInstances()
+                    delay(2000)
+                    val profile = currentProfile ?: return@launch
+                    val compartment = profile.ociCompartmentOcid?.takeIf { it.isNotBlank() }
+                        ?: profile.ociTenancyOcid ?: return@launch
+                    loadInstances(client, compartment)
                 } else {
-                    showError("${action.wireValue} failed for ${inst.displayName}", "Error")
-                    progressBar.visibility = View.GONE
+                    hideProgress()
+                    showError("${action.wireValue} failed for ${inst.displayName}")
                 }
             } catch (e: Exception) {
-                Logger.e("OciManager", "Action ${action.wireValue} failed", e)
-                showError("Action failed: ${e.message}", "Error")
-                progressBar.visibility = View.GONE
+                Logger.e(TAG, "Action ${action.wireValue} failed", e)
+                showError("Action failed: ${e.message}")
             }
         }
     }
 
     /**
-     * SSH Connect — shows a persistent configuration dialog pre-filled with
-     * any previously saved SSH settings for this OCI instance. On Connect the
-     * settings are written to (or updated in) the local DB so the next tap
-     * remembers them. Supports password auth and key-based auth via any key
-     * stored in the SSH key store.
-     *
-     * The default username is "opc" (Oracle Linux) but users running Ubuntu
-     * images should change it to "ubuntu"; the saved value will stick.
+     * SSH Connect — shows a persistent configuration dialog pre-filled with any
+     * previously saved SSH settings for this OCI instance. Supports password and
+     * key-based auth. The connection profile is saved so settings persist across
+     * taps on the same instance.
      */
     private fun handleSshConnect(inst: OciInstance) {
         val publicIp = inst.publicIp
@@ -324,8 +327,6 @@ class OciManagerActivity : AppCompatActivity() {
             Toast.makeText(this, "Instance has no public IP address", Toast.LENGTH_SHORT).show()
             return
         }
-
-        // Load existing profile + key list from DB, then show the config dialog.
         lifecycleScope.launch {
             val existing = withContext(Dispatchers.IO) {
                 app.database.connectionDao().getByOciInstanceId(inst.id)
@@ -337,12 +338,6 @@ class OciManagerActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Inflate and show the SSH config dialog for the given OCI instance.
-     * [existing] is the previously saved [ConnectionProfile] for this instance
-     * (null on first connect). [storedKeys] is the full list of SSH keys from
-     * the key store.
-     */
     private fun showSshConfigDialog(
         inst: OciInstance,
         publicIp: String,
@@ -360,13 +355,9 @@ class OciManagerActivity : AppCompatActivity() {
         val noKeysHint = view.findViewById<TextView>(R.id.oci_ssh_no_keys_hint)
 
         instanceLabel.text = "SSH to $publicIp"
-
-        // Pre-fill from saved profile or sensible defaults.
         usernameField.setText(existing?.username ?: "opc")
         portField.setText((existing?.port ?: 22).toString())
 
-        // Auth method spinner — Password and Public Key only; keyboard-interactive
-        // is essentially password-prompt on OCI hosts and adds confusion.
         val authOptions = listOf(AuthType.PASSWORD, AuthType.PUBLIC_KEY)
         val authAdapter = ArrayAdapter(
             this,
@@ -378,7 +369,6 @@ class OciManagerActivity : AppCompatActivity() {
         val savedAuth = existing?.getAuthTypeEnum() ?: AuthType.PASSWORD
         authSpinner.setSelection(authOptions.indexOf(savedAuth).coerceAtLeast(0))
 
-        // Key spinner — populated from key store.
         val keyAdapter = ArrayAdapter(
             this,
             android.R.layout.simple_spinner_item,
@@ -386,13 +376,11 @@ class OciManagerActivity : AppCompatActivity() {
         ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
         keySpinner.adapter = keyAdapter
 
-        // Restore previously selected key by keyId.
         val savedKeyIndex = existing?.keyId
             ?.let { id -> storedKeys.indexOfFirst { it.keyId == id } }
             ?.takeIf { it >= 0 } ?: 0
         if (storedKeys.isNotEmpty()) keySpinner.setSelection(savedKeyIndex)
 
-        // Show/hide key picker based on selected auth method.
         fun updateKeyVisibility(authType: AuthType) {
             val needsKey = authType == AuthType.PUBLIC_KEY
             keyLabel.visibility = if (needsKey) View.VISIBLE else View.GONE
@@ -424,8 +412,6 @@ class OciManagerActivity : AppCompatActivity() {
                     storedKeys[keySpinner.selectedItemPosition].keyId
                 } else null
 
-                // Build the ConnectionProfile — reuse existing ID to update
-                // in place rather than accumulate orphan rows.
                 val profile = (existing ?: ConnectionProfile(
                     name = "OCI: ${inst.displayName}",
                     host = publicIp,
@@ -442,13 +428,11 @@ class OciManagerActivity : AppCompatActivity() {
                     modifiedAt = System.currentTimeMillis()
                 )
 
-                // Persist in background, then launch.
                 lifecycleScope.launch {
                     withContext(Dispatchers.IO) {
                         app.database.connectionDao().insertConnection(profile)
                     }
-                    Logger.i("OciManager", "Launching SSH to $username@$publicIp " +
-                        "(auth=${authType.name}, key=$keyId) for ${inst.displayName}")
+                    Logger.i(TAG, "Launching SSH to $username@$publicIp (auth=${authType.name}, key=$keyId) for ${inst.displayName}")
                     val intent = TabTerminalActivity.createIntent(this@OciManagerActivity, profile, autoConnect = true)
                     startActivity(intent)
                 }
@@ -457,98 +441,75 @@ class OciManagerActivity : AppCompatActivity() {
             .show()
     }
 
-    // ---------- Adapter -----------------------------------------------
+    // ── UI helpers ────────────────────────────────────────────────────────────
 
-    private class InstanceAdapter(
+    private fun showProgress(message: String) {
+        runOnUiThread {
+            progressBar.visibility = View.VISIBLE
+            statusText.visibility = View.VISIBLE
+            statusText.text = message
+        }
+    }
+
+    private fun hideProgress() {
+        runOnUiThread {
+            progressBar.visibility = View.GONE
+            statusText.visibility = View.GONE
+        }
+    }
+
+    private fun showError(message: String) {
+        runOnUiThread {
+            progressBar.visibility = View.GONE
+            statusText.visibility = View.VISIBLE
+            statusText.text = "Error: $message"
+        }
+    }
+
+    // ── Adapter ───────────────────────────────────────────────────────────────
+
+    private inner class InstanceAdapter(
         private val items: List<OciInstance>,
-        private val onAction: (OciInstance, OciInstanceAction) -> Unit,
-        private val onSshConnect: (OciInstance) -> Unit
+        private val onClick: (OciInstance) -> Unit
     ) : RecyclerView.Adapter<InstanceAdapter.VH>() {
 
-        class VH(view: View) : RecyclerView.ViewHolder(view) {
-            val name: TextView = view.findViewById(R.id.instance_name)
-            val state: TextView = view.findViewById(R.id.instance_state)
-            val info: TextView = view.findViewById(R.id.instance_info)
-            val ip: TextView = view.findViewById(R.id.instance_ip)
-            val start: Button = view.findViewById(R.id.start_button)
-            val stop: Button = view.findViewById(R.id.stop_button)
-            val softStop: Button = view.findViewById(R.id.softstop_button)
-            val reset: Button = view.findViewById(R.id.reset_button)
-            val softReset: Button = view.findViewById(R.id.softreset_button)
-            val sshConnect: Button = view.findViewById(R.id.ssh_connect_button)
+        inner class VH(view: View) : RecyclerView.ViewHolder(view) {
+            val name: TextView = view.findViewById(R.id.vm_name)
+            val state: TextView = view.findViewById(R.id.vm_state)
+            val info: TextView = view.findViewById(R.id.vm_info)
+            val ip: TextView = view.findViewById(R.id.vm_ip)
         }
 
-        override fun onCreateViewHolder(parent: android.view.ViewGroup, viewType: Int): VH {
-            val v = android.view.LayoutInflater.from(parent.context)
-                .inflate(R.layout.item_oci_instance, parent, false)
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
+            val v = layoutInflater.inflate(R.layout.item_hypervisor_vm, parent, false)
             return VH(v)
         }
 
-        override fun getItemCount(): Int = items.size
+        override fun getItemCount() = items.size
 
         override fun onBindViewHolder(holder: VH, position: Int) {
             val inst = items[position]
             holder.name.text = inst.displayName
             holder.state.text = inst.lifecycleState
+            holder.state.setTextColor(stateColor(inst.lifecycleState))
             holder.info.text = "${inst.shape} · ${inst.availabilityDomain}"
 
             val ipParts = mutableListOf<String>()
             inst.publicIp?.let { ipParts += "Public: $it" }
             inst.privateIp?.let { ipParts += "Private: $it" }
             if (ipParts.isNotEmpty()) {
-                holder.ip.visibility = View.VISIBLE
                 holder.ip.text = ipParts.joinToString(" · ")
-            } else holder.ip.visibility = View.GONE
-
-            holder.state.setTextColor(
-                when (inst.lifecycleState.uppercase()) {
-                    "RUNNING" -> 0xFF4CAF50.toInt()
-                    "STOPPED", "TERMINATED" -> 0xFFF44336.toInt()
-                    else -> 0xFFFF9800.toInt()
-                }
-            )
-
-            // Show/hide buttons by state — same UX rule as ProxmoxAdapter.
-            when (inst.lifecycleState.uppercase()) {
-                "RUNNING" -> {
-                    holder.start.visibility = View.GONE
-                    holder.stop.visibility = View.VISIBLE
-                    holder.softStop.visibility = View.VISIBLE
-                    holder.reset.visibility = View.VISIBLE
-                    holder.softReset.visibility = View.VISIBLE
-                }
-                "STOPPED", "TERMINATED" -> {
-                    holder.start.visibility = View.VISIBLE
-                    holder.stop.visibility = View.GONE
-                    holder.softStop.visibility = View.GONE
-                    holder.reset.visibility = View.GONE
-                    holder.softReset.visibility = View.GONE
-                }
-                else -> {
-                    holder.start.visibility = View.VISIBLE
-                    holder.stop.visibility = View.VISIBLE
-                    holder.softStop.visibility = View.GONE
-                    holder.reset.visibility = View.GONE
-                    holder.softReset.visibility = View.GONE
-                }
-            }
-
-            holder.start.setOnClickListener { onAction(inst, OciInstanceAction.START) }
-            holder.stop.setOnClickListener { onAction(inst, OciInstanceAction.STOP) }
-            holder.softStop.setOnClickListener { onAction(inst, OciInstanceAction.SOFTSTOP) }
-            holder.reset.setOnClickListener { onAction(inst, OciInstanceAction.RESET) }
-            holder.softReset.setOnClickListener { onAction(inst, OciInstanceAction.SOFTRESET) }
-
-            // SSH Connect — only meaningful for RUNNING instances that have
-            // a resolved public IP. Hidden when the instance is stopped or
-            // the VNIC walk didn't find a public address.
-            val isRunning = inst.lifecycleState.equals("RUNNING", ignoreCase = true)
-            if (isRunning && !inst.publicIp.isNullOrBlank()) {
-                holder.sshConnect.visibility = View.VISIBLE
-                holder.sshConnect.setOnClickListener { onSshConnect(inst) }
+                holder.ip.visibility = View.VISIBLE
             } else {
-                holder.sshConnect.visibility = View.GONE
+                holder.ip.visibility = View.GONE
             }
+            holder.itemView.setOnClickListener { onClick(inst) }
+        }
+
+        private fun stateColor(state: String): Int = when (state.uppercase()) {
+            "RUNNING"               -> 0xFF4CAF50.toInt()
+            "STOPPED", "TERMINATED" -> 0xFFF44336.toInt()
+            else                    -> 0xFFFF9800.toInt()
         }
     }
 }

@@ -178,6 +178,11 @@ class HypervisorEditActivity : AppCompatActivity() {
             dropdownSshIdentity.setOnItemClickListener { _, _, position, _ ->
                 selectedSshIdentityId = if (position == 0) null
                 else availableSshKeys.getOrNull(position - 1)?.keyId
+                // Hide password field when a key is selected; reveal it when reverting to none.
+                // Only applies when no account is chosen (account selection owns layoutPassword too).
+                if (selectedAccountId == null) {
+                    layoutPassword.visibility = if (position > 0) View.GONE else View.VISIBLE
+                }
             }
         }
     }
@@ -626,6 +631,10 @@ class HypervisorEditActivity : AppCompatActivity() {
                         else 0
                         dropdownSshIdentity.setText(keyLabels[keyIdx], false)
                         selectedSshIdentityId = if (keyIdx == 0) null else keys[keyIdx - 1].keyId
+                        // Reflect key selection in password field visibility immediately on load.
+                        if (selectedSshIdentityId != null && selectedAccountId == null) {
+                            layoutPassword.visibility = View.GONE
+                        }
                     }
                 }
             } catch (e: Exception) {
