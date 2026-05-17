@@ -75,13 +75,29 @@ object Logger {
     private val RE_IPV6_FULL     = Regex("""(?<![:\w])(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}(?![:\w])""")
     private val RE_IPV6_COMP     = Regex("""(?<![:\w])(?:[0-9a-fA-F]{1,4}:){0,6}::(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{0,4})?(?![:\w])""")
     private val RE_IPV4          = Regex("""\b(?:\d{1,3}\.){3}\d{1,3}\b""")
-    private val RE_HOSTNAME      = Regex("""\b[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.([a-zA-Z]{2,}|\d{1,3})\b""")
+    // RE_HOSTNAME: TLD must contain at least one letter (not just digits) so
+    // version numbers like "2.0", "8.7", "SSH-2.0" are not matched as hostnames.
+    private val RE_HOSTNAME      = Regex("""\b[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.([a-zA-Z][a-zA-Z0-9]{1,})\b""")
     private val RE_USER_AT    = Regex("""([a-zA-Z0-9_.-]+)@([a-zA-Z0-9.-]+)""")
     private val RE_HOME_PATH  = Regex("""/home/[a-zA-Z0-9_-]+""")
     private val RE_USERS_PATH = Regex("""/Users/[a-zA-Z0-9_-]+""")
-    // Domain suffixes / keywords that are always safe to keep as-is
+    // Domain suffixes / keywords that are always safe to keep as-is.
+    // SAFE_DOMAIN_KEYWORDS covers SSH algorithm vendor domains (openssh.com,
+    // libssh.org), JVM runtime packages (java, javax, dalvik, kotlin), and
+    // third-party library packages (okhttp, jsch) so that stack traces and
+    // SSH algorithm-name strings like "chacha20-poly1305@openssh.com" are
+    // preserved verbatim instead of being anonymized.
     private val SAFE_DOMAIN_SUFFIXES = setOf(".com", ".org", ".net")
-    private val SAFE_DOMAIN_KEYWORDS = setOf("android", "google", "github")
+    private val SAFE_DOMAIN_KEYWORDS = setOf(
+        // public cloud / OS / dev tool domains — add diagnostic context
+        "android", "google", "github",
+        // SSH algorithm vendor domains embedded in algorithm names
+        "openssh", "libssh", "dropbear",
+        // JVM / Android runtime packages that appear in stack traces
+        "java", "javax", "kotlin", "dalvik", "sun.",
+        // third-party libraries whose class names appear in stack traces
+        "okhttp", "jsch", "okio",
+    )
 
     /**
      * Initialize the logger
@@ -314,12 +330,16 @@ object Logger {
      *  • SSH private-key PEM blocks
      *  • SSH public keys
      *  • SSH key fingerprints         (SHA256:… and MD5:xx:xx:… forms) → [FINGERPRINT]
-     *  • user@host patterns → user1@server1 (session-consistent mapping)
+     *  • user@host patterns → user1@server1 (session-consistent mapping;
+     *                         SSH algorithm names like chacha20-poly1305@openssh.com
+     *                         are preserved verbatim via the safe-domain list)
      *  • IPv6 addresses     → IP1, IP2, … (all RFC 4291 forms; bracket, v4-mapped,
      *                         fully-expanded, and compressed; processed before IPv4
      *                         so mixed-form addresses are replaced as a unit)
      *  • IPv4 addresses     → IP1, IP2, … (session-consistent)
-     *  • private hostnames  → server1, server2, … (well-known domains kept)
+     *  • private hostnames  → server1, server2, … (safe-domain list preserved;
+     *                         version numbers like "2.0" / "8.7" are excluded by
+     *                         requiring at least one letter in the TLD)
      *  • /home/<name> and /Users/<name> paths
      */
     private fun sanitizeForPublic(message: String): String {
@@ -345,10 +365,19 @@ object Logger {
 
         // ── user@host (before individual IP/hostname passes to avoid double
         //    processing the same token) ────────────────────────────────────
+        // SSH algorithm names like "chacha20-poly1305@openssh.com" match
+        // user@host syntactically but are not credentials. Preserve any
+        // match whose host part is a safe domain verbatim.
         s = RE_USER_AT.replace(s) { match ->
-            val anonUser = userMap.getOrPut(match.groupValues[1]) { "user${++userCounter}" }
-            val anonHost = hostMap.getOrPut(match.groupValues[2]) { "server${++hostCounter}" }
-            "$anonUser@$anonHost"
+            val host = match.groupValues[2]
+            if (SAFE_DOMAIN_SUFFIXES.any { host.endsWith(it) } ||
+                SAFE_DOMAIN_KEYWORDS.any { host.contains(it) }) {
+                match.value  // algorithm name / public domain — keep as-is
+            } else {
+                val anonUser = userMap.getOrPut(match.groupValues[1]) { "user${++userCounter}" }
+                val anonHost = hostMap.getOrPut(host) { "server${++hostCounter}" }
+                "$anonUser@$anonHost"
+            }
         }
 
         // ── IPv6 addresses (before IPv4 — mixed forms must be caught whole) ──
