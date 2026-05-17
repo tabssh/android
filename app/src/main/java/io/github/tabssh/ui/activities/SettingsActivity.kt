@@ -784,6 +784,24 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
             clearLogs()
             true
         }
+
+        // Test crash — debug builds only.  Throws a RuntimeException on the
+        // main thread so the UncaughtExceptionHandler fires and the crash
+        // dialog appears, letting developers verify crash reporting end-to-end.
+        val testCrashPref = findPreference<androidx.preference.Preference>("test_crash")
+        if (io.github.tabssh.BuildConfig.DEBUG_MODE) {
+            testCrashPref?.setOnPreferenceClickListener {
+                throw RuntimeException(
+                    "Test crash — verify crash dialog\n" +
+                    "Sensitive data that must be redacted: host=192.168.1.10 " +
+                    "user=admin password=hunter2 token=abc123secret"
+                )
+                @Suppress("UNREACHABLE_CODE")
+                true
+            }
+        } else {
+            testCrashPref?.isVisible = false
+        }
     }
 
     private fun showLogViewer(title: String, logType: String) {

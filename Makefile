@@ -15,7 +15,7 @@ DOCKER_RUN := docker run --rm --network=host \
 	-v $(shell pwd):/workspace \
 	-v $(shell pwd)/.android-keystore:/root/.android \
 	-w /workspace \
-	-e ANDROID_HOME=/opt/android-sdk \
+	-e ANDROID_HOME=/opt/android \
 	-e GRADLE_USER_HOME=/workspace/.gradle
 
 # Colors
@@ -56,11 +56,19 @@ clean: ## Clean build artifacts
 	@rm -rf $(BINARIES)/*.apk app/build/ .gradle/
 	@echo -e "$(GREEN)✅ Cleaned$(NC)"
 
+ADB := $(shell command -v adb 2>/dev/null || find /opt/android /opt/android-sdk -name adb -type f 2>/dev/null | head -1)
+
 install: ## Install APK to device
-	@adb install -r $(BINARIES)/tabssh-android-universal.apk
+	@$(ADB) install -r $(BINARIES)/tabssh-android-universal.apk
 
 logs: ## View device logs
-	@adb logcat | grep -E "TabSSH|tabssh"
+	@$(ADB) logcat | grep -E "TabSSH|tabssh"
+
+test: ## Run UI tests on connected device/emulator (TEST=name or all)
+	@scripts/ui-test.sh --serial $(shell $(ADB) devices | awk '/\tdevice$$/{print $$1; exit}') $(if $(TEST),$(TEST),all)
+
+test-install: ## Build, install, then run UI tests
+	$(MAKE) build install test
 
 image: ## Build Docker image
 	@echo -e "$(BLUE)🐳 Building image...$(NC)"

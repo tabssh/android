@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application>
+        <!-- Exported in debug builds only so ui-test.sh can launch directly via adb -->
+        <activity
+            android:name=".ui.activities.SettingsActivity"
+            android:exported="true"
+            tools:replace="android:exported" />
+        <activity
+            android:name=".ui.activities.CrashReportActivity"
+            android:exported="true"
+            tools:replace="android:exported" />
+        <activity
+            android:name=".ui.activities.HypervisorEditActivity"
+            android:exported="true"
+            tools:replace="android:exported" />
+    </application>
+</manifest>
