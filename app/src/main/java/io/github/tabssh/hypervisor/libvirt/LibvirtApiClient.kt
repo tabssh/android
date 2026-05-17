@@ -70,9 +70,10 @@ class LibvirtApiClient(
         // the hypervisor UI handles its own TLS pinning separately.
         config["StrictHostKeyChecking"] = "no"
         if (keyId != null) {
-            // Load the SSH key. retrieveJSchBytes() returns JSch-native PEM bytes
-            // encrypted in SharedPreferences with a Keystore-backed AES-GCM key.
-            val jschBytes = app.keyStorage.retrieveJSchBytes(keyId)
+            // Load the SSH key. getJSchBytesWithFallback() returns JSch-native PEM bytes,
+            // reconstructing them from stored PKCS#8 DER for generated keys that pre-date
+            // the JSch bytes cache (and caching the result for future connects).
+            val jschBytes = app.keyStorage.getJSchBytesWithFallback(keyId)
             if (jschBytes != null) {
                 // Prefer the byte-array addIdentity variant so we never write a
                 // temp file (avoids data leaks on unencrypted external storage).

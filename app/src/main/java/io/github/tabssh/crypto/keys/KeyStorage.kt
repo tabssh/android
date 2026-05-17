@@ -148,6 +148,14 @@ class KeyStorage(private val context: Context) {
             )
             
             if (keyId != null) {
+                // Store JSch-native bytes so connect-time paths (LibvirtApiClient,
+                // SSHConnection) have the right format without needing to reconstruct.
+                try {
+                    val jschBytes = toJSchKeyBytes(keyPair.private, keyPair.public, keyType)
+                    storeJSchBytes(keyId, jschBytes)
+                } catch (e: Exception) {
+                    Logger.w("KeyStorage", "Could not store JSch bytes for generated key $keyId (non-fatal)", e)
+                }
                 Logger.i("KeyStorage", "Generated $keyType key: $keyName")
                 GenerateResult.Success(keyId, keyPair, fingerprint)
             } else {
@@ -530,6 +538,43 @@ class KeyStorage(private val context: Context) {
             cipher.doFinal(android.util.Base64.decode(encData, android.util.Base64.NO_WRAP))
         } catch (e: Exception) {
             Logger.e("KeyStorage", "Failed to retrieve JSch bytes for $keyId", e)
+            null
+        }
+    }
+
+    /**
+     * Get JSch-native bytes for [keyId], with a fallback for keys that were
+     * generated or imported before the jsch_bytes store was introduced.
+     *
+     * Order:
+     *  1. Return cached JSch bytes from [retrieveJSchBytes] (fast path).
+     *  2. Reconstruct from stored PKCS#8 DER via [toJSchKeyBytes] and cache
+     *     the result so future calls hit the fast path.
+     *
+     * Returns null if the key does not exist or cannot be reconstructed.
+     */
+    suspend fun getJSchBytesWithFallback(keyId: String): ByteArray? = withContext(Dispatchers.IO) {
+        retrieveJSchBytes(keyId)?.let { return@withContext it }
+
+        // Fallback: reconstruct from stored PKCS#8 DER
+        return@withContext try {
+            val privateKey = retrievePrivateKey(keyId) ?: run {
+                Logger.e("KeyStorage", "getJSchBytesWithFallback: no private key for $keyId")
+                return@withContext null
+            }
+            val storedKey = database.keyDao().getKeyById(keyId) ?: run {
+                Logger.e("KeyStorage", "getJSchBytesWithFallback: no metadata for $keyId")
+                return@withContext null
+            }
+            val keyType = KeyType.valueOf(storedKey.keyType)
+            val publicKey = getPublicKeyFromPrivate(privateKey)
+            val jschBytes = toJSchKeyBytes(privateKey, publicKey, keyType)
+            // Cache so next call is fast
+            storeJSchBytes(keyId, jschBytes)
+            Logger.i("KeyStorage", "getJSchBytesWithFallback: rebuilt and cached JSch bytes for $keyId")
+            jschBytes
+        } catch (e: Exception) {
+            Logger.e("KeyStorage", "getJSchBytesWithFallback: failed for $keyId", e)
             null
         }
     }

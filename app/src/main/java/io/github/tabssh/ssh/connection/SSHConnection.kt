@@ -1109,62 +1109,18 @@ class SSHConnection(
     
     /**
      * Retrieve JSch-native bytes for a keyId.
-     * 1. Try the dedicated jsch_bytes_ store (set at import time for all formats).
-     * 2. Fallback: reconstruct from stored PKCS#8 DER + convert via KeyStorage.toJSchKeyBytes().
-     *    This handles keys imported before the jsch_bytes store was introduced.
+     * Delegates to [KeyStorage.getJSchBytesWithFallback] which handles both
+     * the fast-path (bytes cached at import/generate time) and the fallback
+     * (reconstruct from stored PKCS#8 DER for pre-cache legacy keys).
      */
-    private suspend fun getJSchBytes(keyId: String): ByteArray? = withContext(Dispatchers.IO) {
+    private suspend fun getJSchBytes(keyId: String): ByteArray? {
         val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
         if (app == null) {
             Logger.e("SSHConnection", "getJSchBytes: Application context is null")
-            return@withContext null
+            return null
         }
-
         Logger.d("SSHConnection", "getJSchBytes: Looking up key $keyId")
-
-        // Preferred path — JSch-native bytes stored at import time
-        val stored = app.keyStorage.retrieveJSchBytes(keyId)
-        if (stored != null) {
-            Logger.d("SSHConnection", "getJSchBytes: Found cached JSch bytes (${stored.size} bytes)")
-            return@withContext stored
-        }
-
-        Logger.d("SSHConnection", "getJSchBytes: No cached JSch bytes, attempting fallback conversion")
-
-        // Fallback for legacy stored keys — convert PKCS#8 DER on-the-fly
-        return@withContext try {
-            val privateKey = app.keyStorage.retrievePrivateKey(keyId)
-            if (privateKey == null) {
-                Logger.e("SSHConnection", "getJSchBytes: Private key not found for $keyId")
-                return@withContext null
-            }
-            Logger.d("SSHConnection", "getJSchBytes: Retrieved private key (algorithm=${privateKey.algorithm})")
-
-            val storedKey = app.database.keyDao().getKeyById(keyId)
-            if (storedKey == null) {
-                Logger.e("SSHConnection", "getJSchBytes: StoredKey metadata not found for $keyId")
-                return@withContext null
-            }
-            Logger.d("SSHConnection", "getJSchBytes: Key metadata - type=${storedKey.keyType}, name=${storedKey.name}")
-
-            val keyType = io.github.tabssh.crypto.keys.KeyType.valueOf(storedKey.keyType)
-            // Public key is derived from the private key for the fallback
-            Logger.d("SSHConnection", "getJSchBytes: Deriving public key from private key")
-            val publicKey = app.keyStorage.getPublicKeyFromPrivate(privateKey)
-            Logger.d("SSHConnection", "getJSchBytes: Public key derived successfully")
-
-            val jschBytes = app.keyStorage.toJSchKeyBytes(privateKey, publicKey, keyType)
-            Logger.d("SSHConnection", "getJSchBytes: Converted to JSch format (${jschBytes.size} bytes)")
-
-            // Cache for next time
-            app.keyStorage.storeJSchBytes(keyId, jschBytes)
-            Logger.d("SSHConnection", "getJSchBytes: Cached JSch bytes for future use")
-
-            jschBytes
-        } catch (e: Exception) {
-            Logger.e("SSHConnection", "getJSchBytes: Failed to build JSch bytes for $keyId", e)
-            null
-        }
+        return app.keyStorage.getJSchBytesWithFallback(keyId)
     }
 
     /**
