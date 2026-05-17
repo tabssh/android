@@ -1,6 +1,7 @@
 package io.github.tabssh.ssh.connection
 
 import com.jcraft.jsch.*
+import io.github.tabssh.network.NetworkAwareReconnector
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.utils.logging.Logger
@@ -106,13 +107,17 @@ class SSHConnection(
     val bytesTransferred: StateFlow<Long> = _bytesTransferred.asStateFlow()
 
     private var connectJob: Job? = null
-    private var reconnectJob: Job? = null
-    private var reconnectAttempts = 0
+
     // Auto-reconnect should only fire after a session has been *established*
     // and then dropped — not on initial-connect failures (host unreachable,
     // wrong port, …). Without this gate the reconnect loop runs in the
     // background after the activity has bailed.
     private var hadSuccessfulConnect = false
+
+    // Network-aware reconnector — pauses when the device is offline, wakes
+    // immediately when the link returns, falls back to a 5-minute poll.
+    // null until the first successful connect (same guard as hadSuccessfulConnect).
+    private var reconnector: NetworkAwareReconnector? = null
 
     private val listeners = mutableListOf<ConnectionListener>()
 
@@ -143,9 +148,18 @@ class SSHConnection(
     }
     
     /**
-     * Connect to the SSH server
+     * Connect to the SSH server.
+     *
+     * This is safe to call both from user UI actions and from the
+     * [NetworkAwareReconnector]. When called from user code directly,
+     * [NetworkAwareReconnector.onUserInitiated] is called first to cancel
+     * any pending backoff timer so the user is never blocked.
      */
     suspend fun connect(): Boolean = withContext(Dispatchers.IO) {
+        // If this is a direct user-driven call (not from the reconnector),
+        // cancel any pending retry timer so we connect immediately.
+        reconnector?.onUserInitiated()
+
         // Trust the JSch session over our state field — after a remote-side
         // EOF the JSch session tears down without our DISCONNECTED transition
         // firing, leaving _connectionState stuck at CONNECTED. If the session
@@ -159,7 +173,7 @@ class SSHConnection(
             Logger.i("SSHConnection", "State was ${_connectionState.value} but JSch session is dead — reconnecting")
             _connectionState.value = ConnectionState.DISCONNECTED
         }
-        
+
         connectJob?.cancel()
         connectJob = scope.launch(Dispatchers.IO) {
             try {
@@ -295,10 +309,27 @@ class SSHConnection(
                 applyAdvancedSettings(activeSession)
 
                 _connectionState.value = ConnectionState.CONNECTED
-                reconnectAttempts = 0
                 hadSuccessfulConnect = true
+
+                // First successful connect — create the reconnector and start
+                // its network observer + poll loop. Subsequent successful
+                // reconnects call onConnectionRestored() to reset the backoff.
+                if (reconnector == null) {
+                    val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
+                    if (app != null) {
+                        reconnector = NetworkAwareReconnector(
+                            networkDetector = app.networkDetector,
+                            scope = scope,
+                            tag = "SSHConnection/${profile.host}:${profile.port}",
+                            reconnect = { connect() },
+                        ).also { it.start() }
+                    }
+                } else {
+                    reconnector?.onConnectionRestored()
+                }
+
                 notifyListeners { onConnected(id) }
-                
+
                 Logger.i("SSHConnection", "Connection complete to ${profile.host}")
                 
             } catch (e: Exception) {
@@ -1394,9 +1425,8 @@ class SSHConnection(
         Logger.i("SSHConnection", "Disconnecting from ${profile.host}")
 
         connectJob?.cancel()
-        reconnectJob?.cancel()
-        reconnectJob = null
-        reconnectAttempts = 0
+        reconnector?.cancel()
+        reconnector = null
         hadSuccessfulConnect = false
 
         // Issue #163 — close every channel a tab opened against this session,
@@ -1473,21 +1503,13 @@ class SSHConnection(
             return
         }
 
-        // Exponential backoff: 5 s → 10 s → 20 s → 40 s → 80 s → 160 s → 300 s (cap).
-        // No hard retry limit — keep trying until the user explicitly disconnects or
-        // the connection succeeds. Three quick retries is not enough when a network
-        // blip is the cause; the host may be reachable again by attempt 4 or 5.
-        reconnectAttempts++
-        val delayMs = minOf(5_000L shl minOf(reconnectAttempts - 1, 6), 300_000L)
-        Logger.i(
-            "SSHConnection",
-            "Scheduling reconnect attempt $reconnectAttempts in ${delayMs / 1000}s"
-        )
-        reconnectJob?.cancel()
-        reconnectJob = scope.launch {
-            delay(delayMs)
-            connect()
-        }
+        // Delegate reconnection to NetworkAwareReconnector which handles:
+        //  - exponential backoff (5 s → … → 5 min cap)
+        //  - pausing when the device is offline (no wasted retries)
+        //  - immediate wake when the network link returns
+        //  - 5-minute fallback poll for missed network callbacks
+        reconnector?.onConnectionLost()
+            ?: Logger.w("SSHConnection", "reconnector is null after successful connect — this is a bug")
     }
     
     /**

@@ -52,6 +52,9 @@ class TabSSHApplication : Application() {
     val performanceManager by lazy { PerformanceManager(this) }
     val auditLogManager by lazy { io.github.tabssh.audit.AuditLogManager(this, database, preferencesManager) }
     val tabManager by lazy { io.github.tabssh.ui.tabs.TabManager() }
+    /** App-wide network state observer. Single instance so every connection
+     *  type (SSH, VNC, Telnet) shares one [ConnectivityManager] callback. */
+    val networkDetector by lazy { io.github.tabssh.network.detection.NetworkDetector(this) }
 
     // ANR watchdog — single instance, only running when debug logging is
     // active. Public start/stop so the Settings → Logging toggle can flip
