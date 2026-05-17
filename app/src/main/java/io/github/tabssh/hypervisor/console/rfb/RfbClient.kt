@@ -228,7 +228,7 @@ class RfbClient(
         fbWidth = din.readUnsignedShort()
         fbHeight = din.readUnsignedShort()
         val serverFmt = PixelFormat.readFrom(din)
-        Logger.i(TAG, "Server framebuffer: ${fbWidth}×$fbHeight, format=$serverFmt")
+        Logger.i(TAG, "Server framebuffer: ${fbWidth}×$fbHeight bpp=${serverFmt.bitsPerPixel}/depth=${serverFmt.depth}")
 
         val nameLen = din.readInt()
         val nameBytes = ByteArray(nameLen); din.readFully(nameBytes)
@@ -297,7 +297,6 @@ class RfbClient(
     private fun handleFramebufferUpdate() {
         din.skipBytes(1) // padding
         val numRects = din.readUnsignedShort()
-        Logger.d(TAG, "FramebufferUpdate: $numRects rects")
 
         // numRects == 0xFFFF means "unlimited"; stop on ENC_LAST_RECT instead
         var i = 0
@@ -309,11 +308,7 @@ class RfbClient(
             val encoding = din.readInt()
 
             when (encoding) {
-                RfbConstants.ENC_LAST_RECT -> {
-                    // No data follows; the update is complete
-                    Logger.d(TAG, "LastRect — ending FramebufferUpdate early")
-                    break
-                }
+                RfbConstants.ENC_LAST_RECT -> break // no data; update is complete
                 RfbConstants.ENC_DESKTOP_SIZE -> {
                     // Server-side resize: rx/ry hold the new dimensions
                     Logger.i(TAG, "DesktopSize pseudo-rect: ${rx}×$ry (was ${fbWidth}×$fbHeight)")
