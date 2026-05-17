@@ -940,6 +940,19 @@ class VMConsoleActivity : AppCompatActivity() {
         }
     }
 
+    override fun onStop() {
+        super.onStop()
+        // Disconnect the console WebSocket/RFB loop when the activity is
+        // backgrounded. The tight RFB polling loop writes framebuffer data to
+        // a pipe; if the pipe buffer fills (no consumer reading while hidden),
+        // blocking writes stall the I/O thread pool and make the app
+        // unresponsive. Disconnecting here is safe — the user can reconnect
+        // when they bring the activity back to the foreground.
+        consoleManager?.disconnect()
+        termuxBridge?.cleanup()
+        try { directVncSocket?.close() } catch (_: Exception) {}
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         vncConsoleChannel = null

@@ -369,6 +369,11 @@ class PerformanceFragment : Fragment() {
                 
                 result.onFailure { error ->
                     Logger.e("PerformanceFragment", "Failed to collect metrics", error)
+                    // Stop the monitoring loop when the SSH connection is gone —
+                    // avoids a continuous stream of "Not connected" errors every 5 s.
+                    if (error is IllegalStateException && !(sshConnection?.isConnected() ?: false)) {
+                        stopMonitoring()
+                    }
                 }
                 
             } catch (e: Exception) {

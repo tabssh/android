@@ -1459,6 +1459,29 @@ class TabTerminalActivity : AppCompatActivity() {
                     Logger.d("TabTerminalActivity", "Found profile: ${profile.name}, identityId: ${profile.identityId}")
                     if (autoConnect) {
                         connectToProfile(profile)
+                    } else {
+                        // autoConnect=false means "surface the existing session" (e.g. notification tap).
+                        // connectToProfile already handles the reattach short-circuit, but we must
+                        // not open a NEW connection. Find a live tab and switch to it; if none
+                        // exists the session is dead — close this activity so the user lands on
+                        // MainActivity rather than a blank terminal screen.
+                        val existing = tabManager.getAllTabs().firstOrNull {
+                            it.profile.id == profile.id && it.isConnected()
+                        }
+                        if (existing != null) {
+                            val idx = tabManager.getAllTabs().indexOf(existing)
+                            Logger.i("TabTerminalActivity", "Surfacing live tab idx=$idx for ${profile.name}")
+                            if (idx >= 0) {
+                                tabManager.setActiveTab(idx)
+                                switchToTab(idx)
+                            }
+                        } else {
+                            Logger.w(
+                                "TabTerminalActivity",
+                                "Notification tap: no live tab for ${profile.name} — closing activity"
+                            )
+                            finish()
+                        }
                     }
                 } else {
                     Logger.e("TabTerminalActivity", "Profile not found for ID: $connectionProfileId")

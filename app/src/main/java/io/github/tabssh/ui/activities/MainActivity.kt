@@ -1,6 +1,8 @@
 package io.github.tabssh.ui.activities
 
+import android.app.NotificationManager
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.view.MenuItem
 import android.view.View
@@ -86,6 +88,19 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
 
         app = application as TabSSHApplication
         backupManager = io.github.tabssh.backup.BackupManager(this)
+
+        // Sweep any per-host SSH notifications that were orphaned by a prior
+        // force-stop or OOM kill (onDestroy never ran → notifications survived
+        // their normal 20-min safety-net timeout but are now stale).
+        // The service sweeps on its own onCreate, but it only starts when the
+        // user initiates a new connection — opening MainActivity is the
+        // earliest reliable opportunity to clear leftover entries.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val nm = getSystemService(NotificationManager::class.java)
+            nm.activeNotifications
+                .filter { it.id in 10_000..99_999 }
+                .forEach { nm.cancel(it.id) }
+        }
 
         // Setup drawer with toolbar hamburger so the drawer is discoverable
         drawerLayout = findViewById(R.id.drawer_layout)

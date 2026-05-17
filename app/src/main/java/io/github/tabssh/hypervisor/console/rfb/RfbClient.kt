@@ -551,8 +551,14 @@ class RfbClient(
             i++
         }
 
-        // Request next incremental update immediately
+        // Throttle the next incremental update request to ~60 FPS max.
+        // Without this the loop spins as fast as the network allows: each
+        // FramebufferUpdate triggers an immediate request, which triggers
+        // another update, etc. The resulting pipe writes (to feed the
+        // terminal bridge) outpace the consumer when the activity is in the
+        // background, filling the pipe buffer and blocking the I/O thread.
         if (running.get()) {
+            Thread.sleep(16) // ~60 FPS ceiling
             sendUpdateRequest(0, 0, fbWidth, fbHeight, incremental = true)
         }
     }
