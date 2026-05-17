@@ -87,6 +87,82 @@ Do not volume-mount `/opt/android-sdk` — that overlays the baked SDK in the bu
 
 The device is on a remote server and cannot be connected via ADB. Logcat is unavailable. All debugging must be done via static code analysis only.
 
+## VNC-as-console architecture
+
+TabSSH treats VNC as a **text console transport**, not a GUI desktop viewer. The target users are server admins who want keyboard access to a machine's console (BIOS POST, boot loader, login prompt, text-mode shell). Full GUI viewers exist elsewhere; we are not that.
+
+### Philosophy
+
+- Render VNC output through `TermuxBridge` → `TerminalView`, exactly as SSH and Telnet do.
+- No framebuffer bitmap rendering for direct VNC connections. The VNC framebuffer is not displayed as a scaled image.
+- No mouse passthrough. No clipboard sync to remote desktop. No file drag-drop.
+- The same custom key row (Esc, Tab, Ctrl, Alt, arrows, Fn keys) and system keyboard used for SSH appear for VNC. `KeyboardHandler` translates Android `KeyEvent` codes to RFB `KeyEvent` messages using an X11 keysym table.
+- Terminal dimensions (cols × rows) are negotiated via RFB `SetDesktopSize` (pseudo-encoding 0xFFFFFE21, `ExtendedDesktopSize`). On view resize, send a new `SetDesktopSize` request — same path as SSH `resizePtyOf()`.
+- Send `FramebufferUpdateRequest` for the full framebuffer on connect; from then on the flow is: keys in → RFB KeyEvent out, RFB FramebufferUpdate in → feed raw bytes to `TermuxBridge` as if they were SSH stdout.
+
+### `VncConsoleChannel`
+
+`vnc/console/VncConsoleChannel.kt` — implements the same `InputStream` / `OutputStream` interface that `TermuxBridge` consumes:
+
+- **Input side** (server → terminal): RFB `FramebufferUpdate` messages are received and their raw pixel data is **not rendered**. Instead, for console-mode VNC, the channel extracts the ZRLE/Zlib-compressed text bytes or falls back to treating the raw framebuffer bytes as terminal output when the server is running in text/framebuffer mode. The clean path: negotiate `CopyRect` + `Raw` encodings only; this gives line-by-line byte changes that, for a text-mode console, are valid ANSI/VT100 sequences.
+- **Output side** (terminal → server): `KeyboardHandler` converts Android `KeyEvent` → X11 keysym → RFB `KeyEvent` (message type 4, down + up pair). No pointer events.
+- Piped `PipedInputStream` / `PipedOutputStream` pairs connect `VncConsoleChannel` to `TermuxBridge`, matching the `HypervisorConsoleManager.wireToTerminal()` pattern already used for hypervisor consoles (§11.6 of AI.md).
+
+### Keyboard rules for VNC
+
+- All keys go through `KeyboardHandler`, same code path as SSH.
+- X11 keysym table must cover at minimum: printable ASCII (0x0020–0x007E), Latin-1 supplements (0x00A0–0x00FF), and the control keysyms: BackSpace (0xFF08), Tab (0xFF09), Return (0xFF0D), Escape (0xFF1B), Delete (0xFFFF), cursor arrows (0xFF51–0xFF54), F1–F12 (0xFFBE–0xFFC9), Ctrl/Shift/Alt modifiers (0xFFE1–0xFFEA).
+- Ctrl+key sequences: send the modifier down, then the key, then the key up, then the modifier up — matching RFB spec §7.5.4.
+- Custom key row buttons map to the same keysyms as their SSH counterparts (e.g. Esc → 0xFF1B, Tab → 0xFF09).
+- Both custom keyboard and Android system keyboard must be present for VNC sessions. Do not suppress either.
+
+### Proxmox serial console requirements
+
+Proxmox `PROXMOX_TERM` (the `termproxy` endpoint) requires the VM to have a serial device configured:
+
+```
+# In Proxmox VM config (/etc/pve/qemu-server/<vmid>.conf):
+serial0: socket
+```
+
+Without it, the WebSocket frame `"unable to find a serial interface"` is returned and the terminal console path is unavailable.
+
+**Required error handling:** when `ConsoleWebSocket` receives the `"unable to find a serial interface"` binary frame, do not silently fall back to VNC graphical mode. Instead:
+
+1. Show a dismissible banner in `VMConsoleActivity`:  
+   *"Serial console unavailable — VM has no serial device. Add `serial0: socket` in Proxmox → VM Hardware, then reboot the VM. Falling back to VNC console mode."*
+2. Proceed with the `vncproxy` fallback, but open it through `VncConsoleChannel` (console mode), not `VncView` (GUI mode).
+
+The VNC fallback for Proxmox should be console-mode only — same `TerminalView` + `TermuxBridge` path. `VncView` (the graphical bitmap renderer) is reserved for future opt-in GUI mode and must not be the automatic fallback.
+
+### RFB session sizing
+
+- On connect: send `SetDesktopSize` immediately after `ServerInit`, using the current `TerminalView` cols × rows converted to pixels (cols × font_width_px, rows × font_height_px). Default: 80×24 cells.
+- On view resize (`TerminalView.onSizeChanged`): send a new `SetDesktopSize`. Do not send the initial 80×24 resize if the view has already measured — check `cols > 0 && rows > 0` before the initial send to avoid the double-resize race visible in logs (resize sent at 80×24, then re-sent at the measured size a few hundred milliseconds later).
+- `SetDesktopSize` is sent as a `SetEncodings` pseudo-encoding list including `ExtendedDesktopSize` (0xFFFFFE21) so the server knows to accept resize requests.
+
+### Direct VNC connections (ConnectionEditActivity)
+
+Direct VNC hosts (stored in `vnc_hosts` table, edited via `ConnectionEditActivity`) connect via `VncConsoleChannel` directly over TCP (no WebSocket wrapper). The connection flow:
+
+1. TCP connect to `VncHost.effectivePort` (default 5900).
+2. RFB version handshake (offer 3.8; accept 3.3/3.7/3.8).
+3. Security negotiation — respect `VncHost.securityType`:
+   - `"none"` → security type 1 (no auth).
+   - `"vnc_auth"` → security type 2 (DES challenge; password from `SecurePasswordManager` under key `vnc_identity_${identityId}` or `vnc_host_${id}`).
+   - `"auto"` → let server pick; if type 2 is offered, use it.
+4. `ClientInit` with `shared-flag = 0` (exclusive access for a console session).
+5. `SetEncodings`: Raw, CopyRect, ExtendedDesktopSize. No Zlib, no Tight, no ZRLE — text-mode consoles don't need compression encodings and the simpler set makes the byte-extraction path deterministic.
+6. `SetDesktopSize` with terminal dimensions.
+7. `FramebufferUpdateRequest` (incremental=0) for the full framebuffer.
+8. Wire to `TermuxBridge` via `VncConsoleChannel` piped streams.
+
+### What `VncView` is for
+
+`VncView` (the bitmap/graphical renderer) is **not** used for the console path. It exists for future opt-in graphical mode (e.g. a user explicitly wants to view a desktop). It is not wired to the Proxmox VNC fallback or to direct VNC connections in the current implementation. Any code path that reaches `VncView` today (graphical fallback in `VMConsoleActivity`) should be replaced with the `VncConsoleChannel` path.
+
+---
+
 ## Threading rules (Android-specific)
 
 - `lifecycleScope.launch {}` defaults to `Dispatchers.Main` — never call Keystore, database, or filesystem operations inside a bare launch without switching to `Dispatchers.IO`
