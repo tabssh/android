@@ -796,15 +796,28 @@ It also constructs `SyncMetadata` (with `BuildConfig.VERSION_NAME`, `Build.MODEL
 
 ## 10. Backup and restore
 
-`backup/BackupManager.kt` produces a **ZIP** containing structured JSON exports — independent of the SAF sync system.
+`backup/BackupManager.kt` produces a single encrypted-or-plain `.tabssh` JSON file (current `BACKUP_VERSION = 3`) or a legacy ZIP — independent of the SAF sync system.
 
-ZIP entries:
-- `metadata.json` — `BACKUP_VERSION = 1`, `createdAt`, `appVersion`, `deviceModel`, `androidVersion`, item counts.
-- `connections.json`, `keys.json`, `preferences.json`, `themes.json`, `certificates.json`, `host_keys.json`.
+**Wire format v2** (written by `BackupExporter`): each entity file is `{"v":2,"items":[<kotlinx.serialization entity JSON>,...]}`. Replaces the hand-rolled per-field v1 shape that silently dropped fields.
+
+**Entity files backed up:**
+`connections.json`, `keys.json`, `themes.json`, `certificates.json`, `host_keys.json`, `identities.json`, `connection_groups.json`, `snippets.json`, `hypervisors.json`, `hypervisor_accounts.json`, `workspaces.json`, `cloud_accounts.json`, `macros.json`, `monitor_slots.json`, `vnc_hosts.json`, `vnc_identities.json`
+
+**`preferences.json`** — hand-rolled v2 JSONObject with these categories:
+- `general` — autoBackup, backupFrequency, startupBehavior, language
+- `security` — passwordStorageLevel, requireBiometric, strictHostKeyChecking, clearClipboardTimeout
+- `terminal` — theme, fontSize, fontFamily, cursorStyle, cursorBlink, scrollbackLines
+- `ui` — maxTabs, confirmTabClose, appTheme, dynamicColors
+- `notifications` — notifications_enabled, show_connection_notifications, show_error_notifications, show_file_transfer_notifications, notification_vibrate
+- `monitoring` — monitoring_enabled, monitoring_run_in_battery_saver, monitoring_notify_down, monitoring_notify_recovery, monitoring_alert_cooldown_minutes, monitoring_default_cpu/memory/disk_threshold
+
+**Secrets policy:** connection passwords included only when `includePasswords=true`; all Keystore-bound values (SSH private keys, Identity.password, CloudAccount tokens, HypervisorProfile.password, OCI PEM key) never exported.
+
+**Tables excluded:** `tab_sessions` (runtime), `sync_state` (per-device), `audit_log` (large; export separately).
 
 API: `createBackup(outputUri, includePasswords, encryptBackup, password)` → `BackupResult`, `restoreBackup(inputUri, password)` → `RestoreResult`, `validateBackup(uri)`. Helpers: `BackupExporter`, `BackupImporter`, `BackupValidator`.
 
-The MainActivity drawer exposes Import/Export entries that fire SAF `ACTION_OPEN_DOCUMENT` / `ACTION_CREATE_DOCUMENT` and report restored counts in a confirmation dialog.
+The MainActivity drawer exposes Import/Export entries that fire SAF `ACTION_OPEN_DOCUMENT` / `ACTION_CREATE_DOCUMENT` and report restored counts in a confirmation dialog. Old v1 ZIP backups are still restorable via the `ZipInputStream` path in `BackupImporter`.
 
 ---
 
