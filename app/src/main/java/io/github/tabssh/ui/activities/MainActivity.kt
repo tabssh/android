@@ -18,9 +18,12 @@ import com.google.android.material.tabs.TabLayoutMediator
 import io.github.tabssh.BuildConfig
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.hypervisor.vnc.VncDirectConnector
+import io.github.tabssh.hypervisor.vnc.VncStreamHolder
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.HypervisorType
+import io.github.tabssh.storage.database.entities.VncHost
 import io.github.tabssh.ui.adapters.MainPagerAdapter
 import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.utils.logging.Logger
@@ -1183,13 +1186,30 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
      */
     private fun showQuickConnectDialog() {
         val view = layoutInflater.inflate(R.layout.dialog_quick_connect, null)
+        val chipGroupProtocol = view.findViewById<com.google.android.material.chip.ChipGroup>(R.id.chip_group_protocol)
+        val chipSsh = view.findViewById<com.google.android.material.chip.Chip>(R.id.chip_ssh)
+        val chipVnc = view.findViewById<com.google.android.material.chip.Chip>(R.id.chip_vnc)
         val hostInput = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.input_host)
         val hostLayout = view.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.layout_host)
         val portInput = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.input_port)
         val passwordInput = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.input_password)
+        val passwordLayout = view.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.layout_password)
         val switchSave = view.findViewById<com.google.android.material.materialswitch.MaterialSwitch>(R.id.switch_save_connection)
         val layoutSaveName = view.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.layout_save_name)
         val inputSaveName = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.input_save_name)
+
+        // Update hints when protocol selection changes.
+        chipGroupProtocol.setOnCheckedStateChangeListener { _, checkedIds ->
+            if (checkedIds.contains(R.id.chip_vnc)) {
+                hostLayout.hint = "hostname or IP"
+                portInput.setText("5900")
+                passwordLayout.hint = "VNC password (optional)"
+            } else {
+                hostLayout.hint = "hostname or user@hostname"
+                portInput.setText("22")
+                passwordLayout.hint = "Password (leave blank to use SSH key)"
+            }
+        }
 
         // Toggle: "Save this connection" reveals/hides the name field.
         switchSave.setOnCheckedChangeListener { _, checked ->
@@ -1206,7 +1226,6 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         dialog.setOnShowListener {
             dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val raw = hostInput.text.toString().trim()
-                val port = portInput.text.toString().toIntOrNull() ?: 22
                 val password = passwordInput.text.toString()
 
                 if (raw.isEmpty()) {
@@ -1215,21 +1234,84 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                 }
                 hostLayout.error = null
 
-                val (username, hostname) = resolveQuickConnectUser(raw)
                 val savePermanent = switchSave.isChecked
                 val saveName = inputSaveName.text?.toString()?.trim()
-                dialog.dismiss()
 
-                if (savePermanent) {
-                    saveAndConnect(
-                        name = saveName?.takeIf { it.isNotBlank() } ?: "$username@$hostname",
-                        username = username,
-                        hostname = hostname,
-                        port = port,
-                        password = password.takeIf { it.isNotEmpty() }
-                    )
+                if (chipVnc.isChecked) {
+                    val port = portInput.text.toString().toIntOrNull() ?: 5900
+                    dialog.dismiss()
+                    if (savePermanent) {
+                        lifecycleScope.launch {
+                            val now = System.currentTimeMillis()
+                            val vncHost = VncHost(
+                                id = java.util.UUID.randomUUID().toString(),
+                                name = saveName?.takeIf { it.isNotBlank() } ?: "$raw:$port",
+                                host = raw,
+                                port = port,
+                                createdAt = now,
+                                modifiedAt = now
+                            )
+                            try {
+                                app.database.vncHostDao().insert(vncHost)
+                                if (password.isNotEmpty()) {
+                                    app.securePasswordManager.storePassword(
+                                        "vnc_host_${vncHost.id}", password,
+                                        io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.ENCRYPTED
+                                    )
+                                }
+                                val intent = android.content.Intent(this@MainActivity, VMConsoleActivity::class.java).apply {
+                                    putExtra(VMConsoleActivity.EXTRA_VNC_HOST_ID, vncHost.id)
+                                }
+                                startActivity(intent)
+                            } catch (e: Exception) {
+                                Logger.e("MainActivity", "Failed to save VNC host", e)
+                                Toast.makeText(this@MainActivity, "Failed to save: ${e.message}", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    } else {
+                        lifecycleScope.launch {
+                            try {
+                                val now = System.currentTimeMillis()
+                                val transientHost = VncHost(
+                                    id = java.util.UUID.randomUUID().toString(),
+                                    name = "$raw:$port",
+                                    host = raw,
+                                    port = port,
+                                    createdAt = now,
+                                    modifiedAt = now
+                                )
+                                val (rfbClient, socket) = VncDirectConnector.connect(
+                                    transientHost,
+                                    password.takeIf { it.isNotEmpty() },
+                                    context = this@MainActivity
+                                )
+                                VncStreamHolder.set(socket.inputStream, socket.outputStream, socket)
+                                val intent = android.content.Intent(this@MainActivity, VMConsoleActivity::class.java).apply {
+                                    putExtra(VMConsoleActivity.EXTRA_DIRECT_VNC, true)
+                                }
+                                startActivity(intent)
+                            } catch (e: Exception) {
+                                Logger.e("MainActivity", "VNC connect failed", e)
+                                Toast.makeText(this@MainActivity, "VNC connect failed: ${e.message}", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
                 } else {
-                    quickConnect(username, hostname, port, password.takeIf { it.isNotEmpty() })
+                    val port = portInput.text.toString().toIntOrNull() ?: 22
+                    val (username, hostname) = resolveQuickConnectUser(raw)
+                    dialog.dismiss()
+
+                    if (savePermanent) {
+                        saveAndConnect(
+                            name = saveName?.takeIf { it.isNotBlank() } ?: "$username@$hostname",
+                            username = username,
+                            hostname = hostname,
+                            port = port,
+                            password = password.takeIf { it.isNotEmpty() }
+                        )
+                    } else {
+                        quickConnect(username, hostname, port, password.takeIf { it.isNotEmpty() })
+                    }
                 }
             }
         }

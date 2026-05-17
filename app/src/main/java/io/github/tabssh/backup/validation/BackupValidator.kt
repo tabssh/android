@@ -28,10 +28,11 @@ class BackupValidator {
         if (metadata == null) {
             errors.add("Missing backup metadata")
         } else {
-            // Wire formats supported: v1 (legacy hand-rolled) and v2
-            // (entity-serialised — 2026-05-16 audit). Anything newer means
+            // Wire formats supported: v1 (legacy hand-rolled), v2
+            // (entity-serialised — 2026-05-16 audit), and v3
+            // (single-JSON .tabssh — 2026-05-17). Anything newer means
             // the backup was produced by a future build we don't know yet.
-            if (metadata.version > 2) {
+            if (metadata.version > 3) {
                 errors.add("Unsupported backup version: ${metadata.version}")
             }
         }

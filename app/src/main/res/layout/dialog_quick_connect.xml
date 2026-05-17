@@ -8,6 +8,32 @@
     android:paddingTop="8dp"
     android:paddingBottom="8dp">
 
+    <!-- Protocol selector -->
+    <com.google.android.material.chip.ChipGroup
+        android:id="@+id/chip_group_protocol"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="12dp"
+        app:singleSelection="true"
+        app:selectionRequired="true">
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/chip_ssh"
+            style="@style/Widget.Material3.Chip.Filter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="SSH"
+            android:checked="true" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/chip_vnc"
+            style="@style/Widget.Material3.Chip.Filter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="VNC" />
+
+    </com.google.android.material.chip.ChipGroup>
+
     <com.google.android.material.textfield.TextInputLayout
         android:id="@+id/layout_host"
         style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
