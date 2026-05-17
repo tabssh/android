@@ -33,7 +33,7 @@
 | SAF sync wire format, encryption, 3-way merge, conflict resolution | §9 |
 | Sync coverage matrix (what syncs, what doesn't, and why) | §9.4 |
 | Backup/restore ZIP format | §10 |
-| Proxmox / XCP-ng / Xen Orchestra / VMware / OCI APIs | §11 |
+| Proxmox / XCP-ng / Xen Orchestra / VMware / OCI / libvirt-QEMU APIs | §11 |
 | Hypervisor console WebSocket framing | §11.6 |
 | Settings XML files and hosting fragments | §12.1 |
 | Themes (23 built-ins, `Theme.kt` fields, contrast validation) | §12.2 |
@@ -57,8 +57,10 @@
 | Debug APKs → `./binaries/` | `make build` (~5 min cached) |
 | Install on device | `make install` |
 | Tail logcat | `make logs` |
-| Production release | `make release` |
+| Run UI tests | `make test` |
 | Clean artifacts | `make clean` |
+
+Production releases are produced by the `release.yml` GitHub Actions workflow on tag push (`v*`) — there is no local `make release` target.
 
 ## File locations
 

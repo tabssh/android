@@ -416,7 +416,7 @@ Additional SFTP capabilities:
 
 ### 5.6 Telnet
 
-`protocols/telnet/TelnetConnection.kt` — **fully implemented** RFC 854 Telnet client; **not a stub**.
+`ssh/connection/TelnetConnection.kt` — **fully implemented** RFC 854 Telnet client; **not a stub**.
 
 Wired into `SSHConnection`'s auth path when `ConnectionProfile.protocol == Protocol.TELNET` (DB v20, migration 19→20). The `TelnetConnection` replaces `SSHConnection` in `SSHSessionManager.createConnection()` for Telnet profiles.
 
@@ -924,7 +924,17 @@ Realm format `user@pam` / `user@pve`. Optional SSL bypass.
   browser (paste OCID instead), `ListInstances` pagination, identity
   domains, anything outside Compute.
 
-### 11.6 `HypervisorConsoleManager` and `ConsoleWebSocketClient`
+### 11.6 Libvirt / QEMU (SSH-tunneled VNC)
+
+`hypervisor/libvirt/LibvirtApiClient.kt` — SSH-backed control plane. No HTTP API exists for libvirt; everything runs over a JSch session to the hypervisor host.
+
+- **Auth:** Password or SSH key (`HypervisorProfile.sshIdentityId` set in DB v34→35, migration `MIGRATION_34_35`). When `sshIdentityId` is set, `getJSchBytesWithFallback()` loads JSch-native PEM bytes (reconstructing them from stored PKCS#8 DER for generated keys that pre-date the cache); the resulting bytes are added via `jsch.addIdentity(..., bytes, cert, null)`. Password is used as fallback. Credentials are validated **before** the SSH handshake so the user gets a clear error instead of opaque "Auth fail".
+- **VM enumeration:** `virsh list --all` via `ChannelExec`, parsed into `LibvirtVm` records.
+- **VNC discovery:** `virsh vncdisplay <domain>` returns `:N`; the client opens a JSch `direct-tcpip` channel to `127.0.0.1:(5900+N)` so the VNC stream tunnels through the SSH connection — no VNC port needs to be exposed on the hypervisor.
+- **SSH fallback for no-VNC VMs:** `LibvirtApiClient.getVmIpAddress()` calls `virsh domifaddr` to discover the VM's IP. `LibvirtManagerActivity.offerSshFallback()` prompts the user, then `directSshToVm()`/`launchSshToVm()` builds a `ConnectionProfile` whose ProxyJump fields point at the hypervisor (`proxyType="SSH"`, host/port/username from `HypervisorProfile`). Key-auth hypervisors propagate `proxyKeyId`; password-auth hypervisors cache the hypervisor password `SESSION_ONLY` in `SecurePasswordManager` for the VM profile so `SSHConnection.setupJumpHost()` can retrieve it.
+- **Files:** `LibvirtApiClient.kt`, `LibvirtVm.kt`. UI: `LibvirtManagerActivity` (running VMs include an inline SSH button when VNC is not configured).
+
+### 11.7 `HypervisorConsoleManager` and `ConsoleWebSocketClient`
 
 `hypervisor/console/`:
 - `HypervisorConsoleManager` exposes `connectProxmoxConsole`, `connectXCPngConsole`, `connectXenOrchestraConsole`. Each returns a `ConsoleConnection` with bidirectional piped streams.
@@ -934,13 +944,13 @@ Realm format `user@pam` / `user@pve`. Optional SSL bypass.
   - `XCPNG`, `XO`, `VMWARE`: pass-through.
 - `wireToTerminal(connection, bridge: TermuxBridge)` connects the piped streams to the terminal — same `TermuxBridge` used for SSH, so the user gets identical terminal behavior.
 
-### 11.7 UI
+### 11.8 UI
 
 - `HypervisorsFragment` (RecyclerView, FAB → `HypervisorEditActivity`, long-press for edit/delete, click → manager activity).
 - `HypervisorEditActivity` + `dialog_add_hypervisor.xml` — dynamic field visibility (Proxmox shows realm, XCP-ng/VMware show API-type dropdown, OCI hides every connection field and shows a "Configure OCI credentials…" button that launches `OciOnboardingActivity`), default ports (Proxmox 8006, XCP-ng/VMware 443), "Import from SSH connection" pre-fill, `testConnection()` validation. For OCI rows, save updates only `name` + `notes` and refuses brand-new rows (the wizard is the only entry point).
-- Type-specific manager activities: `ProxmoxManagerActivity`, `XCPngManagerActivity`, `VMwareManagerActivity`, `OciManagerActivity`. They show VM/instance lists with power/snapshot/backup actions and route to `VMConsoleActivity` for serial console (OCI has no console — deferred).
+- Type-specific manager activities: `ProxmoxManagerActivity`, `XCPngManagerActivity`, `VMwareManagerActivity`, `OciManagerActivity`, `LibvirtManagerActivity`. They show VM/instance lists with power/snapshot/backup actions and route to `VMConsoleActivity` for serial console (OCI has no console — deferred). All four `HypervisorEditActivity`/manager UIs are normalized: `EXTRA_HYPERVISOR_ID`, shared `item_hypervisor_vm.xml` card, inline action buttons (state shown as colored text — Running/Stopped/Paused/Restarting; Hard Reset confirms via dialog).
 
-### 11.8 Cloud account integration
+### 11.9 Cloud account integration
 
 Package `cloud/` (separate from `hypervisor/`). Manages SSH-accessible cloud VM inventories rather than hypervisor-level control. Managed via `CloudAccountsActivity` (§4.3).
 
@@ -1174,19 +1184,21 @@ If a new file triggers a false positive, add a targeted `grep -v` to the chain a
 | `crypto` | SSH key parser/generator |
 | `crypto.keys` | `KeyStorage`, `KeyType` |
 | `crypto.storage` | `SecurePasswordManager` |
-| `hypervisor.console` | `HypervisorConsoleManager`, `ConsoleWebSocketClient` |
+| `hypervisor.console` | `HypervisorConsoleManager`, `ConsoleWebSocketClient`, `RfbClient` (under `hypervisor.console.rfb`) |
 | `hypervisor.proxmox` | `ProxmoxApiClient`, models |
 | `hypervisor.xcpng` | `XCPngApiClient`, `XenOrchestraApiClient`, models |
 | `hypervisor.vmware` | `VMwareApiClient`, models |
+| `hypervisor.libvirt` | `LibvirtApiClient` (SSH-tunneled VNC + virsh), `LibvirtVm` |
+| `hypervisor.oci` | `OciApiClient`, `OciSigner`, `OciKeyMaterial`, `OciConfigParser`, `OciInstance` |
+| `hypervisor.vnc` | `VncDirectConnector`, `VncStreamHolder` (direct-VNC entry points + framebuffer holder) |
 | `notifications` | `NotificationHelper` (utility lives in `utils/`) |
 | `performance` | `PerformanceManager`, `MetricsCollector`, charts feeder |
-| `protocols.mosh` | Mosh framework (stub) |
-| `protocols.x11` | X11 forwarding framework (stub) |
+| `protocols.mosh` | Mosh native client glue (`MoshHandoff`, `MoshNativeClient`, `TermuxMoshLauncher`) — fully wired |
 | `services` | `SSHConnectionService`, `TaskerIntentService` |
 | `sftp` | `SFTPManager`, `TransferTask` |
 | `ssh.config` | `SSHConfigParser` |
-| `ssh.connection` | `SSHConnection`, `HostKeyVerifier` |
-| `ssh.forwarding` | `PortForwardingManager` |
+| `ssh.connection` | `SSHConnection`, `HostKeyVerifier`, `TelnetConnection` (RFC 854; fully implemented — not a stub) |
+| `ssh.forwarding` | `PortForwardingManager`, `X11Proxy`, `HttpPortProbe` |
 | `ssh.session` | `SSHSessionManager`, listeners |
 | `storage.database` | `TabSSHDatabase` |
 | `storage.database.dao` | DAOs |
@@ -1221,7 +1233,7 @@ If a new file triggers a false positive, add a targeted `grep -v` to the chain a
 These exist in source but are **not** wired into a working user-facing flow. Treat them as roadmap items.
 
 - **Mosh** — fully wired. `MoshHandoff.kt` bootstraps via an SSH exec channel (`mosh-server` on the remote), parses the `MOSH CONNECT <port> <key>` response, then calls `TermuxBridge.connectMoshClient()` which launches the bundled native `mosh-client` binary through `TerminalSession` (JNI `forkpty()`). The binary handles all UDP/SSP/AES-128-OCB transport natively — no user action required. The `use_mosh` flag on `ConnectionProfile` (DB v11) switches the connection path in `SSHTab`. `MoshConnection.kt` scaffolding is superseded by this architecture.
-- **X11 forwarding** (`protocols/x11/X11ForwardingManager.kt`) — virtual display + Unix socket framework only; no rendering. The `x11_forwarding` flag is persisted (DB v7) and surfaced in the UI.
+- **X11 forwarding** — fully wired via `ssh/forwarding/X11Proxy.kt`. The proxy binds an ephemeral `localhost` port, JSch X11 channels are routed through it to either Termux:X11 (Unix socket) or XServer XSDL (TCP `:6000`). `SSHConnection.applyForwardingFlags()` passes the dynamic port via `session.setX11Port(proxy.port)`; the proxy is stopped in `disconnect()`. Non-fatal `X11NoServerException` surfaces in `TabTerminalActivity` as a Snackbar via the `SSHConnection.warnings` `SharedFlow`. The `x11_forwarding` flag is persisted (DB v7).
 - **VMware console** — `VMwareApiClient` and `VMwareManagerActivity` fully route to `VMConsoleActivity`; list / start / stop / reset / console all implemented.
 - **Frequently-used UI** — fully interactive: top-10 connections loaded, tap to connect, swipe-right for delete/duplicate/edit actions.
 - **Devkeystore** — `keystore.jks` is checked in for development; production releases must override `KEYSTORE_BASE64` via GitHub Secrets.

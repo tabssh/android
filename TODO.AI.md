@@ -15,6 +15,8 @@
 
 ## ✅ Recently Shipped
 
+- **`8b98f60be8a3`** 🐛 Five bug fixes: Proxmox VNC "Pipe closed" after SetDesktopSize rejection (`canRequestResize=false` in both vncproxy paths); libvirt ProxyJump "invalid private key" (PKCS#8 DER → OpenSSH PEM via `getJSchBytesWithFallback()`); PerformanceFragment stats last-host not persisting (`selectedConnection=null` on `onDestroyView()`); status indicator dots always grey (connected=green, disconnected=red); OCI identity: blank region in account list, `.OCI/CONFIG`/`IMPORT FILE` button labels, auto-fill name from config section header, test connection works before saving profile.
+
 - **`1e20b80a0ba8`** 🐛 Keyboard layout editor: preview keys now use `width=0/weight=1` matching `KeyboardRowView` so the preview is dynamically accurate; `refreshAvailableKeys()` subtracts all in-use key IDs from the palette and is called on every `rebuildSurface()` so placed keys disappear from the picker instantly; `addKey()` guard upgraded to global.
 - **`730c9bf472d5`** 🎨 Hypervisor manager cards: inline compact action buttons replace tap-for-dialog across all four managers; VM state shown as colored plain text (Running/Stopped/Paused/Restarting); Hard Reset retains confirmation dialog; Libvirt running row adds SSH button calling `directSshToVm()`.
 - **`6f27a0d3e0a8`** 🐛 Libvirt SSH fallback: `launchSshToVm()` now populates ProxyJump fields (`proxyType="SSH"`, host/port/username from `HypervisorProfile`) so the VM's private bridge IP is reachable via tunnel; key-auth hypervisors set `proxyKeyId`; password-auth hypervisors cache the hypervisor password `SESSION_ONLY` in `SecurePasswordManager` for the VM profile so `setupJumpHost()` can retrieve it.

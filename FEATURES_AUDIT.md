@@ -146,7 +146,7 @@
 | Auto-open browser to forwarded port | ❌ | ✅ Pro | — | One-tap "open the dev server I just tunnelled". **LOW** |
 | Run forwards without terminal session | ✅ | ✅ Pro | ✅ Free | `PortForwardingActivity` background tunnels — pick connection, no terminal opened |
 | Home-screen widget for one-tap forward | ❌ | ✅ Pro | — | **LOW** |
-| X11 forwarding | 🟡 | ✅ doc | — | UI toggle, not rendered. **LOW** |
+| X11 forwarding | ✅ | ✅ doc | — | `X11Proxy.kt` relays JSch X11 channels to Termux:X11 (Unix socket) or XServer XSDL (TCP :6000); no-server case surfaces as a Snackbar. |
 
 ## Sync / backup
 
@@ -235,6 +235,7 @@
 | Xen Orchestra (REST + WS live updates) | ✅ | — | — | 🆕 |
 | VMware ESXi/vCenter | 🟡 | — | — | API works, console wiring deferred. **MEDIUM** |
 | Oracle Cloud Infrastructure (OCI Compute) | ✅ | — | — | Path A onboarding + signed REST. Console deferred. 🆕 |
+| Libvirt / QEMU (SSH-tunneled VNC + virsh) | ✅ | — | — | `LibvirtApiClient`: SSH-only control plane, `direct-tcpip` VNC tunnel, SSH-fallback to VM via `virsh domifaddr` when VNC absent. 🆕 |
 | VM serial console via hypervisor (no VM network) | ✅ | — | — | 🆕 |
 | AWS EC2 auto-import | ❌ | ✅ Pro | ✅ Pro | **🚫 unless explicitly wanted — cloud privacy** |
 | GCP / DO / Azure auto-import | ❌ | — | ✅ Pro | Same — opt-in only |
