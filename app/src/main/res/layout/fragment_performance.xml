@@ -134,7 +134,7 @@
             <!--CPUChart-->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
-                android:layout_height="220dp"
+                android:layout_height="180dp"
                 android:layout_marginBottom="@dimen/space_md"
                 app:cardElevation="2dp"
                 app:cardCornerRadius="8dp">
@@ -173,7 +173,7 @@
                 <!--MemoryCard-->
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="0dp"
-                    android:layout_height="160dp"
+                    android:layout_height="130dp"
                     android:layout_weight="1"
                     android:layout_marginEnd="@dimen/space_sm"
                     app:cardElevation="2dp"
@@ -222,7 +222,7 @@
                 <!--DiskCard-->
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="0dp"
-                    android:layout_height="160dp"
+                    android:layout_height="130dp"
                     android:layout_weight="1"
                     android:layout_marginStart="@dimen/space_sm"
                     app:cardElevation="2dp"
@@ -280,7 +280,7 @@
                 <!--NetworkCard-->
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="0dp"
-                    android:layout_height="160dp"
+                    android:layout_height="130dp"
                     android:layout_weight="1"
                     android:layout_marginEnd="@dimen/space_sm"
                     app:cardElevation="2dp"
@@ -340,7 +340,7 @@
                 <!--LoadCard-->
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="0dp"
-                    android:layout_height="160dp"
+                    android:layout_height="130dp"
                     android:layout_weight="1"
                     android:layout_marginStart="@dimen/space_sm"
                     app:cardElevation="2dp"

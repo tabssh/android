@@ -1,30 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
+<androidx.core.widget.NestedScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:padding="16dp">
+    android:fillViewport="true">
 
-    <com.google.android.material.textfield.TextInputLayout
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Local Port"
-        style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
+        android:orientation="vertical"
+        android:padding="16dp">
 
-        <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/edit_local_port"
+        <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="number"
-            android:maxLines="1" />
-    </com.google.android.material.textfield.TextInputLayout>
+            android:hint="Local Port"
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="Creates a SOCKS proxy on the specified local port. Configure your browser or applications to use localhost:PORT as a SOCKS5 proxy.\n\nExample: ssh -D 1080 user@host"
-        android:textAppearance="@style/TextAppearance.Material3.BodySmall"
-        android:textColor="?android:textColorSecondary" />
-</LinearLayout>
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/edit_local_port"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:maxLines="1" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Creates a SOCKS proxy on the specified local port. Configure your browser or applications to use localhost:PORT as a SOCKS5 proxy.\n\nExample: ssh -D 1080 user@host"
+            android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+            android:textColor="?android:textColorSecondary" />
+    </LinearLayout>
+
+</androidx.core.widget.NestedScrollView>
