@@ -886,8 +886,13 @@ class IdentitiesFragment : Fragment() {
                 "⚠ Doesn't look like a private key — verify format"
         }
 
-        // Wire up .oci/config profile callback — populates the five OCI fields
+        // Wire up .oci/config profile callback — populates the five OCI fields.
+        // Auto-fills the identity name from the section header (e.g. [DEFAULT] → DEFAULT)
+        // when the name field is blank so the user doesn't have to type it manually.
         ociDialogConfigCallback = { profile ->
+            if (editName.text.toString().isBlank()) {
+                editName.setText(profile.name)
+            }
             editOciTenancy.setText(profile.tenancyOcid ?: "")
             editOciUser.setText(profile.userOcid ?: "")
             dropdownOciRegion.setText(profile.region ?: "", false)

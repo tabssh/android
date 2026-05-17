@@ -892,22 +892,36 @@ class HypervisorEditActivity : AppCompatActivity() {
     }
 
     /**
-     * Test an existing OCI row. Credentials are resolved from the linked
-     * [HypervisorAccount] when `accountId` is set (v33+), with a lazy
-     * fallback to the legacy per-profile Keystore aliases for older rows.
+     * Test an OCI connection. Works in two modes:
+     * 1. **Saved profile** — looks up the saved HypervisorProfile row and resolves
+     *    credentials from the linked HypervisorAccount (v33+) or the legacy
+     *    per-profile Keystore aliases (older rows).
+     * 2. **New, unsaved profile** — when `editingHypervisor` is null and no saved
+     *    profile can be fetched, falls back to `selectedAccountId` so the user can
+     *    test a freshly chosen OCI identity before saving the profile.
      */
     private suspend fun testOciConnection(): Boolean {
         val existing = editingHypervisor
             ?: hypervisorId?.let {
                 withContext(Dispatchers.IO) { app.database.hypervisorDao().getById(it) }
             }
-        if (existing == null || existing.type != HypervisorType.OCI) {
-            Toast.makeText(this, "Link an OCI identity first", Toast.LENGTH_LONG).show()
+
+        // Resolve which account to use for credential lookup:
+        //  - Saved profile → prefer profile.accountId, then selectedAccountId (in-flight change)
+        //  - New profile   → use selectedAccountId directly so the user can test before saving
+        val accountId: Long? = existing?.accountId ?: selectedAccountId
+
+        if (existing == null && accountId == null) {
+            // No saved profile and no account selected — nothing to test against.
+            Toast.makeText(this, "Select an OCI identity first", Toast.LENGTH_LONG).show()
+            return false
+        }
+        if (existing != null && existing.type != HypervisorType.OCI) {
+            Toast.makeText(this, "This profile is not an OCI hypervisor", Toast.LENGTH_LONG).show()
             return false
         }
 
         // Resolve OCI metadata: prefer account row, fall back to profile columns
-        val accountId = existing.accountId
         val account = if (accountId != null) {
             withContext(Dispatchers.IO) {
                 try { app.database.hypervisorAccountDao().getById(accountId) }
@@ -915,10 +929,10 @@ class HypervisorEditActivity : AppCompatActivity() {
             }
         } else null
 
-        val tenancy = account?.ociTenancyOcid ?: existing.ociTenancyOcid
-        val user = account?.ociUserOcid ?: existing.ociUserOcid
-        val region = account?.ociRegion ?: existing.ociRegion
-        val fingerprint = account?.ociFingerprint ?: existing.ociFingerprint
+        val tenancy     = account?.ociTenancyOcid  ?: existing?.ociTenancyOcid
+        val user        = account?.ociUserOcid      ?: existing?.ociUserOcid
+        val region      = account?.ociRegion        ?: existing?.ociRegion
+        val fingerprint = account?.ociFingerprint   ?: existing?.ociFingerprint
         if (tenancy.isNullOrBlank() || user.isNullOrBlank() ||
             region.isNullOrBlank() || fingerprint.isNullOrBlank()
         ) {
@@ -929,11 +943,16 @@ class HypervisorEditActivity : AppCompatActivity() {
             return false
         }
 
+        // legacyProfileId is only meaningful for saved profiles; new profiles don't
+        // have a persisted ID yet so we pass null (account-keyed alias only).
+        val legacyProfileId = existing?.id
         val pem = withContext(Dispatchers.IO) {
             if (accountId != null) {
-                HypervisorPasswordStore.retrieveOciAccountKey(this@HypervisorEditActivity, accountId, existing.id)
+                HypervisorPasswordStore.retrieveOciAccountKey(
+                    this@HypervisorEditActivity, accountId, legacyProfileId
+                )
             } else {
-                app.securePasswordManager.retrievePassword("oci_private_key_${existing.id}")
+                app.securePasswordManager.retrievePassword("oci_private_key_${existing!!.id}")
             }
         }
         if (pem.isNullOrBlank()) {
@@ -946,10 +965,10 @@ class HypervisorEditActivity : AppCompatActivity() {
         val passphrase = withContext(Dispatchers.IO) {
             if (accountId != null) {
                 HypervisorPasswordStore.retrieveOciAccountPassphrase(
-                    this@HypervisorEditActivity, accountId, existing.id
+                    this@HypervisorEditActivity, accountId, legacyProfileId
                 )?.takeIf { it.isNotEmpty() }
             } else {
-                app.securePasswordManager.retrievePassword("oci_passphrase_${existing.id}")
+                app.securePasswordManager.retrievePassword("oci_passphrase_${existing!!.id}")
                     ?.takeIf { it.isNotEmpty() }
             }
         }
@@ -958,8 +977,8 @@ class HypervisorEditActivity : AppCompatActivity() {
                 OciKeyMaterial.fromPem(pem, passphrase?.toCharArray())
             }
             val client = OciApiClient(tenancy, user, fingerprint, region, km,
-                verifySsl = existing.verifySsl,
-                pinnedCertSha256 = existing.pinnedCertSha256)
+                verifySsl = existing?.verifySsl ?: true,
+                pinnedCertSha256 = existing?.pinnedCertSha256)
             client.validateCredentials()
         } catch (e: Exception) {
             Logger.e("HypervisorEditActivity", "OCI test failed", e)

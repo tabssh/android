@@ -28,8 +28,8 @@
 | Feature | Us | JuiceSSH | Termius | Notes / priority |
 |---|---|---|---|---|
 | SSH protocol | ✅ | ✅ | ✅ | — |
-| Mosh protocol | 🟡 | ✅ | ✅ Free | **Code exists, UI toggle exists, not wired end-to-end. HIGH** |
-| Telnet protocol | ❌ | ✅ Free | ✅ Free | Legacy gear (switches/routers). **MEDIUM** |
+| Mosh protocol | ✅ | ✅ | ✅ Free | Fully wired; `libmosh-client.so` bundled for all 4 ABIs; auto-falls-back to SSH |
+| Telnet protocol | ✅ | ✅ Free | ✅ Free | `TelnetConnection.kt` |
 | Local Android shell | ❌ | ✅ Free | — | Open a shell on the device itself. **LOW** |
 | Serial console (USB) | ❌ | — | ✅ Free | Redpark USB-C/Lightning serial cables for switches/routers. **LOW** (USB-OTG mostly) |
 | SFTP | ✅ | ✅ | ✅ | — |
@@ -40,7 +40,7 @@
 | Auto-reconnect | ✅ | ✅ | — | — |
 | Background sessions | ✅ | ✅ | ✅ | Foreground service |
 | SSH config import (~/.ssh/config) | ✅ | ❌ (Plugin) | ✅ Free | We have parsing |
-| Bulk import: PuTTY, CSV, JSON, OpenSSH config, Terraform | ❌ | ❌ | ✅ Free | **MEDIUM** |
+| Bulk import: PuTTY, CSV, JSON, OpenSSH config, Terraform | ✅ | ❌ | ✅ Free | `BulkImportParser.kt` — auto-detect + all four formats |
 | Jump host / ProxyJump | ✅ | ✅ ("Connect-via") | ✅ Pro | We have it |
 | Connect-via chained nested connections | ✅ | ✅ | ✅ | Same as jump host |
 | HTTP/SOCKS proxy | ✅ | — | ✅ Pro | — |
@@ -48,7 +48,7 @@
 | Custom SSH ciphers/MACs | ✅ | — | ✅ | We have modern defaults; no UI yet to override |
 | ML-DSA / post-quantum auth | ❌ | — | ✅ Free | NEW. **LOW** until OpenSSH 9.x is widespread |
 | ML-KEM key exchange | ❌ | — | ✅ Free | Same — JSch 2.27 already supports it |
-| Per-connection env vars | ❌ | ✅ Free | ✅ Free | **MEDIUM** — easy win, very useful |
+| Per-connection env vars | ✅ | ✅ Free | ✅ Free | `ConnectionProfile.envVars` + UI in ConnectionEditActivity + `SSHConnection.setEnv()` |
 | Per-connection startup script (post-connect) | ✅ | ✅ Free | ✅ Pro | We have it |
 | Quick-connect (no save) | ✅ | ✅ | ✅ | — |
 
@@ -82,19 +82,19 @@
 | Volume keys → font size | ✅ | ✅ | ✅ | — |
 | Pinch-zoom font size | ✅ | ✅ | — | — |
 | Built-in terminal themes | ✅ 23 | ✅ ~6 | ✅ ~10+ | We're ahead 🆕 |
-| Custom theme editor | 🟡 | — | ✅ Free | We have JSON import/export but no GUI editor. **MEDIUM** |
+| Custom theme editor | ✅ | — | ✅ Free | `ThemeEditorActivity` — full GUI editor |
 | Per-host theme override | ✅ | — | ✅ Free | — |
 | Programmer fonts bundled | ✅ 8 | ✅ 8 | ✅ 7 | — |
 | Cursor styles | ✅ | ✅ | ✅ | — |
 | Bell options (audio/visual/silent) | ✅ | ✅ | ✅ | — |
 | Configurable scrollback | ✅ | ✅ | ✅ | — |
-| Find/search in scrollback | ❌ | — | ✅ Free | **HIGH** — daily use |
+| Find/search in scrollback | ✅ | — | ✅ Free | Shipped `7841256b841a` — `ScrollbackSearchController`, Ctrl+Shift+F |
 | Long-press copy text | ✅ | ✅ | ✅ | — |
 | Long-press context menu | ✅ | ✅ | ✅ | New (Phase 7.8) |
 | Terminal autocomplete (suggestions while typing) | ❌ | — | ✅ Free | Like fish/zsh inline completion. **MEDIUM-HIGH** |
 | AI command generation | ❌ | — | ✅ Free | English → shell command. **🚫 out of scope** (cloud LLM, privacy) — unless we wire local model later |
 | AI Agent / chat with infra | ❌ | — | ✅ Pro | **🚫 out of scope** — cloud LLM |
-| Broadcast input (one keystroke → many tabs) | 🟡 | — | ✅ Pro | We have ClusterCommandActivity but not interactive broadcast. **MEDIUM** |
+| Broadcast input (one keystroke → many tabs) | ✅ | — | ✅ Pro | `TermuxBridge.broadcastTargets` fan-out; `showBroadcastTargetsDialog()` in TabTerminalActivity |
 | Session log auto-record | ✅ | — | ✅ Pro | We have transcript recording |
 | URL detection + open | ✅ | — | — | 🆕 |
 
@@ -106,13 +106,13 @@
 | Swipe between tabs | ✅ | — | ✅ | — |
 | Tab list / switcher | ✅ | ✅ | ✅ | — |
 | Tab reordering (drag) | 🟡 | — | ✅ | Infrastructure exists, UI toggle deferred. **LOW** |
-| Reconnect button on disconnected tab | 🟡 | ✅ | ✅ | Auto-close currently; should also offer Reconnect. **MEDIUM** |
+| Reconnect button on disconnected tab | ✅ | ✅ | ✅ | Fully implemented — non-zero exit shows Reconnect/Close dialog; clean exit auto-closes |
 | Session indicator badge | ✅ | ✅ | ✅ | — |
 | Background session via notification | ✅ | ✅ | ✅ | — |
-| Workspaces (named tab groups) | ❌ | — | ✅ Free | Group related tabs into a workspace. **MEDIUM** |
-| Split view (multiple panes per tab) | ❌ | — | ✅ Pro (16-pane) | Vertical/horizontal pane split. **HIGH for tablets** |
-| Command palette (Ctrl+K) | ❌ | — | ✅ Free | Quick switch / open host. **MEDIUM** |
-| Quick switcher (Ctrl+J) | ❌ | — | ✅ Free | Jump to open tab. **MEDIUM** |
+| Workspaces (named tab groups) | ✅ | — | ✅ Free | Save/open/delete workspaces from TabTerminalActivity menu |
+| Split view (multiple panes per tab) | ✅ | — | ✅ Pro (16-pane) | Wave 2.8 minimal split — bottom pane per tab, independent SSHTab |
+| Command palette (Ctrl+K) | ✅ | — | ✅ Free | `PaletteDialog.kt` |
+| Quick switcher (Ctrl+J) | ✅ | — | ✅ Free | Part of `PaletteDialog.kt` |
 | Foldable-aware layout | ❌ | — | ✅ Free | Smooth fold/unfold. **LOW** until you need it |
 | Resume session on app restart | ✅ | ✅ | ✅ | — |
 
@@ -125,9 +125,9 @@
 | Multi-file selection | ✅ | — | ✅ | — |
 | Recursive folders | ✅ | — | — | 🆕 |
 | Resume transfers | ✅ | — | ✅ | — |
-| Edit remote files in-app | ❌ | — | ✅ Free | Tap a file → integrated text editor → save back. **MEDIUM** |
+| Edit remote files in-app | ✅ | — | ✅ Free | `RemoteFileEditorActivity`; long-press → "Open / Edit" in SFTPActivity |
 | Drag-and-drop | ❌ | — | ✅ Free | Inside the SFTP UI on tablets. **LOW** |
-| chmod / permissions edit | 🟡 | — | ✅ Free | We display, don't edit. **MEDIUM** |
+| chmod / permissions edit | ✅ | — | ✅ Free | `showPermissionsDialog()` in SFTPActivity — rwx checkboxes for user/group/other |
 | Create/rename/delete | ✅ | — | ✅ | — |
 | SFTP tabs (multiple file panels) | ❌ | — | ✅ Free | **LOW** |
 | Native Android file-picker integration | ❌ | — | ✅ Free | Android SAF for upload destination. **MEDIUM** |
@@ -144,7 +144,7 @@
 | Saved rules per host | ✅ | ✅ | ✅ | — |
 | Quick start/stop toggle | ✅ | ✅ | ✅ | — |
 | Auto-open browser to forwarded port | ❌ | ✅ Pro | — | One-tap "open the dev server I just tunnelled". **LOW** |
-| Run forwards without terminal session | 🟡 | ✅ Pro | ✅ Free | Currently requires connection. **MEDIUM** |
+| Run forwards without terminal session | ✅ | ✅ Pro | ✅ Free | `PortForwardingActivity` background tunnels — pick connection, no terminal opened |
 | Home-screen widget for one-tap forward | ❌ | ✅ Pro | — | **LOW** |
 | X11 forwarding | 🟡 | ✅ doc | — | UI toggle, not rendered. **LOW** |
 
@@ -168,7 +168,7 @@
 |---|---|---|---|---|
 | Snippets library | ✅ | ✅ Pro | ✅ Free | — |
 | Categories / tags | ✅ | ✅ | ✅ | — |
-| Variable placeholders | ✅ basic | — | ✅ | We have `{host}`/`{user}`/`{date}`. Add prompt-style `{?password}` etc. **MEDIUM** |
+| Variable placeholders | ✅ | — | ✅ | `{host}`/`{user}`/`{date}` + prompt-style `{?name:default|hint}` with recall + password masking |
 | One-tap run on session | ✅ | ✅ | ✅ | — |
 | Run on multiple hosts (cluster snippets) | ✅ | ✅ Plugin | ✅ Pro | We have ClusterCommandActivity |
 | Sync snippets | ✅ | ✅ Pro | ✅ Pro | — |
@@ -247,7 +247,7 @@
 | Configurable polling interval | ✅ | ✅ Plugin | — | — |
 | Background SSH for metrics | ✅ | ✅ Plugin | — | — |
 | Charts | ✅ MPAndroidChart | ✅ Plugin | — | — |
-| Multi-host dashboard | ❌ | — | — | A "rack view" overlay across active connections. **LOW** |
+| Multi-host dashboard | ✅ | — | — | Shipped `2596eeb7` — sysadmin cards, dashboard groups, DiffUtil, monitor bell |
 
 ## Misc / advanced
 
@@ -255,7 +255,7 @@
 |---|---|---|---|---|
 | Plugin SDK | 🚫 | ✅ Free | — | Decision: we ship everything built-in, no plugin model. |
 | Tasker integration | ✅ | ✅ Plugin | — | — |
-| In-app changelog | ❌ | ✅ | ✅ | What's-new screen on update. **LOW** |
+| In-app changelog | ✅ | ✅ | ✅ | `WhatsNewActivity`, linked from nav drawer |
 | Connection history view | ✅ | — | ✅ Free | We have last-connected timestamp |
 | Cluster snippets fan-out | ✅ | ✅ Plugin | ✅ Pro | — |
 | Team Vault / shared groups | 🚫 | ✅ Pro | ✅ Team+ | **🚫 out of scope** unless we add a self-hosted backend. SAF sync covers personal multi-device. |
@@ -265,6 +265,39 @@
 | CLI companion | ❌ | — | ✅ Free | Termius CLI for headless management. **LOW** (Android-only app) |
 | Education / OSS free plans | n/a | — | ✅ Free | We're already free for everyone |
 | FAQ / help links in-app | 🟡 | ✅ | ✅ | We have About; add a help section. **LOW** |
+
+---
+
+## Audit corrections (verified 2026-05-17 against live codebase)
+
+The table rows below were wrong at time of audit. All confirmed against source:
+
+| Row | Was | Correct status |
+|-----|-----|----------------|
+| Find/search in scrollback | ❌ HIGH | ✅ shipped `7841256b841a` — `ScrollbackSearchController`, Ctrl+Shift+F, live highlights |
+| Reconnect button on disconnected tab | 🟡 Auto-close only | ✅ `showReconnectDialog()` fully implemented; exit 0 = silent close, non-zero = Reconnect/Close dialog |
+| Multi-host dashboard | ❌ LOW | ✅ shipped `2596eeb7` — sysadmin cards, dashboard groups, DiffUtil, per-host monitor bell |
+| Mosh | 🟡 not wired | ✅ `libmosh-client.so` bundled for all 4 ABIs; `MoshHandoff.bootstrap()` + `tab.connectMosh()` fully wired in `TabTerminalActivity` |
+| Per-connection env vars | ❌ MEDIUM | ✅ `ConnectionProfile.envVars` field + `ConnectionEditActivity` UI + `SSHConnection` `setEnv()` fan-out |
+| Bulk import: CSV/JSON/PuTTY/Terraform | ❌ MEDIUM | ✅ `BulkImportParser.kt` supports all four formats with auto-detection |
+| SSH agent forwarding | "wire toggle" | ✅ `SSHConnection` sets `channel.setAgentForwarding(true)` + `IdentityRepository` populated |
+| File-edit in SFTP | ❌ MEDIUM | ✅ `RemoteFileEditorActivity` + `openOrEditRemoteFile()` in `SFTPActivity` |
+| chmod in SFTP | 🟡 display only | ✅ `showPermissionsDialog()` in `SFTPActivity` — full rwxr-xr-x checkboxes |
+| Custom theme GUI editor | 🟡 no GUI | ✅ `ThemeEditorActivity` |
+| Snippet variables `{?var}` | 🟡 basic only | ✅ `showVariablesDialog()` — hint text, password masking, per-variable recall from SharedPrefs |
+| Workspaces (named tab groups) | ❌ MEDIUM | ✅ save/open/delete via `showSaveWorkspaceDialog()` / `showOpenWorkspaceDialog()` in `TabTerminalActivity` |
+| Split view (multi-pane) | ❌ HIGH tablet | ✅ "Wave 2.8" minimal split — bottom pane per tab, independent SSHTab, `action_unsplit` |
+| Command palette (Ctrl+K) | ❌ MEDIUM | ✅ `PaletteDialog.kt` |
+| Telnet protocol | ❌ MEDIUM | ✅ `TelnetConnection.kt` |
+| Broadcast input (interactive) | 🟡 batch only | ✅ `TermuxBridge.broadcastTargets` fan-out; `showBroadcastTargetsDialog()` in `TabTerminalActivity` |
+| In-app changelog | ❌ LOW | ✅ `WhatsNewActivity`, linked from nav drawer |
+
+**Genuine remaining gaps (as of 2026-05-17):**
+- Local Android shell — no implementation found
+- Auto-open browser on forwarded port — no implementation found
+- Bottom nav bar on phones — no `BottomNavigationView` anywhere
+- ML-DSA / ML-KEM post-quantum — JSch limitation (as-is)
+- FIDO2 hardware key auth — JSch limitation (stub exists, documented in AI.md §16)
 
 ---
 
@@ -285,37 +318,37 @@
 
 ## Suggested priority buckets (proposal — you decide)
 
-### 🔥 Tier 1 — finish the half-done + quick wins
-1. **Mosh** — wire backend ↔ UI (we have both halves)
-2. **Find/search in scrollback** — daily use
-3. **Per-connection environment variables** — easy, very useful
-4. **SSH agent forwarding** — wire toggle to real implementation
-5. **Reconnect button on disconnected tab** — replace auto-close as the only option
-6. **Bulk import** — CSV/JSON/Terraform/PuTTY in addition to ssh_config we already have
-7. **File-edit in SFTP** — open file → text editor → save back
-8. **chmod editing in SFTP**
+### 🔥 Tier 1 — finish the half-done + quick wins (all shipped)
+1. ~~**Mosh** — wire backend ↔ UI~~ ✅ done
+2. ~~**Find/search in scrollback**~~ ✅ done `7841256b841a`
+3. ~~**Per-connection environment variables**~~ ✅ done
+4. ~~**SSH agent forwarding**~~ ✅ done
+5. ~~**Reconnect button on disconnected tab**~~ ✅ done
+6. ~~**Bulk import** — CSV/JSON/Terraform/PuTTY~~ ✅ done
+7. ~~**File-edit in SFTP**~~ ✅ done
+8. ~~**chmod editing in SFTP**~~ ✅ done
 
 ### 🚀 Tier 2 — meaningful new capabilities
-9. **FIDO2 / hardware-key SSH auth** — YubiKey via USB-C/NFC
-10. **SSH certificate auth** — OpenSSH cert files
-11. **Telnet protocol** — legacy gear
-12. **Workspaces (named tab groups)**
-13. **Split view (multi-pane terminal)** — big tablet win
-14. **Command palette (Ctrl+K) + quick switcher (Ctrl+J)**
-15. **Custom theme GUI editor** (we have JSON I/O, give it a UI)
-16. **Snippet variables: prompt-style `{?password}`**
-17. **Broadcast input (interactive multi-host typing)**
+9. **FIDO2 / hardware-key SSH auth** — JSch limitation; stub exists (AI.md §16); needs JSch fork ~80h
+10. ~~**SSH certificate auth** — OpenSSH cert files~~ ✅ already done (listed as ✅ in table above)
+11. ~~**Telnet protocol**~~ ✅ done (`TelnetConnection.kt`)
+12. ~~**Workspaces (named tab groups)**~~ ✅ done
+13. ~~**Split view (multi-pane terminal)**~~ ✅ done (Wave 2.8 minimal split)
+14. ~~**Command palette (Ctrl+K)**~~ ✅ done (`PaletteDialog.kt`)
+15. ~~**Custom theme GUI editor**~~ ✅ done (`ThemeEditorActivity`)
+16. ~~**Snippet variables: prompt-style `{?password}`**~~ ✅ done
+17. ~~**Broadcast input (interactive multi-host typing)**~~ ✅ done (`TermuxBridge.broadcastTargets`)
 
 ### 🎯 Tier 3 — polish & nice-to-haves
-18. Bottom-nav bar on phones (Termius-style)
-19. Per-host color tags (in addition to group colors)
-20. Auto-open browser on forwarded HTTP(S) port
-21. Run port forwards without a terminal session
-22. PIN code app lock (currently biometric-only)
-23. In-app changelog / what's new
-24. Per-host startup commands UI exposure (we have post-connect script field already)
-25. ~~Bluetooth keyboard polish + AltGr~~ — **shipped (Issue #171)**: xterm-style modifier-encoded nav keys, AltGr distinguished from real Alt
-26. Connection history view (separate from "last connected")
+18. **Bottom-nav bar on phones** (Termius-style) — no implementation yet
+19. **Per-host color tags** (in addition to group colors)
+20. **Auto-open browser on forwarded HTTP(S) port** — no implementation yet
+21. ~~**Run port forwards without a terminal session**~~ ✅ done (`PortForwardingActivity` background tunnels)
+22. **PIN code app lock** (currently biometric-only)
+23. ~~**In-app changelog / what's new**~~ ✅ done (`WhatsNewActivity`)
+24. ~~**Per-host startup commands UI exposure**~~ ✅ done (post-connect script field in ConnectionEditActivity)
+25. ~~**Bluetooth keyboard polish + AltGr**~~ ✅ **shipped (Issue #171)**
+26. ~~**Connection history view**~~ ✅ done (last-connected timestamp + history in ConnectionProfile)
 
 ### 🧊 Tier 4 — speculative / situational
 - True-color rendering verification

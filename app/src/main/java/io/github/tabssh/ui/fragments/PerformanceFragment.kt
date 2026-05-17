@@ -569,6 +569,10 @@ class PerformanceFragment : Fragment() {
         }
 
         sshConnection = null
+        // Clear the in-memory selection so updateConnectionSpinner()'s restore
+        // guard (`if (savedId != null && selectedConnection == null)`) fires on
+        // the next onViewCreated and restores the persisted host from SharedPreferences.
+        selectedConnection = null
         metricsCollector = null
     }
 

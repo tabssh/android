@@ -94,6 +94,15 @@ class RfbClient(
 
     var listener: RfbListener? = null
 
+    /**
+     * When false, [sendSetDesktopSize] is a no-op. Set to false for servers
+     * (e.g. Proxmox vncproxy) that close the WebSocket after rejecting a
+     * SetDesktopSize request with ExtendedDesktopSize status=3. Automatically
+     * flipped to false when the server returns a non-zero status code for a
+     * client-initiated resize so we never hammer a server that can't resize.
+     */
+    var canRequestResize: Boolean = true
+
     private var din = DataInputStream(inputStream.buffered(65536))
     private var dout = DataOutputStream(outputStream)
     private val outLock = Any()        // guards all writes to dout
@@ -445,6 +454,10 @@ class RfbClient(
      * [RfbConstants.ENC_EXTENDED_DESKTOP_SIZE] pseudo-rectangle.
      */
     fun sendSetDesktopSize(width: Int, height: Int) {
+        if (!canRequestResize) {
+            Logger.d(TAG, "SetDesktopSize suppressed — canRequestResize=false")
+            return
+        }
         synchronized(outLock) {
             dout.writeByte(251)        // SetDesktopSize message type
             dout.writeByte(0)          // padding
@@ -534,7 +547,11 @@ class RfbClient(
                         listener?.onDesktopResize(fbWidth, fbHeight, framebuffer)
                         sendUpdateRequest(0, 0, fbWidth, fbHeight, incremental = false)
                     } else if (ry != 0) {
-                        Logger.w(TAG, "ExtendedDesktopSize rejected: reason=$rx status=$ry")
+                        Logger.w(TAG, "ExtendedDesktopSize rejected: reason=$rx status=$ry — disabling resize")
+                        // Server rejected our resize request. Disable future attempts so we
+                        // don't trigger a second rejection that causes the server to close
+                        // the connection (Proxmox vncproxy behaviour: rejects then hangs up).
+                        canRequestResize = false
                     }
                 }
                 RfbConstants.ENC_CURSOR -> {

@@ -816,15 +816,18 @@ class SSHConnection(
                 AuthType.PUBLIC_KEY.name -> {
                     if (profile.proxyKeyId != null) {
                         Logger.d("SSHConnection", "Jump host: Using public key authentication")
-                        // Load jump host SSH key using KeyStorage
+                        // Load jump host SSH key as OpenSSH PEM bytes.
+                        // getJSchBytesWithFallback() returns the correct format for
+                        // JSch's byte-array addIdentity(); retrievePrivateKey().encoded
+                        // returns PKCS#8 DER which JSch rejects as "invalid private key".
                         val app = (context.applicationContext as io.github.tabssh.TabSSHApplication)
-                        val privateKey = app.keyStorage.retrievePrivateKey(profile.proxyKeyId)
-                        if (privateKey != null) {
+                        val jschBytes = app.keyStorage.getJSchBytesWithFallback(profile.proxyKeyId)
+                        if (jschBytes != null) {
                             jsch.addIdentity(
                                 profile.proxyKeyId,
-                                privateKey.encoded,
+                                jschBytes,
                                 null, // public key (JSch can derive it)
-                                null // passphrase
+                                null  // passphrase — keys stored unencrypted in Keystore
                             )
                         } else {
                             throw SSHException("Jump host key not found: ${profile.proxyKeyId}")

@@ -32,7 +32,13 @@ class HypervisorAccountAdapter(
     override fun onBindViewHolder(holder: VH, position: Int) {
         val account = items[position]
         holder.name.text = account.name
-        holder.username.text = "Username: ${account.username}"
+        // OCI accounts authenticate via API key, not a username+password pair.
+        // Show the region instead so the card is informative; username is always blank.
+        holder.username.text = if (account.authType == "oci_api_key") {
+            "Region: ${account.ociRegion ?: "—"}"
+        } else {
+            "Username: ${account.username}"
+        }
         if (!account.realm.isNullOrBlank()) {
             holder.realm.visibility = View.VISIBLE
             holder.realm.text = "realm: ${account.realm}"
