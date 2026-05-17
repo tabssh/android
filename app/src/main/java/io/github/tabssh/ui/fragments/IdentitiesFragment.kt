@@ -36,6 +36,7 @@ import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.storage.database.entities.HypervisorAccount
 import io.github.tabssh.storage.database.entities.Identity
 import io.github.tabssh.storage.database.entities.StoredKey
+import io.github.tabssh.storage.database.entities.VncIdentity
 import io.github.tabssh.ui.adapters.HypervisorAccountAdapter
 import io.github.tabssh.ui.adapters.IdentityAdapter
 import io.github.tabssh.ui.adapters.StoredKeyAdapter
@@ -59,6 +60,7 @@ class IdentitiesFragment : Fragment() {
     private lateinit var identityAdapter: IdentityAdapter
     private lateinit var virtAdapter: HypervisorAccountAdapter
     private lateinit var keyAdapter: StoredKeyAdapter
+    private lateinit var vncIdentityAdapter: VncIdentityAdapter
 
     // ── SAF launchers — must be declared as field initializers (before onStart) ──
 
@@ -191,6 +193,7 @@ class IdentitiesFragment : Fragment() {
 
         setupHostIdentitiesSection(view)
         setupVirtIdentitiesSection(view)
+        setupVncIdentitiesSection(view)
         setupSshKeysSection(view)
         observeData()
     }
@@ -248,6 +251,171 @@ class IdentitiesFragment : Fragment() {
         view.findViewById<View>(R.id.text_virt_identities_empty).visibility = if (empty) View.VISIBLE else View.GONE
     }
 
+    // ─── VNC Identities ─────────────────────────────────────────────────────
+
+    private fun setupVncIdentitiesSection(view: View) {
+        vncIdentityAdapter = VncIdentityAdapter(
+            onEdit = { identity -> showVncIdentityDialog(identity) },
+            onDelete = { identity -> confirmDeleteVncIdentity(identity) }
+        )
+        val rv = view.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.recycler_vnc_identities)
+        rv.layoutManager = LinearLayoutManager(requireContext())
+        rv.adapter = vncIdentityAdapter
+        updateVncEmptyState(view, 0)
+
+        view.findViewById<MaterialButton>(R.id.btn_add_vnc_identity).setOnClickListener {
+            showVncIdentityDialog(null)
+        }
+    }
+
+    private fun updateVncEmptyState(view: View, count: Int) {
+        val empty = count == 0
+        view.findViewById<View>(R.id.recycler_vnc_identities).visibility = if (empty) View.GONE else View.VISIBLE
+        view.findViewById<View>(R.id.text_vnc_identities_empty).visibility = if (empty) View.VISIBLE else View.GONE
+    }
+
+    private fun showVncIdentityDialog(existing: VncIdentity?) {
+        val ctx = requireContext()
+        val isEditing = existing != null
+
+        val dialogView = android.view.LayoutInflater.from(ctx).inflate(
+            android.R.layout.simple_list_item_2, null, false
+        )
+        // Build fields manually since we don't have a dedicated dialog layout
+        val layout = android.widget.LinearLayout(ctx).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(48, 32, 48, 8)
+        }
+        fun makeEditText(hint: String, value: String? = null, inputType: Int = android.text.InputType.TYPE_CLASS_TEXT): android.widget.EditText {
+            return android.widget.EditText(ctx).apply {
+                this.hint = hint
+                setText(value ?: "")
+                this.inputType = inputType
+                val params = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                params.bottomMargin = 16
+                layoutParams = params
+            }
+        }
+        val editName = makeEditText("Name (required)", existing?.name)
+        val editUsername = makeEditText("Username (for VeNCrypt Plain)", existing?.username)
+        val editDescription = makeEditText("Description", existing?.description)
+        val editPassword = makeEditText(
+            if (isEditing) "Password (blank = keep existing)" else "Password",
+            null,
+            android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        )
+        layout.addView(editName)
+        layout.addView(editUsername)
+        layout.addView(editDescription)
+        layout.addView(editPassword)
+
+        MaterialAlertDialogBuilder(ctx)
+            .setTitle(if (isEditing) "Edit VNC Identity" else "Add VNC Identity")
+            .setView(layout)
+            .setPositiveButton("Save") { _, _ ->
+                val name = editName.text.toString().trim()
+                if (name.isBlank()) {
+                    Toast.makeText(ctx, "Name is required", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                val now = System.currentTimeMillis()
+                val id = existing?.id ?: java.util.UUID.randomUUID().toString()
+                val identity = VncIdentity(
+                    id = id,
+                    name = name,
+                    username = editUsername.text.toString().trim().takeIf { it.isNotBlank() },
+                    description = editDescription.text.toString().trim().takeIf { it.isNotBlank() },
+                    createdAt = existing?.createdAt ?: now,
+                    modifiedAt = now
+                )
+                val password = editPassword.text.toString()
+                lifecycleScope.launch {
+                    withContext(Dispatchers.IO) { app.database.vncIdentityDao().insert(identity) }
+                    if (password.isNotBlank()) {
+                        try {
+                            app.securePasswordManager.storePassword(
+                                "vnc_identity_$id",
+                                password,
+                                io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.ENCRYPTED
+                            )
+                        } catch (e: Exception) {
+                            Logger.w(TAG, "Failed to store VNC identity password: ${e.message}")
+                        }
+                    }
+                    Toast.makeText(ctx, "Saved", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun confirmDeleteVncIdentity(identity: VncIdentity) {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Delete VNC identity?")
+            .setMessage("\"${identity.name}\" will be removed. Any VNC hosts using it will lose their credential link.")
+            .setPositiveButton("Delete") { _, _ ->
+                lifecycleScope.launch {
+                    withContext(Dispatchers.IO) { app.database.vncIdentityDao().deleteById(identity.id) }
+                    try {
+                        app.securePasswordManager.clearPassword("vnc_identity_${identity.id}")
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to clear VNC identity password: ${e.message}")
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    // ─── VNC Identity adapter ────────────────────────────────────────────────
+
+    inner class VncIdentityAdapter(
+        private val onEdit: (VncIdentity) -> Unit,
+        private val onDelete: (VncIdentity) -> Unit
+    ) : androidx.recyclerview.widget.RecyclerView.Adapter<VncIdentityAdapter.VH>() {
+
+        private var items: List<VncIdentity> = emptyList()
+
+        fun submit(list: List<VncIdentity>) {
+            items = list
+            notifyDataSetChanged()
+        }
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
+            val v = LayoutInflater.from(parent.context)
+                .inflate(R.layout.item_vnc_identity, parent, false)
+            return VH(v)
+        }
+
+        override fun getItemCount(): Int = items.size
+
+        override fun onBindViewHolder(holder: VH, position: Int) {
+            val identity = items[position]
+            holder.name.text = identity.name
+            if (!identity.description.isNullOrBlank()) {
+                holder.description.visibility = View.VISIBLE
+                holder.description.text = identity.description
+            } else if (!identity.username.isNullOrBlank()) {
+                holder.description.visibility = View.VISIBLE
+                holder.description.text = "Username: ${identity.username}"
+            } else {
+                holder.description.visibility = View.GONE
+            }
+            holder.btnEdit.setOnClickListener { onEdit(identity) }
+            holder.btnDelete.setOnClickListener { onDelete(identity) }
+        }
+
+        inner class VH(view: View) : androidx.recyclerview.widget.RecyclerView.ViewHolder(view) {
+            val name: android.widget.TextView = view.findViewById(R.id.text_name)
+            val description: android.widget.TextView = view.findViewById(R.id.text_description)
+            val btnEdit: android.widget.ImageButton = view.findViewById(R.id.btn_edit)
+            val btnDelete: android.widget.ImageButton = view.findViewById(R.id.btn_delete)
+        }
+    }
+
     // ─── SSH Keys ────────────────────────────────────────────────────────────
 
     private fun setupSshKeysSection(view: View) {
@@ -292,6 +460,13 @@ class IdentitiesFragment : Fragment() {
                         virtAdapter.submit(list)
                         view?.let { updateVirtEmptyState(it, list.size) }
                         Logger.d(TAG, "Loaded ${list.size} virtualization identities")
+                    }
+                }
+                launch {
+                    app.database.vncIdentityDao().getAllIdentities().collect { list ->
+                        vncIdentityAdapter.submit(list)
+                        view?.let { updateVncEmptyState(it, list.size) }
+                        Logger.d(TAG, "Loaded ${list.size} VNC identities")
                     }
                 }
                 launch {

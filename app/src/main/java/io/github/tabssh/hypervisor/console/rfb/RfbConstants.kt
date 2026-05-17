@@ -6,6 +6,15 @@ object RfbConstants {
     // ── Security types ──────────────────────────────────────────────────────
     const val SECURITY_NONE: Int = 1
     const val SECURITY_VNC_AUTH: Int = 2
+    const val SECURITY_VENCRYPT: Int = 19
+
+    // ── VeNCrypt sub-types ───────────────────────────────────────────────────
+    const val VENCRYPT_TLS_NONE: Int = 256
+    const val VENCRYPT_X509_NONE: Int = 260
+    const val VENCRYPT_TLS_VNC: Int = 257
+    const val VENCRYPT_X509_VNC: Int = 261
+    const val VENCRYPT_TLS_PLAIN: Int = 258
+    const val VENCRYPT_X509_PLAIN: Int = 262
 
     // ── Client → Server message types ───────────────────────────────────────
     const val C2S_SET_PIXEL_FORMAT: Int = 0

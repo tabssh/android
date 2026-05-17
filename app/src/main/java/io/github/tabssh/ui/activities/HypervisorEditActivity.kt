@@ -598,6 +598,24 @@ class HypervisorEditActivity : AppCompatActivity() {
                         client.authenticate()
                     }
                     HypervisorType.OCI -> testOciConnection()
+                    HypervisorType.LIBVIRT -> {
+                        // SSH-based; just do a quick connect/disconnect
+                        val client = io.github.tabssh.hypervisor.libvirt.LibvirtApiClient(
+                            this@HypervisorEditActivity,
+                            io.github.tabssh.storage.database.entities.HypervisorProfile(
+                                name = "",
+                                type = HypervisorType.LIBVIRT,
+                                host = host,
+                                port = port,
+                                username = username,
+                                password = password,
+                                verifySsl = verifySsl
+                            )
+                        )
+                        client.connect()
+                        client.disconnect()
+                        true
+                    }
                 }
                 
                 if (success) {

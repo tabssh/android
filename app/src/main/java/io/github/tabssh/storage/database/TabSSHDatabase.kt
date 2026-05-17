@@ -6,6 +6,8 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import io.github.tabssh.storage.database.dao.*
 import io.github.tabssh.storage.database.entities.*
+import io.github.tabssh.storage.database.entities.VncHost
+import io.github.tabssh.storage.database.entities.VncIdentity
 import io.github.tabssh.utils.logging.Logger
 
 /**
@@ -29,9 +31,11 @@ import io.github.tabssh.utils.logging.Logger
         CloudAccount::class,
         Macro::class,
         io.github.tabssh.storage.database.entities.HypervisorAccount::class,
-        MonitorSlot::class
+        MonitorSlot::class,
+        VncHost::class,
+        VncIdentity::class
     ],
-    version = 33,
+    version = 34,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -54,6 +58,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
     abstract fun macroDao(): MacroDao
     abstract fun hypervisorAccountDao(): io.github.tabssh.storage.database.dao.HypervisorAccountDao
     abstract fun monitorSlotDao(): MonitorSlotDao
+    abstract fun vncHostDao(): VncHostDao
+    abstract fun vncIdentityDao(): VncIdentityDao
 
     companion object {
         @Volatile
@@ -315,7 +321,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     MIGRATION_29_30,
                     MIGRATION_30_31,
                     MIGRATION_31_32,
-                    MIGRATION_32_33
+                    MIGRATION_32_33,
+                    MIGRATION_33_34
                 )
                 .build()
                 INSTANCE = instance
@@ -784,6 +791,53 @@ data class DatabaseStats(
                     }
                 }
                 Logger.i("Database", "Migration 32->33: OCI credentials promoted to hypervisor_accounts")
+            }
+        }
+
+        /**
+         * v33 → v34 — VNC host and identity tables.
+         * - New `vnc_identities` table: named credential sets for VNC / VeNCrypt
+         *   connections. Passwords live in SecurePasswordManager under
+         *   `vnc_identity_${id}`, never in this table.
+         * - New `vnc_hosts` table: direct VNC host records for VPS / QEMU
+         *   libvirt consoles. FK to vnc_identities via identity_id.
+         */
+        val MIGRATION_33_34 = object : Migration(33, 34) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS vnc_identities (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        username TEXT,
+                        description TEXT,
+                        created_at INTEGER NOT NULL,
+                        modified_at INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS vnc_hosts (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        host TEXT NOT NULL,
+                        port INTEGER NOT NULL DEFAULT 5900,
+                        display_number INTEGER,
+                        identity_id TEXT,
+                        security_type TEXT NOT NULL DEFAULT 'auto',
+                        tls_verify INTEGER NOT NULL DEFAULT 0,
+                        pinned_cert_sha256 TEXT,
+                        group_id TEXT,
+                        color_tag INTEGER NOT NULL DEFAULT 0,
+                        notes TEXT,
+                        last_connected INTEGER NOT NULL DEFAULT 0,
+                        created_at INTEGER NOT NULL,
+                        modified_at INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                Logger.i("Database", "Migration 33->34: Created vnc_identities and vnc_hosts tables")
             }
         }
 

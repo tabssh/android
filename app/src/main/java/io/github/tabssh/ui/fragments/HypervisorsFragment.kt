@@ -20,6 +20,7 @@ import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.ui.activities.HypervisorEditActivity
+import io.github.tabssh.ui.activities.LibvirtManagerActivity
 import io.github.tabssh.ui.activities.OciManagerActivity
 import io.github.tabssh.ui.activities.ProxmoxManagerActivity
 import io.github.tabssh.ui.activities.VMwareManagerActivity
@@ -164,6 +165,7 @@ class HypervisorsFragment : Fragment() {
             HypervisorType.VMWARE -> Intent(requireContext(), VMwareManagerActivity::class.java)
             HypervisorType.XCPNG -> Intent(requireContext(), XCPngManagerActivity::class.java)
             HypervisorType.OCI -> Intent(requireContext(), OciManagerActivity::class.java)
+            HypervisorType.LIBVIRT -> Intent(requireContext(), LibvirtManagerActivity::class.java)
         }
         intent.putExtra("hypervisor_id", hypervisor.id)
         startActivity(intent)

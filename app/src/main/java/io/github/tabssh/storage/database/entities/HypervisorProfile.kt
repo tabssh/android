@@ -132,5 +132,6 @@ enum class HypervisorType {
     PROXMOX,
     XCPNG,
     VMWARE,
-    OCI
+    OCI,
+    LIBVIRT
 }

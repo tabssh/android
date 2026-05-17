@@ -561,6 +561,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                             HypervisorType.XCPNG -> "XCP-ng"
                             HypervisorType.VMWARE -> "VMware"
                             HypervisorType.OCI -> "OCI"
+                            HypervisorType.LIBVIRT -> "QEMU/libvirt"
                         }
                         android.widget.Toast.makeText(
                             this@MainActivity,
@@ -599,6 +600,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             HypervisorType.XCPNG -> Intent(this, XCPngManagerActivity::class.java)
             HypervisorType.VMWARE -> Intent(this, VMwareManagerActivity::class.java)
             HypervisorType.OCI -> Intent(this, OciManagerActivity::class.java)
+            HypervisorType.LIBVIRT -> Intent(this, LibvirtManagerActivity::class.java)
         }
         intent.putExtra("hypervisor_id", hypervisor.id)
         startActivity(intent)

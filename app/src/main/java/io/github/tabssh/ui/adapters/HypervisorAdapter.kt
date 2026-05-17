@@ -78,6 +78,7 @@ class HypervisorAdapter(
                 HypervisorType.XCPNG -> "☁️"
                 HypervisorType.VMWARE -> "📦"
                 HypervisorType.OCI -> "🏛️"
+                HypervisorType.LIBVIRT -> "🖥️"
             }
 
             // Set name
@@ -89,6 +90,7 @@ class HypervisorAdapter(
                 HypervisorType.XCPNG -> "XCP-ng"
                 HypervisorType.VMWARE -> "VMware"
                 HypervisorType.OCI -> "OCI"
+                HypervisorType.LIBVIRT -> "QEMU/libvirt"
             }
 
             // Set host and port

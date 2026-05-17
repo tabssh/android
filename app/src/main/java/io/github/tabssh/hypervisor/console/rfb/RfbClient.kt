@@ -6,7 +6,13 @@ import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.InputStream
 import java.io.OutputStream
+import java.net.Socket
 import java.util.concurrent.atomic.AtomicBoolean
+import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLSocket
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
+import java.security.cert.X509Certificate
 
 /**
  * RFB 3.8 client state machine.
@@ -28,8 +34,18 @@ import java.util.concurrent.atomic.AtomicBoolean
 class RfbClient(
     private val inputStream: InputStream,
     private val outputStream: OutputStream,
-    /** VNC password for SECURITY_VNC_AUTH; null means None-only connections. */
-    private val vncPassword: String? = null
+    /** VNC password for SECURITY_VNC_AUTH / VeNCrypt Vnc/Plain sub-types; null means None-only connections. */
+    private val vncPassword: String? = null,
+    /** Underlying TCP socket; required for VeNCrypt TLS upgrade (stream replacement). */
+    private val rawSocket: Socket? = null,
+    /** Hostname used for TLS SNI during VeNCrypt handshake. */
+    private val tlsHost: String? = null,
+    /** Port used for TLS SNI hint (informational); not sent over the wire. */
+    private val tlsPort: Int = 5900,
+    /** Whether to verify the server certificate during VeNCrypt TLS upgrade. */
+    private val tlsVerify: Boolean = false,
+    /** Username for VeNCrypt Plain sub-types. */
+    private val vncUsername: String? = null
 ) {
     companion object {
         private const val TAG = "RfbClient"
@@ -55,8 +71,8 @@ class RfbClient(
 
     var listener: RfbListener? = null
 
-    private val din = DataInputStream(inputStream.buffered(65536))
-    private val dout = DataOutputStream(outputStream)
+    private var din = DataInputStream(inputStream.buffered(65536))
+    private var dout = DataOutputStream(outputStream)
     private val outLock = Any()        // guards all writes to dout
 
     private val running = AtomicBoolean(false)
@@ -152,9 +168,10 @@ class RfbClient(
         din.readFully(types)
         Logger.d(TAG, "Security types offered: ${types.map { it.toInt() and 0xFF }}")
 
-        // Prefer None (ticket-authenticated proxies), fall back to VNC Auth if
-        // a password was supplied by the caller.
+        // Prefer VeNCrypt (when rawSocket is available), then None, then VNC Auth.
         val chosen = when {
+            types.contains(RfbConstants.SECURITY_VENCRYPT.toByte()) && rawSocket != null ->
+                RfbConstants.SECURITY_VENCRYPT
             types.contains(RfbConstants.SECURITY_NONE.toByte()) -> RfbConstants.SECURITY_NONE
             types.contains(RfbConstants.SECURITY_VNC_AUTH.toByte()) && vncPassword != null ->
                 RfbConstants.SECURITY_VNC_AUTH
@@ -177,6 +194,15 @@ class RfbClient(
                 val response = vncDesEncrypt(vncPassword!!, challenge)
                 synchronized(outLock) { dout.write(response); dout.flush() }
             }
+
+            RfbConstants.SECURITY_VENCRYPT -> {
+                authenticateVeNCrypt()
+                // VeNCrypt security result is 1 byte (0=OK), not 4 bytes.
+                val result = din.readUnsignedByte()
+                if (result != 0) throw Exception("VeNCrypt authentication failed")
+                Logger.d(TAG, "VeNCrypt authentication OK")
+                return // skip the 4-byte SecurityResult block below
+            }
         }
 
         // SecurityResult (u32): 0 = OK, anything else = failure with reason string
@@ -187,6 +213,129 @@ class RfbClient(
             throw Exception("Authentication failed: ${String(reason)}")
         }
         Logger.d(TAG, "Authentication OK")
+    }
+
+    /**
+     * VeNCrypt handshake (security type 19, RFB 3.8 extension).
+     * Negotiates a TLS-based sub-type, upgrades the stream, then performs
+     * secondary auth (None / VNC DES challenge / Plain credentials).
+     * On return, [din] and [dout] are already rewrapped around the TLS socket.
+     */
+    private fun authenticateVeNCrypt() {
+        // Version exchange: server sends major (u8) + minor (u8)
+        val major = din.readUnsignedByte()
+        val minor = din.readUnsignedByte()
+        Logger.d(TAG, "VeNCrypt version offered: $major.$minor")
+        if (major != 0 || minor != 2) {
+            throw Exception("Unsupported VeNCrypt version $major.$minor (expected 0.2)")
+        }
+        // Client sends back 0x00 0x02 (the only version we support)
+        synchronized(outLock) { dout.writeByte(0); dout.writeByte(2); dout.flush() }
+
+        // Server sends OK byte (1=accepted, 0=rejected)
+        val versionOk = din.readUnsignedByte()
+        if (versionOk != 1) throw Exception("Server rejected VeNCrypt version")
+
+        // Server sends sub-type count (u8) then list of u32 sub-types
+        val subTypeCount = din.readUnsignedByte()
+        val subTypes = IntArray(subTypeCount) { din.readInt() }
+        Logger.d(TAG, "VeNCrypt sub-types offered: ${subTypes.toList()}")
+
+        // Preference order: X509None > TLSNone > X509Vnc > TLSVnc > X509Plain > TLSPlain
+        val preferenceOrder = listOf(
+            RfbConstants.VENCRYPT_X509_NONE,
+            RfbConstants.VENCRYPT_TLS_NONE,
+            RfbConstants.VENCRYPT_X509_VNC,
+            RfbConstants.VENCRYPT_TLS_VNC,
+            RfbConstants.VENCRYPT_X509_PLAIN,
+            RfbConstants.VENCRYPT_TLS_PLAIN
+        )
+        val chosen = preferenceOrder.firstOrNull { subTypes.contains(it) }
+            ?: throw Exception("No supported VeNCrypt sub-type in ${subTypes.toList()}")
+        Logger.d(TAG, "Chose VeNCrypt sub-type: $chosen")
+
+        // Send chosen sub-type as u32
+        synchronized(outLock) { dout.writeInt(chosen); dout.flush() }
+
+        // Server sends accepted byte (1=yes)
+        val accepted = din.readUnsignedByte()
+        if (accepted != 1) throw Exception("Server rejected VeNCrypt sub-type $chosen")
+
+        // Upgrade to TLS
+        val sslSocket = upgradeTls()
+
+        // Replace streams — all subsequent RFB traffic goes over TLS
+        synchronized(outLock) {
+            din = DataInputStream(sslSocket.inputStream.buffered(65536))
+            dout = DataOutputStream(sslSocket.outputStream)
+        }
+
+        // Secondary authentication
+        when (chosen) {
+            RfbConstants.VENCRYPT_TLS_NONE,
+            RfbConstants.VENCRYPT_X509_NONE -> {
+                // No secondary auth; SecurityResult follows
+            }
+
+            RfbConstants.VENCRYPT_TLS_VNC,
+            RfbConstants.VENCRYPT_X509_VNC -> {
+                // VNC DES challenge auth
+                val challenge = ByteArray(16)
+                din.readFully(challenge)
+                val response = vncDesEncrypt(
+                    vncPassword ?: throw Exception("VNC password required for VeNCrypt VNC auth"),
+                    challenge
+                )
+                synchronized(outLock) { dout.write(response); dout.flush() }
+            }
+
+            RfbConstants.VENCRYPT_TLS_PLAIN,
+            RfbConstants.VENCRYPT_X509_PLAIN -> {
+                // Plain credentials: 4-byte username length + bytes, 4-byte password length + bytes
+                val user = (vncUsername ?: "").toByteArray(Charsets.UTF_8)
+                val pass = (vncPassword ?: "").toByteArray(Charsets.UTF_8)
+                synchronized(outLock) {
+                    dout.writeInt(user.size)
+                    dout.write(user)
+                    dout.writeInt(pass.size)
+                    dout.write(pass)
+                    dout.flush()
+                }
+            }
+        }
+    }
+
+    /** Wrap [rawSocket] with TLS. Uses a permissive trust manager when [tlsVerify] is false. */
+    private fun upgradeTls(): SSLSocket {
+        val socket = rawSocket ?: throw Exception("No raw socket for TLS upgrade")
+        val trustManagers: Array<TrustManager> = if (tlsVerify) {
+            // Use the platform default trust store
+            val tmf = javax.net.ssl.TrustManagerFactory.getInstance(
+                javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm()
+            )
+            tmf.init(null as java.security.KeyStore?)
+            tmf.trustManagers
+        } else {
+            // Accept all certificates (caller opted out of verification)
+            arrayOf(object : X509TrustManager {
+                override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+                override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) = Unit
+                override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) = Unit
+            })
+        }
+        val ctx = SSLContext.getInstance("TLS")
+        ctx.init(null, trustManagers, null)
+        val sf = ctx.socketFactory
+        val sslSocket = sf.createSocket(socket, tlsHost ?: socket.inetAddress.hostAddress, tlsPort, true) as SSLSocket
+        sslSocket.useClientMode = true
+        if (tlsHost != null) {
+            val params = sslSocket.sslParameters
+            params.serverNames = listOf(javax.net.ssl.SNIHostName(tlsHost))
+            sslSocket.sslParameters = params
+        }
+        sslSocket.startHandshake()
+        Logger.d(TAG, "VeNCrypt TLS handshake complete; cipher=${sslSocket.session.cipherSuite}")
+        return sslSocket
     }
 
     /**

@@ -444,6 +444,22 @@
             android:exported="false"
             android:parentActivityName=".ui.activities.SettingsActivity" />
 
+        <!-- QEMU/libvirt domain manager -->
+        <activity
+            android:name=".ui.activities.LibvirtManagerActivity"
+            android:exported="false"
+            android:label="QEMU/libvirt Manager"
+            android:parentActivityName=".ui.activities.MainActivity"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- VNC host editor (create / edit direct VNC connections) -->
+        <activity
+            android:name=".ui.activities.VncHostEditActivity"
+            android:exported="false"
+            android:label="VNC Host"
+            android:parentActivityName=".ui.activities.MainActivity"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- Crash reporter (debug builds only) -->
         <activity
             android:name=".ui.activities.CrashReportActivity"

@@ -11,8 +11,11 @@ import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.hypervisor.console.ConsoleEventListener
 import io.github.tabssh.hypervisor.console.HypervisorConsoleManager
+import io.github.tabssh.hypervisor.console.rfb.RfbClient
 import io.github.tabssh.hypervisor.console.rfb.RfbConstants
 import io.github.tabssh.hypervisor.proxmox.ProxmoxApiClient
+import io.github.tabssh.hypervisor.vnc.VncDirectConnector
+import io.github.tabssh.hypervisor.vnc.VncStreamHolder
 import io.github.tabssh.hypervisor.xcpng.XCPngApiClient
 import io.github.tabssh.hypervisor.xcpng.XenOrchestraApiClient
 import io.github.tabssh.terminal.TermuxBridge
@@ -23,6 +26,7 @@ import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.net.Socket
 
 /**
  * Activity for displaying VM serial console.
@@ -70,6 +74,12 @@ class VMConsoleActivity : AppCompatActivity() {
         const val TYPE_XCPNG = "xcpng"
         const val TYPE_XEN_ORCHESTRA = "xen_orchestra"
         const val TYPE_VMWARE = "vmware"
+
+        // Direct VNC connection extras
+        /** Boolean — when true, read streams from VncStreamHolder (libvirt console). */
+        const val EXTRA_DIRECT_VNC = "direct_vnc"
+        /** String — VncHost UUID; when set, connect directly to that host. */
+        const val EXTRA_VNC_HOST_ID = "vnc_host_id"
     }
 
     private lateinit var app: TabSSHApplication
@@ -84,6 +94,8 @@ class VMConsoleActivity : AppCompatActivity() {
     private var isRecreated = false
     /** True when the active console is graphical (VNC); false for text (serial). */
     private var isGraphicalMode = false
+    /** Socket to close when a direct VNC host connection ends. */
+    private var directVncSocket: Socket? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -375,19 +387,35 @@ class VMConsoleActivity : AppCompatActivity() {
     }
 
     private fun connectToConsole() {
-        val hypervisorType = intent.getStringExtra(EXTRA_HYPERVISOR_TYPE)
-        val vmId = intent.getStringExtra(EXTRA_VM_ID)
-        val vmName = intent.getStringExtra(EXTRA_VM_NAME) ?: "Unknown VM"
-
-        if (hypervisorType == null || vmId == null) {
-            showError("Missing hypervisor or VM information")
-            return
-        }
-
-        showProgress("Connecting to $vmName...")
+        val vmName = intent.getStringExtra(EXTRA_VM_NAME) ?: "VM Console"
+        showProgress("Connecting to $vmName…")
 
         lifecycleScope.launch {
             try {
+                // ── Direct VNC paths take priority over hypervisor connections ──
+
+                // Path 1: Libvirt console — streams pre-stored in VncStreamHolder.
+                if (intent.getBooleanExtra(EXTRA_DIRECT_VNC, false)) {
+                    connectFromStreamHolder(vmName)
+                    return@launch
+                }
+
+                // Path 2: Direct VncHost connection by ID.
+                val vncHostId = intent.getStringExtra(EXTRA_VNC_HOST_ID)
+                if (vncHostId != null) {
+                    connectVncHost(vncHostId)
+                    return@launch
+                }
+
+                // ── Standard hypervisor path ──────────────────────────────────
+                val hypervisorType = intent.getStringExtra(EXTRA_HYPERVISOR_TYPE)
+                val vmId = intent.getStringExtra(EXTRA_VM_ID)
+
+                if (hypervisorType == null || vmId == null) {
+                    showError("Missing hypervisor or VM information")
+                    return@launch
+                }
+
                 consoleManager = HypervisorConsoleManager()
 
                 val connection = when (hypervisorType) {
@@ -433,6 +461,80 @@ class VMConsoleActivity : AppCompatActivity() {
                 showError("Connection failed: ${e.message}")
             }
         }
+    }
+
+    /**
+     * Path 1 — Libvirt direct VNC: retrieve pre-built streams from [VncStreamHolder]
+     * and hand them to [RfbClient].
+     */
+    private fun connectFromStreamHolder(vmName: String) {
+        val streams = VncStreamHolder.take()
+        if (streams == null) {
+            showError("VNC stream not available — please retry from the VM list")
+            return
+        }
+        val (ins, out, socket) = streams
+        directVncSocket = socket
+        val rfbClient = RfbClient(
+            inputStream = ins,
+            outputStream = out,
+            vncPassword = null
+        )
+        val connection = HypervisorConsoleManager.ConsoleConnection.Graphical(
+            vmName = vmName,
+            hypervisorType = HypervisorConsoleManager.HypervisorType.PROXMOX,
+            rfbClient = rfbClient
+        )
+        switchToGraphical(connection)
+    }
+
+    /**
+     * Path 2 — Direct VncHost: load the host from DB, resolve credentials,
+     * establish a TCP connection, and hand off to [switchToGraphical].
+     */
+    private suspend fun connectVncHost(vncHostId: String) {
+        val app = application as TabSSHApplication
+        val host = withContext(Dispatchers.IO) {
+            app.database.vncHostDao().getById(vncHostId)
+        }
+        if (host == null) {
+            showError("VNC host not found (id=$vncHostId)")
+            return
+        }
+        val (password, username) = withContext(Dispatchers.IO) {
+            val identityId = host.identityId
+            if (identityId != null) {
+                val identity = app.database.vncIdentityDao().getById(identityId)
+                val pw = try {
+                    app.securePasswordManager.retrievePassword("vnc_identity_$identityId")
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Could not retrieve VNC identity password: ${e.message}")
+                    null
+                }
+                Pair(pw, identity?.username)
+            } else {
+                val pw = try {
+                    app.securePasswordManager.retrievePassword("vnc_host_$vncHostId")
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Could not retrieve VNC host password: ${e.message}")
+                    null
+                }
+                Pair(pw, null)
+            }
+        }
+        val (rfbClient, socket) = withContext(Dispatchers.IO) {
+            VncDirectConnector.connect(host, password, username, this@VMConsoleActivity)
+        }
+        directVncSocket = socket
+        val connection = HypervisorConsoleManager.ConsoleConnection.Graphical(
+            vmName = host.name,
+            hypervisorType = HypervisorConsoleManager.HypervisorType.PROXMOX,
+            rfbClient = rfbClient
+        )
+        withContext(Dispatchers.IO) {
+            app.database.vncHostDao().updateLastConnected(vncHostId, System.currentTimeMillis())
+        }
+        switchToGraphical(connection)
     }
 
     private suspend fun connectProxmox(vmId: String, vmName: String): HypervisorConsoleManager.ConsoleConnection? {
@@ -784,6 +886,7 @@ class VMConsoleActivity : AppCompatActivity() {
         consoleManager?.disconnect()
         termuxBridge?.cleanup()
         vncView.recycle()
+        try { directVncSocket?.close() } catch (_: Exception) {}
     }
 
 }
