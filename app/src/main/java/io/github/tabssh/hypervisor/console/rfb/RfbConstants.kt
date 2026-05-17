@@ -50,9 +50,9 @@ object RfbConstants {
      * Client-initiated resize (RFB 3.8 extension, §5.4).
      * Advertised in SetEncodings so the server knows we support SetDesktopSize
      * messages.  Server acknowledges by sending an ExtendedDesktopSize pseudo-
-     * rectangle.  Unsigned value 0xFFFFFE21 = -479 as signed int32.
+     * rectangle.  Unsigned value 0xFFFFFECC = -308 as signed int32.
      */
-    const val ENC_EXTENDED_DESKTOP_SIZE: Int = -479
+    const val ENC_EXTENDED_DESKTOP_SIZE: Int = -308
 
     // ── Tight compression control byte top nibble ────────────────────────────
     const val TIGHT_FILL: Int = 0x08

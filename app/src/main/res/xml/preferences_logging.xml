@@ -225,22 +225,22 @@
             android:key="paste_microbin_url"
             android:title="MicroBin Server"
             android:defaultValue="https://mb.pste.us"
-            android:summary="%s"
-            android:inputType="textUri" />
+            android:inputType="textUri"
+            app:useSimpleSummaryProvider="true" />
 
         <EditTextPreference
             android:key="paste_lenpaste_url"
             android:title="Lenpaste Server"
             android:defaultValue="https://lp.pste.us"
-            android:summary="%s"
-            android:inputType="textUri" />
+            android:inputType="textUri"
+            app:useSimpleSummaryProvider="true" />
 
         <EditTextPreference
             android:key="paste_stikked_url"
             android:title="Stikked Server"
             android:defaultValue="https://pste.us"
-            android:summary="%s"
-            android:inputType="textUri" />
+            android:inputType="textUri"
+            app:useSimpleSummaryProvider="true" />
 
         <EditTextPreference
             android:key="paste_pastebin_api_key"

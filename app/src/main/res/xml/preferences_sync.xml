@@ -53,10 +53,10 @@
         <ListPreference
             android:key="sync_frequency"
             android:title="Sync frequency"
-            android:summary="%s"
             android:entries="@array/sync_frequency_entries"
             android:entryValues="@array/sync_frequency_values"
-            android:defaultValue="1h" />
+            android:defaultValue="1h"
+            app:useSimpleSummaryProvider="true" />
 
         <SwitchPreferenceCompat
             android:key="sync_wifi_only"
