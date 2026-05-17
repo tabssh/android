@@ -766,7 +766,10 @@ class VMConsoleActivity : AppCompatActivity() {
         }
 
         override fun onSerialConsoleUnavailable() {
-            runOnUiThread { showSerialConsoleUnavailableBanner() }
+            // Serial console unavailability is an internal implementation detail —
+            // HypervisorConsoleManager already logs it at DEBUG and retries with
+            // vncproxy transparently. Only surface an error if VNC also fails
+            // (that path calls onError() above). No dialog needed here.
         }
 
         override fun onSwitchToGraphical(
@@ -774,24 +777,6 @@ class VMConsoleActivity : AppCompatActivity() {
         ) {
             runOnUiThread { switchToGraphical(connection) }
         }
-    }
-
-    /**
-     * Dismissible banner shown when Proxmox termproxy reports that the VM has
-     * no serial device configured and the console is falling back to VNC mode.
-     */
-    private fun showSerialConsoleUnavailableBanner() {
-        if (isFinishing || isDestroyed) return
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Serial console unavailable")
-            .setMessage(
-                "This VM has no serial device configured.\n\n" +
-                "To enable the serial console: open the VM in Proxmox → Hardware → " +
-                "Add → Serial Port → set type to \"socket\", then reboot the VM.\n\n" +
-                "Falling back to VNC console mode."
-            )
-            .setPositiveButton("OK", null)
-            .show()
     }
 
     private fun showProgress(message: String) {

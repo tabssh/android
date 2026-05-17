@@ -1028,6 +1028,16 @@ class MonitoringSettingsFragment : androidx.preference.PreferenceFragmentCompat(
     override fun onCreatePreferences(savedInstanceState: android.os.Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences_monitoring, rootKey)
 
+        // Embed the selected entry label into the cooldown summary sentence so
+        // the user sees e.g. "1 hour between repeated 'still down' notifications"
+        // rather than a bare value or a literal "%s".
+        findPreference<androidx.preference.ListPreference>("monitoring_alert_cooldown_minutes")
+            ?.summaryProvider = androidx.preference.Preference.SummaryProvider<androidx.preference.ListPreference> { pref ->
+                val entry = pref.entry
+                if (entry.isNullOrEmpty()) "Not set"
+                else "$entry between repeated 'still down' notifications"
+            }
+
         // Master toggle — schedule or cancel the background worker.
         findPreference<androidx.preference.SwitchPreferenceCompat>("monitoring_enabled")
             ?.setOnPreferenceChangeListener { _, newValue ->

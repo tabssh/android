@@ -44,19 +44,52 @@ class LibvirtApiClient(
     /**
      * Establish the SSH session. Must be called (on IO dispatcher) before any
      * other method. Throws on failure.
+     *
+     * When [HypervisorProfile.sshIdentityId] is set, the corresponding key is
+     * loaded from [KeyStorage] and offered to the server first (publickey auth);
+     * password is still tried as a fallback so existing setups keep working.
+     * When no identity is configured, password-only auth is used as before.
      */
     suspend fun connect() = withContext(Dispatchers.IO) {
         val app = context.applicationContext as TabSSHApplication
         val password = HypervisorPasswordStore.retrieve(context, profile)
 
         val jsch = JSch()
+        val config = java.util.Properties()
         // Disable strict host-key checking for hypervisor connections;
         // the hypervisor UI handles its own TLS pinning separately.
+        config["StrictHostKeyChecking"] = "no"
+
+        val keyId = profile.sshIdentityId
+        if (keyId != null) {
+            // Load the SSH key. retrieveJSchBytes() returns JSch-native PEM bytes
+            // encrypted in SharedPreferences with a Keystore-backed AES-GCM key.
+            val jschBytes = app.keyStorage.retrieveJSchBytes(keyId)
+            if (jschBytes != null) {
+                // Prefer the byte-array addIdentity variant so we never write a
+                // temp file (avoids data leaks on unencrypted external storage).
+                val storedKey = app.database.keyDao().getKeyById(keyId)
+                val certBytes = storedKey?.certificate
+                    ?.takeIf { it.isNotBlank() }
+                    ?.toByteArray(Charsets.US_ASCII)
+                jsch.addIdentity(
+                    "tabssh-libvirt-$keyId",
+                    jschBytes,
+                    certBytes,
+                    null  // passphrase — LIBVIRT keys stored unencrypted in Keystore
+                )
+                config["PreferredAuthentications"] = "publickey,password"
+                Logger.i(TAG, "SSH key identity loaded for ${profile.host} (keyId=$keyId)")
+            } else {
+                Logger.w(TAG, "sshIdentityId=$keyId set but JSch bytes not found — falling back to password")
+                config["PreferredAuthentications"] = "password"
+            }
+        } else {
+            config["PreferredAuthentications"] = "password"
+        }
+
         val sess = jsch.getSession(profile.username, profile.host, profile.port)
         sess.setPassword(password)
-        val config = java.util.Properties()
-        config["StrictHostKeyChecking"] = "no"
-        config["PreferredAuthentications"] = "password"
         sess.setConfig(config)
         sess.connect(CONNECT_TIMEOUT_MS)
         session = sess

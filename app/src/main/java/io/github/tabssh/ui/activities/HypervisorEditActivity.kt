@@ -62,6 +62,13 @@ class HypervisorEditActivity : AppCompatActivity() {
     private var availableAccounts: List<io.github.tabssh.storage.database.entities.HypervisorAccount> = emptyList()
     private var selectedAccountId: Long? = null
 
+    // SSH identity picker — visible only for LIBVIRT type. Maps display
+    // label to StoredKey.keyId; "(none)" entry maps to null.
+    private lateinit var dropdownSshIdentity: AutoCompleteTextView
+    private lateinit var layoutSshIdentity: com.google.android.material.textfield.TextInputLayout
+    private var availableSshKeys: List<io.github.tabssh.storage.database.entities.StoredKey> = emptyList()
+    private var selectedSshIdentityId: String? = null
+
     // Phase 1 cert pinning UI. Visible only when verifySsl is on.
     private lateinit var layoutPinnedCert: LinearLayout
     private lateinit var textPinnedCert: TextView
@@ -85,6 +92,7 @@ class HypervisorEditActivity : AppCompatActivity() {
         setupSpinner()
         setupApiTypeDropdown()
         setupAccountDropdown()
+        setupSshIdentityDropdown()
         setupClickListeners()
 
         hypervisorId = intent.getLongExtra("hypervisor_id", -1).takeIf { it != -1L }
@@ -133,6 +141,43 @@ class HypervisorEditActivity : AppCompatActivity() {
                 // availableAccounts.
                 val acc = if (position == 0) null else availableAccounts.getOrNull(position - 1)
                 applyAccountSelection(acc?.id)
+            }
+        }
+    }
+
+    /**
+     * Load stored SSH keys and populate the identity dropdown. Only called for
+     * LIBVIRT connections; the layout row starts hidden and is revealed by
+     * [updateUIForType].
+     */
+    private fun setupSshIdentityDropdown() {
+        lifecycleScope.launch {
+            availableSshKeys = withContext(Dispatchers.IO) {
+                try {
+                    app.database.keyDao().getAllKeysList()
+                } catch (e: Exception) {
+                    io.github.tabssh.utils.logging.Logger.w(
+                        "HypervisorEditActivity", "Failed to load SSH keys", e
+                    )
+                    emptyList()
+                }
+            }
+            val labels = mutableListOf("(none — password only)")
+            labels += availableSshKeys.map { it.getDisplayName() }
+            dropdownSshIdentity.setAdapter(
+                ArrayAdapter(
+                    this@HypervisorEditActivity,
+                    android.R.layout.simple_dropdown_item_1line,
+                    labels
+                )
+            )
+            if (dropdownSshIdentity.text.isNullOrEmpty()) {
+                dropdownSshIdentity.setText(labels.first(), false)
+                selectedSshIdentityId = null
+            }
+            dropdownSshIdentity.setOnItemClickListener { _, _, position, _ ->
+                selectedSshIdentityId = if (position == 0) null
+                else availableSshKeys.getOrNull(position - 1)?.keyId
             }
         }
     }
@@ -188,6 +233,8 @@ class HypervisorEditActivity : AppCompatActivity() {
         buttonImportHost = findViewById(R.id.button_import_host)
         dropdownAccount = findViewById(R.id.dropdown_account)
         layoutAccount = findViewById(R.id.layout_account)
+        dropdownSshIdentity = findViewById(R.id.dropdown_ssh_identity)
+        layoutSshIdentity = findViewById(R.id.layout_ssh_identity)
         layoutPinnedCert = findViewById(R.id.layout_pinned_cert)
         textPinnedCert = findViewById(R.id.text_pinned_cert)
         buttonForgetPin = findViewById(R.id.button_forget_pin)
@@ -407,6 +454,8 @@ class HypervisorEditActivity : AppCompatActivity() {
         // LIBVIRT uses SSH (host/port/username/password apply, no OCI section, no SSL switch).
         val isOci = typePosition == HypervisorType.OCI.ordinal
         val isLibvirt = typePosition == HypervisorType.LIBVIRT.ordinal
+        // SSH identity picker is LIBVIRT-only; hide it first, show inside when block below.
+        layoutSshIdentity.visibility = if (isLibvirt) View.VISIBLE else View.GONE
         layoutHost.visibility = if (isOci) View.GONE else View.VISIBLE
         layoutPort.visibility = if (isOci) View.GONE else View.VISIBLE
         layoutUsername.visibility = if (isOci) View.GONE else View.VISIBLE
@@ -553,6 +602,31 @@ class HypervisorEditActivity : AppCompatActivity() {
                     }
 
                     editNotes.setText(hypervisor.notes ?: "")
+
+                    // SSH identity dropdown — re-load keys on IO and pre-select the
+                    // saved identity when editing an existing LIBVIRT profile.
+                    if (hypervisor.type == HypervisorType.LIBVIRT) {
+                        val keys = withContext(Dispatchers.IO) {
+                            try { app.database.keyDao().getAllKeysList() }
+                            catch (e: Exception) { emptyList() }
+                        }
+                        availableSshKeys = keys
+                        val keyLabels = mutableListOf("(none — password only)")
+                        keyLabels += keys.map { it.getDisplayName() }
+                        dropdownSshIdentity.setAdapter(
+                            ArrayAdapter(
+                                this@HypervisorEditActivity,
+                                android.R.layout.simple_dropdown_item_1line,
+                                keyLabels
+                            )
+                        )
+                        val keyIdx = if (hypervisor.sshIdentityId != null)
+                            keys.indexOfFirst { it.keyId == hypervisor.sshIdentityId }
+                                .takeIf { it >= 0 }?.plus(1) ?: 0
+                        else 0
+                        dropdownSshIdentity.setText(keyLabels[keyIdx], false)
+                        selectedSshIdentityId = if (keyIdx == 0) null else keys[keyIdx - 1].keyId
+                    }
                 }
             } catch (e: Exception) {
                 showError("Failed to load hypervisor", "Error")
@@ -621,7 +695,8 @@ class HypervisorEditActivity : AppCompatActivity() {
                                 port = port,
                                 username = username,
                                 password = password,
-                                verifySsl = verifySsl
+                                verifySsl = verifySsl,
+                                sshIdentityId = selectedSshIdentityId
                             )
                         )
                         client.connect()
@@ -759,7 +834,8 @@ class HypervisorEditActivity : AppCompatActivity() {
                     accountId = accountId,
                     notes = editNotes.text.toString().takeIf { it.isNotBlank() },
                     lastConnected = editingHypervisor?.lastConnected ?: 0,
-                    createdAt = editingHypervisor?.createdAt ?: System.currentTimeMillis()
+                    createdAt = editingHypervisor?.createdAt ?: System.currentTimeMillis(),
+                    sshIdentityId = if (type == HypervisorType.LIBVIRT) selectedSshIdentityId else null
                 )
 
                 val savedId = if (hypervisorId != null) {

@@ -35,7 +35,7 @@ import io.github.tabssh.utils.logging.Logger
         VncHost::class,
         VncIdentity::class
     ],
-    version = 34,
+    version = 35,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -322,7 +322,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     MIGRATION_30_31,
                     MIGRATION_31_32,
                     MIGRATION_32_33,
-                    MIGRATION_33_34
+                    MIGRATION_33_34,
+                    MIGRATION_34_35
                 )
                 .build()
                 INSTANCE = instance
@@ -838,6 +839,18 @@ data class DatabaseStats(
                     """.trimIndent()
                 )
                 Logger.i("Database", "Migration 33->34: Created vnc_identities and vnc_hosts tables")
+            }
+        }
+
+        /**
+         * v34 → v35 — Add ssh_identity_id to hypervisors for LIBVIRT SSH key auth.
+         */
+        val MIGRATION_34_35 = object : Migration(34, 35) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE hypervisors ADD COLUMN ssh_identity_id TEXT"
+                )
+                Logger.i("Database", "Migration 34->35: Added ssh_identity_id to hypervisors")
             }
         }
 

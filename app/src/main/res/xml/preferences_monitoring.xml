@@ -38,7 +38,6 @@
         <ListPreference
             android:key="monitoring_alert_cooldown_minutes"
             android:title="Alert cooldown"
-            android:summary="%s between repeated 'still down' notifications"
             android:entries="@array/monitoring_cooldown_labels"
             android:entryValues="@array/monitoring_cooldown_values"
             android:defaultValue="60" />

@@ -124,7 +124,16 @@ data class HypervisorProfile(
     /** Compartment OCID to scope ListInstances against. NULL/empty = use
      *  tenancy OCID (the root compartment). */
     @ColumnInfo(name = "oci_compartment_ocid")
-    val ociCompartmentOcid: String? = null
+    val ociCompartmentOcid: String? = null,
+
+    /**
+     * SSH identity (StoredKey.keyId) to use when connecting to a LIBVIRT
+     * hypervisor. NULL = password-only auth. When set, JSch loads the key
+     * via KeyStorage.retrieveJSchBytes() and sets PreferredAuthentications
+     * to "publickey,password" so key auth is tried first.
+     */
+    @ColumnInfo(name = "ssh_identity_id")
+    val sshIdentityId: String? = null
 )
 
 @Serializable
