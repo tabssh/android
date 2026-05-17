@@ -1,12 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Wave 2.3 — protocol options for ConnectionEditActivity -->
+    <!-- Wave 2.3 / Wave 13 — protocol options for ConnectionEditActivity.
+         Index 0=SSH, 1=VNC, 2=Telnet.  Keep in sync with
+         ConnectionEditActivity.updateProtocolUI(). -->
     <string-array name="protocol_options">
         <item>SSH</item>
+        <item>VNC</item>
         <item>Telnet</item>
     </string-array>
     <string-array name="protocol_values">
         <item>ssh</item>
+        <item>vnc</item>
         <item>telnet</item>
     </string-array>
 

@@ -13,6 +13,8 @@ import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.databinding.ActivityConnectionEditBinding
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.StoredKey
+import io.github.tabssh.storage.database.entities.VncHost
+import io.github.tabssh.storage.database.entities.VncIdentity
 import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.crypto.keys.KeyType
@@ -22,41 +24,69 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Dispatchers
 import io.github.tabssh.utils.showError
+import java.util.UUID
 
 /**
- * Activity for creating and editing SSH connection profiles
+ * Activity for creating and editing connection profiles.
+ *
+ * Protocol-aware:
+ *   SSH    — full SSH form; identity picker shows [Identity] (SSH identities)
+ *   VNC    — simplified form (name/host/port + VNC identity); saves [VncHost]
+ *   Telnet — username/password only; identity picker hidden
+ *
+ * Launch via [createIntent] (SSH/Telnet/ConnectionProfile) or
+ * [createVncIntent] (VNC/VncHost).
  */
 class ConnectionEditActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_CONNECTION_ID = "connection_id"
         const val EXTRA_IS_EDIT_MODE = "is_edit_mode"
+        /** When present, load + save as [VncHost] regardless of protocol spinner. */
+        const val EXTRA_VNC_HOST_ID = "vnc_host_id"
         private const val REQUEST_CODE_IMPORT_KEY = 1001
 
+        /** Launch to create/edit an SSH or Telnet [ConnectionProfile]. */
         fun createIntent(context: Context, connectionId: String? = null): Intent {
             return Intent(context, ConnectionEditActivity::class.java).apply {
                 connectionId?.let { putExtra(EXTRA_CONNECTION_ID, it) }
                 putExtra(EXTRA_IS_EDIT_MODE, connectionId != null)
             }
         }
+
+        /** Launch to create/edit a [VncHost]. */
+        fun createVncIntent(context: Context, vncHostId: String? = null): Intent {
+            return Intent(context, ConnectionEditActivity::class.java).apply {
+                vncHostId?.let { putExtra(EXTRA_VNC_HOST_ID, it) }
+                putExtra(EXTRA_IS_EDIT_MODE, vncHostId != null)
+            }
+        }
     }
-    
+
     private lateinit var binding: ActivityConnectionEditBinding
     private lateinit var app: TabSSHApplication
 
     private var existingProfile: ConnectionProfile? = null
+    private var editingVncHostId: String? = null
     private var isEditMode = false
+
+    // Protocol state — "ssh" | "vnc" | "telnet"
+    private var currentProtocol: String = "ssh"
+
     private var availableKeys: List<StoredKey> = emptyList()
     private var selectedKeyIndex: Int = -1
-    // Persists the keyId from populateFields() so setupKeySpinner() can
-    // restore the selection after the async key-list load completes, even
-    // when the two coroutines race and keys haven't loaded yet when
-    // populateFields() runs.
     private var pendingRestoreKeyId: String? = null
+
     private var selectedGroupId: String? = null
     private var selectedGroupName: String = "No Group"
+
+    // SSH identities (Identity table)
     private var availableIdentities: List<io.github.tabssh.storage.database.entities.Identity> = emptyList()
     private var selectedIdentityId: String? = null
+
+    // VNC identities (VncIdentity table)
+    private var availableVncIdentities: List<VncIdentity> = emptyList()
+    private var selectedVncIdentityId: String? = null
 
     /** Wave 3.1 — current color tag in the editor (ARGB int; 0 = none). */
     private var currentColorTag: Int = 0
@@ -71,21 +101,20 @@ class ConnectionEditActivity : AppCompatActivity() {
         0xFF6D4C41.toInt() to "Brown",
         0xFF546E7A.toInt() to "Slate"
     )
-    
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         binding = ActivityConnectionEditBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        
+
         app = application as TabSSHApplication
         isEditMode = intent.getBooleanExtra(EXTRA_IS_EDIT_MODE, false)
-        
+
         setupToolbar()
         setupAuthTypeSpinner()
         setupKeySpinner()
         setupGroupSpinner()
-        setupIdentitySpinner()
         setupProxyTypeSpinner()
         setupTerminalTypeSpinner()
         setupMultiplexerSpinner()
@@ -94,26 +123,36 @@ class ConnectionEditActivity : AppCompatActivity() {
         setupValidation()
         setupButtons()
         setupPortKnockUI()
-        
-        // Load existing connection if editing — otherwise pre-fill the
-        // username with the user's preferred default (Settings →
-        // Connection → Default username, defaults to "root"). Doing
-        // this here instead of hardcoding android:text="root" in the
-        // layout keeps the form honest if the user changed the default.
+        // Protocol spinner wired last — it calls updateProtocolUI() which
+        // triggers identity list loading and card visibility.
+        setupProtocolSpinner()
+
+        val vncHostId = intent.getStringExtra(EXTRA_VNC_HOST_ID)
         val connectionId = intent.getStringExtra(EXTRA_CONNECTION_ID)
-        if (connectionId != null) {
-            loadConnection(connectionId)
-        } else {
-            val defaultUser = io.github.tabssh.storage.preferences.PreferenceManager(this)
-                .getDefaultUsername()
-            if (defaultUser.isNotBlank()) {
-                binding.editUsername.setText(defaultUser)
+
+        when {
+            vncHostId != null -> {
+                editingVncHostId = vncHostId
+                loadVncHost(vncHostId)
+            }
+            connectionId != null -> loadConnection(connectionId)
+            else -> {
+                // New connection — pre-fill the preferred default username.
+                val defaultUser = io.github.tabssh.storage.preferences.PreferenceManager(this)
+                    .getDefaultUsername()
+                if (defaultUser.isNotBlank()) {
+                    binding.editUsername.setText(defaultUser)
+                }
             }
         }
-        
-        Logger.d("ConnectionEditActivity", "Connection edit activity created, editMode: $isEditMode")
+
+        Logger.d("ConnectionEditActivity", "editMode=$isEditMode vncHostId=$vncHostId connectionId=$connectionId")
     }
-    
+
+    // -------------------------------------------------------------------------
+    // Toolbar
+    // -------------------------------------------------------------------------
+
     private fun setupToolbar() {
         setSupportActionBar(binding.toolbar)
         supportActionBar?.apply {
@@ -129,14 +168,203 @@ class ConnectionEditActivity : AppCompatActivity() {
 
     override fun onOptionsItemSelected(item: android.view.MenuItem): Boolean {
         return when (item.itemId) {
-            R.id.action_set_group -> {
-                showGroupSelectionDialog()
-                true
-            }
+            R.id.action_set_group -> { showGroupSelectionDialog(); true }
             else -> super.onOptionsItemSelected(item)
         }
     }
-    
+
+    // -------------------------------------------------------------------------
+    // Protocol spinner — drives all per-protocol visibility changes
+    // -------------------------------------------------------------------------
+
+    private fun setupProtocolSpinner() {
+        binding.spinnerProtocol.onItemSelectedListener =
+            object : android.widget.AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(
+                    parent: android.widget.AdapterView<*>?,
+                    view: View?,
+                    position: Int,
+                    id: Long
+                ) {
+                    val values = resources.getStringArray(R.array.protocol_values)
+                    val proto = values.getOrElse(position) { "ssh" }
+                    updateProtocolUI(proto)
+                }
+                override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+            }
+        // Fire the listener for position 0 (SSH default) to initialise visibility.
+        updateProtocolUI("ssh")
+    }
+
+    /**
+     * Update card visibility, field hints, port default, and identity list for
+     * the chosen protocol. Shared state [currentProtocol] is updated here.
+     *
+     * Visibility matrix:
+     *
+     * |Card                     | SSH | VNC | Telnet |
+     * |-------------------------|-----|-----|--------|
+     * | cardAuthentication      |  ✓  |  ✗  |   ✓    |
+     * | layoutIdentityRow       |  ✓  |  ✓  |   ✗    |
+     * | layoutUsernameInput     |  ✓  |  ✗  |   ✓    |
+     * | cardAdvancedSettings    |  ✓  |  ✗  |   ✓    |
+     * | cardNotificationsSection|  ✓  |  ✗  |   ✓    |
+     * | cardMultiplexer         |  ✓  |  ✗  |   ✗    |
+     * | cardAppearance          |  ✓  |  ✗  |   ✓    |
+     * | cardProxy               |  ✓  |  ✗  |   ✗    |
+     */
+    private fun updateProtocolUI(proto: String) {
+        if (currentProtocol == proto) return
+        currentProtocol = proto
+
+        when (proto) {
+            "vnc" -> {
+                // Hide SSH-specific authentication and advanced sections
+                binding.cardAuthentication.visibility = View.GONE
+                binding.cardAdvancedSettings.visibility = View.GONE
+                binding.cardNotificationsSection.visibility = View.GONE
+                binding.cardMultiplexer.visibility = View.GONE
+                binding.cardAppearance.visibility = View.GONE
+                binding.cardProxy.visibility = View.GONE
+                // VNC hosts have no username field
+                binding.layoutUsernameInput.visibility = View.GONE
+                // VNC identity picker
+                binding.layoutIdentityRow.visibility = View.VISIBLE
+                // Default port
+                autoSetPort("5900", setOf("22", "23"))
+                // Reload identity list with VNC identities
+                loadVncIdentities()
+            }
+            "telnet" -> {
+                binding.cardAuthentication.visibility = View.VISIBLE
+                binding.cardAdvancedSettings.visibility = View.VISIBLE
+                binding.cardNotificationsSection.visibility = View.VISIBLE
+                // Multiplexer and proxy are not applicable to Telnet
+                binding.cardMultiplexer.visibility = View.GONE
+                binding.cardAppearance.visibility = View.VISIBLE
+                binding.cardProxy.visibility = View.GONE
+                binding.layoutUsernameInput.visibility = View.VISIBLE
+                // Hide identity picker — Telnet uses inline user/pass only
+                binding.layoutIdentityRow.visibility = View.GONE
+                autoSetPort("23", setOf("22", "5900"))
+            }
+            else -> { // "ssh"
+                binding.cardAuthentication.visibility = View.VISIBLE
+                binding.cardAdvancedSettings.visibility = View.VISIBLE
+                binding.cardNotificationsSection.visibility = View.VISIBLE
+                binding.cardMultiplexer.visibility = View.VISIBLE
+                binding.cardAppearance.visibility = View.VISIBLE
+                binding.cardProxy.visibility = View.VISIBLE
+                binding.layoutUsernameInput.visibility = View.VISIBLE
+                binding.layoutIdentityRow.visibility = View.VISIBLE
+                autoSetPort("22", setOf("5900", "23"))
+                // Reload identity list with SSH identities
+                loadSshIdentities()
+            }
+        }
+    }
+
+    /** Set [newPort] only when the port field is blank or holds one of [swapPorts]. */
+    private fun autoSetPort(newPort: String, swapPorts: Set<String>) {
+        val current = binding.editPort.text?.toString() ?: ""
+        if (current.isBlank() || current in swapPorts) {
+            binding.editPort.setText(newPort)
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Identity spinner — protocol-aware
+    // -------------------------------------------------------------------------
+
+    /** Populate the identity spinner with SSH [Identity] rows. */
+    private fun loadSshIdentities() {
+        lifecycleScope.launch {
+            try {
+                availableIdentities = app.database.identityDao().getAllIdentitiesList()
+                availableVncIdentities = emptyList()
+
+                val items = listOf("No Identity") + availableIdentities.map { it.name }
+                val adapter = ArrayAdapter(
+                    this@ConnectionEditActivity,
+                    android.R.layout.simple_dropdown_item_1line,
+                    items
+                )
+                binding.spinnerIdentity.setAdapter(adapter)
+                binding.spinnerIdentity.setOnItemClickListener { _, _, position, _ ->
+                    if (position > 0) {
+                        val identity = availableIdentities[position - 1]
+                        selectedIdentityId = identity.id
+                        selectedVncIdentityId = null
+                        binding.editUsername.setText(identity.username)
+                        binding.cardAuthentication.visibility = View.GONE
+                    } else {
+                        selectedIdentityId = null
+                        selectedVncIdentityId = null
+                        binding.cardAuthentication.visibility = View.VISIBLE
+                    }
+                }
+                restoreSshIdentitySpinner()
+            } catch (e: Exception) {
+                Logger.e("ConnectionEditActivity", "Failed to load SSH identities", e)
+            }
+        }
+    }
+
+    /** Populate the identity spinner with [VncIdentity] rows. */
+    private fun loadVncIdentities() {
+        lifecycleScope.launch {
+            try {
+                availableVncIdentities = app.database.vncIdentityDao().getAllIdentitiesList()
+                availableIdentities = emptyList()
+
+                val items = listOf("No Identity") + availableVncIdentities.map { it.name }
+                val adapter = ArrayAdapter(
+                    this@ConnectionEditActivity,
+                    android.R.layout.simple_dropdown_item_1line,
+                    items
+                )
+                binding.spinnerIdentity.setAdapter(adapter)
+                binding.spinnerIdentity.setOnItemClickListener { _, _, position, _ ->
+                    selectedVncIdentityId = if (position > 0) availableVncIdentities[position - 1].id else null
+                    selectedIdentityId = null
+                }
+                restoreVncIdentitySpinner()
+            } catch (e: Exception) {
+                Logger.e("ConnectionEditActivity", "Failed to load VNC identities", e)
+            }
+        }
+    }
+
+    private fun restoreSshIdentitySpinner() {
+        val id = selectedIdentityId
+        if (id != null) {
+            val idx = availableIdentities.indexOfFirst { it.id == id }
+            if (idx >= 0) {
+                binding.spinnerIdentity.setText(availableIdentities[idx].name, false)
+                binding.cardAuthentication.visibility = View.GONE
+                return
+            }
+        }
+        binding.spinnerIdentity.setText("No Identity", false)
+        binding.cardAuthentication.visibility = View.VISIBLE
+    }
+
+    private fun restoreVncIdentitySpinner() {
+        val id = selectedVncIdentityId
+        if (id != null) {
+            val idx = availableVncIdentities.indexOfFirst { it.id == id }
+            if (idx >= 0) {
+                binding.spinnerIdentity.setText(availableVncIdentities[idx].name, false)
+                return
+            }
+        }
+        binding.spinnerIdentity.setText("No Identity", false)
+    }
+
+    // -------------------------------------------------------------------------
+    // Auth type spinner
+    // -------------------------------------------------------------------------
+
     private fun setupAuthTypeSpinner() {
         val authTypes = AuthType.getAvailableTypes()
         val adapter = ArrayAdapter(
@@ -144,42 +372,59 @@ class ConnectionEditActivity : AppCompatActivity() {
             android.R.layout.simple_list_item_1,
             authTypes.map { it.displayName }
         )
-
         binding.spinnerAuthType.setAdapter(adapter)
-
         binding.spinnerAuthType.setOnItemClickListener { _, _, position, _ ->
-            val selectedAuthType = authTypes[position]
-            updateAuthTypeUI(selectedAuthType)
+            updateAuthTypeUI(authTypes[position])
         }
-
-        // Set default selection
         if (authTypes.isNotEmpty()) {
             binding.spinnerAuthType.setText(authTypes[0].displayName, false)
             updateAuthTypeUI(authTypes[0])
         }
     }
-    
+
+    private fun updateAuthTypeUI(authType: AuthType) {
+        when (authType) {
+            AuthType.PASSWORD -> {
+                binding.layoutPassword.visibility = View.VISIBLE
+                binding.layoutSshKey.visibility = View.GONE
+                binding.layoutSavePassword.visibility = View.VISIBLE
+            }
+            AuthType.PUBLIC_KEY -> {
+                binding.layoutPassword.visibility = View.GONE
+                binding.layoutSshKey.visibility = View.VISIBLE
+                binding.layoutSavePassword.visibility = View.GONE
+            }
+            AuthType.KEYBOARD_INTERACTIVE -> {
+                binding.layoutPassword.visibility = View.VISIBLE
+                binding.layoutSshKey.visibility = View.GONE
+                binding.layoutSavePassword.visibility = View.VISIBLE
+            }
+            else -> {
+                binding.layoutPassword.visibility = View.GONE
+                binding.layoutSshKey.visibility = View.GONE
+                binding.layoutSavePassword.visibility = View.GONE
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // SSH key spinner
+    // -------------------------------------------------------------------------
+
     private fun setupKeySpinner() {
         lifecycleScope.launch {
             try {
                 availableKeys = app.keyStorage.listStoredKeys()
-
                 val keyNames = listOf("Select SSH Key...") + availableKeys.map { it.getDisplayName() }
                 val adapter = ArrayAdapter(
                     this@ConnectionEditActivity,
                     android.R.layout.simple_list_item_1,
                     keyNames
                 )
-
                 binding.spinnerSshKey.setAdapter(adapter)
-
                 binding.spinnerSshKey.setOnItemClickListener { _, _, position, _ ->
                     selectedKeyIndex = position
                 }
-
-                // Restore any key selection that populateFields() couldn't apply
-                // because it ran before this async block completed (the two
-                // coroutines — key-list load and connection-profile load — race).
                 pendingRestoreKeyId?.let { keyId ->
                     pendingRestoreKeyId = null
                     val keyIndex = availableKeys.indexOfFirst { it.keyId == keyId }
@@ -188,82 +433,95 @@ class ConnectionEditActivity : AppCompatActivity() {
                         binding.spinnerSshKey.setText(keyNames[selectedKeyIndex], false)
                     }
                 }
-
             } catch (e: Exception) {
                 Logger.e("ConnectionEditActivity", "Failed to load SSH keys", e)
                 showError("Failed to load SSH keys", "Error")
             }
         }
     }
-    
+
+    // -------------------------------------------------------------------------
+    // Proxy type spinner
+    // -------------------------------------------------------------------------
+
     private fun setupProxyTypeSpinner() {
         val proxyTypes = listOf("None", "HTTP", "SOCKS4", "SOCKS5", "SSH Jump Host")
-        val adapter = ArrayAdapter(
-            this,
-            android.R.layout.simple_list_item_1,
-            proxyTypes
-        )
-
+        val adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, proxyTypes)
         binding.spinnerProxyType.setAdapter(adapter)
-
         binding.spinnerProxyType.setOnItemClickListener { _, _, position, _ ->
-            val selectedProxyType = proxyTypes[position]
-            updateProxyTypeUI(selectedProxyType)
+            updateProxyTypeUI(proxyTypes[position])
         }
-
-        // Set default to "None"
         binding.spinnerProxyType.setText(proxyTypes[0], false)
         updateProxyTypeUI(proxyTypes[0])
 
-        // Setup proxy auth type spinner
         val authTypes = AuthType.getAvailableTypes()
         val authAdapter = ArrayAdapter(
-            this,
-            android.R.layout.simple_list_item_1,
-            authTypes.map { it.displayName }
+            this, android.R.layout.simple_list_item_1, authTypes.map { it.displayName }
         )
-
         binding.spinnerProxyAuthType.setAdapter(authAdapter)
-
         binding.spinnerProxyAuthType.setOnItemClickListener { _, _, position, _ ->
-            val selectedAuthType = authTypes[position]
-            updateProxyAuthTypeUI(selectedAuthType)
+            updateProxyAuthTypeUI(authTypes[position])
         }
 
-        // Setup proxy SSH key spinner (reuse available keys)
         lifecycleScope.launch {
             val keyNames = listOf("Select SSH Key...") + availableKeys.map { it.getDisplayName() }
             val keyAdapter = ArrayAdapter(
-                this@ConnectionEditActivity,
-                android.R.layout.simple_list_item_1,
-                keyNames
+                this@ConnectionEditActivity, android.R.layout.simple_list_item_1, keyNames
             )
-
             binding.spinnerProxySshKey.setAdapter(keyAdapter)
         }
     }
 
+    private fun updateProxyTypeUI(proxyType: String) {
+        when (proxyType) {
+            "None" -> {
+                binding.layoutProxyConfig.visibility = View.GONE
+                binding.layoutJumpHostAuth.visibility = View.GONE
+            }
+            "SSH Jump Host" -> {
+                binding.layoutProxyConfig.visibility = View.VISIBLE
+                binding.layoutJumpHostAuth.visibility = View.VISIBLE
+                binding.editProxyPort.setText("22")
+            }
+            "HTTP" -> {
+                binding.layoutProxyConfig.visibility = View.VISIBLE
+                binding.layoutJumpHostAuth.visibility = View.GONE
+                binding.editProxyPort.setText("8080")
+            }
+            "SOCKS4", "SOCKS5" -> {
+                binding.layoutProxyConfig.visibility = View.VISIBLE
+                binding.layoutJumpHostAuth.visibility = View.GONE
+                binding.editProxyPort.setText("1080")
+            }
+        }
+    }
+
+    private fun updateProxyAuthTypeUI(authType: AuthType) {
+        binding.layoutProxyKey.visibility =
+            if (authType == AuthType.PUBLIC_KEY) View.VISIBLE else View.GONE
+    }
+
+    // -------------------------------------------------------------------------
+    // Group spinner
+    // -------------------------------------------------------------------------
+
     private fun setupGroupSpinner() {
         lifecycleScope.launch {
-            // Get one-time snapshot from Flow
             val groups = app.database.connectionGroupDao().getAllGroups().first()
             val groupsList = mutableListOf("No Group")
             groups.forEach { group -> groupsList.add(group.name) }
-            
+
             val adapter = ArrayAdapter(
                 this@ConnectionEditActivity,
                 android.R.layout.simple_dropdown_item_1line,
                 groupsList
             )
             binding.spinnerGroup.setAdapter(adapter)
-            
             binding.spinnerGroup.setOnItemClickListener { _, _, position, _ ->
                 selectedGroupId = if (position == 0) null else groups[position - 1].id
                 selectedGroupName = groupsList[position]
             }
-            
-            // Set current group — also update the action bar subtitle now
-            // that we have the human-readable name.
+
             existingProfile?.groupId?.let { groupId ->
                 val index = groups.indexOfFirst { it.id == groupId }
                 if (index >= 0) {
@@ -272,8 +530,6 @@ class ConnectionEditActivity : AppCompatActivity() {
                     selectedGroupName = groups[index].name
                     supportActionBar?.subtitle = groups[index].name
                 } else {
-                    // Group row is missing (deleted, or old backup with bare name).
-                    // Treat as ungrouped so we don't persist a dangling ID.
                     binding.spinnerGroup.setText("No Group", false)
                     selectedGroupId = null
                     selectedGroupName = "No Group"
@@ -284,149 +540,22 @@ class ConnectionEditActivity : AppCompatActivity() {
             }
         }
     }
-    
-    private fun setupIdentitySpinner() {
-        lifecycleScope.launch {
-            availableIdentities = app.database.identityDao().getAllIdentitiesList()
-            val identityList = mutableListOf("No Identity")
-            availableIdentities.forEach { identity -> identityList.add(identity.name) }
 
-            val adapter = ArrayAdapter(
-                this@ConnectionEditActivity,
-                android.R.layout.simple_dropdown_item_1line,
-                identityList
-            )
-            binding.spinnerIdentity.setAdapter(adapter)
+    // -------------------------------------------------------------------------
+    // Validation
+    // -------------------------------------------------------------------------
 
-            binding.spinnerIdentity.setOnItemClickListener { _, _, position, _ ->
-                if (position > 0) {
-                    val identity = availableIdentities[position - 1]
-                    selectedIdentityId = identity.id
-                    binding.editUsername.setText(identity.username)
-                    binding.cardAuthentication.visibility = android.view.View.GONE
-                } else {
-                    selectedIdentityId = null
-                    binding.cardAuthentication.visibility = android.view.View.VISIBLE
-                }
-            }
-
-            // Restore selection if editing (may be called before or after loadExistingProfile)
-            restoreIdentitySpinner()
-        }
-    }
-
-    private fun restoreIdentitySpinner() {
-        val id = selectedIdentityId
-        if (id != null) {
-            val idx = availableIdentities.indexOfFirst { it.id == id }
-            if (idx >= 0) {
-                binding.spinnerIdentity.setText(availableIdentities[idx].name, false)
-                binding.cardAuthentication.visibility = android.view.View.GONE
-                return
-            }
-        }
-        binding.spinnerIdentity.setText("No Identity", false)
-        binding.cardAuthentication.visibility = android.view.View.VISIBLE
-    }
-
-    private fun updateProxyTypeUI(proxyType: String) {
-        when (proxyType) {
-            "None" -> {
-                binding.layoutProxyConfig.visibility = android.view.View.GONE
-                binding.layoutJumpHostAuth.visibility = android.view.View.GONE
-            }
-            "SSH Jump Host" -> {
-                binding.layoutProxyConfig.visibility = android.view.View.VISIBLE
-                binding.layoutJumpHostAuth.visibility = android.view.View.VISIBLE
-                binding.editProxyPort.setText("22")
-            }
-            "HTTP" -> {
-                binding.layoutProxyConfig.visibility = android.view.View.VISIBLE
-                binding.layoutJumpHostAuth.visibility = android.view.View.GONE
-                binding.editProxyPort.setText("8080")
-            }
-            "SOCKS4", "SOCKS5" -> {
-                binding.layoutProxyConfig.visibility = android.view.View.VISIBLE
-                binding.layoutJumpHostAuth.visibility = android.view.View.GONE
-                binding.editProxyPort.setText("1080")
-            }
-        }
-    }
-
-    private fun updateProxyAuthTypeUI(authType: AuthType) {
-        when (authType) {
-            AuthType.PUBLIC_KEY -> {
-                binding.layoutProxyKey.visibility = android.view.View.VISIBLE
-            }
-            else -> {
-                binding.layoutProxyKey.visibility = android.view.View.GONE
-            }
-        }
-    }
-
-    private fun updateAuthTypeUI(authType: AuthType) {
-        when (authType) {
-            AuthType.PASSWORD -> {
-                binding.layoutPassword.visibility = android.view.View.VISIBLE
-                binding.layoutSshKey.visibility = android.view.View.GONE
-                binding.layoutSavePassword.visibility = android.view.View.VISIBLE
-            }
-            AuthType.PUBLIC_KEY -> {
-                binding.layoutPassword.visibility = android.view.View.GONE
-                binding.layoutSshKey.visibility = android.view.View.VISIBLE
-                binding.layoutSavePassword.visibility = android.view.View.GONE
-            }
-            AuthType.KEYBOARD_INTERACTIVE -> {
-                binding.layoutPassword.visibility = android.view.View.VISIBLE
-                binding.layoutSshKey.visibility = android.view.View.GONE
-                binding.layoutSavePassword.visibility = android.view.View.VISIBLE
-            }
-            else -> {
-                binding.layoutPassword.visibility = android.view.View.GONE
-                binding.layoutSshKey.visibility = android.view.View.GONE
-                binding.layoutSavePassword.visibility = android.view.View.GONE
-            }
-        }
-    }
-    
     private fun setupValidation() {
-        // Real-time validation could be added here
-        binding.editHost.setOnFocusChangeListener { _, hasFocus ->
-            if (!hasFocus) {
-                validateHost()
-            }
-        }
-        
-        binding.editPort.setOnFocusChangeListener { _, hasFocus ->
-            if (!hasFocus) {
-                validatePort()
-            }
-        }
-        
-        binding.editUsername.setOnFocusChangeListener { _, hasFocus ->
-            if (!hasFocus) {
-                validateUsername()
-            }
-        }
+        binding.editHost.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) validateHost() }
+        binding.editPort.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) validatePort() }
+        binding.editUsername.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) validateUsername() }
     }
-    
+
     private fun setupButtons() {
-        binding.btnSave.setOnClickListener {
-            saveConnection()
-        }
-        
-        binding.btnCancel.setOnClickListener {
-            finish()
-        }
-        
-        binding.btnTest.setOnClickListener {
-            testConnection()
-        }
-        
-        binding.btnGenerateKey.setOnClickListener {
-            showKeyManagementDialog()
-        }
-        // Wave 3.1 — color tag picker buttons
+        binding.btnSave.setOnClickListener { saveConnection() }
+        binding.btnCancel.setOnClickListener { finish() }
+        binding.btnTest.setOnClickListener { testConnection() }
+        binding.btnGenerateKey.setOnClickListener { showKeyManagementDialog() }
         binding.btnPickColorTag.setOnClickListener { showColorTagPicker() }
         binding.btnClearColorTag.setOnClickListener {
             currentColorTag = 0
@@ -455,14 +584,17 @@ class ConnectionEditActivity : AppCompatActivity() {
             binding.previewColorTag.setBackgroundColor(0xFFCCCCCC.toInt())
         }
     }
-    
+
+    // -------------------------------------------------------------------------
+    // Load — SSH/Telnet ConnectionProfile
+    // -------------------------------------------------------------------------
+
     private fun loadConnection(connectionId: String) {
         lifecycleScope.launch {
             try {
                 existingProfile = app.database.connectionDao().getConnectionById(connectionId)
                 existingProfile?.let { profile ->
                     populateFields(profile)
-                    // Update toolbar with actual connection name
                     supportActionBar?.title = "Edit ${profile.name}"
                 }
             } catch (e: Exception) {
@@ -472,17 +604,27 @@ class ConnectionEditActivity : AppCompatActivity() {
             }
         }
     }
-    
+
     private suspend fun populateFields(profile: ConnectionProfile) {
         binding.editName.setText(profile.name)
         binding.editHost.setText(profile.host)
         binding.editPort.setText(profile.port.toString())
         binding.editUsername.setText(profile.username)
 
-        // Restore identity selection — must be set before restoreIdentitySpinner() runs
+        // Protocol — SSH=0, VNC=1, Telnet=2 (VNC profiles don't come through here;
+        // this handles the legacy SSH/Telnet split).
+        val protocolIndex = when (profile.protocol.lowercase()) {
+            "telnet" -> 2
+            else -> 0
+        }
+        // Setting selection fires onItemSelected → updateProtocolUI(); that in
+        // turn loads the right identity list and resets visibility.
+        binding.spinnerProtocol.setSelection(protocolIndex)
+
+        // Set identity before restoring, so restoreSshIdentitySpinner() can use it
         selectedIdentityId = profile.identityId
-        restoreIdentitySpinner()
-        // Set auth type
+        restoreSshIdentitySpinner()
+
         val authType = profile.getAuthTypeEnum()
         val authTypes = AuthType.getAvailableTypes()
         val authTypeIndex = authTypes.indexOf(authType)
@@ -490,25 +632,20 @@ class ConnectionEditActivity : AppCompatActivity() {
             binding.spinnerAuthType.setText(authTypes[authTypeIndex].displayName, false)
             updateAuthTypeUI(authTypes[authTypeIndex])
         }
-        
-        // Set SSH key if applicable. availableKeys may still be empty if
-        // setupKeySpinner()'s async block hasn't finished — store the id as
-        // pendingRestoreKeyId so it can be applied once keys are loaded.
+
         if (authType == AuthType.PUBLIC_KEY && profile.keyId != null) {
             val keyIndex = availableKeys.indexOfFirst { it.keyId == profile.keyId }
             if (keyIndex >= 0) {
-                selectedKeyIndex = keyIndex + 1 // +1 for "Select SSH Key..." item
+                selectedKeyIndex = keyIndex + 1
                 val keyNames = listOf("Select SSH Key...") + availableKeys.map { it.getDisplayName() }
                 if (selectedKeyIndex < keyNames.size) {
                     binding.spinnerSshKey.setText(keyNames[selectedKeyIndex], false)
                 }
             } else {
-                // Keys not loaded yet — defer to setupKeySpinner()'s completion block.
                 pendingRestoreKeyId = profile.keyId
             }
         }
 
-        // Load stored password so user doesn't have to re-enter when editing
         if (authType == AuthType.PASSWORD || authType == AuthType.KEYBOARD_INTERACTIVE) {
             val storedPassword = withContext(Dispatchers.IO) {
                 app.securePasswordManager.retrievePassword(profile.id)
@@ -518,99 +655,69 @@ class ConnectionEditActivity : AppCompatActivity() {
                 binding.switchSavePassword.isChecked = true
             }
         }
-        
-        // Advanced settings
+
         binding.spinnerTerminalType.setText(profile.terminalType, false)
         binding.switchCompression.isChecked = profile.compression
         binding.switchX11Forwarding.isChecked = profile.x11Forwarding
         binding.switchUseMosh.isChecked = profile.useMosh
 
-        // Per-host notification alert modes
         val notifAlertEntries = resources.getStringArray(R.array.notif_alert_mode_entries)
         binding.spinnerNotifSound.setAdapter(
-            android.widget.ArrayAdapter(
-                this, android.R.layout.simple_dropdown_item_1line, notifAlertEntries
-            )
+            android.widget.ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, notifAlertEntries)
         )
         binding.spinnerNotifVibrate.setAdapter(
-            android.widget.ArrayAdapter(
-                this, android.R.layout.simple_dropdown_item_1line, notifAlertEntries
-            )
+            android.widget.ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, notifAlertEntries)
         )
         binding.spinnerNotifSound.setText(
-            notifAlertEntries.getOrNull(profile.notifSoundMode.coerceIn(0, 2)) ?: notifAlertEntries[0],
-            false
+            notifAlertEntries.getOrNull(profile.notifSoundMode.coerceIn(0, 2)) ?: notifAlertEntries[0], false
         )
         binding.spinnerNotifVibrate.setText(
-            notifAlertEntries.getOrNull(profile.notifVibrateMode.coerceIn(0, 2)) ?: notifAlertEntries[0],
-            false
+            notifAlertEntries.getOrNull(profile.notifVibrateMode.coerceIn(0, 2)) ?: notifAlertEntries[0], false
         )
 
-        // Multiplexer settings
         val modeEntries = resources.getStringArray(R.array.multiplexer_mode_entries)
         val modeValues = resources.getStringArray(R.array.multiplexer_mode_values)
         val modeIndex = modeValues.indexOf(profile.multiplexerMode)
         if (modeIndex >= 0) {
             binding.spinnerMultiplexerMode.setText(modeEntries[modeIndex], false)
-            // Show session name field if not OFF
             binding.layoutMultiplexerSessionName.visibility = if (profile.multiplexerMode != "OFF") {
-                android.view.View.VISIBLE
+                View.VISIBLE
             } else {
-                android.view.View.GONE
+                View.GONE
             }
         }
         profile.multiplexerSessionName?.let { binding.editMultiplexerSessionName.setText(it) }
 
-        // Group — selectedGroupName is resolved to the human name by
-        // setupGroupSpinner() (async). Initialise to "No Group" so the
-        // subtitle never shows a raw UUID if the spinner hasn't loaded yet.
         selectedGroupId = profile.groupId
         selectedGroupName = "No Group"
         if (selectedGroupId != null) {
             supportActionBar?.subtitle = selectedGroupName
         }
 
-        // Appearance & Scripts settings
         val themeEntries = resources.getStringArray(R.array.terminal_theme_entries)
         val themeValues = resources.getStringArray(R.array.terminal_theme_values)
         val themeIndex = themeValues.indexOf(profile.theme)
         if (themeIndex >= 0) {
-            // +1 to account for "Use Global Default" at index 0
             val displayEntries = listOf("Use Global Default") + themeEntries.toList()
             binding.spinnerConnectionTheme.setText(displayEntries[themeIndex + 1], false)
         } else {
             binding.spinnerConnectionTheme.setText("Use Global Default", false)
         }
 
-        profile.fontSizeOverride?.let { fontSize ->
-            binding.editFontSizeOverride.setText(fontSize.toString())
-        }
-
-        profile.postConnectScript?.let { script ->
-            binding.editPostConnectScript.setText(script)
-        }
-
-        // Wave 1.2: per-host env vars + Wave 1.5: agent forwarding
+        profile.fontSizeOverride?.let { binding.editFontSizeOverride.setText(it.toString()) }
+        profile.postConnectScript?.let { binding.editPostConnectScript.setText(it) }
         profile.envVars?.let { binding.editEnvVars.setText(it) }
         binding.switchAgentForwarding.isChecked = profile.agentForwarding
 
-        // Issue #37: snap the spinner to a matching preset, or fall through
-        // to "Custom…" with the value pre-filled in the EditText.
         applyRemoteCommandToUi(profile.remoteCommand)
 
-        // Wave 2.3: protocol selector
-        binding.spinnerProtocol.setSelection(if (profile.protocol.equals("telnet", true)) 1 else 0)
-
-        // Issue #6: IP mode selector (auto/ipv4/ipv6 → indices 0/1/2)
         binding.spinnerIpMode.setSelection(
             when (profile.ipMode.lowercase()) { "ipv4" -> 1; "ipv6" -> 2; else -> 0 }
         )
 
-        // Wave 3.1: color tag preview + picker
         currentColorTag = profile.colorTag
         renderColorTagPreview()
 
-        // Proxy/Jump Host settings
         val proxyTypes = listOf("None", "HTTP", "SOCKS4", "SOCKS5", "SSH Jump Host")
         val proxyType = profile.proxyType ?: "None"
         val proxyTypeDisplay = when (proxyType) {
@@ -623,26 +730,18 @@ class ConnectionEditActivity : AppCompatActivity() {
         if (proxyType != "None") {
             profile.proxyHost?.let { binding.editProxyHost.setText(it) }
             profile.proxyPort?.let { binding.editProxyPort.setText(it.toString()) }
-
-            // SSH Jump Host specific fields
             if (proxyType == "SSH") {
                 profile.proxyUsername?.let { binding.editProxyUsername.setText(it) }
-
-                // Set proxy auth type
                 if (profile.proxyAuthType != null) {
                     val proxyAuthType = try {
                         AuthType.valueOf(profile.proxyAuthType)
-                    } catch (e: IllegalArgumentException) {
-                        AuthType.PASSWORD
-                    }
+                    } catch (e: IllegalArgumentException) { AuthType.PASSWORD }
                     val authTypes = AuthType.getAvailableTypes()
                     val proxyAuthTypeIndex = authTypes.indexOf(proxyAuthType)
                     if (proxyAuthTypeIndex >= 0) {
                         binding.spinnerProxyAuthType.setText(authTypes[proxyAuthTypeIndex].displayName, false)
                         updateProxyAuthTypeUI(authTypes[proxyAuthTypeIndex])
                     }
-
-                    // Set proxy SSH key if applicable
                     if (proxyAuthType == AuthType.PUBLIC_KEY && profile.proxyKeyId != null) {
                         val keyIndex = availableKeys.indexOfFirst { it.keyId == profile.proxyKeyId }
                         if (keyIndex >= 0) {
@@ -656,66 +755,156 @@ class ConnectionEditActivity : AppCompatActivity() {
             }
         }
     }
-    
+
+    // -------------------------------------------------------------------------
+    // Load — VncHost
+    // -------------------------------------------------------------------------
+
+    private fun loadVncHost(vncHostId: String) {
+        lifecycleScope.launch {
+            try {
+                val vncHost = app.database.vncHostDao().getById(vncHostId)
+                if (vncHost != null) {
+                    populateVncFields(vncHost)
+                    supportActionBar?.title = "Edit ${vncHost.name}"
+                } else {
+                    showError("VNC host not found", "Error")
+                    finish()
+                }
+            } catch (e: Exception) {
+                Logger.e("ConnectionEditActivity", "Failed to load VNC host", e)
+                showError("Failed to load VNC host", "Error")
+                finish()
+            }
+        }
+    }
+
+    private fun populateVncFields(vncHost: VncHost) {
+        binding.editName.setText(vncHost.name)
+        binding.editHost.setText(vncHost.host)
+        binding.editPort.setText(vncHost.effectivePort.toString())
+        // Set protocol spinner to VNC (index 1) — triggers updateProtocolUI("vnc")
+        // which loads VNC identities and hides SSH-only cards.
+        binding.spinnerProtocol.setSelection(1)
+        // Set identity before restoring so restoreVncIdentitySpinner() can use it.
+        selectedVncIdentityId = vncHost.identityId
+        restoreVncIdentitySpinner()
+        selectedGroupId = vncHost.groupId
+        currentColorTag = vncHost.colorTag
+        renderColorTagPreview()
+    }
+
+    // -------------------------------------------------------------------------
+    // Save
+    // -------------------------------------------------------------------------
+
     private fun saveConnection() {
-        if (!validateAllFields()) {
+        if (!validateAllFields()) return
+
+        if (currentProtocol == "vnc") {
+            saveVncHost()
             return
         }
-        
+        saveConnectionProfile()
+    }
+
+    private fun saveVncHost() {
+        lifecycleScope.launch {
+            try {
+                val name = binding.editName.text.toString().trim()
+                val host = binding.editHost.text.toString().trim()
+                val port = binding.editPort.text.toString().toIntOrNull() ?: 5900
+                val now = System.currentTimeMillis()
+                val hostId = editingVncHostId ?: UUID.randomUUID().toString()
+
+                val existing = if (editingVncHostId != null) {
+                    app.database.vncHostDao().getById(editingVncHostId!!)
+                } else null
+
+                val vncHost = existing?.copy(
+                    name = name,
+                    host = host,
+                    port = port,
+                    identityId = selectedVncIdentityId,
+                    groupId = selectedGroupId,
+                    colorTag = currentColorTag,
+                    modifiedAt = now
+                ) ?: VncHost(
+                    id = hostId,
+                    name = name,
+                    host = host,
+                    port = port,
+                    identityId = selectedVncIdentityId,
+                    groupId = selectedGroupId,
+                    colorTag = currentColorTag,
+                    createdAt = now,
+                    modifiedAt = now
+                )
+
+                if (existing != null) {
+                    app.database.vncHostDao().update(vncHost)
+                    Logger.i("ConnectionEditActivity", "Updated VNC host: $name")
+                    showToast("VNC host updated")
+                } else {
+                    app.database.vncHostDao().insert(vncHost)
+                    Logger.i("ConnectionEditActivity", "Saved VNC host: $name")
+                    showToast("VNC host saved")
+                }
+
+                setResult(RESULT_OK)
+                finish()
+            } catch (e: Exception) {
+                Logger.e("ConnectionEditActivity", "Failed to save VNC host", e)
+                showError("Failed to save VNC host: ${e.message}", "Error")
+            }
+        }
+    }
+
+    private fun saveConnectionProfile() {
         lifecycleScope.launch {
             try {
                 val profile = createConnectionProfile()
-                
+
                 if (isEditMode && existingProfile != null) {
-                    // Update existing connection
                     app.database.connectionDao().updateConnection(profile)
                     Logger.i("ConnectionEditActivity", "Updated connection: ${profile.name}")
                     showToast("Connection updated")
                 } else {
-                    // Create new connection
                     app.database.connectionDao().insertConnection(profile)
                     Logger.i("ConnectionEditActivity", "Created connection: ${profile.name}")
                     showToast("Connection saved")
                 }
-                
-                // Save password if requested
+
                 val authType = getSelectedAuthType()
                 if (authType == AuthType.PASSWORD || authType == AuthType.KEYBOARD_INTERACTIVE) {
                     val password = binding.editPassword.text.toString()
                     val savePassword = binding.switchSavePassword.isChecked
-                    
                     if (password.isNotEmpty() && savePassword) {
                         val storageLevel = if (app.securePasswordManager.requiresEnhancedSecurity(profile.host)) {
                             io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.BIOMETRIC
                         } else {
                             io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.ENCRYPTED
                         }
-                        
                         app.securePasswordManager.storePassword(profile.id, password, storageLevel)
                     }
                 }
-                
+
                 setResult(RESULT_OK)
                 finish()
-                
             } catch (e: Exception) {
                 Logger.e("ConnectionEditActivity", "Failed to save connection", e)
                 showError("Failed to save connection: ${e.message}", "Error")
             }
         }
     }
-    
+
     private fun createConnectionProfile(): ConnectionProfile {
         val name = binding.editName.text.toString().trim()
         val host = binding.editHost.text.toString().trim()
         val port = binding.editPort.text.toString().toIntOrNull() ?: 22
         val username = binding.editUsername.text.toString().trim()
 
-        // If identity is selected, use identity's auth settings
-        // Otherwise use form values
-        val selectedIdentity = selectedIdentityId?.let { id ->
-            availableIdentities.find { it.id == id }
-        }
+        val selectedIdentity = selectedIdentityId?.let { id -> availableIdentities.find { it.id == id } }
 
         val authType = if (selectedIdentity != null) {
             selectedIdentity.authType
@@ -730,16 +919,13 @@ class ConnectionEditActivity : AppCompatActivity() {
                 availableKeys[selectedKeyIndex - 1].keyId
             } else null
         } else null
-        
+
         val terminalType = binding.spinnerTerminalType.text.toString().takeIf { it.isNotBlank() } ?: "xterm-256color"
         val compression = binding.switchCompression.isChecked
-        // Issue #166 — keepalive is always on at the SSH layer for mobile
-        // clients. Persist `true` so imports/exports round-trip cleanly.
         val keepAlive = true
         val x11Forwarding = binding.switchX11Forwarding.isChecked
         val useMosh = binding.switchUseMosh.isChecked
 
-        // Multiplexer settings
         val modeEntries = resources.getStringArray(R.array.multiplexer_mode_entries)
         val modeValues = resources.getStringArray(R.array.multiplexer_mode_values)
         val multiplexerModeText = binding.spinnerMultiplexerMode.text.toString()
@@ -747,12 +933,11 @@ class ConnectionEditActivity : AppCompatActivity() {
         val multiplexerMode = if (modeIndex >= 0) modeValues[modeIndex] else "OFF"
         val multiplexerSessionName = binding.editMultiplexerSessionName.text.toString().takeIf { it.isNotBlank() }
 
-        // Appearance & Scripts settings
         val themeEntries = resources.getStringArray(R.array.terminal_theme_entries)
         val themeValues = resources.getStringArray(R.array.terminal_theme_values)
         val selectedThemeText = binding.spinnerConnectionTheme.text.toString()
         val theme = if (selectedThemeText == "Use Global Default") {
-            "dracula" // Default theme
+            "dracula"
         } else {
             val themeIndex = themeEntries.indexOf(selectedThemeText)
             if (themeIndex >= 0) themeValues[themeIndex] else "dracula"
@@ -762,42 +947,28 @@ class ConnectionEditActivity : AppCompatActivity() {
         val postConnectScript = binding.editPostConnectScript.text.toString().takeIf { it.isNotBlank() }
         val envVars = binding.editEnvVars.text.toString().takeIf { it.isNotBlank() }
         val agentForwarding = binding.switchAgentForwarding.isChecked
-        // Issue #37: pull the active RemoteCommand out of the spinner /
-        // custom EditText (whichever is in play).
         val remoteCommand = readRemoteCommandFromUi()
-        // Wave 2.3: protocol selector
-        val protocol = if (binding.spinnerProtocol.selectedItemPosition == 1) "telnet" else "ssh"
-        // Issue #6: IP mode (0=auto, 1=ipv4, 2=ipv6)
+
+        // Use tracked currentProtocol — "vnc" never reaches here (saveVncHost handles it).
+        val protocol = if (currentProtocol == "vnc") "ssh" else currentProtocol
+
         val ipMode = when (binding.spinnerIpMode.selectedItemPosition) { 1 -> "ipv4"; 2 -> "ipv6"; else -> "auto" }
-        // Wave 3.1: color tag (0 = none)
         val colorTag = currentColorTag
 
-        // Proxy/Jump Host settings
         val proxyTypeDisplay = binding.spinnerProxyType.text.toString()
         val proxyType = when (proxyTypeDisplay) {
             "SSH Jump Host" -> "SSH"
             "None" -> null
             else -> proxyTypeDisplay
         }
-
-        val proxyHost = if (proxyType != null) {
-            binding.editProxyHost.text.toString().takeIf { it.isNotBlank() }
-        } else null
-
-        val proxyPort = if (proxyType != null) {
-            binding.editProxyPort.text.toString().toIntOrNull()
-        } else null
-
-        val proxyUsername = if (proxyType == "SSH") {
-            binding.editProxyUsername.text.toString().takeIf { it.isNotBlank() }
-        } else null
-
+        val proxyHost = if (proxyType != null) binding.editProxyHost.text.toString().takeIf { it.isNotBlank() } else null
+        val proxyPort = if (proxyType != null) binding.editProxyPort.text.toString().toIntOrNull() else null
+        val proxyUsername = if (proxyType == "SSH") binding.editProxyUsername.text.toString().takeIf { it.isNotBlank() } else null
         val proxyAuthType = if (proxyType == "SSH") {
             val authTypes = AuthType.getAvailableTypes()
             val selectedText = binding.spinnerProxyAuthType.text.toString()
             authTypes.find { it.displayName == selectedText }?.name
         } else null
-
         val proxyKeyId = if (proxyType == "SSH" && proxyAuthType == AuthType.PUBLIC_KEY.name) {
             val selectedProxyKeyText = binding.spinnerProxySshKey.text.toString()
             if (selectedProxyKeyText != "Select SSH Key...") {
@@ -805,99 +976,47 @@ class ConnectionEditActivity : AppCompatActivity() {
             } else null
         } else null
 
-        // Per-host notification alert modes — index of selected entry
-        // maps directly to NotificationAlertMode int (0=NEVER/silent,
-        // 1=ALWAYS, 2=ON_ERROR).
         val notifAlertEntries = resources.getStringArray(R.array.notif_alert_mode_entries)
-        val notifSoundMode = notifAlertEntries.indexOf(binding.spinnerNotifSound.text.toString())
-            .takeIf { it >= 0 } ?: 0
-        val notifVibrateMode = notifAlertEntries.indexOf(binding.spinnerNotifVibrate.text.toString())
-            .takeIf { it >= 0 } ?: 0
+        val notifSoundMode = notifAlertEntries.indexOf(binding.spinnerNotifSound.text.toString()).takeIf { it >= 0 } ?: 0
+        val notifVibrateMode = notifAlertEntries.indexOf(binding.spinnerNotifVibrate.text.toString()).takeIf { it >= 0 } ?: 0
 
         return existingProfile?.copy(
-            name = name,
-            host = host,
-            port = port,
-            username = username,
-            protocol = protocol,
-            authType = authType.name,
-            keyId = keyId,
-            identityId = selectedIdentityId,
-            terminalType = terminalType,
-            compression = compression,
-            keepAlive = keepAlive,
-            x11Forwarding = x11Forwarding,
-            useMosh = useMosh,
-            multiplexerMode = multiplexerMode,
-            multiplexerSessionName = multiplexerSessionName,
-            theme = theme,
-            fontSizeOverride = fontSizeOverride,
-            postConnectScript = postConnectScript,
-            envVars = envVars,
-            agentForwarding = agentForwarding,
-            remoteCommand = remoteCommand,
-            ipMode = ipMode,
-            groupId = selectedGroupId,
-            proxyType = proxyType,
-            proxyHost = proxyHost,
-            proxyPort = proxyPort,
-            proxyUsername = proxyUsername,
-            proxyAuthType = proxyAuthType,
-            proxyKeyId = proxyKeyId,
-            colorTag = colorTag,
-            notifSoundMode = notifSoundMode,
-            notifVibrateMode = notifVibrateMode
+            name = name, host = host, port = port, username = username,
+            protocol = protocol, authType = authType.name, keyId = keyId,
+            identityId = selectedIdentityId, terminalType = terminalType,
+            compression = compression, keepAlive = keepAlive,
+            x11Forwarding = x11Forwarding, useMosh = useMosh,
+            multiplexerMode = multiplexerMode, multiplexerSessionName = multiplexerSessionName,
+            theme = theme, fontSizeOverride = fontSizeOverride,
+            postConnectScript = postConnectScript, envVars = envVars,
+            agentForwarding = agentForwarding, remoteCommand = remoteCommand,
+            ipMode = ipMode, groupId = selectedGroupId,
+            proxyType = proxyType, proxyHost = proxyHost, proxyPort = proxyPort,
+            proxyUsername = proxyUsername, proxyAuthType = proxyAuthType, proxyKeyId = proxyKeyId,
+            colorTag = colorTag, notifSoundMode = notifSoundMode, notifVibrateMode = notifVibrateMode
         ) ?: ConnectionProfile(
-            name = name,
-            host = host,
-            port = port,
-            username = username,
-            protocol = protocol,
-            authType = authType.name,
-            keyId = keyId,
-            identityId = selectedIdentityId,
-            terminalType = terminalType,
-            compression = compression,
-            keepAlive = keepAlive,
-            x11Forwarding = x11Forwarding,
-            useMosh = useMosh,
-            multiplexerMode = multiplexerMode,
-            multiplexerSessionName = multiplexerSessionName,
-            theme = theme,
-            fontSizeOverride = fontSizeOverride,
-            postConnectScript = postConnectScript,
-            envVars = envVars,
-            agentForwarding = agentForwarding,
-            remoteCommand = remoteCommand,
-            ipMode = ipMode,
-            groupId = selectedGroupId,
-            proxyType = proxyType,
-            proxyHost = proxyHost,
-            proxyPort = proxyPort,
-            proxyUsername = proxyUsername,
-            proxyAuthType = proxyAuthType,
-            proxyKeyId = proxyKeyId,
-            notifSoundMode = notifSoundMode,
-            notifVibrateMode = notifVibrateMode
+            name = name, host = host, port = port, username = username,
+            protocol = protocol, authType = authType.name, keyId = keyId,
+            identityId = selectedIdentityId, terminalType = terminalType,
+            compression = compression, keepAlive = keepAlive,
+            x11Forwarding = x11Forwarding, useMosh = useMosh,
+            multiplexerMode = multiplexerMode, multiplexerSessionName = multiplexerSessionName,
+            theme = theme, fontSizeOverride = fontSizeOverride,
+            postConnectScript = postConnectScript, envVars = envVars,
+            agentForwarding = agentForwarding, remoteCommand = remoteCommand,
+            ipMode = ipMode, groupId = selectedGroupId,
+            proxyType = proxyType, proxyHost = proxyHost, proxyPort = proxyPort,
+            proxyUsername = proxyUsername, proxyAuthType = proxyAuthType, proxyKeyId = proxyKeyId,
+            notifSoundMode = notifSoundMode, notifVibrateMode = notifVibrateMode
         )
     }
 
-    // ---------------------------------------------------------------------
-    // Issue #37 — Remote command spinner UX.
-    //
-    // The spinner shows a curated list of common SSH RemoteCommand values
-    // (`create` for SourceForge, `sftp` / `internal-sftp` for SFTP-only
-    // accounts, `tmux attach || tmux new` for auto-attach, …) plus
-    // "Default — login shell" (no command) and "Custom…" (reveal an
-    // EditText for arbitrary input).
-    //
-    // On import: if the saved value matches a preset verbatim, the spinner
-    // snaps to that preset and the EditText stays hidden. Otherwise the
-    // spinner snaps to "Custom…" and pre-fills the EditText.
-    // ---------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    // Remote command spinner (Issue #37)
+    // -------------------------------------------------------------------------
 
     private fun setupRemoteCommandSpinner() {
-        val customIndex = (resources.getStringArray(R.array.remote_command_values).size) - 1
+        val customIndex = resources.getStringArray(R.array.remote_command_values).size - 1
         binding.spinnerRemoteCommand.onItemSelectedListener =
             object : android.widget.AdapterView.OnItemSelectedListener {
                 override fun onItemSelected(
@@ -909,7 +1028,6 @@ class ConnectionEditActivity : AppCompatActivity() {
                     binding.layoutRemoteCommandCustom.visibility =
                         if (position == customIndex) View.VISIBLE else View.GONE
                 }
-
                 override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
             }
     }
@@ -923,8 +1041,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             binding.layoutRemoteCommandCustom.visibility = View.GONE
             return
         }
-        val matchIndex = values.indexOfFirst { it == remoteCommand }
-            .takeIf { it > 0 && it != customIndex }
+        val matchIndex = values.indexOfFirst { it == remoteCommand }.takeIf { it > 0 && it != customIndex }
         if (matchIndex != null) {
             binding.spinnerRemoteCommand.setSelection(matchIndex)
             binding.editRemoteCommandCustom.setText("")
@@ -941,40 +1058,39 @@ class ConnectionEditActivity : AppCompatActivity() {
         val customIndex = values.size - 1
         val pos = binding.spinnerRemoteCommand.selectedItemPosition
         return when {
-            pos == 0 -> null                                                                  // Default — login shell
+            pos == 0 -> null
             pos == customIndex -> binding.editRemoteCommandCustom.text.toString().trim().takeIf { it.isNotEmpty() }
             pos in values.indices -> values[pos].takeIf { it.isNotBlank() }
             else -> null
         }
     }
-    
+
     private fun getSelectedAuthType(): AuthType {
         val authTypes = AuthType.getAvailableTypes()
         val selectedText = binding.spinnerAuthType.text.toString()
-        val selectedAuthType = authTypes.find { it.displayName == selectedText }
-        return selectedAuthType ?: AuthType.PASSWORD
+        return authTypes.find { it.displayName == selectedText } ?: AuthType.PASSWORD
     }
-    
+
+    // -------------------------------------------------------------------------
+    // Field validation
+    // -------------------------------------------------------------------------
+
     private fun validateAllFields(): Boolean {
         var isValid = true
-
         if (!validateHost()) isValid = false
         if (!validatePort()) isValid = false
-        if (!validateUsername()) isValid = false
-
-        // Only validate key selection if NO identity is selected
-        // When identity is used, it provides the auth settings
-        if (selectedIdentityId == null) {
+        // Username is not required for VNC (VncHost has no username field)
+        if (currentProtocol != "vnc" && !validateUsername()) isValid = false
+        // Key selection only checked when no identity selected and auth is public key
+        if (currentProtocol == "ssh" && selectedIdentityId == null) {
             val authType = getSelectedAuthType()
             if (authType == AuthType.PUBLIC_KEY && !validateKeySelection()) isValid = false
         }
-
         return isValid
     }
-    
+
     private fun validateHost(): Boolean {
         val host = binding.editHost.text.toString().trim()
-        
         return if (host.isBlank()) {
             binding.editHost.error = "Host is required"
             false
@@ -983,34 +1099,20 @@ class ConnectionEditActivity : AppCompatActivity() {
             true
         }
     }
-    
+
     private fun validatePort(): Boolean {
         val portText = binding.editPort.text.toString().trim()
         val port = portText.toIntOrNull()
-        
         return when {
-            portText.isBlank() -> {
-                binding.editPort.error = "Port is required"
-                false
-            }
-            port == null -> {
-                binding.editPort.error = "Invalid port number"
-                false
-            }
-            port < 1 || port > 65535 -> {
-                binding.editPort.error = "Port must be between 1 and 65535"
-                false
-            }
-            else -> {
-                binding.editPort.error = null
-                true
-            }
+            portText.isBlank() -> { binding.editPort.error = "Port is required"; false }
+            port == null -> { binding.editPort.error = "Invalid port number"; false }
+            port < 1 || port > 65535 -> { binding.editPort.error = "Port must be between 1 and 65535"; false }
+            else -> { binding.editPort.error = null; true }
         }
     }
-    
+
     private fun validateUsername(): Boolean {
         val username = binding.editUsername.text.toString().trim()
-        
         return if (username.isBlank()) {
             binding.editUsername.error = "Username is required"
             false
@@ -1019,7 +1121,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             true
         }
     }
-    
+
     private fun validateKeySelection(): Boolean {
         return if (selectedKeyIndex <= 0) {
             showToast("Please select an SSH key for public key authentication")
@@ -1028,27 +1130,28 @@ class ConnectionEditActivity : AppCompatActivity() {
             true
         }
     }
-    
+
+    // -------------------------------------------------------------------------
+    // Test connection (SSH-only)
+    // -------------------------------------------------------------------------
+
     private fun testConnection() {
-        if (!validateAllFields()) {
+        if (currentProtocol == "vnc") {
+            showToast("Test connection is not available for VNC")
             return
         }
+        if (!validateAllFields()) return
 
         lifecycleScope.launch {
             binding.btnTest.isEnabled = false
             binding.btnTest.text = "Testing..."
-
             var tempProfileId: String? = null
 
             try {
                 val profile = createConnectionProfile()
-
-                // For new (unsaved) connections the password hasn't been stored yet.
-                // Temporarily store it as SESSION_ONLY so auth can find it, then delete it.
                 val authType = getSelectedAuthType()
                 if (!isEditMode &&
-                    (authType == io.github.tabssh.ssh.auth.AuthType.PASSWORD ||
-                     authType == io.github.tabssh.ssh.auth.AuthType.KEYBOARD_INTERACTIVE)) {
+                    (authType == AuthType.PASSWORD || authType == AuthType.KEYBOARD_INTERACTIVE)) {
                     val pw = binding.editPassword.text.toString()
                     if (pw.isNotEmpty()) {
                         app.securePasswordManager.storePassword(
@@ -1058,18 +1161,9 @@ class ConnectionEditActivity : AppCompatActivity() {
                         tempProfileId = profile.id
                     }
                 }
-
-                // Create a direct SSHConnection — bypass SSHSessionManager to avoid
-                // side-effects (pool entries, foreground service, connection listeners).
                 val connection = io.github.tabssh.ssh.connection.SSHConnection(
                     profile, lifecycleScope, this@ConnectionEditActivity
                 )
-
-                // ConnectionEditActivity builds a one-off SSHConnection
-                // directly (not via SSHSessionManager) for the "Test"
-                // button, so the manager's callbacks don't auto-attach.
-                // Pull them in from the same global slot to keep the
-                // host-key dialog identical to every other SSH path.
                 connection.newHostKeyCallback = app.sshSessionManager.newHostKeyCallback
                 connection.hostKeyChangedCallback = app.sshSessionManager.hostKeyChangedCallback
 
@@ -1082,19 +1176,21 @@ class ConnectionEditActivity : AppCompatActivity() {
                     val errorMsg = connection.errorMessage.value ?: "Connection test failed"
                     showError(errorMsg, "Test Failed")
                 }
-
             } catch (e: Exception) {
                 Logger.e("ConnectionEditActivity", "Connection test failed", e)
                 showError(e.message ?: "Unknown error", "Test Failed")
             } finally {
-                // Clean up any temp password that was stored only for this test
                 tempProfileId?.let { app.securePasswordManager.clearPassword(it) }
                 binding.btnTest.isEnabled = true
                 binding.btnTest.text = "Test"
             }
         }
     }
-    
+
+    // -------------------------------------------------------------------------
+    // Utility / dialogs
+    // -------------------------------------------------------------------------
+
     private fun showToast(message: String) {
         android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_SHORT).show()
     }
@@ -1106,7 +1202,6 @@ class ConnectionEditActivity : AppCompatActivity() {
             "Generate New Key Pair",
             "Browse Existing Keys"
         )
-
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("SSH Key Management")
             .setItems(options) { _, which ->
@@ -1141,7 +1236,6 @@ class ConnectionEditActivity : AppCompatActivity() {
             minLines = 10
             maxLines = 20
         }
-
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Paste SSH Private Key")
             .setView(editText)
@@ -1159,9 +1253,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun generateNewKey() {
-        showKeyGenerationDialog()
-    }
+    private fun generateNewKey() { showKeyGenerationDialog() }
 
     private fun showKeyGenerationDialog() {
         val keyTypes = arrayOf(
@@ -1171,24 +1263,16 @@ class ConnectionEditActivity : AppCompatActivity() {
             "ECDSA P-384 (High Security)",
             "Ed25519 (Recommended)"
         )
-
-        var selectedType = 4 // Default to Ed25519
+        var selectedType = 4
         val keyTypeMapping = mapOf(
-            0 to Pair(KeyType.RSA, 2048),
-            1 to Pair(KeyType.RSA, 4096),
-            2 to Pair(KeyType.ECDSA, 256),
-            3 to Pair(KeyType.ECDSA, 384),
+            0 to Pair(KeyType.RSA, 2048), 1 to Pair(KeyType.RSA, 4096),
+            2 to Pair(KeyType.ECDSA, 256), 3 to Pair(KeyType.ECDSA, 384),
             4 to Pair(KeyType.ED25519, 256)
         )
-
-        val dialogView = layoutInflater.inflate(android.R.layout.simple_list_item_single_choice, null)
-        
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Generate SSH Key Pair")
             .setMessage("Choose the key type to generate. Ed25519 is recommended for best security and performance.")
-            .setSingleChoiceItems(keyTypes, selectedType) { _, which ->
-                selectedType = which
-            }
+            .setSingleChoiceItems(keyTypes, selectedType) { _, which -> selectedType = which }
             .setPositiveButton("Generate") { _, _ ->
                 val (keyType, keySize) = keyTypeMapping[selectedType] ?: Pair(KeyType.ED25519, 256)
                 showKeyNamingDialog(keyType, keySize)
@@ -1209,50 +1293,38 @@ class ConnectionEditActivity : AppCompatActivity() {
             setText("Generated $keyName Key")
             selectAll()
         }
-
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Name Your Key")
             .setMessage("Give your new SSH key a descriptive name.")
             .setView(editText)
             .setPositiveButton("Generate Key") { _, _ ->
                 val keyName = editText.text.toString().trim()
-                if (keyName.isNotEmpty()) {
-                    generateKeyPair(keyType, keySize, keyName)
-                } else {
-                    showToast("Key name is required")
-                }
+                if (keyName.isNotEmpty()) generateKeyPair(keyType, keySize, keyName)
+                else showToast("Key name is required")
             }
             .setNegativeButton("Cancel", null)
             .show()
     }
 
     private fun generateKeyPair(keyType: KeyType, keySize: Int, keyName: String) {
-        // Show progress dialog
         val progressDialog = androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Generating SSH Key")
-            .setMessage("Creating ${keyType.name} ${keySize}-bit key pair...\nThis may take a moment.")
+            .setMessage("Creating ${keyType.name} ${keySize}-bit key pair…\nThis may take a moment.")
             .setCancelable(false)
             .create()
-        
         progressDialog.show()
 
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val keyStorage = app.keyStorage
-                val result = keyStorage.generateKeyPair(keyType, keySize, keyName)
-                
+                val result = app.keyStorage.generateKeyPair(keyType, keySize, keyName)
                 runOnUiThread {
                     progressDialog.dismiss()
-                    
                     when (result) {
                         is GenerateResult.Success -> {
                             showKeyGenerationSuccess(keyName, result.fingerprint)
-                            // Refresh the key list and auto-select the new key
                             loadAvailableKeys()
                         }
-                        is GenerateResult.Error -> {
-                            showKeyGenerationError(result.message)
-                        }
+                        is GenerateResult.Error -> showKeyGenerationError(result.message)
                     }
                 }
             } catch (e: Exception) {
@@ -1264,20 +1336,14 @@ class ConnectionEditActivity : AppCompatActivity() {
         }
     }
 
-    private fun loadAvailableKeys() {
-        setupKeySpinner()
-    }
+    private fun loadAvailableKeys() { setupKeySpinner() }
 
     private fun showKeyGenerationSuccess(message: String, fingerprint: String) {
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("✅ Key Generated Successfully")
             .setMessage("$message\n\nFingerprint:\n$fingerprint\n\nThe key has been securely stored and is ready to use.")
-            .setPositiveButton("OK") { _, _ ->
-                // Auto-select the newly generated key if it's available
-                loadAvailableKeys()
-            }
+            .setPositiveButton("OK") { _, _ -> loadAvailableKeys() }
             .show()
-        
         showToast("🔑 SSH key generated successfully!")
     }
 
@@ -1286,25 +1352,20 @@ class ConnectionEditActivity : AppCompatActivity() {
             context = this,
             title = "❌ Key Generation Failed",
             message = "Failed to generate SSH key:\n\n$errorMessage\n\nPlease try again or contact support if the problem persists.",
-            onDismiss = {
-                // User can manually retry via the Generate button
-            }
+            onDismiss = {}
         )
     }
-
 
     private fun browseExistingKeys() {
         if (availableKeys.isEmpty()) {
             showToast("No SSH keys stored yet. Import or generate a key first.")
             return
         }
-
         val keyNames = availableKeys.map { it.getDisplayName() }.toTypedArray()
-
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Select SSH Key")
             .setItems(keyNames) { _, which ->
-                selectedKeyIndex = which + 1 // +1 for "Select SSH Key..." offset
+                selectedKeyIndex = which + 1
                 val selectedKey = availableKeys[which]
                 binding.spinnerSshKey.setText(selectedKey.getDisplayName(), false)
                 showToast("Selected: ${selectedKey.getDisplayName()}")
@@ -1316,78 +1377,56 @@ class ConnectionEditActivity : AppCompatActivity() {
     private fun importKeyFromContent(keyContent: String, filename: String) {
         lifecycleScope.launch {
             try {
-                // Show progress
-                showToast("Importing SSH key...")
-                
-                // Check if key is encrypted (needs passphrase)
-                val needsPassphrase = keyContent.contains("ENCRYPTED") || 
-                                     keyContent.contains("Proc-Type: 4,ENCRYPTED")
-                
-                if (needsPassphrase) {
-                    // Show passphrase dialog
-                    showKeyPassphraseDialog(keyContent, filename)
-                } else {
-                    // Import without passphrase
-                    performKeyImport(keyContent, filename, null)
-                }
+                showToast("Importing SSH key…")
+                val needsPassphrase = keyContent.contains("ENCRYPTED") ||
+                    keyContent.contains("Proc-Type: 4,ENCRYPTED")
+                if (needsPassphrase) showKeyPassphraseDialog(keyContent, filename)
+                else performKeyImport(keyContent, filename, null)
             } catch (e: Exception) {
                 Logger.e("ConnectionEditActivity", "Failed to import key", e)
                 showError("❌ Import failed: ${e.message}", "Error")
             }
         }
     }
-    
+
     private fun showKeyPassphraseDialog(keyContent: String, filename: String) {
         val passphraseInput = android.widget.EditText(this).apply {
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
             hint = "Key passphrase"
         }
-        
         val layout = android.widget.LinearLayout(this).apply {
             orientation = android.widget.LinearLayout.VERTICAL
             setPadding(50, 40, 50, 10)
             addView(passphraseInput)
         }
-        
         android.app.AlertDialog.Builder(this)
             .setTitle("🔐 Encrypted SSH Key")
             .setMessage("This key is encrypted. Enter passphrase to decrypt.")
             .setView(layout)
             .setPositiveButton("Import") { _, _ ->
                 val passphrase = passphraseInput.text.toString()
-                if (passphrase.isEmpty()) {
-                    showToast("Passphrase is required")
-                    return@setPositiveButton
-                }
-                lifecycleScope.launch {
-                    performKeyImport(keyContent, filename, passphrase)
-                }
+                if (passphrase.isEmpty()) { showToast("Passphrase is required"); return@setPositiveButton }
+                lifecycleScope.launch { performKeyImport(keyContent, filename, passphrase) }
             }
             .setNegativeButton("Cancel", null)
             .show()
     }
-    
+
     private suspend fun performKeyImport(keyContent: String, filename: String, passphrase: String?) {
         try {
-            // Import key using enhanced KeyStorage
             val result = app.keyStorage.importKeyFromText(
                 keyContent = keyContent,
                 passphrase = passphrase,
                 keyName = extractKeyNameFromFilename(filename)
             )
-            
             when (result) {
                 is io.github.tabssh.crypto.keys.ImportResult.Success -> {
                     Logger.i("ConnectionEditActivity", "Key imported successfully: ${result.keyId}")
                     showToast("✅ SSH key imported successfully!")
-                    
-                    // Refresh key list
                     setupKeySpinner()
-                    
-                    // Auto-select the imported key
                     val importedKeyIndex = availableKeys.indexOfFirst { it.keyId == result.keyId }
                     if (importedKeyIndex >= 0) {
-                        selectedKeyIndex = importedKeyIndex + 1 // +1 for "Select SSH Key..." offset
+                        selectedKeyIndex = importedKeyIndex + 1
                         val keyNames = listOf("Select SSH Key...") + availableKeys.map { it.getDisplayName() }
                         if (selectedKeyIndex < keyNames.size) {
                             binding.spinnerSshKey.setText(keyNames[selectedKeyIndex], false)
@@ -1399,66 +1438,37 @@ class ConnectionEditActivity : AppCompatActivity() {
                     showKeyImportErrorDialog(result.message)
                 }
             }
-            
         } catch (e: Exception) {
             Logger.e("ConnectionEditActivity", "Key import failed", e)
             showError("❌ Key import failed: ${e.message}", "Error")
         }
     }
-    
+
     private fun extractKeyNameFromFilename(filename: String): String {
-        // Extract a meaningful name from the filename
         val name = filename
-            .substringBeforeLast(".") // Remove extension
+            .substringBeforeLast(".")
             .replace("_", " ")
             .replace("-", " ")
             .split(" ")
-            .joinToString(" ") { word -> 
+            .joinToString(" ") { word ->
                 word.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
             }
-        
         return if (name.isBlank()) "Imported Key" else name
     }
-    
-    private fun showPassphraseDialog(keyContent: String, filename: String) {
-        val editText = android.widget.EditText(this).apply {
-            hint = "Enter passphrase for encrypted key"
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-        }
 
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Encrypted Key")
-            .setMessage("This SSH key is encrypted and requires a passphrase.")
-            .setView(editText)
-            .setPositiveButton("Import") { _, _ ->
-                val passphrase = editText.text.toString()
-                if (passphrase.isNotEmpty()) {
-                    importKeyWithPassphrase(keyContent, filename, passphrase)
-                } else {
-                    showToast("Passphrase is required for encrypted keys")
-                }
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-    
     private fun importKeyWithPassphrase(keyContent: String, filename: String, passphrase: String) {
         lifecycleScope.launch {
             try {
-                showToast("Importing encrypted SSH key...")
-                
+                showToast("Importing encrypted SSH key…")
                 val result = app.keyStorage.importKeyFromText(
                     keyContent = keyContent,
                     passphrase = passphrase,
                     keyName = extractKeyNameFromFilename(filename)
                 )
-                
                 when (result) {
                     is io.github.tabssh.crypto.keys.ImportResult.Success -> {
-                        Logger.i("ConnectionEditActivity", "Encrypted key imported successfully: ${result.keyId}")
+                        Logger.i("ConnectionEditActivity", "Encrypted key imported: ${result.keyId}")
                         showToast("✅ Encrypted SSH key imported successfully!")
-                        
-                        // Refresh key list and auto-select
                         setupKeySpinner()
                         val importedKeyIndex = availableKeys.indexOfFirst { it.keyId == result.keyId }
                         if (importedKeyIndex >= 0) {
@@ -1474,99 +1484,33 @@ class ConnectionEditActivity : AppCompatActivity() {
                         showKeyImportErrorDialog(result.message)
                     }
                 }
-                
             } catch (e: Exception) {
                 Logger.e("ConnectionEditActivity", "Encrypted key import failed", e)
                 showError("❌ Encrypted key import failed: ${e.message}", "Error")
             }
         }
     }
-    
+
     private fun showKeyImportErrorDialog(errorMessage: String) {
         io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(
             context = this,
             title = "❌ SSH Key Import Failed",
             message = errorMessage,
-            onDismiss = {
-                // User can try importing again
-            }
+            onDismiss = {}
         )
-    }
-    
-    private fun showKeyImportHelpDialog() {
-        val helpText = """
-SSH Key Import - Supported Formats:
-
-✅ FULLY SUPPORTED (No Conversion Needed):
-• OpenSSH Private Key (-----BEGIN OPENSSH PRIVATE KEY-----)
-• RSA Private Key (-----BEGIN RSA PRIVATE KEY-----)
-• DSA Private Key (-----BEGIN DSA PRIVATE KEY-----)
-• EC Private Key (-----BEGIN EC PRIVATE KEY-----)
-• PKCS#8 (-----BEGIN PRIVATE KEY-----)
-• PKCS#8 Encrypted (-----BEGIN ENCRYPTED PRIVATE KEY-----)
-• PuTTY v2/v3 (.ppk files)
-
-✅ KEY TYPES SUPPORTED:
-• RSA (2048, 3072, 4096-bit)
-• ECDSA (P-256, P-384, P-521)
-• Ed25519
-• DSA
-
-✅ ENCRYPTED KEYS:
-• Passphrase-protected keys fully supported
-• AES-128, AES-256, 3DES encryption
-
-❌ If Import Still Fails:
-
-1. Check key file is complete (not truncated)
-2. Verify passphrase is correct (case-sensitive)
-3. Try without extra whitespace/newlines
-4. Convert PuTTY to OpenSSH:
-   puttygen key.ppk -O private-openssh -o key
-
-5. Re-export key:
-   ssh-keygen -p -m PEM -f your_key
-
-📋 The error message above can be copied by tapping "Copy Error"
-        """.trimIndent()
-        
-        // Create scrollable TextView with selectable text
-        val textView = android.widget.TextView(this).apply {
-            text = helpText
-            setTextIsSelectable(true)
-            setPadding(50, 40, 50, 10)
-            textSize = 14f
-        }
-        
-        val scrollView = android.widget.ScrollView(this).apply {
-            addView(textView)
-        }
-        
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("🔑 SSH Key Import Help")
-            .setView(scrollView)
-            .setPositiveButton("Got It", null)
-            .show()
     }
 
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-
         if (requestCode == REQUEST_CODE_IMPORT_KEY && resultCode == RESULT_OK) {
             data?.data?.let { uri ->
                 try {
                     contentResolver.openInputStream(uri)?.use { inputStream ->
                         val keyContent = inputStream.bufferedReader().readText()
-                        // SAF URI lastPathSegment is the document ID
-                        // ("msf:1000003152"), not a real filename. Resolve
-                        // DISPLAY_NAME and prompt user for confirmation.
-                        val display = resolveDisplayName(uri)
-                            ?: uri.lastPathSegment ?: "imported_key"
-                        val suggestion = display
-                            .replace(Regex("\\.(pem|key|pub)$"), "")
-                            .replace("_", " ")
-                            .trim()
+                        val display = resolveDisplayName(uri) ?: uri.lastPathSegment ?: "imported_key"
+                        val suggestion = display.replace(Regex("\\.(pem|key|pub)$"), "")
+                            .replace("_", " ").trim()
                         promptForKeyName(suggestion) { confirmedName ->
                             importKeyFromContent(keyContent, confirmedName)
                         }
@@ -1582,12 +1526,8 @@ SSH Key Import - Supported Formats:
     private fun resolveDisplayName(uri: Uri): String? {
         return try {
             contentResolver.query(
-                uri,
-                arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
-                null, null, null
-            )?.use { cursor ->
-                if (cursor.moveToFirst()) cursor.getString(0) else null
-            }
+                uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null
+            )?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
         } catch (e: Exception) {
             Logger.w("ConnectionEditActivity", "Display name lookup failed: ${e.message}")
             null
@@ -1615,10 +1555,8 @@ SSH Key Import - Supported Formats:
     private fun showGroupSelectionDialog() {
         val editText = android.widget.EditText(this).apply {
             hint = "Group name (e.g., Work Servers, Home Lab)"
-            // Show the human-readable name, not the UUID
             setText(if (selectedGroupName == "No Group") "" else selectedGroupName)
         }
-
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Set Connection Group")
             .setMessage("Organize your connections into groups.\n\nLeave empty for 'No Group'.")
@@ -1631,9 +1569,6 @@ SSH Key Import - Supported Formats:
                     supportActionBar?.subtitle = null
                     showToast("Group cleared")
                 } else {
-                    // Look up the group by name, creating it if it doesn't exist.
-                    // This ensures groupId is always a real UUID from the
-                    // connection_groups table, not a bare name string.
                     lifecycleScope.launch {
                         try {
                             val groupDao = app.database.connectionGroupDao()
@@ -1642,9 +1577,7 @@ SSH Key Import - Supported Formats:
                                 existing.id
                             } else {
                                 val newGroup = io.github.tabssh.storage.database.entities.ConnectionGroup(
-                                    name = groupName,
-                                    icon = "folder",
-                                    sortOrder = 0
+                                    name = groupName, icon = "folder", sortOrder = 0
                                 )
                                 groupDao.insertGroup(newGroup)
                                 newGroup.id
@@ -1674,12 +1607,12 @@ SSH Key Import - Supported Formats:
         onBackPressedDispatcher.onBackPressed()
         return true
     }
-    
+
     private fun setupTerminalTypeSpinner() {
         val terminalTypes = resources.getStringArray(R.array.terminal_types)
         val adapter = android.widget.ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, terminalTypes)
         binding.spinnerTerminalType.setAdapter(adapter)
-        binding.spinnerTerminalType.setText("xterm-256color", false) // Default value
+        binding.spinnerTerminalType.setText("xterm-256color", false)
     }
 
     private fun setupMultiplexerSpinner() {
@@ -1687,73 +1620,51 @@ SSH Key Import - Supported Formats:
         val modeValues = resources.getStringArray(R.array.multiplexer_mode_values)
         val adapter = android.widget.ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, modeEntries)
         binding.spinnerMultiplexerMode.setAdapter(adapter)
-        binding.spinnerMultiplexerMode.setText(modeEntries[0], false) // Default: Disabled
-
+        binding.spinnerMultiplexerMode.setText(modeEntries[0], false)
         binding.spinnerMultiplexerMode.setOnItemClickListener { _, _, position, _ ->
-            // Show session name field when not "OFF"
-            val showSessionName = modeValues[position] != "OFF"
-            binding.layoutMultiplexerSessionName.visibility = if (showSessionName) {
-                android.view.View.VISIBLE
-            } else {
-                android.view.View.GONE
-            }
+            binding.layoutMultiplexerSessionName.visibility =
+                if (modeValues[position] != "OFF") View.VISIBLE else View.GONE
         }
     }
 
     private fun setupConnectionThemeSpinner() {
         val themeEntries = resources.getStringArray(R.array.terminal_theme_entries)
-        val themeValues = resources.getStringArray(R.array.terminal_theme_values)
-        // Add "Use Global Default" as first option
         val entries = listOf("Use Global Default") + themeEntries.toList()
         val adapter = android.widget.ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, entries)
         binding.spinnerConnectionTheme.setAdapter(adapter)
-        binding.spinnerConnectionTheme.setText(entries[0], false) // Default: Use Global
+        binding.spinnerConnectionTheme.setText(entries[0], false)
     }
 
     private fun setupPortKnockUI() {
-        // Toggle configure button visibility based on switch
         binding.switchPortKnock.setOnCheckedChangeListener { _, isChecked ->
-            binding.btnConfigurePortKnock.visibility = if (isChecked) {
-                android.view.View.VISIBLE
-            } else {
-                android.view.View.GONE
-            }
+            binding.btnConfigurePortKnock.visibility = if (isChecked) View.VISIBLE else View.GONE
         }
-        
-        // Configure knock sequence button
-        binding.btnConfigurePortKnock.setOnClickListener {
-            showPortKnockConfigDialog()
-        }
+        binding.btnConfigurePortKnock.setOnClickListener { showPortKnockConfigDialog() }
     }
-    
+
     private fun showPortKnockConfigDialog() {
-        // Simple input dialog for port knock sequence
-        val dialogView = android.widget.LinearLayout(this)
-        dialogView.orientation = android.widget.LinearLayout.VERTICAL
-        dialogView.setPadding(50, 40, 50, 10)
-        
-        val textView = android.widget.TextView(this)
-        textView.text = "Enter port knock sequence (format: port:protocol, comma-separated)\nExample: 7000:TCP,8000:TCP,9000:UDP"
-        textView.textSize = 14f
+        val dialogView = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(50, 40, 50, 10)
+        }
+        val textView = android.widget.TextView(this).apply {
+            text = "Enter port knock sequence (format: port:protocol, comma-separated)\nExample: 7000:TCP,8000:TCP,9000:UDP"
+            textSize = 14f
+        }
         dialogView.addView(textView)
-        
-        val editText = android.widget.EditText(this)
-        editText.hint = "7000:TCP,8000:TCP,9000:UDP"
-        editText.setSingleLine(false)
-        editText.maxLines = 3
+        val editText = android.widget.EditText(this).apply {
+            hint = "7000:TCP,8000:TCP,9000:UDP"
+            setSingleLine(false)
+            maxLines = 3
+        }
         dialogView.addView(editText)
-        
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Port Knock Sequence")
             .setView(dialogView)
             .setPositiveButton("Save") { _, _ ->
                 val sequence = editText.text.toString().trim()
                 val count = if (sequence.isNotBlank()) sequence.split(",").size else 0
-                android.widget.Toast.makeText(
-                    this,
-                    "✓ Knock sequence saved: $count ports",
-                    android.widget.Toast.LENGTH_SHORT
-                ).show()
+                android.widget.Toast.makeText(this, "✓ Knock sequence saved: $count ports", android.widget.Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Cancel", null)
             .setNeutralButton("Clear") { _, _ ->

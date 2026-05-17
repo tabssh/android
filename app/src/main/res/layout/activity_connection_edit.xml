@@ -153,6 +153,7 @@
                         </com.google.android.material.textfield.TextInputLayout>
 
                         <com.google.android.material.textfield.TextInputLayout
+                            android:id="@+id/layout_username_input"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="2"
@@ -246,7 +247,10 @@
                             android:text="Clear" />
                     </LinearLayout>
 
+                    <!-- Reused for both SSH identities and VNC identities depending
+                         on selected protocol. Hidden entirely for Telnet. -->
                     <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/layout_identity_row"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:hint="Identity"
@@ -385,8 +389,9 @@
 
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Advanced Settings -->
+            <!-- Advanced Settings — SSH-only; hidden when VNC is selected -->
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_advanced_settings"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="@dimen/space_md"
@@ -495,8 +500,10 @@
 
             <!-- Per-host Notification alerts. Default is silent — sound /
                  vibration are only opt-in. ON_ERROR fires on non-zero exit
-                 status or unexpected drop, useful for prod servers. -->
+                 status or unexpected drop, useful for prod servers.
+                 SSH-only; hidden when VNC is selected. -->
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_notifications_section"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="@dimen/space_md"
@@ -562,8 +569,9 @@
 
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Multiplexer Settings (tmux/screen/zellij) -->
+            <!-- Multiplexer Settings (tmux/screen/zellij) — SSH-only -->
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_multiplexer"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="@dimen/space_md"
@@ -629,8 +637,9 @@
 
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Appearance & Scripts -->
+            <!-- Appearance & Scripts — SSH-only; hidden when VNC is selected -->
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_appearance"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="@dimen/space_md"
@@ -786,8 +795,9 @@
 
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Proxy/Jump Host Settings -->
+            <!-- Proxy/Jump Host Settings — SSH-only; hidden when VNC is selected -->
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_proxy"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="@dimen/space_md"
