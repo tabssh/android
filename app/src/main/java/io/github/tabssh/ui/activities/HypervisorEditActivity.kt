@@ -148,11 +148,17 @@ class HypervisorEditActivity : AppCompatActivity() {
         val accountChosen = accountId != null
         layoutUsername.visibility = if (accountChosen) View.GONE else View.VISIBLE
         layoutPassword.visibility = if (accountChosen) View.GONE else View.VISIBLE
-        // Realm row visibility is also driven by the selected hypervisor
-        // type (Proxmox-only) — only force it hidden when an account is
-        // chosen; otherwise leave the existing type-driven visibility.
-        if (accountChosen) layoutRealm.visibility = View.GONE
-        else updateUIForType(spinnerType.selectedItemPosition)
+        // Realm row visibility is driven by the selected hypervisor type (Proxmox-only).
+        // When an account is chosen, realm is always hidden (the account row owns it).
+        // When no account is chosen, restore type-driven visibility directly — do NOT
+        // call updateUIForType() here: that calls refreshAccountDropdownForType() which
+        // calls applyAccountSelection(null) again → infinite recursion → ANR.
+        if (accountChosen) {
+            layoutRealm.visibility = View.GONE
+        } else {
+            val isProxmox = spinnerType.selectedItemPosition == HypervisorType.PROXMOX.ordinal
+            layoutRealm.visibility = if (isProxmox) View.VISIBLE else View.GONE
+        }
     }
 
     private fun setupViews() {
