@@ -1,0 +1,86 @@
+package io.github.tabssh.hypervisor.console.rfb
+
+/** RFB 3.8 protocol constants (RFC 6143). */
+object RfbConstants {
+
+    // ── Security types ──────────────────────────────────────────────────────
+    const val SECURITY_NONE: Int = 1
+    const val SECURITY_VNC_AUTH: Int = 2
+
+    // ── Client → Server message types ───────────────────────────────────────
+    const val C2S_SET_PIXEL_FORMAT: Int = 0
+    const val C2S_SET_ENCODINGS: Int = 2
+    const val C2S_FRAMEBUFFER_UPDATE_REQUEST: Int = 3
+    const val C2S_KEY_EVENT: Int = 4
+    const val C2S_POINTER_EVENT: Int = 5
+    const val C2S_CLIENT_CUT_TEXT: Int = 6
+
+    // ── Server → Client message types ───────────────────────────────────────
+    const val S2C_FRAMEBUFFER_UPDATE: Int = 0
+    const val S2C_SET_COLOUR_MAP_ENTRIES: Int = 1
+    const val S2C_BELL: Int = 2
+    const val S2C_SERVER_CUT_TEXT: Int = 3
+
+    // ── Encoding types ───────────────────────────────────────────────────────
+    const val ENC_RAW: Int = 0
+    const val ENC_COPY_RECT: Int = 1
+    const val ENC_RRE: Int = 2
+    const val ENC_HEXTILE: Int = 5
+    const val ENC_ZRLE: Int = 16
+
+    // ── Pseudo-encoding types ────────────────────────────────────────────────
+    /** Server can resize the framebuffer at any time. */
+    const val ENC_DESKTOP_SIZE: Int = -223
+    /** Server sends software cursor separately (client renders it). */
+    const val ENC_CURSOR: Int = -239
+
+    // ── Hextile sub-encoding flags ───────────────────────────────────────────
+    const val HEXTILE_RAW: Int = 1
+    const val HEXTILE_BG_SPECIFIED: Int = 2
+    const val HEXTILE_FG_SPECIFIED: Int = 4
+    const val HEXTILE_ANY_SUBRECTS: Int = 8
+    const val HEXTILE_SUBRECTS_COLOURED: Int = 16
+
+    // ── X11 KeySym values for hardware / on-screen keyboard ─────────────────
+    const val KEY_BACK_SPACE: Long = 0xFF08L
+    const val KEY_TAB: Long = 0xFF09L
+    const val KEY_RETURN: Long = 0xFF0DL
+    const val KEY_ESCAPE: Long = 0xFF1BL
+    const val KEY_DELETE: Long = 0xFFFFL
+    const val KEY_INSERT: Long = 0xFF63L
+    const val KEY_HOME: Long = 0xFF50L
+    const val KEY_END: Long = 0xFF57L
+    const val KEY_PAGE_UP: Long = 0xFF55L
+    const val KEY_PAGE_DOWN: Long = 0xFF56L
+    const val KEY_LEFT: Long = 0xFF51L
+    const val KEY_UP: Long = 0xFF52L
+    const val KEY_RIGHT: Long = 0xFF53L
+    const val KEY_DOWN: Long = 0xFF54L
+    const val KEY_F1: Long = 0xFFBEL
+    const val KEY_F2: Long = 0xFFBFL
+    const val KEY_F3: Long = 0xFFC0L
+    const val KEY_F4: Long = 0xFFC1L
+    const val KEY_F5: Long = 0xFFC2L
+    const val KEY_F6: Long = 0xFFC3L
+    const val KEY_F7: Long = 0xFFC4L
+    const val KEY_F8: Long = 0xFFC5L
+    const val KEY_F9: Long = 0xFFC6L
+    const val KEY_F10: Long = 0xFFC7L
+    const val KEY_F11: Long = 0xFFC8L
+    const val KEY_F12: Long = 0xFFC9L
+    const val KEY_SHIFT_L: Long = 0xFFE1L
+    const val KEY_SHIFT_R: Long = 0xFFE2L
+    const val KEY_CTRL_L: Long = 0xFFE3L
+    const val KEY_CTRL_R: Long = 0xFFE4L
+    const val KEY_ALT_L: Long = 0xFFE9L
+    const val KEY_ALT_R: Long = 0xFFEAL
+    const val KEY_SUPER_L: Long = 0xFFEBL
+    const val KEY_SUPER_R: Long = 0xFFECL
+
+    // ── Pointer button mask bits ─────────────────────────────────────────────
+    const val BTN_LEFT: Int = 1
+    const val BTN_MIDDLE: Int = 2
+    const val BTN_RIGHT: Int = 4
+    const val BTN_SCROLL_UP: Int = 8
+    const val BTN_SCROLL_DOWN: Int = 16
+}

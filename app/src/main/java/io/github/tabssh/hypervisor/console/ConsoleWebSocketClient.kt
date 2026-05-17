@@ -323,31 +323,9 @@ class ConsoleWebSocketClient(
                                 return
                             }
                         }
-                        // Proxmox VNC fallback sends binary RFB protocol frames
-                        // that TermuxBridge cannot render. Detect the RFB version
-                        // handshake (e.g. "RFB 003.008\n") — stripping a possible
-                        // 1-byte frame-type prefix first — and surface a clear error
-                        // rather than writing binary garbage to the terminal.
-                        if (protocol == ConsoleProtocol.PROXMOX_VNC) {
-                            val text = bytes.utf8()
-                            val stripped = if (bytes.size > 1) text.drop(1) else text
-                            val candidate = when {
-                                stripped.startsWith("RFB ") -> stripped
-                                text.startsWith("RFB ") -> text
-                                else -> null
-                            }
-                            if (candidate != null) {
-                                Logger.w(TAG, "VNC RFB handshake detected — cannot render graphical console in text terminal")
-                                isConnected = false
-                                connectionListener?.onError(Exception(
-                                    "This VM's serial console is unavailable and the VNC " +
-                                    "graphical console cannot be displayed in a text terminal.\n\n" +
-                                    "To enable serial console: Proxmox → VM → Hardware → " +
-                                    "Add → Serial Port → set to \"socket\", then restart the VM."
-                                ))
-                                return
-                            }
-                        }
+                        // PROXMOX_VNC: binary frames are raw RFB protocol bytes.
+                        // They flow through the pipe to RfbClient unchanged;
+                        // RfbClient owns the protocol handshake and decode loop.
                         inputPipeOut?.write(bytes.toByteArray())
                         inputPipeOut?.flush()
                     } catch (e: Exception) {

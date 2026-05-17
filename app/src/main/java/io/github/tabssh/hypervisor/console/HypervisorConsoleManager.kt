@@ -1,5 +1,6 @@
 package io.github.tabssh.hypervisor.console
 
+import io.github.tabssh.hypervisor.console.rfb.RfbClient
 import io.github.tabssh.hypervisor.proxmox.ProxmoxApiClient
 import io.github.tabssh.hypervisor.xcpng.XCPngApiClient
 import io.github.tabssh.hypervisor.xcpng.XenOrchestraApiClient
@@ -51,14 +52,30 @@ class HypervisorConsoleManager {
     private var proxmoxVncFallbackDisplayPort: Int = 0
 
     /**
-     * Console connection result
+     * Console connection result — sealed so callers must handle both variants.
+     *
+     * [Text] carries a raw byte stream wired to TermuxBridge (serial/text consoles).
+     * [Graphical] carries a fully-constructed [RfbClient] for VNC/RFB consoles;
+     * the caller should attach a [io.github.tabssh.hypervisor.console.rfb.RfbListener]
+     * and call [RfbClient.start].
      */
-    data class ConsoleConnection(
-        val inputStream: InputStream,
-        val outputStream: OutputStream,
-        val vmName: String,
-        val hypervisorType: HypervisorType
-    )
+    sealed class ConsoleConnection {
+        abstract val vmName: String
+        abstract val hypervisorType: HypervisorType
+
+        data class Text(
+            override val vmName: String,
+            override val hypervisorType: HypervisorType,
+            val inputStream: InputStream,
+            val outputStream: OutputStream
+        ) : ConsoleConnection()
+
+        data class Graphical(
+            override val vmName: String,
+            override val hypervisorType: HypervisorType,
+            val rfbClient: RfbClient
+        ) : ConsoleConnection()
+    }
 
     enum class HypervisorType {
         PROXMOX,
@@ -228,12 +245,22 @@ class HypervisorConsoleManager {
                 return@withContext null
             }
 
-            ConsoleConnection(
-                inputStream = inputStream,
-                outputStream = outputStream,
-                vmName = vmName,
-                hypervisorType = HypervisorType.PROXMOX
-            )
+            if (protocol == ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_VNC) {
+                // Graphical console: hand the streams to an RfbClient.
+                // The caller wires an RfbListener and calls rfbClient.start().
+                ConsoleConnection.Graphical(
+                    vmName = vmName,
+                    hypervisorType = HypervisorType.PROXMOX,
+                    rfbClient = RfbClient(inputStream, outputStream)
+                )
+            } else {
+                ConsoleConnection.Text(
+                    inputStream = inputStream,
+                    outputStream = outputStream,
+                    vmName = vmName,
+                    hypervisorType = HypervisorType.PROXMOX
+                )
+            }
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to connect Proxmox console", e)
             listener?.onError(e.message ?: "Connection failed")
@@ -319,7 +346,7 @@ class HypervisorConsoleManager {
                 return@withContext null
             }
 
-            ConsoleConnection(
+            ConsoleConnection.Text(
                 inputStream = inputStream,
                 outputStream = outputStream,
                 vmName = vmName,
@@ -414,7 +441,7 @@ class HypervisorConsoleManager {
                 return@withContext null
             }
 
-            ConsoleConnection(
+            ConsoleConnection.Text(
                 inputStream = inputStream,
                 outputStream = outputStream,
                 vmName = vmName,
@@ -480,12 +507,22 @@ class HypervisorConsoleManager {
         val connected = vncClient.connect(vnc.websocketUrl, headers, object : ConsoleConnectionListener {
             override fun onConnected() {
                 Logger.i(TAG, "VNC fallback connected for $vmName")
+                val input = vncClient.getInputStream() ?: run {
+                    listener?.onError("VNC fallback: could not get streams")
+                    return
+                }
+                val output = vncClient.getOutputStream() ?: run {
+                    listener?.onError("VNC fallback: could not get streams")
+                    return
+                }
+                val rfbClient = RfbClient(input, output)
+                val graphical = ConsoleConnection.Graphical(
+                    vmName = vmName,
+                    hypervisorType = HypervisorType.PROXMOX,
+                    rfbClient = rfbClient
+                )
                 listener?.onConnected(vmName)
-                // Re-wire the terminal bridge to the new streams if it is still set.
-                val bridge = termuxBridge ?: return
-                val input = vncClient.getInputStream() ?: return
-                val output = vncClient.getOutputStream() ?: return
-                bridge.connect(input, output)
+                listener?.onSwitchToGraphical(graphical)
             }
 
             override fun onDisconnected(reason: String) {
@@ -506,9 +543,10 @@ class HypervisorConsoleManager {
     }
 
     /**
-     * Wire console connection to TermuxBridge for terminal display
+     * Wire a text console connection to TermuxBridge for terminal display.
+     * Only valid for [ConsoleConnection.Text]; graphical consoles use [RfbClient] directly.
      */
-    fun wireToTerminal(connection: ConsoleConnection, bridge: TermuxBridge) {
+    fun wireToTerminal(connection: ConsoleConnection.Text, bridge: TermuxBridge) {
         termuxBridge = bridge
         bridge.connect(connection.inputStream, connection.outputStream)
         Logger.i(TAG, "Console wired to terminal for ${connection.vmName}")
@@ -539,10 +577,23 @@ class HypervisorConsoleManager {
 }
 
 /**
- * Listener for console events
+ * Listener for console events fired by [HypervisorConsoleManager].
  */
 interface ConsoleEventListener {
     fun onConnected(vmName: String)
     fun onDisconnected(reason: String)
     fun onError(message: String)
+
+    /**
+     * Called when a text console falls back to a graphical (VNC/RFB) console
+     * mid-session (e.g. Proxmox termproxy reports no serial interface after
+     * the WebSocket is already open).
+     *
+     * The caller should detach TermuxBridge, show [VncView], attach an
+     * [io.github.tabssh.hypervisor.console.rfb.RfbListener] to the client,
+     * and call [HypervisorConsoleManager.ConsoleConnection.Graphical.rfbClient]`.start()`.
+     *
+     * Default no-op so existing callers that never use VNC don't need to change.
+     */
+    fun onSwitchToGraphical(connection: HypervisorConsoleManager.ConsoleConnection.Graphical) {}
 }

@@ -21,6 +21,7 @@
         android:layout_height="match_parent"
         android:orientation="vertical">
 
+        <!-- Text console (serial / termproxy) -->
         <io.github.tabssh.ui.views.TerminalView
             android:id="@+id/terminal_view"
             android:layout_width="match_parent"
@@ -29,6 +30,18 @@
             android:visibility="gone"
             android:focusable="true"
             android:focusableInTouchMode="true" />
+
+        <!-- Graphical console (VNC / RFB). Occupies the same slot as
+             TerminalView; only one is visible at a time. -->
+        <io.github.tabssh.ui.views.VncView
+            android:id="@+id/vnc_view"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:visibility="gone"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:background="@android:color/black" />
 
         <io.github.tabssh.ui.keyboard.MultiRowKeyboardView
             android:id="@+id/multi_row_keyboard"

@@ -11,12 +11,14 @@ import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.hypervisor.console.ConsoleEventListener
 import io.github.tabssh.hypervisor.console.HypervisorConsoleManager
+import io.github.tabssh.hypervisor.console.rfb.RfbConstants
 import io.github.tabssh.hypervisor.proxmox.ProxmoxApiClient
 import io.github.tabssh.hypervisor.xcpng.XCPngApiClient
 import io.github.tabssh.hypervisor.xcpng.XenOrchestraApiClient
 import io.github.tabssh.terminal.TermuxBridge
 import io.github.tabssh.terminal.TermuxBridgeListener
 import io.github.tabssh.ui.views.TerminalView
+import io.github.tabssh.ui.views.VncView
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -72,6 +74,7 @@ class VMConsoleActivity : AppCompatActivity() {
 
     private lateinit var app: TabSSHApplication
     private lateinit var terminalView: TerminalView
+    private lateinit var vncView: VncView
     private lateinit var progressBar: ProgressBar
     private lateinit var statusText: TextView
 
@@ -79,6 +82,8 @@ class VMConsoleActivity : AppCompatActivity() {
     private var termuxBridge: TermuxBridge? = null
     private var isConnected = false
     private var isRecreated = false
+    /** True when the active console is graphical (VNC); false for text (serial). */
+    private var isGraphicalMode = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -89,6 +94,7 @@ class VMConsoleActivity : AppCompatActivity() {
 
         // Find views
         terminalView = findViewById(R.id.terminal_view)
+        vncView = findViewById(R.id.vnc_view)
         progressBar = findViewById(R.id.progress_bar)
         statusText = findViewById(R.id.status_text)
 
@@ -394,21 +400,24 @@ class VMConsoleActivity : AppCompatActivity() {
                     }
                 }
 
-                if (connection != null) {
-                    // Wire console to terminal
-                    termuxBridge?.let { bridge ->
-                        consoleManager?.wireToTerminal(connection, bridge)
-
-                        // Setup resize callback for VM console (Proxmox termproxy needs resize messages)
-                        bridge.onResizeCallback = { cols, rows ->
-                            consoleManager?.getWebSocketClient()?.sendResize(cols, rows)
+                when (connection) {
+                    is HypervisorConsoleManager.ConsoleConnection.Text -> {
+                        termuxBridge?.let { bridge ->
+                            consoleManager?.wireToTerminal(connection, bridge)
+                            bridge.onResizeCallback = { cols, rows ->
+                                consoleManager?.getWebSocketClient()?.sendResize(cols, rows)
+                            }
                         }
-
                         isConnected = true
+                        isGraphicalMode = false
                         hideProgress()
-                        refreshFloatingControls()  // refresh Disconnect/Reconnect visibility
-                        Logger.i(TAG, "Console connected for $vmName")
+                        refreshFloatingControls()
+                        Logger.i(TAG, "Text console connected for $vmName")
                     }
+                    is HypervisorConsoleManager.ConsoleConnection.Graphical -> {
+                        switchToGraphical(connection)
+                    }
+                    null -> Unit // error already surfaced via listener
                 }
                 // Do NOT show a generic "Failed to connect" here. Every code path
                 // that returns null from connectProxmox / connectXCPng /
@@ -547,6 +556,58 @@ class VMConsoleActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Switch the activity from text-terminal mode to graphical VNC mode.
+     * Called both from [connectToConsole] (when the API returns a graphical
+     * connection directly) and from [createConsoleListener]'s
+     * [onSwitchToGraphical] (when Proxmox falls back mid-session).
+     */
+    private fun switchToGraphical(connection: HypervisorConsoleManager.ConsoleConnection.Graphical) {
+        Logger.i(TAG, "Switching to graphical (VNC) console for ${connection.vmName}")
+        isGraphicalMode = true
+        isConnected = true
+
+        // Wire VncView ↔ RfbClient
+        val rfb = connection.rfbClient
+        vncView.onPointerEvent = { bx, by, mask -> rfb.sendPointerEvent(bx, by, mask) }
+        vncView.onKeyEvent = { keysym, down -> rfb.sendKeyEvent(keysym, down) }
+
+        val rfbListener = vncView.asRfbListener()
+        rfb.listener = object : io.github.tabssh.hypervisor.console.rfb.RfbListener by rfbListener {
+            override fun onConnected(width: Int, height: Int, name: String,
+                                     framebuffer: IntArray) {
+                rfbListener.onConnected(width, height, name, framebuffer)
+                runOnUiThread {
+                    terminalView.visibility = View.GONE
+                    vncView.visibility = View.VISIBLE
+                    // Hide the text keyboard bar — mouse/touch is the input in VNC mode.
+                    // (User can still access it via context menu if needed.)
+                    findViewById<View>(R.id.multi_row_keyboard)?.visibility = View.GONE
+                    hideProgress()
+                    refreshFloatingControls()
+                }
+            }
+            override fun onError(message: String) {
+                rfbListener.onError(message)
+                runOnUiThread { showError(message) }
+            }
+            override fun onDisconnected(reason: String) {
+                rfbListener.onDisconnected(reason)
+                runOnUiThread {
+                    isConnected = false
+                    showStatus("Disconnected: $reason")
+                    refreshFloatingControls()
+                }
+            }
+        }
+        rfb.start()
+
+        runOnUiThread {
+            hideProgress()
+            refreshFloatingControls()
+        }
+    }
+
     private fun createConsoleListener() = object : ConsoleEventListener {
         override fun onConnected(vmName: String) {
             runOnUiThread {
@@ -561,14 +622,18 @@ class VMConsoleActivity : AppCompatActivity() {
             runOnUiThread {
                 showStatus("Disconnected: $reason")
                 isConnected = false
-                refreshFloatingControls()  // surfaces the Reconnect menu item
+                refreshFloatingControls()
             }
         }
 
         override fun onError(message: String) {
-            runOnUiThread {
-                showError(message)
-            }
+            runOnUiThread { showError(message) }
+        }
+
+        override fun onSwitchToGraphical(
+            connection: HypervisorConsoleManager.ConsoleConnection.Graphical
+        ) {
+            runOnUiThread { switchToGraphical(connection) }
         }
     }
 
@@ -582,7 +647,13 @@ class VMConsoleActivity : AppCompatActivity() {
     private fun hideProgress() {
         progressBar.visibility = View.GONE
         statusText.visibility = View.GONE
-        terminalView.visibility = View.VISIBLE
+        if (isGraphicalMode) {
+            vncView.visibility = View.VISIBLE
+            terminalView.visibility = View.GONE
+        } else {
+            terminalView.visibility = View.VISIBLE
+            vncView.visibility = View.GONE
+        }
     }
 
     private fun showStatus(message: String) {
@@ -665,10 +736,25 @@ class VMConsoleActivity : AppCompatActivity() {
             keyboard.resetToDefault()
         }
         keyboard.setOnKeyClickListener { key ->
-            // KeyboardKey.keySequence already encodes ESC, arrows, F-keys,
-            // etc. Send the bytes verbatim through the same write path as
-            // the long-press menu items.
-            sendBytes(key.keySequence.toByteArray(Charsets.UTF_8))
+            if (isGraphicalMode) {
+                // In VNC mode, translate the key sequence to keysyms.
+                // Single printable characters are sent as Unicode keysyms;
+                // control sequences use the VncView helper.
+                val seq = key.keySequence
+                when {
+                    seq == "" -> vncView.sendKey(RfbConstants.KEY_ESCAPE, true)
+                        .also { vncView.sendKey(RfbConstants.KEY_ESCAPE, false) }
+                    seq == "\t"     -> vncView.sendKey(RfbConstants.KEY_TAB, true)
+                        .also { vncView.sendKey(RfbConstants.KEY_TAB, false) }
+                    seq == "\r" || seq == "\n" -> vncView.sendKey(RfbConstants.KEY_RETURN, true)
+                        .also { vncView.sendKey(RfbConstants.KEY_RETURN, false) }
+                    seq.length == 1 -> vncView.sendChar(seq[0])
+                    else -> seq.forEach { vncView.sendChar(it) }
+                }
+            } else {
+                // Text console: send the byte sequence verbatim.
+                sendBytes(key.keySequence.toByteArray(Charsets.UTF_8))
+            }
         }
     }
 
@@ -697,6 +783,7 @@ class VMConsoleActivity : AppCompatActivity() {
         super.onDestroy()
         consoleManager?.disconnect()
         termuxBridge?.cleanup()
+        vncView.recycle()
     }
 
 }
