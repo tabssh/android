@@ -319,12 +319,17 @@ class LibvirtManagerActivity : AppCompatActivity() {
                     AuthType.PUBLIC_KEY.name else AuthType.PASSWORD.name
                 val proxyKeyId = hvProfile.sshIdentityId
 
+                val isNewProfile = existing == null
                 if (existing == null) {
+                    // Leave username/authType blank so the user fills them in via
+                    // ConnectionEditActivity. Connecting with guessed credentials
+                    // (e.g. root/password) always fails; it's better to stop and
+                    // let the user configure the right auth method for their VM.
                     existing = ConnectionProfile(
                         name = connectionName,
                         host = host,
                         port = 22,
-                        username = "root",
+                        username = "",
                         authType = AuthType.PASSWORD.name,
                         // Route through the hypervisor as an SSH jump host so the VM's
                         // internal bridge IP is reachable from Android.
@@ -375,11 +380,22 @@ class LibvirtManagerActivity : AppCompatActivity() {
                     }
                 }
 
-                val intent = TabTerminalActivity.createIntent(
-                    this@LibvirtManagerActivity, existing, autoConnect = host.isNotBlank()
-                )
-                startActivity(intent)
-                Logger.i(TAG, "Launched SSH fallback for ${vm.name} → $host via jump:${hvProfile.host}:${hvProfile.port}")
+                if (isNewProfile) {
+                    // New profile: open editor so the user can set the correct
+                    // username and auth method before connecting. Auto-connecting
+                    // with default credentials always fails.
+                    val intent = ConnectionEditActivity.createIntent(
+                        this@LibvirtManagerActivity, connectionId = existing.id
+                    )
+                    startActivity(intent)
+                    Logger.i(TAG, "Opened SSH editor for new VM profile ${vm.name} — user must set credentials")
+                } else {
+                    val intent = TabTerminalActivity.createIntent(
+                        this@LibvirtManagerActivity, existing, autoConnect = host.isNotBlank()
+                    )
+                    startActivity(intent)
+                    Logger.i(TAG, "Launched SSH fallback for ${vm.name} → $host via jump:${hvProfile.host}:${hvProfile.port}")
+                }
             } catch (e: Exception) {
                 Logger.e(TAG, "SSH fallback launch failed for ${vm.name}", e)
                 showError("Failed to open SSH: ${e.message}")

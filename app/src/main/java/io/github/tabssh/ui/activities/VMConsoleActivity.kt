@@ -713,6 +713,9 @@ class VMConsoleActivity : AppCompatActivity() {
                     vncView.visibility = View.VISIBLE
                     // Keep the keyboard bar visible — console mode uses keyboard
                     // input the same way SSH does.
+                    // Request focus so keyboard events are routed to the VNC view
+                    // and the Android soft keyboard can appear when tapped.
+                    vncView.requestFocus()
                     hideProgress()
                     refreshFloatingControls()
                 }

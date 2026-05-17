@@ -83,6 +83,8 @@ class SSHConnection(
     // observer reads it — without this snapshot the reconnect-prompt
     // gate always saw -1 and prompted even on a clean `exit`.
     @Volatile private var lastShellExitStatus: Int = -1
+    /** Set by [markIntentionalClose] to suppress the reconnect dialog. */
+    @Volatile private var intentionalClose: Boolean = false
     // Issue #163 — track every channel we've opened on this Session so that
     // (a) multiple tabs can each hold their own ChannelShell against one
     // Session (real multiplexing — opening the same profile twice no longer
@@ -262,7 +264,11 @@ class SSHConnection(
                 Logger.d("SSHConnection", "STEP 6: Creating SSH session")
                 val newSession = if (jumpHostPort != null) {
                     Logger.i("SSHConnection", "Connecting to target through jump host on localhost:$jumpHostPort as $effectiveUsername")
-                    jsch.getSession(effectiveUsername, "localhost", jumpHostPort)
+                    val tunnelSession = jsch.getSession(effectiveUsername, "localhost", jumpHostPort)
+                    // Store the host key under the real target hostname (not localhost:ephemeralPort)
+                    // so "Accept & save" persists across reconnects that use different tunnel ports.
+                    tunnelSession.setHostKeyAlias(profile.host)
+                    tunnelSession
                 } else {
                     val resolved = resolveHostForIpMode(profile.host, profile.ipMode)
                     Logger.i("SSHConnection", "Direct connection to $resolved (host=${profile.host}, ipMode=${profile.ipMode}):${profile.port} as $effectiveUsername")
@@ -388,7 +394,9 @@ class SSHConnection(
         try { Thread.sleep(500) } catch (_: InterruptedException) {}
 
         val retrySession = if (jumpHostPort != null) {
-            jsch.getSession(effectiveUsername, "localhost", jumpHostPort)
+            jsch.getSession(effectiveUsername, "localhost", jumpHostPort).also {
+                it.setHostKeyAlias(profile.host)
+            }
         } else {
             jsch.getSession(effectiveUsername, profile.host, profile.port)
         }
@@ -1812,8 +1820,20 @@ class SSHConnection(
      * vs unexpected disconnect — should we offer reconnect?".
      */
     fun getShellExitStatus(): Int {
+        if (intentionalClose) return 0
         val live = try { shellChannel?.exitStatus ?: -1 } catch (_: Exception) { -1 }
         return if (live >= 0) live else lastShellExitStatus
+    }
+
+    /**
+     * Signal that this disconnect is intentional (user-initiated from the
+     * notification shade or a similar explicit action). After this call,
+     * [getShellExitStatus] returns 0 so [TabTerminalActivity] closes the
+     * tab cleanly instead of showing the reconnect dialog.
+     */
+    fun markIntentionalClose() {
+        intentionalClose = true
+        lastShellExitStatus = 0
     }
     
     /**

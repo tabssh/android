@@ -50,9 +50,11 @@ class ConfirmDisconnectActivity : AppCompatActivity() {
             .setPositiveButton("Disconnect") { _, _ ->
                 Logger.i(TAG, "User confirmed disconnect for profile $profileId")
                 try {
-                    app.sshSessionManager.closeConnection(profileId)
+                    // Mark as intentional so TabTerminalActivity closes the tab
+                    // cleanly without prompting the user to reconnect.
+                    app.sshSessionManager.closeConnectionIntentionally(profileId)
                 } catch (e: Exception) {
-                    Logger.e(TAG, "closeConnection failed for $profileId", e)
+                    Logger.e(TAG, "closeConnectionIntentionally failed for $profileId", e)
                     Toast.makeText(this, "Failed to disconnect: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
                 finish()

@@ -422,12 +422,13 @@ class ConnectionEditActivity : AppCompatActivity() {
                 val keyNames = listOf("Select SSH Key...") + availableKeys.map { it.getDisplayName() }
                 val adapter = ArrayAdapter(
                     this@ConnectionEditActivity,
-                    android.R.layout.simple_list_item_1,
+                    android.R.layout.simple_dropdown_item_1line,
                     keyNames
                 )
                 binding.spinnerSshKey.setAdapter(adapter)
                 binding.spinnerSshKey.setOnItemClickListener { _, _, position, _ ->
                     selectedKeyIndex = position
+                    binding.spinnerSshKey.setText(keyNames[position], false)
                 }
                 pendingRestoreKeyId?.let { keyId ->
                     pendingRestoreKeyId = null
@@ -470,9 +471,12 @@ class ConnectionEditActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val keyNames = listOf("Select SSH Key...") + availableKeys.map { it.getDisplayName() }
             val keyAdapter = ArrayAdapter(
-                this@ConnectionEditActivity, android.R.layout.simple_list_item_1, keyNames
+                this@ConnectionEditActivity, android.R.layout.simple_dropdown_item_1line, keyNames
             )
             binding.spinnerProxySshKey.setAdapter(keyAdapter)
+            binding.spinnerProxySshKey.setOnItemClickListener { _, _, position, _ ->
+                binding.spinnerProxySshKey.setText(keyNames[position], false)
+            }
         }
     }
 

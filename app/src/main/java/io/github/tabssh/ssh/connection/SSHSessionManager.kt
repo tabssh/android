@@ -183,6 +183,17 @@ class SSHSessionManager(private val context: Context) {
     }
     
     /**
+     * Close a connection that was explicitly requested by the user (e.g. from
+     * the notification shade "Disconnect" action). Marks the connection as
+     * intentionally closed so [TabTerminalActivity] skips the reconnect dialog
+     * and closes the tab cleanly instead.
+     */
+    fun closeConnectionIntentionally(profileId: String) {
+        activeConnections[profileId]?.markIntentionalClose()
+        closeConnection(profileId)
+    }
+
+    /**
      * Close a specific connection
      */
     fun closeConnection(profileId: String) {

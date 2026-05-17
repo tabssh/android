@@ -500,12 +500,31 @@ class RfbClient(
                 RfbConstants.S2C_SET_COLOUR_MAP_ENTRIES -> skipColourMap()
                 RfbConstants.S2C_BELL -> listener?.onBell()
                 RfbConstants.S2C_SERVER_CUT_TEXT -> handleServerCutText()
-                else -> {
-                    Logger.w(TAG, "Unknown server message type $msgType — cannot resync, aborting")
-                    throw Exception("Unknown RFB message type $msgType")
-                }
+                else -> handleUnknownServerMessage(msgType)
             }
         }
+    }
+
+    /**
+     * Best-effort handler for server message types outside the RFB 3.8 core spec.
+     *
+     * Proxmox / QEMU sometimes sends proprietary extension messages that we have
+     * not negotiated for. We cannot know their payload length in general, so we
+     * log and continue without consuming any bytes. If the unknown message has a
+     * payload the stream will desync and the next message parse will likely fail
+     * with a different error — that is still better than always dropping the
+     * connection on the first non-standard message.
+     *
+     * Known observed types:
+     *   204 (0xCC) — QEMU/Proxmox audio or display notification; appears to carry
+     *                no payload in the sessions observed. Skipping it safely keeps
+     *                the VNC session alive.
+     */
+    private fun handleUnknownServerMessage(msgType: Int) {
+        Logger.w(TAG, "Unrecognised server message type $msgType (0x${msgType.toString(16).uppercase()}) — skipping")
+        // No payload consumed; if the message does have payload bytes the stream
+        // will subsequently desync, producing a different error message that will
+        // help identify the correct payload format.
     }
 
     private fun handleFramebufferUpdate() {

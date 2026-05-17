@@ -119,15 +119,27 @@ class MultiRowKeyboardView @JvmOverloads constructor(
      * Set layout for all rows. The full layout is remembered so that
      * all rows can be restored when rotating back to portrait even if
      * landscape capped the visible count.
+     *
+     * If the saved layout has fewer rows than [portraitRowCount] (e.g. the
+     * user added a row since the layout was saved), the extra rows are
+     * populated with the best-practice defaults rather than left empty.
+     * This honours user customisations on existing rows while still giving
+     * new rows a useful starting point.
      */
     fun setLayout(rows: List<List<KeyboardKey>>) {
-        portraitRowCount = rows.size.coerceIn(MIN_ROWS, MAX_ROWS)
-        fullLayout = rows.take(portraitRowCount)
+        // Do NOT override portraitRowCount — the Activity already set it via
+        // setRowCount() to honour the user's row-count preference. We only
+        // clamp if the saved layout is larger than the allowed maximum.
+        if (rows.size > portraitRowCount) {
+            portraitRowCount = rows.size.coerceIn(MIN_ROWS, MAX_ROWS)
+        }
         numberOfRows = effectiveRowCount()
         Logger.d(TAG, "setLayout: ${rows.size} rows supplied, portrait=$portraitRowCount effective=$numberOfRows")
         rebuildRows()
 
-        fullLayout!!.take(numberOfRows).forEachIndexed { index, keys ->
+        // Apply saved rows.
+        val rowsToApply = rows.take(numberOfRows)
+        rowsToApply.forEachIndexed { index, keys ->
             Logger.d(TAG, "Setting row $index with ${keys.size} keys: ${keys.map { it.label }}")
             if (index < keyboardRows.size) {
                 keyboardRows[index].setKeys(keys)
@@ -136,7 +148,25 @@ class MultiRowKeyboardView @JvmOverloads constructor(
             }
         }
 
-        Logger.d(TAG, "Layout set: $numberOfRows rows visible, ${rows.sumOf { it.size }} total keys")
+        // If the user has more rows configured than are in the saved layout
+        // (e.g. they increased row count after the last save), fill the extra
+        // rows with defaults rather than leaving them blank.
+        if (rows.size < numberOfRows) {
+            val defaultLayouts = getDefaultRowLayouts(numberOfRows)
+            for (i in rows.size until numberOfRows) {
+                if (i < keyboardRows.size && i < defaultLayouts.size) {
+                    Logger.d(TAG, "Filling new row $i with defaults")
+                    keyboardRows[i].setKeys(defaultLayouts[i])
+                }
+            }
+            // Extend fullLayout to cover the default-filled rows so orientation
+            // changes can restore them correctly.
+            fullLayout = rows + defaultLayouts.drop(rows.size).take(numberOfRows - rows.size)
+        } else {
+            fullLayout = rows.take(portraitRowCount)
+        }
+
+        Logger.d(TAG, "Layout set: $numberOfRows rows visible, ${keyboardRows.sumOf { it.getKeys().size }} total keys")
     }
 
     /**
