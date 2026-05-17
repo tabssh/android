@@ -289,7 +289,7 @@ class SecuritySettingsFragment : PreferenceFragmentCompat() {
                         }
                         items[which] == "Disable PIN lock" -> {
                             app.preferencesManager.setBoolean(io.github.tabssh.ui.activities.PinLockActivity.PREF_PIN_ENABLED, false)
-                            app.preferencesManager.setString(io.github.tabssh.ui.activities.PinLockActivity.PREF_PIN_HASH, "")
+                            app.preferencesManager.remove(io.github.tabssh.ui.activities.PinLockActivity.PREF_PIN_HASH)
                             android.widget.Toast.makeText(ctx, "PIN lock disabled", android.widget.Toast.LENGTH_SHORT).show()
                         }
                     }
@@ -469,15 +469,64 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
     }
 
     private fun importThemeFromUri(uri: android.net.Uri) {
-        // Simplified: just show message that feature works via ThemeManager
-        Toast.makeText(requireContext(), "Theme import: Use theme files in JSON format", Toast.LENGTH_SHORT).show()
-        // Full implementation would require ThemeManager.importTheme() to parse JSON properly
+        val app = requireActivity().application as TabSSHApplication
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val json = requireContext().contentResolver
+                    .openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                if (json.isNullOrBlank()) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        Toast.makeText(requireContext(), "Empty or unreadable theme file", Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+                val result = app.themeManager.importTheme(json)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    when (result) {
+                        is io.github.tabssh.themes.definitions.ImportThemeResult.Success ->
+                            Toast.makeText(
+                                requireContext(),
+                                "Theme \"${result.theme.name}\" imported",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        is io.github.tabssh.themes.definitions.ImportThemeResult.Error ->
+                            Toast.makeText(requireContext(), "Import failed: ${result.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Logger.e("Settings", "Theme import failed", e)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    Toast.makeText(requireContext(), "Import failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     private fun exportThemeToUri(uri: android.net.Uri) {
-        // Simplified: just show message that feature works via ThemeManager
-        Toast.makeText(requireContext(), "Theme export: Theme saved", Toast.LENGTH_SHORT).show()
-        // Full implementation would require ThemeManager.exportTheme() to serialize JSON properly
+        val app = requireActivity().application as TabSSHApplication
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val themeId = app.preferencesManager.getString("terminal_theme", "dark")
+                val json = app.themeManager.exportTheme(themeId)
+                if (json == null) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        Toast.makeText(requireContext(), "Theme not found", Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+                requireContext().contentResolver.openOutputStream(uri)?.bufferedWriter()?.use {
+                    it.write(json)
+                }
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    Toast.makeText(requireContext(), "Theme exported", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Logger.e("Settings", "Theme export failed", e)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    Toast.makeText(requireContext(), "Export failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 }
 

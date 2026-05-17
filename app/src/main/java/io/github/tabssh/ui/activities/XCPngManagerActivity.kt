@@ -462,19 +462,23 @@ class XCPngManagerActivity : AppCompatActivity() {
                 val apiTypeIndex = apiTypeEntries.indexOf(selectedApiType)
                 val apiTypeOverride = if (apiTypeIndex >= 0) apiTypeValues[apiTypeIndex] else "auto"
 
+                val plaintextPassword = passwordInput.text.toString()
                 val profile = HypervisorProfile(
                     name = nameInput.text.toString(),
                     type = HypervisorType.XCPNG,
                     host = hostInput.text.toString(),
                     port = portInput.text.toString().toIntOrNull() ?: 443,
                     username = usernameInput.text.toString(),
-                    password = passwordInput.text.toString(),
+                    password = "",   // never persist plaintext — routed to Keystore below
                     verifySsl = false,
                     apiTypeOverride = apiTypeOverride
                 )
-                
+
                 lifecycleScope.launch {
-                    app.database.hypervisorDao().insert(profile)
+                    val newId = app.database.hypervisorDao().insert(profile)
+                    io.github.tabssh.crypto.storage.HypervisorPasswordStore.store(
+                        this@XCPngManagerActivity, newId, plaintextPassword
+                    )
                     loadHypervisors()
                 }
             }

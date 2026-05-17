@@ -81,7 +81,8 @@ class HypervisorConsoleManager {
         PROXMOX,
         XCPNG,
         XEN_ORCHESTRA,
-        VMWARE
+        VMWARE,
+        LIBVIRT
     }
 
     /**

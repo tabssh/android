@@ -91,6 +91,10 @@ class ConnectionEditActivity : AppCompatActivity() {
     /** Wave 3.1 — current color tag in the editor (ARGB int; 0 = none). */
     private var currentColorTag: Int = 0
 
+    // Port-knock state held in memory while the dialog is open; written to the
+    // profile on save. Format: "port:PROTO,port:PROTO,…" (e.g. "7000:TCP,8000:UDP").
+    private var pendingKnockSequence: String? = null
+
     private val colorTagPresets = listOf(
         0xFFE53935.toInt() to "Red",
         0xFFFB8C00.toInt() to "Orange",
@@ -754,6 +758,12 @@ class ConnectionEditActivity : AppCompatActivity() {
                 }
             }
         }
+
+        // Port knock — restore persisted sequence into local state and switch.
+        pendingKnockSequence = profile.portKnockSequence
+        binding.switchPortKnock.isChecked = profile.portKnockEnabled == true
+        binding.btnConfigurePortKnock.visibility =
+            if (profile.portKnockEnabled == true) View.VISIBLE else View.GONE
     }
 
     // -------------------------------------------------------------------------
@@ -980,6 +990,9 @@ class ConnectionEditActivity : AppCompatActivity() {
         val notifSoundMode = notifAlertEntries.indexOf(binding.spinnerNotifSound.text.toString()).takeIf { it >= 0 } ?: 0
         val notifVibrateMode = notifAlertEntries.indexOf(binding.spinnerNotifVibrate.text.toString()).takeIf { it >= 0 } ?: 0
 
+        val knockEnabled = binding.switchPortKnock.isChecked
+        val knockSequence = if (knockEnabled) pendingKnockSequence else null
+
         return existingProfile?.copy(
             name = name, host = host, port = port, username = username,
             protocol = protocol, authType = authType.name, keyId = keyId,
@@ -993,7 +1006,8 @@ class ConnectionEditActivity : AppCompatActivity() {
             ipMode = ipMode, groupId = selectedGroupId,
             proxyType = proxyType, proxyHost = proxyHost, proxyPort = proxyPort,
             proxyUsername = proxyUsername, proxyAuthType = proxyAuthType, proxyKeyId = proxyKeyId,
-            colorTag = colorTag, notifSoundMode = notifSoundMode, notifVibrateMode = notifVibrateMode
+            colorTag = colorTag, notifSoundMode = notifSoundMode, notifVibrateMode = notifVibrateMode,
+            portKnockEnabled = knockEnabled, portKnockSequence = knockSequence
         ) ?: ConnectionProfile(
             name = name, host = host, port = port, username = username,
             protocol = protocol, authType = authType.name, keyId = keyId,
@@ -1007,7 +1021,8 @@ class ConnectionEditActivity : AppCompatActivity() {
             ipMode = ipMode, groupId = selectedGroupId,
             proxyType = proxyType, proxyHost = proxyHost, proxyPort = proxyPort,
             proxyUsername = proxyUsername, proxyAuthType = proxyAuthType, proxyKeyId = proxyKeyId,
-            notifSoundMode = notifSoundMode, notifVibrateMode = notifVibrateMode
+            notifSoundMode = notifSoundMode, notifVibrateMode = notifVibrateMode,
+            portKnockEnabled = knockEnabled, portKnockSequence = knockSequence
         )
     }
 
@@ -1658,16 +1673,21 @@ class ConnectionEditActivity : AppCompatActivity() {
             maxLines = 3
         }
         dialogView.addView(editText)
+        // Pre-fill with any previously entered sequence.
+        pendingKnockSequence?.let { editText.setText(it) }
+
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Port Knock Sequence")
             .setView(dialogView)
             .setPositiveButton("Save") { _, _ ->
                 val sequence = editText.text.toString().trim()
+                pendingKnockSequence = sequence.ifBlank { null }
                 val count = if (sequence.isNotBlank()) sequence.split(",").size else 0
                 android.widget.Toast.makeText(this, "✓ Knock sequence saved: $count ports", android.widget.Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Cancel", null)
             .setNeutralButton("Clear") { _, _ ->
+                pendingKnockSequence = null
                 android.widget.Toast.makeText(this, "Sequence cleared", android.widget.Toast.LENGTH_SHORT).show()
             }
             .show()

@@ -8,6 +8,7 @@ import android.view.ViewGroup
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.lifecycle.lifecycleScope
@@ -27,7 +28,8 @@ import kotlinx.coroutines.withContext
 
 /**
  * Displays the list of libvirt domains on a QEMU/KVM hypervisor and lets the
- * user open a VNC console for running domains.
+ * user open a VNC console for running domains or perform power actions
+ * (start / shutdown / reboot / hard-reset).
  *
  * Receives [EXTRA_HYPERVISOR_ID] (Long) in its launch intent.
  */
@@ -145,14 +147,87 @@ class LibvirtManagerActivity : AppCompatActivity() {
     // ── VM interaction ────────────────────────────────────────────────────────
 
     private fun onVmClicked(vm: LibvirtVm) {
-        if (vm.state != "running") {
-            Toast.makeText(this, "VM is not running", Toast.LENGTH_SHORT).show()
-            return
-        }
         val client = apiClient ?: run {
             Toast.makeText(this, "Not connected", Toast.LENGTH_SHORT).show()
             return
         }
+        when {
+            vm.state == "running" -> showRunningActions(vm, client)
+            vm.state == "shut off" || vm.state == "paused" -> showStoppedActions(vm, client)
+            else -> showRunningActions(vm, client)
+        }
+    }
+
+    /** Action dialog for a running domain. */
+    private fun showRunningActions(vm: LibvirtVm, client: LibvirtApiClient) {
+        val actions = arrayOf("🖥  Open Console", "🔄  Reboot", "⏹  Shutdown", "⚡  Hard Reset")
+        AlertDialog.Builder(this)
+            .setTitle(vm.name)
+            .setItems(actions) { _, which ->
+                when (which) {
+                    0 -> openConsole(vm, client)
+                    1 -> powerAction(vm, client, "reboot")
+                    2 -> powerAction(vm, client, "shutdown")
+                    3 -> confirmHardReset(vm, client)
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /** Action dialog for a shut-off / paused domain. */
+    private fun showStoppedActions(vm: LibvirtVm, client: LibvirtApiClient) {
+        val actions = arrayOf("▶  Start")
+        AlertDialog.Builder(this)
+            .setTitle(vm.name)
+            .setItems(actions) { _, which ->
+                if (which == 0) powerAction(vm, client, "start")
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /** Extra confirmation before hard reset (destructive). */
+    private fun confirmHardReset(vm: LibvirtVm, client: LibvirtApiClient) {
+        AlertDialog.Builder(this)
+            .setTitle("Hard Reset ${vm.name}?")
+            .setMessage("This is equivalent to pulling the power cord. Any unsaved data will be lost.")
+            .setPositiveButton("Reset") { _, _ -> powerAction(vm, client, "reset") }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun powerAction(vm: LibvirtVm, client: LibvirtApiClient, action: String) {
+        lifecycleScope.launch {
+            showProgress("${action.replaceFirstChar { it.uppercase() }}ing ${vm.name}…")
+            try {
+                withContext(Dispatchers.IO) {
+                    when (action) {
+                        "start"    -> client.startDomain(vm.name)
+                        "shutdown" -> client.shutdownDomain(vm.name)
+                        "reboot"   -> client.rebootDomain(vm.name)
+                        "reset"    -> client.resetDomain(vm.name)
+                    }
+                }
+                Toast.makeText(
+                    this@LibvirtManagerActivity,
+                    "${vm.name}: $action sent",
+                    Toast.LENGTH_SHORT
+                ).show()
+                loadDomains(client)
+            } catch (e: LibvirtException) {
+                hideProgress()
+                Logger.e(TAG, "$action failed for ${vm.name}", e)
+                showDomainError("$action failed", e.message ?: "virsh error")
+            } catch (e: Exception) {
+                hideProgress()
+                Logger.e(TAG, "$action failed for ${vm.name}", e)
+                showError("$action failed: ${e.message}")
+            }
+        }
+    }
+
+    private fun openConsole(vm: LibvirtVm, client: LibvirtApiClient) {
         lifecycleScope.launch {
             showProgress("Opening VNC console for ${vm.name}…")
             try {
@@ -167,7 +242,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
             } catch (e: LibvirtException) {
                 Logger.e(TAG, "VNC channel error for ${vm.name}", e)
                 hideProgress()
-                showVncError(e.message ?: "VNC error")
+                showDomainError("VNC Not Available", e.message ?: "VNC error")
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to open VNC channel for ${vm.name}", e)
                 hideProgress()
@@ -176,9 +251,9 @@ class LibvirtManagerActivity : AppCompatActivity() {
         }
     }
 
-    private fun showVncError(message: String) {
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("VNC Not Available")
+    private fun showDomainError(title: String, message: String) {
+        AlertDialog.Builder(this)
+            .setTitle(title)
             .setMessage(message)
             .setPositiveButton("OK", null)
             .show()
@@ -230,15 +305,25 @@ class LibvirtManagerActivity : AppCompatActivity() {
         override fun onBindViewHolder(holder: VmViewHolder, position: Int) {
             val vm = items[position]
             holder.vmName.text = vm.name
-            holder.vmState.text = vm.state
+            holder.vmState.text = stateLabel(vm.state)
             holder.vmId.text = if (vm.id >= 0) "ID: ${vm.id}" else "ID: —"
-            holder.vmState.setTextColor(
-                if (vm.state == "running") getColor(android.R.color.holo_green_dark)
-                else getColor(android.R.color.darker_gray)
-            )
+            holder.vmState.setTextColor(stateColor(vm.state))
             holder.itemView.setOnClickListener { onClick(vm) }
         }
 
         override fun getItemCount(): Int = items.size
+
+        private fun stateLabel(state: String): String = when (state) {
+            "running"  -> "● running"
+            "shut off" -> "○ shut off"
+            "paused"   -> "⏸ paused"
+            else       -> state
+        }
+
+        private fun stateColor(state: String): Int = when (state) {
+            "running"  -> 0xFF4CAF50.toInt() // green
+            "paused"   -> 0xFFFF9800.toInt() // orange
+            else       -> 0xFF9E9E9E.toInt() // grey
+        }
     }
 }

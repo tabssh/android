@@ -590,6 +590,23 @@ class KeyStorage(private val context: Context) {
     }
     
     /**
+     * Return the OpenSSH-format public key as a single-line string suitable
+     * for copying into an authorized_keys file, or null if the key cannot be
+     * retrieved.
+     */
+    suspend fun getPublicKeyText(keyId: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val storedKey = database.keyDao().getKeyById(keyId) ?: return@withContext null
+            val privateKey = retrievePrivateKey(keyId) ?: return@withContext null
+            val publicKey = getPublicKeyFromPrivate(privateKey)
+            formatPublicKey(publicKey, storedKey.keyType, storedKey.comment)
+        } catch (e: Exception) {
+            Logger.e("KeyStorage", "Failed to get public key text for $keyId", e)
+            null
+        }
+    }
+
+    /**
      * Get key fingerprint
      */
     suspend fun getKeyFingerprint(keyId: String): String? = withContext(Dispatchers.IO) {

@@ -102,6 +102,60 @@ class LibvirtApiClient(
         result
     }
 
+    // ── Power management ──────────────────────────────────────────────────────
+
+    /**
+     * Start a shut-off or paused domain via `virsh start <domain>`.
+     * Throws [LibvirtException] if virsh reports an error.
+     */
+    suspend fun startDomain(domain: String) = withContext(Dispatchers.IO) {
+        val output = runCommand("virsh start $domain 2>&1").trim()
+        if (!output.contains("started") && !output.contains("Domain '$domain' started")) {
+            // virsh exit code is not surfaced via JSch exec channel exit status
+            // reliably on all distros; check stdout instead.
+            if (output.contains("error:") || output.contains("failed")) {
+                throw LibvirtException("virsh start failed: $output")
+            }
+        }
+        Logger.i(TAG, "startDomain($domain): $output")
+    }
+
+    /**
+     * Gracefully shut down a running domain via `virsh shutdown <domain>`.
+     * The domain transitions to "shut off" asynchronously; callers should
+     * poll [listDomains] to confirm.
+     */
+    suspend fun shutdownDomain(domain: String) = withContext(Dispatchers.IO) {
+        val output = runCommand("virsh shutdown $domain 2>&1").trim()
+        if (output.contains("error:") || output.contains("failed")) {
+            throw LibvirtException("virsh shutdown failed: $output")
+        }
+        Logger.i(TAG, "shutdownDomain($domain): $output")
+    }
+
+    /**
+     * Gracefully reboot a running domain via `virsh reboot <domain>`.
+     */
+    suspend fun rebootDomain(domain: String) = withContext(Dispatchers.IO) {
+        val output = runCommand("virsh reboot $domain 2>&1").trim()
+        if (output.contains("error:") || output.contains("failed")) {
+            throw LibvirtException("virsh reboot failed: $output")
+        }
+        Logger.i(TAG, "rebootDomain($domain): $output")
+    }
+
+    /**
+     * Hard-reset a domain (equivalent to pulling the power cord) via
+     * `virsh reset <domain>`. Use only when graceful reboot is unresponsive.
+     */
+    suspend fun resetDomain(domain: String) = withContext(Dispatchers.IO) {
+        val output = runCommand("virsh reset $domain 2>&1").trim()
+        if (output.contains("error:") || output.contains("failed")) {
+            throw LibvirtException("virsh reset failed: $output")
+        }
+        Logger.i(TAG, "resetDomain($domain): $output")
+    }
+
     /**
      * Returns the VNC display number for [domain] by running
      * `virsh vncdisplay <domain>` and parsing e.g. `:1` or `localhost:1`.

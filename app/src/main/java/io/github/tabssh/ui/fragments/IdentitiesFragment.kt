@@ -1179,12 +1179,18 @@ class IdentitiesFragment : Fragment() {
     }
 
     private fun showMoreActionsDialog(key: StoredKey) {
-        val items = mutableListOf("Rename", "Attach certificate (paste)…", "Attach certificate (file)…")
+        val items = mutableListOf(
+            "📋 Copy Public Key",
+            "Rename",
+            "Attach certificate (paste)…",
+            "Attach certificate (file)…"
+        )
         if (key.certificate != null) items += "Remove certificate"
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(key.name)
             .setItems(items.toTypedArray()) { _, which ->
                 when (items[which]) {
+                    "📋 Copy Public Key" -> copyPublicKeyToClipboard(key)
                     "Rename" -> showRenameKeyDialog(key)
                     "Attach certificate (paste)…" -> showPasteCertDialog(key)
                     "Attach certificate (file)…" -> { pendingCertKey = key; attachCertLauncher.launch(arrayOf("*/*")) }
@@ -1193,6 +1199,25 @@ class IdentitiesFragment : Fragment() {
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    private fun copyPublicKeyToClipboard(key: StoredKey) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val text = app.keyStorage.getPublicKeyText(key.keyId)
+            withContext(Dispatchers.Main) {
+                if (!isAdded) return@withContext
+                if (text == null) {
+                    Toast.makeText(requireContext(), "Failed to read public key", Toast.LENGTH_SHORT).show()
+                    return@withContext
+                }
+                val clipboard = requireContext()
+                    .getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(
+                    android.content.ClipData.newPlainText("SSH public key", text)
+                )
+                Toast.makeText(requireContext(), "Public key copied to clipboard", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     /** Show a paste dialog pre-filled with clipboard if it looks like a cert. */

@@ -429,6 +429,14 @@ class VMConsoleActivity : AppCompatActivity() {
                     TYPE_PROXMOX -> connectProxmox(vmId, vmName)
                     TYPE_XCPNG -> connectXCPng(vmId, vmName)
                     TYPE_XEN_ORCHESTRA -> connectXenOrchestra(vmId, vmName)
+                    TYPE_VMWARE -> {
+                        // VMware serial/VNC console via RFB is not yet implemented.
+                        // VMwareManagerActivity opens a TabTerminalActivity (SSH) path
+                        // for VM access. This branch should not be reachable in normal
+                        // flow; surface a clear message in case it is.
+                        showError("VMware console is not supported in this build. Connect via SSH from the VMware VM list instead.")
+                        null
+                    }
                     else -> {
                         showError("Unsupported hypervisor type: $hypervisorType")
                         null
@@ -490,7 +498,7 @@ class VMConsoleActivity : AppCompatActivity() {
         )
         val connection = HypervisorConsoleManager.ConsoleConnection.Graphical(
             vmName = vmName,
-            hypervisorType = HypervisorConsoleManager.HypervisorType.PROXMOX,
+            hypervisorType = HypervisorConsoleManager.HypervisorType.LIBVIRT,
             rfbClient = rfbClient
         )
         switchToGraphical(connection)

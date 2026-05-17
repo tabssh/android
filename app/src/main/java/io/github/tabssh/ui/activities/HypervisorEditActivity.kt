@@ -234,9 +234,9 @@ class HypervisorEditActivity : AppCompatActivity() {
 
     private fun setupSpinner() {
         // Order MUST match HypervisorType ordinals (PROXMOX=0, XCPNG=1,
-        // VMWARE=2, OCI=3) — `loadHypervisor()` calls
+        // VMWARE=2, OCI=3, LIBVIRT=4) — `loadHypervisor()` calls
         // `spinnerType.setSelection(hypervisor.type.ordinal)`.
-        val types = arrayOf("Proxmox", "XCP-ng", "VMware", "OCI")
+        val types = arrayOf("Proxmox", "XCP-ng", "VMware", "OCI", "QEMU/libvirt")
         val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, types)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         spinnerType.adapter = adapter
@@ -372,6 +372,9 @@ class HypervisorEditActivity : AppCompatActivity() {
             2 -> { // VMware
                 editPort.setText("443")
             }
+            4 -> { // QEMU/libvirt — SSH, keep the connection's port as-is (usually 22)
+                editPort.setText(connection.port.toString())
+            }
         }
 
         // Show confirmation
@@ -389,7 +392,7 @@ class HypervisorEditActivity : AppCompatActivity() {
      * on `isEmpty()`, which meant flipping the type spinner from Proxmox
      * (8006) to XCP-ng/VMware never replaced 8006 with 443.
      */
-    private val typeDefaultPorts = setOf("8006", "443")
+    private val typeDefaultPorts = setOf("8006", "443", "22")
     private fun applyTypeDefaultPort(default: String) {
         val current = editPort.text.toString()
         if (current.isEmpty() || current in typeDefaultPorts) {
@@ -401,12 +404,15 @@ class HypervisorEditActivity : AppCompatActivity() {
         // OCI uses API-key + HTTP signatures — host/port/username/password don't apply.
         // Account dropdown is shown for both password-type (v32) and OCI (v33+)
         // but filtered to the matching authType.
+        // LIBVIRT uses SSH (host/port/username/password apply, no OCI section, no SSL switch).
         val isOci = typePosition == HypervisorType.OCI.ordinal
+        val isLibvirt = typePosition == HypervisorType.LIBVIRT.ordinal
         layoutHost.visibility = if (isOci) View.GONE else View.VISIBLE
         layoutPort.visibility = if (isOci) View.GONE else View.VISIBLE
         layoutUsername.visibility = if (isOci) View.GONE else View.VISIBLE
         layoutPassword.visibility = if (isOci) View.GONE else View.VISIBLE
-        switchVerifySsl.visibility = if (isOci) View.GONE else View.VISIBLE
+        // SSL verify does not apply to SSH-backed libvirt connections
+        switchVerifySsl.visibility = if (isOci || isLibvirt) View.GONE else View.VISIBLE
         // Account dropdown always visible; filter changes by type
         layoutAccount.visibility = View.VISIBLE
         // "Open Identities" guidance button only shown for OCI
@@ -438,6 +444,12 @@ class HypervisorEditActivity : AppCompatActivity() {
                 textApiTypeHint.text = "Auto: Try vCenter → ESXi\nDirect: ESXi host\nCentralized: vCenter/vSphere"
             }
             3 -> { // OCI
+                layoutRealm.visibility = View.GONE
+                layoutApiType.visibility = View.GONE
+                textApiTypeHint.visibility = View.GONE
+            }
+            4 -> { // QEMU/libvirt (SSH-tunnelled VNC)
+                applyTypeDefaultPort("22")
                 layoutRealm.visibility = View.GONE
                 layoutApiType.visibility = View.GONE
                 textApiTypeHint.visibility = View.GONE

@@ -82,12 +82,17 @@ class TranscriptViewerActivity : AppCompatActivity() {
     }
     
     private fun shareTranscript(transcript: TranscriptManager.Transcript) {
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_SUBJECT, transcript.name)
-            putExtra(Intent.EXTRA_TEXT, TranscriptManager.getTranscriptContent(transcript))
+        lifecycleScope.launch(Dispatchers.IO) {
+            val content = TranscriptManager.getTranscriptContent(transcript)
+            withContext(Dispatchers.Main) {
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_SUBJECT, transcript.name)
+                    putExtra(Intent.EXTRA_TEXT, content)
+                }
+                startActivity(Intent.createChooser(intent, "Share Transcript"))
+            }
         }
-        startActivity(Intent.createChooser(intent, "Share Transcript"))
     }
     
     private fun deleteTranscript(transcript: TranscriptManager.Transcript) {

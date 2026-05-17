@@ -252,26 +252,36 @@ class HypervisorsFragment : Fragment() {
 
     private fun refreshHypervisorStatus(hypervisor: HypervisorProfile) {
         lifecycleScope.launch {
-            try {
-                // Attempt basic connectivity check
-                withContext(Dispatchers.IO) {
-                    // Simple ping/connection test would go here
-                    // For now, just show that we tried
+            val reachable = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    if (hypervisor.type == io.github.tabssh.storage.database.entities.HypervisorType.LIBVIRT) {
+                        // SSH-based — attempt connect/disconnect using LibvirtApiClient
+                        val client = io.github.tabssh.hypervisor.libvirt.LibvirtApiClient(
+                            requireContext(), hypervisor
+                        )
+                        client.connect()
+                        client.disconnect()
+                    } else {
+                        // REST/WebSocket hypervisors — TCP reachability probe on the API port
+                        val socket = java.net.Socket()
+                        socket.connect(
+                            java.net.InetSocketAddress(hypervisor.host, hypervisor.port),
+                            5_000
+                        )
+                        socket.close()
+                    }
+                    true
+                } catch (e: Exception) {
+                    io.github.tabssh.utils.logging.Logger.d(
+                        "HypervisorsFragment", "Connectivity check failed for ${hypervisor.name}: ${e.message}"
+                    )
+                    false
                 }
-                if (!isAdded) return@launch
-                Toast.makeText(
-                    requireContext(),
-                    "✓ ${hypervisor.name} connectivity checked",
-                    Toast.LENGTH_SHORT
-                ).show()
-            } catch (e: Exception) {
-                if (!isAdded) return@launch
-                Toast.makeText(
-                    requireContext(),
-                    "✗ ${hypervisor.name} not reachable",
-                    Toast.LENGTH_SHORT
-                ).show()
             }
+            if (!isAdded) return@launch
+            val msg = if (reachable) "✓ ${hypervisor.name} is reachable"
+                      else "✗ ${hypervisor.name} not reachable"
+            Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
         }
     }
 

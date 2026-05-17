@@ -401,6 +401,10 @@ class PreferenceManager(private val context: Context) {
         preferences.edit().putString(key, value).apply()
     }
 
+    fun remove(key: String) {
+        preferences.edit().remove(key).apply()
+    }
+
     fun getBoolean(key: String, defaultValue: Boolean): Boolean {
         return preferences.getBoolean(key, defaultValue)
     }

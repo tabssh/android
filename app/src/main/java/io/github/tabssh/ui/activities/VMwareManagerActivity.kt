@@ -14,7 +14,9 @@ import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.hypervisor.vmware.VMwareApiClient
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.HypervisorType
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import io.github.tabssh.utils.showError
 
 class VMwareManagerActivity : AppCompatActivity() {
@@ -209,16 +211,12 @@ class VMwareManagerActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
-                // Get or create connection profile for VM
+                // Get or create connection profile for VM — use one-shot suspend query,
+                // not getAllConnections() which returns an infinite Flow.
                 val connectionName = "${vm.name}-console"
-                var connection = app.database.connectionDao().getAllConnections()
-                    .let { flow -> 
-                        var result: io.github.tabssh.storage.database.entities.ConnectionProfile? = null
-                        flow.collect { connections ->
-                            result = connections.firstOrNull { it.name == connectionName }
-                        }
-                        result
-                    }
+                var connection = withContext(Dispatchers.IO) {
+                    app.database.connectionDao().getByName(connectionName)
+                }
 
                 if (connection == null) {
                     // Create new connection profile

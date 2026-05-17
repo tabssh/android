@@ -71,13 +71,13 @@
 - ☁️ **Cloud Sync** - Storage Access Framework (works with **any** provider — Google Drive, Dropbox, OneDrive, Nextcloud, local storage), AES-256-GCM encryption with PBKDF2, and 3-way merge with conflict UI. **No Google services dependency** — runs on de-Googled ROMs.
 - 📝 **Custom Fonts** - 8 monospace fonts: Cascadia Code, Fira Code, JetBrains Mono, and more
 - 🏠 **Home Screen Widgets** - Quick connect from home screen
-- 🌐 **Hypervisor Management** - Proxmox VE, VMware vSphere, XCP-ng, **Xen Orchestra** (REST API + WebSocket), Oracle Cloud Infrastructure (OCI Compute)
-  - **Xen Orchestra** - Full REST API + WebSocket ⚡ real-time updates
-  - Toggle between XO and direct XCP-ng connections
-  - VM management with live state changes
-  - Snapshot & backup operations
-  - Pool and host information
-  - **OCI** - Path A onboarding (import `~/.oci/config` + `.pem` via SAF), RSA-SHA256 HTTP signed requests, list/start/stop/softstop/reset/softreset Compute instances, public/private IP via VNIC walk. No console (deferred). API-key only — `security_token_file=` configs are rejected
+- 🌐 **Hypervisor Management** - Proxmox VE, VMware vSphere, XCP-ng, **Xen Orchestra** (REST API + WebSocket), Oracle Cloud Infrastructure (OCI Compute), and **QEMU/libvirt** (SSH-tunnelled VNC)
+  - **Proxmox VE** - Full REST API; list/start/stop/shutdown/reboot/reset VMs and LXC containers; serial console (termproxy) + VNC graphical console
+  - **XCP-ng / Xen Orchestra** - XML-RPC direct host or Xen Orchestra REST + WebSocket; real-time VM state updates; snapshot and backup operations; pool/host info; auto-detects XO vs. direct
+  - **VMware vSphere / ESXi** - REST API; auto-detects ESXi vs. vCenter; VM power management
+  - **QEMU/libvirt (KVM)** - SSH tunnel to hypervisor host; `virsh list` domain enumeration; start / graceful-shutdown / graceful-reboot / hard-reset power actions; VNC console tunnelled over SSH (no VNC port exposure required); works with any libvirt-managed QEMU/KVM host
+  - **OCI Compute** - Path A onboarding (import `~/.oci/config` + `.pem` via SAF); RSA-SHA256 HTTP signed requests; list/start/stop/softstop/reset/softreset instances; public/private IP via VNIC walk. API-key only — `security_token_file=` configs rejected
+  - **Reusable Hypervisor Accounts** - Shared credential rows (username + Keystore-stored password) referenced by multiple hypervisor profiles
 - 🖥️ **VM Serial Console** - Connect to VMs via hypervisor serial console (no VM network required; works during OS install)
 - 🔗 **Identity Abstraction** - Reusable credentials across multiple connections
 - 📂 **Connection Groups** - Organize connections into folders with expand/collapse
@@ -460,15 +460,16 @@ TabSSH is built on the shoulders of giants:
 
 ## 📊 Stats
 
-- **201 Kotlin files** - ~61,668 lines of code
-- **30 Activities · 7 Fragments · 1 Service** (`SSHConnectionService`)
-- **23 built-in terminal themes** + GUI theme editor (Wave 2.4)
+- **203 Kotlin files** - ~63,000 lines of code
+- **31 Activities · 7 Fragments · 1 Service** (`SSHConnectionService`)
+- **23 built-in terminal themes** + GUI theme editor
 - **100+ XML resources** — Layouts, themes, strings, translations
 - **4 languages** - English, Spanish, French, German
 - **100% open source** - MIT licensed
 - **0 trackers** - Complete privacy
 - **5 APK variants** - Universal + 4 architecture-specific builds (`tabssh-{arch}.apk`)
-- **Database v23** — 22 forward migrations from v1
+- **6 hypervisor types** — Proxmox, XCP-ng, VMware, OCI, QEMU/libvirt, Xen Orchestra
+- **Database v33** — 32 forward migrations from v1
 
 ---
 
@@ -525,7 +526,9 @@ If you find TabSSH useful, please consider starring the repository! It helps oth
 - ✅ **Notification Fixes** - Stale "Connected to [host]" notifications properly cancelled on disconnect and force-close
 - ✅ **23 Built-in Themes** + GUI theme editor in Settings → General → Appearance
 - ✅ **Cloud Sync** - SAF-based universal sync (any provider) with AES-256-GCM + 3-way conflict merge
-- ✅ **Hypervisor Management** - Proxmox VE, VMware vSphere, XCP-ng, Xen Orchestra, OCI Compute
+- ✅ **Hypervisor Management** - Proxmox VE, VMware vSphere, XCP-ng, Xen Orchestra, OCI Compute, **QEMU/libvirt (KVM)**
+- ✅ **QEMU/libvirt Console** - VNC console tunnelled over SSH; full VNC-as-console keyboard bridge (X11 keysyms, VT220 sequences, terminal resize via SetDesktopSize); power management (start / shutdown / reboot / hard-reset) — no VNC port exposure required
+- ✅ **VNC Console Keyboard** - System keyboard + custom SSH keyboard bar both work in VNC sessions; Android KeyEvents translate to X11 keysyms via VncConsoleChannel; modifier sequences (Ctrl, Alt, Shift) and all F-keys covered
 - ✅ **Copy Button on All Errors** - Every error dialog has a Copy button for clean bug reports
 
 ---
