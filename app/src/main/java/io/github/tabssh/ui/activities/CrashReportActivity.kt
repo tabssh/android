@@ -11,13 +11,15 @@ import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.button.MaterialButton
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.ui.dialogs.ReportIssueDialog
+import io.github.tabssh.utils.logging.Logger
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 /**
  * Shown automatically after a crash in debug builds.
- * Displays the full stack trace with Copy / Share / Restart options
+ * Displays the full stack trace with Copy / Paste-Issue / Restart options
  * so developers don't need ADB to diagnose crashes.
  */
 class CrashReportActivity : AppCompatActivity() {
@@ -30,7 +32,7 @@ class CrashReportActivity : AppCompatActivity() {
         onBackPressedDispatcher.addCallback(this,
             object : androidx.activity.OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {
-                    // Do nothing — force the user to tap Restart or Share
+                    // Do nothing — force the user to tap Restart, Copy, or Paste / Issue
                 }
             }
         )
@@ -61,15 +63,17 @@ class CrashReportActivity : AppCompatActivity() {
             Toast.makeText(this, "Copied to clipboard", Toast.LENGTH_SHORT).show()
         }
 
-        findViewById<MaterialButton>(R.id.btn_share).setOnClickListener {
-            startActivity(Intent.createChooser(
-                Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_SUBJECT, "TabSSH crash report")
-                    putExtra(Intent.EXTRA_TEXT, stackTrace)
-                },
-                "Share crash report"
-            ))
+        // "Paste / Issue" — upload the sanitized crash to a paste service and
+        // optionally open a pre-filled GitHub issue, identical to the flow used
+        // by the Debug / App Log viewers in MainActivity.
+        // The raw stackTrace shown on-screen is kept as-is for developer
+        // readability; we sanitize (strip IPs, hostnames, credentials, keys)
+        // only for the version that leaves the device.
+        findViewById<MaterialButton>(R.id.btn_paste_issue).setOnClickListener {
+            val sanitized = Logger.sanitize(stackTrace)
+            ReportIssueDialog
+                .create(sanitized, "crash")
+                .show(supportFragmentManager, "report_issue")
         }
 
         findViewById<MaterialButton>(R.id.btn_restart).setOnClickListener {

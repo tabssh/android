@@ -46,6 +46,28 @@ object Logger {
     private var hostCounter = 0
     private var userCounter = 0
 
+    // ── Sanitization patterns — compiled ONCE at object load, never per-call ──
+    // Inline Regex(...) inside sanitizeForPublic() was allocating a new pattern
+    // object on every log write; pre-compiling here drops that cost to zero.
+    private val RE_PASSWORD   = Regex("""(?i)password[=:]\s*\S+""")
+    private val RE_PASSWD     = Regex("""(?i)passwd[=:]\s*\S+""")
+    private val RE_USERNAME   = Regex("""(?i)username[=:]\s*\S+""")
+    private val RE_USER_KV    = Regex("""(?i)\buser[=:]\s*\S+""")
+    private val RE_TOKEN      = Regex("""(?i)\btoken[=:]\s*\S+""")
+    private val RE_SECRET     = Regex("""(?i)\bsecret[=:]\s*\S+""")
+    private val RE_AUTH_KV    = Regex("""(?i)\bauth(?:key|token)?[=:]\s*\S+""")
+    private val RE_APIKEY     = Regex("""(?i)api[_-]?key[=:]\s*\S+""")
+    private val RE_SSH_PRIV   = Regex("""-----BEGIN[^-]+-----[\s\S]*?-----END[^-]+-----""")
+    private val RE_SSH_PUB    = Regex("""ssh-(rsa|ed25519|ecdsa|dss)\s+\S+""")
+    private val RE_IPV4       = Regex("""\b(?:\d{1,3}\.){3}\d{1,3}\b""")
+    private val RE_HOSTNAME   = Regex("""\b[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.([a-zA-Z]{2,}|\d{1,3})\b""")
+    private val RE_USER_AT    = Regex("""([a-zA-Z0-9_.-]+)@([a-zA-Z0-9.-]+)""")
+    private val RE_HOME_PATH  = Regex("""/home/[a-zA-Z0-9_-]+""")
+    private val RE_USERS_PATH = Regex("""/Users/[a-zA-Z0-9_-]+""")
+    // Domain suffixes / keywords that are always safe to keep as-is
+    private val SAFE_DOMAIN_SUFFIXES = setOf(".com", ".org", ".net")
+    private val SAFE_DOMAIN_KEYWORDS = setOf("android", "google", "github")
+
     /**
      * Initialize the logger
      * @param context Application context
@@ -266,53 +288,77 @@ object Logger {
     }
 
     /**
-     * Sanitize message for public sharing
-     * Removes/redacts: hostnames, usernames, IPs, passwords, keys
+     * Sanitize [message] before writing to any log file.
+     *
+     * All regex patterns are pre-compiled class-level constants — this
+     * function performs zero pattern-object allocations per call.
+     *
+     * Redacts / anonymizes:
+     *  • credential key=value pairs  (password, passwd, username, user, token,
+     *                                 secret, auth, api_key, …)
+     *  • SSH private-key PEM blocks
+     *  • SSH public keys
+     *  • user@host patterns → user1@server1 (session-consistent mapping)
+     *  • IPv4 addresses     → IP1, IP2, … (session-consistent)
+     *  • private hostnames  → server1, server2, … (well-known domains kept)
+     *  • /home/<name> and /Users/<name> paths
      */
     private fun sanitizeForPublic(message: String): String {
-        var sanitized = message
+        var s = message
 
-        // Redact passwords (should never be in logs, but just in case)
-        sanitized = sanitized.replace(Regex("password[=:]\\s*\\S+", RegexOption.IGNORE_CASE), "password=[REDACTED]")
-        sanitized = sanitized.replace(Regex("passwd[=:]\\s*\\S+", RegexOption.IGNORE_CASE), "passwd=[REDACTED]")
+        // ── credentials (key=value / key:value pairs) ─────────────────────
+        s = RE_PASSWORD .replace(s, "password=[REDACTED]")
+        s = RE_PASSWD   .replace(s, "passwd=[REDACTED]")
+        s = RE_USERNAME .replace(s, "username=[REDACTED]")
+        s = RE_USER_KV  .replace(s, "user=[REDACTED]")
+        s = RE_TOKEN    .replace(s, "token=[REDACTED]")
+        s = RE_SECRET   .replace(s, "secret=[REDACTED]")
+        s = RE_AUTH_KV  .replace(s, "auth=[REDACTED]")
+        s = RE_APIKEY   .replace(s, "api_key=[REDACTED]")
 
-        // Redact SSH key data
-        sanitized = sanitized.replace(Regex("-----BEGIN[^-]+-----[\\s\\S]*?-----END[^-]+-----"), "[SSH KEY REDACTED]")
-        sanitized = sanitized.replace(Regex("ssh-(rsa|ed25519|ecdsa|dss)\\s+\\S+"), "[SSH PUBLIC KEY]")
+        // ── SSH key material ──────────────────────────────────────────────
+        s = RE_SSH_PRIV .replace(s, "[SSH KEY REDACTED]")
+        s = RE_SSH_PUB  .replace(s, "[SSH PUBLIC KEY]")
 
-        // Anonymize IP addresses (replace with consistent placeholders)
-        sanitized = sanitized.replace(Regex("\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b")) { match ->
-            val ip = match.value
-            hostMap.getOrPut(ip) { "IP${++hostCounter}" }
+        // ── user@host (before individual IP/hostname passes to avoid double
+        //    processing the same token) ────────────────────────────────────
+        s = RE_USER_AT.replace(s) { match ->
+            val anonUser = userMap.getOrPut(match.groupValues[1]) { "user${++userCounter}" }
+            val anonHost = hostMap.getOrPut(match.groupValues[2]) { "server${++hostCounter}" }
+            "$anonUser@$anonHost"
         }
 
-        // Anonymize hostnames that look like domains
-        sanitized = sanitized.replace(Regex("\\b[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.([a-zA-Z]{2,}|\\d{1,3})\\b")) { match ->
+        // ── IPv4 addresses → IP1, IP2, … ─────────────────────────────────
+        s = RE_IPV4.replace(s) { match ->
+            hostMap.getOrPut(match.value) { "IP${++hostCounter}" }
+        }
+
+        // ── private hostnames → server1, server2, … ──────────────────────
+        // Well-known public domains and Android/Google/GitHub identifiers are
+        // preserved verbatim — they add diagnostic context without leaking
+        // anything private.
+        s = RE_HOSTNAME.replace(s) { match ->
             val host = match.value
-            // Skip common safe domains
-            if (host.endsWith(".com") || host.endsWith(".org") || host.endsWith(".net") ||
-                host.contains("android") || host.contains("google") || host.contains("github")) {
+            if (SAFE_DOMAIN_SUFFIXES.any { host.endsWith(it) } ||
+                SAFE_DOMAIN_KEYWORDS.any { host.contains(it) }) {
                 host
             } else {
                 hostMap.getOrPut(host) { "server${++hostCounter}" }
             }
         }
 
-        // Anonymize user@host patterns
-        sanitized = sanitized.replace(Regex("([a-zA-Z0-9_.-]+)@([a-zA-Z0-9.-]+)")) { match ->
-            val user = match.groupValues[1]
-            val host = match.groupValues[2]
-            val anonUser = userMap.getOrPut(user) { "user${++userCounter}" }
-            val anonHost = hostMap.getOrPut(host) { "server${++hostCounter}" }
-            "$anonUser@$anonHost"
-        }
+        // ── home-directory paths that reveal usernames ────────────────────
+        s = RE_HOME_PATH .replace(s, "/home/[user]")
+        s = RE_USERS_PATH.replace(s, "/Users/[user]")
 
-        // Redact file paths that might contain usernames
-        sanitized = sanitized.replace(Regex("/home/[a-zA-Z0-9_-]+"), "/home/[user]")
-        sanitized = sanitized.replace(Regex("/Users/[a-zA-Z0-9_-]+"), "/Users/[user]")
-
-        return sanitized
+        return s
     }
+
+    /**
+     * Public surface for sanitizing arbitrary text (e.g. crash stack traces
+     * stored outside the normal logging path before sharing them).
+     */
+    fun sanitize(text: String): String = sanitizeForPublic(text)
 
     /**
      * Sanitize stack trace for public sharing
