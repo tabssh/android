@@ -98,6 +98,16 @@ class VMConsoleActivity : AppCompatActivity() {
     /** Socket to close when a direct VNC host connection ends. */
     private var directVncSocket: Socket? = null
     /**
+     * Active [RfbClient] for all VNC paths (Proxmox via manager, libvirt direct,
+     * VncHost direct).  Set in [switchToGraphical]; cleared in [onDestroy].
+     *
+     * Kept here so [onStop]/[onDestroy] can call [RfbClient.stop] — setting
+     * [running]=false — BEFORE the underlying pipe is torn down.  Without the
+     * stop(), the reader thread sees IOException "Pipe closed" while running=true
+     * and logs a spurious E/ error on every user-initiated disconnect.
+     */
+    private var activeRfbClient: io.github.tabssh.hypervisor.console.rfb.RfbClient? = null
+    /**
      * Active VNC console channel (keyboard bridge to RfbClient).
      * Non-null whenever [isGraphicalMode] is true — all VNC paths now
      * use console mode (VncConsoleChannel) rather than raw VncView input.
@@ -692,6 +702,7 @@ class VMConsoleActivity : AppCompatActivity() {
         isConnected = true
 
         val rfb = connection.rfbClient
+        activeRfbClient = rfb
 
         // Build the keyboard bridge first so the initial size can be captured.
         val channel = VncConsoleChannel(rfb)
@@ -936,6 +947,10 @@ class VMConsoleActivity : AppCompatActivity() {
         // blocking writes stall the I/O thread pool and make the app
         // unresponsive. Disconnecting here is safe — the user can reconnect
         // when they bring the activity back to the foreground.
+        //
+        // Stop the RFB client FIRST so running=false before any pipe is torn
+        // down — prevents spurious E/ "Pipe closed" on user-initiated close.
+        activeRfbClient?.stop()
         consoleManager?.disconnect()
         termuxBridge?.cleanup()
         try { directVncSocket?.close() } catch (_: Exception) {}
@@ -943,6 +958,8 @@ class VMConsoleActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        activeRfbClient?.stop()
+        activeRfbClient = null
         vncConsoleChannel = null
         consoleManager?.disconnect()
         termuxBridge?.cleanup()

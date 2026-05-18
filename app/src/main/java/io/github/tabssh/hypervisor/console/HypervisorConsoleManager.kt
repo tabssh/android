@@ -38,6 +38,15 @@ class HypervisorConsoleManager {
     private var termuxBridge: TermuxBridge? = null
     private var consoleListener: ConsoleEventListener? = null
 
+    /**
+     * The active [RfbClient] when a graphical console is running, or null for
+     * text consoles.  Stored so [disconnect] can call [RfbClient.stop] before
+     * tearing down the WebSocket pipe — without the stop(), the reader thread
+     * sees [java.io.IOException] "Pipe closed" while [running] is still true
+     * and logs a spurious error.
+     */
+    private var activeRfbClient: RfbClient? = null
+
     // Stored for VNC fallback when termproxy WebSocket reports a serial error
     // after a successful API call (the API-level fallback is in connectProxmoxConsole
     // phase 1; this covers the rare case where the API succeeds but the WS frame fails).
@@ -259,6 +268,7 @@ class HypervisorConsoleManager {
                     vncPassword = ticket.termproxyTicket,
                     consoleMode = true)
                 rfbClient.canRequestResize = false
+                activeRfbClient = rfbClient
                 ConsoleConnection.Graphical(
                     vmName = vmName,
                     hypervisorType = HypervisorType.PROXMOX,
@@ -539,6 +549,7 @@ class HypervisorConsoleManager {
                     vncPassword = vnc.termproxyTicket,
                     consoleMode = true)
                 rfbClient.canRequestResize = false
+                activeRfbClient = rfbClient
                 val graphical = ConsoleConnection.Graphical(
                     vmName = vmName,
                     hypervisorType = HypervisorType.PROXMOX,
@@ -589,6 +600,11 @@ class HypervisorConsoleManager {
     fun disconnect() {
         Logger.i(TAG, "Disconnecting console")
         scope.coroutineContext[Job]?.cancel()
+        // Stop the RFB reader thread BEFORE closing the WebSocket pipe.
+        // Without this, the reader sees IOException "Pipe closed" while
+        // running=true and logs a spurious E/ error on every user-initiated close.
+        activeRfbClient?.stop()
+        activeRfbClient = null
         termuxBridge?.disconnect()
         webSocketClient?.disconnect()
         termuxBridge = null
