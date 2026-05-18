@@ -19,6 +19,7 @@ import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.crypto.keys.KeyType
 import io.github.tabssh.crypto.keys.GenerateResult
+import io.github.tabssh.crypto.storage.SecurePasswordManager
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.first
@@ -234,6 +235,8 @@ class ConnectionEditActivity : AppCompatActivity() {
                 binding.layoutUsernameInput.visibility = View.GONE
                 // VNC identity picker
                 binding.layoutIdentityRow.visibility = View.VISIBLE
+                // Per-host password visible when no identity selected (default state)
+                binding.layoutVncPassword.visibility = View.VISIBLE
                 // Default port
                 autoSetPort("5900", setOf("22", "23"))
                 // Reload identity list with VNC identities
@@ -248,8 +251,10 @@ class ConnectionEditActivity : AppCompatActivity() {
                 binding.cardAppearance.visibility = View.VISIBLE
                 binding.cardProxy.visibility = View.GONE
                 binding.layoutUsernameInput.visibility = View.VISIBLE
-                // Hide identity picker — Telnet uses inline user/pass only
+                // Hide identity picker and VNC password — Telnet uses inline user/pass only
                 binding.layoutIdentityRow.visibility = View.GONE
+                binding.layoutVncPassword.visibility = View.GONE
+                binding.editVncPassword.text?.clear()
                 autoSetPort("23", setOf("22", "5900"))
             }
             else -> { // "ssh"
@@ -261,6 +266,8 @@ class ConnectionEditActivity : AppCompatActivity() {
                 binding.cardProxy.visibility = View.VISIBLE
                 binding.layoutUsernameInput.visibility = View.VISIBLE
                 binding.layoutIdentityRow.visibility = View.VISIBLE
+                binding.layoutVncPassword.visibility = View.GONE
+                binding.editVncPassword.text?.clear()
                 autoSetPort("22", setOf("5900", "23"))
                 // Reload identity list with SSH identities
                 loadSshIdentities()
@@ -329,8 +336,16 @@ class ConnectionEditActivity : AppCompatActivity() {
                 )
                 binding.spinnerIdentity.setAdapter(adapter)
                 binding.spinnerIdentity.setOnItemClickListener { _, _, position, _ ->
+                    binding.spinnerIdentity.setText(items[position], false)
                     selectedVncIdentityId = if (position > 0) availableVncIdentities[position - 1].id else null
                     selectedIdentityId = null
+                    // Show per-host password only when no identity is selected
+                    if (selectedVncIdentityId == null) {
+                        binding.layoutVncPassword.visibility = View.VISIBLE
+                    } else {
+                        binding.layoutVncPassword.visibility = View.GONE
+                        binding.editVncPassword.text?.clear()
+                    }
                 }
                 restoreVncIdentitySpinner()
             } catch (e: Exception) {
@@ -806,6 +821,22 @@ class ConnectionEditActivity : AppCompatActivity() {
         selectedGroupId = vncHost.groupId
         currentColorTag = vncHost.colorTag
         renderColorTagPreview()
+        // Pre-populate per-host password when no identity is linked
+        if (vncHost.identityId == null) {
+            lifecycleScope.launch {
+                val stored = try {
+                    app.securePasswordManager.retrievePassword("vnc_host_${vncHost.id}")
+                } catch (e: Exception) {
+                    Logger.w("ConnectionEditActivity", "No stored VNC host password: ${e.message}")
+                    null
+                }
+                if (!stored.isNullOrEmpty()) {
+                    binding.editVncPassword.setText(stored)
+                }
+            }
+        } else {
+            binding.layoutVncPassword.visibility = View.GONE
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -863,6 +894,22 @@ class ConnectionEditActivity : AppCompatActivity() {
                     app.database.vncHostDao().insert(vncHost)
                     Logger.i("ConnectionEditActivity", "Saved VNC host: $name")
                     showToast("VNC host saved")
+                }
+
+                // Persist or clear the per-host VNC password when no identity is linked
+                if (selectedVncIdentityId == null) {
+                    val vncPw = binding.editVncPassword.text.toString()
+                    if (vncPw.isNotEmpty()) {
+                        app.securePasswordManager.storePassword(
+                            "vnc_host_$hostId",
+                            vncPw,
+                            SecurePasswordManager.StorageLevel.ENCRYPTED
+                        )
+                    } else {
+                        // User blanked the field — remove any previously stored password
+                        try { app.securePasswordManager.clearPassword("vnc_host_$hostId") }
+                        catch (_: Exception) { /* nothing stored, ignore */ }
+                    }
                 }
 
                 setResult(RESULT_OK)

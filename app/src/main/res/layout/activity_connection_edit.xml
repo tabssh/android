@@ -266,6 +266,28 @@
 
                     </com.google.android.material.textfield.TextInputLayout>
 
+                    <!-- VNC per-host password — shown for VNC protocol when no identity
+                         is selected. Hidden by default; toggled by identity picker. -->
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/layout_vnc_password"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="VNC Password"
+                        android:layout_marginTop="@dimen/space_sm"
+                        android:visibility="gone"
+                        app:endIconMode="password_toggle"
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/edit_vnc_password"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="textPassword"
+                            android:imeOptions="actionDone"
+                            android:contentDescription="VNC password for this host" />
+
+                    </com.google.android.material.textfield.TextInputLayout>
+
                 </LinearLayout>
 
             </com.google.android.material.card.MaterialCardView>
