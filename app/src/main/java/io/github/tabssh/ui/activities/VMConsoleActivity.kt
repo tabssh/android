@@ -735,11 +735,16 @@ class VMConsoleActivity : AppCompatActivity() {
                 runOnUiThread {
                     terminalView.visibility = View.GONE
                     vncView.visibility = View.VISIBLE
-                    // Keep the keyboard bar visible — console mode uses keyboard
-                    // input the same way SSH does.
-                    // Request focus so keyboard events are routed to the VNC view
-                    // and the Android soft keyboard can appear when tapped.
+                    // Force a redraw now that the view is visible — the bitmap may
+                    // already contain decoded framebuffer pixels that arrived while
+                    // the view was GONE (postInvalidate on a GONE view is a no-op).
+                    vncView.postInvalidate()
+                    // Mirror TerminalView: request focus AND show the soft keyboard
+                    // immediately so the user can type without tapping first.
                     vncView.requestFocus()
+                    val imm = getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
+                        as android.view.inputmethod.InputMethodManager
+                    imm.showSoftInput(vncView, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
                     hideProgress()
                     refreshFloatingControls()
                 }

@@ -212,6 +212,10 @@ class VncView @JvmOverloads constructor(
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         recomputeFitScale()
+        // If we already have framebuffer data (e.g. the first update arrived while
+        // the view was GONE and its dimensions were 0), force a redraw now that we
+        // have real dimensions and a valid fitScale.
+        if (bitmap != null) invalidate()
     }
 
     private fun recomputeFitScale() {
