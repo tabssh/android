@@ -52,15 +52,25 @@ class VncConsoleChannel(private val rfbClient: RfbClient) {
     }
 
     /**
-     * Wrap [delegate] with a listener that additionally sends [RfbClient.sendSetDesktopSize]
-     * on connect.  Pass the result to [rfbClient].listener before calling
-     * [rfbClient].start().
+     * Wrap [delegate] with a listener that sends [RfbClient.sendSetDesktopSize]
+     * once the server signals ExtendedDesktopSize support ([RfbListener.onExtendedDesktopSizeReady]).
+     * Pass the result to [rfbClient].listener before calling [rfbClient].start().
      */
     fun wrapListener(delegate: RfbListener): RfbListener = object : RfbListener by delegate {
         override fun onConnected(width: Int, height: Int, name: String, framebuffer: IntArray) {
             delegate.onConnected(width, height, name, framebuffer)
-            // Send the initial terminal size now that the RFB handshake is complete.
+            // Do NOT send SetDesktopSize here.  We wait for the server to send
+            // an unsolicited ExtendedDesktopSize rect (reason=0) via
+            // onExtendedDesktopSizeReady() before requesting a specific size.
+            // Sending unconditionally causes QEMU to reject the request and
+            // close the connection (reason=1/status=3 → EOF).
+        }
+
+        override fun onExtendedDesktopSizeReady() {
+            // Server confirmed ExtendedDesktopSize support — request the
+            // desired terminal size now.
             rfbClient.sendSetDesktopSize(initialCols * fontW, initialRows * fontH)
+            delegate.onExtendedDesktopSizeReady()
         }
     }
 

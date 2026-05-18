@@ -59,35 +59,31 @@ class RfbClient(
         private const val RFB_VERSION = "RFB 003.008\n"
 
         /**
-         * Encodings advertised to the server in full GUI mode, in preference order.
-         * Servers pick the first one they support.
+         * Encodings advertised to the server, in preference order.
+         *
+         * Both GUI and console-mode connections use this list.  The only
+         * behavioural difference between the two modes is the ClientInit
+         * shared-flag (0 = exclusive for [consoleMode], 1 = shared otherwise).
+         *
+         * ENC_EXTENDED_DESKTOP_SIZE is always advertised so the server knows
+         * we understand client-initiated resize.  We do NOT send
+         * SetDesktopSize immediately on connect; instead we wait for the
+         * server to send an unsolicited ExtendedDesktopSize rect (reason=0)
+         * which confirms it supports the extension.  See [sendSetDesktopSize].
          */
         private val PREFERRED_ENCODINGS = intArrayOf(
-            RfbConstants.ENC_TIGHT,        // TigerVNC default
-            RfbConstants.ENC_ZRLE,         // Proxmox preferred
+            RfbConstants.ENC_TIGHT,                    // TigerVNC / libvirt default
+            RfbConstants.ENC_ZRLE,                     // Proxmox preferred
             RfbConstants.ENC_ZLIB,
             RfbConstants.ENC_HEXTILE,
+            RfbConstants.ENC_CORRE,                    // compact RRE fallback
             RfbConstants.ENC_COPY_RECT,
             RfbConstants.ENC_RRE,
             RfbConstants.ENC_RAW,
-            RfbConstants.ENC_DESKTOP_SIZE,
+            RfbConstants.ENC_EXTENDED_DESKTOP_SIZE,    // client-initiated resize
+            RfbConstants.ENC_DESKTOP_SIZE,             // server-side resize
             RfbConstants.ENC_CURSOR,
-            RfbConstants.ENC_LAST_RECT
-        )
-
-        /**
-         * Encodings for text-console mode.  Compression encodings (Tight, ZRLE,
-         * Zlib) are omitted so the Raw byte path is deterministic — important for
-         * parsing VT100/ANSI output from text-mode framebuffers.
-         * ExtendedDesktopSize is included to enable client-initiated resize via
-         * SetDesktopSize (RFB message type 251).
-         */
-        private val CONSOLE_ENCODINGS = intArrayOf(
-            RfbConstants.ENC_RAW,
-            RfbConstants.ENC_COPY_RECT,
-            RfbConstants.ENC_DESKTOP_SIZE,
-            RfbConstants.ENC_EXTENDED_DESKTOP_SIZE,
-            RfbConstants.ENC_CURSOR,
+            RfbConstants.ENC_FENCE,                    // consume fence messages
             RfbConstants.ENC_LAST_RECT
         )
     }
@@ -102,6 +98,23 @@ class RfbClient(
      * client-initiated resize so we never hammer a server that can't resize.
      */
     var canRequestResize: Boolean = true
+
+    /**
+     * Set to true the first time the server sends an unsolicited
+     * ExtendedDesktopSize rectangle (reason=0, status=0).  Until this flag
+     * is set, [sendSetDesktopSize] is a no-op — sending SetDesktopSize before
+     * the server signals support causes QEMU to reject it and close the
+     * connection (observed: reason=1 status=3 → EOF).
+     */
+    private var serverSupportsExtendedDesktopSize = false
+
+    /**
+     * Set to true when we just received an ExtendedDesktopSize rejection.
+     * When the server closes the connection in that window (QEMU behaviour),
+     * we treat it as a clean disconnect rather than a protocol error so the
+     * UI does not show a red error banner.
+     */
+    @Volatile private var pendingResizeRejection = false
 
     private var din = DataInputStream(inputStream.buffered(65536))
     private var dout = DataOutputStream(outputStream)
@@ -163,8 +176,18 @@ class RfbClient(
             Logger.d(TAG, "RFB reader interrupted")
         } catch (e: Exception) {
             if (running.get()) {
-                Logger.e(TAG, "RFB protocol error", e)
-                listener?.onError("VNC connection lost: ${e.message ?: e.javaClass.simpleName}")
+                if (pendingResizeRejection &&
+                    (e is java.io.EOFException || e is java.io.IOException)) {
+                    // Server closed the connection immediately after rejecting our
+                    // SetDesktopSize request (QEMU behaviour).  This is not a
+                    // protocol error from the user's perspective — the session
+                    // simply ended because the server doesn't support resize.
+                    Logger.i(TAG, "Server closed after resize rejection — treating as clean disconnect")
+                    listener?.onDisconnected("Server closed after resize rejection")
+                } else {
+                    Logger.e(TAG, "RFB protocol error", e)
+                    listener?.onError("VNC connection lost: ${e.message ?: e.javaClass.simpleName}")
+                }
             }
         } finally {
             running.set(false)
@@ -436,7 +459,7 @@ class RfbClient(
     }
 
     private fun sendSetEncodings() {
-        val encodings = if (consoleMode) CONSOLE_ENCODINGS else PREFERRED_ENCODINGS
+        val encodings = PREFERRED_ENCODINGS
         synchronized(outLock) {
             dout.writeByte(RfbConstants.C2S_SET_ENCODINGS)
             dout.writeByte(0)                              // padding
@@ -447,13 +470,22 @@ class RfbClient(
     }
 
     /**
-     * Request the server to resize its framebuffer (RFB message type 251,
-     * SetDesktopSize extension).  Only meaningful when [consoleMode] is true
-     * and [RfbConstants.ENC_EXTENDED_DESKTOP_SIZE] was advertised in
-     * [sendSetEncodings].  The server acknowledges via an
-     * [RfbConstants.ENC_EXTENDED_DESKTOP_SIZE] pseudo-rectangle.
+     * Request the server to resize its framebuffer (RFB extension, message
+     * type 251 / [RfbConstants.C2S_SET_DESKTOP_SIZE]).
+     *
+     * Only sent after the server has confirmed support by sending an
+     * unsolicited ExtendedDesktopSize rectangle (reason=0) — i.e. after
+     * [serverSupportsExtendedDesktopSize] is true.  Sending unconditionally
+     * causes servers that do not support it (or QEMU before it emits the
+     * initial rect) to reject the request and close the connection.
+     *
+     * The server acknowledges via an ENC_EXTENDED_DESKTOP_SIZE pseudo-rect.
      */
     fun sendSetDesktopSize(width: Int, height: Int) {
+        if (!serverSupportsExtendedDesktopSize) {
+            Logger.d(TAG, "SetDesktopSize deferred — waiting for server capability signal")
+            return
+        }
         if (!canRequestResize) {
             Logger.d(TAG, "SetDesktopSize suppressed — canRequestResize=false")
             return
@@ -500,6 +532,7 @@ class RfbClient(
                 RfbConstants.S2C_SET_COLOUR_MAP_ENTRIES -> skipColourMap()
                 RfbConstants.S2C_BELL -> listener?.onBell()
                 RfbConstants.S2C_SERVER_CUT_TEXT -> handleServerCutText()
+                RfbConstants.S2C_QEMU_EXT -> handleQemuExt()
                 else -> handleUnknownServerMessage(msgType)
             }
         }
@@ -551,26 +584,38 @@ class RfbClient(
                     sendUpdateRequest(0, 0, fbWidth, fbHeight, incremental = false)
                 }
                 RfbConstants.ENC_EXTENDED_DESKTOP_SIZE -> {
-                    // Client-initiated resize acknowledgement (or server-side change).
-                    // Payload: 2-byte numScreens + 2-byte padding + 16 bytes per screen.
-                    // rx = reason (0=server, 1=this client, 2=other client)
-                    // ry = status (0=OK, 1=prohibited, 2=out of resources, 3=invalid)
-                    // rw/rh = new framebuffer dimensions (valid when ry==0)
+                    // Payload: u16 numScreens + u16 padding + 16 bytes per screen.
+                    // rx = reason: 0=server-initiated, 1=this client, 2=other client
+                    // ry = status: 0=OK, 1=prohibited, 2=out of resources, 3=invalid layout
+                    // rw/rh = new framebuffer dimensions (only valid when ry==0)
                     val numScreens = din.readUnsignedShort()
                     din.skipBytes(2)               // padding
-                    din.skipBytes(numScreens * 16) // screen descriptors (id, x, y, w, h, flags)
-                    if (ry == 0 && rw > 0 && rh > 0) {
-                        Logger.i(TAG, "ExtendedDesktopSize: ${rw}×$rh (reason=$rx)")
-                        fbWidth = rw; fbHeight = rh
-                        framebuffer = IntArray(fbWidth * fbHeight)
-                        listener?.onDesktopResize(fbWidth, fbHeight, framebuffer)
-                        sendUpdateRequest(0, 0, fbWidth, fbHeight, incremental = false)
-                    } else if (ry != 0) {
+                    din.skipBytes(numScreens * 16) // screen descriptors (id u32 + x u16 + y u16 + w u16 + h u16 + flags u32)
+                    if (ry == 0) {
+                        pendingResizeRejection = false
+                        if (rw > 0 && rh > 0) {
+                            Logger.i(TAG, "ExtendedDesktopSize: ${rw}×$rh (reason=$rx status=OK)")
+                            fbWidth = rw; fbHeight = rh
+                            framebuffer = IntArray(fbWidth * fbHeight)
+                            listener?.onDesktopResize(fbWidth, fbHeight, framebuffer)
+                            sendUpdateRequest(0, 0, fbWidth, fbHeight, incremental = false)
+                        }
+                        if (rx == 0 && !serverSupportsExtendedDesktopSize) {
+                            // Server-initiated first announcement → server supports EDS.
+                            // Fire the callback so VncConsoleChannel can send the desired size.
+                            serverSupportsExtendedDesktopSize = true
+                            Logger.i(TAG, "Server confirmed ExtendedDesktopSize support")
+                            listener?.onExtendedDesktopSizeReady()
+                        } else if (rx == 0) {
+                            serverSupportsExtendedDesktopSize = true
+                        }
+                    } else {
                         Logger.w(TAG, "ExtendedDesktopSize rejected: reason=$rx status=$ry — disabling resize")
-                        // Server rejected our resize request. Disable future attempts so we
-                        // don't trigger a second rejection that causes the server to close
-                        // the connection (Proxmox vncproxy behaviour: rejects then hangs up).
                         canRequestResize = false
+                        pendingResizeRejection = true
+                        // Some servers (QEMU ≤ 9.x) close the connection after sending the
+                        // rejection.  pendingResizeRejection lets runProtocol() treat the
+                        // resulting EOF as a clean disconnect rather than a protocol error.
                     }
                 }
                 RfbConstants.ENC_CURSOR -> {
@@ -631,6 +676,45 @@ class RfbClient(
         if (len > 0) {
             val bytes = ByteArray(len); din.readFully(bytes)
             listener?.onClipboardText(String(bytes, Charsets.ISO_8859_1))
+        }
+    }
+
+    /**
+     * Consume a QEMU extended server message (type 255).
+     *
+     * QEMU sends these for LED state changes, audio streaming, and pointer-mode
+     * changes.  We do not act on any of them — we just consume the payload so
+     * the stream stays in sync.
+     */
+    private fun handleQemuExt() {
+        val subType = din.readUnsignedShort()
+        when (subType) {
+            RfbConstants.QEMU_EXT_LED_STATE -> {
+                din.skipBytes(1) // u8: LED state bitmask
+            }
+            RfbConstants.QEMU_EXT_AUDIO -> {
+                val op = din.readUnsignedShort()
+                when (op) {
+                    RfbConstants.QEMU_AUDIO_BEGIN -> {
+                        din.skipBytes(1) // u8: format
+                        din.skipBytes(1) // u8: nchannels
+                        din.skipBytes(4) // u32: frequency (Hz)
+                    }
+                    RfbConstants.QEMU_AUDIO_DATA -> {
+                        val len = din.readInt()
+                        var remaining = len.toLong()
+                        while (remaining > 0) remaining -= din.skip(remaining)
+                    }
+                    RfbConstants.QEMU_AUDIO_END -> { /* no body */ }
+                    else -> Logger.w(TAG, "Unknown QEMU audio operation $op")
+                }
+            }
+            RfbConstants.QEMU_EXT_POINTER_MOTION -> {
+                din.skipBytes(1) // u8: 0=absolute, 1=relative
+            }
+            else -> {
+                Logger.w(TAG, "Unknown QEMU ext sub-type $subType (0x${subType.toString(16).uppercase()})")
+            }
         }
     }
 
@@ -717,4 +801,12 @@ interface RfbListener {
 
     /** Connection closed cleanly. */
     fun onDisconnected(reason: String) {}
+
+    /**
+     * The server has confirmed it supports client-initiated resize by sending
+     * an unsolicited ExtendedDesktopSize rectangle (reason=0).  Callers that
+     * want to request a specific size (e.g. [VncConsoleChannel]) should call
+     * [RfbClient.sendSetDesktopSize] here.  Default implementation is a no-op.
+     */
+    fun onExtendedDesktopSizeReady() {}
 }

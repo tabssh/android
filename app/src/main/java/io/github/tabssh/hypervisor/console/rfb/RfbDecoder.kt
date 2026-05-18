@@ -17,6 +17,7 @@ import java.util.zip.Inflater
  *   Hextile (5)    — tile-based, universal server-side fallback
  *   CopyRect (1)   — cheap scroll / blit operations
  *   RRE (2)        — solid-colour region compression
+ *   CoRRE (4)      — compact RRE with 1-byte sub-rect coordinates
  *   Raw (0)        — uncompressed baseline, always available
  *
  * Pseudo-encodings decoded inline by RfbClient:
@@ -67,6 +68,7 @@ class RfbDecoder(private val fmt: PixelFormat) {
             RfbConstants.ENC_RAW       -> decodeRaw(din, fb, fbW, x, y, w, h)
             RfbConstants.ENC_COPY_RECT -> decodeCopyRect(din, fb, fbW, x, y, w, h)
             RfbConstants.ENC_RRE       -> decodeRre(din, fb, fbW, x, y, w, h)
+            RfbConstants.ENC_CORRE     -> decodeCorre(din, fb, fbW, x, y, w, h)
             RfbConstants.ENC_HEXTILE   -> decodeHextile(din, fb, fbW, x, y, w, h)
             RfbConstants.ENC_ZLIB      -> decodeZlib(din, fb, fbW, x, y, w, h)
             RfbConstants.ENC_ZRLE      -> decodeZrle(din, fb, fbW, x, y, w, h)
@@ -140,6 +142,33 @@ class RfbDecoder(private val fmt: PixelFormat) {
             val sy = din.readUnsignedShort()
             val sw = din.readUnsignedShort()
             val sh = din.readUnsignedShort()
+            fillRect(fb, fbW, x + sx, y + sy, sw, sh, fg)
+        }
+    }
+
+    // ── CoRRE ───────────────────────────────────────────────────────────────
+    //
+    // Compact RRE: like RRE but sub-rect coordinates and dimensions are each
+    // a single byte instead of two, limiting tile size to 255×255 pixels.
+    // Pixel values use the full pixel format (not CPixel).
+
+    private fun decodeCorre(
+        din: DataInputStream, fb: IntArray, fbW: Int,
+        x: Int, y: Int, w: Int, h: Int
+    ) {
+        val numSubRects = din.readInt()
+        val bgBuf = ByteArray(fmt.bytesPerPixel)
+        din.readFully(bgBuf)
+        fillRect(fb, fbW, x, y, w, h, fmt.toArgb(bgBuf))
+
+        val fgBuf = ByteArray(fmt.bytesPerPixel)
+        repeat(numSubRects) {
+            din.readFully(fgBuf)
+            val fg = fmt.toArgb(fgBuf)
+            val sx = din.readUnsignedByte()
+            val sy = din.readUnsignedByte()
+            val sw = din.readUnsignedByte()
+            val sh = din.readUnsignedByte()
             fillRect(fb, fbW, x + sx, y + sy, sw, sh, fg)
         }
     }

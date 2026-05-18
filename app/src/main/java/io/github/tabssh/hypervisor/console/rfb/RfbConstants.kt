@@ -46,6 +46,34 @@ object RfbConstants {
     const val ENC_CURSOR: Int = -239
     /** No more rectangles follow in this update (TigerVNC extension). */
     const val ENC_LAST_RECT: Int = -224
+
+    /** CoRRE encoding (type 4) — compact RRE with 1-byte sub-rect coordinates. */
+    const val ENC_CORRE: Int = 4
+
+    /**
+     * Fence pseudo-encoding (RFC extension).  Advertised so servers know we
+     * can handle ServerFence messages; the payload is consumed and discarded
+     * since we do not use synchronous fencing.  Unsigned 0xFFFFFEC8 = -312.
+     */
+    const val ENC_FENCE: Int = -312
+
+    // ── QEMU extension messages ─────────────────────────────────────────────
+    /**
+     * Server message type 255: QEMU extended messages.  Sub-type follows as
+     * a u16.  Used by QEMU/KVM for LED state, audio, and pointer-mode changes.
+     */
+    const val S2C_QEMU_EXT: Int = 255
+    const val QEMU_EXT_LED_STATE: Int = 0
+    const val QEMU_EXT_AUDIO: Int = 1
+    const val QEMU_EXT_POINTER_MOTION: Int = 2
+    const val QEMU_AUDIO_BEGIN: Int = 0
+    const val QEMU_AUDIO_DATA: Int = 1
+    const val QEMU_AUDIO_END: Int = 2
+
+    // ── Named client message types ──────────────────────────────────────────
+    /** SetDesktopSize — client-initiated resize request (RFB extension §5.4). */
+    const val C2S_SET_DESKTOP_SIZE: Int = 251
+
     /**
      * Client-initiated resize (RFB 3.8 extension, §5.4).
      * Advertised in SetEncodings so the server knows we support SetDesktopSize
