@@ -4,6 +4,7 @@ import android.view.KeyEvent
 import io.github.tabssh.hypervisor.console.rfb.RfbClient
 import io.github.tabssh.hypervisor.console.rfb.RfbConstants
 import io.github.tabssh.hypervisor.console.rfb.RfbListener
+import java.util.concurrent.Executors
 
 /**
  * Keyboard + resize bridge between the Android UI and an [RfbClient] running in
@@ -25,10 +26,14 @@ import io.github.tabssh.hypervisor.console.rfb.RfbListener
  * channel.setInitialSize(cols, rows)
  * rfbClient.listener = channel.wrapListener(vncView.asRfbListener())
  * rfbClient.start()
+ * // ... on session end:
+ * channel.close()
  * ```
  *
- * Thread safety: all public methods are safe to call from any thread; they
- * delegate to [RfbClient] which synchronises on its output lock.
+ * Thread safety: all public send methods are safe to call from any thread,
+ * including the main thread.  They post work to an internal single-threaded
+ * executor so socket writes never happen on the calling thread.  Key ordering
+ * is preserved because the executor is strictly FIFO.
  */
 class VncConsoleChannel(private val rfbClient: RfbClient) {
 
@@ -42,14 +47,37 @@ class VncConsoleChannel(private val rfbClient: RfbClient) {
     private var initialRows: Int = 24
 
     /**
+     * Single-threaded executor that serialises all outgoing RFB writes.
+     *
+     * All public send methods post work here so that callers on the main
+     * thread never touch the socket directly — avoiding
+     * [android.os.NetworkOnMainThreadException] and keeping key ordering
+     * deterministic (the executor is a FIFO single-thread pool).
+     */
+    private val writeExecutor = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "tabssh-vnc-writer").also { it.isDaemon = true }
+    }
+
+    /** Post [block] to the serialised writer thread. */
+    private fun io(block: () -> Unit) { writeExecutor.execute(block) }
+
+    /**
      * Record the initial terminal size.  Call before [rfbClient] is started.
      * The size is sent via [RfbClient.sendSetDesktopSize] once the server is
-     * ready (inside [wrapListener]'s [RfbListener.onConnected] override).
+     * ready (inside [wrapListener]'s [RfbListener.onExtendedDesktopSizeReady]
+     * override).
      */
     fun setInitialSize(cols: Int, rows: Int) {
         initialCols = cols.coerceAtLeast(1)
         initialRows = rows.coerceAtLeast(1)
     }
+
+    /**
+     * Shut down the writer executor.  Call when the VNC session ends to
+     * release the background thread.  Any sends queued before this call will
+     * still be delivered; sends after this call are silently dropped.
+     */
+    fun close() { writeExecutor.shutdownNow() }
 
     /**
      * Wrap [delegate] with a listener that sends [RfbClient.sendSetDesktopSize]
@@ -68,37 +96,39 @@ class VncConsoleChannel(private val rfbClient: RfbClient) {
 
         override fun onExtendedDesktopSizeReady() {
             // Server confirmed ExtendedDesktopSize support — request the
-            // desired terminal size now.
-            rfbClient.sendSetDesktopSize(initialCols * fontW, initialRows * fontH)
+            // desired terminal size now.  Dispatch via writeExecutor so this
+            // send is ordered correctly relative to any resize() calls queued
+            // from the UI thread.
+            io { rfbClient.sendSetDesktopSize(initialCols * fontW, initialRows * fontH) }
             delegate.onExtendedDesktopSizeReady()
         }
     }
 
+    // ── Public send API (all dispatch to writeExecutor) ───────────────────
+
     /**
      * Translate a terminal grid resize to a SetDesktopSize message.
-     * Safe to call any time after [rfbClient].start(); the message is only
-     * sent when both dimensions are positive.
+     * Safe to call from any thread including the main thread.
      */
     fun resize(cols: Int, rows: Int) {
         if (cols > 0 && rows > 0) {
-            rfbClient.sendSetDesktopSize(cols * fontW, rows * fontH)
+            io { rfbClient.sendSetDesktopSize(cols * fontW, rows * fontH) }
         }
     }
 
     /**
      * Send a single keysym as a down+up pair.
+     * Safe to call from any thread including the main thread.
      */
-    fun sendKey(keysym: Long) {
-        rfbClient.sendKeyEvent(keysym, true)
-        rfbClient.sendKeyEvent(keysym, false)
-    }
+    fun sendKey(keysym: Long) = io { sendKeyDirect(keysym) }
 
     /**
      * Translate an Android [KeyEvent] to RFB key events and send them.
      *
      * Handles [KeyEvent.ACTION_DOWN] only (modifier state is read from the
      * event's metaState, so held modifiers are captured correctly).  Returns
-     * true when the event was consumed.
+     * true when the event was consumed.  Safe to call from any thread
+     * including the main thread.
      *
      * Modifier sequencing per RFB §7.5.4:
      *   modifier-down → key-down → key-up → modifier-up
@@ -112,11 +142,15 @@ class VncConsoleChannel(private val rfbClient: RfbClient) {
         // key is pressed, so there is no need to track modifier down/up separately.
         if (isModifierKey(event.keyCode)) return true
 
+        // Key translation is pure computation — safe on main thread.
         val mods = collectModifiers(event)
-        for (mod in mods) rfbClient.sendKeyEvent(mod, true)
-        rfbClient.sendKeyEvent(keysym, true)
-        rfbClient.sendKeyEvent(keysym, false)
-        for (mod in mods.reversed()) rfbClient.sendKeyEvent(mod, false)
+        // Network writes are dispatched to the writer thread.
+        io {
+            for (mod in mods) rfbClient.sendKeyEvent(mod, true)
+            rfbClient.sendKeyEvent(keysym, true)
+            rfbClient.sendKeyEvent(keysym, false)
+            for (mod in mods.reversed()) rfbClient.sendKeyEvent(mod, false)
+        }
         return true
     }
 
@@ -126,47 +160,59 @@ class VncConsoleChannel(private val rfbClient: RfbClient) {
      * sequences are decoded to the corresponding X11 keysyms.
      *
      * An empty string is treated as Escape (keyboard bar convention).
+     * Safe to call from any thread including the main thread.
      */
-    fun sendSequence(seq: String) {
-        when {
-            seq.isEmpty()            -> sendKey(RfbConstants.KEY_ESCAPE)
-            seq == "\t"              -> sendKey(RfbConstants.KEY_TAB)
-            seq == "\r" || seq == "\n" -> sendKey(RfbConstants.KEY_RETURN)
-            seq.startsWith("") -> parseEscapeSequence(seq)
-            seq.length == 1          -> sendCharKey(seq[0])
-            else                     -> seq.forEach { sendCharKey(it) }
-        }
-    }
+    fun sendSequence(seq: String) = io { sendSequenceDirect(seq) }
 
     /**
      * Send a string of plain text as a series of Unicode keysyms.
+     * Safe to call from any thread including the main thread.
      */
-    fun sendText(text: String) {
-        text.forEach { sendCharKey(it) }
+    fun sendText(text: String) = io { text.forEach { sendCharDirect(it) } }
+
+    // ── Internal helpers (called only from inside io{} blocks) ────────────
+    //
+    // These methods call rfbClient.send* directly and must NOT be called from
+    // the main thread.  They must NOT call any of the public send methods
+    // (which would re-enter the executor); call the *Direct variants instead.
+
+    /** Send a keysym down+up without executor dispatch. */
+    private fun sendKeyDirect(keysym: Long) {
+        rfbClient.sendKeyEvent(keysym, true)
+        rfbClient.sendKeyEvent(keysym, false)
     }
 
-    // ── Private helpers ───────────────────────────────────────────────────
-
-    private fun sendCharKey(ch: Char) {
+    private fun sendCharDirect(ch: Char) {
         val keysym = charToKeysym(ch)
         rfbClient.sendKeyEvent(keysym, true)
         rfbClient.sendKeyEvent(keysym, false)
     }
 
-    private fun parseEscapeSequence(seq: String) {
+    private fun sendSequenceDirect(seq: String) {
+        when {
+            seq.isEmpty()               -> sendKeyDirect(RfbConstants.KEY_ESCAPE)
+            seq == "\t"                 -> sendKeyDirect(RfbConstants.KEY_TAB)
+            seq == "\r" || seq == "\n"  -> sendKeyDirect(RfbConstants.KEY_RETURN)
+            seq.startsWith("")    -> parseEscapeSequenceDirect(seq.removePrefix(""))
+            seq.length == 1             -> sendCharDirect(seq[0])
+            else                        -> seq.forEach { sendCharDirect(it) }
+        }
+    }
+
+    private fun parseEscapeSequenceDirect(seq: String) {
         when {
             // CSI (ESC [)
-            seq.startsWith("[") -> parseCsiSequence(seq.removePrefix("["))
+            seq.startsWith("[") -> parseCsiSequenceDirect(seq.removePrefix("["))
             // SS3 (ESC O)
-            seq.startsWith("O") -> parseSs3Sequence(seq.removePrefix("O"))
-            // Alt+key (ESC + single char)
-            seq.length == 2 -> {
+            seq.startsWith("O") -> parseSs3SequenceDirect(seq.removePrefix("O"))
+            // Alt+key: one char remains after ESC was stripped (ESC + single char => length 1)
+            seq.length == 1 -> {
                 rfbClient.sendKeyEvent(RfbConstants.KEY_ALT_L, true)
-                sendCharKey(seq[1])
+                sendCharDirect(seq[0])
                 rfbClient.sendKeyEvent(RfbConstants.KEY_ALT_L, false)
             }
-            // Bare ESC
-            seq == "" -> sendKey(RfbConstants.KEY_ESCAPE)
+            // Bare ESC: nothing remains after the leading ESC byte was stripped
+            seq.isEmpty() -> sendKeyDirect(RfbConstants.KEY_ESCAPE)
         }
     }
 
@@ -180,54 +226,54 @@ class VncConsoleChannel(private val rfbClient: RfbClient) {
      *   - Modifier variants: ESC[1;Na where N = VT220 modifier bitmask + 1
      *     (e.g. "1;5A" = Ctrl+Up; body contains ';' for modifier forms)
      */
-    private fun parseCsiSequence(body: String) {
+    private fun parseCsiSequenceDirect(body: String) {
         val hasModifier = body.contains(';')
         when {
             // Cursor keys — bare or with VT220 modifier (e.g. "A", "1;5A")
             body == "A" || (hasModifier && body.endsWith("A")) ->
-                sendWithCsiModifier(body, RfbConstants.KEY_UP)
+                sendWithCsiModifierDirect(body, RfbConstants.KEY_UP)
             body == "B" || (hasModifier && body.endsWith("B")) ->
-                sendWithCsiModifier(body, RfbConstants.KEY_DOWN)
+                sendWithCsiModifierDirect(body, RfbConstants.KEY_DOWN)
             body == "C" || (hasModifier && body.endsWith("C")) ->
-                sendWithCsiModifier(body, RfbConstants.KEY_RIGHT)
+                sendWithCsiModifierDirect(body, RfbConstants.KEY_RIGHT)
             body == "D" || (hasModifier && body.endsWith("D")) ->
-                sendWithCsiModifier(body, RfbConstants.KEY_LEFT)
+                sendWithCsiModifierDirect(body, RfbConstants.KEY_LEFT)
             // Navigation
-            body == "1~" || body == "H" -> sendKey(RfbConstants.KEY_HOME)
-            body == "4~" || body == "F" -> sendKey(RfbConstants.KEY_END)
-            body == "5~"                -> sendKey(RfbConstants.KEY_PAGE_UP)
-            body == "6~"                -> sendKey(RfbConstants.KEY_PAGE_DOWN)
-            body == "2~"                -> sendKey(RfbConstants.KEY_INSERT)
-            body == "3~"                -> sendKey(RfbConstants.KEY_DELETE)
+            body == "1~" || body == "H" -> sendKeyDirect(RfbConstants.KEY_HOME)
+            body == "4~" || body == "F" -> sendKeyDirect(RfbConstants.KEY_END)
+            body == "5~"                -> sendKeyDirect(RfbConstants.KEY_PAGE_UP)
+            body == "6~"                -> sendKeyDirect(RfbConstants.KEY_PAGE_DOWN)
+            body == "2~"                -> sendKeyDirect(RfbConstants.KEY_INSERT)
+            body == "3~"                -> sendKeyDirect(RfbConstants.KEY_DELETE)
             // Function keys (xterm / VT220 sequences)
-            body == "11~" -> sendKey(RfbConstants.KEY_F1)
-            body == "12~" -> sendKey(RfbConstants.KEY_F2)
-            body == "13~" -> sendKey(RfbConstants.KEY_F3)
-            body == "14~" -> sendKey(RfbConstants.KEY_F4)
-            body == "15~" -> sendKey(RfbConstants.KEY_F5)
-            body == "17~" -> sendKey(RfbConstants.KEY_F6)
-            body == "18~" -> sendKey(RfbConstants.KEY_F7)
-            body == "19~" -> sendKey(RfbConstants.KEY_F8)
-            body == "20~" -> sendKey(RfbConstants.KEY_F9)
-            body == "21~" -> sendKey(RfbConstants.KEY_F10)
-            body == "23~" -> sendKey(RfbConstants.KEY_F11)
-            body == "24~" -> sendKey(RfbConstants.KEY_F12)
+            body == "11~" -> sendKeyDirect(RfbConstants.KEY_F1)
+            body == "12~" -> sendKeyDirect(RfbConstants.KEY_F2)
+            body == "13~" -> sendKeyDirect(RfbConstants.KEY_F3)
+            body == "14~" -> sendKeyDirect(RfbConstants.KEY_F4)
+            body == "15~" -> sendKeyDirect(RfbConstants.KEY_F5)
+            body == "17~" -> sendKeyDirect(RfbConstants.KEY_F6)
+            body == "18~" -> sendKeyDirect(RfbConstants.KEY_F7)
+            body == "19~" -> sendKeyDirect(RfbConstants.KEY_F8)
+            body == "20~" -> sendKeyDirect(RfbConstants.KEY_F9)
+            body == "21~" -> sendKeyDirect(RfbConstants.KEY_F10)
+            body == "23~" -> sendKeyDirect(RfbConstants.KEY_F11)
+            body == "24~" -> sendKeyDirect(RfbConstants.KEY_F12)
         }
     }
 
     /** Decode an SS3 body (the part after ESC O). */
-    private fun parseSs3Sequence(body: String) {
+    private fun parseSs3SequenceDirect(body: String) {
         when (body) {
-            "A" -> sendKey(RfbConstants.KEY_UP)
-            "B" -> sendKey(RfbConstants.KEY_DOWN)
-            "C" -> sendKey(RfbConstants.KEY_RIGHT)
-            "D" -> sendKey(RfbConstants.KEY_LEFT)
-            "H" -> sendKey(RfbConstants.KEY_HOME)
-            "F" -> sendKey(RfbConstants.KEY_END)
-            "P" -> sendKey(RfbConstants.KEY_F1)
-            "Q" -> sendKey(RfbConstants.KEY_F2)
-            "R" -> sendKey(RfbConstants.KEY_F3)
-            "S" -> sendKey(RfbConstants.KEY_F4)
+            "A" -> sendKeyDirect(RfbConstants.KEY_UP)
+            "B" -> sendKeyDirect(RfbConstants.KEY_DOWN)
+            "C" -> sendKeyDirect(RfbConstants.KEY_RIGHT)
+            "D" -> sendKeyDirect(RfbConstants.KEY_LEFT)
+            "H" -> sendKeyDirect(RfbConstants.KEY_HOME)
+            "F" -> sendKeyDirect(RfbConstants.KEY_END)
+            "P" -> sendKeyDirect(RfbConstants.KEY_F1)
+            "Q" -> sendKeyDirect(RfbConstants.KEY_F2)
+            "R" -> sendKeyDirect(RfbConstants.KEY_F3)
+            "S" -> sendKeyDirect(RfbConstants.KEY_F4)
         }
     }
 
@@ -239,10 +285,10 @@ class VncConsoleChannel(private val rfbClient: RfbClient) {
      * VT220 modifier encoding (N-1 = bitmask):
      *   bit 0 = Shift, bit 1 = Alt, bit 2 = Ctrl.
      */
-    private fun sendWithCsiModifier(body: String, keysym: Long) {
+    private fun sendWithCsiModifierDirect(body: String, keysym: Long) {
         val semi = body.indexOf(';')
         if (semi < 0) {
-            sendKey(keysym)
+            sendKeyDirect(keysym)
             return
         }
         val modN = body.substring(semi + 1, body.length - 1).toIntOrNull() ?: 1
