@@ -1,22 +1,25 @@
 package io.github.tabssh.ui.activities
 
 import android.os.Bundle
-import android.text.InputType
+import android.view.LayoutInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
-import android.widget.EditText
-import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.Spinner
+import android.widget.ArrayAdapter
+import android.widget.AutoCompleteTextView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.Toolbar
-import androidx.core.view.setPadding
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.ListAdapter
+import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.cloud.AwsEc2Client
@@ -30,6 +33,8 @@ import io.github.tabssh.cloud.ImportCandidate
 import io.github.tabssh.cloud.LinodeClient
 import io.github.tabssh.cloud.VultrClient
 import io.github.tabssh.crypto.storage.SecurePasswordManager
+import io.github.tabssh.databinding.ActivityCloudAccountsBinding
+import io.github.tabssh.databinding.ItemCloudAccountBinding
 import io.github.tabssh.storage.database.SystemGroupHelper
 import io.github.tabssh.storage.database.entities.CloudAccount
 import io.github.tabssh.utils.logging.Logger
@@ -56,153 +61,150 @@ class CloudAccountsActivity : AppCompatActivity() {
 
     private companion object {
         private const val TAG = "CloudAccounts"
-        private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
-        private const val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
         private val ROW_FORMATTER = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
+
+        fun providerIcon(tag: String) = when (tag) {
+            "digitalocean" -> "🌊"  // 🌊
+            "hetzner"      -> "🖥️"  // 🖥️
+            "linode"       -> "🟠"  // 🟠
+            "vultr"        -> "🦅"  // 🦅
+            "aws"          -> "🟡"  // 🟡
+            "gcp"          -> "🔵"  // 🔵
+            "azure"        -> "🔷"  // 🔷
+            else           -> "☁️"  // ☁️
+        }
     }
 
+    private lateinit var binding: ActivityCloudAccountsBinding
     private lateinit var app: TabSSHApplication
-    private lateinit var listContainer: LinearLayout
+    private lateinit var adapter: CloudAccountAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         app = application as TabSSHApplication
 
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = ViewGroup.LayoutParams(MATCH, MATCH)
-        }
-        val toolbar = Toolbar(this).apply {
-            title = "Cloud Accounts"
-            setBackgroundResource(R.color.primary_500)
-            setTitleTextColor(0xFFFFFFFF.toInt())
-        }
-        root.addView(toolbar)
+        binding = ActivityCloudAccountsBinding.inflate(layoutInflater)
+        setContentView(binding.root)
 
-        val addBtn = Button(this).apply { text = "Add cloud account…" }
-        addBtn.setOnClickListener { showAddAccountDialog() }
-        root.addView(addBtn)
-
-        val scroll = ScrollView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(MATCH, 0, 1f)
-        }
-        listContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(8))
-        }
-        scroll.addView(listContainer)
-        root.addView(scroll)
-
-        setContentView(root)
-        setSupportActionBar(toolbar)
+        setSupportActionBar(binding.toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        toolbar.setNavigationOnClickListener { finish() }
+        binding.toolbar.setNavigationOnClickListener { finish() }
 
-        reload()
-    }
+        adapter = CloudAccountAdapter(
+            onRefresh = { refreshAccount(it) },
+            onDelete  = { confirmDelete(it) }
+        )
+        binding.recyclerAccounts.layoutManager = LinearLayoutManager(this)
+        binding.recyclerAccounts.adapter = adapter
 
-    override fun onResume() {
-        super.onResume()
-        reload()
-    }
+        binding.fabAdd.setOnClickListener { showAddAccountDialog() }
 
-    private fun reload() {
+        // Fix: use Flow + repeatOnLifecycle to eliminate the onCreate/onResume
+        // double-load race. The Flow emits whenever the table changes, so
+        // refresh/delete updates the list automatically without a manual reload().
         lifecycleScope.launch {
-            val accounts = try {
-                app.database.cloudAccountDao().getAll()
-            } catch (e: Exception) {
-                Logger.e(TAG, "Failed to load cloud accounts", e)
-                emptyList()
-            }
-            runOnUiThread {
-                listContainer.removeAllViews()
-                if (accounts.isEmpty()) {
-                    val empty = TextView(this@CloudAccountsActivity).apply {
-                        text = "No cloud accounts. Tap “Add cloud account…” to import droplets / instances."
-                        setPadding(dp(16))
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                app.database.cloudAccountDao().observeAll().collect { accounts ->
+                    adapter.submitList(accounts)
+                    if (accounts.isEmpty()) {
+                        binding.recyclerAccounts.visibility = View.GONE
+                        binding.layoutEmptyState.visibility = View.VISIBLE
+                    } else {
+                        binding.layoutEmptyState.visibility = View.GONE
+                        binding.recyclerAccounts.visibility = View.VISIBLE
                     }
-                    listContainer.addView(empty)
-                } else {
-                    accounts.forEach { listContainer.addView(buildAccountCard(it)) }
                 }
             }
         }
     }
 
-    private fun buildAccountCard(account: CloudAccount): View {
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(12))
-            val lp = LinearLayout.LayoutParams(MATCH, WRAP)
-            lp.bottomMargin = dp(8)
-            layoutParams = lp
-            setBackgroundColor(0xFF1A1A1A.toInt())
+    // ── Adapter ─────────────────────────────────────────────────────────────
+
+    private inner class CloudAccountAdapter(
+        private val onRefresh: (CloudAccount) -> Unit,
+        private val onDelete:  (CloudAccount) -> Unit
+    ) : ListAdapter<CloudAccount, CloudAccountAdapter.ViewHolder>(AccountDiff) {
+
+        inner class ViewHolder(val b: ItemCloudAccountBinding) : RecyclerView.ViewHolder(b.root)
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+            val b = ItemCloudAccountBinding.inflate(LayoutInflater.from(parent.context), parent, false)
+            return ViewHolder(b)
         }
-        card.addView(TextView(this).apply {
-            text = "${account.name} · ${CloudProviderType.fromTag(account.provider)?.displayName ?: account.provider}"
-            setTextColor(0xFFFFFFFF.toInt())
-            textSize = 16f
-        })
-        card.addView(TextView(this).apply {
-            val ts = if (account.lastRefreshAt > 0) ROW_FORMATTER.format(Date(account.lastRefreshAt)) else "never"
-            text = "Last refresh: $ts · ${account.lastCount} hosts"
-            setTextColor(0xFFAAAAAA.toInt())
-            textSize = 12f
-        })
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+
+        override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+            val account = getItem(position)
+            val b = holder.b
+            val providerType = CloudProviderType.fromTag(account.provider)
+
+            b.textProviderIcon.text = providerIcon(account.provider)
+            b.textAccountName.text = account.name
+            b.textProviderDetail.text = buildString {
+                append(providerType?.displayName ?: account.provider)
+                if (account.lastCount > 0) append(" · ${account.lastCount} hosts")
+            }
+
+            b.textLastRefresh.text = if (account.lastRefreshAt > 0) {
+                "Last sync: ${ROW_FORMATTER.format(Date(account.lastRefreshAt))}"
+            } else {
+                "Never synced"
+            }
+
+            b.switchEnabled.isChecked = true
+            b.switchEnabled.setOnCheckedChangeListener(null)
+
+            b.btnRefresh.setOnClickListener { onRefresh(account) }
+            b.btnDelete.setOnClickListener  { onDelete(account) }
         }
-        val refresh = Button(this).apply { text = "Refresh" }
-        val delete = Button(this).apply { text = "Delete" }
-        refresh.setOnClickListener { refreshAccount(account) }
-        delete.setOnClickListener { confirmDelete(account) }
-        row.addView(refresh); row.addView(delete)
-        card.addView(row)
-        return card
     }
 
+    private object AccountDiff : DiffUtil.ItemCallback<CloudAccount>() {
+        override fun areItemsTheSame(old: CloudAccount, new: CloudAccount) = old.id == new.id
+        override fun areContentsTheSame(old: CloudAccount, new: CloudAccount) = old == new
+    }
+
+    // ── Add account dialog ───────────────────────────────────────────────────
+
     private fun showAddAccountDialog() {
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(16))
+        val dialogView = layoutInflater.inflate(R.layout.dialog_add_cloud_account, null, false)
+
+        val tilName     = dialogView.findViewById<TextInputLayout>(R.id.til_account_name)
+        val editName    = dialogView.findViewById<TextInputEditText>(R.id.edit_account_name)
+        val tilProvider = dialogView.findViewById<TextInputLayout>(R.id.til_provider)
+        val spinProvider= dialogView.findViewById<AutoCompleteTextView>(R.id.spinner_provider)
+        val tilToken    = dialogView.findViewById<TextInputLayout>(R.id.til_api_token)
+        val editToken   = dialogView.findViewById<TextInputEditText>(R.id.edit_api_token)
+        val tvTokenHelp = dialogView.findViewById<TextView>(R.id.tv_token_help)
+
+        val providerLabels = CloudProviderType.entries.map { it.displayName }
+        val providerAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, providerLabels)
+        spinProvider.setAdapter(providerAdapter)
+        spinProvider.setText(providerLabels.first(), false)
+        tvTokenHelp.text = CloudProviderType.entries.first().tokenHelp
+
+        spinProvider.setOnItemClickListener { _, _, position, _ ->
+            val pt = CloudProviderType.entries[position]
+            tvTokenHelp.text = pt.tokenHelp
+            tilToken.helperText = pt.tokenHelp
         }
-        val nameEdit = EditText(this).apply { hint = "Account name (e.g. work-do)" }
-        val providerSpinner = Spinner(this)
-        val providerLabels = CloudProviderType.entries.map { it.displayName }.toTypedArray()
-        providerSpinner.adapter = android.widget.ArrayAdapter(
-            this, android.R.layout.simple_spinner_dropdown_item, providerLabels
-        )
-        val tokenHelp = TextView(this)
-        val tokenEdit = EditText(this).apply {
-            hint = "API token / Bearer secret"
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-        }
-        // Wave 8.1 — provider-specific token format hint (AWS uses AKID:SECRET:REGION).
-        providerSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(p: android.widget.AdapterView<*>?, v: View?, position: Int, id: Long) {
-                val pt = CloudProviderType.entries[position]
-                tokenHelp.text = pt.tokenHelp
-                tokenEdit.hint = pt.tokenHelp
-            }
-            override fun onNothingSelected(p: android.widget.AdapterView<*>?) {}
-        }
-        container.addView(TextView(this).apply { text = "Name" })
-        container.addView(nameEdit)
-        container.addView(TextView(this).apply { text = "Provider" })
-        container.addView(providerSpinner)
-        container.addView(TextView(this).apply { text = "Token" })
-        container.addView(tokenHelp)
-        container.addView(tokenEdit)
 
         AlertDialog.Builder(this)
             .setTitle("Add cloud account")
-            .setView(container)
+            .setView(dialogView)
             .setPositiveButton("Save") { _, _ ->
-                val name = nameEdit.text.toString().trim()
-                val token = tokenEdit.text.toString()
-                val providerType = CloudProviderType.entries[providerSpinner.selectedItemPosition]
-                if (name.isBlank() || token.isBlank()) {
-                    Toast.makeText(this, "Name + token required", Toast.LENGTH_SHORT).show()
+                val name = editName.text?.toString()?.trim().orEmpty()
+                val token = editToken.text?.toString().orEmpty()
+                val selectedLabel = spinProvider.text?.toString().orEmpty()
+                val providerType = CloudProviderType.entries
+                    .firstOrNull { it.displayName == selectedLabel }
+                    ?: CloudProviderType.entries.first()
+
+                if (name.isBlank()) {
+                    tilName.error = "Account name is required"
+                    return@setPositiveButton
+                }
+                if (token.isBlank()) {
+                    tilToken.error = "API token is required"
                     return@setPositiveButton
                 }
                 saveAccount(name, providerType, token)
@@ -210,6 +212,8 @@ class CloudAccountsActivity : AppCompatActivity() {
             .setNegativeButton("Cancel", null)
             .show()
     }
+
+    // ── Business logic (unchanged from original) ─────────────────────────────
 
     private fun saveAccount(name: String, provider: CloudProviderType, token: String) {
         lifecycleScope.launch {
@@ -221,7 +225,6 @@ class CloudAccountsActivity : AppCompatActivity() {
                     SecurePasswordManager.StorageLevel.ENCRYPTED
                 )
                 Toast.makeText(this@CloudAccountsActivity, "Saved '${account.name}'", Toast.LENGTH_SHORT).show()
-                reload()
             } catch (e: Exception) {
                 Logger.e(TAG, "Save cloud account failed", e)
                 Toast.makeText(this@CloudAccountsActivity, "Save failed: ${e.message}", Toast.LENGTH_LONG).show()
@@ -278,7 +281,6 @@ class CloudAccountsActivity : AppCompatActivity() {
     private fun showImportPicker(account: CloudAccount, candidates: List<ImportCandidate>) {
         if (candidates.isEmpty()) {
             Toast.makeText(this, "${account.name}: 0 hosts found", Toast.LENGTH_SHORT).show()
-            reload()
             return
         }
         val labels = candidates.map { "${it.profile.getDisplayName()} (${it.sourceLabel})" }.toTypedArray()
@@ -345,7 +347,6 @@ class CloudAccountsActivity : AppCompatActivity() {
                         "Inserted $inserted, updated $updated",
                         Toast.LENGTH_SHORT
                     ).show()
-                    reload()
                 }
             } catch (e: Exception) {
                 Logger.e(TAG, "Bulk insert/update failed", e)
@@ -376,7 +377,6 @@ class CloudAccountsActivity : AppCompatActivity() {
                     } catch (e: Exception) {
                         Logger.e(TAG, "Delete failed", e)
                     }
-                    reload()
                 }
             }
             .setNegativeButton("Cancel", null)
@@ -387,6 +387,4 @@ class CloudAccountsActivity : AppCompatActivity() {
         android.R.id.home -> { finish(); true }
         else -> super.onOptionsItemSelected(item)
     }
-
-    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 }

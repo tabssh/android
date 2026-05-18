@@ -11,8 +11,8 @@
     app:cardCornerRadius="10dp"
     app:cardElevation="0dp"
     app:strokeWidth="1dp"
-    app:strokeColor="@color/primary_700"
-    app:cardBackgroundColor="@color/surface_variant_dark">
+    app:strokeColor="?attr/colorPrimary"
+    app:cardBackgroundColor="?attr/colorSurfaceVariant">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -32,7 +32,7 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Toggle group"
             app:srcCompat="@drawable/ic_expand_more"
-            app:tint="@color/on_surface_variant_dark" />
+            app:tint="?attr/colorOnSurfaceVariant" />
 
         <!-- Group name -->
         <TextView
@@ -41,7 +41,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:textAppearance="@style/TextAppearance.Material3.TitleSmall"
-            android:textColor="@color/on_surface_dark"
+            android:textColor="?attr/colorOnSurface"
             android:ellipsize="end"
             android:maxLines="1"
             android:paddingStart="4dp" />
@@ -56,8 +56,8 @@
             android:paddingTop="2dp"
             android:paddingBottom="2dp"
             android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
-            android:textColor="@color/on_surface_variant_dark"
-            android:background="@color/surface_dark"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:background="@drawable/bg_host_count_chip"
             android:layout_marginEnd="4dp" />
 
         <!-- Add hosts to this group -->
@@ -68,7 +68,7 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Add hosts to group"
             app:srcCompat="@drawable/ic_add"
-            app:tint="@color/on_surface_variant_dark" />
+            app:tint="?attr/colorOnSurfaceVariant" />
 
         <!-- Rename group -->
         <ImageButton
@@ -78,7 +78,7 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Rename group"
             app:srcCompat="@drawable/ic_edit"
-            app:tint="@color/on_surface_variant_dark" />
+            app:tint="?attr/colorOnSurfaceVariant" />
 
         <!-- Delete group -->
         <ImageButton
@@ -88,7 +88,7 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Delete group"
             app:srcCompat="@drawable/ic_close"
-            app:tint="@color/on_surface_variant_dark" />
+            app:tint="?attr/colorOnSurfaceVariant" />
 
     </LinearLayout>
 

@@ -9,13 +9,13 @@
         android:id="@+id/app_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/primary_500">
+        android:background="@color/primary_500"
+        app:liftOnScroll="true">
 
         <androidx.appcompat.widget.Toolbar
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
-            android:layout_height="40dp"
-            android:minHeight="40dp"
+            android:layout_height="?attr/actionBarSize"
             android:background="@color/primary_500"
             app:titleTextColor="@color/white"
             app:popupTheme="@style/ThemeOverlay.Material3.Light" />
@@ -35,7 +35,8 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
-        android:layout_margin="16dp"
+        android:layout_margin="@dimen/space_md"
+        app:tint="@android:color/white"
         android:text="New Group"
         android:contentDescription="Create a new dashboard group"
         app:icon="@drawable/ic_add" />

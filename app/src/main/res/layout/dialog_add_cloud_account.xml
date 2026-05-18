@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="@dimen/space_md">
+
+    <!-- Account name -->
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/til_account_name"
+        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Account name (e.g. work-do)"
+        android:layout_marginBottom="@dimen/space_sm">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/edit_account_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="text"
+            android:imeOptions="actionNext"
+            android:singleLine="true" />
+
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <!-- Provider dropdown -->
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/til_provider"
+        style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Cloud provider"
+        android:layout_marginBottom="@dimen/space_sm">
+
+        <AutoCompleteTextView
+            android:id="@+id/spinner_provider"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="none"
+            android:focusable="false" />
+
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <!-- API token -->
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/til_api_token"
+        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="API token / secret"
+        app:endIconMode="password_toggle"
+        android:layout_marginBottom="@dimen/space_xs">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/edit_api_token"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textPassword"
+            android:imeOptions="actionDone"
+            android:singleLine="true" />
+
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <!-- Token format helper -->
+    <TextView
+        android:id="@+id/tv_token_help"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="12sp"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:layout_marginBottom="@dimen/space_xs" />
+
+</LinearLayout>
