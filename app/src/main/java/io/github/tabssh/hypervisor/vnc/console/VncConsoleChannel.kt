@@ -58,8 +58,22 @@ class VncConsoleChannel(private val rfbClient: RfbClient) {
         Thread(r, "tabssh-vnc-writer").also { it.isDaemon = true }
     }
 
-    /** Post [block] to the serialised writer thread. */
-    private fun io(block: () -> Unit) { writeExecutor.execute(block) }
+    /**
+     * Post [block] to the serialised writer thread.
+     *
+     * Silently drops the task if the executor has already been shut down —
+     * this happens when [close] is called while a touch/key event is still
+     * in flight from the UI thread.  The session is over; dropping is correct
+     * and avoids a [java.util.concurrent.RejectedExecutionException] crash.
+     */
+    private fun io(block: () -> Unit) {
+        if (writeExecutor.isShutdown) return
+        try {
+            writeExecutor.execute(block)
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+            // Race between isShutdown check and execute() — session is ending; drop safely.
+        }
+    }
 
     /**
      * Record the initial terminal size.  Call before [rfbClient] is started.

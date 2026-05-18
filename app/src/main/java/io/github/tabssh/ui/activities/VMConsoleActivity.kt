@@ -760,6 +760,16 @@ class VMConsoleActivity : AppCompatActivity() {
                     vncConsoleChannel?.close()
                     vncConsoleChannel = null
                     activeRfbClient = null
+                    // Clear VncView callbacks — they capture the now-closed
+                    // VncConsoleChannel.  If left set, a touch or key event on
+                    // the still-visible framebuffer after disconnect will call
+                    // channel.sendPointerEvent() → executor.execute() on a
+                    // Terminated executor → RejectedExecutionException crash
+                    // (observed: 34 s after disconnect on SM-X230, API 36).
+                    vncView.onPointerEvent = null
+                    vncView.onKeyEvent = null
+                    vncView.onTextInput = null
+                    vncView.onBackspace = null
                     showStatus("Disconnected: $reason")
                     refreshFloatingControls()
                 }
@@ -990,6 +1000,13 @@ class VMConsoleActivity : AppCompatActivity() {
         activeRfbClient = null
         vncConsoleChannel?.close()
         vncConsoleChannel = null
+        // Clear VncView callbacks — they capture the now-closed VncConsoleChannel.
+        // Must be cleared here as well as in onDisconnected so they don't survive
+        // an activity background → foreground cycle.
+        vncView.onPointerEvent = null
+        vncView.onKeyEvent = null
+        vncView.onTextInput = null
+        vncView.onBackspace = null
         isGraphicalMode = false
         isConnected = false
         consoleManager?.disconnect()
