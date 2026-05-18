@@ -170,6 +170,36 @@ class VncConsoleChannel(private val rfbClient: RfbClient) {
      */
     fun sendText(text: String) = io { text.forEach { sendCharDirect(it) } }
 
+    /**
+     * Send a raw keysym with an explicit down/up state.
+     *
+     * Use when the caller manages modifier sequencing itself (e.g. wiring
+     * [VncView.onKeyEvent] which already provides separate down and up events).
+     * Safe to call from any thread including the main thread.
+     */
+    fun sendRawKeyEvent(keysym: Long, down: Boolean) = io { rfbClient.sendKeyEvent(keysym, down) }
+
+    /**
+     * Send Ctrl+[char] as an atomic modifier sequence.
+     *
+     * Sends CTRL_L down → char down+up → CTRL_L up in a single executor task
+     * so no other key event can be interleaved between the modifier and the key.
+     * Safe to call from any thread including the main thread.
+     */
+    fun sendCtrlChar(ch: Char) = io {
+        rfbClient.sendKeyEvent(RfbConstants.KEY_CTRL_L, true)
+        sendCharDirect(ch)
+        rfbClient.sendKeyEvent(RfbConstants.KEY_CTRL_L, false)
+    }
+
+    /**
+     * Forward a pointer (touch/mouse) event to the VM.
+     * [x] and [y] are framebuffer-space coordinates.
+     * [mask] is a bitmask of [RfbConstants.BTN_*] buttons.
+     * Safe to call from any thread including the main thread.
+     */
+    fun sendPointerEvent(x: Int, y: Int, mask: Int) = io { rfbClient.sendPointerEvent(x, y, mask) }
+
     // ── Internal helpers (called only from inside io{} blocks) ────────────
     //
     // These methods call rfbClient.send* directly and must NOT be called from

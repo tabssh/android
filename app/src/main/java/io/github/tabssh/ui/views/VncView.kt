@@ -5,12 +5,16 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Paint
+import android.text.InputType
 import android.util.AttributeSet
 import android.view.GestureDetector
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
+import android.view.inputmethod.BaseInputConnection
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputConnection
 import io.github.tabssh.hypervisor.console.rfb.RfbConstants
 import io.github.tabssh.hypervisor.console.rfb.RfbListener
 import io.github.tabssh.utils.logging.Logger
@@ -72,6 +76,10 @@ class VncView @JvmOverloads constructor(
     var onPointerEvent: ((Int, Int, Int) -> Unit)? = null
     /** Called with (keysym, isDown). */
     var onKeyEvent: ((Long, Boolean) -> Unit)? = null
+    /** Called when the Android soft keyboard (IME) commits text. */
+    var onTextInput: ((String) -> Unit)? = null
+    /** Called when the Android soft keyboard (IME) deletes a character before the cursor. */
+    var onBackspace: (() -> Unit)? = null
 
     // ── Touch bookkeeping ─────────────────────────────────────────────────
 
@@ -343,10 +351,61 @@ class VncView @JvmOverloads constructor(
 
     // ── Accessibility ─────────────────────────────────────────────────────
 
-    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+    init {
+        // Must be focusable so the VNC view can receive hardware key events
+        // and so the Android IME will attach to it when it gains focus.
         isFocusable = true
         isFocusableInTouchMode = true
+    }
+
+    // ── IME / soft-keyboard support ───────────────────────────────────────
+
+    /**
+     * Tell the IME framework this view accepts text input.  Without this,
+     * tapping the view never shows the soft keyboard, and typed characters
+     * are silently discarded by the default [View.onCreateInputConnection].
+     */
+    override fun onCheckIsTextEditor(): Boolean = true
+
+    /**
+     * Return an [InputConnection] that routes soft-keyboard input to the
+     * active VNC session.
+     *
+     * Key design choices:
+     *  - [InputType.TYPE_NULL] tells the IME this is a raw terminal — no
+     *    auto-correct, no suggestions, no spell-check, no word wrap.
+     *  - [EditorInfo.IME_FLAG_NO_FULLSCREEN] prevents the IME from taking
+     *    over the screen and hiding the VNC framebuffer on small devices.
+     *  - [EditorInfo.IME_FLAG_NO_EXTRACT_UI] suppresses the extract-mode
+     *    text bar that would normally appear above the keyboard.
+     *  - Soft-keyboard delete is routed via [onBackspace] rather than
+     *    through [onKeyEvent] so the single-threaded writer executor in
+     *    [VncConsoleChannel] serialises it correctly with text input.
+     */
+    override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection {
+        outAttrs.inputType = InputType.TYPE_NULL
+        outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN or
+                              EditorInfo.IME_FLAG_NO_EXTRACT_UI
+        return object : BaseInputConnection(this, false) {
+            override fun commitText(text: CharSequence, newCursorPosition: Int): Boolean {
+                if (text.isNotEmpty()) onTextInput?.invoke(text.toString())
+                return true
+            }
+            override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
+                repeat(beforeLength) { onBackspace?.invoke() }
+                return true
+            }
+            override fun sendKeyEvent(event: KeyEvent): Boolean {
+                // Some IMEs (e.g. Gboard) send KEYCODE_DEL as a KeyEvent rather
+                // than calling deleteSurroundingText.  Route it the same way.
+                if (event.action == KeyEvent.ACTION_DOWN &&
+                    event.keyCode == KeyEvent.KEYCODE_DEL) {
+                    onBackspace?.invoke()
+                    return true
+                }
+                return super.sendKeyEvent(event)
+            }
+        }
     }
 
     // ── Cleanup ───────────────────────────────────────────────────────────

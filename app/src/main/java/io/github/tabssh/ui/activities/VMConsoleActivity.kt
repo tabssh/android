@@ -13,6 +13,7 @@ import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.hypervisor.console.ConsoleEventListener
 import io.github.tabssh.hypervisor.console.HypervisorConsoleManager
 import io.github.tabssh.hypervisor.console.rfb.RfbClient
+import io.github.tabssh.hypervisor.console.rfb.RfbConstants
 import io.github.tabssh.hypervisor.proxmox.ProxmoxApiClient
 import io.github.tabssh.hypervisor.vnc.VncDirectConnector
 import io.github.tabssh.hypervisor.vnc.VncStreamHolder
@@ -258,12 +259,20 @@ class VMConsoleActivity : AppCompatActivity() {
                     0 -> copyScreenToClipboard()
                     1 -> beginSelection(x, y)
                     2 -> pasteFromClipboard()
-                    3 -> sendBytes(byteArrayOf(0x03))                  // ETX
-                    4 -> sendBytes(byteArrayOf(0x04))                  // EOT
-                    5 -> sendBytes(byteArrayOf(0x1A))                  // SUB
-                    6 -> sendBytes(byteArrayOf(0x1B))                  // ESC
-                    7 -> sendBytes(byteArrayOf(0x09))                  // TAB
-                    8 -> sendBytes(byteArrayOf(0x0D))                  // CR
+                    // In VNC mode route via VncConsoleChannel → X11 keysyms.
+                    // In text/serial mode send the raw byte over the WebSocket.
+                    3 -> if (isGraphicalMode) vncConsoleChannel?.sendCtrlChar('c')
+                         else sendBytes(byteArrayOf(0x03))             // ETX
+                    4 -> if (isGraphicalMode) vncConsoleChannel?.sendCtrlChar('d')
+                         else sendBytes(byteArrayOf(0x04))             // EOT
+                    5 -> if (isGraphicalMode) vncConsoleChannel?.sendCtrlChar('z')
+                         else sendBytes(byteArrayOf(0x1A))             // SUB
+                    6 -> if (isGraphicalMode) vncConsoleChannel?.sendKey(RfbConstants.KEY_ESCAPE)
+                         else sendBytes(byteArrayOf(0x1B))             // ESC
+                    7 -> if (isGraphicalMode) vncConsoleChannel?.sendKey(RfbConstants.KEY_TAB)
+                         else sendBytes(byteArrayOf(0x09))             // TAB
+                    8 -> if (isGraphicalMode) vncConsoleChannel?.sendKey(RfbConstants.KEY_RETURN)
+                         else sendBytes(byteArrayOf(0x0D))             // CR
                     9 -> showSendTextDialog()
                     10 -> {
                         // toggleSoftInput(SHOW_FORCED, …) is deprecated.
@@ -292,7 +301,8 @@ class VMConsoleActivity : AppCompatActivity() {
             Toast.makeText(this, "Clipboard is empty", Toast.LENGTH_SHORT).show()
             return
         }
-        sendBytes(text.toByteArray(Charsets.UTF_8))
+        if (isGraphicalMode) vncConsoleChannel?.sendText(text)
+        else sendBytes(text.toByteArray(Charsets.UTF_8))
     }
 
     /**
@@ -389,7 +399,10 @@ class VMConsoleActivity : AppCompatActivity() {
             .setView(input)
             .setPositiveButton("Send") { _, _ ->
                 val text = input.text.toString()
-                if (text.isNotEmpty()) sendBytes(text.toByteArray(Charsets.UTF_8))
+                if (text.isNotEmpty()) {
+                    if (isGraphicalMode) vncConsoleChannel?.sendText(text)
+                    else sendBytes(text.toByteArray(Charsets.UTF_8))
+                }
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -746,6 +759,22 @@ class VMConsoleActivity : AppCompatActivity() {
                 }
             }
         })
+
+        // Wire pointer events: finger taps and drags are forwarded to the VM.
+        vncView.onPointerEvent = { x, y, mask -> channel.sendPointerEvent(x, y, mask) }
+
+        // Wire VncView hardware-key fallback: handles cases where the activity's
+        // dispatchKeyEvent did not consume the event (ACTION_UP, unrecognised keys).
+        vncView.onKeyEvent = { keysym, down -> channel.sendRawKeyEvent(keysym, down) }
+
+        // Wire Android soft-keyboard input: IME commitText() → keysym sequence.
+        // Without this, every character typed on the Android soft keyboard is
+        // silently dropped because View.onCreateInputConnection() is a no-op.
+        vncView.onTextInput = { text -> channel.sendText(text) }
+
+        // Wire soft-keyboard backspace: IME deleteSurroundingText() / KEYCODE_DEL
+        // key events sent through the InputConnection route here.
+        vncView.onBackspace = { channel.sendKey(RfbConstants.KEY_BACK_SPACE) }
 
         // Wire resize: when the terminal view changes size, update VNC too.
         termuxBridge?.onResizeCallback = { cols, rows -> channel.resize(cols, rows) }
