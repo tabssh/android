@@ -768,6 +768,12 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences_logging, rootKey)
 
+        // Debug Logging category is developer-only. Hide it entirely in release
+        // builds so production users never see it.
+        if (!io.github.tabssh.BuildConfig.DEBUG_MODE) {
+            findPreference<androidx.preference.PreferenceCategory>("debug_logging_category")?.isVisible = false
+        }
+
         // Live-toggle the Logger when the user flips the master switch.
         // Without this, the pref persisted but `Logger.logToFile` /
         // `Logger.logFile` only updated on the next cold start. Now flipping

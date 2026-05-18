@@ -771,7 +771,7 @@ object Logger {
 
     // ── Per-host log ─────────────────────────────────────────────────────────
 
-    private const val HOST_LOG_MAX_SIZE = 2 * 1024 * 1024L  // 2 MiB
+    private const val HOST_LOG_MAX_SIZE = 1 * 1024 * 1024L  // 1 MiB
 
     /**
      * Write a single event to the per-connection host log.
@@ -782,12 +782,14 @@ object Logger {
      * Format (OpenSSH-style):
      *   `YYYY-MM-DD HH:mm:ss.SSS LEVEL user@host:port message`
      *
-     * The host log is always-on and contains real hostnames / usernames —
-     * it never leaves the device unless the user manually exports it.
-     * Cap: [HOST_LOG_MAX_SIZE] (2 MiB), single rotation → `.log.1`.
+     * Opt-in: only writes when the `host_logging_enabled` preference is true.
+     * Contains real hostnames / usernames — never leaves the device unless
+     * the user manually exports it. Cap: 1 MiB, single rotation → `.log.1`.
      */
     fun logHostEvent(connectionId: String, username: String, host: String, port: Int, level: String, message: String) {
         val ctx = appContext ?: return
+        val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(ctx)
+        if (!prefs.getBoolean("host_logging_enabled", false)) return
         executor.execute {
             try {
                 val logsDir = File(ctx.filesDir, "host_logs")

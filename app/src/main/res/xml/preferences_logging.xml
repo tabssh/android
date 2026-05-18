@@ -16,8 +16,9 @@
 
     </PreferenceCategory>
 
-    <!-- Debug Logging (developer, opt-in) -->
+    <!-- Debug Logging (developer builds only — hidden at runtime in release) -->
     <PreferenceCategory
+        android:key="debug_logging_category"
         android:title="Debug Logging"
         android:icon="@android:drawable/ic_menu_info_details">
 
@@ -50,20 +51,28 @@
         android:title="Host Logs"
         android:icon="@android:drawable/ic_menu_edit">
 
+        <SwitchPreferenceCompat
+            android:key="host_logging_enabled"
+            android:title="Enable Host Logs"
+            android:summary="Record connect, auth, disconnect, and error events per SSH session. Files stay on this device — never sent anywhere unless you export manually."
+            android:defaultValue="false" />
+
         <Preference
             android:key="host_log_info"
             android:title="One log file per connection"
-            android:summary="Records connect, auth, disconnect, and error events for every SSH session. Files stay on this device — max 2 MB per host before rotation. Share manually via View Host Logs → export."
-            android:selectable="false" />
+            android:summary="Each connection profile gets its own log file. Share via View Host Logs → export."
+            android:selectable="false"
+            android:dependency="host_logging_enabled" />
 
         <SeekBarPreference
             android:key="host_log_max_size_mb"
             android:title="Max Size per Host (MB)"
             android:summary="Rotate after this size. One backup copy kept."
-            android:defaultValue="2"
+            android:defaultValue="1"
             android:min="1"
-            android:max="20"
-            app:showSeekBarValue="true" />
+            android:max="10"
+            app:showSeekBarValue="true"
+            android:dependency="host_logging_enabled" />
 
     </PreferenceCategory>
 
@@ -88,7 +97,8 @@
             android:key="view_host_logs"
             android:title="View Host Logs"
             android:summary="Per-connection session logs"
-            android:icon="@android:drawable/ic_menu_edit" />
+            android:icon="@android:drawable/ic_menu_edit"
+            android:dependency="host_logging_enabled" />
 
         <Preference
             android:key="view_audit_log"
