@@ -19,7 +19,6 @@ import io.github.tabssh.terminal.TermuxBridge
 import io.github.tabssh.terminal.TermuxBridgeListener
 import io.github.tabssh.themes.definitions.Theme
 import io.github.tabssh.utils.logging.Logger
-import java.io.OutputStream
 
 /**
  * Custom terminal view implementing VT100/ANSI terminal emulation
@@ -46,9 +45,6 @@ class TerminalView @JvmOverloads constructor(
     // Termux bridge for proper VT100/ANSI emulation
     private var termuxBridge: TermuxBridge? = null
     private var termuxBuffer: com.termux.terminal.TerminalBuffer? = null
-
-    // Output stream for sending data
-    private var outputStream: OutputStream? = null
 
     // Rendering components
     private val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG)
@@ -530,15 +526,6 @@ class TerminalView @JvmOverloads constructor(
     }
 
     /**
-     * Set the output stream for sending user input
-     */
-    fun setOutputStream(stream: OutputStream) {
-        outputStream = stream
-        terminalEmulator?.attachOutputStream(stream)
-        Logger.d("TerminalView", "Output stream set for terminal view")
-    }
-
-    /**
      * Performance optimization: Mark specific rows as dirty for partial redraw
      */
     private fun markRowsDirty(startRow: Int, endRow: Int) {
@@ -578,15 +565,6 @@ class TerminalView @JvmOverloads constructor(
     }
 
     /**
-     * Connect terminal to SSH streams
-     */
-    fun connectToStreams(inputStream: java.io.InputStream, outputStream: java.io.OutputStream) {
-        terminalEmulator?.connect(inputStream, outputStream)
-        this.outputStream = outputStream
-        Logger.i("TerminalView", "Connected terminal to SSH streams")
-    }
-
-    /**
      * Send data to terminal for processing
      */
     fun sendData(data: ByteArray) {
@@ -604,17 +582,10 @@ class TerminalView @JvmOverloads constructor(
             return
         }
 
-        // Fall back to old terminal emulator
-        terminalEmulator?.sendText(text) ?: run {
-            outputStream?.let { stream ->
-                try {
-                    stream.write(text.toByteArray())
-                    stream.flush()
-                } catch (e: Exception) {
-                    Logger.e("TerminalView", "Error sending text: ${e.message}")
-                }
-            } ?: Logger.w("TerminalView", "Unable to send text - no output stream or bridge attached")
-        }
+        // Fall back to local terminal emulator (in-memory, no remote send).
+        // Real SSH/VNC paths always have a TermuxBridge attached.
+        terminalEmulator?.sendText(text)
+            ?: Logger.w("TerminalView", "Unable to send text - no bridge attached")
     }
 
     /**
