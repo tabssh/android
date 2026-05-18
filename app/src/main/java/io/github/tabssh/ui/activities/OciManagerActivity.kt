@@ -26,6 +26,7 @@ import io.github.tabssh.hypervisor.oci.OciInstance
 import io.github.tabssh.hypervisor.oci.OciInstanceAction
 import io.github.tabssh.hypervisor.oci.OciKeyMaterial
 import io.github.tabssh.ssh.auth.AuthType
+import io.github.tabssh.storage.database.SystemGroupHelper
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.StoredKey
@@ -384,8 +385,15 @@ class OciManagerActivity : AppCompatActivity() {
                 )
 
                 lifecycleScope.launch {
+                    val cloudGroupId = withContext(Dispatchers.IO) {
+                        SystemGroupHelper.getOrCreateSystemGroupId(
+                            app.database, "cloud", "Cloud Instances", "cloud"
+                        )
+                    }
                     withContext(Dispatchers.IO) {
-                        app.database.connectionDao().insertConnection(profile)
+                        app.database.connectionDao().insertConnection(
+                            profile.copy(groupId = cloudGroupId)
+                        )
                     }
                     Logger.i(TAG, "Launching SSH to $username@$publicIp (auth=${authType.name}, key=$keyId) for ${inst.displayName}")
                     val intent = TabTerminalActivity.createIntent(this@OciManagerActivity, profile, autoConnect = true)

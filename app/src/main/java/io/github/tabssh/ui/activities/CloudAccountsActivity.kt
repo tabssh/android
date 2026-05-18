@@ -30,9 +30,12 @@ import io.github.tabssh.cloud.ImportCandidate
 import io.github.tabssh.cloud.LinodeClient
 import io.github.tabssh.cloud.VultrClient
 import io.github.tabssh.crypto.storage.SecurePasswordManager
+import io.github.tabssh.storage.database.SystemGroupHelper
 import io.github.tabssh.storage.database.entities.CloudAccount
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -306,6 +309,11 @@ class CloudAccountsActivity : AppCompatActivity() {
                 val existing = app.database.connectionDao().getAllConnectionsList()
                 var inserted = 0
                 var updated = 0
+                val cloudGroupId = withContext(Dispatchers.IO) {
+                    SystemGroupHelper.getOrCreateSystemGroupId(
+                        app.database, "cloud", "Cloud Instances", "cloud"
+                    )
+                }
                 for (cand in picked) {
                     val src = extractCloudSource(cand.profile.advancedSettings)
                     val match = existing.firstOrNull { e ->
@@ -319,12 +327,15 @@ class CloudAccountsActivity : AppCompatActivity() {
                             match.copy(
                                 name = cand.profile.name,
                                 advancedSettings = cand.profile.advancedSettings,
+                                groupId = cloudGroupId,
                                 modifiedAt = System.currentTimeMillis()
                             )
                         )
                         updated++
                     } else {
-                        app.database.connectionDao().insertConnection(cand.profile)
+                        app.database.connectionDao().insertConnection(
+                            cand.profile.copy(groupId = cloudGroupId)
+                        )
                         inserted++
                     }
                 }

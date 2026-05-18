@@ -47,7 +47,10 @@ data class ConnectionGroup(
     val syncVersion: Long = 0,
 
     @ColumnInfo(name = "sync_device_id")
-    val syncDeviceId: String = ""
+    val syncDeviceId: String = "",
+
+    @ColumnInfo(name = "group_type")
+    val groupType: String = "" // "" = normal user group, "vm_hosts" = VM Hosts system group, "cloud" = Cloud Instances system group
 ) {
     /**
      * Check if this is a root-level group (no parent)

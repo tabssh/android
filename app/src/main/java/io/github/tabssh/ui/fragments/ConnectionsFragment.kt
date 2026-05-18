@@ -787,7 +787,7 @@ class ConnectionsFragment : Fragment() {
         dropdownColorTag.setAdapter(ArrayAdapter(ctx, android.R.layout.simple_dropdown_item_1line, colorTagOptions))
 
         val groupOptions = mutableListOf("(Clear group assignment)")
-        groupOptions.addAll(allGroups.map { it.name })
+        groupOptions.addAll(allGroups.filter { it.groupType.isEmpty() }.map { it.name })
         dropdownGroup.setAdapter(ArrayAdapter(ctx, android.R.layout.simple_dropdown_item_1line, groupOptions))
 
         // Identity dropdown — populated async from Room flow.
@@ -1086,14 +1086,20 @@ class ConnectionsFragment : Fragment() {
         // Build ConnectionListItem list
         val items = mutableListOf<ConnectionListItem>()
         
-        // Add grouped connections
-        val sortedGroups = when (currentGroupSortOption) {
-            GroupSortOption.NAME_ASC -> allGroups.sortedBy { it.name.lowercase() }
-            GroupSortOption.NAME_DESC -> allGroups.sortedByDescending { it.name.lowercase() }
-            GroupSortOption.CUSTOM -> allGroups.sortedWith(
-                compareBy({ it.sortOrder }, { it.name.lowercase() })
-            )
-        }
+        // Add grouped connections — user groups first, VM Hosts groups at the end,
+        // cloud groups hidden entirely (their connections don't appear in this view).
+        val userGroups = allGroups
+            .filter { it.groupType != "cloud" && it.groupType != "vm_hosts" }
+            .let { list ->
+                when (currentGroupSortOption) {
+                    GroupSortOption.NAME_ASC -> list.sortedBy { it.name.lowercase() }
+                    GroupSortOption.NAME_DESC -> list.sortedByDescending { it.name.lowercase() }
+                    GroupSortOption.CUSTOM -> list.sortedWith(compareBy({ it.sortOrder }, { it.name.lowercase() }))
+                }
+            }
+        val vmGroups = allGroups.filter { it.groupType == "vm_hosts" }
+            .sortedBy { it.name.lowercase() }
+        val sortedGroups = userGroups + vmGroups
         for (group in sortedGroups) {
             val groupConnections = allConnections.filter { it.groupId == group.id }
             if (groupConnections.isNotEmpty()) {
@@ -1117,11 +1123,13 @@ class ConnectionsFragment : Fragment() {
             }
         }
         
-        // Add ungrouped connections (null groupId OR groupId that doesn't exist in allGroups)
-        // This ensures imported connections with non-existent groupId still appear
+        // Add ungrouped connections (null groupId OR groupId that doesn't exist in allGroups).
+        // Exclude connections whose groupId belongs to a cloud system group — they are not
+        // shown in the Hosts view at all.
         val existingGroupIds = allGroups.map { it.id }.toSet()
+        val cloudGroupIds = allGroups.filter { it.groupType == "cloud" }.map { it.id }.toSet()
         val ungroupedConnections = allConnections.filter {
-            it.groupId == null || it.groupId !in existingGroupIds
+            (it.groupId == null || it.groupId !in existingGroupIds) && it.groupId !in cloudGroupIds
         }
         if (ungroupedConnections.isNotEmpty()) {
             items.add(ConnectionListItem.UngroupedHeader(

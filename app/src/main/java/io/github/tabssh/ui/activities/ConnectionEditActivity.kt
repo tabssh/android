@@ -531,6 +531,7 @@ class ConnectionEditActivity : AppCompatActivity() {
     private fun setupGroupSpinner() {
         lifecycleScope.launch {
             val groups = app.database.connectionGroupDao().getAllGroups().first()
+                .filter { it.groupType.isEmpty() } // only user groups in the spinner
             val groupsList = mutableListOf("No Group")
             groups.forEach { group -> groupsList.add(group.name) }
 

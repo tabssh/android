@@ -18,6 +18,7 @@ import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.crypto.storage.HypervisorPasswordStore
 import io.github.tabssh.hypervisor.vmware.VMwareApiClient
+import io.github.tabssh.storage.database.SystemGroupHelper
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.utils.logging.Logger
@@ -210,19 +211,29 @@ class VMwareManagerActivity : AppCompatActivity() {
                     app.database.connectionDao().getByName(connectionName)
                 }
                 if (connection == null) {
+                    val vmHostsGroupId = withContext(Dispatchers.IO) {
+                        SystemGroupHelper.getOrCreateSystemGroupId(
+                            app.database, "vm_hosts", "VM Hosts", "vm"
+                        )
+                    }
                     connection = ConnectionProfile(
                         name = connectionName,
                         host = ip,
                         port = 22,
                         username = "root",
                         authType = io.github.tabssh.ssh.auth.AuthType.PASSWORD.name,
+                        groupId = vmHostsGroupId,
                         createdAt = System.currentTimeMillis(),
                         modifiedAt = System.currentTimeMillis()
                     )
-                    app.database.connectionDao().insertConnection(connection)
+                    withContext(Dispatchers.IO) {
+                        app.database.connectionDao().insertConnection(connection)
+                    }
                 } else {
                     connection = connection.copy(host = ip, modifiedAt = System.currentTimeMillis())
-                    app.database.connectionDao().updateConnection(connection)
+                    withContext(Dispatchers.IO) {
+                        app.database.connectionDao().updateConnection(connection)
+                    }
                 }
                 val intent = TabTerminalActivity.createIntent(this@VMwareManagerActivity, connection, autoConnect = false)
                 startActivity(intent)

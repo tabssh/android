@@ -35,7 +35,7 @@ import io.github.tabssh.utils.logging.Logger
         VncHost::class,
         VncIdentity::class
     ],
-    version = 35,
+    version = 36,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -323,7 +323,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     MIGRATION_31_32,
                     MIGRATION_32_33,
                     MIGRATION_33_34,
-                    MIGRATION_34_35
+                    MIGRATION_34_35,
+                    MIGRATION_35_36
                 )
                 .build()
                 INSTANCE = instance
@@ -900,5 +901,19 @@ data class DatabaseStats(
                     """.trimIndent()
                 )
                 Logger.i("Database", "Migration 20->21: Created workspaces table")
+            }
+        }
+
+        /**
+         * v35 → v36 — System group type column.
+         * Adds `group_type` to `connection_groups` so VM-host and cloud-instance
+         * auto-created groups can be distinguished from normal user groups.
+         */
+        val MIGRATION_35_36 = object : Migration(35, 36) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE connection_groups ADD COLUMN group_type TEXT NOT NULL DEFAULT ''"
+                )
+                Logger.i("Database", "Migration 35->36: Added group_type to connection_groups")
             }
         }

@@ -24,6 +24,7 @@ import io.github.tabssh.hypervisor.libvirt.LibvirtException
 import io.github.tabssh.hypervisor.libvirt.LibvirtVm
 import io.github.tabssh.hypervisor.vnc.VncStreamHolder
 import io.github.tabssh.ssh.auth.AuthType
+import io.github.tabssh.storage.database.SystemGroupHelper
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.utils.logging.Logger
@@ -328,6 +329,11 @@ class LibvirtManagerActivity : AppCompatActivity() {
                     // ConnectionEditActivity. Connecting with guessed credentials
                     // (e.g. root/password) always fails; it's better to stop and
                     // let the user configure the right auth method for their VM.
+                    val vmHostsGroupId = withContext(Dispatchers.IO) {
+                        SystemGroupHelper.getOrCreateSystemGroupId(
+                            app.database, "vm_hosts", "VM Hosts", "vm"
+                        )
+                    }
                     existing = ConnectionProfile(
                         name = connectionName,
                         host = host,
@@ -342,6 +348,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
                         proxyUsername = hvProfile.username,
                         proxyAuthType = proxyAuthType,
                         proxyKeyId = proxyKeyId,
+                        groupId = vmHostsGroupId,
                         createdAt = System.currentTimeMillis(),
                         modifiedAt = System.currentTimeMillis()
                     )
