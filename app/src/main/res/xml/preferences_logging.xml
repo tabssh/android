@@ -2,7 +2,21 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <!-- Debug Logging -->
+    <!-- Application Log (always-on, sanitized) -->
+    <PreferenceCategory
+        android:title="Application Log"
+        android:icon="@android:drawable/ic_menu_agenda">
+
+        <!-- Not a toggle — the app log is always on. This is informational. -->
+        <Preference
+            android:key="app_log_info"
+            android:title="Always-on sanitized log"
+            android:summary="Hostnames and usernames are anonymised before writing. Safe to share with support. Errors are included automatically — no separate error log needed."
+            android:selectable="false" />
+
+    </PreferenceCategory>
+
+    <!-- Debug Logging (developer, opt-in) -->
     <PreferenceCategory
         android:title="Debug Logging"
         android:icon="@android:drawable/ic_menu_info_details">
@@ -10,7 +24,7 @@
         <SwitchPreferenceCompat
             android:key="debug_logging_enabled"
             android:title="Enable Debug Logging"
-            android:summary="Log debug information for troubleshooting"
+            android:summary="Full verbose log including real hostnames/usernames. Developer use only — disable when done."
             android:defaultValue="false" />
 
         <ListPreference
@@ -31,115 +45,25 @@
 
     </PreferenceCategory>
 
-    <!-- Host/Session Logging -->
+    <!-- Per-host Session Logs -->
     <PreferenceCategory
-        android:title="Host Logging"
+        android:title="Host Logs"
         android:icon="@android:drawable/ic_menu_edit">
 
-        <SwitchPreferenceCompat
-            android:key="host_logging_enabled"
-            android:title="Enable Host Logging"
-            android:summary="Log session output for each connection"
-            android:defaultValue="false" />
-
-        <EditTextPreference
-            android:key="host_log_filename_pattern"
-            android:title="Log Filename Pattern"
-            android:summary="Use variables: {user}, {host}, {date}, {time}"
-            android:defaultValue="{user}_{host}.log"
-            android:dependency="host_logging_enabled" />
+        <Preference
+            android:key="host_log_info"
+            android:title="One log file per connection"
+            android:summary="Records connect, auth, disconnect, and error events for every SSH session. Files stay on this device — max 2 MB per host before rotation. Share manually via View Host Logs → export."
+            android:selectable="false" />
 
         <SeekBarPreference
             android:key="host_log_max_size_mb"
-            android:title="Max Log Size (MB)"
-            android:summary="Maximum size for each host log file"
-            android:defaultValue="1"
+            android:title="Max Size per Host (MB)"
+            android:summary="Rotate after this size. One backup copy kept."
+            android:defaultValue="2"
             android:min="1"
             android:max="20"
-            app:showSeekBarValue="true"
-            android:dependency="host_logging_enabled" />
-
-        <SwitchPreferenceCompat
-            android:key="host_log_append"
-            android:title="Append to Existing Logs"
-            android:summary="Append to log file or overwrite each session"
-            android:defaultValue="true"
-            android:dependency="host_logging_enabled" />
-
-        <SwitchPreferenceCompat
-            android:key="host_log_include_input"
-            android:title="Log User Input"
-            android:summary="Include commands typed by user (security risk)"
-            android:defaultValue="false"
-            android:dependency="host_logging_enabled" />
-
-        <SwitchPreferenceCompat
-            android:key="host_log_include_timestamps"
-            android:title="Include Timestamps"
-            android:summary="Prefix each line with timestamp"
-            android:defaultValue="true"
-            android:dependency="host_logging_enabled" />
-
-    </PreferenceCategory>
-
-    <!-- Error Logging -->
-    <PreferenceCategory
-        android:title="Error Logging"
-        android:icon="@drawable/ic_error">
-
-        <SwitchPreferenceCompat
-            android:key="error_logging_enabled"
-            android:title="Enable Error Logging"
-            android:summary="Log errors and exceptions to file"
-            android:defaultValue="true" />
-
-        <SwitchPreferenceCompat
-            android:key="error_log_include_stacktrace"
-            android:title="Include Stack Traces"
-            android:summary="Full stack traces in error logs"
-            android:defaultValue="true"
-            android:dependency="error_logging_enabled" />
-
-        <SeekBarPreference
-            android:key="error_log_max_size_mb"
-            android:title="Error Log Max Size (MB)"
-            android:summary="Maximum size for error log file"
-            android:defaultValue="5"
-            android:min="1"
-            android:max="20"
-            app:showSeekBarValue="true"
-            android:dependency="error_logging_enabled" />
-
-    </PreferenceCategory>
-
-    <!-- Audit Logging -->
-    <PreferenceCategory
-        android:title="Audit Logging"
-        android:icon="@android:drawable/ic_lock_lock">
-
-        <SwitchPreferenceCompat
-            android:key="audit_logging_enabled"
-            android:title="Enable Audit Logging"
-            android:summary="Log security events and user actions"
-            android:defaultValue="false" />
-
-        <MultiSelectListPreference
-            android:key="audit_log_events"
-            android:title="Audit Events"
-            android:summary="Select which events to audit"
-            android:entries="@array/audit_events"
-            android:entryValues="@array/audit_event_values"
-            android:dependency="audit_logging_enabled" />
-
-        <SeekBarPreference
-            android:key="audit_log_max_size_mb"
-            android:title="Audit Log Max Size (MB)"
-            android:summary="Maximum size for audit log file"
-            android:defaultValue="10"
-            android:min="1"
-            android:max="20"
-            app:showSeekBarValue="true"
-            android:dependency="audit_logging_enabled" />
+            app:showSeekBarValue="true" />
 
     </PreferenceCategory>
 
@@ -151,31 +75,25 @@
         <Preference
             android:key="view_app_log"
             android:title="View Application Log"
-            android:summary="All application logs (debug, info, warnings, errors)"
+            android:summary="Sanitized log — info, warnings, and errors"
             android:icon="@android:drawable/ic_menu_agenda" />
 
         <Preference
             android:key="view_debug_log"
             android:title="View Debug Log"
-            android:summary="Application debug messages"
+            android:summary="Full verbose log (only available when debug logging is on)"
             android:icon="@android:drawable/ic_menu_info_details" />
 
         <Preference
             android:key="view_host_logs"
             android:title="View Host Logs"
-            android:summary="Session logs per connection"
+            android:summary="Per-connection session logs"
             android:icon="@android:drawable/ic_menu_edit" />
-
-        <Preference
-            android:key="view_error_log"
-            android:title="View Error Log"
-            android:summary="Application errors and exceptions"
-            android:icon="@drawable/ic_error" />
 
         <Preference
             android:key="view_audit_log"
             android:title="View Audit Log"
-            android:summary="Security events and user actions"
+            android:summary="Security events — auth, commands, file transfers (requires audit logging enabled)"
             android:icon="@android:drawable/ic_lock_lock" />
 
     </PreferenceCategory>
@@ -187,18 +105,18 @@
 
         <Preference
             android:key="export_logs"
-            android:title="Export All Logs"
-            android:summary="Save logs to file for debugging"
+            android:title="Export Logs"
+            android:summary="Save app log and host logs to a ZIP for sharing"
             android:icon="@android:drawable/ic_menu_save" />
 
         <Preference
             android:key="clear_logs"
-            android:title="Clear All Logs"
-            android:summary="Delete all log files (cannot be undone)"
+            android:title="Clear Logs"
+            android:summary="Delete app log and all host log files (cannot be undone)"
             android:icon="@android:drawable/ic_menu_delete" />
 
         <!-- Debug-build only: triggers a test crash to verify the crash
-             reporting dialog.  Hidden at runtime when BuildConfig.DEBUG_MODE
+             reporting dialog. Hidden at runtime when BuildConfig.DEBUG_MODE
              is false so it never appears in release builds. -->
         <Preference
             android:key="test_crash"

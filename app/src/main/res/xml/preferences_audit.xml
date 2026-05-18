@@ -2,19 +2,30 @@
 <androidx.preference.PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
+    <!-- MDM status banner — shown/hidden and populated at runtime by SettingsActivity
+         when isMdmManaged() is true. The key is used to find the preference. -->
+    <Preference
+        android:key="audit_mdm_status"
+        android:title="Managed by your organisation"
+        android:summary="Audit logging is controlled by your IT administrator via MDM policy. Some settings below may be locked."
+        android:icon="@android:drawable/ic_lock_lock"
+        android:selectable="false"
+        android:visible="false" />
+
     <PreferenceCategory android:title="Audit Logging">
-        
+
+        <!-- Toggle is greyed out when MDM forces the value. -->
         <SwitchPreferenceCompat
             android:key="audit_log_enabled"
             android:title="Enable Audit Logging"
-            android:summary="Record terminal commands and events (Default: OFF for privacy)"
+            android:summary="Record security-relevant events: auth, commands, file transfers, port forwards. Default: OFF for privacy."
             android:defaultValue="false"
             android:icon="@android:drawable/ic_menu_save" />
 
         <EditTextPreference
             android:key="audit_log_max_size_mb"
             android:title="Max Log Size (MB)"
-            android:summary="Maximum size for audit logs"
+            android:summary="Oldest entries are pruned when this limit is reached"
             android:defaultValue="100"
             android:inputType="number"
             android:dependency="audit_log_enabled"
@@ -22,50 +33,61 @@
 
         <EditTextPreference
             android:key="audit_log_max_age_days"
-            android:title="Max Log Age (Days)"
-            android:summary="Automatically delete logs older than this"
+            android:title="Retention (days)"
+            android:summary="Entries older than this are deleted automatically. MDM policy overrides this value when set."
             android:defaultValue="30"
             android:inputType="number"
             android:dependency="audit_log_enabled"
             app:useSimpleSummaryProvider="true" />
 
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="What to Record">
+
         <SwitchPreferenceCompat
             android:key="audit_log_commands"
-            android:title="Log Commands"
-            android:summary="Record terminal commands"
+            android:title="Terminal Commands"
+            android:summary="Record every command typed in a session"
             android:defaultValue="true"
             android:dependency="audit_log_enabled" />
 
         <SwitchPreferenceCompat
             android:key="audit_log_output"
-            android:title="Log Command Output"
-            android:summary="Record command output (increases size)"
+            android:title="Command Output"
+            android:summary="Record terminal output — significantly increases log size"
             android:defaultValue="false"
             android:dependency="audit_log_enabled" />
 
-        <SwitchPreferenceCompat
-            android:key="audit_log_auto_cleanup"
-            android:title="Auto Cleanup"
-            android:summary="Automatically clean up old logs"
-            android:defaultValue="true"
+        <!-- Auth, host-key, SFTP, and port-forward events are always recorded
+             when audit logging is enabled; they are not individually toggleable
+             because they are the core of what an audit log is for. -->
+        <Preference
+            android:key="audit_events_info"
+            android:title="Authentication, host keys, SFTP, port forwards"
+            android:summary="These security events are always recorded when audit logging is on"
+            android:selectable="false"
             android:dependency="audit_log_enabled" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="Log Actions">
 
         <Preference
             android:key="audit_log_viewer"
-            android:title="View Audit Logs"
-            android:summary="Browse audit log history"
+            android:title="View Audit Log"
+            android:summary="Browse and search audit history"
             android:dependency="audit_log_enabled" />
 
         <Preference
             android:key="audit_log_export"
-            android:title="Export Audit Logs"
-            android:summary="Save logs to file"
+            android:title="Export Audit Log"
+            android:summary="Save as CSV or JSON for external review"
             android:dependency="audit_log_enabled" />
 
         <Preference
             android:key="audit_log_clear"
-            android:title="Clear All Logs"
-            android:summary="Delete all audit log entries"
+            android:title="Clear All Audit Entries"
+            android:summary="Delete all audit log entries — cannot be undone"
             android:dependency="audit_log_enabled" />
 
     </PreferenceCategory>

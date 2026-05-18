@@ -213,5 +213,13 @@
     
     <string name="sync_password_too_short">Minimum 8 characters</string>
     <string name="sync_password_mismatch">Passwords do not match</string>
+
+    <!-- MDM / Managed App Configuration descriptions (app_restrictions.xml) -->
+    <string name="mdm_desc_audit_enabled">Force audit logging on or off. When set, overrides the user\'s in-app preference.</string>
+    <string name="mdm_desc_audit_log_commands">Record every command typed in a terminal session.</string>
+    <string name="mdm_desc_audit_log_output">Record terminal output (significantly increases log size).</string>
+    <string name="mdm_desc_audit_retention_days">Number of days to retain audit entries before automatic deletion.</string>
+    <string name="mdm_desc_syslog_host">Hostname or IP address of a UDP syslog receiver (RFC 5424). Leave blank to disable forwarding.</string>
+    <string name="mdm_desc_syslog_port">UDP port of the syslog receiver.</string>
 </resources>
 

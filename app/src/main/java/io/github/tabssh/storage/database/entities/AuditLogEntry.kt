@@ -68,14 +68,35 @@ data class AuditLogEntry(
     val metadata: String? = null // JSON for additional context
 ) {
     companion object {
-        const val EVENT_COMMAND = "COMMAND"
-        const val EVENT_CONNECT = "CONNECT"
-        const val EVENT_DISCONNECT = "DISCONNECT"
-        const val EVENT_AUTH_SUCCESS = "AUTH_SUCCESS"
-        const val EVENT_AUTH_FAILURE = "AUTH_FAILURE"
-        const val EVENT_FILE_TRANSFER = "FILE_TRANSFER"
-        const val EVENT_PORT_FORWARD = "PORT_FORWARD"
-        const val EVENT_X11_FORWARD = "X11_FORWARD"
+        // Session lifecycle
+        const val EVENT_SESSION_START   = "SESSION_START"
+        const val EVENT_SESSION_END     = "SESSION_END"
+        const val EVENT_CONNECT         = "CONNECT"
+        const val EVENT_DISCONNECT      = "DISCONNECT"
+        // Auth
+        const val EVENT_AUTH_SUCCESS    = "AUTH_SUCCESS"
+        const val EVENT_AUTH_FAILURE    = "AUTH_FAILURE"
+        const val EVENT_KEY_USAGE       = "KEY_USAGE"      // SSH key used for auth
+        // Host key trust
+        const val EVENT_HOST_KEY_ACCEPTED = "HOST_KEY_ACCEPTED"
+        const val EVENT_HOST_KEY_REJECTED = "HOST_KEY_REJECTED"
+        const val EVENT_HOST_KEY_CHANGED  = "HOST_KEY_CHANGED"  // TOFU mismatch
+        // Commands and output
+        const val EVENT_COMMAND         = "COMMAND"
+        const val EVENT_OUTPUT          = "OUTPUT"
+        // File operations
+        const val EVENT_SFTP_UPLOAD     = "SFTP_UPLOAD"
+        const val EVENT_SFTP_DOWNLOAD   = "SFTP_DOWNLOAD"
+        const val EVENT_SFTP_DELETE     = "SFTP_DELETE"
+        const val EVENT_SFTP_MKDIR      = "SFTP_MKDIR"
+        const val EVENT_FILE_TRANSFER   = "FILE_TRANSFER"   // kept for back-compat
+        // Forwarding
+        const val EVENT_PORT_FORWARD_OPEN  = "PORT_FORWARD_OPEN"
+        const val EVENT_PORT_FORWARD_CLOSE = "PORT_FORWARD_CLOSE"
+        const val EVENT_PORT_FORWARD       = "PORT_FORWARD"  // kept for back-compat
+        const val EVENT_X11_FORWARD        = "X11_FORWARD"
+        // Admin / configuration
+        const val EVENT_CONFIG_CHANGE   = "CONFIG_CHANGE"   // settings changed by MDM or user
     }
     
     fun getDisplayTimestamp(): String {
@@ -85,15 +106,29 @@ data class AuditLogEntry(
     
     fun getDisplayEvent(): String {
         return when (eventType) {
-            EVENT_COMMAND -> "Command: ${command?.take(50) ?: ""}"
-            EVENT_CONNECT -> "Connected to $host:$port"
-            EVENT_DISCONNECT -> "Disconnected from $host:$port"
-            EVENT_AUTH_SUCCESS -> "Authentication successful"
-            EVENT_AUTH_FAILURE -> "Authentication failed"
-            EVENT_FILE_TRANSFER -> "File transfer"
-            EVENT_PORT_FORWARD -> "Port forwarding"
-            EVENT_X11_FORWARD -> "X11 forwarding"
-            else -> eventType
+            EVENT_SESSION_START      -> "Session started — $user@$host:$port"
+            EVENT_SESSION_END        -> "Session ended — $user@$host:$port"
+            EVENT_CONNECT            -> "Connected to $host:$port"
+            EVENT_DISCONNECT         -> "Disconnected from $host:$port"
+            EVENT_AUTH_SUCCESS       -> "Authenticated — $user@$host:$port"
+            EVENT_AUTH_FAILURE       -> "Auth failed — $user@$host:$port"
+            EVENT_KEY_USAGE          -> "Key auth — ${metadata ?: "key used"}"
+            EVENT_HOST_KEY_ACCEPTED  -> "Host key accepted — $host"
+            EVENT_HOST_KEY_REJECTED  -> "Host key REJECTED — $host"
+            EVENT_HOST_KEY_CHANGED   -> "⚠️ Host key CHANGED — $host"
+            EVENT_COMMAND            -> "Command: ${command?.take(60) ?: ""}"
+            EVENT_OUTPUT             -> "Output captured"
+            EVENT_SFTP_UPLOAD        -> "SFTP upload: ${metadata ?: ""}"
+            EVENT_SFTP_DOWNLOAD      -> "SFTP download: ${metadata ?: ""}"
+            EVENT_SFTP_DELETE        -> "SFTP delete: ${metadata ?: ""}"
+            EVENT_SFTP_MKDIR         -> "SFTP mkdir: ${metadata ?: ""}"
+            EVENT_FILE_TRANSFER      -> "File transfer"
+            EVENT_PORT_FORWARD_OPEN  -> "Port forward opened: ${metadata ?: ""}"
+            EVENT_PORT_FORWARD_CLOSE -> "Port forward closed: ${metadata ?: ""}"
+            EVENT_PORT_FORWARD       -> "Port forwarding"
+            EVENT_X11_FORWARD        -> "X11 forwarding"
+            EVENT_CONFIG_CHANGE      -> "Config changed: ${metadata ?: ""}"
+            else                     -> eventType
         }
     }
 }

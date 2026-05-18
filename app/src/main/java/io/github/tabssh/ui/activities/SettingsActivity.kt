@@ -586,9 +586,19 @@ class ConnectionSettingsFragment : PreferenceFragmentCompat() {
 class AuditSettingsFragment : PreferenceFragmentCompat() {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences_audit, rootKey)
-        
+
         val app = requireActivity().application as TabSSHApplication
-        
+
+        // MDM status banner — show and lock the toggle when an EMM policy is active.
+        if (app.auditLogManager.isMdmManaged()) {
+            findPreference<Preference>("audit_mdm_status")?.isVisible = true
+            findPreference<androidx.preference.SwitchPreferenceCompat>("audit_log_enabled")?.apply {
+                isEnabled = false
+                // Reflect the MDM-forced value so the toggle shows the right state.
+                isChecked = app.auditLogManager.isEnabled()
+            }
+        }
+
         // View logs button
         findPreference<Preference>("audit_log_viewer")?.setOnPreferenceClickListener {
             startActivity(Intent(requireContext(), AuditLogViewerActivity::class.java))
@@ -804,15 +814,10 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
             true
         }
 
-        // View Error Log
-        findPreference<Preference>("view_error_log")?.setOnPreferenceClickListener {
-            showLogViewer("Error Log", "error")
-            true
-        }
-
-        // View Audit Log
+        // View Audit Log — open the dedicated viewer (audit log lives in Room,
+        // not a flat file, so we hand off to AuditLogViewerActivity).
         findPreference<Preference>("view_audit_log")?.setOnPreferenceClickListener {
-            showLogViewer("Audit Log", "audit")
+            startActivity(Intent(requireContext(), AuditLogViewerActivity::class.java))
             true
         }
 
@@ -858,8 +863,6 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
             try {
                 val logContent = when (logType) {
                     "debug" -> io.github.tabssh.utils.logging.Logger.getDebugLogs()
-                    "error" -> io.github.tabssh.utils.logging.Logger.getErrorLogs()
-                    "audit" -> io.github.tabssh.utils.logging.Logger.getAuditLogs()
                     "app" -> io.github.tabssh.utils.logging.Logger.getRecentLogs()
                         .joinToString("\n") { "${it.timestamp} [${it.level}] ${it.tag}: ${it.message}" }
                     else -> "No logs available"

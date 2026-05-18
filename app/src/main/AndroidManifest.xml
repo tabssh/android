@@ -495,6 +495,25 @@
             </intent-filter>
         </receiver>
 
+        <!-- MDM / Android Enterprise managed-app config receiver.
+             Only the platform delivers ACTION_APPLICATION_RESTRICTIONS_CHANGED
+             so exported=false is correct and sufficient. -->
+        <receiver
+            android:name=".audit.MdmRestrictionsReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.APPLICATION_RESTRICTIONS_CHANGED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Declare Android Enterprise Managed App Configuration schema so
+             EMM consoles (Intune, Jamf, Workspace ONE, etc.) can discover
+             and present the audit-log settings UI to IT administrators. -->
+        <meta-data
+            android:name="android.content.APP_RESTRICTIONS"
+            android:resource="@xml/app_restrictions" />
+
     </application>
 
 </manifest>

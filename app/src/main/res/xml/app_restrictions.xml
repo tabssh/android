@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android Enterprise Managed App Configuration (Managed Configurations).
+  EMM consoles (Intune, Jamf, Workspace ONE, etc.) read this file to present
+  a configuration UI to IT administrators. Keys must match the constants in
+  AuditLogManager.
+
+  When any key here is pushed by an MDM, it overrides the corresponding user
+  preference in Settings → Logging → Audit. The audit toggle in the app UI is
+  greyed out when mdm_audit_enabled is present in the restrictions bundle.
+
+  Reference: https://developer.android.com/work/managed-configurations
+-->
+<restrictions xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- ── Audit logging ──────────────────────────────────────────────── -->
+
+    <restriction
+        android:key="mdm_audit_enabled"
+        android:title="Enable Audit Logging"
+        android:restrictionType="bool"
+        android:description="@string/mdm_desc_audit_enabled"
+        android:defaultValue="false" />
+
+    <restriction
+        android:key="mdm_audit_log_commands"
+        android:title="Log Terminal Commands"
+        android:restrictionType="bool"
+        android:description="@string/mdm_desc_audit_log_commands"
+        android:defaultValue="true" />
+
+    <restriction
+        android:key="mdm_audit_log_output"
+        android:title="Log Command Output"
+        android:restrictionType="bool"
+        android:description="@string/mdm_desc_audit_log_output"
+        android:defaultValue="false" />
+
+    <restriction
+        android:key="mdm_audit_retention_days"
+        android:title="Log Retention (days)"
+        android:restrictionType="integer"
+        android:description="@string/mdm_desc_audit_retention_days"
+        android:defaultValue="90" />
+
+    <!-- ── Syslog forwarding ───────────────────────────────────────────── -->
+
+    <restriction
+        android:key="mdm_syslog_host"
+        android:title="Syslog Host"
+        android:restrictionType="string"
+        android:description="@string/mdm_desc_syslog_host"
+        android:defaultValue="" />
+
+    <restriction
+        android:key="mdm_syslog_port"
+        android:title="Syslog Port"
+        android:restrictionType="integer"
+        android:description="@string/mdm_desc_syslog_port"
+        android:defaultValue="514" />
+
+</restrictions>

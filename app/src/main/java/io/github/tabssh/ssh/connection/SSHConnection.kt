@@ -127,6 +127,7 @@ class SSHConnection(
     // wrong port, …). Without this gate the reconnect loop runs in the
     // background after the activity has bailed.
     private var hadSuccessfulConnect = false
+    private var sessionStartMs: Long = 0   // wall-clock ms at last successful connect
 
     // Network-aware reconnector — pauses when the device is offline, wakes
     // immediately when the link returns, falls back to a 5-minute poll.
@@ -227,6 +228,7 @@ class SSHConnection(
                 val effectiveUsername = resolvedIdentity?.username ?: profile.username
 
                 Logger.i("SSHConnection", "STEP 1: Starting connection to ${profile.host}:${profile.port} as $effectiveUsername")
+                Logger.logHostEvent(profile.id, effectiveUsername, profile.host, profile.port, "INFO", "Connecting")
 
                 // Execute port knock sequence if enabled
                 Logger.d("SSHConnection", "STEP 2: Checking port knock configuration")
@@ -296,6 +298,8 @@ class SSHConnection(
 
                 // Setup authentication BEFORE connecting
                 Logger.i("SSHConnection", "STEP 9: Setting up authentication")
+                val authMethod = resolvedIdentity?.authType ?: profile.authType
+                Logger.logHostEvent(profile.id, effectiveUsername, profile.host, profile.port, "INFO", "Authenticating ($authMethod)")
                 _connectionState.value = ConnectionState.AUTHENTICATING
                 notifyListeners { onAuthenticating(id) }
 
@@ -319,6 +323,8 @@ class SSHConnection(
                 session = activeSession
 
                 Logger.i("SSHConnection", "Successfully connected and authenticated to ${profile.host}")
+                sessionStartMs = System.currentTimeMillis()
+                Logger.logHostEvent(profile.id, effectiveUsername, profile.host, profile.port, "INFO", "Session started")
 
                 // Issue #29 — apply port forwards parsed from `~/.ssh/config`
                 // and stored in `advancedSettings` JSON. Without this, imported
@@ -1461,6 +1467,18 @@ class SSHConnection(
      */
     fun disconnect() {
         Logger.i("SSHConnection", "Disconnecting from ${profile.host}")
+        val effectiveUser = resolvedIdentity?.username ?: profile.username
+        val duration = if (sessionStartMs > 0) {
+            val secs = (System.currentTimeMillis() - sessionStartMs) / 1000
+            when {
+                secs < 60   -> "${secs}s"
+                secs < 3600 -> "${secs / 60}m ${secs % 60}s"
+                else        -> "${secs / 3600}h ${(secs % 3600) / 60}m"
+            }
+        } else null
+        val msg = if (duration != null) "Session ended (duration: $duration)" else "Session ended"
+        Logger.logHostEvent(profile.id, effectiveUser, profile.host, profile.port, "INFO", msg)
+        sessionStartMs = 0
 
         connectJob?.cancel()
         reconnector?.cancel()
@@ -1522,6 +1540,10 @@ class SSHConnection(
         val errorInfo = buildDetailedErrorInfo(error)
 
         Logger.e("SSHConnection", "Connection failed: ${errorInfo.userMessage}", error)
+        val effectiveUser = resolvedIdentity?.username ?: profile.username
+        val hostLogLevel = if (errorInfo.errorType.contains("AUTH", ignoreCase = true)) "WARN" else "ERROR"
+        Logger.logHostEvent(profile.id, effectiveUser, profile.host, profile.port, hostLogLevel, "Connection failed: ${errorInfo.userMessage}")
+        sessionStartMs = 0
 
         _connectionState.value = ConnectionState.ERROR
         _errorMessage.value = errorInfo.userMessage

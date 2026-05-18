@@ -769,15 +769,72 @@ object Logger {
         }
     }
 
+    // ── Per-host log ─────────────────────────────────────────────────────────
+
+    private const val HOST_LOG_MAX_SIZE = 2 * 1024 * 1024L  // 2 MiB
+
     /**
-     * Get list of host log files
+     * Write a single event to the per-connection host log.
+     *
+     * Each connection profile gets its own file:
+     *   `files/host_logs/{connectionId}.log`
+     *
+     * Format (OpenSSH-style):
+     *   `YYYY-MM-DD HH:mm:ss.SSS LEVEL user@host:port message`
+     *
+     * The host log is always-on and contains real hostnames / usernames —
+     * it never leaves the device unless the user manually exports it.
+     * Cap: [HOST_LOG_MAX_SIZE] (2 MiB), single rotation → `.log.1`.
+     */
+    fun logHostEvent(connectionId: String, username: String, host: String, port: Int, level: String, message: String) {
+        val ctx = appContext ?: return
+        executor.execute {
+            try {
+                val logsDir = File(ctx.filesDir, "host_logs")
+                if (!logsDir.exists()) logsDir.mkdirs()
+
+                val logFile = File(logsDir, "$connectionId.log")
+                if (logFile.exists() && logFile.length() > HOST_LOG_MAX_SIZE) {
+                    val backup = File(logsDir, "$connectionId.log.1")
+                    backup.delete()
+                    logFile.renameTo(backup)
+                }
+
+                val timestamp = dateFormat.format(Date())
+                val line = "$timestamp ${level.padEnd(5)} $username@$host:$port $message\n"
+                FileWriter(logFile, true).use { it.append(line) }
+            } catch (e: Exception) {
+                Log.e("$TAG_PREFIX:Logger", "Failed to write host log for $connectionId", e)
+            }
+        }
+    }
+
+    /**
+     * Get list of host log files, sorted newest-modified first.
      */
     fun getHostLogFiles(): List<File> {
         val logsDir = appContext?.let { File(it.filesDir, "host_logs") }
         return if (logsDir?.exists() == true && logsDir.isDirectory) {
-            logsDir.listFiles()?.filter { it.isFile && it.extension == "log" }?.sortedByDescending { it.lastModified() } ?: emptyList()
+            logsDir.listFiles()
+                ?.filter { it.isFile && it.name.endsWith(".log") && !it.name.endsWith(".log.1") }
+                ?.sortedByDescending { it.lastModified() }
+                ?: emptyList()
         } else {
             emptyList()
+        }
+    }
+
+    /**
+     * Read the host log for a specific connection ID (primary + overflow).
+     */
+    fun readHostLog(connectionId: String): String {
+        val ctx = appContext ?: return ""
+        val logsDir = File(ctx.filesDir, "host_logs")
+        val primary  = File(logsDir, "$connectionId.log")
+        val overflow = File(logsDir, "$connectionId.log.1")
+        return buildString {
+            if (overflow.exists()) append(overflow.readText())
+            if (primary.exists())  append(primary.readText())
         }
     }
 
