@@ -15,6 +15,8 @@
 
 ## ✅ Recently Shipped
 
+- **`b7952325aa60`** 🐛 Libvirt: stamp `last_connected` on successful SSH connect — every other hypervisor manager called `updateLastConnected()`; libvirt did not; "Last connected" always showed "Never connected".
+
 - **`30ab65557db1`** 🐛 Seven bug fixes: SSH identity spinner beeping/not picking (wrong adapter layout + missing setText in both key spinners); libvirt SSH fallback opening ConnectionEditActivity for new VM profiles instead of auto-connecting with wrong credentials; ProxyJump host key not saving (JSch stored key under `localhost:ephemeralPort`, fixed with `session.setHostKeyAlias(profile.host)`); keyboard setLayout() preserving portraitRowCount and filling extra rows with defaults; notification Disconnect triggering reconnect dialog (added `markIntentionalClose()`/`closeConnectionIntentionally()`); RFB type 204 crashing VNC connection (log and continue instead of throw); VNC keyboard not appearing (added `vncView.requestFocus()` in onConnected).
 
 - **`8b98f60be8a3`** 🐛 Five bug fixes: Proxmox VNC "Pipe closed" after SetDesktopSize rejection (`canRequestResize=false` in both vncproxy paths); libvirt ProxyJump "invalid private key" (PKCS#8 DER → OpenSSH PEM via `getJSchBytesWithFallback()`); PerformanceFragment stats last-host not persisting (`selectedConnection=null` on `onDestroyView()`); status indicator dots always grey (connected=green, disconnected=red); OCI identity: blank region in account list, `.OCI/CONFIG`/`IMPORT FILE` button labels, auto-fill name from config section header, test connection works before saving profile.
@@ -26,21 +28,21 @@
 
 - **`7841256b841a`** ✨ Find-in-scrollback overlay bar — floating search bar replaces AlertDialog stub; prev/next nav, live match counter, amber/orange highlights in terminal, scroll-to-match, case-sensitive toggle, Ctrl+Shift+F shortcut, Back key to dismiss; `ScrollbackSearchController`, `TerminalView.SearchMatch` + `drawSearchHighlights()`.
 - **`e6586a3350e0`** 🐛 Notification text format + backup preference coverage — CONNECTED notification now always shows `host:port-title` (port was absent when title set); connection-type fallback (mosh/telnet/ssh) when no title; `BackupExporter`/`BackupImporter` `preferences.json` now includes `notifications` + `monitoring` categories; backward-compatible with old backups; `AI.md §10` updated.
-- **`(this batch)`** ✨ Notification system overhaul — SSH sessions grouped under `tabssh_ssh_sessions` parent summary; monitoring alerts grouped under `tabssh_monitoring`; CONNECTED per-host notifications now include "Disconnect" action that launches `ConfirmDisconnectActivity` (transparent dialog, confirms before closing); `SSHConnectionService` private `"ssh_connections"` channel removed and consolidated into `NotificationHelper.CHANNEL_SERVICE`; `postSshGroupSummary()` called on every 30s heartbeat and sweep; `AI.md §13.1` updated.
+- **`34d0a4363bb4`** ✨ Notification system overhaul — SSH sessions grouped under `tabssh_ssh_sessions` parent summary; monitoring alerts grouped under `tabssh_monitoring`; CONNECTED per-host notifications now include "Disconnect" action that launches `ConfirmDisconnectActivity` (transparent dialog, confirms before closing); `SSHConnectionService` private `"ssh_connections"` channel removed and consolidated into `NotificationHelper.CHANNEL_SERVICE`; `postSshGroupSummary()` called on every 30s heartbeat and sweep; `AI.md §13.1` updated.
 - **`61dadd4b8f6f`** 🐛 QEMU/libvirt SSH key identity not loaded for generated keys — `generateKeyPair()` never stored JSch bytes; `retrieveJSchBytes()` returned null; key silently not used; now fixed with `getJSchBytesWithFallback()` on `KeyStorage` (shared by libvirt + `SSHConnection`) and `storeJSchBytes()` called at generate time.
 - **`ae68921ee89d`** 🐛 QEMU/libvirt auth failure — `autoDeleteOnFailure` in `SecurePasswordManager` silently wiped Keystore credentials on any decryption error; `LibvirtApiClient.connect()` now fails fast with a helpful message instead of opaque SSH auth failure; `LibvirtManagerActivity` shows "Open Settings" dialog on credential miss; `validateFields()` no longer requires password when SSH key identity is selected for LIBVIRT; `saveHypervisor()` skips `store()` call when password is blank (key-only auth path).
-- **`(this batch)`** 📝 Translation drift — 10 missing keys added to `values-es/`, `values-fr/`, `values-de/` (`cluster_progress`, `navigation_drawer_open/close`, `select_connection`, `sync_password_*`, `widget_*_description`).
-- **`(this batch)`** 🔧 ProxyJump verified already wired — `SSHConfigParser.kt:299-302` populates proxy columns at parse time; `SSHConnection.setupJumpHost()` reads them. Stale TODO entry closed.
-- **`(this batch)`** 🔒 Cached SSH credential zeroing — `SSHConnection.clearCachedCredentials()` + `SSHSessionManager.clearCachedCredentials()` called from `TabSSHApplication.onActivityStopped()` when whole app backgrounds. Prevents in-memory password survival across biometric-lock events.
-- **`(this batch)`** ✨ Group badges on flat connection lists — `ConnectionAdapter` shows `"• GroupName"` badge on search result cards; `ClusterCommandActivity.ConnectionSelectionAdapter` shows group badges in multi-select picker. `item_connection.xml` and `item_cluster_connection.xml` updated.
-- **`(this batch)`** ✨ X11 forwarding proxy — `X11Proxy.kt` (`ssh/forwarding/`) binds a `ServerSocket` on port 0 and relays JSch X11 channels to Termux:X11 (Unix socket) or XServer XSDL (TCP :6000). `SSHConnection.applyForwardingFlags()` now passes the dynamic port via `session.setX11Port(proxy.port)`. Non-fatal `X11NoServerException` shown as a Snackbar in `TabTerminalActivity` via `SSHConnection.warnings` `SharedFlow`. Proxy stopped in `disconnect()`.
+- **`0c4af7d4be32`** 📝 Translation drift — 10 missing keys added to `values-es/`, `values-fr/`, `values-de/` (`cluster_progress`, `navigation_drawer_open/close`, `select_connection`, `sync_password_*`, `widget_*_description`).
+- **`0c4af7d4be32`** 🔧 ProxyJump verified already wired — `SSHConfigParser.kt:299-302` populates proxy columns at parse time; `SSHConnection.setupJumpHost()` reads them. Stale TODO entry closed.
+- **`0c4af7d4be32`** 🔒 Cached SSH credential zeroing — `SSHConnection.clearCachedCredentials()` + `SSHSessionManager.clearCachedCredentials()` called from `TabSSHApplication.onActivityStopped()` when whole app backgrounds. Prevents in-memory password survival across biometric-lock events.
+- **`0c4af7d4be32`** ✨ Group badges on flat connection lists — `ConnectionAdapter` shows `"• GroupName"` badge on search result cards; `ClusterCommandActivity.ConnectionSelectionAdapter` shows group badges in multi-select picker. `item_connection.xml` and `item_cluster_connection.xml` updated.
+- **`0c4af7d4be32`** ✨ X11 forwarding proxy — `X11Proxy.kt` (`ssh/forwarding/`) binds a `ServerSocket` on port 0 and relays JSch X11 channels to Termux:X11 (Unix socket) or XServer XSDL (TCP :6000). `SSHConnection.applyForwardingFlags()` now passes the dynamic port via `session.setX11Port(proxy.port)`. Non-fatal `X11NoServerException` shown as a Snackbar in `TabTerminalActivity` via `SSHConnection.warnings` `SharedFlow`. Proxy stopped in `disconnect()`.
 - **`1d40e3f2`** 🐛 Remove spurious "Serial console unavailable" AlertDialog — VNC fallback is transparent; dialog was confusing noise. Only surface error if VNC itself fails.
 - **`1d40e3f2`** 🐛 Fix `%s` showing literally in Settings → Monitoring → Alert cooldown — removed broken `android:summary="%s…"` from XML, added programmatic `SummaryProvider` in `MonitoringSettingsFragment` producing e.g. "1 hour between repeated 'still down' notifications".
 - **`1d40e3f2`** ✨ QEMU/libvirt SSH key auth — `HypervisorProfile.sshIdentityId` (DB v34→35, `MIGRATION_34_35`), `LibvirtApiClient.connect()` loads key via `KeyStorage.retrieveJSchBytes()` + `jsch.addIdentity()`, `HypervisorEditActivity` adds SSH Key dropdown (LIBVIRT-only).
-- **`(prev session)`** 🐛 Landscape dialog clipping — 11 layout files wrapped in `NestedScrollView`; `dialog_backup_runs.xml` RecyclerView fixed from 0dp+weight (invisible) to 200dp.
-- **`(prev session)`** 🐛 RFB ExtendedDesktopSize constant wrong — `ENC_EXTENDED_DESKTOP_SIZE` corrected from `-479` to `-308` (0xFFFFFECC), fixing "Pipe closed" VNC crash on resize.
-- **`(prev session)`** 🐛 `%s` literals in Logging + Sync preferences — `paste_microbin_url`, `paste_lenpaste_url`, `paste_stikked_url`, `sync_frequency` all fixed with `app:useSimpleSummaryProvider="true"`.
-- **`(prev session)`** 🐛 Proxmox serial console fallback — `ConsoleWebSocketClient` detects serial-unavailable frame and calls back to `HypervisorConsoleManager` which retries with vncproxy transparently.
+- **`b318a560c6aa`** 🐛 Landscape dialog clipping — 11 layout files wrapped in `NestedScrollView`; `dialog_backup_runs.xml` RecyclerView fixed from 0dp+weight (invisible) to 200dp.
+- **`a8d50c81c0bd`** 🐛 RFB ExtendedDesktopSize constant wrong — `ENC_EXTENDED_DESKTOP_SIZE` corrected from `-479` to `-308` (0xFFFFFECC), fixing "Pipe closed" VNC crash on resize.
+- **`a8d50c81c0bd`** 🐛 `%s` literals in Logging + Sync preferences — `paste_microbin_url`, `paste_lenpaste_url`, `paste_stikked_url`, `sync_frequency` all fixed with `app:useSimpleSummaryProvider="true"`.
+- **`3085f504ebc5`** 🐛 Proxmox serial console fallback — `ConsoleWebSocketClient` detects serial-unavailable frame and calls back to `HypervisorConsoleManager` which retries with vncproxy transparently.
 - **`2596eeb7`** ✨ Multi-host Dashboard v2 — sysadmin-grade host cards, dashboard groups (independent from connection groups), DiffUtil metric updates, group CRUD, per-host monitor bell.
 - **`55386d5b`** 🐛 OCI SSH Connect ephemeral — persistent SSH config dialog backed by `ConnectionProfile.ociInstanceId`; DB v30→v31.
 - **`bfa72c87`** 🐛 Proxmox console fails for VMs without serial interface — API-level detection + automatic vncproxy fallback.
@@ -83,7 +85,7 @@ Local/Remote/Dynamic forwards now apply at connect (`d714a7b4`). Status:
 | `ProxyJump` / `ProxyCommand` | ✅ | columns | ✅ — `SSHConfigParser.kt:299-302` populates `proxy_host`/`proxy_port`/`proxy_username` at parse time. `ProxyCommand` has no JSch equivalent. |
 | `ServerAliveInterval` / `StrictHostKeyChecking` | ✅ | JSON | intentionally ignored (mobile keepalive + TOFU dialog own these) |
 | `ForwardAgent` / `ForwardX11` / `compression` / `connectTimeout` | ✅ | JSON + columns | ✅ |
-| `RequestTTY` | ✅ | JSON | 🟡 — `force` honored when `remoteCommand` set; `no`/`auto` distinctions ignored |
+| `RequestTTY` | ✅ | JSON | 🔴 — never read by `applyAdvancedSettings()`; PTY is unconditionally allocated regardless of value |
 
 ---
 
@@ -93,7 +95,7 @@ Local/Remote/Dynamic forwards now apply at connect (`d714a7b4`). Status:
 
 **Safe to do now (zero crash risk):**
 - Unused string resources and drawable references — R8/lint flags them; missing one doesn't crash
-- `HypervisorProfile.isXenOrchestra` — deprecated flag superseded by `apiTypeOverride` (AI.md §16); can be removed with a migration that drops the column after v1 schema is locked
+- `HypervisorProfile.isXenOrchestra` — still actively used in 10+ call sites in `XCPngManagerActivity`; the migration to `apiTypeOverride` is incomplete. Do NOT drop before that migration is finished and v1 schema is locked.
 
 **After v1 ships:**
 - Full dead code sweep — by then the migration chain is locked, you have a stable test device matrix, and ProGuard keep rules are proven
