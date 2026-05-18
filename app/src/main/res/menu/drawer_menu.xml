@@ -88,14 +88,12 @@
         </menu>
     </item>
 
-    <item android:title="Settings">
-        <menu>
-            <item
-                android:id="@+id/nav_settings"
-                android:icon="@drawable/ic_settings"
-                android:title="Settings" />
-        </menu>
-    </item>
+    <group android:id="@+id/group_settings">
+        <item
+            android:id="@+id/nav_settings"
+            android:icon="@drawable/ic_settings"
+            android:title="Settings" />
+    </group>
 
     <item android:title="Diagnostics">
         <menu>
