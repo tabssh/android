@@ -18,30 +18,38 @@
             android:layout_height="wrap_content"
             android:background="@color/primary_500">
 
-            <!-- Toolbar provides the hamburger/nav icon to open the drawer -->
-            <com.google.android.material.appbar.MaterialToolbar
-                android:id="@+id/toolbar"
-                android:layout_width="match_parent"
-                android:layout_height="?attr/actionBarSize"
-                android:background="@color/primary_500"
-                app:titleTextColor="@color/white"
-                app:subtitleTextColor="@color/white"
-                app:navigationIcon="@drawable/ic_menu"
-                app:navigationIconTint="@color/white"
-                app:navigationContentDescription="Open navigation menu"
-                app:title="@string/app_name" />
-
-            <com.google.android.material.tabs.TabLayout
-                android:id="@+id/tab_layout"
+            <!-- Single row: hamburger icon + tabs — no title bar wasted space -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:orientation="horizontal"
                 android:background="@color/primary_500"
-                app:tabTextColor="@color/white"
-                app:tabSelectedTextColor="@color/white"
-                app:tabIndicatorColor="@color/accent_500"
-                app:tabIndicatorHeight="3dp"
-                app:tabMode="auto"
-                app:tabGravity="fill" />
+                android:gravity="center_vertical">
+
+                <ImageButton
+                    android:id="@+id/btn_nav_menu"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:src="@drawable/ic_menu"
+                    android:tint="@color/white"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/navigation_drawer_open"
+                    android:padding="12dp" />
+
+                <com.google.android.material.tabs.TabLayout
+                    android:id="@+id/tab_layout"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:background="@color/primary_500"
+                    app:tabTextColor="@color/white"
+                    app:tabSelectedTextColor="@color/white"
+                    app:tabIndicatorColor="@color/accent_500"
+                    app:tabIndicatorHeight="3dp"
+                    app:tabMode="auto"
+                    app:tabGravity="fill" />
+
+            </LinearLayout>
 
         </com.google.android.material.appbar.AppBarLayout>
 

@@ -102,15 +102,12 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                 .forEach { nm.cancel(it.id) }
         }
 
-        // Setup drawer with toolbar hamburger so the drawer is discoverable
+        // Setup drawer — hamburger is now inline with the tab bar (no separate title row)
         drawerLayout = findViewById(R.id.drawer_layout)
         val navView = findViewById<NavigationView>(R.id.nav_view)
         navView.setNavigationItemSelectedListener(this)
 
-        val toolbar = findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar)
-        setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(false)
-        toolbar.setNavigationOnClickListener {
+        findViewById<android.widget.ImageButton>(R.id.btn_nav_menu).setOnClickListener {
             drawerLayout.openDrawer(GravityCompat.START)
         }
 
