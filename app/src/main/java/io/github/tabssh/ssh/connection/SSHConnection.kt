@@ -675,7 +675,7 @@ class SSHConnection(
      * This is required for JSch to work with StrictHostKeyChecking="ask"
      */
     private fun setupUserInfo(session: Session) {
-        session.setUserInfo(object : com.jcraft.jsch.UserInfo {
+        session.setUserInfo(object : com.jcraft.jsch.UserInfo, com.jcraft.jsch.UIKeyboardInteractive {
             override fun getPassword(): String? {
                 Logger.d("SSHConnection", "UserInfo.getPassword() called, returning cached password: ${cachedPassword != null}")
                 return cachedPassword
@@ -742,6 +742,36 @@ class SSHConnection(
 
             override fun showMessage(message: String) {
                 Logger.i("SSHConnection", "Server message: $message")
+            }
+
+            // UIKeyboardInteractive — required for JSch to complete challenge-response auth.
+            // Without this implementation JSch cannot drive the keyboard-interactive exchange
+            // even when the server offers it. For password-style challenges we return the
+            // cached password; for banner-only exchanges (empty prompt array) we return an
+            // empty array so the handshake can complete without user interaction.
+            override fun promptKeyboardInteractive(
+                destination: String,
+                name: String,
+                instruction: String,
+                prompt: Array<String>,
+                echo: BooleanArray
+            ): Array<String>? {
+                Logger.d(
+                    "SSHConnection",
+                    "UIKeyboardInteractive: destination=$destination name=$name " +
+                        "prompts=${prompt.toList()} echo=${echo.toList()}"
+                )
+                if (prompt.isEmpty()) {
+                    Logger.d("SSHConnection", "Keyboard-interactive: banner/info only, returning empty array")
+                    return arrayOf()
+                }
+                val pw = cachedPassword
+                if (pw != null) {
+                    Logger.d("SSHConnection", "Keyboard-interactive: returning cached password for ${prompt.size} prompt(s)")
+                    return Array(prompt.size) { pw }
+                }
+                Logger.w("SSHConnection", "Keyboard-interactive: no cached credential, cancelling challenge")
+                return null
             }
         })
 
@@ -985,8 +1015,11 @@ class SSHConnection(
             Logger.d("SSHConnection", "Auth: Password cached for fallback (length=${effectivePassword.length})")
         }
 
-        // Priority 1: SSH key (if available and retrievable)
-        if (effectiveKeyId != null) {
+        // Priority 1: SSH key (if available and retrievable, and not overridden to keyboard-interactive)
+        // When the target explicitly requests keyboard-interactive auth, skip publickey even if an
+        // identity key is configured — some servers drop keyboard-interactive from the offered-methods
+        // list after a failed publickey attempt, leaving no viable auth path.
+        if (effectiveKeyId != null && profile.authType != AuthType.KEYBOARD_INTERACTIVE.name) {
             Logger.i("SSHConnection", "Auth: Attempting SSH key authentication with keyId=$effectiveKeyId")
 
             // Try to retrieve passphrase if key is encrypted (non-blocking)
