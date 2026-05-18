@@ -15,6 +15,7 @@ import android.view.View
 import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
+import android.view.inputmethod.InputMethodManager
 import io.github.tabssh.hypervisor.console.rfb.RfbConstants
 import io.github.tabssh.hypervisor.console.rfb.RfbListener
 import io.github.tabssh.utils.logging.Logger
@@ -95,6 +96,15 @@ class VncView @JvmOverloads constructor(
             val (bx, by) = screenToBitmap(e.x, e.y)
             firePointer(bx, by, RfbConstants.BTN_LEFT)
             firePointer(bx, by, 0)
+            // Toggle the soft keyboard so the user can type without needing a
+            // separate button — show it if hidden, hide it if currently active.
+            val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            if (imm.isActive(this@VncView)) {
+                imm.hideSoftInputFromWindow(windowToken, 0)
+            } else {
+                requestFocus()
+                imm.showSoftInput(this@VncView, InputMethodManager.SHOW_IMPLICIT)
+            }
             return true
         }
 

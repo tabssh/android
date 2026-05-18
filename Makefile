@@ -10,13 +10,18 @@ BUILD_IMAGE := ghcr.io/tabssh/android:build
 BINARIES := binaries
 DEBUG_DIR := app/build/outputs/apk/debug
 
+# Host Gradle cache — persists between runs; override with GRADLE_CACHE=/your/path
+GRADLE_CACHE ?= $(HOME)/.gradle
+
 # Docker run command
+# ANDROID_HOME is already set correctly in the image; no override needed.
+# Mount the host Gradle cache so dependency downloads persist between image
+# rebuilds and don't need to be re-fetched from Maven Central every run.
 DOCKER_RUN := docker run --rm --network=host \
 	-v $(shell pwd):/workspace \
 	-v $(shell pwd)/.android-keystore:/root/.android \
-	-w /workspace \
-	-e ANDROID_HOME=/opt/android \
-	-e GRADLE_USER_HOME=/workspace/.gradle
+	-v $(GRADLE_CACHE):/root/.gradle \
+	-w /workspace
 
 # Colors
 GREEN := \033[0;32m
@@ -35,7 +40,8 @@ help: ## Show available targets
 
 build: _ensure-image fetch-mosh fetch-fonts ## Build debug APKs
 	@echo -e "$(GREEN)🚀 Building TabSSH v$(VERSION)...$(NC)"
-	@$(DOCKER_RUN) $(BUILD_IMAGE) ./gradlew clean assembleDebug --no-daemon -q
+	@mkdir -p $(GRADLE_CACHE)
+	@$(DOCKER_RUN) $(BUILD_IMAGE) ./gradlew clean assembleDebug --no-daemon --build-cache -q
 	@mkdir -p $(BINARIES)
 	@cp $(DEBUG_DIR)/*.apk $(BINARIES)/ 2>/dev/null || true
 	@echo -e "$(GREEN)✅ Done$(NC)"
@@ -48,7 +54,9 @@ fetch-fonts: ## Fetch Nerd Fonts (skip-if-present, --force to refresh)
 	@scripts/fetch-fonts.sh
 
 check: _ensure-image ## Check for errors (KSP + compile, mirrors GH build)
-	@$(DOCKER_RUN) $(BUILD_IMAGE) ./gradlew kspDebugKotlin compileDebugKotlin --no-daemon \
+	@mkdir -p $(GRADLE_CACHE)
+	@$(DOCKER_RUN) $(BUILD_IMAGE) ./gradlew kspDebugKotlin compileDebugKotlin \
+		--no-daemon --build-cache -q \
 		&& echo -e "$(GREEN)✅ No errors$(NC)" \
 		|| { echo -e "$(YELLOW)❌ Errors found$(NC)"; exit 1; }
 

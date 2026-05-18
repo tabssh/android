@@ -1,5 +1,6 @@
 # TabSSH Android Build Image
-# Pre-built with all tools for fast CI/CD builds
+# Pre-built with all tools and pre-warmed Gradle/Android dependency caches
+# so incremental builds start in seconds rather than downloading from scratch.
 # Usage: docker pull ghcr.io/tabssh/android:build
 
 FROM eclipse-temurin:17-jdk
@@ -7,7 +8,7 @@ FROM eclipse-temurin:17-jdk
 LABEL org.opencontainers.image.source=https://github.com/tabssh/android
 LABEL org.opencontainers.image.description="TabSSH Android build environment"
 
-# Install required packages
+# ── System packages ────────────────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     unzip \
@@ -15,45 +16,87 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Set up Android SDK
+# ── Android SDK ────────────────────────────────────────────────────────────────
 ENV ANDROID_SDK_ROOT=/opt/android-sdk
-ENV ANDROID_HOME=$ANDROID_SDK_ROOT
-ENV PATH=$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools
+ENV ANDROID_HOME=${ANDROID_SDK_ROOT}
+ENV PATH=${PATH}:${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin:${ANDROID_SDK_ROOT}/platform-tools
 
-# Download and install Android SDK command line tools
-# The zip extracts to cmdline-tools/, we need it at cmdline-tools/latest/
-RUN mkdir -p $ANDROID_SDK_ROOT && \
-    cd $ANDROID_SDK_ROOT && \
-    wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip && \
-    unzip -q cmdline-tools.zip -d cmdline-tools-tmp && \
-    mkdir -p cmdline-tools && \
-    mv cmdline-tools-tmp/cmdline-tools cmdline-tools/latest && \
-    rm -rf cmdline-tools.zip cmdline-tools-tmp
+RUN mkdir -p ${ANDROID_SDK_ROOT} && \
+    wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip \
+         -O /tmp/cmdline-tools.zip && \
+    unzip -q /tmp/cmdline-tools.zip -d /tmp/cmdline-tools-raw && \
+    mkdir -p ${ANDROID_SDK_ROOT}/cmdline-tools && \
+    mv /tmp/cmdline-tools-raw/cmdline-tools ${ANDROID_SDK_ROOT}/cmdline-tools/latest && \
+    rm -rf /tmp/cmdline-tools.zip /tmp/cmdline-tools-raw
 
-# Accept licenses and install required SDK components
-RUN yes | sdkmanager --licenses > /dev/null 2>&1 || true
-RUN sdkmanager --install \
-    "platform-tools" \
-    "platforms;android-34" \
-    "build-tools;34.0.0" \
+RUN yes | sdkmanager --licenses > /dev/null 2>&1 || true && \
+    sdkmanager \
+        "platform-tools" \
+        "platforms;android-34" \
+        "build-tools;34.0.0" \
     > /dev/null 2>&1
 
-# Pre-download Gradle 8.11.1 to speed up builds
+# ── Gradle wrapper pre-warm ────────────────────────────────────────────────────
+# Pre-populate the exact directory structure the Gradle wrapper expects so it
+# never needs to download gradle-8.11.1-bin.zip at runtime.
 ENV GRADLE_VERSION=8.11.1
-ENV GRADLE_HOME=/opt/gradle
-ENV PATH=$PATH:$GRADLE_HOME/bin
-RUN mkdir -p $GRADLE_HOME && \
-    wget -q https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip -O /tmp/gradle.zip && \
-    unzip -q /tmp/gradle.zip -d /opt && \
-    mv /opt/gradle-${GRADLE_VERSION}/* $GRADLE_HOME && \
-    rm -rf /opt/gradle-${GRADLE_VERSION} /tmp/gradle.zip
-
-# Create gradle user home for caching
 ENV GRADLE_USER_HOME=/root/.gradle
-RUN mkdir -p $GRADLE_USER_HOME
 
-# Set working directory
+RUN DIST_DIR="${GRADLE_USER_HOME}/wrapper/dists/gradle-${GRADLE_VERSION}-bin" && \
+    mkdir -p "${DIST_DIR}" && \
+    wget -q "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" \
+         -O "${DIST_DIR}/gradle-${GRADLE_VERSION}-bin.zip"
+
+# Unpack the distribution so the wrapper skips extraction on first use.
+# The wrapper stores the unpacked tree next to the zip under a hash directory;
+# we mimic that by unpacking into the same folder.
+RUN DIST_DIR="${GRADLE_USER_HOME}/wrapper/dists/gradle-${GRADLE_VERSION}-bin" && \
+    unzip -q "${DIST_DIR}/gradle-${GRADLE_VERSION}-bin.zip" -d "${DIST_DIR}" && \
+    # Create the .ok sentinel file the wrapper uses to skip re-extraction
+    touch "${DIST_DIR}/gradle-${GRADLE_VERSION}-bin.zip.lck" && \
+    ls "${DIST_DIR}/gradle-${GRADLE_VERSION}/bin/gradle" > /dev/null
+
+# Add unpacked gradle bin to PATH for this image layer's RUN commands
+ENV PATH=${PATH}:${GRADLE_USER_HOME}/wrapper/dists/gradle-${GRADLE_VERSION}-bin/gradle-${GRADLE_VERSION}/bin
+
+# ── Gradle dependency pre-warm ─────────────────────────────────────────────────
+# Copy the minimum build scaffolding into a throwaway location, run
+# `./gradlew dependencies` so all Maven artifacts land in /root/.gradle/caches,
+# then discard the scaffolding.  The cache layer stays in the image.
+WORKDIR /tmp/prewarm
+
+COPY gradle/                   gradle/
+COPY gradlew                   gradlew
+COPY build.gradle              build.gradle
+COPY settings.gradle           settings.gradle
+COPY gradle.properties         gradle.properties
+COPY app/build.gradle          app/build.gradle
+
+RUN chmod +x gradlew
+
+# Minimal stub so the Android plugin can resolve the app module
+RUN mkdir -p app/src/main/java && \
+    cat > app/src/main/AndroidManifest.xml <<'EOF'
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="io.github.tabssh" />
+EOF
+
+# Download all dependencies declared in every configuration, including KSP.
+# --no-daemon avoids a background JVM being left alive inside the layer.
+# Continue even if the stub app produces build errors (the deps will be cached).
+RUN ./gradlew \
+        dependencies \
+        kspDebugKotlin \
+        compileDebugKotlin \
+        --no-daemon \
+        --no-configuration-cache \
+        --build-cache \
+        -q \
+    ; true
+
+# Discard the stub — we only needed it to populate /root/.gradle/caches
 WORKDIR /workspace
+RUN rm -rf /tmp/prewarm
 
-# Default command
-CMD ["gradle", "--version"]
+# ── Runtime defaults ───────────────────────────────────────────────────────────
+CMD ["bash"]

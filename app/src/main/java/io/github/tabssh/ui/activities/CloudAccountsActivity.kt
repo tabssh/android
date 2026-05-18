@@ -91,8 +91,9 @@ class CloudAccountsActivity : AppCompatActivity() {
         binding.toolbar.setNavigationOnClickListener { finish() }
 
         adapter = CloudAccountAdapter(
-            onRefresh = { refreshAccount(it) },
-            onDelete  = { confirmDelete(it) }
+            onRefresh   = { refreshAccount(it) },
+            onDelete    = { confirmDelete(it) },
+            onItemClick = { showAccountHosts(it) }
         )
         binding.recyclerAccounts.layoutManager = LinearLayoutManager(this)
         binding.recyclerAccounts.adapter = adapter
@@ -121,8 +122,9 @@ class CloudAccountsActivity : AppCompatActivity() {
     // ── Adapter ─────────────────────────────────────────────────────────────
 
     private inner class CloudAccountAdapter(
-        private val onRefresh: (CloudAccount) -> Unit,
-        private val onDelete:  (CloudAccount) -> Unit
+        private val onRefresh:   (CloudAccount) -> Unit,
+        private val onDelete:    (CloudAccount) -> Unit,
+        private val onItemClick: (CloudAccount) -> Unit
     ) : ListAdapter<CloudAccount, CloudAccountAdapter.ViewHolder>(AccountDiff) {
 
         inner class ViewHolder(val b: ItemCloudAccountBinding) : RecyclerView.ViewHolder(b.root)
@@ -153,6 +155,7 @@ class CloudAccountsActivity : AppCompatActivity() {
             b.switchEnabled.isChecked = true
             b.switchEnabled.setOnCheckedChangeListener(null)
 
+            b.root.setOnClickListener      { onItemClick(account) }
             b.btnRefresh.setOnClickListener { onRefresh(account) }
             b.btnDelete.setOnClickListener  { onDelete(account) }
         }
@@ -363,6 +366,48 @@ class CloudAccountsActivity : AppCompatActivity() {
         return try {
             org.json.JSONObject(advanced).optString("cloud_source").takeIf { it.isNotBlank() }
         } catch (_: Exception) { null }
+    }
+
+    /**
+     * Shows the SSH connections already imported from [account], identified by
+     * the `cloud_source` field in their advancedSettings JSON. Each row shows
+     * the connection name and host. Tapping a row opens its terminal; long-
+     * pressing is not needed here because this is a read-only quick-view.
+     */
+    private fun showAccountHosts(account: CloudAccount) {
+        lifecycleScope.launch {
+            val allConnections = withContext(Dispatchers.IO) {
+                app.database.connectionDao().getAllConnectionsList()
+            }
+            // cloud_source is written as "{provider}:{accountName}" by every client
+            val accountSource = "${account.provider}:${account.name}"
+            val hosts = allConnections.filter { conn ->
+                extractCloudSource(conn.advancedSettings) == accountSource
+            }
+            runOnUiThread {
+                if (hosts.isEmpty()) {
+                    AlertDialog.Builder(this@CloudAccountsActivity)
+                        .setTitle(account.name)
+                        .setMessage("No hosts imported yet. Use the refresh button to fetch and import hosts.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                    return@runOnUiThread
+                }
+                val labels = hosts.map { "${it.getDisplayName()}  –  ${it.host}:${it.port}" }.toTypedArray()
+                AlertDialog.Builder(this@CloudAccountsActivity)
+                    .setTitle("${account.name} · ${hosts.size} host${if (hosts.size == 1) "" else "s"}")
+                    .setItems(labels) { _, idx ->
+                        val profile = hosts[idx]
+                        startActivity(
+                            TabTerminalActivity.createIntent(
+                                this@CloudAccountsActivity, profile, autoConnect = true
+                            )
+                        )
+                    }
+                    .setNegativeButton("Close", null)
+                    .show()
+            }
+        }
     }
 
     private fun confirmDelete(account: CloudAccount) {
