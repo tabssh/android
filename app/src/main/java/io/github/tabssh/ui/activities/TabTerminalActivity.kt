@@ -991,12 +991,17 @@ class TabTerminalActivity : AppCompatActivity() {
                     .setNegativeButton("Cancel", null)
                     .setPositiveButton("Send to all") { _, _ ->
                         val payload = (cmd + "\n").toByteArray(Charsets.UTF_8)
+                        // Route via each tab's TermuxBridge so the write hits
+                        // the writeScope (Dispatchers.IO) + writeLock funnel
+                        // instead of the main thread. Writing directly to
+                        // JSch's ChannelOutputStream here threw
+                        // NetworkOnMainThreadException, the catch swallowed
+                        // it silently, and the toast lied "Sent to N".
                         var sent = 0
                         tabs.forEach { tab ->
                             try {
-                                tab.connection?.getOutputStream()?.let { os ->
-                                    os.write(payload); os.flush(); sent++
-                                }
+                                tab.termuxBridge.write(payload)
+                                sent++
                             } catch (e: Exception) {
                                 Logger.w("TabTerminalActivity", "Cluster send to ${tab.profile.getDisplayName()} failed", e)
                             }
@@ -1008,17 +1013,7 @@ class TabTerminalActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun sendBytesToActiveTab(bytes: ByteArray) {
-        try {
-            tabManager.getActiveTab()?.connection?.getOutputStream()?.let { os ->
-                os.write(bytes); os.flush()
-            }
-        } catch (e: Exception) {
-            Logger.w("TabTerminalActivity", "sendBytesToActiveTab failed: ${e.message}")
-        }
-    }
-
-    private fun showSnippetsPickerForActiveTab() {
+private fun showSnippetsPickerForActiveTab() {
         // Defer to the existing Snippets activity if present, else inform.
         try {
             val cls = Class.forName("io.github.tabssh.ui.activities.SnippetManagerActivity")

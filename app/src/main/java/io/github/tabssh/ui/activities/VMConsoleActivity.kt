@@ -752,8 +752,14 @@ class VMConsoleActivity : AppCompatActivity() {
                 rfbListener.onDisconnected(reason)
                 runOnUiThread {
                     isConnected = false
+                    // Reset graphical mode so a subsequent reconnect to a
+                    // text/serial console isn't routed through the now-null
+                    // vncConsoleChannel (custom keyboard taps would otherwise
+                    // be silently dropped).
+                    isGraphicalMode = false
                     vncConsoleChannel?.close()
                     vncConsoleChannel = null
+                    activeRfbClient = null
                     showStatus("Disconnected: $reason")
                     refreshFloatingControls()
                 }
@@ -981,11 +987,15 @@ class VMConsoleActivity : AppCompatActivity() {
         // Stop the RFB client FIRST so running=false before any pipe is torn
         // down — prevents spurious E/ "Pipe closed" on user-initiated close.
         activeRfbClient?.stop()
+        activeRfbClient = null
         vncConsoleChannel?.close()
         vncConsoleChannel = null
+        isGraphicalMode = false
+        isConnected = false
         consoleManager?.disconnect()
         termuxBridge?.cleanup()
         try { directVncSocket?.close() } catch (_: Exception) {}
+        directVncSocket = null
     }
 
     override fun onDestroy() {

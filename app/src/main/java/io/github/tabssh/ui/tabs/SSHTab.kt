@@ -344,7 +344,7 @@ class SSHTab(
                 connectionScope.launch {
                     try {
                         kotlinx.coroutines.delay(500)
-                        runPostConnectCommands(outputStream)
+                        runPostConnectCommands()
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -646,7 +646,7 @@ class SSHTab(
      * cover the practical cases; a global "always create new" toggle has
      * never landed in any SSH client we've copied from.
      */
-    private fun runPostConnectCommands(outputStream: java.io.OutputStream) {
+    private fun runPostConnectCommands() {
         val lines = mutableListOf<String>()
 
         if (profile.multiplexerMode != "OFF") {
@@ -672,9 +672,14 @@ class SSHTab(
         if (lines.isEmpty()) return
 
         val payload = lines.joinToString("\n", postfix = "\n").toByteArray(Charsets.UTF_8)
+        // Route through TermuxBridge so the write is serialised by the same
+        // writeLock that protects the IME/keyboard/broadcast paths. Writing
+        // directly to JSch's ChannelOutputStream here raced with concurrent
+        // keystrokes on the GCM cipher state, producing server-side
+        // "ssh_dispatch_run_fatal: message authentication code incorrect"
+        // and a dropped session (see TermuxBridge writeLock docstring).
         try {
-            outputStream.write(payload)
-            outputStream.flush()
+            termuxBridge.write(payload)
         } catch (e: Exception) {
             Logger.w("SSHTab", "Failed to write post-connect commands: ${e.message}")
         }
