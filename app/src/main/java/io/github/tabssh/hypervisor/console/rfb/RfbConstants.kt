@@ -53,9 +53,29 @@ object RfbConstants {
     /**
      * Fence pseudo-encoding (RFC extension).  Advertised so servers know we
      * can handle ServerFence messages; the payload is consumed and discarded
-     * since we do not use synchronous fencing.  Unsigned 0xFFFFFEC8 = -312.
+     * since we do not use synchronous fencing.  Unsigned 0xFFFFFEB8 = -312.
+     *
+     * When the server includes ENC_FENCE as a pseudo-rect in a FramebufferUpdate
+     * (capability signal or inline fence), the rect header is followed by a
+     * 4-byte flags word, a 1-byte length, and up to 64 bytes of opaque data.
+     * All bytes must be consumed to keep the stream in sync.
      */
     const val ENC_FENCE: Int = -312
+
+    /**
+     * ServerFence server message (type 248).
+     * Format: 3 bytes padding + 4 bytes flags + 1 byte length + length bytes data.
+     * QEMU/Proxmox sends this message to synchronise the update pipeline; the
+     * client must echo it back with [C2S_CLIENT_FENCE] to unblock the server.
+     */
+    const val S2C_FENCE: Int = 248
+
+    /**
+     * ClientFence message type (248, same wire byte as ServerFence).
+     * The client responds with the same flags (minus any request bits) and
+     * the same opaque data to fulfil the fence request.
+     */
+    const val C2S_CLIENT_FENCE: Int = 248
 
     // ── QEMU extension messages ─────────────────────────────────────────────
     /**

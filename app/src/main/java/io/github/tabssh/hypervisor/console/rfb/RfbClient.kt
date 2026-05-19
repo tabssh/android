@@ -535,6 +535,7 @@ class RfbClient(
                 RfbConstants.S2C_SET_COLOUR_MAP_ENTRIES -> skipColourMap()
                 RfbConstants.S2C_BELL -> listener?.onBell()
                 RfbConstants.S2C_SERVER_CUT_TEXT -> handleServerCutText()
+                RfbConstants.S2C_FENCE -> handleServerFence()
                 RfbConstants.S2C_QEMU_EXT -> handleQemuExt()
                 else -> handleUnknownServerMessage(msgType)
             }
@@ -625,6 +626,13 @@ class RfbClient(
                     // Software cursor: rw×rh cursor image + bitmask
                     handleCursor(rx, ry, rw, rh)
                 }
+                RfbConstants.ENC_FENCE -> {
+                    // Fence pseudo-rect: flags (u32) + length (u8) + data (length bytes).
+                    // The fence is a capability signal or inline sync point — we echo it
+                    // back via handleInlineFence so the server unblocks its update queue.
+                    // Not consuming these bytes desyncs the stream and causes black screen.
+                    handleInlineFence()
+                }
                 else -> {
                     // Large positive encoding values (> 0xFFFF) are vendor-specific
                     // pseudo-encodings (QEMU, Proxmox, VMware, etc.) that servers embed
@@ -636,11 +644,19 @@ class RfbClient(
                     // Observed: encoding 0x79000000 sent by QEMU/Proxmox after
                     // ExtendedDesktopSize, with sentinel x=0xAAAA and dimensions 9×41586.
                     // The old skip formula computed 9×41586×4 = ~1.5 MB that never arrives.
-                    if (encoding > 0xFFFF) {
+                    //
+                    // Negative encodings are also pseudo-encodings (e.g. ENC_FENCE=-312,
+                    // ENC_DESKTOP_SIZE=-223, etc.) — the catch-all here is a safety net for
+                    // any not yet given an explicit when-branch above.  We cannot safely
+                    // skip an unknown payload, so log and continue; if the stream desyncs
+                    // the subsequent error will expose the format for a proper fix.
+                    if (encoding > 0xFFFF || encoding < 0) {
                         val hexEnc = (encoding.toLong() and 0xFFFFFFFFL).toString(16).uppercase()
-                        Logger.d(TAG, "Vendor pseudo-encoding 0x$hexEnc at $rx,$ry ${rw}×$rh — no pixel payload")
+                        Logger.w(TAG, "Unhandled pseudo-encoding 0x$hexEnc at $rx,$ry ${rw}×$rh — stream may desync")
                     } else if (rw > 0 && rh > 0) {
+                        Logger.d(TAG, "Decoding rect enc=$encoding at $rx,$ry ${rw}×$rh")
                         decoder.decodeRect(din, framebuffer, fbWidth, rx, ry, rw, rh, encoding)
+                        Logger.d(TAG, "FramebufferUpdate: painted enc=$encoding at $rx,$ry ${rw}×$rh (fb=${fbWidth}×$fbHeight)")
                         listener?.onFramebufferUpdate(rx, ry, rw, rh, framebuffer)
                     }
                 }
@@ -731,6 +747,69 @@ class RfbClient(
             else -> {
                 Logger.w(TAG, "Unknown QEMU ext sub-type $subType (0x${subType.toString(16).uppercase()})")
             }
+        }
+    }
+
+    /**
+     * Handle a top-level ServerFence message (type 248).
+     *
+     * Format (after message type byte):
+     *   3 bytes padding · u32 flags · u8 length · length bytes data
+     *
+     * QEMU/Proxmox sends a ServerFence with the SyncNext flag set before the
+     * first FramebufferUpdate.  Until the client echoes it back with a
+     * ClientFence, the server holds the update queue — this is why the screen
+     * stays permanently black: the first real FramebufferUpdate is queued
+     * behind the fence and never arrives.
+     *
+     * We respond immediately by echoing the same flags (with the BlockBefore
+     * request bit cleared and Request bit cleared) and the same opaque data.
+     */
+    private fun handleServerFence() {
+        din.skipBytes(3) // padding
+        val flags = din.readInt()
+        val len = din.readUnsignedByte()
+        val data = if (len > 0) ByteArray(len).also { din.readFully(it) } else ByteArray(0)
+        Logger.d(TAG, "ServerFence flags=0x${flags.toString(16).uppercase()} len=$len")
+
+        // Echo the fence back so the server unblocks its update queue.
+        // Clear the request bits (bit 0 = BlockBefore, bit 1 = BlockAfter,
+        // bit 2 = SyncNext) so we don't inadvertently trigger another fence.
+        val replyFlags = flags and 0x7.inv()
+        synchronized(outLock) {
+            dout.writeByte(RfbConstants.C2S_CLIENT_FENCE)
+            dout.writeByte(0); dout.writeByte(0); dout.writeByte(0) // padding
+            dout.writeInt(replyFlags)
+            dout.writeByte(len)
+            if (len > 0) dout.write(data)
+            dout.flush()
+        }
+        Logger.d(TAG, "ClientFence replied flags=0x${replyFlags.toString(16).uppercase()}")
+    }
+
+    /**
+     * Handle an inline Fence pseudo-rect inside a FramebufferUpdate.
+     *
+     * Format (after the 10-byte rect header):
+     *   u32 flags · u8 length · length bytes data
+     *
+     * We echo it back the same way as [handleServerFence] to unblock the
+     * server's update queue.
+     */
+    private fun handleInlineFence() {
+        val flags = din.readInt()
+        val len = din.readUnsignedByte()
+        val data = if (len > 0) ByteArray(len).also { din.readFully(it) } else ByteArray(0)
+        Logger.d(TAG, "Inline Fence pseudo-rect flags=0x${flags.toString(16).uppercase()} len=$len")
+
+        val replyFlags = flags and 0x7.inv()
+        synchronized(outLock) {
+            dout.writeByte(RfbConstants.C2S_CLIENT_FENCE)
+            dout.writeByte(0); dout.writeByte(0); dout.writeByte(0)
+            dout.writeInt(replyFlags)
+            dout.writeByte(len)
+            if (len > 0) dout.write(data)
+            dout.flush()
         }
     }
 
