@@ -32,7 +32,12 @@ class KeyboardLayoutManager(
                     val row = mutableListOf<KeyboardKey>()
                     for (j in 0 until rowArray.length()) {
                         val keyId = rowArray.getString(j)
-                        allKeys.find { it.id == keyId }?.let { row.add(it) }
+                        val key = allKeys.find { it.id == keyId }
+                        if (key != null) {
+                            row.add(key)
+                        } else {
+                            Logger.w("KeyboardLayoutManager", "Unknown key id '$keyId' in saved layout — skipped")
+                        }
                     }
                     if (row.isNotEmpty()) {
                         result.add(row)

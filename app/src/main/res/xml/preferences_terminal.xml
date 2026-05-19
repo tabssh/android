@@ -55,7 +55,7 @@
             android:summary="Cursor appearance"
             android:entries="@array/cursor_style_entries"
             android:entryValues="@array/cursor_style_values"
-            android:defaultValue="block"
+            android:defaultValue="bar"
             app:useSimpleSummaryProvider="true" />
 
         <SwitchPreferenceCompat

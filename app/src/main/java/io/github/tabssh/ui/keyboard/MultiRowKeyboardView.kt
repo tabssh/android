@@ -414,6 +414,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
                         KeyboardKey("ESC", "ESC", "\u001B"),
                         KeyboardKey("CTL", "CTL", "", KeyboardKey.KeyCategory.MODIFIER),
                         KeyboardKey("ALT", "ALT", "", KeyboardKey.KeyCategory.MODIFIER),
+                        KeyboardKey("FN", "FN", "", KeyboardKey.KeyCategory.MODIFIER),
                         KeyboardKey("TAB", "TAB", "\t"),
                         KeyboardKey("UP", "↑", "\u001B[A", KeyboardKey.KeyCategory.ARROW),
                         KeyboardKey("DOWN", "↓", "\u001B[B", KeyboardKey.KeyCategory.ARROW),
@@ -427,6 +428,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
                         KeyboardKey("ESC", "ESC", "\u001B"),
                         KeyboardKey("CTL", "CTL", "", KeyboardKey.KeyCategory.MODIFIER),
                         KeyboardKey("ALT", "ALT", "", KeyboardKey.KeyCategory.MODIFIER),
+                        KeyboardKey("FN", "FN", "", KeyboardKey.KeyCategory.MODIFIER),
                         KeyboardKey("TAB", "TAB", "\t"),
                         KeyboardKey("UP", "↑", "\u001B[A", KeyboardKey.KeyCategory.ARROW),
                         KeyboardKey("DOWN", "↓", "\u001B[B", KeyboardKey.KeyCategory.ARROW),
@@ -466,6 +468,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
                         KeyboardKey("END", "END", "\u001B[F"),
                         KeyboardKey("PGUP", "PGUP", "\u001B[5~"),
                         KeyboardKey("PGDN", "PGDN", "\u001B[6~"),
+                        KeyboardKey("FN", "FN", "", KeyboardKey.KeyCategory.MODIFIER),
                         KeyboardKey("ENTER", "ENT", "\r"),
                         KeyboardKey("PASTE", "📋", "", KeyboardKey.KeyCategory.ACTION)
                     ),
@@ -506,6 +509,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
                         KeyboardKey("END", "END", "\u001B[F"),
                         KeyboardKey("PGUP", "PGUP", "\u001B[5~"),
                         KeyboardKey("PGDN", "PGDN", "\u001B[6~"),
+                        KeyboardKey("FN", "FN", "", KeyboardKey.KeyCategory.MODIFIER),
                         KeyboardKey("ENTER", "ENT", "\r"),
                         KeyboardKey("PASTE", "📋", "", KeyboardKey.KeyCategory.ACTION)
                     ),
@@ -553,6 +557,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
                         KeyboardKey("END", "END", "\u001B[F"),
                         KeyboardKey("PGUP", "PGUP", "\u001B[5~"),
                         KeyboardKey("PGDN", "PGDN", "\u001B[6~"),
+                        KeyboardKey("FN", "FN", "", KeyboardKey.KeyCategory.MODIFIER),
                         KeyboardKey("ENTER", "ENT", "\r"),
                         KeyboardKey("PASTE", "📋", "", KeyboardKey.KeyCategory.ACTION)
                     ),

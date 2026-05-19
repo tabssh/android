@@ -601,7 +601,7 @@ class TermuxBridge(
      * Check if cursor should be visible
      */
     fun isCursorVisible(): Boolean {
-        return emulator?.shouldCursorBeVisible() ?: false
+        return emulator?.shouldCursorBeVisible() ?: true
     }
 
     /**

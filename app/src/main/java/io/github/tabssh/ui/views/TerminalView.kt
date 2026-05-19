@@ -51,6 +51,19 @@ class TerminalView @JvmOverloads constructor(
     private val backgroundPaint = Paint()
     private val cursorPaint = Paint()
 
+    // Cursor blink state — toggled every 500 ms when blink is enabled.
+    // Starts true so the cursor is visible immediately (even before the
+    // emulator attaches and DECTCEM has been negotiated).
+    private var cursorBlinkPhase = true
+    private val cursorBlinkHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val cursorBlinkRunnable: Runnable = object : Runnable {
+        override fun run() {
+            cursorBlinkPhase = !cursorBlinkPhase
+            invalidate()
+            cursorBlinkHandler.postDelayed(this, CURSOR_BLINK_INTERVAL_MS)
+        }
+    }
+
     // Touch and input handling
     private val gestureDetector: GestureDetector
     private val scaleGestureDetector: ScaleGestureDetector
@@ -418,7 +431,17 @@ class TerminalView @JvmOverloads constructor(
             }
 
             override fun onCursorStateChanged(visible: Boolean) {
-                post { invalidate() }
+                post {
+                    val prefs = androidx.preference.PreferenceManager
+                        .getDefaultSharedPreferences(context)
+                    if (visible && prefs.getBoolean("terminal_cursor_blink", true)) {
+                        startCursorBlink()
+                    } else {
+                        stopCursorBlink()
+                        cursorBlinkPhase = visible
+                    }
+                    invalidate()
+                }
             }
 
             override fun onCopyToClipboard(text: String) {
@@ -458,6 +481,12 @@ class TerminalView @JvmOverloads constructor(
                 termuxBuffer = bridge.getBuffer()
                 invalidate()
             }, 500)
+        }
+
+        // Start cursor blink if the preference is enabled
+        val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+        if (prefs.getBoolean("terminal_cursor_blink", true)) {
+            startCursorBlink()
         }
 
         invalidate()
@@ -1061,7 +1090,9 @@ class TerminalView @JvmOverloads constructor(
 
         // Draw cursor based on style (0=block, 1=underline, 2=bar/I-beam).
         // Hide it when scrolled into scrollback — the cursor belongs to the live screen.
-        if (cursorVisible && scrollRows == 0 && cursorRow in 0 until rows && cursorCol in 0 until cols) {
+        // cursorBlinkPhase toggles every 500 ms when blink is on; when blink is off it
+        // stays true so the cursor is always visible.
+        if (cursorVisible && cursorBlinkPhase && scrollRows == 0 && cursorRow in 0 until rows && cursorCol in 0 until cols) {
             val cursorX = startX + cursorCol * cellWidth
             val cursorY = startY + cursorRow * cellHeight
             cursorPaint.color = currentTheme?.cursor ?: Color.WHITE
@@ -1958,6 +1989,24 @@ class TerminalView @JvmOverloads constructor(
             Logger.d("TerminalView", "Removed bridge listener on detach")
         }
         currentBridgeListener = null
+        stopCursorBlink()
+    }
+
+    // ── Cursor blink helpers ─────────────────────────────────────────────────
+
+    private fun startCursorBlink() {
+        cursorBlinkHandler.removeCallbacks(cursorBlinkRunnable)
+        cursorBlinkPhase = true
+        cursorBlinkHandler.postDelayed(cursorBlinkRunnable, CURSOR_BLINK_INTERVAL_MS)
+    }
+
+    private fun stopCursorBlink() {
+        cursorBlinkHandler.removeCallbacks(cursorBlinkRunnable)
+        cursorBlinkPhase = true   // leave cursor visible when blink stops
+    }
+
+    companion object {
+        private const val CURSOR_BLINK_INTERVAL_MS = 500L
     }
 }
 
