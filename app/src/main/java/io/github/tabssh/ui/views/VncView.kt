@@ -15,7 +15,6 @@ import android.view.View
 import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
-import android.view.inputmethod.InputMethodManager
 import io.github.tabssh.hypervisor.console.rfb.RfbConstants
 import io.github.tabssh.hypervisor.console.rfb.RfbListener
 import io.github.tabssh.utils.logging.Logger
@@ -93,17 +92,26 @@ class VncView @JvmOverloads constructor(
         override fun onDown(e: MotionEvent) = true
 
         override fun onSingleTapUp(e: MotionEvent): Boolean {
-            val (bx, by) = screenToBitmap(e.x, e.y)
-            firePointer(bx, by, RfbConstants.BTN_LEFT)
-            firePointer(bx, by, 0)
-            // Toggle the soft keyboard so the user can type without needing a
-            // separate button — show it if hidden, hide it if currently active.
-            val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-            if (imm.isActive(this@VncView)) {
-                imm.hideSoftInputFromWindow(windowToken, 0)
+            // Pointer down/up for this tap is already fired by onTouchEvent
+            // ACTION_DOWN / ACTION_UP — no need to call firePointer here, which
+            // would produce a duplicate second click sent to the VM.
+            //
+            // Only toggle the Android soft keyboard so the user can type without
+            // needing a dedicated button.  Use WindowInsetsController (the modern
+            // API) instead of InputMethodManager.showSoftInput(SHOW_IMPLICIT),
+            // which is unreliable on Android 11+ and silently ignored when the
+            // IME is already visible.
+            val imeType = androidx.core.view.WindowInsetsCompat.Type.ime()
+            val visible = androidx.core.view.ViewCompat.getRootWindowInsets(this@VncView)
+                ?.isVisible(imeType) == true
+            val activity = context as? android.app.Activity ?: return true
+            val ic = androidx.core.view.WindowCompat
+                .getInsetsController(activity.window, this@VncView)
+            if (visible) {
+                ic.hide(imeType)
             } else {
                 requestFocus()
-                imm.showSoftInput(this@VncView, InputMethodManager.SHOW_IMPLICIT)
+                ic.show(imeType)
             }
             return true
         }

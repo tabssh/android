@@ -793,12 +793,11 @@ class VMConsoleActivity : AppCompatActivity() {
                     // already contain decoded framebuffer pixels that arrived while
                     // the view was GONE (postInvalidate on a GONE view is a no-op).
                     vncView.postInvalidate()
-                    // Mirror TerminalView: request focus AND show the soft keyboard
-                    // immediately so the user can type without tapping first.
+                    // Request focus so hardware keys and the custom keyboard bar
+                    // route input to the VNC view.  The Android soft keyboard is
+                    // NOT auto-shown here — the user can tap the framebuffer to
+                    // toggle it when needed.
                     vncView.requestFocus()
-                    val imm = getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
-                        as android.view.inputmethod.InputMethodManager
-                    imm.showSoftInput(vncView, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
                     hideProgress()
                     refreshFloatingControls()
                 }
