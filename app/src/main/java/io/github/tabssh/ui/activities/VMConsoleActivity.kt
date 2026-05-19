@@ -26,6 +26,7 @@ import io.github.tabssh.ui.views.TerminalView
 import io.github.tabssh.ui.views.VncView
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.Socket
@@ -98,6 +99,14 @@ class VMConsoleActivity : AppCompatActivity() {
     private var isGraphicalMode = false
     /** Socket to close when a direct VNC host connection ends. */
     private var directVncSocket: Socket? = null
+    /** Job returned by [connectToConsole]'s lifecycleScope.launch; cancelled in [onStop]. */
+    private var connectionJob: Job? = null
+    /**
+     * Set to true in [onStop] when we were connected (or in graphical mode) at the
+     * time the activity was backgrounded.  [onResume] consults this flag to decide
+     * whether an automatic reconnect is needed.
+     */
+    private var shouldReconnectOnResume = false
     /**
      * Active [RfbClient] for all VNC paths (Proxmox via manager, libvirt direct,
      * VncHost direct).  Set in [switchToGraphical]; cleared in [onDestroy].
@@ -420,7 +429,7 @@ class VMConsoleActivity : AppCompatActivity() {
         val vmName = intent.getStringExtra(EXTRA_VM_NAME) ?: "VM Console"
         showProgress("Connecting to $vmName…")
 
-        lifecycleScope.launch {
+        connectionJob = lifecycleScope.launch {
             try {
                 // ── Direct VNC paths take priority over hypervisor connections ──
 
@@ -990,14 +999,39 @@ class VMConsoleActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Auto-reconnect when returning from background if onStop() tore down
+        // an active session.  shouldReconnectOnResume is set only in onStop(),
+        // so this is a no-op on the very first onResume() after onCreate().
+        if (shouldReconnectOnResume && !isConnected) {
+            shouldReconnectOnResume = false
+            // TermuxBridge was cleaned up and nulled in onStop(); rebuild it so
+            // the serial-console path (text mode) works again after reconnect.
+            if (termuxBridge == null) setupTerminal()
+            connectToConsole()
+        }
+    }
+
     override fun onStop() {
         super.onStop()
+        // Cancel any in-flight connection coroutine so it cannot call
+        // switchToGraphical() after we've already nulled activeRfbClient and
+        // vncConsoleChannel below.  lifecycleScope coroutines survive onStop()
+        // (they only cancel at DESTROYED), so an explicit cancel is needed.
+        connectionJob?.cancel()
+        connectionJob = null
+
+        // Remember that the user was actively connected so onResume() can
+        // re-establish the session automatically when the activity comes back.
+        shouldReconnectOnResume = isConnected || isGraphicalMode
+
         // Disconnect the console WebSocket/RFB loop when the activity is
         // backgrounded. The tight RFB polling loop writes framebuffer data to
         // a pipe; if the pipe buffer fills (no consumer reading while hidden),
         // blocking writes stall the I/O thread pool and make the app
-        // unresponsive. Disconnecting here is safe — the user can reconnect
-        // when they bring the activity back to the foreground.
+        // unresponsive. Disconnecting here is safe — onResume() reconnects
+        // automatically when the user returns to the activity.
         //
         // Stop the RFB client FIRST so running=false before any pipe is torn
         // down — prevents spurious E/ "Pipe closed" on user-initiated close.
@@ -1016,18 +1050,24 @@ class VMConsoleActivity : AppCompatActivity() {
         isConnected = false
         consoleManager?.disconnect()
         termuxBridge?.cleanup()
+        // Null out TermuxBridge so onResume() can detect it needs reinitialisation
+        // (setupTerminal() recreates it from scratch).
+        termuxBridge = null
         try { directVncSocket?.close() } catch (_: Exception) {}
         directVncSocket = null
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        connectionJob?.cancel()
+        connectionJob = null
         activeRfbClient?.stop()
         activeRfbClient = null
         vncConsoleChannel?.close()
         vncConsoleChannel = null
         consoleManager?.disconnect()
         termuxBridge?.cleanup()
+        termuxBridge = null
         vncView.recycle()
         try { directVncSocket?.close() } catch (_: Exception) {}
     }
