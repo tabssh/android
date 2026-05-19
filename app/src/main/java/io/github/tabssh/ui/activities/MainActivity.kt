@@ -657,7 +657,9 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                     showImportSuccessDialog(result)
                     Logger.i("MainActivity", "Imported backup successfully")
                 } else {
-                    throw Exception("Import failed")
+                    // Propagate result.message so the catch block can route
+                    // "encrypted" results to the password prompt correctly.
+                    throw Exception(result.message)
                 }
 
             } catch (e: Exception) {
@@ -720,14 +722,14 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                     showImportSuccessDialog(result)
                     Logger.i("MainActivity", "Imported encrypted backup successfully")
                 } else {
-                    throw Exception("Import failed")
+                    throw Exception(result.message)
                 }
 
             } catch (e: Exception) {
                 Logger.e("MainActivity", "Failed to import backup with password", e)
                 io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(
                     this@MainActivity, "Import Failed",
-                    "Failed to import backup:\n${e.message}\n\nThe password may be incorrect."
+                    "Failed to import backup:\n${e.message}"
                 )
             }
         }
