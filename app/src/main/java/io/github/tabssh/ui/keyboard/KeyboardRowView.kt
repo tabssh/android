@@ -2,15 +2,18 @@ package io.github.tabssh.ui.keyboard
 
 import android.content.Context
 import android.content.res.Configuration
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.Gravity
+import android.view.View
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
-import com.google.android.material.button.MaterialButton
 import io.github.tabssh.R
 
 /**
- * Single row of the multi-row keyboard
+ * Single row of the multi-row keyboard.
  * Horizontally scrollable row of keys.
  *
  * Modifier (CTL/ALT/FN) state is owned by the parent [MultiRowKeyboardView] so
@@ -24,10 +27,7 @@ class KeyboardRowView @JvmOverloads constructor(
 ) : HorizontalScrollView(context, attrs, defStyleAttr) {
 
     companion object {
-        private const val TAG = "KeyboardRowView"
-        private const val KEY_PADDING_DP = 12
         private const val KEY_MARGIN_DP = 4
-        private const val KEY_TEXT_SIZE_SP = 12f
         /** Fixed width (dp) for pinned anchor keys so they never shift position. */
         private const val KEY_PINNED_WIDTH_DP = 52
     }
@@ -39,14 +39,12 @@ class KeyboardRowView @JvmOverloads constructor(
     private var onToggleClickListener: (() -> Unit)? = null
 
     /** Buttons keyed by modifier id (CTL/ALT/FN) so the parent can highlight. */
-    private val modifierButtons = mutableMapOf<String, MaterialButton>()
+    private val modifierButtons = mutableMapOf<String, KeyButton>()
 
     init {
-        // Setup scroll view
         isHorizontalScrollBarEnabled = false
         isFillViewport = true
 
-        // Create key container
         keyContainer = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -83,48 +81,44 @@ class KeyboardRowView @JvmOverloads constructor(
         rebuildKeys()
     }
 
-    /**
-     * Get current keys
-     */
     fun getKeys(): List<KeyboardKey> = keys.toList()
 
     /**
      * Highlight the active modifier (called by parent). Pass null to clear.
      */
     fun highlightModifier(activeId: String?) {
-        modifierButtons.forEach { (id, button) ->
-            button.alpha = if (id == activeId) 1.0f else 0.7f
+        modifierButtons.forEach { (id, btn) ->
+            btn.alpha = if (id == activeId) 1.0f else 0.7f
         }
     }
 
     /**
-     * Rebuild key buttons
+     * Rebuild key buttons synchronously.
+     *
+     * [KeyButton] extends [View] via the single-argument View(Context) constructor,
+     * which does NOT call obtainStyledAttributes / nativeApplyStyle.  On the emulator
+     * every other View subclass (AppCompatButton, MaterialButton, TextView…) hits a
+     * JNI-backed theme attribute resolution that takes ~200 ms per instance; with 27
+     * keys that blocks the main thread for >5 s and triggers both the TabSSH
+     * ANR watchdog and the system input-dispatch timeout.
+     *
+     * KeyButton draws text + an outlined rounded-rect entirely on Canvas, so all 27
+     * buttons can be created in a single pass in well under 1 ms total on any device.
      */
     private fun rebuildKeys() {
         keyContainer.removeAllViews()
         modifierButtons.clear()
-
         keys.forEachIndexed { index, key ->
-            val pinned = index < pinnedCount
-            val button = createKeyButton(key, pinned)
-            keyContainer.addView(button)
-
-            // Track modifier buttons for highlighting
+            val btn = createKeyButton(key, index < pinnedCount)
+            keyContainer.addView(btn)
             if (key.category == KeyboardKey.KeyCategory.MODIFIER) {
-                modifierButtons[key.id] = button
+                modifierButtons[key.id] = btn
             }
         }
     }
 
-    /**
-     * Create a button for a key.
-     *
-     * @param pinned When true the button gets a fixed [KEY_PINNED_WIDTH_DP] width
-     *               (weight = 0) so it never shifts position.  When false it
-     *               shares the remaining row space equally (weight = 1).
-     */
-    private fun createKeyButton(key: KeyboardKey, pinned: Boolean = false): MaterialButton {
-        val button = MaterialButton(context, null, com.google.android.material.R.attr.materialButtonOutlinedStyle)
+    private fun createKeyButton(key: KeyboardKey, pinned: Boolean): KeyButton {
+        val btn = KeyButton(context, key.label)
 
         val params = if (pinned) {
             LinearLayout.LayoutParams(dpToPx(KEY_PINNED_WIDTH_DP), LinearLayout.LayoutParams.MATCH_PARENT, 0f)
@@ -132,72 +126,99 @@ class KeyboardRowView @JvmOverloads constructor(
             LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
         }
         params.marginEnd = dpToPx(KEY_MARGIN_DP)
-        button.layoutParams = params
+        btn.layoutParams = params
 
-        button.text = key.label
-        button.minWidth = 0
-        button.minimumWidth = 0
-        button.minHeight = 0
-        button.minimumHeight = 0
-        button.setPadding(dpToPx(KEY_PADDING_DP), 0, dpToPx(KEY_PADDING_DP), 0)
-        button.textSize = KEY_TEXT_SIZE_SP
-        button.insetTop = 0
-        button.insetBottom = 0
-
-        // Color coding by category
         when (key.category) {
-            KeyboardKey.KeyCategory.MODIFIER -> button.alpha = 0.7f
-            KeyboardKey.KeyCategory.FUNCTION -> button.alpha = 0.85f
-            KeyboardKey.KeyCategory.ACTION -> button.alpha = 0.95f
-            else -> button.alpha = 1.0f
+            KeyboardKey.KeyCategory.MODIFIER -> btn.alpha = 0.7f
+            KeyboardKey.KeyCategory.FUNCTION -> btn.alpha = 0.85f
+            KeyboardKey.KeyCategory.ACTION   -> btn.alpha = 0.95f
+            else                             -> btn.alpha = 1.0f
         }
 
-        button.setOnClickListener {
-            handleKeyClick(key)
-        }
-
-        return button
+        btn.setOnClickListener { handleKeyClick(key) }
+        return btn
     }
 
-    /**
-     * Handle key click
-     */
     private fun handleKeyClick(key: KeyboardKey) {
-        when (key.category) {
-            KeyboardKey.KeyCategory.ACTION -> {
-                if (key.id == "TOGGLE") {
-                    onToggleClickListener?.invoke()
-                } else {
-                    onKeyClickListener?.invoke(key)
-                }
-            }
-            else -> {
-                // Modifiers, symbols, arrows, function keys, special — all
-                // propagate to the parent which decides whether to apply a
-                // sticky modifier or interpret as a modifier toggle.
-                onKeyClickListener?.invoke(key)
-            }
+        when {
+            key.category == KeyboardKey.KeyCategory.ACTION && key.id == "TOGGLE" ->
+                onToggleClickListener?.invoke()
+            else -> onKeyClickListener?.invoke(key)
         }
     }
 
-    /**
-     * Set key click listener
-     */
     fun setOnKeyClickListener(listener: (KeyboardKey) -> Unit) {
         this.onKeyClickListener = listener
     }
 
-    /**
-     * Set toggle click listener
-     */
     fun setOnToggleClickListener(listener: () -> Unit) {
         this.onToggleClickListener = listener
     }
 
+    private fun dpToPx(dp: Int): Int =
+        (dp * resources.displayMetrics.density).toInt()
+
+    // ── Lightweight key button ────────────────────────────────────────────────
+
     /**
-     * Convert dp to pixels
+     * Minimal key button drawn entirely on Canvas.
+     *
+     * Extends View via the single-argument View(Context) constructor, which is
+     * the only constructor that does NOT call obtainStyledAttributes.  All other
+     * constructors (View(Context, AttributeSet, int) etc.) call nativeApplyStyle
+     * regardless of whether attrs or defStyleAttr are null/0 — that JNI call is
+     * ~200 ms per instance on the emulator's software renderer.
+     *
+     * Drawing: rounded-rect outline (1 dp stroke, 4 dp corner) + centred label
+     * text.  Pressed state adds a translucent white fill.  Everything is drawn
+     * with pre-allocated Paint objects so onDraw never allocates.
      */
-    private fun dpToPx(dp: Int): Int {
-        return (dp * resources.displayMetrics.density).toInt()
+    private class KeyButton(context: Context, label: String) : View(context) {
+
+        var label: String = label
+            set(v) { field = v; invalidate() }
+
+        private val density = context.resources.displayMetrics.density
+        private val scaledDensity = context.resources.displayMetrics.scaledDensity
+
+        private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            color = 0xFF666666.toInt()
+            strokeWidth = density
+        }
+        private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFFEEEEEE.toInt()
+            textAlign = Paint.Align.CENTER
+            textSize = 12f * scaledDensity
+        }
+        private val pressPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.FILL
+            color = 0x33FFFFFF
+        }
+        private val rectF = RectF()
+        private val cornerR = 4f * density
+
+        init {
+            isClickable = true
+            isFocusable = true
+            // Give touch feedback via state-change invalidate below.
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            val inset = strokePaint.strokeWidth / 2f
+            rectF.set(inset, inset, width - inset, height - inset)
+
+            if (isPressed) canvas.drawRoundRect(rectF, cornerR, cornerR, pressPaint)
+            canvas.drawRoundRect(rectF, cornerR, cornerR, strokePaint)
+
+            val cx = width / 2f
+            val cy = height / 2f - (textPaint.ascent() + textPaint.descent()) / 2f
+            canvas.drawText(label, cx, cy, textPaint)
+        }
+
+        override fun drawableStateChanged() {
+            super.drawableStateChanged()
+            invalidate()
+        }
     }
 }

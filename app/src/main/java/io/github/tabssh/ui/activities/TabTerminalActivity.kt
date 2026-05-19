@@ -3481,27 +3481,7 @@ private fun showSnippetsPickerForActiveTab() {
     }
     
     private fun setupCustomKeyboard() {
-        // Load keyboard row count from preferences (default 3, max 5)
-        val rowCount = app.preferencesManager.getKeyboardRowCount()
-        binding.multiRowKeyboard.setRowCount(rowCount)
-
-        // Load custom layout from preferences if available
-        val layoutJson = app.preferencesManager.getKeyboardLayoutJson()
-        Logger.d("TabTerminalActivity", "Custom keyboard layout JSON length=${layoutJson?.length ?: 0}, rowCount=$rowCount")
-        if (layoutJson != null) {
-            try {
-                val savedLayout = io.github.tabssh.ui.keyboard.KeyboardLayoutManager.parseLayoutJson(layoutJson)
-                binding.multiRowKeyboard.setLayout(savedLayout)
-                Logger.i("TabTerminalActivity", "Loaded custom keyboard layout: ${savedLayout.size} rows, ${savedLayout.sumOf { it.size }} keys")
-            } catch (e: Exception) {
-                Logger.e("TabTerminalActivity", "Failed to load keyboard layout, using defaults", e)
-                binding.multiRowKeyboard.resetToDefault()
-            }
-        } else {
-            Logger.d("TabTerminalActivity", "No saved layout, using default keyboard")
-            binding.multiRowKeyboard.resetToDefault()
-        }
-
+        // Wire listeners synchronously — these are cheap.
         binding.multiRowKeyboard.setOnKeyClickListener { key ->
             handleCustomKeyPress(key)
         }
@@ -3521,7 +3501,33 @@ private fun showSnippetsPickerForActiveTab() {
             }
         }
 
-        Logger.d("TabTerminalActivity", "Multi-row keyboard initialized with $rowCount rows")
+        // Defer the expensive layout population (button creation) to after
+        // onCreate returns so it does not block the main thread.
+        binding.multiRowKeyboard.post {
+            try {
+                val rowCount = app.preferencesManager.getKeyboardRowCount()
+                binding.multiRowKeyboard.setRowCount(rowCount)
+                val layoutJson = app.preferencesManager.getKeyboardLayoutJson()
+                Logger.d("TabTerminalActivity", "Custom keyboard layout JSON length=${layoutJson?.length ?: 0}, rowCount=$rowCount")
+                if (layoutJson != null) {
+                    try {
+                        val savedLayout = io.github.tabssh.ui.keyboard.KeyboardLayoutManager.parseLayoutJson(layoutJson)
+                        binding.multiRowKeyboard.setLayout(savedLayout)
+                        Logger.i("TabTerminalActivity", "Loaded custom keyboard layout: ${savedLayout.size} rows, ${savedLayout.sumOf { it.size }} keys")
+                    } catch (e: Exception) {
+                        Logger.e("TabTerminalActivity", "Failed to load keyboard layout, using defaults", e)
+                        binding.multiRowKeyboard.resetToDefault()
+                    }
+                } else {
+                    Logger.d("TabTerminalActivity", "No saved layout, using default keyboard")
+                    binding.multiRowKeyboard.resetToDefault()
+                }
+                Logger.d("TabTerminalActivity", "Multi-row keyboard initialized with $rowCount rows")
+            } catch (e: Exception) {
+                Logger.w("TabTerminalActivity", "Keyboard layout load failed; using defaults: ${e.message}")
+                binding.multiRowKeyboard.resetToDefault()
+            }
+        }
     }
 
     private fun handleCustomKeyPress(key: io.github.tabssh.ui.keyboard.KeyboardKey) {

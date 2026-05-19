@@ -171,87 +171,84 @@ class VMConsoleActivity : AppCompatActivity() {
     }
 
     private fun setupTerminal() {
-        // Create TermuxBridge for terminal emulation with user's preferred cursor style
+        // TermuxBridge construction triggers first-time DEX verification of
+        // kotlinx.coroutines Mutex/Semaphore classes — on the emulator this
+        // takes ~5 s on the main thread and trips the ANR watchdog.  For VNC
+        // connections termuxBridge is not used at all (graphical path), so
+        // blocking onCreate is pure waste.  Construct on IO; all UI wiring
+        // happens back on Main after the bridge is ready.
         val app = application as io.github.tabssh.TabSSHApplication
         val cursorStyle = app.preferencesManager.getCursorStyleInt()
-        termuxBridge = TermuxBridge(
-            columns = 80,
-            rows = 24,
-            transcriptRows = 2000,
-            cursorStyle = cursorStyle
-        )
-        termuxBridge?.initialize()
-
-        // Set up terminal listener
-        termuxBridge?.addListener(object : TermuxBridgeListener {
-            override fun onConnected() {
-                Logger.d(TAG, "Terminal connected")
+        lifecycleScope.launch {
+            val bridge = withContext(Dispatchers.IO) {
+                TermuxBridge(
+                    columns = 80,
+                    rows = 24,
+                    transcriptRows = 2000,
+                    cursorStyle = cursorStyle
+                ).also { it.initialize() }
             }
 
-            override fun onDisconnected() {
-                Logger.d(TAG, "Terminal disconnected")
-                runOnUiThread {
-                    showStatus("Disconnected")
+            // UI wiring — back on Main.
+            termuxBridge = bridge
+
+            bridge.addListener(object : TermuxBridgeListener {
+                override fun onConnected() {
+                    Logger.d(TAG, "Terminal connected")
                 }
-            }
 
-            override fun onScreenChanged() {
-                runOnUiThread {
-                    terminalView.invalidate()
+                override fun onDisconnected() {
+                    Logger.d(TAG, "Terminal disconnected")
+                    runOnUiThread { showStatus("Disconnected") }
                 }
-            }
 
-            override fun onTitleChanged(title: String) {
-                // No-op: there's no action bar to update in mobile-first
-                // mode. The escape-sequence title (set by remote shell) is
-                // still useful info, but we choose to drop it rather than
-                // claw back vertical space for a custom title strip.
-                Logger.d(TAG, "Remote terminal title changed: $title (ignored)")
-            }
-
-            override fun onBell() {
-                // Could vibrate or play sound
-            }
-
-            override fun onColorsChanged() {
-                runOnUiThread {
-                    terminalView.invalidate()
+                override fun onScreenChanged() {
+                    runOnUiThread { terminalView.invalidate() }
                 }
-            }
 
-            override fun onCursorStateChanged(visible: Boolean) {
-                runOnUiThread {
-                    terminalView.invalidate()
+                override fun onTitleChanged(title: String) {
+                    // No-op: there's no action bar to update in mobile-first
+                    // mode. The escape-sequence title (set by remote shell) is
+                    // still useful info, but we choose to drop it rather than
+                    // claw back vertical space for a custom title strip.
+                    Logger.d(TAG, "Remote terminal title changed: $title (ignored)")
                 }
-            }
 
-            override fun onCopyToClipboard(text: String) {
-                // Handle clipboard
-            }
-
-            override fun onPasteFromClipboard() {
-                // Handle paste
-            }
-
-            override fun onError(e: Exception) {
-                Logger.e(TAG, "Terminal error", e)
-                runOnUiThread {
-                    showError("Terminal error: ${e.message}")
+                override fun onBell() {
+                    // Could vibrate or play sound
                 }
+
+                override fun onColorsChanged() {
+                    runOnUiThread { terminalView.invalidate() }
+                }
+
+                override fun onCursorStateChanged(visible: Boolean) {
+                    runOnUiThread { terminalView.invalidate() }
+                }
+
+                override fun onCopyToClipboard(text: String) {
+                    // Handle clipboard
+                }
+
+                override fun onPasteFromClipboard() {
+                    // Handle paste
+                }
+
+                override fun onError(e: Exception) {
+                    Logger.e(TAG, "Terminal error", e)
+                    runOnUiThread { showError("Terminal error: ${e.message}") }
+                }
+            })
+
+            terminalView.attachTerminalEmulator(bridge)
+
+            // Wire long-press → context menu (was missing — VM console had
+            // no way to copy/paste/send Ctrl keys; only the SSH terminal did).
+            // x,y forwarded so the "Select text…" item can anchor selection
+            // mode at the long-press point.
+            terminalView.onContextMenuRequested = { x, y ->
+                showVmConsoleContextMenu(x, y)
             }
-        })
-
-        // Attach to terminal view
-        termuxBridge?.let {
-            terminalView.attachTerminalEmulator(it)
-        }
-
-        // Wire long-press → context menu (was missing — VM console had
-        // no way to copy/paste/send Ctrl keys; only the SSH terminal did).
-        // x,y forwarded so the "Select text…" item can anchor selection
-        // mode at the long-press point.
-        terminalView.onContextMenuRequested = { x, y ->
-            showVmConsoleContextMenu(x, y)
         }
     }
 

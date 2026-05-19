@@ -626,7 +626,20 @@ class RfbClient(
                     handleCursor(rx, ry, rw, rh)
                 }
                 else -> {
-                    if (rw > 0 && rh > 0) {
+                    // Large positive encoding values (> 0xFFFF) are vendor-specific
+                    // pseudo-encodings (QEMU, Proxmox, VMware, etc.) that servers embed
+                    // in FramebufferUpdate rect lists as capability signals.  They carry
+                    // NO raw-pixel payload — applying the standard w×h×bytesPerPixel skip
+                    // formula would block the reader thread indefinitely waiting for data
+                    // that never arrives, leaving the screen permanently black.
+                    //
+                    // Observed: encoding 0x79000000 sent by QEMU/Proxmox after
+                    // ExtendedDesktopSize, with sentinel x=0xAAAA and dimensions 9×41586.
+                    // The old skip formula computed 9×41586×4 = ~1.5 MB that never arrives.
+                    if (encoding > 0xFFFF) {
+                        val hexEnc = (encoding.toLong() and 0xFFFFFFFFL).toString(16).uppercase()
+                        Logger.d(TAG, "Vendor pseudo-encoding 0x$hexEnc at $rx,$ry ${rw}×$rh — no pixel payload")
+                    } else if (rw > 0 && rh > 0) {
                         decoder.decodeRect(din, framebuffer, fbWidth, rx, ry, rw, rh, encoding)
                         listener?.onFramebufferUpdate(rx, ry, rw, rh, framebuffer)
                     }
