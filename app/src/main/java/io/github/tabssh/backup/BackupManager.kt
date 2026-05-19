@@ -186,13 +186,26 @@ class BackupManager(private val context: Context) {
                         }
                     }
                 } else {
-                    // v3 single-JSON format (optionally AES-GCM encrypted)
-                    val plainBytes: ByteArray = if (password != null) {
+                    // v3 single-JSON format (optionally AES-GCM encrypted).
+                    // Detect the SyncEncryptor magic header so we can surface a
+                    // clear "need password" error instead of a raw JSONException.
+                    val isEncrypted = allBytes.size >= 14 &&
+                        String(allBytes, 0, 14, Charsets.ISO_8859_1) == "TABSSH_SYNC_V2"
+                    if (isEncrypted && password == null) {
+                        return@withContext RestoreResult(
+                            success = false,
+                            message = "This backup is encrypted — enter your backup password to restore"
+                        )
+                    }
+                    val plainBytes: ByteArray = if (isEncrypted && password != null) {
                         try {
                             encryptor.decrypt(allBytes, password)
-                        } catch (_: Exception) {
-                            // Not encrypted or wrong password — treat as raw JSON
-                            allBytes
+                        } catch (e: Exception) {
+                            return@withContext RestoreResult(
+                                success = false,
+                                message = "Incorrect backup password",
+                                errors = listOf(e.message ?: "Decryption failed")
+                            )
                         }
                     } else {
                         allBytes

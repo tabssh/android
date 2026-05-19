@@ -173,7 +173,8 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
             visibility  = View.GONE
         }
         val resultUrl = TextView(ctx).apply {
-            textSize = 13f
+            textSize = 18f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
             setTextIsSelectable(true)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
