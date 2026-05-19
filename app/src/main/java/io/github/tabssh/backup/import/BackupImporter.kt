@@ -2,6 +2,8 @@ package io.github.tabssh.backup.import
 
 import android.content.Context
 import io.github.tabssh.backup.export.BackupExporter
+import io.github.tabssh.crypto.keys.KeyStorage
+import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.database.entities.CloudAccount
@@ -48,7 +50,9 @@ import org.json.JSONObject
 class BackupImporter(
     private val context: Context,
     private val database: TabSSHDatabase,
-    private val preferenceManager: PreferenceManager
+    private val preferenceManager: PreferenceManager,
+    private val securePasswordManager: SecurePasswordManager? = null,
+    private val keyStorage: KeyStorage? = null
 ) {
 
     companion object { private const val TAG = "BackupImporter" }
@@ -120,6 +124,13 @@ class BackupImporter(
             { restoreVncHosts(it, overwriteExisting) }) { out["vnc_hosts"] = it; Logger.d(TAG, "Restored $it VNC hosts") }
         table(BackupExporter.FILE_VNC_IDENTITIES, "vnc_identities",
             { restoreVncIdentities(it, overwriteExisting) }) { out["vnc_identities"] = it; Logger.d(TAG, "Restored $it VNC identities") }
+
+        // Secrets must be restored AFTER entity rows so all IDs are present.
+        backupData[BackupExporter.FILE_SECRETS]?.let {
+            restoreSecrets(it)
+            out["secrets"] = 1
+            Logger.d(TAG, "Restored credentials from secrets file")
+        } ?: Logger.d(TAG, "Skipping secrets — not in backup (pre-v3 or unencrypted backup)")
 
         out
     }
@@ -498,6 +509,66 @@ class BackupImporter(
             }
         }
         return count
+    }
+
+    // ── Secrets ──────────────────────────────────────────────────────────────
+
+    /**
+     * Restore all Keystore-backed credentials from [BackupExporter.FILE_SECRETS].
+     *
+     * Passwords are written back via [SecurePasswordManager.storePassword] using
+     * the same alias strings the app uses at runtime, so every subsystem
+     * (HypervisorPasswordStore, VMConsoleActivity, TabTerminalActivity, etc.)
+     * picks them up on the next access without any migration code.
+     *
+     * SSH key JSch bytes are re-encrypted with fresh Keystore AES keys via
+     * [KeyStorage.importKeyFromBackup] so the companion [StoredKey] metadata rows
+     * (restored by [restoreKeys]) are immediately usable for SSH authentication.
+     */
+    private suspend fun restoreSecrets(data: String) {
+        val pm = securePasswordManager
+        val ks = keyStorage
+        try {
+            val root = json.parseToJsonElement(data).jsonObject
+
+            // Passwords / tokens / OCI keys
+            if (pm != null) {
+                (root["passwords"] as? JsonObject)?.forEach { (alias, element) ->
+                    val value = element.jsonPrimitive.content
+                    if (value.isNotEmpty()) {
+                        try {
+                            pm.storePassword(alias, value,
+                                SecurePasswordManager.StorageLevel.ENCRYPTED)
+                            Logger.d(TAG, "Restored secret alias: $alias")
+                        } catch (e: Exception) {
+                            Logger.w(TAG, "Failed to restore secret $alias: ${e.message}")
+                        }
+                    }
+                }
+            } else {
+                Logger.w(TAG, "SecurePasswordManager unavailable — passwords not restored")
+            }
+
+            // SSH private key JSch bytes
+            if (ks != null) {
+                (root["ssh_keys"] as? JsonObject)?.forEach { (keyId, element) ->
+                    val b64 = element.jsonPrimitive.content
+                    if (b64.isNotEmpty()) {
+                        try {
+                            val bytes = android.util.Base64.decode(b64, android.util.Base64.NO_WRAP)
+                            ks.importKeyFromBackup(keyId, bytes)
+                            Logger.d(TAG, "Restored SSH key: $keyId")
+                        } catch (e: Exception) {
+                            Logger.w(TAG, "Failed to restore SSH key $keyId: ${e.message}")
+                        }
+                    }
+                }
+            } else {
+                Logger.w(TAG, "KeyStorage unavailable — SSH key bytes not restored")
+            }
+        } catch (e: Exception) {
+            Logger.w(TAG, "Failed to parse secrets file: ${e.message}")
+        }
     }
 
     // ── Preferences ──────────────────────────────────────────────────────────

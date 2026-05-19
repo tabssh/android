@@ -17,6 +17,8 @@ import io.github.tabssh.storage.database.entities.TrustedCertificate
 import io.github.tabssh.storage.database.entities.VncHost
 import io.github.tabssh.storage.database.entities.VncIdentity
 import io.github.tabssh.storage.database.entities.Workspace
+import io.github.tabssh.crypto.keys.KeyStorage
+import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.storage.preferences.PreferenceManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -67,7 +69,10 @@ import org.json.JSONObject
 class BackupExporter(
     private val context: android.content.Context,
     private val database: TabSSHDatabase,
-    private val preferenceManager: PreferenceManager
+    private val preferenceManager: PreferenceManager,
+    /** Non-null only when [collectBackupData] is called with includeSecrets=true. */
+    private val securePasswordManager: SecurePasswordManager? = null,
+    private val keyStorage: KeyStorage? = null
 ) {
 
     private val json = Json {
@@ -97,16 +102,34 @@ class BackupExporter(
         const val FILE_MONITOR_SLOTS     = "monitor_slots.json"
         const val FILE_VNC_HOSTS         = "vnc_hosts.json"
         const val FILE_VNC_IDENTITIES    = "vnc_identities.json"
+        /**
+         * All Keystore-backed credentials (passwords, tokens, OCI PEM keys,
+         * SSH key JSch bytes).  Only written when the backup is encrypted
+         * (see [BackupManager.createBackup] `includeSecrets` parameter).
+         * Never written to an unencrypted backup — plaintext on disk.
+         */
+        const val FILE_SECRETS           = "secrets.json"
     }
 
     /**
      * Collect every backed-up table as a name→JSON map. Caller (BackupManager)
      * decides whether to encrypt and how to write to disk.
+     *
+     * @param includePasswords Legacy flag — SSH connection passwords are included
+     *   in the `connections.json` sidecar when true.  Superseded by [includeSecrets]
+     *   which covers all credential types; when [includeSecrets] is true this flag
+     *   is implicitly treated as true so the two paths are consistent.
+     * @param includeSecrets   When true (only ever set for password-encrypted backups)
+     *   all Keystore-backed credentials are gathered into [FILE_SECRETS].  Never set
+     *   for unencrypted backups — the backup file itself is the only protection.
      */
-    suspend fun collectBackupData(includePasswords: Boolean): Map<String, String> = withContext(Dispatchers.IO) {
+    suspend fun collectBackupData(
+        includePasswords: Boolean,
+        includeSecrets: Boolean = false
+    ): Map<String, String> = withContext(Dispatchers.IO) {
         val out = mutableMapOf<String, String>()
 
-        out[FILE_CONNECTIONS]      = exportConnections(includePasswords)
+        out[FILE_CONNECTIONS]      = exportConnections(includePasswords || includeSecrets)
         out[FILE_KEYS]             = exportKeys()
         out[FILE_PREFERENCES]      = exportPreferences()
         out[FILE_THEMES]           = exportThemes()
@@ -123,6 +146,7 @@ class BackupExporter(
         out[FILE_MONITOR_SLOTS]    = exportMonitorSlots()
         out[FILE_VNC_HOSTS]        = exportVncHosts()
         out[FILE_VNC_IDENTITIES]   = exportVncIdentities()
+        if (includeSecrets) out[FILE_SECRETS] = exportSecrets()
 
         out
     }
@@ -206,9 +230,8 @@ class BackupExporter(
             database.workspaceDao().getAll())
 
     private suspend fun exportCloudAccounts(): String =
-        // Token lives in SecurePasswordManager under `cloud_token_${id}` and
-        // is not exported. The metadata row tells the restoring device which
-        // providers were configured; user re-enters the token after restore.
+        // Metadata row only — the API token lives in SecurePasswordManager under
+        // `cloud_token_${id}` and is captured by exportSecrets() for encrypted backups.
         encodeEntities(ListSerializer(CloudAccount.serializer()),
             database.cloudAccountDao().getAll())
 
@@ -227,8 +250,105 @@ class BackupExporter(
     private suspend fun exportVncIdentities(): String =
         // Password lives in Keystore under `vnc_identity_${id}` — it is NOT in
         // this entity, so no scrubbing needed. All other fields are safe to export.
+        // The actual password value is captured in exportSecrets() when the backup
+        // is encrypted so restore does not require user re-entry.
         encodeEntities(ListSerializer(VncIdentity.serializer()),
             database.vncIdentityDao().getAllIdentitiesList())
+
+    // ── Secrets (encrypted backup only) ─────────────────────────────────────
+
+    /**
+     * Gather every Keystore-backed credential into a single JSON object.
+     *
+     * Covered credential namespaces (all via [SecurePasswordManager]):
+     *   `identity_{id}`                  — SSH identity password
+     *   `hypervisor_{id}`                — per-host hypervisor password (inline creds)
+     *   `hypervisor_account_{id}`        — hypervisor account password (reusable creds)
+     *   `oci_private_key_account_{id}`   — OCI API private key PEM
+     *   `oci_passphrase_account_{id}`    — OCI API key passphrase
+     *   `vnc_identity_{id}`              — VNC identity password
+     *   `cloud_token_{id}`               — cloud provider API token
+     *
+     * SSH private key JSch bytes are exported separately under `ssh_keys` keyed
+     * by [StoredKey.keyId], re-encrypted under the backup password by the outer
+     * [BackupManager] AES-GCM envelope.  Only keys that have a stored JSch byte
+     * blob are exported; keys with only PKCS#8 DER (pre-JSch-byte era) are
+     * skipped with a warning and must be re-imported manually after restore.
+     *
+     * Empty / null values are omitted — no point carrying dead entries.
+     */
+    private suspend fun exportSecrets(): String {
+        val passwords = mutableMapOf<String, String>()
+        val sshKeys   = mutableMapOf<String, String>()
+        val pm = securePasswordManager
+
+        if (pm != null) {
+            // Identity passwords — alias: identity_{id}
+            database.identityDao().getAllIdentitiesList().forEach { id ->
+                pm.retrievePassword("identity_${id.id}")
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { passwords["identity_${id.id}"] = it }
+            }
+
+            // Per-host hypervisor passwords (accountId == null path)
+            database.hypervisorDao().getAllList()
+                .filter { it.accountId == null }
+                .forEach { h ->
+                    pm.retrievePassword("hypervisor_${h.id}")
+                        ?.takeIf { it.isNotEmpty() }
+                        ?.let { passwords["hypervisor_${h.id}"] = it }
+                }
+
+            // Hypervisor account passwords + OCI secrets
+            database.hypervisorAccountDao().getAllAccountsList().forEach { a ->
+                pm.retrievePassword("hypervisor_account_${a.id}")
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { passwords["hypervisor_account_${a.id}"] = it }
+                pm.retrievePassword("oci_private_key_account_${a.id}")
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { passwords["oci_private_key_account_${a.id}"] = it }
+                pm.retrievePassword("oci_passphrase_account_${a.id}")
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { passwords["oci_passphrase_account_${a.id}"] = it }
+            }
+
+            // VNC identity passwords — alias: vnc_identity_{id}
+            database.vncIdentityDao().getAllIdentitiesList().forEach { vi ->
+                pm.retrievePassword("vnc_identity_${vi.id}")
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { passwords["vnc_identity_${vi.id}"] = it }
+            }
+
+            // Cloud account tokens — alias: cloud_token_{id}
+            database.cloudAccountDao().getAll().forEach { ca ->
+                pm.retrievePassword("cloud_token_${ca.id}")
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { passwords["cloud_token_${ca.id}"] = it }
+            }
+        }
+
+        // SSH private key JSch bytes
+        keyStorage?.let { ks ->
+            database.keyDao().getAllKeys().first().forEach { key ->
+                val bytes = ks.retrieveJSchBytes(key.keyId)
+                if (bytes != null) {
+                    sshKeys[key.keyId] = android.util.Base64.encodeToString(
+                        bytes, android.util.Base64.NO_WRAP
+                    )
+                } else {
+                    android.util.Log.w("BackupExporter",
+                        "No JSch bytes for key ${key.keyId} (${key.name}) — skipped in backup")
+                }
+            }
+        }
+
+        val obj = buildJsonObject {
+            put("v", WIRE_VERSION)
+            put("passwords", JsonObject(passwords.mapValues { JsonPrimitive(it.value) }))
+            put("ssh_keys",  JsonObject(sshKeys.mapValues  { JsonPrimitive(it.value) }))
+        }
+        return json.encodeToString(JsonObject.serializer(), obj)
+    }
 
     // ── Preferences ──────────────────────────────────────────────────────────
 

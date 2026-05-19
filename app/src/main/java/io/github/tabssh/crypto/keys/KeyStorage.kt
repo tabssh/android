@@ -503,6 +503,30 @@ class KeyStorage(private val context: Context) {
     }
 
     /**
+     * Restore SSH key JSch bytes from an encrypted backup.
+     *
+     * Creates (or reuses) the Keystore AES-GCM wrapping key for [keyId],
+     * then encrypts and persists [jschBytes] via [storeJSchBytes].  The
+     * companion [StoredKey] metadata row is restored separately by
+     * [BackupImporter.restoreKeys]; this method only handles the key
+     * material so subsequent [retrieveJSchBytes] / [getJSchBytesWithFallback]
+     * calls succeed without user re-import.
+     *
+     * Called by [io.github.tabssh.backup.import.BackupImporter].
+     */
+    fun importKeyFromBackup(keyId: String, jschBytes: ByteArray): Boolean {
+        return try {
+            createKeyEncryptionKey(keyId)   // idempotent — returns existing key if present
+            storeJSchBytes(keyId, jschBytes)
+            Logger.i("KeyStorage", "Restored key material from backup: $keyId")
+            true
+        } catch (e: Exception) {
+            Logger.e("KeyStorage", "importKeyFromBackup($keyId) failed", e)
+            false
+        }
+    }
+
+    /**
      * Encrypt and store JSch-native bytes.  Reuses the same AES-GCM keystore key
      * already created by storePrivateKey() for this keyId.
      */

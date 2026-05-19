@@ -2,6 +2,7 @@ package io.github.tabssh.backup
 
 import android.content.Context
 import android.net.Uri
+import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.backup.export.BackupExporter
 import io.github.tabssh.backup.import.BackupImporter
 import io.github.tabssh.backup.validation.BackupValidator
@@ -26,8 +27,20 @@ class BackupManager(private val context: Context) {
 
     private val database = TabSSHDatabase.getDatabase(context)
     private val preferenceManager = PreferenceManager(context)
-    private val exporter = BackupExporter(context, database, preferenceManager)
-    private val importer = BackupImporter(context, database, preferenceManager)
+    // Resolve credential managers from the Application singleton so that
+    // encrypted backups include all Keystore-backed secrets (passwords,
+    // tokens, SSH key material). Null-safe: if the app hasn't initialised
+    // yet the exporter/importer will skip the secrets section gracefully.
+    private val app: TabSSHApplication?
+        get() = context.applicationContext as? TabSSHApplication
+    private val exporter by lazy {
+        BackupExporter(context, database, preferenceManager,
+            app?.securePasswordManager, app?.keyStorage)
+    }
+    private val importer by lazy {
+        BackupImporter(context, database, preferenceManager,
+            app?.securePasswordManager, app?.keyStorage)
+    }
     private val validator = BackupValidator()
     // P0 fix: real password-based encryption for backups. Reuses the
     // sync subsystem's SyncEncryptor (AES-256-GCM + PBKDF2 100k iter,
@@ -83,8 +96,12 @@ class BackupManager(private val context: Context) {
         try {
             Logger.i("BackupManager", "Creating backup...")
 
-            // Collect all data to backup
-            val backupData = exporter.collectBackupData(includePasswords)
+            // Collect all data to backup.
+            // includeSecrets adds a secrets.json with all Keystore-backed
+            // credentials (SSH key bytes, hypervisor/VNC/cloud passwords,
+            // OCI tokens). Only safe inside an encrypted backup envelope.
+            val includeSecrets = encryptBackup && password != null
+            val backupData = exporter.collectBackupData(includePasswords, includeSecrets)
 
             // Create metadata
             val metadata = createBackupMetadata(backupData)
