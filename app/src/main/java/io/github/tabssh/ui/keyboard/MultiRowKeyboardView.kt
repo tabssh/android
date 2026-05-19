@@ -45,7 +45,14 @@ class MultiRowKeyboardView @JvmOverloads constructor(
 
     init {
         orientation = VERTICAL
-        setupDefaultLayout()
+        // Creating MaterialButton instances triggers Material theme resolution via
+        // AssetManager JNI on first use — very slow (~200 ms per button on the
+        // emulator, ~5 ms on device).  Defer so setContentView / inflate do not
+        // block the main thread.  The hosting activity always calls setLayout() or
+        // resetToDefault() after inflation, which populates the rows explicitly;
+        // this post() is a safety fallback for contexts that inflate the view and
+        // rely on the default keys without further configuration.
+        post { if (keyboardRows.isEmpty()) setupDefaultLayout() }
     }
 
     /**

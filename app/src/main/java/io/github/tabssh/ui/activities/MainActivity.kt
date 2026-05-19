@@ -87,7 +87,15 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         Logger.d("MainActivity", "onCreate - New 5-tab layout")
 
         app = application as TabSSHApplication
-        backupManager = io.github.tabssh.backup.BackupManager(this)
+        // BackupManager's constructor calls SyncEncryptor() which seeds
+        // BouncyCastle's DRBG (SecureRandom) — a multi-second blocking
+        // operation.  Constructing it on the main thread caused an ANR on
+        // first launch.  All usages of backupManager are inside coroutines
+        // triggered by explicit user actions (import/export), so by the time
+        // any of those fire the IO-dispatcher init will have finished.
+        lifecycleScope.launch(Dispatchers.IO) {
+            backupManager = io.github.tabssh.backup.BackupManager(this@MainActivity)
+        }
 
         // Sweep any per-host SSH notifications that were orphaned by a prior
         // force-stop or OOM kill (onDestroy never ran → notifications survived

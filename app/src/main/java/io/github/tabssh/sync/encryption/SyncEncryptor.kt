@@ -32,7 +32,11 @@ class SyncEncryptor {
         private const val HEADER_SIZE = 32
     }
 
-    private val secureRandom = SecureRandom()
+    // Lazy: BouncyCastle's DRBG seeds SecureRandom by calling Provider.getServices()
+    // which can block for 5-10 seconds on first use.  Deferring to first actual
+    // encrypt/decrypt call ensures initialisation always happens on a background
+    // thread (IO dispatcher) rather than on the main thread at construction time.
+    private val secureRandom by lazy { SecureRandom() }
 
     /**
      * Simple encrypt method - returns serialized encrypted data

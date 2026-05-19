@@ -217,6 +217,17 @@ class VncView @JvmOverloads constructor(
         }
     }
 
+    // ── View-size callback (used by VncConsoleChannel to send SetDesktopSize) ──
+
+    /**
+     * Fired on the main thread whenever the view is measured with non-zero
+     * dimensions.  [VncConsoleChannel.resizeToPixels] is wired here by
+     * [VMConsoleActivity.switchToGraphical] so the VNC server's framebuffer
+     * is resized to match the visible pixel area rather than an arbitrary
+     * character-grid size.
+     */
+    var onViewSizeReady: ((width: Int, height: Int) -> Unit)? = null
+
     // ── Drawing ───────────────────────────────────────────────────────────
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -226,6 +237,8 @@ class VncView @JvmOverloads constructor(
         // the view was GONE and its dimensions were 0), force a redraw now that we
         // have real dimensions and a valid fitScale.
         if (bitmap != null) invalidate()
+        // Notify the channel so it can send SetDesktopSize to the server.
+        if (w > 0 && h > 0) onViewSizeReady?.invoke(w, h)
     }
 
     private fun recomputeFitScale() {
@@ -425,6 +438,7 @@ class VncView @JvmOverloads constructor(
     // ── Cleanup ───────────────────────────────────────────────────────────
 
     fun recycle() {
+        onViewSizeReady = null
         synchronized(fbLock) {
             bitmap?.recycle()
             bitmap = null

@@ -83,6 +83,15 @@ class VMConsoleActivity : AppCompatActivity() {
         const val EXTRA_DIRECT_VNC = "direct_vnc"
         /** String — VncHost UUID; when set, connect directly to that host. */
         const val EXTRA_VNC_HOST_ID = "vnc_host_id"
+
+        // Ad-hoc direct VNC extras — connect without a DB entry.
+        // Useful for one-shot connections and debug sessions.
+        /** String — hostname or IP to connect to directly (no DB lookup). */
+        const val EXTRA_VNC_ADHOC_HOST = "vnc_adhoc_host"
+        /** Int — port number; defaults to 5900. */
+        const val EXTRA_VNC_ADHOC_PORT = "vnc_adhoc_port"
+        /** String — VNC password; may be null for unauthenticated servers. */
+        const val EXTRA_VNC_ADHOC_PASSWORD = "vnc_adhoc_password"
     }
 
     private lateinit var app: TabSSHApplication
@@ -433,6 +442,20 @@ class VMConsoleActivity : AppCompatActivity() {
             try {
                 // ── Direct VNC paths take priority over hypervisor connections ──
 
+                // Path 0: Ad-hoc direct VNC — host/port/password provided in the
+                // intent without a DB entry.  Useful for one-shot connections and
+                // debug sessions launched directly via `adb shell am start`.
+                val adhocHost = intent.getStringExtra(EXTRA_VNC_ADHOC_HOST)
+                if (adhocHost != null) {
+                    connectVncAdhoc(
+                        host     = adhocHost,
+                        port     = intent.getIntExtra(EXTRA_VNC_ADHOC_PORT, 5900),
+                        password = intent.getStringExtra(EXTRA_VNC_ADHOC_PASSWORD),
+                        vmName   = vmName
+                    )
+                    return@launch
+                }
+
                 // Path 1: Libvirt console — streams pre-stored in VncStreamHolder.
                 if (intent.getBooleanExtra(EXTRA_DIRECT_VNC, false)) {
                     connectFromStreamHolder(vmName)
@@ -508,6 +531,31 @@ class VMConsoleActivity : AppCompatActivity() {
                 showError("Connection failed: ${e.message}")
             }
         }
+    }
+
+    /**
+     * Path 0 — Ad-hoc direct VNC: connect to [host]:[port] with optional [password]
+     * without requiring a DB entry.  The TCP connection and RFB handshake are
+     * identical to Path 2; this path just skips the DB lookup.
+     */
+    private suspend fun connectVncAdhoc(host: String, port: Int, password: String?, vmName: String) {
+        Logger.i(TAG, "Ad-hoc VNC connect → $host:$port (password=${if (password != null) "set" else "none"})")
+        val socket = withContext(Dispatchers.IO) {
+            java.net.Socket(host, port)
+        }
+        directVncSocket = socket
+        val rfbClient = RfbClient(
+            inputStream  = socket.getInputStream(),
+            outputStream = socket.getOutputStream(),
+            vncPassword  = password,
+            consoleMode  = true
+        )
+        val connection = HypervisorConsoleManager.ConsoleConnection.Graphical(
+            vmName          = vmName,
+            hypervisorType  = HypervisorConsoleManager.HypervisorType.PROXMOX,
+            rfbClient       = rfbClient
+        )
+        withContext(Dispatchers.Main) { switchToGraphical(connection) }
     }
 
     /**
@@ -726,13 +774,13 @@ class VMConsoleActivity : AppCompatActivity() {
         val rfb = connection.rfbClient
         activeRfbClient = rfb
 
-        // Build the keyboard bridge first so the initial size can be captured.
+        // Build the keyboard bridge.  Initial size is NOT set via setInitialSize()
+        // because character-grid math (cols * fontW = 640 px) resets the server
+        // framebuffer to blank before any pixels arrive.  Instead, the VncView
+        // reports its pixel dimensions via onViewSizeReady and we forward those
+        // directly to sendSetDesktopSize() — see below.
         val channel = VncConsoleChannel(rfb)
         vncConsoleChannel = channel
-        // TermuxBridge is constructed with columns=80, rows=24. Use those defaults
-        // for the initial SetDesktopSize; the onResizeCallback will send an updated
-        // size once the terminal view has been measured by the layout system.
-        channel.setInitialSize(80, 24)
 
         // Wire VncView for framebuffer rendering only — no pointer or key
         // events from VncView itself; those go through VncConsoleChannel.
@@ -784,6 +832,7 @@ class VMConsoleActivity : AppCompatActivity() {
                     vncView.onKeyEvent = null
                     vncView.onTextInput = null
                     vncView.onBackspace = null
+                    vncView.onViewSizeReady = null
                     showStatus("Disconnected: $reason")
                     refreshFloatingControls()
                 }
@@ -806,8 +855,16 @@ class VMConsoleActivity : AppCompatActivity() {
         // key events sent through the InputConnection route here.
         vncView.onBackspace = { channel.sendKey(RfbConstants.KEY_BACK_SPACE) }
 
-        // Wire resize: when the terminal view changes size, update VNC too.
-        termuxBridge?.onResizeCallback = { cols, rows -> channel.resize(cols, rows) }
+        // Wire resize: when VncView is measured (or re-measured on rotation),
+        // send the pixel dimensions to the server as SetDesktopSize.
+        // Using the view's actual pixel dimensions — not a character-grid
+        // calculation — prevents the server from resizing to a blank 640×384
+        // framebuffer before any pixels arrive.
+        vncView.onViewSizeReady = { w, h -> channel.resizeToPixels(w, h) }
+        // If the view is already measured (e.g. reconnect after rotation), fire now.
+        if (vncView.width > 0 && vncView.height > 0) {
+            channel.resizeToPixels(vncView.width, vncView.height)
+        }
 
         rfb.start()
 
@@ -950,21 +1007,8 @@ class VMConsoleActivity : AppCompatActivity() {
         val keyboard = findViewById<io.github.tabssh.ui.keyboard.MultiRowKeyboardView>(
             R.id.multi_row_keyboard
         )
-        try {
-            val rowCount = app.preferencesManager.getKeyboardRowCount()
-            keyboard.setRowCount(rowCount)
-            val layoutJson = app.preferencesManager.getKeyboardLayoutJson()
-            if (layoutJson != null) {
-                val saved = io.github.tabssh.ui.keyboard.KeyboardLayoutManager
-                    .parseLayoutJson(layoutJson)
-                keyboard.setLayout(saved)
-            } else {
-                keyboard.resetToDefault()
-            }
-        } catch (e: Exception) {
-            Logger.w(TAG, "Custom keyboard layout load failed; defaults: ${e.message}")
-            keyboard.resetToDefault()
-        }
+        // Wire the click listener immediately so any tap that arrives before
+        // the deferred layout runs is still routed correctly.
         keyboard.setOnKeyClickListener { key ->
             if (isGraphicalMode) {
                 // VNC console mode: route through VncConsoleChannel which
@@ -974,6 +1018,28 @@ class VMConsoleActivity : AppCompatActivity() {
             } else {
                 // Text console: send the byte sequence verbatim.
                 sendBytes(key.keySequence.toByteArray(Charsets.UTF_8))
+            }
+        }
+        // Defer MaterialButton construction to after the initial layout pass.
+        // Creating ~27 buttons synchronously in onCreate() blocks the main
+        // thread for several seconds on a cold theme cache (emulator / first
+        // launch on device), which crosses the ANR threshold.  Deferring here
+        // ensures the activity becomes interactive before any button work runs.
+        keyboard.post {
+            try {
+                val rowCount = app.preferencesManager.getKeyboardRowCount()
+                keyboard.setRowCount(rowCount)
+                val layoutJson = app.preferencesManager.getKeyboardLayoutJson()
+                if (layoutJson != null) {
+                    val saved = io.github.tabssh.ui.keyboard.KeyboardLayoutManager
+                        .parseLayoutJson(layoutJson)
+                    keyboard.setLayout(saved)
+                } else {
+                    keyboard.resetToDefault()
+                }
+            } catch (e: Exception) {
+                Logger.w(TAG, "Custom keyboard layout load failed; defaults: ${e.message}")
+                keyboard.resetToDefault()
             }
         }
     }
@@ -1046,6 +1112,7 @@ class VMConsoleActivity : AppCompatActivity() {
         vncView.onKeyEvent = null
         vncView.onTextInput = null
         vncView.onBackspace = null
+        vncView.onViewSizeReady = null
         isGraphicalMode = false
         isConnected = false
         consoleManager?.disconnect()

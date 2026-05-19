@@ -37,14 +37,24 @@ import java.util.concurrent.Executors
  */
 class VncConsoleChannel(private val rfbClient: RfbClient) {
 
-    /** Pixel width of one terminal character cell (used for SetDesktopSize). */
+    /** Pixel width of one terminal character cell (used for SetDesktopSize via [resize]). */
     var fontW: Int = 8
 
-    /** Pixel height of one terminal character cell (used for SetDesktopSize). */
+    /** Pixel height of one terminal character cell (used for SetDesktopSize via [resize]). */
     var fontH: Int = 16
 
     private var initialCols: Int = 80
     private var initialRows: Int = 24
+
+    /**
+     * Desired VNC framebuffer pixel dimensions, set by [resizeToPixels] when the
+     * hosting [VncView] reports its measured size.  Volatile so the RFB reader
+     * thread can safely read them in [wrapListener.onExtendedDesktopSizeReady].
+     *
+     * Zero means "not yet known — wait for VncView to measure itself".
+     */
+    @Volatile private var pendingViewW: Int = 0
+    @Volatile private var pendingViewH: Int = 0
 
     /**
      * Single-threaded executor that serialises all outgoing RFB writes.
@@ -94,6 +104,27 @@ class VncConsoleChannel(private val rfbClient: RfbClient) {
     fun close() { writeExecutor.shutdownNow() }
 
     /**
+     * Resize the VNC server's framebuffer to exactly [w]×[h] pixels.
+     *
+     * This is the preferred resize path for graphical VNC sessions: call it
+     * with the [VncView]'s measured dimensions so the VM's virtual display
+     * fills the available screen area without the character-cell math that
+     * [resize] uses.
+     *
+     * Safe to call from any thread including the main thread.
+     *
+     * If the server has not yet confirmed ExtendedDesktopSize support,
+     * the values are stored in [pendingViewW]/[pendingViewH] and sent once
+     * [wrapListener.onExtendedDesktopSizeReady] fires.
+     */
+    fun resizeToPixels(w: Int, h: Int) {
+        if (w <= 0 || h <= 0) return
+        pendingViewW = w
+        pendingViewH = h
+        io { rfbClient.sendSetDesktopSize(w, h) }
+    }
+
+    /**
      * Wrap [delegate] with a listener that sends [RfbClient.sendSetDesktopSize]
      * once the server signals ExtendedDesktopSize support ([RfbListener.onExtendedDesktopSizeReady]).
      * Pass the result to [rfbClient].listener before calling [rfbClient].start().
@@ -109,11 +140,19 @@ class VncConsoleChannel(private val rfbClient: RfbClient) {
         }
 
         override fun onExtendedDesktopSizeReady() {
-            // Server confirmed ExtendedDesktopSize support — request the
-            // desired terminal size now.  Dispatch via writeExecutor so this
-            // send is ordered correctly relative to any resize() calls queued
-            // from the UI thread.
-            io { rfbClient.sendSetDesktopSize(initialCols * fontW, initialRows * fontH) }
+            // Server confirmed ExtendedDesktopSize support.  Send a resize request
+            // only if the VncView has already reported its pixel dimensions via
+            // resizeToPixels().  If not, the pending size will be sent the moment
+            // the view fires its onViewSizeReady callback.
+            //
+            // We deliberately do NOT fall back to initialCols * fontW here: that
+            // 640×384 size resets the server framebuffer to blank and the user sees
+            // a black screen until a second resize (from the view) arrives.
+            val pw = pendingViewW
+            val ph = pendingViewH
+            if (pw > 0 && ph > 0) {
+                io { rfbClient.sendSetDesktopSize(pw, ph) }
+            }
             delegate.onExtendedDesktopSizeReady()
         }
     }
