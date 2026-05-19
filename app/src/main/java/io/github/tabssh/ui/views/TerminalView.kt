@@ -1356,7 +1356,7 @@ class TerminalView @JvmOverloads constructor(
                 return true
             }
             KeyEvent.KEYCODE_DEL -> {
-                sendText("\b")
+                sendText("")
                 return true
             }
             KeyEvent.KEYCODE_FORWARD_DEL -> {
