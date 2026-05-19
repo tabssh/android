@@ -158,7 +158,10 @@ class RfbClient(
         readerThread = null
         try { inputStream.close() } catch (_: Exception) {}
         try { outputStream.close() } catch (_: Exception) {}
-        decoder.reset()
+        // decoder is only initialized after serverInit() completes; guard against
+        // stop() being called during or before the handshake (e.g. user backs out
+        // before the connection completes) to prevent UninitializedPropertyAccessException.
+        if (::decoder.isInitialized) decoder.reset()
     }
 
     // ── Protocol state machine ────────────────────────────────────────────
@@ -725,6 +728,9 @@ class RfbClient(
      * [x] and [y] are framebuffer-space coordinates.
      */
     fun sendPointerEvent(x: Int, y: Int, buttonMask: Int) {
+        // Guard: fbWidth/fbHeight are 0 until serverInit() completes. coerceIn(0, -1)
+        // throws IllegalArgumentException, which would crash the caller's thread.
+        if (fbWidth <= 0 || fbHeight <= 0) return
         synchronized(outLock) {
             dout.writeByte(RfbConstants.C2S_POINTER_EVENT)
             dout.writeByte(buttonMask)

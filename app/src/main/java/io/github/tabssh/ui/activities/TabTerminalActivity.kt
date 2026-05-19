@@ -1962,8 +1962,17 @@ private fun showSnippetsPickerForActiveTab() {
             }
             tabLayoutMediator?.attach()
         }
+
+        // Push the current theme into the freshly-created adapter so pages
+        // are rendered with the correct colors from the first onBindViewHolder
+        // call. Without this, pagerAdapter.currentTheme stays null (the default)
+        // and each terminal page shows the default theme regardless of what the
+        // user has selected. applyCurrentTheme() is idempotent — calling it here
+        // costs nothing and guarantees correctness whether this is first setup or
+        // a tab-count change triggered recreation.
+        applyCurrentTheme()
     }
-    
+
     private fun removeTabFromUI(index: Int) {
         if (swipeEnabled) {
             // Rebuild ViewPager2 adapter
