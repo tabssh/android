@@ -28,10 +28,13 @@ class KeyboardRowView @JvmOverloads constructor(
         private const val KEY_PADDING_DP = 12
         private const val KEY_MARGIN_DP = 4
         private const val KEY_TEXT_SIZE_SP = 12f
+        /** Fixed width (dp) for pinned anchor keys so they never shift position. */
+        private const val KEY_PINNED_WIDTH_DP = 52
     }
 
     private val keyContainer: LinearLayout
     private var keys: List<KeyboardKey> = emptyList()
+    private var pinnedCount = 0
     private var onKeyClickListener: ((KeyboardKey) -> Unit)? = null
     private var onToggleClickListener: (() -> Unit)? = null
 
@@ -64,10 +67,19 @@ class KeyboardRowView @JvmOverloads constructor(
         resources.getDimensionPixelSize(R.dimen.keyboard_row_height)
 
     /**
-     * Set keys for this row
+     * Set keys for this row.
+     *
+     * @param newKeys     The keys to display.
+     * @param pinnedCount The first [pinnedCount] keys are given a fixed pixel
+     *                    width ([KEY_PINNED_WIDTH_DP]) so they always sit at the
+     *                    same left-edge position regardless of how many keys are
+     *                    in the row or the physical screen width.  The remaining
+     *                    keys share the leftover space equally (weight = 1).
+     *                    Pass 0 (default) for uniform flex sizing.
      */
-    fun setKeys(newKeys: List<KeyboardKey>) {
+    fun setKeys(newKeys: List<KeyboardKey>, pinnedCount: Int = 0) {
         keys = newKeys
+        this.pinnedCount = pinnedCount.coerceIn(0, newKeys.size)
         rebuildKeys()
     }
 
@@ -92,8 +104,9 @@ class KeyboardRowView @JvmOverloads constructor(
         keyContainer.removeAllViews()
         modifierButtons.clear()
 
-        keys.forEach { key ->
-            val button = createKeyButton(key)
+        keys.forEachIndexed { index, key ->
+            val pinned = index < pinnedCount
+            val button = createKeyButton(key, pinned)
             keyContainer.addView(button)
 
             // Track modifier buttons for highlighting
@@ -104,16 +117,20 @@ class KeyboardRowView @JvmOverloads constructor(
     }
 
     /**
-     * Create a button for a key
+     * Create a button for a key.
+     *
+     * @param pinned When true the button gets a fixed [KEY_PINNED_WIDTH_DP] width
+     *               (weight = 0) so it never shifts position.  When false it
+     *               shares the remaining row space equally (weight = 1).
      */
-    private fun createKeyButton(key: KeyboardKey): MaterialButton {
+    private fun createKeyButton(key: KeyboardKey, pinned: Boolean = false): MaterialButton {
         val button = MaterialButton(context, null, com.google.android.material.R.attr.materialButtonOutlinedStyle)
 
-        val params = LinearLayout.LayoutParams(
-            0,
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            1f
-        )
+        val params = if (pinned) {
+            LinearLayout.LayoutParams(dpToPx(KEY_PINNED_WIDTH_DP), LinearLayout.LayoutParams.MATCH_PARENT, 0f)
+        } else {
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
+        }
         params.marginEnd = dpToPx(KEY_MARGIN_DP)
         button.layoutParams = params
 

@@ -102,7 +102,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
         val layout = fullLayout
         if (layout != null) {
             for ((idx, keys) in layout.take(numberOfRows).withIndex()) {
-                if (idx < keyboardRows.size) keyboardRows[idx].setKeys(keys)
+                if (idx < keyboardRows.size) keyboardRows[idx].setKeys(keys, pinnedCountForRow(idx))
             }
         } else {
             applyDefaultKeys()
@@ -142,7 +142,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
         rowsToApply.forEachIndexed { index, keys ->
             Logger.d(TAG, "Setting row $index with ${keys.size} keys: ${keys.map { it.label }}")
             if (index < keyboardRows.size) {
-                keyboardRows[index].setKeys(keys)
+                keyboardRows[index].setKeys(keys, pinnedCountForRow(index))
             } else {
                 Logger.e(TAG, "Row $index doesn't exist in keyboardRows (size=${keyboardRows.size})")
             }
@@ -156,7 +156,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
             for (i in rows.size until numberOfRows) {
                 if (i < keyboardRows.size && i < defaultLayouts.size) {
                     Logger.d(TAG, "Filling new row $i with defaults")
-                    keyboardRows[i].setKeys(defaultLayouts[i])
+                    keyboardRows[i].setKeys(defaultLayouts[i], pinnedCountForRow(i))
                 }
             }
             // Extend fullLayout to cover the default-filled rows so orientation
@@ -174,7 +174,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
      */
     fun setRowLayout(rowIndex: Int, keys: List<KeyboardKey>) {
         if (rowIndex in 0 until keyboardRows.size) {
-            keyboardRows[rowIndex].setKeys(keys)
+            keyboardRows[rowIndex].setKeys(keys, pinnedCountForRow(rowIndex))
         }
     }
 
@@ -220,7 +220,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
         val defaultLayouts = getDefaultRowLayouts(numberOfRows)
         defaultLayouts.forEachIndexed { index, keys ->
             if (index < keyboardRows.size) {
-                keyboardRows[index].setKeys(keys)
+                keyboardRows[index].setKeys(keys, pinnedCountForRow(index))
             }
         }
         applyModifierHighlight()
@@ -316,11 +316,20 @@ class MultiRowKeyboardView @JvmOverloads constructor(
         if (!fnMode) return
         fnMode = false
         savedLayout?.forEachIndexed { idx, keys ->
-            if (idx < keyboardRows.size) keyboardRows[idx].setKeys(keys)
+            if (idx < keyboardRows.size) keyboardRows[idx].setKeys(keys, pinnedCountForRow(idx))
         }
         savedLayout = null
         applyModifierHighlight()
     }
+
+    /**
+     * How many keys to pin (fixed-width) on the left of a given row index.
+     * Rows 0 and 1 anchor their first two keys when there are 2+ rows so that
+     * ESC+CTL (row 0) and TAB+ENT (row 1) always sit at the same left-edge
+     * position regardless of screen size or total key count.
+     */
+    private fun pinnedCountForRow(rowIndex: Int): Int =
+        if (numberOfRows >= 2 && rowIndex <= 1) 2 else 0
 
     /**
      * Set key click listener
