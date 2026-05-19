@@ -536,7 +536,8 @@ class VMConsoleActivity : AppCompatActivity() {
      * identical to Path 2; this path just skips the DB lookup.
      */
     private suspend fun connectVncAdhoc(host: String, port: Int, password: String?, vmName: String) {
-        Logger.i(TAG, "Ad-hoc VNC connect → $host:$port (password=${if (password != null) "set" else "none"})")
+        val hasVncAuth = password != null
+        Logger.i(TAG, "Ad-hoc VNC connect → $host:$port (auth=${if (hasVncAuth) "set" else "none"})")
         val socket = withContext(Dispatchers.IO) {
             java.net.Socket(host, port)
         }
