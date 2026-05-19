@@ -138,7 +138,13 @@ data class SyncDataPackage(
     /** Wave 13 (2026-05-17) — direct VNC hosts (metadata only; Keystore password not transferred)
      *  and VNC identity metadata rows. */
     val vncHosts: List<io.github.tabssh.storage.database.entities.VncHost> = emptyList(),
-    val vncIdentities: List<io.github.tabssh.storage.database.entities.VncIdentity> = emptyList()
+    val vncIdentities: List<io.github.tabssh.storage.database.entities.VncIdentity> = emptyList(),
+    /** Keystore-backed credentials — included only in encrypted sync payloads.
+     *  Map keys are alias names; values are plaintext (safe inside AES-GCM envelope).
+     *  SSH private key material is base64-encoded JSch bytes under key
+     *  `"ssh_key_{keyId}"`. All other entries are password/token strings.
+     *  Default empty so old sync files (without this field) deserialize cleanly. */
+    val secrets: Map<String, String> = emptyMap()
 )
 
 /**

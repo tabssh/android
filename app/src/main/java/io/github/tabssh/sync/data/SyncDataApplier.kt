@@ -1,6 +1,9 @@
 package io.github.tabssh.sync.data
 
 import android.content.Context
+import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.crypto.keys.KeyStorage
+import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HostKeyEntry
@@ -35,6 +38,11 @@ class SyncDataApplier {
     private val context: Context
     private val database: TabSSHDatabase
     private val preferenceManager: PreferenceManager
+
+    // Credential managers — resolved from Application singleton so that
+    // Keystore-backed secrets in the sync payload are restored on this device.
+    private val app: TabSSHApplication?
+        get() = context.applicationContext as? TabSSHApplication
 
     // Simple constructor for SAF sync
     constructor(context: Context) {
@@ -216,12 +224,56 @@ class SyncDataApplier {
 
             } // end withTransaction
 
+            // Apply credentials outside the Room transaction — Keystore
+            // AES-GCM encrypt/decrypt is I/O and must not run inside a DB tx.
+            if (data.secrets.isNotEmpty()) {
+                applySecrets(data.secrets)
+            } else {
+                Logger.d(TAG, "No secrets in sync payload (pre-v14 or empty device)")
+            }
+
             Logger.i(TAG, "Applied $appliedCount items from sync data")
             ApplyResult.Success(appliedCount)
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to apply sync data", e)
             ApplyResult.Error("Failed to apply sync data: ${e.message}")
         }
+    }
+
+    /**
+     * Restore Keystore-backed credentials from the sync secrets map.
+     *
+     * Entries whose key starts with "ssh_key_" are base64-encoded JSch bytes
+     * and are stored via [KeyStorage.importKeyFromBackup]. All other entries
+     * are password/token strings stored via [SecurePasswordManager.storePassword].
+     */
+    private suspend fun applySecrets(secrets: Map<String, String>) {
+        val pm: SecurePasswordManager? = app?.securePasswordManager
+        val ks: KeyStorage? = app?.keyStorage
+        var passwordCount = 0
+        var keyCount = 0
+        secrets.forEach { (alias, value) ->
+            if (value.isEmpty()) return@forEach
+            try {
+                if (alias.startsWith("ssh_key_")) {
+                    if (ks != null) {
+                        val keyId = alias.removePrefix("ssh_key_")
+                        val bytes = android.util.Base64.decode(value, android.util.Base64.NO_WRAP)
+                        ks.importKeyFromBackup(keyId, bytes)
+                        keyCount++
+                    }
+                } else {
+                    if (pm != null) {
+                        pm.storePassword(alias, value,
+                            SecurePasswordManager.StorageLevel.ENCRYPTED)
+                        passwordCount++
+                    }
+                }
+            } catch (e: Exception) {
+                Logger.w(TAG, "Failed to restore secret $alias: ${e.message}")
+            }
+        }
+        Logger.i(TAG, "Restored $passwordCount passwords and $keyCount SSH keys from sync")
     }
 
     /**

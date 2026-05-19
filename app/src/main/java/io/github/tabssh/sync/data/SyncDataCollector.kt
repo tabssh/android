@@ -1,6 +1,9 @@
 package io.github.tabssh.sync.data
 
 import android.content.Context
+import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.crypto.keys.KeyStorage
+import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HostKeyEntry
@@ -34,6 +37,12 @@ class SyncDataCollector {
     private val database: TabSSHDatabase
     private val preferenceManager: PreferenceManager
     private val metadataManager: SyncMetadataManager
+
+    // Credential managers — resolved from Application singleton so that
+    // every sync upload includes Keystore-backed secrets (passwords, tokens,
+    // SSH key material) inside the AES-GCM encrypted sync envelope.
+    private val app: TabSSHApplication?
+        get() = context.applicationContext as? TabSSHApplication
 
     // Simple constructor for SAF sync
     constructor(context: Context) {
@@ -104,6 +113,7 @@ class SyncDataCollector {
         )
 
         val metadata = metadataManager.createSyncMetadata(itemCounts)
+        val secrets = collectSecrets()
 
         Logger.d(TAG, "Collected ${itemCounts.total()} items for sync")
 
@@ -124,7 +134,8 @@ class SyncDataCollector {
             monitorSlots = monitorSlots,
             hypervisorAccounts = hypervisorAccounts,
             vncHosts = vncHosts,
-            vncIdentities = vncIdentities
+            vncIdentities = vncIdentities,
+            secrets = secrets
         )
     }
 
@@ -296,6 +307,7 @@ class SyncDataCollector {
         )
 
         val metadata = metadataManager.createSyncMetadata(itemCounts)
+        val secrets = collectSecrets()
 
         Logger.d(TAG, "Collected ${itemCounts.total()} changed items")
 
@@ -316,8 +328,80 @@ class SyncDataCollector {
             monitorSlots = monitorSlots,
             hypervisorAccounts = hypervisorAccounts,
             vncHosts = vncHosts,
-            vncIdentities = vncIdentities
+            vncIdentities = vncIdentities,
+            secrets = secrets
         )
+    }
+
+    /**
+     * Collect all Keystore-backed credentials.
+     *
+     * Returns a flat map of alias → plaintext value. SSH private key bytes are
+     * base64-encoded and stored under key "ssh_key_{keyId}". The map is empty
+     * when neither SecurePasswordManager nor KeyStorage is accessible (e.g. in
+     * unit tests). Values are plaintext because the sync payload is AES-GCM
+     * encrypted before it leaves the device.
+     */
+    private suspend fun collectSecrets(): Map<String, String> {
+        val out = mutableMapOf<String, String>()
+        val pm: SecurePasswordManager? = app?.securePasswordManager
+        val ks: KeyStorage? = app?.keyStorage
+        try {
+            if (pm != null) {
+                // Identity passwords — alias: identity_{id}
+                database.identityDao().getAllIdentitiesList().forEach { id ->
+                    pm.retrievePassword("identity_${id.id}")
+                        ?.takeIf { it.isNotEmpty() }
+                        ?.let { out["identity_${id.id}"] = it }
+                }
+
+                // Per-host hypervisor passwords (no linked account)
+                database.hypervisorDao().getAllList()
+                    .filter { it.accountId == null }
+                    .forEach { h ->
+                        pm.retrievePassword("hypervisor_${h.id}")
+                            ?.takeIf { it.isNotEmpty() }
+                            ?.let { out["hypervisor_${h.id}"] = it }
+                    }
+
+                // Hypervisor account passwords + OCI secrets
+                database.hypervisorAccountDao().getAllAccountsList().forEach { a ->
+                    pm.retrievePassword("hypervisor_account_${a.id}")
+                        ?.takeIf { it.isNotEmpty() }
+                        ?.let { out["hypervisor_account_${a.id}"] = it }
+                    pm.retrievePassword("oci_private_key_account_${a.id}")
+                        ?.takeIf { it.isNotEmpty() }
+                        ?.let { out["oci_private_key_account_${a.id}"] = it }
+                    pm.retrievePassword("oci_passphrase_account_${a.id}")
+                        ?.takeIf { it.isNotEmpty() }
+                        ?.let { out["oci_passphrase_account_${a.id}"] = it }
+                }
+
+                // VNC identity passwords — alias: vnc_identity_{id}
+                database.vncIdentityDao().getAllIdentitiesList().forEach { vi ->
+                    pm.retrievePassword("vnc_identity_${vi.id}")
+                        ?.takeIf { it.isNotEmpty() }
+                        ?.let { out["vnc_identity_${vi.id}"] = it }
+                }
+            }
+
+            // SSH private key JSch bytes — stored as "ssh_key_{keyId}"
+            if (ks != null) {
+                database.keyDao().getAllKeys().first().forEach { key ->
+                    val bytes = ks.retrieveJSchBytes(key.keyId)
+                    if (bytes != null) {
+                        out["ssh_key_${key.keyId}"] = android.util.Base64.encodeToString(
+                            bytes, android.util.Base64.NO_WRAP
+                        )
+                    } else {
+                        Logger.w(TAG, "No JSch bytes for key ${key.keyId} (${key.name}) — skipped in sync")
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Logger.w(TAG, "collectSecrets failed: ${e.message}")
+        }
+        return out
     }
 
     /**
