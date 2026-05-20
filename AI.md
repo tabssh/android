@@ -1078,7 +1078,6 @@ Package `cloud/` (separate from `hypervisor/`). Manages SSH-accessible cloud VM 
 | Channel ID | Importance | Use |
 |---|---|---|
 | `ssh_service_v2` | LOW | FG-service anchor + placeholder notification (`SSHConnectionService`) |
-| `ssh_connection_v2` | LOW | generic connect / disconnect / error events (silent) |
 | `file_transfer_v2` | LOW | SFTP progress (ongoing, BigText for completion) |
 | `errors_v2` | HIGH | actionable errors |
 | `ssh_silent_v3` | LOW | per-host persistent session status (silent) — carries "Disconnect" action |

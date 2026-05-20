@@ -21,7 +21,6 @@ import io.github.tabssh.utils.logging.Logger
  * ┌─ ssh_service_v2       — FG service anchor / placeholder (low, silent)
  * ├─ ssh_silent_v3        — per-host SSH session status (low, silent)
  * ├─ ssh_alerts_v3        — per-host SSH events (high, audible, per-profile gated)
- * ├─ ssh_connection_v2    — generic connect/disconnect events (low, silent)
  * ├─ file_transfer_v2     — SFTP progress (low, silent)
  * ├─ errors_v2            — connection errors / auth failures (high, audible)
  * ├─ host_monitoring_v1   — host down/recovery alerts (high, audible)
@@ -71,7 +70,6 @@ object NotificationHelper {
     // notification without creating a duplicate private channel.
     internal const val CHANNEL_SERVICE = "ssh_service_v2"
 
-    private const val CHANNEL_CONNECTION  = "ssh_connection_v2"
     private const val CHANNEL_FILE_TRANSFER = "file_transfer_v2"
     private const val CHANNEL_ERROR       = "errors_v2"
 
@@ -110,21 +108,7 @@ object NotificationHelper {
                 setSound(null, null)
             }
             
-            // Connection Channel — silent. Routine connect / disconnect
-            // updates shouldn't beep or vibrate. Errors live on the ERROR
-            // channel which keeps sound + vibration.
-            val connectionChannel = NotificationChannel(
-                CHANNEL_CONNECTION,
-                "Connection Status",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "SSH connection status updates"
-                setShowBadge(false)
-                enableVibration(false)
-                setSound(null, null)
-            }
-            
-            // File Transfer Channel - High priority, progress updates
+            // File Transfer Channel - Low priority, progress updates
             val fileTransferChannel = NotificationChannel(
                 CHANNEL_FILE_TRANSFER,
                 "File Transfers",
@@ -201,9 +185,13 @@ object NotificationHelper {
                 setSound(null, null)
             }
 
+            // Remove the legacy ssh_connection_v2 channel that was registered
+            // but never posted to — its role is covered by ssh_silent_v3 and
+            // ssh_alerts_v3. Delete it so it no longer appears in system settings.
+            notificationManager.deleteNotificationChannel("ssh_connection_v2")
+
             notificationManager.createNotificationChannels(listOf(
                 serviceChannel,
-                connectionChannel,
                 fileTransferChannel,
                 errorChannel,
                 sshSilent,
@@ -212,7 +200,7 @@ object NotificationHelper {
                 hostMetrics
             ))
 
-            Logger.d("NotificationHelper", "Created notification channels (ssh_service, ssh_silent, ssh_alerts, ssh_connection, file_transfer, errors, host_monitoring, host_metrics)")
+            Logger.d("NotificationHelper", "Created notification channels (ssh_service, ssh_silent, ssh_alerts, file_transfer, errors, host_monitoring, host_metrics)")
         }
     }
 
