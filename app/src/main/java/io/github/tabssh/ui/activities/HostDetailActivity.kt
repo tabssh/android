@@ -258,8 +258,7 @@ class HostDetailActivity : AppCompatActivity() {
     private fun startPump(profile: ConnectionProfile) {
         pumpJob?.cancel()
         pumpJob = pumpScope.launch {
-            val ssh = app.sshSessionManager.getConnection(profile.id)
-                ?: app.sshSessionManager.connectToServer(profile)
+            val ssh = app.sshSessionManager.connectForMonitoring(profile)
             if (ssh == null) {
                 runOnUiThread {
                     tvCpu.text = "—"; tvMem.text = "—"; tvDisk.text = "—"

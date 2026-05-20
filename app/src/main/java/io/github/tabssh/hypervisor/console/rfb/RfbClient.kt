@@ -558,10 +558,14 @@ class RfbClient(
      *                the VNC session alive.
      */
     private fun handleUnknownServerMessage(msgType: Int) {
-        Logger.w(TAG, "Unrecognised server message type $msgType (0x${msgType.toString(16).uppercase()}) — skipping")
-        // No payload consumed; if the message does have payload bytes the stream
-        // will subsequently desync, producing a different error message that will
-        // help identify the correct payload format.
+        // RFB server messages carry no length prefix — there is no safe way to
+        // skip an unknown message's payload. Continuing would desync the stream
+        // and silently corrupt all subsequent message reads. Failing fast here
+        // produces a clean error instead of confusing downstream garbage.
+        val hex = msgType.toString(16).uppercase()
+        Logger.e(TAG, "Unrecognised server message type $msgType (0x$hex) — cannot safely skip; closing session")
+        running.set(false)
+        throw java.io.IOException("Unknown RFB server message type 0x$hex — session closed to avoid stream desync")
     }
 
     private fun handleFramebufferUpdate() {
@@ -632,6 +636,22 @@ class RfbClient(
                     // back via handleInlineFence so the server unblocks its update queue.
                     // Not consuming these bytes desyncs the stream and causes black screen.
                     handleInlineFence()
+                }
+                RfbConstants.ENC_DESKTOP_NAME -> {
+                    // DesktopName pseudo-rect: u32 name-length + UTF-8 name bytes.
+                    // Must be consumed to stay in sync — the name is informational only.
+                    val nameLen = din.readInt()
+                    if (nameLen > 0) {
+                        val nameBytes = ByteArray(nameLen)
+                        din.readFully(nameBytes)
+                        Logger.d(TAG, "DesktopName: ${String(nameBytes, Charsets.UTF_8)}")
+                    }
+                }
+                RfbConstants.ENC_LED_STATE -> {
+                    // LedState pseudo-rect: 1 byte state flags (Scroll/Num/Caps Lock).
+                    // Must be consumed; we do not currently propagate LED state to the UI.
+                    val ledState = din.readUnsignedByte()
+                    Logger.d(TAG, "LedState: 0x${ledState.toString(16).uppercase()}")
                 }
                 else -> {
                     // Large positive encoding values (> 0xFFFF) are vendor-specific

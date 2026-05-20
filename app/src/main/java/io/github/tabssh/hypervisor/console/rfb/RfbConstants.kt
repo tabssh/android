@@ -63,6 +63,20 @@ object RfbConstants {
     const val ENC_FENCE: Int = -312
 
     /**
+     * DesktopName pseudo-encoding (-307 / 0xFFFFFEB5).
+     * Payload: u32 name-length + UTF-8 name bytes.  Must be consumed to stay
+     * in sync — skipping the u32+string would desync the stream.
+     */
+    const val ENC_DESKTOP_NAME: Int = -307
+
+    /**
+     * LedState pseudo-encoding (-261 / 0xFFFFFEEB).
+     * Payload: 1 byte state flags (bit 0 = Scroll Lock, bit 1 = Num Lock,
+     * bit 2 = Caps Lock).  Must be consumed to stay in sync.
+     */
+    const val ENC_LED_STATE: Int = -261
+
+    /**
      * ServerFence server message (type 248).
      * Format: 3 bytes padding + 4 bytes flags + 1 byte length + length bytes data.
      * QEMU/Proxmox sends this message to synchronise the update pipeline; the
