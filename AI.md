@@ -380,6 +380,15 @@ This double-check prevents silent reuse of a connection whose JSch session dropp
 
 **Host key callbacks.** `hostKeyChangedCallback` and `newHostKeyCallback` are `var` properties wired to `HostKeyVerifier` (§5.2) at initialization time; they must be set before the first `createConnection()` call or host-key dialogs won't appear.
 
+**Two connect paths — notification layer visibility:**
+
+| Method | Starts `SSHConnectionService` | Fires `onConnectionEstablished` | Use for |
+|---|---|---|---|
+| `connectToServer(profile)` | ✅ yes | ✅ yes | Interactive terminal sessions (tab strip) |
+| `connectForMonitoring(profile)` | ❌ no | ❌ no | Multihost dashboard, `HostAvailabilityWorker`, background metric polls |
+
+`connectForMonitoring()` reuses an existing live session if one is already open for the profile (whether it was opened for a terminal or a prior monitoring call). If the session is new it is registered in `activeConnections` and `connectionPool` normally, but no persistent "Connected to…" notification is posted and `SSHConnectionService` is not started. This prevents Multihost dashboard probes from appearing as SSH session notifications in the shade.
+
 ### 5.2 Host key verification
 
 `ssh/connection/HostKeyVerifier.kt` implements JSch's `HostKeyRepository`. Outcomes: `ACCEPTED`, `NEW_HOST`, `CHANGED_KEY`. Backed by `HostKeyDao` and shows `dialog_new_host_key.xml` or `dialog_host_key_changed.xml` with a SHA-256 fingerprint (and a visual "emoji fingerprint"). Trust levels persisted to the `host_keys` table: `UNKNOWN` / `ACCEPTED` / `VERIFIED`.
@@ -940,9 +949,34 @@ Realm format `user@pam` / `user@pve`. Optional SSL bypass.
 - `HypervisorConsoleManager` exposes `connectProxmoxConsole`, `connectXCPngConsole`, `connectXenOrchestraConsole`. Each returns a `ConsoleConnection` with bidirectional piped streams.
 - `ConsoleWebSocketClient` handles per-protocol framing:
   - `PROXMOX_TERM`: text frames `"0:LENGTH:MSG"` (data) and `"1:COLS:ROWS:"` (resize).
-  - `PROXMOX_VNC`: raw RFB bytes (not parsed; for VNC viewer integration).
+  - `PROXMOX_VNC`: raw RFB bytes forwarded to `RfbClient` (see §11.7.1).
   - `XCPNG`, `XO`, `VMWARE`: pass-through.
 - `wireToTerminal(connection, bridge: TermuxBridge)` connects the piped streams to the terminal — same `TermuxBridge` used for SSH, so the user gets identical terminal behavior.
+
+#### 11.7.1 `RfbClient` — RFB/VNC protocol handler
+
+`hypervisor/console/rfb/RfbClient.kt` implements the RFB 3.8 client used for graphical console display (Proxmox vncproxy, QEMU/libvirt direct-tcpip VNC).
+
+**Event loop** (`eventLoop()`) dispatches on the first byte of each server message:
+
+| Server message type | Value | Handler |
+|---|---|---|
+| `FramebufferUpdate` | 0 | `handleFramebufferUpdate()` |
+| `SetColorMapEntries` | 1 | skipped (no palette mode) |
+| `Bell` | 2 | `listener?.onBell()` |
+| `ServerCutText` | 3 | `listener?.onClipboard(text)` |
+| `ServerFence` | 248 | `handleServerFence()` |
+
+**ServerFence (`handleServerFence()`):** QEMU and Proxmox vncproxy send a `ServerFence` (type 248) before the first `FramebufferUpdate`. The server holds its entire update queue until the client echoes a matching `ClientFence`. Wire format: 3 padding bytes + u32 flags + u8 len + `len` bytes payload. The client reply echoes the same payload with bits 0–2 of `flags` cleared (those are request-specific; the echo must not assert them). Without this reply the screen stays black forever.
+
+**ENC_FENCE inline fence (`handleInlineFence()`):** Some servers include a pseudo-rect with encoding `ENC_FENCE` (-312 / 0xFFFFFEB8) inside a `FramebufferUpdate` rect list. Wire format (no rect header — rect x/y/w/h are always 0): u32 flags + u8 len + `len` bytes. Must be consumed immediately to keep the stream framed; the client sends a `ClientFence` reply identically to `handleServerFence()`.
+
+**Negative-encoding guard:** `when (encoding)` in `handleFramebufferUpdate()` has an explicit `ENC_FENCE` branch. The `else` guard is `encoding > 0xFFFF || encoding < 0` — without the `< 0` arm, negative pseudo-encodings (which are valid ints < 0) would fall through to `decodeRect()` and corrupt the stream.
+
+**Constants** (`RfbConstants.kt`):
+- `ENC_FENCE = -312` (0xFFFFFEB8)
+- `S2C_FENCE = 248`, `C2S_CLIENT_FENCE = 248` (same wire type for both directions)
+- `ENC_EXTENDED_DESKTOP_SIZE = -308` (0xFFFFFECC)
 
 ### 11.8 UI
 
@@ -1062,6 +1096,8 @@ Package `cloud/` (separate from `hypervisor/`). Manages SSH-accessible cloud VM 
 `SSHConnectionService.refreshAllHostNotifications()` calls `NotificationHelper.postSshGroupSummary(count)` every 30 s (and on sweep) to keep the SSH group summary accurate. Monitoring group summary is posted inline alongside each monitoring alert.
 
 **Disconnect from notification:** every CONNECTED per-host notification carries a "Disconnect" action button. Tapping it launches `ConfirmDisconnectActivity` (transparent dialog, `Theme.TabSSH.Transparent`) which calls `SSHSessionManager.closeConnection(profileId)` on confirm.
+
+**Multihost dashboard sessions are invisible to this layer.** `MultiHostDashboardActivity` opens connections via `SSHSessionManager.connectForMonitoring()` (§5.1.3). That path never fires `onConnectionEstablished` and never starts `SSHConnectionService`, so no per-host "Connected to…" notification is posted for monitoring-only sessions.
 
 Per-channel toggles: `notifications_enabled`, `show_connection_notifications`, `show_error_notifications`, `show_file_transfer_notifications`, `notification_vibrate`. Master switch for monitoring: `monitoring_enabled` pref.
 

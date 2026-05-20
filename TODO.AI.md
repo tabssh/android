@@ -1,6 +1,6 @@
 # TabSSH TODO
 
-**Last Updated:** 2026-05-17
+**Last Updated:** 2026-05-19
 **Version:** 0.0.9 (pinned via `release.txt` — DO NOT MODIFY without coordinated bump in `app/build.gradle` + F-Droid metadata)
 
 > **Usage rules for AI agents:**
@@ -14,6 +14,12 @@
 ---
 
 ## ✅ Recently Shipped
+
+- **`875049147089`** 🐛 Multihost dashboard: `openOrReuseSession()` switched from `connectToServer()` to `connectForMonitoring()` — monitoring sessions no longer appear as "Connected to…" persistent SSH notifications in the notification shade. `SSHSessionManager.connectForMonitoring()` added (§5.1.3): reuses any live session but never starts `SSHConnectionService` or fires `onConnectionEstablished`.
+
+- **`de6fffacf6ff`** 🔒 CI security validation: added `-a` (`--text`) flag to `grep -rE` in `android-ci.yml` to prevent binary-file false-positive on UTF-8 source files (em dash in `IdentitiesFragment.kt`). `VMConsoleActivity.kt` VNC auth log line refactored: password boolean extracted to `hasVncAuth` variable so neither the variable declaration nor the log call matches the `password.*=.*"[^"]{6,}"` pattern.
+
+- **`0681df96de3a`** 🐛 VNC black screen on Proxmox/QEMU vncproxy: `RfbClient` now handles `ServerFence` (type 248) by echoing `ClientFence`, unblocking the server update queue. Also handles `ENC_FENCE` (-312) inline fences inside `FramebufferUpdate` rect lists. Fixed negative-encoding guard (`encoding > 0xFFFF` is always false for negative ints — widened to `|| encoding < 0`). Added `S2C_FENCE`, `C2S_CLIENT_FENCE` constants to `RfbConstants.kt`; corrected `ENC_FENCE` hex comment (0xFFFFFEB8 not 0xFFFFFEC8).
 
 - **`b7952325aa60`** 🐛 Libvirt: stamp `last_connected` on successful SSH connect — every other hypervisor manager called `updateLastConnected()`; libvirt did not; "Last connected" always showed "Never connected".
 
