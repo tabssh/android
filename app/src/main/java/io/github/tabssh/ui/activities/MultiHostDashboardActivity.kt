@@ -765,8 +765,11 @@ class MultiHostDashboardActivity : AppCompatActivity() {
     }
 
     private suspend fun openOrReuseSession(profile: ConnectionProfile): SSHConnection? {
-        app.sshSessionManager.getConnection(profile.id)?.let { return it }
-        return app.sshSessionManager.connectToServer(profile)?.also {
+        // Use the monitoring-specific connect path so these background sessions
+        // do not start SSHConnectionService or post "Connected to …" notifications.
+        // If a real terminal session is already open for this profile it will be
+        // reused (its existing notification is unaffected).
+        return app.sshSessionManager.connectForMonitoring(profile)?.also {
             ownedSessions[profile.id] = it
         }
     }

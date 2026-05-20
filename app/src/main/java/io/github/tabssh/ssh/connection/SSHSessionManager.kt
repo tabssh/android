@@ -135,7 +135,11 @@ class SSHSessionManager(private val context: Context) {
     }
     
     /**
-     * Connect to a server using the profile
+     * Connect to a server using the profile — for interactive terminal sessions.
+     *
+     * Starts [SSHConnectionService] so a persistent "Connected to …" status
+     * notification appears in the shade and fires [onConnectionEstablished] so
+     * the service can anchor its foreground notification.
      */
     suspend fun connectToServer(profile: ConnectionProfile): SSHConnection? {
         return try {
@@ -164,6 +168,44 @@ class SSHSessionManager(private val context: Context) {
         } catch (e: Exception) {
             Logger.e("SSHSessionManager", "Error connecting to ${profile.getDisplayName()}", e)
             notifyListeners { onConnectionFailed(profile.id, e) }
+            null
+        }
+    }
+
+    /**
+     * Connect to a server for background monitoring purposes (Multihost dashboard,
+     * HostAvailabilityWorker metric checks, etc.).
+     *
+     * Deliberately does NOT start [SSHConnectionService] and does NOT fire
+     * [onConnectionEstablished], so no persistent "Connected to …" notification
+     * appears in the shade.  The returned [SSHConnection] is still registered in
+     * [activeConnections] so the caller can reuse it, but it is invisible to the
+     * notification layer.
+     *
+     * If a full terminal session already exists for this profile the existing
+     * connection is returned as-is — that session already has its notification.
+     */
+    suspend fun connectForMonitoring(profile: ConnectionProfile): SSHConnection? {
+        // Reuse an existing live session (terminal or monitoring — doesn't matter).
+        getConnection(profile.id)?.let { existing ->
+            if (existing.isConnected()) return existing
+        }
+        return try {
+            val connection = createConnection(profile)
+            val success = connection.connect()
+            if (success) {
+                Logger.i("SSHSessionManager", "Monitoring session connected: ${profile.getDisplayName()}")
+                connection
+            } else {
+                Logger.w("SSHSessionManager", "Monitoring connect failed: ${profile.getDisplayName()}")
+                null
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            Logger.i("SSHSessionManager", "Monitoring connect cancelled: ${profile.getDisplayName()} — cleaning up")
+            closeConnection(profile.id)
+            throw e
+        } catch (e: Exception) {
+            Logger.e("SSHSessionManager", "Monitoring connect error: ${profile.getDisplayName()}", e)
             null
         }
     }
