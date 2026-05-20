@@ -156,6 +156,7 @@ class GroupedConnectionAdapter(
         private val textName: TextView = itemView.findViewById(R.id.text_connection_name)
         private val textDetails: TextView = itemView.findViewById(R.id.text_connection_details)
         private val textCount: TextView = itemView.findViewById(R.id.text_connection_count)
+        private val indicatorStatus: View = itemView.findViewById(R.id.indicator_status)
 
         fun bind(profile: ConnectionProfile, indentLevel: Int) {
             textName.text = profile.name
@@ -168,6 +169,9 @@ class GroupedConnectionAdapter(
             } else {
                 textCount.visibility = View.GONE
             }
+
+            // Status dot — green when a live session exists, grey otherwise
+            updateStatusIndicator(profile)
 
             // Apply indent for grouped items
             val indentPx = indentLevel * 32 * itemView.resources.displayMetrics.density.toInt()
@@ -184,6 +188,15 @@ class GroupedConnectionAdapter(
             }
 
             Logger.d("GroupedConnectionAdapter", "Bound connection: ${profile.getDisplayName()} (indent: $indentLevel)")
+        }
+
+        private fun updateStatusIndicator(profile: ConnectionProfile) {
+            val app = itemView.context.applicationContext as? io.github.tabssh.TabSSHApplication
+            val active = app?.sshSessionManager?.isConnectionActive(profile.id) == true
+            indicatorStatus.setBackgroundResource(
+                if (active) R.drawable.connection_status_indicator
+                else        R.drawable.connection_status_disconnected
+            )
         }
     }
 
