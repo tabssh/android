@@ -381,8 +381,10 @@ class MultiRowKeyboardView @JvmOverloads constructor(
         const val MIN_ROWS = 1
         const val MAX_ROWS = 5
         const val DEFAULT_ROWS = 3
-        /** Maximum rows shown in landscape to preserve terminal vertical space. */
-        const val LANDSCAPE_MAX_ROWS = 2
+        /** Maximum rows shown in landscape to preserve terminal vertical space.
+         *  Set to 3 to match the default portrait row count — the split keyboard
+         *  layout saves horizontal space, not vertical, so 3 rows fit cleanly. */
+        const val LANDSCAPE_MAX_ROWS = 3
         /**
          * Portrait caps for tablet-class screens. The user's setting is always
          * a ceiling — these values only kick in when the screen is large enough
