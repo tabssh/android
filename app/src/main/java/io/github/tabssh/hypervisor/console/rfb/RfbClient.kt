@@ -550,11 +550,21 @@ class RfbClient(
      * with a clean error rather than letting the stream desync silently.
      *
      * Known observed types:
+     *   185 (0xB9) — QEMU VNC_MSG_SERVER_LED_STATE; carries a 4-byte payload
+     *                (Caps/Num/Scroll lock bitmask).  Sent spontaneously after
+     *                ExtendedDesktopSize negotiation on libvirt/QEMU sessions.
      *   204 (0xCC) — QEMU/Proxmox display-mode notification; carries no
      *                payload.  Observed on Proxmox 7/8 vncproxy sessions.
      */
     private fun handleUnknownServerMessage(msgType: Int) {
         when (msgType) {
+            0xB9 -> {
+                // QEMU VNC_MSG_SERVER_LED_STATE — 4-byte LED state payload
+                // (Caps/Num/Scroll lock bitmask). Consume the payload to keep
+                // the stream in sync; we do not forward LED state to the client.
+                din.skipBytes(4)
+                Logger.d(TAG, "Skipping QEMU LED state message (0xB9)")
+            }
             0xCC -> {
                 // Zero-payload QEMU/Proxmox display notification — safe to ignore.
                 Logger.d(TAG, "Skipping zero-payload QEMU/Proxmox server message 0xCC")

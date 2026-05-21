@@ -1057,9 +1057,34 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             .setTitle("Export Options")
             .setItems(options) { _, which ->
                 when (which) {
-                    0 -> performExport(uri, includePasswords = false, password = null)
+                    0 -> showUnencryptedExportWarning(uri)
                     1 -> showExportPasswordDialog(uri)
                 }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Warn the user that an unencrypted backup stores all data in plain JSON —
+     * saved passwords and private keys are excluded, but host/user/port data
+     * is readable by anyone with access to the file.  Require explicit confirmation.
+     */
+    private fun showUnencryptedExportWarning(uri: android.net.Uri) {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("⚠️ Unencrypted Backup")
+            .setMessage(
+                "This backup will be saved as plain, unencrypted JSON.\n\n" +
+                "Anyone who can read the file will see all your host addresses, " +
+                "usernames, ports, and configuration details.\n\n" +
+                "Saved passwords and private keys are always excluded from " +
+                "unencrypted backups to reduce risk, but the remaining data " +
+                "is still sensitive.\n\n" +
+                "For full protection — including the ability to restore passwords " +
+                "and keys — use an encrypted backup with a strong password."
+            )
+            .setPositiveButton("Export Without Encryption") { _, _ ->
+                performExport(uri, includePasswords = false, password = null)
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -1144,10 +1169,19 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                 )
 
                 if (result.success) {
+                    val encryptedLabel = if (password != null) " (encrypted)" else " (unencrypted)"
+                    android.widget.Toast.makeText(
+                        this@MainActivity,
+                        "Backup exported successfully$encryptedLabel",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+
                     val message = buildString {
-                        append("Backup exported successfully!")
+                        append("Backup exported and verified successfully!")
                         if (password != null) {
                             append("\n\n🔐 Encrypted with password")
+                        } else {
+                            append("\n\n⚠️ Unencrypted — no password protection")
                         }
                         result.metadata?.itemCounts?.let { items ->
                             if (items.isNotEmpty()) {
@@ -1169,11 +1203,16 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
 
                     Logger.i("MainActivity", "Exported backup successfully")
                 } else {
-                    throw Exception("Export failed")
+                    throw Exception("Export failed: ${result.message}")
                 }
 
             } catch (e: Exception) {
                 Logger.e("MainActivity", "Failed to export backup", e)
+                android.widget.Toast.makeText(
+                    this@MainActivity,
+                    "Backup export failed: ${e.message}",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
                 io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(
                     this@MainActivity, "Export Failed",
                     "Failed to export backup:\n${e.message}"

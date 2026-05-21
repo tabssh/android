@@ -543,6 +543,35 @@ class PerformanceFragment : Fragment() {
         android.widget.Toast.makeText(requireContext(), message, android.widget.Toast.LENGTH_SHORT).show()
     }
 
+    override fun onResume() {
+        super.onResume()
+        // When the user navigates back to the Stats tab the fragment view may
+        // still be alive (ViewPager keeps adjacent pages in memory), so
+        // onViewCreated is NOT called again.  We must re-establish monitoring
+        // here.  Three cases:
+        //   1. Connection healthy, monitoring was paused by onPause → restart.
+        //   2. Connection gone (dropped while away, or initial connect failed)
+        //      → trigger a fresh connect via onConnectionSelected().
+        //   3. Connection alive but not yet CONNECTED (auto-reconnect in
+        //      flight) → connectionStateObserver will restart monitoring once
+        //      the state transitions to CONNECTED; nothing to do here.
+        val selected = selectedConnection ?: return
+        val conn = sshConnection
+        when {
+            conn != null && conn.isConnected() && !isMonitoring -> {
+                Logger.d("PerformanceFragment",
+                    "Resuming monitoring for ${selected.name} after tab navigation")
+                startMonitoring()
+            }
+            conn == null -> {
+                Logger.d("PerformanceFragment",
+                    "Auto-connecting to ${selected.name} on resume (no active connection)")
+                onConnectionSelected()
+            }
+            // conn != null but not yet CONNECTED: leave it to connectionStateObserver
+        }
+    }
+
     override fun onPause() {
         super.onPause()
         // Stop monitoring when fragment is not visible
