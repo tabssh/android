@@ -969,7 +969,7 @@ class MultiHostDashboardActivity : AppCompatActivity() {
                 b.tvGroupMetrics.visibility = View.GONE
                 return
             }
-            b.tvGroupMetrics.text = "CPU: ${agg.avgCpu}% | MEM: ${agg.avgMem}% | DISK: ${agg.avgDisk}% | LOAD: ${agg.avgLoad1}%,${agg.avgLoad5}%,${agg.avgLoad15}%"
+            b.tvGroupMetrics.text = "CPU: ${agg.avgCpu}% | MEM: ${agg.avgMem}%\nDISK: ${agg.avgDisk}% | LOAD: ${agg.avgLoad1}%,${agg.avgLoad5}%,${agg.avgLoad15}%"
             b.tvGroupMetrics.visibility = View.VISIBLE
         }
     }
