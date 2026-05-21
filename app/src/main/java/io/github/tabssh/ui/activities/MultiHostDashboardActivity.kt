@@ -87,9 +87,23 @@ class MultiHostDashboardActivity : AppCompatActivity() {
         val collapsed: Boolean = false
     )
 
+    /** Averaged metric snapshot across all hosts in a group that have data. */
+    data class GroupAggMetrics(
+        val avgCpu: Int,
+        val avgMem: Int,
+        val avgDisk: Int,
+        val avgLoad1: Int,
+        val avgLoad5: Int,
+        val avgLoad15: Int
+    )
+
     sealed class DashboardItem {
         /** Header row for a named dashboard group. */
-        data class GroupHeader(val group: DashboardGroup, val memberCount: Int) : DashboardItem()
+        data class GroupHeader(
+            val group: DashboardGroup,
+            val memberCount: Int,
+            val aggMetrics: GroupAggMetrics? = null
+        ) : DashboardItem()
         /** Header row for the "Ungrouped" pseudo-group. */
         data class UngroupedHeader(val count: Int, val collapsed: Boolean) : DashboardItem()
         /** One host card row. */
@@ -779,9 +793,36 @@ class MultiHostDashboardActivity : AppCompatActivity() {
             it is DashboardItem.Host && it.profile.id == connectionId
         }
         if (pos >= 0) adapter.notifyItemChanged(pos, PAYLOAD_METRICS)
+
+        // Also refresh the group header so its aggregate metrics stay current.
+        val groupId = groupHosts.entries.find { it.value.contains(connectionId) }?.key ?: return
+        val headerPos = adapter.items.indexOfFirst {
+            (it is DashboardItem.GroupHeader && it.group.id == groupId)
+        }
+        if (headerPos >= 0) adapter.notifyItemChanged(headerPos, PAYLOAD_GROUP_METRICS)
     }
 
     // ── RecyclerView list builder ─────────────────────────────────────────────
+
+    /** Average metric snapshot across all hosts in [groupId] that have data. */
+    private fun computeGroupAgg(groupId: String): GroupAggMetrics? {
+        val snapshots = groupHosts[groupId]
+            ?.mapNotNull { metricsMap[it] }
+            ?: return null
+        if (snapshots.isEmpty()) return null
+        fun List<PerformanceMetrics>.avgInt(f: (PerformanceMetrics) -> Float) =
+            map { f(it).toInt() }.average().toInt().coerceAtLeast(0)
+        fun loadPct(m: PerformanceMetrics, load: Float): Int =
+            (load / m.cpuUsage.coreCount.coerceAtLeast(1) * 100).toInt().coerceAtLeast(0)
+        return GroupAggMetrics(
+            avgCpu   = snapshots.avgInt { it.cpuUsage.totalPercent },
+            avgMem   = snapshots.avgInt { it.memoryUsage.usedPercent },
+            avgDisk  = snapshots.avgInt { it.diskUsage.usedPercent },
+            avgLoad1 = snapshots.map { loadPct(it, it.loadAverage.load1min)  }.average().toInt().coerceAtLeast(0),
+            avgLoad5 = snapshots.map { loadPct(it, it.loadAverage.load5min)  }.average().toInt().coerceAtLeast(0),
+            avgLoad15= snapshots.map { loadPct(it, it.loadAverage.load15min) }.average().toInt().coerceAtLeast(0),
+        )
+    }
 
     private fun buildItemList(): List<DashboardItem> {
         val list = mutableListOf<DashboardItem>()
@@ -789,7 +830,7 @@ class MultiHostDashboardActivity : AppCompatActivity() {
         // Named groups
         for (group in dashboardGroups) {
             val hosts = groupHosts[group.id]?.mapNotNull { profileCache[it] } ?: emptyList()
-            list.add(DashboardItem.GroupHeader(group, hosts.size))
+            list.add(DashboardItem.GroupHeader(group, hosts.size, computeGroupAgg(group.id)))
             if (!group.collapsed) {
                 hosts.forEach { list.add(DashboardItem.Host(it, group.id)) }
             }
@@ -859,10 +900,18 @@ class MultiHostDashboardActivity : AppCompatActivity() {
             position: Int,
             payloads: MutableList<Any>
         ) {
-            if (payloads.isNotEmpty() && holder is HostCardHolder) {
+            if (payloads.isNotEmpty()) {
                 val item = items[position]
-                if (item is DashboardItem.Host) holder.updateMetrics(item.profile.id)
-                return
+                when {
+                    holder is HostCardHolder && item is DashboardItem.Host -> {
+                        holder.updateMetrics(item.profile.id)
+                        return
+                    }
+                    holder is GroupHeaderHolder && item is DashboardItem.GroupHeader -> {
+                        holder.updateGroupMetrics(item.group.id)
+                        return
+                    }
+                }
             }
             super.onBindViewHolder(holder, position, payloads)
         }
@@ -881,6 +930,10 @@ class MultiHostDashboardActivity : AppCompatActivity() {
             b.btnToggle.setImageResource(
                 if (g.collapsed) R.drawable.ic_expand_more else R.drawable.ic_expand_less
             )
+            b.btnRename.visibility = View.VISIBLE
+            b.btnDelete.visibility = View.VISIBLE
+
+            bindMetricsRow(item.aggMetrics)
 
             b.btnToggle.setOnClickListener    { toggleGroupCollapsed(g.id) }
             b.root.setOnClickListener         { toggleGroupCollapsed(g.id) }
@@ -896,12 +949,28 @@ class MultiHostDashboardActivity : AppCompatActivity() {
                 if (item.collapsed) R.drawable.ic_expand_more else R.drawable.ic_expand_less
             )
 
+            bindMetricsRow(computeGroupAgg(UNGROUPED_ID))
+
             b.btnToggle.setOnClickListener    { toggleGroupCollapsed(UNGROUPED_ID) }
             b.root.setOnClickListener         { toggleGroupCollapsed(UNGROUPED_ID) }
             b.btnAddHosts.setOnClickListener  { showHostPicker(UNGROUPED_ID) }
             // Ungrouped cannot be renamed or deleted — hide those buttons
             b.btnRename.visibility = View.GONE
             b.btnDelete.visibility = View.GONE
+        }
+
+        /** Payload-only refresh — recomputes aggregates without rebinding click listeners. */
+        fun updateGroupMetrics(groupId: String) {
+            bindMetricsRow(computeGroupAgg(groupId))
+        }
+
+        private fun bindMetricsRow(agg: GroupAggMetrics?) {
+            if (agg == null) {
+                b.tvGroupMetrics.visibility = View.GONE
+                return
+            }
+            b.tvGroupMetrics.text = "CPU: ${agg.avgCpu}% | MEM: ${agg.avgMem}% | DISK: ${agg.avgDisk}% | LOAD: ${agg.avgLoad1}%,${agg.avgLoad5}%,${agg.avgLoad15}%"
+            b.tvGroupMetrics.visibility = View.VISIBLE
         }
     }
 
@@ -988,10 +1057,12 @@ class MultiHostDashboardActivity : AppCompatActivity() {
             setBar(b.pbMem,  mem);  b.tvMem.text  = "$mem%"
             setBar(b.pbDisk, disk); b.tvDisk.text = "$disk%"
 
-            val load = metrics.loadAverage
-            b.tvLoad.text = "LOAD %.2f / %.2f / %.2f".format(
-                load.load1min, load.load5min, load.load15min
-            )
+            val load  = metrics.loadAverage
+            val cores = metrics.cpuUsage.coreCount.coerceAtLeast(1)
+            val l1    = (load.load1min  / cores * 100).toInt().coerceAtLeast(0)
+            val l5    = (load.load5min  / cores * 100).toInt().coerceAtLeast(0)
+            val l15   = (load.load15min / cores * 100).toInt().coerceAtLeast(0)
+            b.tvLoad.text = "LOAD $l1%, $l5%, $l15%"
             b.tvUptime.text = "⏱ " + formatUptime(load.uptime)
 
             val net = metrics.networkStats
@@ -1064,7 +1135,8 @@ class MultiHostDashboardActivity : AppCompatActivity() {
 
     // ── DiffUtil callback ─────────────────────────────────────────────────────
 
-    private val PAYLOAD_METRICS = Any()
+    private val PAYLOAD_METRICS       = Any()
+    private val PAYLOAD_GROUP_METRICS = Any()
 
     private class ItemDiffCallback(
         private val old: List<DashboardItem>,

@@ -17,78 +17,101 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingStart="4dp"
-        android:paddingEnd="4dp"
-        android:paddingTop="6dp"
-        android:paddingBottom="6dp">
+        android:orientation="vertical">
 
-        <!-- Expand/collapse chevron -->
-        <ImageButton
-            android:id="@+id/btn_toggle"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Toggle group"
-            app:srcCompat="@drawable/ic_expand_more"
-            app:tint="?attr/colorOnSurfaceVariant" />
-
-        <!-- Group name -->
-        <TextView
-            android:id="@+id/tv_group_name"
-            android:layout_width="0dp"
+        <!-- Row 1: chevron + name + host count + action buttons -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:textAppearance="@style/TextAppearance.Material3.TitleSmall"
-            android:textColor="?attr/colorOnSurface"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:paddingStart="4dp" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp">
 
-        <!-- Host count chip -->
+            <!-- Expand/collapse chevron -->
+            <ImageButton
+                android:id="@+id/btn_toggle"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Toggle group"
+                app:srcCompat="@drawable/ic_expand_more"
+                app:tint="?attr/colorOnSurfaceVariant" />
+
+            <!-- Group name -->
+            <TextView
+                android:id="@+id/tv_group_name"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textAppearance="@style/TextAppearance.Material3.TitleSmall"
+                android:textColor="?attr/colorOnSurface"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:paddingStart="4dp" />
+
+            <!-- Host count chip -->
+            <TextView
+                android:id="@+id/tv_host_count"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:background="@drawable/bg_host_count_chip"
+                android:layout_marginEnd="4dp" />
+
+            <!-- Add hosts to this group -->
+            <ImageButton
+                android:id="@+id/btn_add_hosts"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Add hosts to group"
+                app:srcCompat="@drawable/ic_add"
+                app:tint="?attr/colorOnSurfaceVariant" />
+
+            <!-- Rename group -->
+            <ImageButton
+                android:id="@+id/btn_rename"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Rename group"
+                app:srcCompat="@drawable/ic_edit"
+                app:tint="?attr/colorOnSurfaceVariant" />
+
+            <!-- Delete group -->
+            <ImageButton
+                android:id="@+id/btn_delete"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Delete group"
+                app:srcCompat="@drawable/ic_close"
+                app:tint="?attr/colorOnSurfaceVariant" />
+
+        </LinearLayout>
+
+        <!-- Row 2: aggregated group metrics snapshot (hidden until data arrives) -->
         <TextView
-            android:id="@+id/tv_host_count"
-            android:layout_width="wrap_content"
+            android:id="@+id/tv_group_metrics"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingStart="6dp"
-            android:paddingEnd="6dp"
-            android:paddingTop="2dp"
-            android:paddingBottom="2dp"
+            android:gravity="center"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="0dp"
+            android:paddingBottom="6dp"
             android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
             android:textColor="?attr/colorOnSurfaceVariant"
-            android:background="@drawable/bg_host_count_chip"
-            android:layout_marginEnd="4dp" />
-
-        <!-- Add hosts to this group -->
-        <ImageButton
-            android:id="@+id/btn_add_hosts"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Add hosts to group"
-            app:srcCompat="@drawable/ic_add"
-            app:tint="?attr/colorOnSurfaceVariant" />
-
-        <!-- Rename group -->
-        <ImageButton
-            android:id="@+id/btn_rename"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Rename group"
-            app:srcCompat="@drawable/ic_edit"
-            app:tint="?attr/colorOnSurfaceVariant" />
-
-        <!-- Delete group -->
-        <ImageButton
-            android:id="@+id/btn_delete"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Delete group"
-            app:srcCompat="@drawable/ic_close"
-            app:tint="?attr/colorOnSurfaceVariant" />
+            android:fontFamily="monospace"
+            android:visibility="gone" />
 
     </LinearLayout>
 
