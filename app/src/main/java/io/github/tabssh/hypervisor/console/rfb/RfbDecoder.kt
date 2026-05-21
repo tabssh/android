@@ -34,6 +34,23 @@ class RfbDecoder(private val fmt: PixelFormat) {
         private const val TAG = "RfbDecoder"
         private const val ZRLE_TILE = 64          // ZRLE tile size in pixels
         private const val ZRLE_BUF = 512 * 1024   // initial inflate buffer
+
+        /**
+         * The complete set of encoding values that [decodeRect] can handle.
+         * RfbClient uses this to guard calls to [decodeRect] — any encoding
+         * not in this set is a pseudo-encoding or vendor extension with zero
+         * pixel payload and must NOT be passed to [decodeRect].
+         */
+        val PIXEL_ENCODINGS: Set<Int> = setOf(
+            RfbConstants.ENC_RAW,
+            RfbConstants.ENC_COPY_RECT,
+            RfbConstants.ENC_RRE,
+            RfbConstants.ENC_CORRE,
+            RfbConstants.ENC_HEXTILE,
+            RfbConstants.ENC_ZLIB,
+            RfbConstants.ENC_ZRLE,
+            RfbConstants.ENC_TIGHT
+        )
     }
 
     // ── Zlib streams ─────────────────────────────────────────────────────────
@@ -74,10 +91,16 @@ class RfbDecoder(private val fmt: PixelFormat) {
             RfbConstants.ENC_ZRLE      -> decodeZrle(din, fb, fbW, x, y, w, h)
             RfbConstants.ENC_TIGHT     -> decodeTight(din, fb, fbW, x, y, w, h)
             else -> {
-                Logger.w(TAG, "Unsupported encoding $encoding for rect $x,$y ${w}×$h — skipping")
-                val skip = w.toLong() * h * fmt.bytesPerPixel
-                var remaining = skip
-                while (remaining > 0) remaining -= din.skip(remaining)
+                // This branch should never be reached: RfbClient guards all
+                // calls to decodeRect with the PIXEL_ENCODINGS set. If it is
+                // reached, the alternative — skipping w*h*bpp bytes — is
+                // catastrophically wrong for pseudo-encodings that carry fake
+                // dimensions (e.g. 0x6000 with 16384×8192 → 512 MB skip that
+                // blocks the reader thread forever). Fail fast instead.
+                throw java.io.IOException(
+                    "decodeRect called with unhandled encoding $encoding " +
+                    "at $x,$y ${w}×$h — stream state unknown, terminating"
+                )
             }
         }
     }

@@ -725,23 +725,20 @@ class RfbClient(
                 }
                 else -> {
                     val hexEnc = (encoding.toLong() and 0xFFFFFFFFL).toString(16).uppercase()
-                    when {
-                        encoding < 0 || encoding > 0xFFFF -> {
-                            // Unrecognised pseudo-encoding or vendor extension.
-                            // Per RFC convention, pseudo-encodings (negative values) and
-                            // high positive vendor encodings used as capability signals carry
-                            // NO pixel payload — they are just advertisement rectangles.
-                            // Assume zero payload and continue; if this assumption is wrong
-                            // (the server sends an unknown payload-bearing pseudo-encoding),
-                            // the stream will desync and a subsequent error will expose it.
-                            Logger.d(TAG, "Unknown pseudo/vendor encoding 0x$hexEnc at ($rx,$ry) ${rw}×$rh — assuming zero payload")
-                        }
-                        rw > 0 && rh > 0 -> {
-                            // Standard encoding range (0–255) with pixel data.
-                            Logger.d(TAG, "Decoding rect enc=0x$hexEnc at ($rx,$ry) ${rw}×$rh")
-                            decoder.decodeRect(din, framebuffer, fbWidth, rx, ry, rw, rh, encoding)
-                            listener?.onFramebufferUpdate(rx, ry, rw, rh, framebuffer)
-                        }
+                    // Only the encodings that RfbDecoder.decodeRect() explicitly
+                    // handles carry real pixel data. Everything else — negative
+                    // pseudo-encodings, QEMU vendor encodings such as 0x6000
+                    // (24576), or any other unrecognised value — is treated as a
+                    // capability-signal advertisement with zero payload.
+                    // Calling the decoder on an unrecognised encoding with fake
+                    // dimensions (e.g. 16384×8192) would compute a 512 MB skip
+                    // that blocks the reader thread forever.
+                    if (encoding in RfbDecoder.PIXEL_ENCODINGS && rw > 0 && rh > 0) {
+                        Logger.d(TAG, "Decoding rect enc=0x$hexEnc at ($rx,$ry) ${rw}×$rh")
+                        decoder.decodeRect(din, framebuffer, fbWidth, rx, ry, rw, rh, encoding)
+                        listener?.onFramebufferUpdate(rx, ry, rw, rh, framebuffer)
+                    } else {
+                        Logger.d(TAG, "Unknown/vendor encoding 0x$hexEnc at ($rx,$ry) ${rw}×$rh — zero payload, skipping")
                     }
                 }
             }
@@ -1064,6 +1061,7 @@ class RfbClient(
      * Send a key event. [keysym] is an X11 keysym (see [RfbConstants.KEY_*]).
      */
     fun sendKeyEvent(keysym: Long, down: Boolean) {
+        Logger.d(TAG, "KeyEvent keysym=0x${keysym.toString(16)} down=$down")
         synchronized(outLock) {
             dout.writeByte(RfbConstants.C2S_KEY_EVENT)
             dout.writeByte(if (down) 1 else 0)
