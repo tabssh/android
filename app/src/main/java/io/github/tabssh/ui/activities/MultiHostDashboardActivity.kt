@@ -38,6 +38,10 @@ import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.background.BatteryOptimizationHelper
 import io.github.tabssh.storage.database.entities.MonitorSlot
 import io.github.tabssh.utils.logging.Logger
+import android.text.Spannable
+import android.text.SpannableStringBuilder
+import android.text.style.ForegroundColorSpan
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -964,12 +968,49 @@ class MultiHostDashboardActivity : AppCompatActivity() {
             bindMetricsRow(computeGroupAgg(groupId))
         }
 
-        private fun bindMetricsRow(agg: GroupAggMetrics?) {
-            if (agg == null) {
-                b.tvGroupMetrics.visibility = View.GONE
-                return
+        /**
+         * Returns green / yellow / red based on [value] vs thresholds.
+         *   ≤ warnAt  → success (green)
+         *   ≤ critAt  → warning (amber)
+         *   > critAt  → error   (red)
+         */
+        private fun metricColor(value: Int, warnAt: Int, critAt: Int): Int {
+            val ctx = itemView.context
+            return when {
+                value > critAt -> ContextCompat.getColor(ctx, R.color.error)
+                value > warnAt -> ContextCompat.getColor(ctx, R.color.warning)
+                else           -> ContextCompat.getColor(ctx, R.color.success)
             }
-            b.tvGroupMetrics.text = "CPU: ${agg.avgCpu}% | MEM: ${agg.avgMem}%\nDISK: ${agg.avgDisk}% | LOAD: ${agg.avgLoad1}%,${agg.avgLoad5}%,${agg.avgLoad15}%"
+        }
+
+        private fun bindMetricsRow(agg: GroupAggMetrics?) {
+            if (agg == null) { b.tvGroupMetrics.visibility = View.GONE; return }
+
+            val sb = SpannableStringBuilder()
+
+            fun SpannableStringBuilder.appendColored(text: String, color: Int) {
+                val start = length
+                append(text)
+                setSpan(ForegroundColorSpan(color), start, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+
+            // Line 1: CPU | MEM
+            sb.append("CPU: ")
+            sb.appendColored("${agg.avgCpu}%", metricColor(agg.avgCpu, warnAt = 60, critAt = 80))
+            sb.append(" | MEM: ")
+            sb.appendColored("${agg.avgMem}%", metricColor(agg.avgMem, warnAt = 60, critAt = 80))
+            sb.append("\n")
+            // Line 2: DISK | LOAD
+            sb.append("DISK: ")
+            sb.appendColored("${agg.avgDisk}%", metricColor(agg.avgDisk, warnAt = 70, critAt = 85))
+            sb.append(" | LOAD: ")
+            sb.appendColored("${agg.avgLoad1}%", metricColor(agg.avgLoad1, warnAt = 60, critAt = 90))
+            sb.append(",")
+            sb.appendColored("${agg.avgLoad5}%", metricColor(agg.avgLoad5, warnAt = 60, critAt = 90))
+            sb.append(",")
+            sb.appendColored("${agg.avgLoad15}%", metricColor(agg.avgLoad15, warnAt = 60, critAt = 90))
+
+            b.tvGroupMetrics.text = sb
             b.tvGroupMetrics.visibility = View.VISIBLE
         }
     }
