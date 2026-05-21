@@ -563,6 +563,17 @@ class RfbClient(
                 RfbConstants.S2C_GII                     -> handleGii()
                 // ── QEMU extended messages (type 255) ───────────────────────
                 RfbConstants.S2C_QEMU_EXT                -> handleQemuExt()
+                // ── QEMU/vendor notification (type 0xE0 = 224) ──────────────
+                // Observed on QEMU-based VPS hosts (e.g. SSDnodes).  Appears
+                // once per session immediately after the first FramebufferUpdate
+                // that contains the EDS rejection + vendor pseudo-encoding flood.
+                // The exact QEMU sub-system that generates this type is
+                // unidentified; empirically it carries zero payload — treating it
+                // as such keeps the stream in sync and allows the session to live.
+                // If this assumption is wrong, the next read will desync and log
+                // a different unknown-type error, at which point the payload
+                // structure can be determined from that log.
+                0xE0                                     -> Logger.d(TAG, "Vendor msg 0xE0 (224) — zero payload, continuing")
                 // ── Unknown ─────────────────────────────────────────────────
                 else                                     -> handleUnknownServerMessage(msgType)
             }
@@ -583,6 +594,10 @@ class RfbClient(
      * caused by stream desync.  The root cause was QEMU sending ExtendedDesktopSize
      * with encoding 0xFFFFFFCC (-52) instead of the standard -308; that is now
      * handled explicitly in [handleFramebufferUpdate].
+     *
+     * 0xE0 (224) IS a genuine top-level message from some QEMU-based VPS hosts
+     * (observed on SSDnodes).  It is handled as zero-payload in [eventLoop] to
+     * keep the session alive rather than closing it here.
      */
     private fun handleUnknownServerMessage(msgType: Int) {
         val hex = msgType.toString(16).uppercase().padStart(2, '0')
@@ -737,7 +752,11 @@ class RfbClient(
                         Logger.d(TAG, "Decoding rect enc=0x$hexEnc at ($rx,$ry) ${rw}×$rh")
                         decoder.decodeRect(din, framebuffer, fbWidth, rx, ry, rw, rh, encoding)
                         listener?.onFramebufferUpdate(rx, ry, rw, rh, framebuffer)
+                    } else if (encoding in RfbDecoder.PIXEL_ENCODINGS) {
+                        // Known pixel encoding but zero-dimension rect — no payload.
+                        Logger.d(TAG, "Zero-dim rect enc=0x$hexEnc at ($rx,$ry) ${rw}×$rh — skipping")
                     } else {
+                        // Unknown vendor / pseudo-encoding — assume zero payload.
                         Logger.d(TAG, "Unknown/vendor encoding 0x$hexEnc at ($rx,$ry) ${rw}×$rh — zero payload, skipping")
                     }
                 }
