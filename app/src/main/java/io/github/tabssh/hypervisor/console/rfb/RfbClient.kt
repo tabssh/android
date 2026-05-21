@@ -635,10 +635,20 @@ class RfbClient(
                         pendingResizeRejection = false
                         if (rw > 0 && rh > 0) {
                             Logger.i(TAG, "ExtendedDesktopSize: ${rw}×$rh (reason=$rx status=OK)")
+                            val sizeChanged = rw != fbWidth || rh != fbHeight
                             fbWidth = rw; fbHeight = rh
-                            framebuffer = IntArray(fbWidth * fbHeight)
-                            listener?.onDesktopResize(fbWidth, fbHeight, framebuffer)
-                            sendUpdateRequest(0, 0, fbWidth, fbHeight, incremental = false)
+                            if (sizeChanged) {
+                                // Dimensions changed: allocate a fresh framebuffer, notify the
+                                // view, and request a full (non-incremental) repaint.
+                                // When the size is unchanged (QEMU/Proxmox sends EDS as a
+                                // capability signal in every FramebufferUpdate response), we
+                                // skip the non-incremental FBUR — the incremental request at
+                                // the bottom of handleFramebufferUpdate() drives the next frame,
+                                // avoiding the feedback loop that produced ~50 EDS per second.
+                                framebuffer = IntArray(fbWidth * fbHeight)
+                                listener?.onDesktopResize(fbWidth, fbHeight, framebuffer)
+                                sendUpdateRequest(0, 0, fbWidth, fbHeight, incremental = false)
+                            }
                         }
                         if (rx == 0 && !serverSupportsExtendedDesktopSize) {
                             // Server-initiated first announcement → server supports EDS.
