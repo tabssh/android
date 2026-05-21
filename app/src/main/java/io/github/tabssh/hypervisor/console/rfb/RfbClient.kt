@@ -72,6 +72,7 @@ class RfbClient(
          * which confirms it supports the extension.  See [sendSetDesktopSize].
          */
         private val PREFERRED_ENCODINGS = intArrayOf(
+            // ── Pixel encodings (preference order) ───────────────────────────
             RfbConstants.ENC_TIGHT,                    // TigerVNC / libvirt default
             RfbConstants.ENC_ZRLE,                     // Proxmox preferred
             RfbConstants.ENC_ZLIB,
@@ -80,11 +81,22 @@ class RfbClient(
             RfbConstants.ENC_COPY_RECT,
             RfbConstants.ENC_RRE,
             RfbConstants.ENC_RAW,
-            RfbConstants.ENC_EXTENDED_DESKTOP_SIZE,    // client-initiated resize
-            RfbConstants.ENC_DESKTOP_SIZE,             // server-side resize
-            RfbConstants.ENC_CURSOR,
+            // ── Desktop resize ────────────────────────────────────────────────
+            RfbConstants.ENC_EXTENDED_DESKTOP_SIZE,    // standard -308 (IANA)
+            RfbConstants.ENC_QEMU_EXTENDED_DESKTOP_SIZE, // QEMU alias -52
+            RfbConstants.ENC_DESKTOP_SIZE,             // legacy server-side resize
+            // ── Cursor ───────────────────────────────────────────────────────
+            RfbConstants.ENC_CURSOR_WITH_ALPHA,        // RGBA cursor
+            RfbConstants.ENC_CURSOR,                   // 1-bit-mask cursor
+            RfbConstants.ENC_XCURSOR,                  // X11 1-bit cursor (legacy)
+            RfbConstants.ENC_POINTER_POS,              // pointer position updates
+            // ── Control flow / sync ──────────────────────────────────────────
             RfbConstants.ENC_FENCE,                    // consume fence messages
-            RfbConstants.ENC_LAST_RECT
+            RfbConstants.ENC_LAST_RECT,                // end-of-update marker
+            RfbConstants.ENC_CONTINUOUS_UPDATES,       // advertise CU support
+            // ── Metadata ─────────────────────────────────────────────────────
+            RfbConstants.ENC_DESKTOP_NAME,             // desktop name changes
+            RfbConstants.ENC_LED_STATE,                // QEMU LED state (pseudo-rect)
         )
     }
 
@@ -531,54 +543,52 @@ class RfbClient(
     private fun eventLoop() {
         while (running.get()) {
             when (val msgType = din.readUnsignedByte()) {
-                RfbConstants.S2C_FRAMEBUFFER_UPDATE -> handleFramebufferUpdate()
-                RfbConstants.S2C_SET_COLOUR_MAP_ENTRIES -> skipColourMap()
-                RfbConstants.S2C_BELL -> listener?.onBell()
-                RfbConstants.S2C_SERVER_CUT_TEXT -> handleServerCutText()
-                RfbConstants.S2C_FENCE -> handleServerFence()
-                RfbConstants.S2C_QEMU_EXT -> handleQemuExt()
-                else -> handleUnknownServerMessage(msgType)
+                // ── RFC 6143 core messages ──────────────────────────────────
+                RfbConstants.S2C_FRAMEBUFFER_UPDATE      -> handleFramebufferUpdate()
+                RfbConstants.S2C_SET_COLOUR_MAP_ENTRIES  -> skipColourMap()
+                RfbConstants.S2C_BELL                    -> listener?.onBell()
+                RfbConstants.S2C_SERVER_CUT_TEXT         -> handleServerCutText()
+                // ── UltraVNC / PalmVNC resize (type 4 / 15) ────────────────
+                RfbConstants.S2C_ULTRAVNC_RESIZE         -> handleUltraVncResize()
+                15                                       -> skipPalmVncResize()
+                // ── TigerVNC extensions ─────────────────────────────────────
+                RfbConstants.S2C_END_OF_CONTINUOUS_UPDATES -> {
+                    // Zero payload; just acknowledges end of continuous-update stream.
+                    Logger.d(TAG, "EndOfContinuousUpdates")
+                }
+                RfbConstants.S2C_FENCE                   -> handleServerFence()
+                // ── xvp power-control extension (type 250) ──────────────────
+                RfbConstants.S2C_XVP                     -> handleXvp()
+                // ── gii General Input Interface (type 253) ──────────────────
+                RfbConstants.S2C_GII                     -> handleGii()
+                // ── QEMU extended messages (type 255) ───────────────────────
+                RfbConstants.S2C_QEMU_EXT                -> handleQemuExt()
+                // ── Unknown ─────────────────────────────────────────────────
+                else                                     -> handleUnknownServerMessage(msgType)
             }
         }
     }
 
     /**
-     * Best-effort handler for server message types outside the RFB 3.8 core spec.
+     * RFB server messages carry no length prefix — there is no safe way to skip
+     * an unknown message's payload without knowing its exact size.  Any message
+     * type that reaches this handler is one we have no formula for; proceeding
+     * would read from an unknown stream position, producing garbage or hanging.
      *
-     * Known zero-payload types are silently consumed.  Truly unknown types
-     * cannot be safely skipped (RFB has no length prefix), so we fail fast
-     * with a clean error rather than letting the stream desync silently.
+     * If this fires on a real session, the message type should be looked up in
+     * the IANA RFB registry and a proper handler added to [eventLoop].
      *
-     * Known observed types:
-     *   185 (0xB9) — QEMU VNC_MSG_SERVER_LED_STATE; carries a 4-byte payload
-     *                (Caps/Num/Scroll lock bitmask).  Sent spontaneously after
-     *                ExtendedDesktopSize negotiation on libvirt/QEMU sessions.
-     *   204 (0xCC) — QEMU/Proxmox display-mode notification; carries no
-     *                payload.  Observed on Proxmox 7/8 vncproxy sessions.
+     * Note: 0xB9 (185) and 0xCC (204) observed on QEMU/Proxmox are NOT genuine
+     * top-level messages — they are bytes from unread FramebufferUpdate payloads
+     * caused by stream desync.  The root cause was QEMU sending ExtendedDesktopSize
+     * with encoding 0xFFFFFFCC (-52) instead of the standard -308; that is now
+     * handled explicitly in [handleFramebufferUpdate].
      */
     private fun handleUnknownServerMessage(msgType: Int) {
-        when (msgType) {
-            0xB9 -> {
-                // QEMU VNC_MSG_SERVER_LED_STATE — 4-byte LED state payload
-                // (Caps/Num/Scroll lock bitmask). Consume the payload to keep
-                // the stream in sync; we do not forward LED state to the client.
-                din.skipBytes(4)
-                Logger.d(TAG, "Skipping QEMU LED state message (0xB9)")
-            }
-            0xCC -> {
-                // Zero-payload QEMU/Proxmox display notification — safe to ignore.
-                Logger.d(TAG, "Skipping zero-payload QEMU/Proxmox server message 0xCC")
-            }
-            else -> {
-                // RFB server messages carry no length prefix — there is no safe way
-                // to skip an unknown message's payload.  Fail fast so the caller
-                // gets a clean error instead of stream desync producing garbage.
-                val hex = msgType.toString(16).uppercase()
-                Logger.e(TAG, "Unrecognised server message type $msgType (0x$hex) — cannot safely skip; closing session")
-                running.set(false)
-                throw java.io.IOException("Unknown RFB server message type 0x$hex — session closed to avoid stream desync")
-            }
-        }
+        val hex = msgType.toString(16).uppercase().padStart(2, '0')
+        Logger.e(TAG, "Unrecognised server message type $msgType (0x$hex) — closing session to avoid stream desync")
+        running.set(false)
+        throw java.io.IOException("Unknown RFB server message type 0x$hex")
     }
 
     private fun handleFramebufferUpdate() {
@@ -604,14 +614,23 @@ class RfbClient(
                     listener?.onDesktopResize(fbWidth, fbHeight, framebuffer)
                     sendUpdateRequest(0, 0, fbWidth, fbHeight, incremental = false)
                 }
-                RfbConstants.ENC_EXTENDED_DESKTOP_SIZE -> {
-                    // Payload: u16 numScreens + u16 padding + 16 bytes per screen.
+                RfbConstants.ENC_EXTENDED_DESKTOP_SIZE,
+                RfbConstants.ENC_QEMU_EXTENDED_DESKTOP_SIZE -> {
+                    // Both -308 (standard IANA) and -52 (QEMU internal alias 0xFFFFFFCC) use
+                    // identical wire format.  QEMU sends -52 regardless of which value the
+                    // client advertised; both must be handled to prevent stream desync.
+                    //
+                    // Payload: U8 numScreens + 3 bytes padding + 16 bytes per screen.
+                    //   Screen: U32 id + U16 x + U16 y + U16 w + U16 h + U32 flags = 16 bytes
                     // rx = reason: 0=server-initiated, 1=this client, 2=other client
                     // ry = status: 0=OK, 1=prohibited, 2=out of resources, 3=invalid layout
                     // rw/rh = new framebuffer dimensions (only valid when ry==0)
-                    val numScreens = din.readUnsignedShort()
-                    din.skipBytes(2)               // padding
-                    din.skipBytes(numScreens * 16) // screen descriptors (id u32 + x u16 + y u16 + w u16 + h u16 + flags u32)
+                    // numScreens is U8 (1 byte) per rfbproto spec, NOT U16.
+                    // The old U16 read accidentally consumed 2 bytes (num+1 padding byte),
+                    // misreading the screen count and leaving the stream mis-aligned.
+                    val numScreens = din.readUnsignedByte()
+                    din.skipBytes(3)               // 3 bytes padding (total 4 incl. numScreens)
+                    din.skipBytes(numScreens * 16) // screen descriptors: U32 id + U16 x + U16 y + U16 w + U16 h + U32 flags
                     if (ry == 0) {
                         pendingResizeRejection = false
                         if (rw > 0 && rh > 0) {
@@ -640,19 +659,35 @@ class RfbClient(
                     }
                 }
                 RfbConstants.ENC_CURSOR -> {
-                    // Software cursor: rw×rh cursor image + bitmask
+                    // Software cursor (RichCursor): rw×rh pixels + 1-bit mask
                     handleCursor(rx, ry, rw, rh)
                 }
+                RfbConstants.ENC_CURSOR_WITH_ALPHA -> {
+                    // RGBA cursor with pre-multiplied alpha (4 bytes per pixel).
+                    handleCursorWithAlpha(rx, ry, rw, rh)
+                }
+                RfbConstants.ENC_XCURSOR -> {
+                    // Legacy X11 XCursor: 6-byte color header + two 1-bit masks.
+                    // Obsolete format; consume the data but do not render.
+                    if (rw > 0 && rh > 0) {
+                        din.skipBytes(6) // primary + secondary colors (2×RGB)
+                        val maskBytes = ((rw + 7) / 8) * rh
+                        din.skipBytes(maskBytes) // AND mask
+                        din.skipBytes(maskBytes) // XOR mask
+                    }
+                    Logger.d(TAG, "XCursor ${rw}×$rh (not rendered)")
+                }
+                RfbConstants.ENC_POINTER_POS -> {
+                    // Pointer position update: no payload, rx/ry = pointer coords.
+                    Logger.d(TAG, "PointerPos: ($rx,$ry)")
+                }
                 RfbConstants.ENC_FENCE -> {
-                    // Fence pseudo-rect: flags (u32) + length (u8) + data (length bytes).
-                    // The fence is a capability signal or inline sync point — we echo it
-                    // back via handleInlineFence so the server unblocks its update queue.
-                    // Not consuming these bytes desyncs the stream and causes black screen.
+                    // Inline fence inside FramebufferUpdate: U32 flags + U8 length + data.
+                    // Echo back so the server unblocks its update queue.
                     handleInlineFence()
                 }
                 RfbConstants.ENC_DESKTOP_NAME -> {
-                    // DesktopName pseudo-rect: u32 name-length + UTF-8 name bytes.
-                    // Must be consumed to stay in sync — the name is informational only.
+                    // DesktopName: U32 name-length + UTF-8 name bytes.
                     val nameLen = din.readInt()
                     if (nameLen > 0) {
                         val nameBytes = ByteArray(nameLen)
@@ -661,36 +696,42 @@ class RfbClient(
                     }
                 }
                 RfbConstants.ENC_LED_STATE -> {
-                    // LedState pseudo-rect: 1 byte state flags (Scroll/Num/Caps Lock).
-                    // Must be consumed; we do not currently propagate LED state to the UI.
+                    // QEMU LED state: 1 byte bitmask (bit2=Caps, bit1=Num, bit0=Scroll).
+                    // Delivered as a 1×1 pseudo-rect in FramebufferUpdate.
                     val ledState = din.readUnsignedByte()
-                    Logger.d(TAG, "LedState: 0x${ledState.toString(16).uppercase()}")
+                    Logger.d(TAG, "LedState: 0x${ledState.toString(16).uppercase().padStart(2, '0')}")
+                }
+                in RfbConstants.ENC_COMPRESS_LEVEL_0..RfbConstants.ENC_COMPRESS_LEVEL_9 -> {
+                    // Compression level hint (-256 to -247): zero payload.
+                    Logger.d(TAG, "CompressionLevel hint: $encoding")
+                }
+                in RfbConstants.ENC_QUALITY_LEVEL_0..RfbConstants.ENC_QUALITY_LEVEL_9 -> {
+                    // JPEG quality level hint (-32 to -23): zero payload.
+                    Logger.d(TAG, "QualityLevel hint: $encoding")
+                }
+                RfbConstants.ENC_CONTINUOUS_UPDATES -> {
+                    // ContinuousUpdates capability advertisement: zero payload.
+                    Logger.d(TAG, "ContinuousUpdates capability signal")
                 }
                 else -> {
-                    // Large positive encoding values (> 0xFFFF) are vendor-specific
-                    // pseudo-encodings (QEMU, Proxmox, VMware, etc.) that servers embed
-                    // in FramebufferUpdate rect lists as capability signals.  They carry
-                    // NO raw-pixel payload — applying the standard w×h×bytesPerPixel skip
-                    // formula would block the reader thread indefinitely waiting for data
-                    // that never arrives, leaving the screen permanently black.
-                    //
-                    // Observed: encoding 0x79000000 sent by QEMU/Proxmox after
-                    // ExtendedDesktopSize, with sentinel x=0xAAAA and dimensions 9×41586.
-                    // The old skip formula computed 9×41586×4 = ~1.5 MB that never arrives.
-                    //
-                    // Negative encodings are also pseudo-encodings (e.g. ENC_FENCE=-312,
-                    // ENC_DESKTOP_SIZE=-223, etc.) — the catch-all here is a safety net for
-                    // any not yet given an explicit when-branch above.  We cannot safely
-                    // skip an unknown payload, so log and continue; if the stream desyncs
-                    // the subsequent error will expose the format for a proper fix.
-                    if (encoding > 0xFFFF || encoding < 0) {
-                        val hexEnc = (encoding.toLong() and 0xFFFFFFFFL).toString(16).uppercase()
-                        Logger.w(TAG, "Unhandled pseudo-encoding 0x$hexEnc at $rx,$ry ${rw}×$rh — stream may desync")
-                    } else if (rw > 0 && rh > 0) {
-                        Logger.d(TAG, "Decoding rect enc=$encoding at $rx,$ry ${rw}×$rh")
-                        decoder.decodeRect(din, framebuffer, fbWidth, rx, ry, rw, rh, encoding)
-                        Logger.d(TAG, "FramebufferUpdate: painted enc=$encoding at $rx,$ry ${rw}×$rh (fb=${fbWidth}×$fbHeight)")
-                        listener?.onFramebufferUpdate(rx, ry, rw, rh, framebuffer)
+                    val hexEnc = (encoding.toLong() and 0xFFFFFFFFL).toString(16).uppercase()
+                    when {
+                        encoding < 0 || encoding > 0xFFFF -> {
+                            // Unrecognised pseudo-encoding or vendor extension.
+                            // Per RFC convention, pseudo-encodings (negative values) and
+                            // high positive vendor encodings used as capability signals carry
+                            // NO pixel payload — they are just advertisement rectangles.
+                            // Assume zero payload and continue; if this assumption is wrong
+                            // (the server sends an unknown payload-bearing pseudo-encoding),
+                            // the stream will desync and a subsequent error will expose it.
+                            Logger.d(TAG, "Unknown pseudo/vendor encoding 0x$hexEnc at ($rx,$ry) ${rw}×$rh — assuming zero payload")
+                        }
+                        rw > 0 && rh > 0 -> {
+                            // Standard encoding range (0–255) with pixel data.
+                            Logger.d(TAG, "Decoding rect enc=0x$hexEnc at ($rx,$ry) ${rw}×$rh")
+                            decoder.decodeRect(din, framebuffer, fbWidth, rx, ry, rw, rh, encoding)
+                            listener?.onFramebufferUpdate(rx, ry, rw, rh, framebuffer)
+                        }
                     }
                 }
             }
@@ -738,47 +779,76 @@ class RfbClient(
     private fun handleServerCutText() {
         din.skipBytes(3) // padding
         val len = din.readInt()
-        if (len > 0) {
-            val bytes = ByteArray(len); din.readFully(bytes)
-            listener?.onClipboardText(String(bytes, Charsets.ISO_8859_1))
+        when {
+            len > 0 -> {
+                // Standard clipboard text (ISO 8859-1)
+                val bytes = ByteArray(len); din.readFully(bytes)
+                listener?.onClipboardText(String(bytes, Charsets.ISO_8859_1))
+            }
+            len < 0 -> {
+                // Extended clipboard (rfbproto §7.6.4 extension): abs(len) bytes of structured data.
+                // Format: U32 flags + optional sub-fields per flag.
+                // We consume the entire payload and log the flags; no clipboard action taken.
+                val extLen = -len  // always positive; safe since Int.MIN_VALUE is not a valid length
+                if (extLen >= 4) {
+                    val flags = din.readInt()
+                    Logger.d(TAG, "ExtendedClipboard flags=0x${flags.toString(16).uppercase()} extLen=$extLen")
+                    if (extLen > 4) din.skipBytes(extLen - 4)
+                } else {
+                    din.skipBytes(extLen)
+                }
+            }
+            // len == 0: empty cut-text; nothing to do
         }
     }
 
     /**
-     * Consume a QEMU extended server message (type 255).
+     * Consume a QEMU extended server message (type 255 / 0xFF).
      *
-     * QEMU sends these for LED state changes, audio streaming, and pointer-mode
-     * changes.  We do not act on any of them — we just consume the payload so
-     * the stream stays in sync.
+     * Wire format (type byte already consumed by event loop):
+     *   U8  sub-type
+     *   sub-type-specific payload
+     *
+     * Only sub-type 1 (Audio) is defined for server→client.
+     * Sub-types 0 (extended key event) and 2 (pointer motion) are
+     * client→server only and must never appear here.
+     *
+     * IMPORTANT: sub-type is 1 byte (U8), NOT 2 bytes.  Reading it as U16
+     * consumed the first byte of the audio op field, desyncing the stream.
      */
     private fun handleQemuExt() {
-        val subType = din.readUnsignedShort()
+        val subType = din.readUnsignedByte() // U8, not U16
         when (subType) {
-            RfbConstants.QEMU_EXT_LED_STATE -> {
-                din.skipBytes(1) // u8: LED state bitmask
-            }
             RfbConstants.QEMU_EXT_AUDIO -> {
+                // Audio stream control.
+                // Op values (U16):
+                //   0 = stream end   (no extra payload)
+                //   1 = stream begin (U8 format + U8 nchannels + U32 freq = 6 bytes)
+                //   2 = audio data   (U32 length + length bytes of PCM)
                 val op = din.readUnsignedShort()
                 when (op) {
+                    RfbConstants.QEMU_AUDIO_END -> {
+                        /* stream end — no extra payload */
+                    }
                     RfbConstants.QEMU_AUDIO_BEGIN -> {
-                        din.skipBytes(1) // u8: format
-                        din.skipBytes(1) // u8: nchannels
-                        din.skipBytes(4) // u32: frequency (Hz)
+                        din.skipBytes(1) // U8: sample format
+                        din.skipBytes(1) // U8: number of channels
+                        din.skipBytes(4) // U32: frequency (Hz)
                     }
                     RfbConstants.QEMU_AUDIO_DATA -> {
                         val len = din.readInt()
                         var remaining = len.toLong()
                         while (remaining > 0) remaining -= din.skip(remaining)
                     }
-                    RfbConstants.QEMU_AUDIO_END -> { /* no body */ }
-                    else -> Logger.w(TAG, "Unknown QEMU audio operation $op")
+                    else -> Logger.w(TAG, "Unknown QEMU audio op $op")
                 }
             }
-            RfbConstants.QEMU_EXT_POINTER_MOTION -> {
-                din.skipBytes(1) // u8: 0=absolute, 1=relative
-            }
             else -> {
-                Logger.w(TAG, "Unknown QEMU ext sub-type $subType (0x${subType.toString(16).uppercase()})")
+                // Sub-types 0 and 2 are client-only; any other value is unknown.
+                // Cannot skip safely without knowing the payload size — close.
+                Logger.w(TAG, "Unexpected QEMU ext sub-type $subType — closing session")
+                running.set(false)
+                throw java.io.IOException("Unexpected QEMU ext sub-type $subType")
             }
         }
     }
@@ -851,6 +921,114 @@ class RfbClient(
             if (len > 0) dout.write(data)
             dout.flush()
         }
+    }
+
+    /**
+     * Handle a CursorWithAlpha pseudo-rect (-314).
+     *
+     * Payload: [w]×[h]×4 bytes, pre-multiplied RGBA (R, G, B, A byte order).
+     * Hotspot is carried in the rectangle's x/y fields ([hotX], [hotY]).
+     * A synthetic 1-bit mask is derived from the alpha channel so the same
+     * [RfbListener.onCursorUpdate] contract as [handleCursor] is maintained.
+     */
+    private fun handleCursorWithAlpha(hotX: Int, hotY: Int, w: Int, h: Int) {
+        if (w <= 0 || h <= 0) return
+        val count = w * h
+        val buf = ByteArray(count * 4)
+        din.readFully(buf)
+        val pixels = IntArray(count)
+        for (i in 0 until count) {
+            val base = i * 4
+            val r = buf[base    ].toInt() and 0xFF
+            val g = buf[base + 1].toInt() and 0xFF
+            val b = buf[base + 2].toInt() and 0xFF
+            val a = buf[base + 3].toInt() and 0xFF
+            pixels[i] = (a shl 24) or (r shl 16) or (g shl 8) or b
+        }
+        // Synthesise a 1-bit mask from alpha (non-zero alpha = visible pixel).
+        val stride = (w + 7) / 8
+        val mask = ByteArray(stride * h)
+        for (row in 0 until h) {
+            for (col in 0 until w) {
+                if ((pixels[row * w + col] ushr 24) > 0) {
+                    mask[row * stride + col / 8] =
+                        (mask[row * stride + col / 8].toInt() or (0x80 ushr (col % 8))).toByte()
+                }
+            }
+        }
+        cursorW = w; cursorH = h
+        cursorHotX = hotX; cursorHotY = hotY
+        cursorPixels = pixels
+        cursorMask = mask
+        listener?.onCursorUpdate(hotX, hotY, w, h, pixels, mask)
+    }
+
+    /**
+     * Handle an UltraVNC ResizeFrameBuffer message (type 4).
+     *
+     * Payload (after the type byte already consumed by event loop):
+     *   U8 padding · U16 width · U16 height
+     */
+    private fun handleUltraVncResize() {
+        din.skipBytes(1) // padding
+        val w = din.readUnsignedShort()
+        val h = din.readUnsignedShort()
+        if (w > 0 && h > 0) {
+            Logger.i(TAG, "UltraVNC ResizeFrameBuffer: ${w}×$h")
+            fbWidth = w; fbHeight = h
+            framebuffer = IntArray(fbWidth * fbHeight)
+            listener?.onDesktopResize(fbWidth, fbHeight, framebuffer)
+            sendUpdateRequest(0, 0, fbWidth, fbHeight, incremental = false)
+        }
+    }
+
+    /**
+     * Consume a PalmVNC 2.0 resize message (type 15 / 0x0F).
+     *
+     * Payload: U16 width · U16 height (4 bytes).
+     * PalmVNC is obsolete; we consume the data silently.
+     */
+    private fun skipPalmVncResize() {
+        val w = din.readUnsignedShort()
+        val h = din.readUnsignedShort()
+        Logger.d(TAG, "PalmVNC type-15 resize: ${w}×$h (ignored)")
+    }
+
+    /**
+     * Consume an xvp power-control server message (type 250 / 0xFA).
+     *
+     * Payload (after the type byte):
+     *   U8 padding · U8 version · U8 code
+     *
+     * xvp codes: 1=fail, 2=init, 3=shutdown, 4=reboot, 5=reset.
+     * We log and discard — power-control responses do not affect the display.
+     */
+    private fun handleXvp() {
+        din.skipBytes(1) // padding
+        val version = din.readUnsignedByte()
+        val code    = din.readUnsignedByte()
+        Logger.d(TAG, "xvp message: version=$version code=$code (power control, not handled)")
+    }
+
+    /**
+     * Consume a gii (General Input Interface) server message (type 253 / 0xFD).
+     *
+     * Payload (after the type byte):
+     *   U8  subtype/endian — bit 7: 0 = big-endian length, 1 = little-endian length
+     *   2 bytes  EU16 length of remaining payload (endian per bit 7 above)
+     *   length bytes  sub-message payload
+     *
+     * gii is used to describe input device capabilities; we consume the data
+     * so the stream stays aligned.
+     */
+    private fun handleGii() {
+        val header    = din.readUnsignedByte()
+        val bigEndian = (header and 0x80) == 0
+        val b0 = din.readUnsignedByte()
+        val b1 = din.readUnsignedByte()
+        val payloadLen = if (bigEndian) (b0 shl 8) or b1 else (b1 shl 8) or b0
+        if (payloadLen > 0) din.skipBytes(payloadLen)
+        Logger.d(TAG, "gii message: subtype=0x${(header and 0x7F).toString(16)} len=$payloadLen (not handled)")
     }
 
     // ── Client → Server input events ─────────────────────────────────────

@@ -282,7 +282,25 @@ class PerformanceFragment : Fragment() {
         connectionStateObserverJob?.cancel()
         connectionStateObserverJob = null
 
-        // Create new SSH connection
+        // Grab and clear the old connection before starting the new one.
+        // Disconnect it in parallel (IO thread) so we don't block the UI or
+        // the new connection attempt while waiting for the old SSH session to
+        // close (which may involve a network round-trip for a clean DISCONNECT).
+        val oldConnection = sshConnection
+        sshConnection = null
+        metricsCollector = null
+        if (oldConnection != null) {
+            lifecycleScope.launch(Dispatchers.IO) {
+                try {
+                    oldConnection.disconnect()
+                    Logger.d("PerformanceFragment", "Old connection closed in parallel")
+                } catch (e: Exception) {
+                    Logger.d("PerformanceFragment", "Old connection close error (ignored): ${e.message}")
+                }
+            }
+        }
+
+        // Connect to new server
         lifecycleScope.launch {
             try {
                 progressLoading.visibility = View.VISIBLE

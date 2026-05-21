@@ -1,6 +1,18 @@
 package io.github.tabssh.hypervisor.console.rfb
 
-/** RFB 3.8 protocol constants (RFC 6143). */
+/**
+ * RFB 3.8 protocol constants (RFC 6143 + vendor extensions).
+ *
+ * Sources:
+ *   RFC 6143 — https://www.rfc-editor.org/rfc/rfc6143
+ *   rfbproto/rfbproto — https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst
+ *   IANA RFB assignments — https://www.iana.org/assignments/rfb/rfb.xhtml
+ *   QEMU ui/vnc.h — https://github.com/qemu/qemu/blob/master/ui/vnc.h
+ *   TigerVNC CMsgReader — https://github.com/TigerVNC/tigervnc
+ *   LibVNCServer rfb/rfbproto.h — https://libvnc.github.io
+ *   noVNC rfb.js — https://github.com/novnc/noVNC
+ *   UltraVNC rfb/rfbproto.h — https://github.com/veyon/ultravnc
+ */
 object RfbConstants {
 
     // ── Security types ──────────────────────────────────────────────────────
@@ -23,6 +35,8 @@ object RfbConstants {
     const val C2S_KEY_EVENT: Int = 4
     const val C2S_POINTER_EVENT: Int = 5
     const val C2S_CLIENT_CUT_TEXT: Int = 6
+    /** SetDesktopSize — client-initiated resize request (RFB extension §5.4). */
+    const val C2S_SET_DESKTOP_SIZE: Int = 251
 
     // ── Server → Client message types ───────────────────────────────────────
     const val S2C_FRAMEBUFFER_UPDATE: Int = 0
@@ -30,96 +44,174 @@ object RfbConstants {
     const val S2C_BELL: Int = 2
     const val S2C_SERVER_CUT_TEXT: Int = 3
 
-    // ── Encoding types ───────────────────────────────────────────────────────
-    const val ENC_RAW: Int = 0
-    const val ENC_COPY_RECT: Int = 1
-    const val ENC_RRE: Int = 2
-    const val ENC_HEXTILE: Int = 5
-    const val ENC_ZLIB: Int = 6
-    const val ENC_TIGHT: Int = 7
-    const val ENC_ZRLE: Int = 16
-
-    // ── Pseudo-encoding types ────────────────────────────────────────────────
-    /** Server can resize the framebuffer at any time. */
-    const val ENC_DESKTOP_SIZE: Int = -223
-    /** Server sends software cursor separately (client renders it). */
-    const val ENC_CURSOR: Int = -239
-    /** No more rectangles follow in this update (TigerVNC extension). */
-    const val ENC_LAST_RECT: Int = -224
-
-    /** CoRRE encoding (type 4) — compact RRE with 1-byte sub-rect coordinates. */
-    const val ENC_CORRE: Int = 4
-
     /**
-     * Fence pseudo-encoding (RFC extension).  Advertised so servers know we
-     * can handle ServerFence messages; the payload is consumed and discarded
-     * since we do not use synchronous fencing.  Unsigned 0xFFFFFEB8 = -312.
-     *
-     * When the server includes ENC_FENCE as a pseudo-rect in a FramebufferUpdate
-     * (capability signal or inline fence), the rect header is followed by a
-     * 4-byte flags word, a 1-byte length, and up to 64 bytes of opaque data.
-     * All bytes must be consumed to keep the stream in sync.
+     * UltraVNC ResizeFrameBuffer (type 4 / 0x04).
+     * Payload: 1 byte padding + U16 width + U16 height = 5 bytes.
      */
-    const val ENC_FENCE: Int = -312
+    const val S2C_ULTRAVNC_RESIZE: Int = 4
 
     /**
-     * DesktopName pseudo-encoding (-307 / 0xFFFFFEB5).
-     * Payload: u32 name-length + UTF-8 name bytes.  Must be consumed to stay
-     * in sync — skipping the u32+string would desync the stream.
+     * EndOfContinuousUpdates (type 150 / 0x96) — TigerVNC extension.
+     * Signals the server is no longer sending continuous updates.
+     * Zero payload.
      */
-    const val ENC_DESKTOP_NAME: Int = -307
+    const val S2C_END_OF_CONTINUOUS_UPDATES: Int = 150
 
     /**
-     * LedState pseudo-encoding (-261 / 0xFFFFFEEB).
-     * Payload: 1 byte state flags (bit 0 = Scroll Lock, bit 1 = Num Lock,
-     * bit 2 = Caps Lock).  Must be consumed to stay in sync.
-     */
-    const val ENC_LED_STATE: Int = -261
-
-    /**
-     * ServerFence server message (type 248).
-     * Format: 3 bytes padding + 4 bytes flags + 1 byte length + length bytes data.
-     * QEMU/Proxmox sends this message to synchronise the update pipeline; the
-     * client must echo it back with [C2S_CLIENT_FENCE] to unblock the server.
+     * ServerFence (type 248 / 0xF8) — TigerVNC/rfbproto extension.
+     * Payload: 3 bytes padding + U32 flags + U8 length + length bytes data.
+     * QEMU/Proxmox sends this before the first FramebufferUpdate; the client
+     * must echo it back or the update queue stays blocked (black screen).
      */
     const val S2C_FENCE: Int = 248
 
     /**
      * ClientFence message type (248, same wire byte as ServerFence).
-     * The client responds with the same flags (minus any request bits) and
-     * the same opaque data to fulfil the fence request.
+     * Client echoes back the server's flags (minus Request bit) to unblock.
      */
     const val C2S_CLIENT_FENCE: Int = 248
 
-    // ── QEMU extension messages ─────────────────────────────────────────────
     /**
-     * Server message type 255: QEMU extended messages.  Sub-type follows as
-     * a u16.  Used by QEMU/KVM for LED state, audio, and pointer-mode changes.
+     * xvp Server Message (type 250 / 0xFA).
+     * Payload: 1 byte padding + U8 version + U8 message-code = 3 bytes.
+     * Used by xvp VNC extension for power control (shutdown/reboot/reset).
+     */
+    const val S2C_XVP: Int = 250
+
+    /**
+     * gii Server Message (type 253 / 0xFD) — General Input Interface.
+     * Payload: U8 endian/subtype + EU16 length + length bytes payload.
+     */
+    const val S2C_GII: Int = 253
+
+    /**
+     * QEMU Server Message (type 255 / 0xFF).
+     * Payload: U8 subtype + subtype-specific data.
+     * Only subtype 1 (Audio) is defined for server-to-client.
      */
     const val S2C_QEMU_EXT: Int = 255
-    const val QEMU_EXT_LED_STATE: Int = 0
-    const val QEMU_EXT_AUDIO: Int = 1
-    const val QEMU_EXT_POINTER_MOTION: Int = 2
-    const val QEMU_AUDIO_BEGIN: Int = 0
-    const val QEMU_AUDIO_DATA: Int = 1
-    const val QEMU_AUDIO_END: Int = 2
 
-    // ── Named client message types ──────────────────────────────────────────
-    /** SetDesktopSize — client-initiated resize request (RFB extension §5.4). */
-    const val C2S_SET_DESKTOP_SIZE: Int = 251
+    // ── Encoding types (pixel data) ───────────────────────────────────────────
+    const val ENC_RAW: Int = 0
+    const val ENC_COPY_RECT: Int = 1
+    const val ENC_RRE: Int = 2
+    /** CoRRE (type 4) — compact RRE with 1-byte sub-rect coordinates. */
+    const val ENC_CORRE: Int = 4
+    const val ENC_HEXTILE: Int = 5
+    const val ENC_ZLIB: Int = 6
+    const val ENC_TIGHT: Int = 7
+    const val ENC_ZRLE: Int = 16
+
+    // ── Pseudo-encoding types ─────────────────────────────────────────────────
+    // Negative values are pseudo-encodings per RFB spec convention.
+    // They appear as rectangle encoding fields in FramebufferUpdate but carry
+    // metadata or capability signals, not pixel data.
 
     /**
-     * Client-initiated resize (RFB 3.8 extension, §5.4).
-     * Advertised in SetEncodings so the server knows we support SetDesktopSize
-     * messages.  Server acknowledges by sending an ExtendedDesktopSize pseudo-
-     * rectangle.  Unsigned value 0xFFFFFECC = -308 as signed int32.
+     * DesktopSize (-223 / 0xFFFFFF21).
+     * No payload. Width and height in the rectangle header are the new
+     * framebuffer dimensions.
+     */
+    const val ENC_DESKTOP_SIZE: Int = -223
+
+    /**
+     * LastRect (-224 / 0xFFFFFF20).
+     * No payload. Signals no more rectangles follow in this update.
+     */
+    const val ENC_LAST_RECT: Int = -224
+
+    /**
+     * PointerPos (-232 / 0xFFFFFF18).
+     * No payload. Rectangle x/y carry the current pointer position.
+     */
+    const val ENC_POINTER_POS: Int = -232
+
+    /**
+     * Cursor / RichCursor (-239 / 0xFFFFFF11).
+     * Payload: w×h×Bpp bytes (cursor pixels) + ⌈w/8⌉×h bytes (1-bit mask).
+     * Hotspot in rectangle x/y. Client renders the cursor locally.
+     */
+    const val ENC_CURSOR: Int = -239
+
+    /**
+     * XCursor (-240 / 0xFFFFFF10).
+     * Payload: 6-byte color header (2×RGB) + 2×⌈w/8⌉×h bytes (AND+XOR masks).
+     * Obsolete 1-bit cursor format; hotspot in rectangle x/y.
+     */
+    const val ENC_XCURSOR: Int = -240
+
+    // CompressionLevel pseudo-encodings (-247 to -256 / 0xFFFFFF09 to 0xFFFFFF00).
+    // No payload. Range encodes hint: -256=level0 … -247=level9.
+    const val ENC_COMPRESS_LEVEL_0: Int = -256  // lowest compression
+    const val ENC_COMPRESS_LEVEL_9: Int = -247  // highest compression
+
+    // QualityLevel pseudo-encodings (-23 to -32 / 0xFFFFFFE9 to 0xFFFFFFE0).
+    // No payload. Range encodes hint: -32=level0 … -23=level9.
+    const val ENC_QUALITY_LEVEL_0: Int = -32    // lowest quality
+    const val ENC_QUALITY_LEVEL_9: Int = -23    // highest quality
+
+    /**
+     * QEMU LED State pseudo-encoding (-261 / 0xFFFFFEFB).
+     * Payload: 1 byte U8 with LED bitmask.
+     *   bit 0 = ScrollLock, bit 1 = NumLock, bit 2 = CapsLock
+     * Delivered inside a FramebufferUpdate as a 1×1 pseudo-rectangle.
+     * This is the correct mechanism (NOT a top-level message type 0xB9).
+     */
+    const val ENC_LED_STATE: Int = -261
+
+    /**
+     * DesktopName (-307 / 0xFFFFFEB5).
+     * Payload: U32 name-length + UTF-8 name bytes.
+     */
+    const val ENC_DESKTOP_NAME: Int = -307
+
+    /**
+     * ExtendedDesktopSize (-308 / 0xFFFFFECC) — standard RFB extension.
+     * Payload: U8 numScreens + 3 bytes padding + 16 bytes per screen.
+     * Each screen: U32 id + U16 x + U16 y + U16 w + U16 h + U32 flags.
+     * Rectangle x = reason (0=server, 1=admin, 2=client).
+     * Rectangle y = status (0=OK, 1=prohibited, 2=no-resources, 3=bad-layout).
+     * Rectangle w/h = new framebuffer dimensions when status=0.
+     *
+     * @see ENC_QEMU_EXTENDED_DESKTOP_SIZE for QEMU's non-standard alias.
      */
     const val ENC_EXTENDED_DESKTOP_SIZE: Int = -308
+
+    /**
+     * QEMU-internal ExtendedDesktopSize alias (-52 / 0xFFFFFFCC).
+     * QEMU defines VNC_ENCODING_DESKTOP_RESIZE_EXT = 0xFFFFFFCC (-52) rather
+     * than the IANA-registered -308 (0xFFFFFECC). Wire format is identical to
+     * ENC_EXTENDED_DESKTOP_SIZE. QEMU sends this encoding regardless of which
+     * value the client advertised; we must handle both.
+     */
+    const val ENC_QEMU_EXTENDED_DESKTOP_SIZE: Int = -52
+
+    /**
+     * Fence pseudo-encoding (-312 / 0xFFFFFEC8) — capability advertisement.
+     * No payload in pseudo-encoding advertisement rectangle.
+     * Enables ServerFence (type 248) / ClientFence (type 248) messages.
+     * When sent as an inline Fence inside FramebufferUpdate:
+     * payload = U32 flags + U8 length + length bytes data.
+     */
+    const val ENC_FENCE: Int = -312
+
+    /**
+     * ContinuousUpdates capability advertisement (-313 / 0xFFFFFEC7).
+     * No payload. Enables EnableContinuousUpdates (client 150) /
+     * EndOfContinuousUpdates (server 150).
+     */
+    const val ENC_CONTINUOUS_UPDATES: Int = -313
+
+    /**
+     * CursorWithAlpha (-314 / 0xFFFFFEC6).
+     * Payload: 4×w×h bytes (pre-multiplied RGBA). Hotspot in rectangle x/y.
+     */
+    const val ENC_CURSOR_WITH_ALPHA: Int = -314
 
     // ── Tight compression control byte top nibble ────────────────────────────
     const val TIGHT_FILL: Int = 0x08
     const val TIGHT_JPEG: Int = 0x09
-    const val TIGHT_PNG: Int = 0x0A   // extended Tight (newer servers)
+    const val TIGHT_PNG: Int = 0x0A   // extended Tight (TightPng)
 
     // ── Tight filter IDs (BasicCompression) ─────────────────────────────────
     const val TIGHT_FILTER_COPY: Int = 0x00
@@ -135,6 +227,26 @@ object RfbConstants {
     const val HEXTILE_FG_SPECIFIED: Int = 4
     const val HEXTILE_ANY_SUBRECTS: Int = 8
     const val HEXTILE_SUBRECTS_COLOURED: Int = 16
+
+    // ── QEMU extension messages ─────────────────────────────────────────────
+    /**
+     * QEMU Audio server sub-message (type 255, sub-type 1 / 0x01).
+     * This is the only defined server-to-client QEMU sub-type.
+     * Sub-types 0 and 2 are client-to-server only (extended key event /
+     * pointer motion) and will never be sent by the server.
+     */
+    const val QEMU_EXT_AUDIO: Int = 1
+
+    /**
+     * QEMU Audio operation codes (U16 field following sub-type byte).
+     * Correct mapping per noVNC rfb.js and QEMU ui/vnc.c:
+     *   0 = stream end   (no extra bytes)
+     *   1 = stream begin (6 bytes: U8 format + U8 nchannels + U32 freq)
+     *   2 = audio data   (U32 length + length bytes of PCM data)
+     */
+    const val QEMU_AUDIO_END: Int = 0
+    const val QEMU_AUDIO_BEGIN: Int = 1
+    const val QEMU_AUDIO_DATA: Int = 2
 
     // ── X11 KeySym values for hardware / on-screen keyboard ─────────────────
     const val KEY_BACK_SPACE: Long = 0xFF08L
