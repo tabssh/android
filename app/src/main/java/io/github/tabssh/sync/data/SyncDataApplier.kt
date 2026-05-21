@@ -1,6 +1,7 @@
 package io.github.tabssh.sync.data
 
 import android.content.Context
+import androidx.preference.PreferenceManager as AndroidPreferenceManager
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.crypto.keys.KeyStorage
 import io.github.tabssh.crypto.storage.SecurePasswordManager
@@ -219,6 +220,17 @@ class SyncDataApplier {
                     appliedCount++
                 } catch (e: Exception) {
                     Logger.w(TAG, "Failed to apply VNC identity: ${vi.name}", e)
+                }
+            }
+
+            // Wave 14 — cloud provider account metadata. Token comes through the
+            // secrets mechanism (cloud_token_{id}) and is applied outside the tx.
+            data.cloudAccounts.forEach { ca ->
+                try {
+                    database.cloudAccountDao().upsert(ca)
+                    appliedCount++
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Failed to apply cloud account: ${ca.name}", e)
                 }
             }
 
@@ -491,6 +503,21 @@ class SyncDataApplier {
             connection?.let {
                 count += applyConnectionPreferences(it)
             }
+
+            val keyboard = (preferences["keyboard"] as? JsonObject)?.toAnyMap()
+            keyboard?.let {
+                count += applyKeyboardPreferences(it)
+            }
+
+            val notifications = (preferences["notifications"] as? JsonObject)?.toAnyMap()
+            notifications?.let {
+                count += applyNotificationPreferences(it)
+            }
+
+            val monitoring = (preferences["monitoring"] as? JsonObject)?.toAnyMap()
+            monitoring?.let {
+                count += applyMonitoringPreferences(it)
+            }
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to apply preferences", e)
         }
@@ -662,6 +689,85 @@ class SyncDataApplier {
                 Logger.e(TAG, "Failed to apply connection preference: $key", e)
             }
         }
+        return count
+    }
+
+    private fun applyKeyboardPreferences(prefs: Map<String, Any>): Int {
+        var count = 0
+        prefs.forEach { (key, value) ->
+            try {
+                when (key) {
+                    "rowCount" -> {
+                        val rows = when (value) {
+                            is Number -> value.toInt()
+                            is String -> value.toIntOrNull() ?: return@forEach
+                            else -> return@forEach
+                        }
+                        preferenceManager.setKeyboardRowCount(rows)
+                    }
+                    "layoutVersion" -> {
+                        val version = when (value) {
+                            is Number -> value.toInt()
+                            is String -> value.toIntOrNull() ?: return@forEach
+                            else -> return@forEach
+                        }
+                        preferenceManager.setKeyboardLayoutVersion(version)
+                    }
+                    "layoutCustomized" -> preferenceManager.setKeyboardLayoutCustomized(value as Boolean)
+                    "layoutJson" -> preferenceManager.setKeyboardLayoutJson(value as String)
+                }
+                count++
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to apply keyboard preference: $key", e)
+            }
+        }
+        return count
+    }
+
+    private fun applyNotificationPreferences(prefs: Map<String, Any>): Int {
+        var count = 0
+        val defaultPrefs = AndroidPreferenceManager.getDefaultSharedPreferences(context)
+        val editor = defaultPrefs.edit()
+        prefs.forEach { (key, value) ->
+            try {
+                when (key) {
+                    "notifications_enabled",
+                    "show_connection_notifications",
+                    "show_error_notifications",
+                    "show_file_transfer_notifications",
+                    "notification_vibrate" -> editor.putBoolean(key, value as Boolean)
+                }
+                count++
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to apply notification preference: $key", e)
+            }
+        }
+        editor.apply()
+        return count
+    }
+
+    private fun applyMonitoringPreferences(prefs: Map<String, Any>): Int {
+        var count = 0
+        val defaultPrefs = AndroidPreferenceManager.getDefaultSharedPreferences(context)
+        val editor = defaultPrefs.edit()
+        prefs.forEach { (key, value) ->
+            try {
+                when (key) {
+                    "monitoring_enabled",
+                    "monitoring_run_in_battery_saver",
+                    "monitoring_notify_down",
+                    "monitoring_notify_recovery" -> editor.putBoolean(key, value as Boolean)
+                    "monitoring_alert_cooldown_minutes",
+                    "monitoring_default_cpu_threshold",
+                    "monitoring_default_memory_threshold",
+                    "monitoring_default_disk_threshold" -> editor.putString(key, value as String)
+                }
+                count++
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to apply monitoring preference: $key", e)
+            }
+        }
+        editor.apply()
         return count
     }
 

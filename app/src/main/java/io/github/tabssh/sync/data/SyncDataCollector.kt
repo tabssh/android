@@ -1,6 +1,7 @@
 package io.github.tabssh.sync.data
 
 import android.content.Context
+import androidx.preference.PreferenceManager as AndroidPreferenceManager
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.crypto.keys.KeyStorage
 import io.github.tabssh.crypto.storage.SecurePasswordManager
@@ -92,6 +93,7 @@ class SyncDataCollector {
         val hypervisorAccounts = collectHypervisorAccounts() // Audit 2026-05-16
         val vncHosts = collectVncHosts()         // Wave 13
         val vncIdentities = collectVncIdentities() // Wave 13
+        val cloudAccounts = collectCloudAccounts() // Wave 14
 
         val itemCounts = SyncItemCounts(
             connections = connections.size,
@@ -109,7 +111,8 @@ class SyncDataCollector {
             monitorSlots = monitorSlots.size,
             hypervisorAccounts = hypervisorAccounts.size,
             vncHosts = vncHosts.size,
-            vncIdentities = vncIdentities.size
+            vncIdentities = vncIdentities.size,
+            cloudAccounts = cloudAccounts.size
         )
 
         val metadata = metadataManager.createSyncMetadata(itemCounts)
@@ -135,6 +138,7 @@ class SyncDataCollector {
             hypervisorAccounts = hypervisorAccounts,
             vncHosts = vncHosts,
             vncIdentities = vncIdentities,
+            cloudAccounts = cloudAccounts,
             secrets = secrets
         )
     }
@@ -253,6 +257,18 @@ class SyncDataCollector {
         }
     }
 
+    /** Wave 14 — cloud provider account metadata rows. Token lives in
+     *  SecurePasswordManager under `cloud_token_${id}` and is captured by
+     *  [collectSecrets]. */
+    private suspend fun collectCloudAccounts(): List<io.github.tabssh.storage.database.entities.CloudAccount> {
+        return try {
+            database.cloudAccountDao().getAll()
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to collect cloud accounts", e)
+            emptyList()
+        }
+    }
+
     /**
      * Collect data changed since timestamp
      */
@@ -280,6 +296,9 @@ class SyncDataCollector {
         // Wave 13 — both tables have modifiedAt; delta-filter them.
         val vncHosts = collectVncHosts().filter { it.modifiedAt > timestamp }
         val vncIdentities = collectVncIdentities().filter { it.modifiedAt > timestamp }
+        // Wave 14 — CloudAccount has no modifiedAt column; always include all rows
+        // (low-volume, rarely more than a few entries per user).
+        val cloudAccounts = collectCloudAccounts()
 
         val preferences = if (hasPreferencesChanged(timestamp)) {
             collectPreferences()
@@ -303,7 +322,8 @@ class SyncDataCollector {
             monitorSlots = monitorSlots.size,
             hypervisorAccounts = hypervisorAccounts.size,
             vncHosts = vncHosts.size,
-            vncIdentities = vncIdentities.size
+            vncIdentities = vncIdentities.size,
+            cloudAccounts = cloudAccounts.size
         )
 
         val metadata = metadataManager.createSyncMetadata(itemCounts)
@@ -329,6 +349,7 @@ class SyncDataCollector {
             hypervisorAccounts = hypervisorAccounts,
             vncHosts = vncHosts,
             vncIdentities = vncIdentities,
+            cloudAccounts = cloudAccounts,
             secrets = secrets
         )
     }
@@ -382,6 +403,13 @@ class SyncDataCollector {
                     pm.retrievePassword("vnc_identity_${vi.id}")
                         ?.takeIf { it.isNotEmpty() }
                         ?.let { out["vnc_identity_${vi.id}"] = it }
+                }
+
+                // Cloud account tokens — alias: cloud_token_{id}
+                database.cloudAccountDao().getAll().forEach { ca ->
+                    pm.retrievePassword("cloud_token_${ca.id}")
+                        ?.takeIf { it.isNotEmpty() }
+                        ?.let { out["cloud_token_${ca.id}"] = it }
                 }
             }
 
@@ -474,6 +502,14 @@ class SyncDataCollector {
             prefs["ui"] = anyMapToJsonObject(collectUIPreferences())
             prefs["connection"] = anyMapToJsonObject(collectConnectionPreferences())
             prefs["sync"] = anyMapToJsonObject(collectSyncPreferences())
+            prefs["keyboard"] = anyMapToJsonObject(collectKeyboardPreferences())
+            // Notification and monitoring: only include keys that differ from
+            // their system defaults so a device with all-defaults does not
+            // overwrite custom values on the receiving device.
+            val notifPrefs = collectNotificationPreferences()
+            if (notifPrefs.isNotEmpty()) prefs["notifications"] = anyMapToJsonObject(notifPrefs)
+            val monitorPrefs = collectMonitoringPreferences()
+            if (monitorPrefs.isNotEmpty()) prefs["monitoring"] = anyMapToJsonObject(monitorPrefs)
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to collect preferences", e)
         }
@@ -554,6 +590,65 @@ class SyncDataCollector {
             "syncThemes" to preferenceManager.isSyncThemesEnabled(),
             "lastSyncTime" to preferenceManager.getLastSyncTime()
         )
+    }
+
+    /** Keyboard layout preferences — always included (layout is always meaningful if set). */
+    private fun collectKeyboardPreferences(): Map<String, Any> {
+        val out = mutableMapOf<String, Any>()
+        out["rowCount"] = preferenceManager.getKeyboardRowCount()
+        out["layoutVersion"] = preferenceManager.getKeyboardLayoutVersion()
+        out["layoutCustomized"] = preferenceManager.isKeyboardLayoutCustomized()
+        // Only include the JSON blob when the user has saved a custom layout.
+        val layoutJson = preferenceManager.getKeyboardLayoutJson()
+        if (!layoutJson.isNullOrEmpty()) out["layoutJson"] = layoutJson
+        return out
+    }
+
+    /**
+     * Notification preferences — only keys that differ from their system defaults
+     * are included so syncing a "default" device does not clobber custom values
+     * on the receiving device.
+     */
+    private fun collectNotificationPreferences(): Map<String, Any> {
+        val defaultPrefs = AndroidPreferenceManager.getDefaultSharedPreferences(context)
+        val out = mutableMapOf<String, Any>()
+        val notifEnabled = defaultPrefs.getBoolean("notifications_enabled", true)
+        if (!notifEnabled) out["notifications_enabled"] = notifEnabled
+        val connNotif = defaultPrefs.getBoolean("show_connection_notifications", true)
+        if (!connNotif) out["show_connection_notifications"] = connNotif
+        val errNotif = defaultPrefs.getBoolean("show_error_notifications", true)
+        if (!errNotif) out["show_error_notifications"] = errNotif
+        val fileNotif = defaultPrefs.getBoolean("show_file_transfer_notifications", true)
+        if (!fileNotif) out["show_file_transfer_notifications"] = fileNotif
+        val vibrate = defaultPrefs.getBoolean("notification_vibrate", true)
+        if (!vibrate) out["notification_vibrate"] = vibrate
+        return out
+    }
+
+    /**
+     * Monitoring preferences — only keys that differ from their system defaults
+     * are included (same "sync if non-default" policy as notifications).
+     */
+    private fun collectMonitoringPreferences(): Map<String, Any> {
+        val defaultPrefs = AndroidPreferenceManager.getDefaultSharedPreferences(context)
+        val out = mutableMapOf<String, Any>()
+        val monitorEnabled = defaultPrefs.getBoolean("monitoring_enabled", true)
+        if (!monitorEnabled) out["monitoring_enabled"] = monitorEnabled
+        val batterySaver = defaultPrefs.getBoolean("monitoring_run_in_battery_saver", false)
+        if (batterySaver) out["monitoring_run_in_battery_saver"] = batterySaver
+        val notifyDown = defaultPrefs.getBoolean("monitoring_notify_down", true)
+        if (!notifyDown) out["monitoring_notify_down"] = notifyDown
+        val notifyRecovery = defaultPrefs.getBoolean("monitoring_notify_recovery", true)
+        if (!notifyRecovery) out["monitoring_notify_recovery"] = notifyRecovery
+        val cooldown = defaultPrefs.getString("monitoring_alert_cooldown_minutes", "60") ?: "60"
+        if (cooldown != "60") out["monitoring_alert_cooldown_minutes"] = cooldown
+        val cpuThresh = defaultPrefs.getString("monitoring_default_cpu_threshold", "") ?: ""
+        if (cpuThresh.isNotEmpty()) out["monitoring_default_cpu_threshold"] = cpuThresh
+        val memThresh = defaultPrefs.getString("monitoring_default_memory_threshold", "") ?: ""
+        if (memThresh.isNotEmpty()) out["monitoring_default_memory_threshold"] = memThresh
+        val diskThresh = defaultPrefs.getString("monitoring_default_disk_threshold", "") ?: ""
+        if (diskThresh.isNotEmpty()) out["monitoring_default_disk_threshold"] = diskThresh
+        return out
     }
 
     /**

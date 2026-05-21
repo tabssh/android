@@ -1,7 +1,11 @@
 package io.github.tabssh.sync.models
 
+import io.github.tabssh.storage.database.entities.CloudAccount
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HostKeyEntry
+import io.github.tabssh.storage.database.entities.HypervisorAccount
+import io.github.tabssh.storage.database.entities.Macro
+import io.github.tabssh.storage.database.entities.MonitorSlot
 import io.github.tabssh.storage.database.entities.StoredKey
 import io.github.tabssh.storage.database.entities.ThemeDefinition
 import kotlinx.serialization.Serializable
@@ -44,11 +48,14 @@ data class SyncItemCounts(
     val hypervisorAccounts: Int = 0,
     /** Wave 13 (2026-05-17) — direct VNC hosts and VNC credential metadata. */
     val vncHosts: Int = 0,
-    val vncIdentities: Int = 0
+    val vncIdentities: Int = 0,
+    /** Wave 14 (2026-05-21) — cloud provider account metadata (token stays Keystore-bound). */
+    val cloudAccounts: Int = 0
 ) {
     fun total(): Int = connections + keys + themes + preferences + hostKeys +
         workspaces + snippets + identities + groups + hypervisors + certificates +
-        macros + monitorSlots + hypervisorAccounts + vncHosts + vncIdentities
+        macros + monitorSlots + hypervisorAccounts + vncHosts + vncIdentities +
+        cloudAccounts
 }
 
 /**
@@ -88,9 +95,16 @@ data class SyncFileData(
     /** Wave 7.1 — last-write-wins. */
     val hypervisors: List<io.github.tabssh.storage.database.entities.HypervisorProfile> = emptyList(),
     val certificates: List<io.github.tabssh.storage.database.entities.TrustedCertificate> = emptyList(),
+    /** Wave 11 — macros / monitor_slots (missing from original SyncFileData; added 2026-05-21). */
+    val macros: List<Macro> = emptyList(),
+    val monitorSlots: List<MonitorSlot> = emptyList(),
+    /** Wave 12 — hypervisor account metadata (missing from original SyncFileData; added 2026-05-21). */
+    val hypervisorAccounts: List<HypervisorAccount> = emptyList(),
     /** Wave 13 — direct VNC hosts and VNC identity metadata. */
     val vncHosts: List<io.github.tabssh.storage.database.entities.VncHost> = emptyList(),
-    val vncIdentities: List<io.github.tabssh.storage.database.entities.VncIdentity> = emptyList()
+    val vncIdentities: List<io.github.tabssh.storage.database.entities.VncIdentity> = emptyList(),
+    /** Wave 14 — cloud provider account metadata (token stays Keystore-bound via secrets). */
+    val cloudAccounts: List<CloudAccount> = emptyList()
 )
 
 /**
@@ -139,6 +153,10 @@ data class SyncDataPackage(
      *  and VNC identity metadata rows. */
     val vncHosts: List<io.github.tabssh.storage.database.entities.VncHost> = emptyList(),
     val vncIdentities: List<io.github.tabssh.storage.database.entities.VncIdentity> = emptyList(),
+    /** Wave 14 — cloud provider account metadata. Token stays Keystore-bound on each
+     *  device under `cloud_token_${id}` and is transferred via the secrets map only
+     *  in encrypted sync payloads. */
+    val cloudAccounts: List<CloudAccount> = emptyList(),
     /** Keystore-backed credentials — included only in encrypted sync payloads.
      *  Map keys are alias names; values are plaintext (safe inside AES-GCM envelope).
      *  SSH private key material is base64-encoded JSch bytes under key

@@ -586,6 +586,8 @@ class BackupImporter(
             preferenceManager.setRequireBiometricForSensitive(s.optBoolean("requireBiometric", true))
             preferenceManager.setStrictHostKeyChecking(s.optBoolean("strictHostKeyChecking", true))
             preferenceManager.setClearClipboardTimeout(s.optInt("clearClipboardTimeout", 60))
+            preferenceManager.setAutoLockOnBackground(s.optBoolean("autoLockEnabled", false))
+            preferenceManager.setAutoLockTimeout(s.optInt("lockTimeout", 300))
         }
         root.optJSONObject("terminal")?.let { t ->
             preferenceManager.setTerminalTheme(t.optString("theme", "dracula"))
@@ -594,12 +596,20 @@ class BackupImporter(
             preferenceManager.setCursorStyle(t.optString("cursorStyle", "block"))
             preferenceManager.setCursorBlink(t.optBoolean("cursorBlink", true))
             preferenceManager.setScrollbackLines(t.optInt("scrollbackLines", 1000))
+            preferenceManager.setBellNotificationEnabled(t.optBoolean("terminalBell", false))
         }
         root.optJSONObject("ui")?.let { u ->
             preferenceManager.setMaxTabs(u.optInt("maxTabs", 10))
             preferenceManager.setConfirmTabClose(u.optBoolean("confirmTabClose", true))
             preferenceManager.setAppTheme(u.optString("appTheme", "system"))
             preferenceManager.setDynamicColors(u.optBoolean("dynamicColors", true))
+        }
+        root.optJSONObject("keyboard")?.let { k ->
+            preferenceManager.setKeyboardRowCount(k.optInt("rowCount", 3))
+            preferenceManager.setKeyboardLayoutVersion(k.optInt("layoutVersion", 0))
+            preferenceManager.setKeyboardLayoutCustomized(k.optBoolean("layoutCustomized", false))
+            val layoutJson = k.optString("layoutJson", "")
+            preferenceManager.setKeyboardLayoutJson(if (layoutJson.isEmpty()) null else layoutJson)
         }
 
         // Notification and monitoring preferences are stored as raw keys in

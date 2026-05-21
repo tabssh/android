@@ -370,6 +370,8 @@ class BackupExporter(
             put("requireBiometric", preferenceManager.isRequireBiometricForSensitive())
             put("strictHostKeyChecking", preferenceManager.isStrictHostKeyChecking())
             put("clearClipboardTimeout", preferenceManager.getClearClipboardTimeout())
+            put("autoLockEnabled", preferenceManager.isAutoLockOnBackground())
+            put("lockTimeout", preferenceManager.getAutoLockTimeout())
         })
 
         root.put("terminal", JSONObject().apply {
@@ -379,6 +381,7 @@ class BackupExporter(
             put("cursorStyle", preferenceManager.getCursorStyle())
             put("cursorBlink", preferenceManager.isCursorBlinkEnabled())
             put("scrollbackLines", preferenceManager.getScrollbackLines())
+            put("terminalBell", preferenceManager.isBellNotificationEnabled())
         })
 
         root.put("ui", JSONObject().apply {
@@ -386,6 +389,14 @@ class BackupExporter(
             put("confirmTabClose", preferenceManager.isConfirmTabClose())
             put("appTheme", preferenceManager.getAppTheme())
             put("dynamicColors", preferenceManager.isDynamicColors())
+        })
+
+        root.put("keyboard", JSONObject().apply {
+            put("rowCount", preferenceManager.getKeyboardRowCount())
+            put("layoutVersion", preferenceManager.getKeyboardLayoutVersion())
+            put("layoutCustomized", preferenceManager.isKeyboardLayoutCustomized())
+            val layoutJson = preferenceManager.getKeyboardLayoutJson()
+            if (!layoutJson.isNullOrEmpty()) put("layoutJson", layoutJson)
         })
 
         // Notification preferences (keys from preferences_general.xml).
