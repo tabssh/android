@@ -7,7 +7,9 @@ data class KeyboardKey(
     val id: String,
     val label: String,
     val keySequence: String,
-    val category: KeyCategory = KeyCategory.SPECIAL
+    val category: KeyCategory = KeyCategory.SPECIAL,
+    /** Relative width multiplier. 1f = standard flex unit; 2f = twice as wide. */
+    val widthMultiplier: Float = 1f
 ) {
     enum class KeyCategory {
         SPECIAL,      // ESC, TAB, etc.

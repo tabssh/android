@@ -180,10 +180,10 @@ class TerminalView @JvmOverloads constructor(
         style = Paint.Style.FILL
         isAntiAlias = true
     }
-    /** Hit radius for handle drag detection, in pixels. ~24dp. */
-    private val handleHitRadiusPx by lazy { 24f * resources.displayMetrics.density }
-    /** Visual radius for the handle bubble, in pixels. */
-    private val handleDrawRadiusPx by lazy { 8f * resources.displayMetrics.density }
+    /** Hit radius for handle drag detection, in pixels. ~40dp — large enough for comfortable drag. */
+    private val handleHitRadiusPx by lazy { 40f * resources.displayMetrics.density }
+    /** Visual radius for the handle bubble, in pixels. ~14dp — clearly visible without obscuring text. */
+    private val handleDrawRadiusPx by lazy { 14f * resources.displayMetrics.density }
 
     // ── Find-in-scrollback search highlights ────────────────────────────────
     private var searchMatches: List<SearchMatch> = emptyList()

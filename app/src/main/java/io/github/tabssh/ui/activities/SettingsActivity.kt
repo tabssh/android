@@ -459,6 +459,12 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
                 .setMessage("This restores the default 3-row layout (Esc/Tab/Ctl/Alt/Fn/Enter, arrows + Home/End/PgUp/PgDn, common symbols). Your current layout will be discarded.")
                 .setPositiveButton("Reset") { _, _ ->
                     app.preferencesManager.setKeyboardLayoutJson(null)
+                    // Clear the customised flag so future default-layout updates
+                    // propagate automatically — the user chose the default layout.
+                    app.preferencesManager.setKeyboardLayoutCustomized(false)
+                    app.preferencesManager.setKeyboardLayoutVersion(
+                        io.github.tabssh.ui.keyboard.MultiRowKeyboardView.CURRENT_DEFAULT_LAYOUT_VERSION
+                    )
                     Toast.makeText(requireContext(), "Keyboard layout reset", Toast.LENGTH_SHORT).show()
                     Logger.i("Settings", "Keyboard layout reset to default")
                 }

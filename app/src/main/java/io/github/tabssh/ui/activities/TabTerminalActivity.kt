@@ -3507,6 +3507,17 @@ private fun showSnippetsPickerForActiveTab() {
             try {
                 val rowCount = app.preferencesManager.getKeyboardRowCount()
                 binding.multiRowKeyboard.setRowCount(rowCount)
+
+                // Auto-migrate default layout when the built-in layout has been
+                // updated and the user has not explicitly customised their layout.
+                val storedVersion = app.preferencesManager.getKeyboardLayoutVersion()
+                val isCustomized  = app.preferencesManager.isKeyboardLayoutCustomized()
+                if (storedVersion < io.github.tabssh.ui.keyboard.MultiRowKeyboardView.CURRENT_DEFAULT_LAYOUT_VERSION && !isCustomized) {
+                    Logger.i("TabTerminalActivity", "Default layout updated (v$storedVersion → v${io.github.tabssh.ui.keyboard.MultiRowKeyboardView.CURRENT_DEFAULT_LAYOUT_VERSION}); clearing saved layout")
+                    app.preferencesManager.setKeyboardLayoutJson(null)
+                    app.preferencesManager.setKeyboardLayoutVersion(io.github.tabssh.ui.keyboard.MultiRowKeyboardView.CURRENT_DEFAULT_LAYOUT_VERSION)
+                }
+
                 val layoutJson = app.preferencesManager.getKeyboardLayoutJson()
                 Logger.d("TabTerminalActivity", "Custom keyboard layout JSON length=${layoutJson?.length ?: 0}, rowCount=$rowCount")
                 if (layoutJson != null) {

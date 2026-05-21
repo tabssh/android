@@ -1026,6 +1026,17 @@ class VMConsoleActivity : AppCompatActivity() {
             try {
                 val rowCount = app.preferencesManager.getKeyboardRowCount()
                 keyboard.setRowCount(rowCount)
+
+                // Auto-migrate default layout when built-in layout version advances
+                // and the user has not explicitly customised their layout.
+                val storedVersion = app.preferencesManager.getKeyboardLayoutVersion()
+                val isCustomized  = app.preferencesManager.isKeyboardLayoutCustomized()
+                if (storedVersion < io.github.tabssh.ui.keyboard.MultiRowKeyboardView.CURRENT_DEFAULT_LAYOUT_VERSION && !isCustomized) {
+                    Logger.i(TAG, "Default layout updated (v$storedVersion → v${io.github.tabssh.ui.keyboard.MultiRowKeyboardView.CURRENT_DEFAULT_LAYOUT_VERSION}); clearing saved layout")
+                    app.preferencesManager.setKeyboardLayoutJson(null)
+                    app.preferencesManager.setKeyboardLayoutVersion(io.github.tabssh.ui.keyboard.MultiRowKeyboardView.CURRENT_DEFAULT_LAYOUT_VERSION)
+                }
+
                 val layoutJson = app.preferencesManager.getKeyboardLayoutJson()
                 if (layoutJson != null) {
                     val saved = io.github.tabssh.ui.keyboard.KeyboardLayoutManager

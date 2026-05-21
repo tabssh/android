@@ -80,6 +80,8 @@ class PreferenceManager(private val context: Context) {
         // Keyboard preferences
         private const val KEY_KEYBOARD_ROW_COUNT = "keyboard_row_count"
         private const val KEY_KEYBOARD_LAYOUT = "keyboard_layout_json"
+        const val KEY_LAYOUT_VERSION = "keyboard_layout_version"
+        const val KEY_LAYOUT_CUSTOMIZED = "keyboard_layout_customized"
 
         // UI preferences
         private const val KEY_MAX_TABS = "ui_max_tabs"
@@ -245,6 +247,12 @@ class PreferenceManager(private val context: Context) {
         // ListPreference stores as String, so we must use String to avoid ClassCastException
         setString(KEY_KEYBOARD_ROW_COUNT, count.coerceIn(1, 5).toString())
     }
+
+    fun getKeyboardLayoutVersion(): Int = getInt(KEY_LAYOUT_VERSION, 0)
+    fun setKeyboardLayoutVersion(version: Int) = setInt(KEY_LAYOUT_VERSION, version)
+
+    fun isKeyboardLayoutCustomized(): Boolean = getBoolean(KEY_LAYOUT_CUSTOMIZED, false)
+    fun setKeyboardLayoutCustomized(customized: Boolean) = setBoolean(KEY_LAYOUT_CUSTOMIZED, customized)
 
     fun getKeyboardLayoutJson(): String? {
         val json = getString(KEY_KEYBOARD_LAYOUT, "")

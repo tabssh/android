@@ -416,6 +416,12 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
         try {
             app.preferencesManager.setKeyboardLayout(keyboardLayout)
             app.preferencesManager.setKeyboardRowCount(keyboardLayout.size)
+            // Mark as user-customised so future default-layout updates don't
+            // overwrite this layout, and record the version it was saved against.
+            app.preferencesManager.setKeyboardLayoutCustomized(true)
+            app.preferencesManager.setKeyboardLayoutVersion(
+                io.github.tabssh.ui.keyboard.MultiRowKeyboardView.CURRENT_DEFAULT_LAYOUT_VERSION
+            )
             Toast.makeText(this, "Layout saved (${keyboardLayout.size} rows)", Toast.LENGTH_SHORT).show()
             Logger.i("KeyboardCustomization", "Saved ${keyboardLayout.size} rows")
             finish()

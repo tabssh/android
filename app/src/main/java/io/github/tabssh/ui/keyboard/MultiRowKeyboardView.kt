@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.res.Configuration
 import android.util.AttributeSet
 import android.widget.LinearLayout
+import io.github.tabssh.ui.keyboard.KeyboardLayoutManager
 import io.github.tabssh.utils.logging.Logger
 
 /**
@@ -71,20 +72,31 @@ class MultiRowKeyboardView @JvmOverloads constructor(
      * the keyboard bar stays proportionate to the available terminal area.
      *
      * Screen-size caps (portrait):
-     *   sw < 600dp  → honour user setting up to [MAX_ROWS]  (phone)
-     *   sw ≥ 600dp  → cap at [TABLET_PORTRAIT_MAX_ROWS]     (7" tablet / large phone)
-     *   sw ≥ 720dp  → cap at [LARGE_TABLET_PORTRAIT_MAX_ROWS] (10"+ tablet)
+     *   sw < 600dp  → honour user setting up to [MAX_ROWS]       (phone)
+     *   sw ≥ 600dp  → cap at [TABLET_PORTRAIT_MAX_ROWS]          (7" tablet)
+     *   sw ≥ 720dp  → cap at [LARGE_TABLET_PORTRAIT_MAX_ROWS]    (10"+ tablet)
      *
-     * Landscape always caps at [LANDSCAPE_MAX_ROWS] regardless of screen size.
+     * Landscape:
+     *   sw ≥ 720dp  → honour user setting (10"+ tablet has vertical space)
+     *   sw < 720dp  → cap at [LANDSCAPE_MAX_ROWS]
+     *
      * [config] defaults to the current resource configuration so call sites
      * that have a fresh Configuration (e.g. onConfigurationChanged) can pass
      * it directly and avoid a stale read.
      */
     private fun effectiveRowCount(config: Configuration = resources.configuration): Int {
-        val isLandscape = config.orientation == Configuration.ORIENTATION_LANDSCAPE
-        if (isLandscape) return minOf(portraitRowCount, LANDSCAPE_MAX_ROWS)
-
         val sw = config.smallestScreenWidthDp
+        val isLandscape = config.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+        if (isLandscape) {
+            // 10-inch+ tablets have plenty of vertical space in landscape — honour
+            // the user's row-count setting without any additional cap.
+            // Smaller screens keep the LANDSCAPE_MAX_ROWS ceiling so the terminal
+            // area remains usable.
+            return if (sw >= 720) portraitRowCount
+            else minOf(portraitRowCount, LANDSCAPE_MAX_ROWS)
+        }
+
         val portraitCap = when {
             sw >= 720 -> LARGE_TABLET_PORTRAIT_MAX_ROWS
             sw >= 600 -> TABLET_PORTRAIT_MAX_ROWS
@@ -285,20 +297,20 @@ class MultiRowKeyboardView @JvmOverloads constructor(
         val backKey = KeyboardKey("FN", "← Back", "", KeyboardKey.KeyCategory.MODIFIER)
         val fnRow1 = listOf(
             backKey,
-            KeyboardKey("F1", "F1", "\u001BOP", KeyboardKey.KeyCategory.FUNCTION),
-            KeyboardKey("F2", "F2", "\u001BOQ", KeyboardKey.KeyCategory.FUNCTION),
-            KeyboardKey("F3", "F3", "\u001BOR", KeyboardKey.KeyCategory.FUNCTION),
-            KeyboardKey("F4", "F4", "\u001BOS", KeyboardKey.KeyCategory.FUNCTION),
-            KeyboardKey("F5", "F5", "\u001B[15~", KeyboardKey.KeyCategory.FUNCTION),
-            KeyboardKey("F6", "F6", "\u001B[17~", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F1", "F1", "OP", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F2", "F2", "OQ", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F3", "F3", "OR", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F4", "F4", "OS", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F5", "F5", "[15~", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F6", "F6", "[17~", KeyboardKey.KeyCategory.FUNCTION),
         )
         val fnRow2 = listOf(
-            KeyboardKey("F7", "F7", "\u001B[18~", KeyboardKey.KeyCategory.FUNCTION),
-            KeyboardKey("F8", "F8", "\u001B[19~", KeyboardKey.KeyCategory.FUNCTION),
-            KeyboardKey("F9", "F9", "\u001B[20~", KeyboardKey.KeyCategory.FUNCTION),
-            KeyboardKey("F10", "F10", "\u001B[21~", KeyboardKey.KeyCategory.FUNCTION),
-            KeyboardKey("F11", "F11", "\u001B[23~", KeyboardKey.KeyCategory.FUNCTION),
-            KeyboardKey("F12", "F12", "\u001B[24~", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F7", "F7", "[18~", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F8", "F8", "[19~", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F9", "F9", "[20~", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F10", "F10", "[21~", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F11", "F11", "[23~", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F12", "F12", "[24~", KeyboardKey.KeyCategory.FUNCTION),
         )
 
         // Show first two rows of F-keys, blank any extras.
@@ -324,13 +336,11 @@ class MultiRowKeyboardView @JvmOverloads constructor(
     }
 
     /**
-     * How many keys to pin (fixed-width) on the left of a given row index.
-     * Rows 0 and 1 anchor their first two keys when there are 2+ rows so that
-     * ESC+CTL (row 0) and TAB+ENT (row 1) always sit at the same left-edge
-     * position regardless of screen size or total key count.
+     * All keys use flex-weight sizing (widthMultiplier on [KeyboardKey] drives
+     * relative width; 2f = double-wide). Fixed-pixel pinning is no longer
+     * used — it conflicted with double-wide anchor keys on small screens.
      */
-    private fun pinnedCountForRow(rowIndex: Int): Int =
-        if (numberOfRows >= 2 && rowIndex <= 1) 2 else 0
+    private fun pinnedCountForRow(@Suppress("UNUSED_PARAMETER") rowIndex: Int): Int = 0
 
     /**
      * Set key click listener
@@ -396,216 +406,96 @@ class MultiRowKeyboardView @JvmOverloads constructor(
          * 10"+ tablet        ≥ 720 dp                 Galaxy Tab S, iPad-class
          */
         const val TABLET_PORTRAIT_MAX_ROWS = 3
-        const val LARGE_TABLET_PORTRAIT_MAX_ROWS = 2
+        /** Raised from 2 → 3 so a 10-inch tablet shows 3 rows in portrait,
+         *  matching the landscape count and the user's configured default. */
+        const val LARGE_TABLET_PORTRAIT_MAX_ROWS = 3
+        /** Re-exported here for convenience; matches [KeyboardLayoutManager.CURRENT_DEFAULT_LAYOUT_VERSION]. */
+        const val CURRENT_DEFAULT_LAYOUT_VERSION = KeyboardLayoutManager.CURRENT_DEFAULT_LAYOUT_VERSION
         private const val TAG = "MultiRowKeyboardView"
 
         /**
          * Get default key layouts for N rows.
          *
-         * Layout philosophy — vim/tmux/coding-first:
-         *   • ESC + CTL + ALT live on row 1 always (vim escape, tmux
-         *     prefix C-b/C-a, shell job control C-c/C-z).
-         *   • Arrow keys promoted to row 1 when there's space (most-used
-         *     in command-line editing + scrollback navigation).
-         *   • `:` `/` symbols promoted to row 1 in the 3+ row layouts —
-         *     vim ex-mode + search are first-class.
-         *   • Coding/shell symbols (\, |, -, _, ~, `, $, *, <, >) on row 3.
-         *   • Page navigation (HOME/END/PGUP/PGDN) lives on row 2.
-         *   • The IME-toggle (⌨) was dropped — back-key dismisses the
-         *     soft keyboard, no dedicated affordance needed.
-         *   • Row 2 of 3+ row layouts ends with SEL (arms drag-select),
-         *     PASTE (📋, paste clipboard), and MENU (☰, tabs/sessions
-         *     bottom-sheet) — three discrete entry points so the user
-         *     never has to dig through nested menus to copy, paste, or
-         *     switch tabs.
+         * Layout — row 1: CTL(2×) TAB(2×) ALT : / ↑ ↓ ← →
+         *          row 2: ENT(2×) ESC(2×) HOME END PGUP PGDN FN
+         *          row 3: | \ - ~ _ ` $ * < > SEL
+         *          row 4: F1-F6
+         *          row 5: F7-F12
+         *
+         * CTL, TAB, ENT, ESC carry widthMultiplier = 2f so they render at
+         * twice the standard key width for a larger, more reliable touch target.
          */
         fun getDefaultRowLayouts(rowCount: Int): List<List<KeyboardKey>> {
+            // Shared building blocks reused across all row counts.
+            //
+            // CTL, TAB, ENT, ESC are 2× wide (widthMultiplier = 2f) — these
+            // four keys are hit most often in SSH/vim/tmux sessions, so the
+            // extra touch area meaningfully reduces mis-taps.
+            val ctl   = KeyboardKey("CTL",   "CTL",  "", KeyboardKey.KeyCategory.MODIFIER, 2f)
+            val tab   = KeyboardKey("TAB",   "TAB",  "\t", widthMultiplier = 2f)
+            val ent   = KeyboardKey("ENTER", "ENT",  "\r", widthMultiplier = 2f)
+            val esc   = KeyboardKey("ESC",   "ESC",  "", widthMultiplier = 2f)
+            val alt   = KeyboardKey("ALT",   "ALT",  "", KeyboardKey.KeyCategory.MODIFIER)
+            val fn    = KeyboardKey("FN",    "FN",   "", KeyboardKey.KeyCategory.MODIFIER)
+            val up    = KeyboardKey("UP",    "↑",    "[A", KeyboardKey.KeyCategory.ARROW)
+            val down  = KeyboardKey("DOWN",  "↓",    "[B", KeyboardKey.KeyCategory.ARROW)
+            val left  = KeyboardKey("LEFT",  "←",    "[D", KeyboardKey.KeyCategory.ARROW)
+            val right = KeyboardKey("RIGHT", "→",    "[C", KeyboardKey.KeyCategory.ARROW)
+            val colon = KeyboardKey("COLON", ":",    ":",          KeyboardKey.KeyCategory.SYMBOL)
+            val slash = KeyboardKey("SLASH", "/",    "/",          KeyboardKey.KeyCategory.SYMBOL)
+            val home  = KeyboardKey("HOME",  "HOME", "[H")
+            val end   = KeyboardKey("END",   "END",  "[F")
+            val pgup  = KeyboardKey("PGUP",  "PGUP", "[5~")
+            val pgdn  = KeyboardKey("PGDN",  "PGDN", "[6~")
+            val sel   = KeyboardKey("SEL",   "SEL",  "", KeyboardKey.KeyCategory.ACTION)
+
+            // Row 1 (all layouts): CTL(2×) TAB(2×) ALT : / ↑ ↓ ← →
+            val row1 = listOf(ctl, tab, alt, colon, slash, up, down, left, right)
+
+            // Row 2 (layouts ≥ 2): ENT(2×) ESC(2×) HOME END PGUP PGDN FN
+            val row2 = listOf(ent, esc, home, end, pgup, pgdn, fn)
+
+            // Row 3 (layouts ≥ 3): shell/vim symbols + SEL
+            val row3 = listOf(
+                KeyboardKey("PIPE",       "|",  "|",  KeyboardKey.KeyCategory.SYMBOL),
+                KeyboardKey("BACKSLASH",  "\\", "\\", KeyboardKey.KeyCategory.SYMBOL),
+                KeyboardKey("MINUS",      "-",  "-",  KeyboardKey.KeyCategory.SYMBOL),
+                KeyboardKey("TILDE",      "~",  "~",  KeyboardKey.KeyCategory.SYMBOL),
+                KeyboardKey("UNDERSCORE", "_",  "_",  KeyboardKey.KeyCategory.SYMBOL),
+                KeyboardKey("BACKTICK",   "`",  "`",  KeyboardKey.KeyCategory.SYMBOL),
+                KeyboardKey("DOLLAR",     "$",  "$",  KeyboardKey.KeyCategory.SYMBOL),
+                KeyboardKey("STAR",       "*",  "*",  KeyboardKey.KeyCategory.SYMBOL),
+                KeyboardKey("LT",         "<",  "<",  KeyboardKey.KeyCategory.SYMBOL),
+                KeyboardKey("GT",         ">",  ">",  KeyboardKey.KeyCategory.SYMBOL),
+                sel
+            )
+
+            // Row 4 (layouts ≥ 4): F1-F6
+            val row4 = listOf(
+                KeyboardKey("F1",  "F1",  "OP",   KeyboardKey.KeyCategory.FUNCTION),
+                KeyboardKey("F2",  "F2",  "OQ",   KeyboardKey.KeyCategory.FUNCTION),
+                KeyboardKey("F3",  "F3",  "OR",   KeyboardKey.KeyCategory.FUNCTION),
+                KeyboardKey("F4",  "F4",  "OS",   KeyboardKey.KeyCategory.FUNCTION),
+                KeyboardKey("F5",  "F5",  "[15~", KeyboardKey.KeyCategory.FUNCTION),
+                KeyboardKey("F6",  "F6",  "[17~", KeyboardKey.KeyCategory.FUNCTION)
+            )
+
+            // Row 5 (layout 5 only): F7-F12
+            val row5 = listOf(
+                KeyboardKey("F7",  "F7",  "[18~", KeyboardKey.KeyCategory.FUNCTION),
+                KeyboardKey("F8",  "F8",  "[19~", KeyboardKey.KeyCategory.FUNCTION),
+                KeyboardKey("F9",  "F9",  "[20~", KeyboardKey.KeyCategory.FUNCTION),
+                KeyboardKey("F10", "F10", "[21~", KeyboardKey.KeyCategory.FUNCTION),
+                KeyboardKey("F11", "F11", "[23~", KeyboardKey.KeyCategory.FUNCTION),
+                KeyboardKey("F12", "F12", "[24~", KeyboardKey.KeyCategory.FUNCTION)
+            )
+
             return when (rowCount) {
-                1 -> listOf(
-                    listOf(
-                        KeyboardKey("ESC", "ESC", "\u001B"),
-                        KeyboardKey("CTL", "CTL", "", KeyboardKey.KeyCategory.MODIFIER),
-                        KeyboardKey("ALT", "ALT", "", KeyboardKey.KeyCategory.MODIFIER),
-                        KeyboardKey("FN", "FN", "", KeyboardKey.KeyCategory.MODIFIER),
-                        KeyboardKey("TAB", "TAB", "\t"),
-                        KeyboardKey("UP", "↑", "\u001B[A", KeyboardKey.KeyCategory.ARROW),
-                        KeyboardKey("DOWN", "↓", "\u001B[B", KeyboardKey.KeyCategory.ARROW),
-                        KeyboardKey("LEFT", "←", "\u001B[D", KeyboardKey.KeyCategory.ARROW),
-                        KeyboardKey("RIGHT", "→", "\u001B[C", KeyboardKey.KeyCategory.ARROW)
-                    )
-                )
-                2 -> listOf(
-                    // Row 1: vim/tmux essentials + arrows
-                    listOf(
-                        KeyboardKey("ESC", "ESC", "\u001B"),
-                        KeyboardKey("CTL", "CTL", "", KeyboardKey.KeyCategory.MODIFIER),
-                        KeyboardKey("ALT", "ALT", "", KeyboardKey.KeyCategory.MODIFIER),
-                        KeyboardKey("FN", "FN", "", KeyboardKey.KeyCategory.MODIFIER),
-                        KeyboardKey("TAB", "TAB", "\t"),
-                        KeyboardKey("UP", "↑", "\u001B[A", KeyboardKey.KeyCategory.ARROW),
-                        KeyboardKey("DOWN", "↓", "\u001B[B", KeyboardKey.KeyCategory.ARROW),
-                        KeyboardKey("LEFT", "←", "\u001B[D", KeyboardKey.KeyCategory.ARROW),
-                        KeyboardKey("RIGHT", "→", "\u001B[C", KeyboardKey.KeyCategory.ARROW)
-                    ),
-                    // Row 2: page navigation + coding symbols
-                    listOf(
-                        KeyboardKey("HOME", "HOME", "\u001B[H"),
-                        KeyboardKey("END", "END", "\u001B[F"),
-                        KeyboardKey("PGUP", "PGUP", "\u001B[5~"),
-                        KeyboardKey("PGDN", "PGDN", "\u001B[6~"),
-                        KeyboardKey("COLON", ":", ":", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("SLASH", "/", "/", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("PIPE", "|", "|", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("TILDE", "~", "~", KeyboardKey.KeyCategory.SYMBOL)
-                    )
-                )
-                3 -> listOf(
-                    // Row 1: vim/tmux essentials + arrows. ESC first
-                    // (vim escape), `:` and `/` promoted (vim ex/search).
-                    listOf(
-                        KeyboardKey("ESC", "ESC", "\u001B"),
-                        KeyboardKey("CTL", "CTL", "", KeyboardKey.KeyCategory.MODIFIER),
-                        KeyboardKey("ALT", "ALT", "", KeyboardKey.KeyCategory.MODIFIER),
-                        KeyboardKey("COLON", ":", ":", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("SLASH", "/", "/", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("UP", "↑", "\u001B[A", KeyboardKey.KeyCategory.ARROW),
-                        KeyboardKey("DOWN", "↓", "\u001B[B", KeyboardKey.KeyCategory.ARROW),
-                        KeyboardKey("LEFT", "←", "\u001B[D", KeyboardKey.KeyCategory.ARROW),
-                        KeyboardKey("RIGHT", "→", "\u001B[C", KeyboardKey.KeyCategory.ARROW)
-                    ),
-                    // Row 2: page navigation + TAB/ENT/PASTE
-                    listOf(
-                        KeyboardKey("TAB", "TAB", "\t"),
-                        KeyboardKey("HOME", "HOME", "\u001B[H"),
-                        KeyboardKey("END", "END", "\u001B[F"),
-                        KeyboardKey("PGUP", "PGUP", "\u001B[5~"),
-                        KeyboardKey("PGDN", "PGDN", "\u001B[6~"),
-                        KeyboardKey("FN", "FN", "", KeyboardKey.KeyCategory.MODIFIER),
-                        KeyboardKey("ENTER", "ENT", "\r"),
-                        KeyboardKey("PASTE", "📋", "", KeyboardKey.KeyCategory.ACTION)
-                    ),
-                    // Row 3: coding/shell symbols Android keyboard buries
-                    // 2 taps deep. Bash + vim flavour: pipe, redirect,
-                    // backslash, glob, command sub.
-                    listOf(
-                        KeyboardKey("PIPE", "|", "|", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("BACKSLASH", "\\", "\\", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("MINUS", "-", "-", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("UNDERSCORE", "_", "_", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("TILDE", "~", "~", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("BACKTICK", "`", "`", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("DOLLAR", "$", "$", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("STAR", "*", "*", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("LT", "<", "<", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("GT", ">", ">", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("SEL", "SEL", "", KeyboardKey.KeyCategory.ACTION),
-                    )
-                )
-                4 -> listOf(
-                    // Row 1: vim/tmux essentials + arrows
-                    listOf(
-                        KeyboardKey("ESC", "ESC", "\u001B"),
-                        KeyboardKey("CTL", "CTL", "", KeyboardKey.KeyCategory.MODIFIER),
-                        KeyboardKey("ALT", "ALT", "", KeyboardKey.KeyCategory.MODIFIER),
-                        KeyboardKey("COLON", ":", ":", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("SLASH", "/", "/", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("UP", "↑", "\u001B[A", KeyboardKey.KeyCategory.ARROW),
-                        KeyboardKey("DOWN", "↓", "\u001B[B", KeyboardKey.KeyCategory.ARROW),
-                        KeyboardKey("LEFT", "←", "\u001B[D", KeyboardKey.KeyCategory.ARROW),
-                        KeyboardKey("RIGHT", "→", "\u001B[C", KeyboardKey.KeyCategory.ARROW)
-                    ),
-                    // Row 2: navigation
-                    listOf(
-                        KeyboardKey("TAB", "TAB", "\t"),
-                        KeyboardKey("HOME", "HOME", "\u001B[H"),
-                        KeyboardKey("END", "END", "\u001B[F"),
-                        KeyboardKey("PGUP", "PGUP", "\u001B[5~"),
-                        KeyboardKey("PGDN", "PGDN", "\u001B[6~"),
-                        KeyboardKey("FN", "FN", "", KeyboardKey.KeyCategory.MODIFIER),
-                        KeyboardKey("ENTER", "ENT", "\r"),
-                        KeyboardKey("PASTE", "📋", "", KeyboardKey.KeyCategory.ACTION)
-                    ),
-                    // Row 3: coding symbols
-                    listOf(
-                        KeyboardKey("PIPE", "|", "|", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("BACKSLASH", "\\", "\\", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("MINUS", "-", "-", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("UNDERSCORE", "_", "_", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("TILDE", "~", "~", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("BACKTICK", "`", "`", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("DOLLAR", "$", "$", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("STAR", "*", "*", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("LT", "<", "<", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("GT", ">", ">", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("SEL", "SEL", "", KeyboardKey.KeyCategory.ACTION),
-                    ),
-                    // Row 4: F1-F6
-                    listOf(
-                        KeyboardKey("F1", "F1", "\u001BOP", KeyboardKey.KeyCategory.FUNCTION),
-                        KeyboardKey("F2", "F2", "\u001BOQ", KeyboardKey.KeyCategory.FUNCTION),
-                        KeyboardKey("F3", "F3", "\u001BOR", KeyboardKey.KeyCategory.FUNCTION),
-                        KeyboardKey("F4", "F4", "\u001BOS", KeyboardKey.KeyCategory.FUNCTION),
-                        KeyboardKey("F5", "F5", "\u001B[15~", KeyboardKey.KeyCategory.FUNCTION),
-                        KeyboardKey("F6", "F6", "\u001B[17~", KeyboardKey.KeyCategory.FUNCTION)
-                    )
-                )
-                5 -> listOf(
-                    // Row 1: vim/tmux essentials + arrows
-                    listOf(
-                        KeyboardKey("ESC", "ESC", "\u001B"),
-                        KeyboardKey("CTL", "CTL", "", KeyboardKey.KeyCategory.MODIFIER),
-                        KeyboardKey("ALT", "ALT", "", KeyboardKey.KeyCategory.MODIFIER),
-                        KeyboardKey("COLON", ":", ":", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("SLASH", "/", "/", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("UP", "↑", "\u001B[A", KeyboardKey.KeyCategory.ARROW),
-                        KeyboardKey("DOWN", "↓", "\u001B[B", KeyboardKey.KeyCategory.ARROW),
-                        KeyboardKey("LEFT", "←", "\u001B[D", KeyboardKey.KeyCategory.ARROW),
-                        KeyboardKey("RIGHT", "→", "\u001B[C", KeyboardKey.KeyCategory.ARROW)
-                    ),
-                    // Row 2: navigation
-                    listOf(
-                        KeyboardKey("TAB", "TAB", "\t"),
-                        KeyboardKey("HOME", "HOME", "\u001B[H"),
-                        KeyboardKey("END", "END", "\u001B[F"),
-                        KeyboardKey("PGUP", "PGUP", "\u001B[5~"),
-                        KeyboardKey("PGDN", "PGDN", "\u001B[6~"),
-                        KeyboardKey("FN", "FN", "", KeyboardKey.KeyCategory.MODIFIER),
-                        KeyboardKey("ENTER", "ENT", "\r"),
-                        KeyboardKey("PASTE", "📋", "", KeyboardKey.KeyCategory.ACTION)
-                    ),
-                    // Row 3: coding symbols
-                    listOf(
-                        KeyboardKey("PIPE", "|", "|", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("BACKSLASH", "\\", "\\", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("MINUS", "-", "-", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("UNDERSCORE", "_", "_", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("TILDE", "~", "~", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("BACKTICK", "`", "`", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("DOLLAR", "$", "$", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("STAR", "*", "*", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("LT", "<", "<", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("GT", ">", ">", KeyboardKey.KeyCategory.SYMBOL),
-                        KeyboardKey("SEL", "SEL", "", KeyboardKey.KeyCategory.ACTION),
-                    ),
-                    // Row 4: F1-F6
-                    listOf(
-                        KeyboardKey("F1", "F1", "\u001BOP", KeyboardKey.KeyCategory.FUNCTION),
-                        KeyboardKey("F2", "F2", "\u001BOQ", KeyboardKey.KeyCategory.FUNCTION),
-                        KeyboardKey("F3", "F3", "\u001BOR", KeyboardKey.KeyCategory.FUNCTION),
-                        KeyboardKey("F4", "F4", "\u001BOS", KeyboardKey.KeyCategory.FUNCTION),
-                        KeyboardKey("F5", "F5", "\u001B[15~", KeyboardKey.KeyCategory.FUNCTION),
-                        KeyboardKey("F6", "F6", "\u001B[17~", KeyboardKey.KeyCategory.FUNCTION)
-                    ),
-                    // Row 5: F7-F12
-                    listOf(
-                        KeyboardKey("F7", "F7", "\u001B[18~", KeyboardKey.KeyCategory.FUNCTION),
-                        KeyboardKey("F8", "F8", "\u001B[19~", KeyboardKey.KeyCategory.FUNCTION),
-                        KeyboardKey("F9", "F9", "\u001B[20~", KeyboardKey.KeyCategory.FUNCTION),
-                        KeyboardKey("F10", "F10", "\u001B[21~", KeyboardKey.KeyCategory.FUNCTION),
-                        KeyboardKey("F11", "F11", "\u001B[23~", KeyboardKey.KeyCategory.FUNCTION),
-                        KeyboardKey("F12", "F12", "\u001B[24~", KeyboardKey.KeyCategory.FUNCTION)
-                    )
-                )
+                1    -> listOf(row1)
+                2    -> listOf(row1, row2)
+                3    -> listOf(row1, row2, row3)
+                4    -> listOf(row1, row2, row3, row4)
+                5    -> listOf(row1, row2, row3, row4, row5)
                 else -> listOf(emptyList())
             }
         }

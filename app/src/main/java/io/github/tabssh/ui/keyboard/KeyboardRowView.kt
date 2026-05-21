@@ -121,9 +121,13 @@ class KeyboardRowView @JvmOverloads constructor(
         val btn = KeyButton(context, key.label)
 
         val params = if (pinned) {
-            LinearLayout.LayoutParams(dpToPx(KEY_PINNED_WIDTH_DP), LinearLayout.LayoutParams.MATCH_PARENT, 0f)
+            // Pinned keys use a fixed pixel width scaled by widthMultiplier so
+            // a 2× key (CTL/TAB/ENT/ESC) gets twice the anchor width.
+            val w = (KEY_PINNED_WIDTH_DP * key.widthMultiplier).toInt()
+            LinearLayout.LayoutParams(dpToPx(w), LinearLayout.LayoutParams.MATCH_PARENT, 0f)
         } else {
-            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
+            // Flex keys: weight = widthMultiplier (1f normal, 2f double-wide).
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, key.widthMultiplier)
         }
         params.marginEnd = dpToPx(KEY_MARGIN_DP)
         btn.layoutParams = params
