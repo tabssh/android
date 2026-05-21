@@ -69,6 +69,8 @@ class TerminalView @JvmOverloads constructor(
     private val scaleGestureDetector: ScaleGestureDetector
     private val scroller: OverScroller
     private var scrollY = 0
+    /** Accumulated scroll pixels for mouse-wheel forwarding (sub-cell precision). */
+    private var mouseScrollAccum = 0f
 
     // Reusable buffer for drawText — avoids one String allocation per glyph per frame.
     private val charBuf = CharArray(2)
@@ -1560,10 +1562,33 @@ class TerminalView @JvmOverloads constructor(
     private inner class TerminalGestureListener : GestureDetector.SimpleOnGestureListener() {
 
         override fun onScroll(e1: MotionEvent?, e2: MotionEvent, distanceX: Float, distanceY: Float): Boolean {
+            val termuxEmulator = termuxBridge?.getEmulator()
+            if (termuxEmulator != null && termuxEmulator.isMouseTrackingActive()) {
+                // Remote app (e.g. tmux with mouse on) owns scroll — forward as
+                // mouse wheel events so it can scroll its own scrollback.
+                // Accumulate sub-cell distances and fire one tick per cell height
+                // to produce a smooth, natural feel without event flooding.
+                mouseScrollAccum += distanceY
+                val cellH = if (cellHeight > 0f) cellHeight else 20f
+                val ticks = (mouseScrollAccum / cellH).toInt()
+                if (ticks != 0) {
+                    mouseScrollAccum -= ticks * cellH
+                    val col = ((e2.x / (if (cellWidth > 0f) cellWidth else cellH)) + 1).toInt().coerceIn(1, terminalCols)
+                    val row = ((e2.y / cellH) + 1).toInt().coerceIn(1, terminalRows)
+                    val button = if (ticks > 0)
+                        com.termux.terminal.TerminalEmulator.MOUSE_WHEELUP_BUTTON
+                    else
+                        com.termux.terminal.TerminalEmulator.MOUSE_WHEELDOWN_BUTTON
+                    repeat(Math.abs(ticks)) { termuxEmulator.sendMouseEvent(button, col, row, true) }
+                }
+                return true
+            }
+            // No remote mouse mode — scroll the local scrollback buffer.
             // distanceY > 0 when the finger moved UP. Mobile convention is
             // swipe-DOWN to reach older scrollback, so we negate distanceY:
             // finger down → distanceY < 0 → -distanceY > 0 → scrollY grows.
             scrollY = (scrollY - distanceY).coerceIn(0f, maxScrollYPx().toFloat()).toInt()
+            mouseScrollAccum = 0f
             // postInvalidateOnAnimation schedules one redraw per vsync frame,
             // preventing multiple expensive re-renders within a single frame
             // when onScroll fires faster than the display can refresh.
@@ -1589,6 +1614,13 @@ class TerminalView @JvmOverloads constructor(
                     onEdgeSwipe?.invoke(+1)
                     return true
                 }
+            }
+            // When remote mouse tracking is active, fling has no meaning
+            // (mouse protocol has no velocity) — consume and clear accumulator.
+            val termuxEmulator = termuxBridge?.getEmulator()
+            if (termuxEmulator != null && termuxEmulator.isMouseTrackingActive()) {
+                mouseScrollAccum = 0f
+                return true
             }
             // velocityY > 0 = finger was moving DOWN. With swipe-down-for-older
             // convention that should increase scrollY, so pass +velocityY.
