@@ -31,6 +31,13 @@ class TabSSHApplication : Application() {
         const val KEY_CRASH_TIME   = "crash_time"
         const val KEY_LAST_LOGGED_COMMIT = "last_logged_commit"
 
+        // Intent extras used to pass crash data directly to CrashReportActivity.
+        // Preferred over SharedPreferences because they are in-process and not
+        // subject to disk-write races; SharedPreferences is kept as a fallback.
+        const val EXTRA_CRASH_TRACE  = "extra_crash_trace"
+        const val EXTRA_CRASH_THREAD = "extra_crash_thread"
+        const val EXTRA_CRASH_TIME   = "extra_crash_time"
+
         // Lightweight Application singleton — set in onCreate, used by
         // helpers that don't have a Context (notably SSHTab when it
         // builds the multiplexer auto-launch command from
@@ -485,11 +492,18 @@ class TabSSHApplication : Application() {
 
             if (BuildConfig.DEBUG_MODE) {
                 try {
+                    val trace     = android.util.Log.getStackTraceString(throwable)
+                    val crashTime = System.currentTimeMillis()
+
+                    // Primary path: pass data directly via Intent extras (in-process,
+                    // no disk I/O, no race between write and read).
+                    // Secondary path: SharedPreferences on disk as a fallback for the
+                    // case where Android restarts CrashReportActivity in a new process.
                     getSharedPreferences(STARTUP_PREFS, MODE_PRIVATE).edit()
-                        .putString(KEY_LAST_CRASH, android.util.Log.getStackTraceString(throwable))
+                        .putString(KEY_LAST_CRASH,   trace)
                         .putString(KEY_CRASH_THREAD, thread.name)
-                        .putLong(KEY_CRASH_TIME, System.currentTimeMillis())
-                        .commit() // must be synchronous
+                        .putLong(KEY_CRASH_TIME,     crashTime)
+                        .commit() // synchronous; ignore return value — Intent extras are primary
 
                     startActivity(
                         android.content.Intent(
@@ -498,6 +512,9 @@ class TabSSHApplication : Application() {
                         ).apply {
                             flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
                                     android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK
+                            putExtra(EXTRA_CRASH_TRACE,  trace)
+                            putExtra(EXTRA_CRASH_THREAD, thread.name)
+                            putExtra(EXTRA_CRASH_TIME,   crashTime)
                         }
                     )
                 } catch (e: Exception) {

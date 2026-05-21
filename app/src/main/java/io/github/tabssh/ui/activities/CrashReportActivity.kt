@@ -37,11 +37,21 @@ class CrashReportActivity : AppCompatActivity() {
             }
         )
 
+        // Prefer Intent extras (in-process, no disk race) then fall back to
+        // SharedPreferences (survives process restart by the activity manager).
         val prefs = getSharedPreferences(TabSSHApplication.STARTUP_PREFS, MODE_PRIVATE)
-        val stackTrace = prefs.getString(TabSSHApplication.KEY_LAST_CRASH, null)
-            ?: "No crash details available."
-        val crashTime = prefs.getLong(TabSSHApplication.KEY_CRASH_TIME, 0L)
-        val crashThread = prefs.getString(TabSSHApplication.KEY_CRASH_THREAD, "unknown") ?: "unknown"
+        val stackTrace =
+            intent.getStringExtra(TabSSHApplication.EXTRA_CRASH_TRACE)
+                ?: prefs.getString(TabSSHApplication.KEY_LAST_CRASH, null)
+                ?: "No crash details available."
+        val crashTime =
+            intent.getLongExtra(TabSSHApplication.EXTRA_CRASH_TIME, 0L)
+                .takeIf { it > 0L }
+                ?: prefs.getLong(TabSSHApplication.KEY_CRASH_TIME, 0L)
+        val crashThread =
+            intent.getStringExtra(TabSSHApplication.EXTRA_CRASH_THREAD)
+                ?: prefs.getString(TabSSHApplication.KEY_CRASH_THREAD, "unknown")
+                ?: "unknown"
 
         prefs.edit()
             .remove(TabSSHApplication.KEY_LAST_CRASH)
