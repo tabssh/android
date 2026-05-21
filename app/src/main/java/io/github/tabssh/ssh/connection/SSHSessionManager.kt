@@ -144,6 +144,9 @@ class SSHSessionManager(private val context: Context) {
     suspend fun connectToServer(profile: ConnectionProfile): SSHConnection? {
         return try {
             val connection = createConnection(profile)
+            // Promote any monitoring-only connection to a full terminal session
+            // so SSHConnectionService renders the persistent status notification.
+            connection.isMonitoringOnly = false
             val success = connection.connect()
 
             if (success) {
@@ -192,6 +195,9 @@ class SSHSessionManager(private val context: Context) {
         }
         return try {
             val connection = createConnection(profile)
+            // Mark as monitoring-only so SSHConnectionService does not render a
+            // persistent "Connected to …" session notification for this connection.
+            connection.isMonitoringOnly = true
             val success = connection.connect()
             if (success) {
                 Logger.i("SSHSessionManager", "Monitoring session connected: ${profile.getDisplayName()}")

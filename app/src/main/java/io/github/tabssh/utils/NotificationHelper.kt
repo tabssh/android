@@ -95,99 +95,130 @@ object NotificationHelper {
     fun createNotificationChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            
-            // Service Channel - Low priority, no sound
+
+            // ── Session Service ───────────────────────────────────────────────────
+            // Transient foreground-service anchor. Posted as a silent placeholder
+            // ("Starting SSH session…") before the first real per-host notification
+            // is live. Swapped out immediately on first connect; users rarely see
+            // this beyond the first half-second of a new connection.
+            // Importance LOW: must not surface as a heads-up banner or make noise.
             val serviceChannel = NotificationChannel(
                 CHANNEL_SERVICE,
-                "SSH Service",
+                "Session Service",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Persistent SSH connections running in background"
+                description = "Transient foreground-service anchor while a session is starting"
                 setShowBadge(false)
                 enableVibration(false)
                 setSound(null, null)
             }
-            
-            // File Transfer Channel - Low priority, progress updates
+
+            // ── File Transfers ────────────────────────────────────────────────────
+            // Progress and completion notifications for SFTP uploads and downloads.
+            // Ongoing while transfer is in flight; auto-cleared on completion.
+            // Importance LOW: progress updates should not interrupt the user.
             val fileTransferChannel = NotificationChannel(
                 CHANNEL_FILE_TRANSFER,
                 "File Transfers",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "SFTP file upload/download progress"
+                description = "SFTP file upload and download progress"
                 setShowBadge(false)
                 enableVibration(false)
                 setSound(null, null)
             }
-            
-            // Error Channel - High priority, sound + vibration
+
+            // ── Connection Errors ─────────────────────────────────────────────────
+            // Fired when a connection attempt fails (auth error, network timeout,
+            // host key mismatch, etc.). High importance so the user is not left
+            // wondering why their session never opened.
+            // Importance HIGH: these are actionable failures that need attention.
             val errorChannel = NotificationChannel(
                 CHANNEL_ERROR,
-                "Errors",
+                "Connection Errors",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Connection errors and failures"
+                description = "SSH connection failures and authentication errors"
                 setShowBadge(true)
                 enableVibration(true)
             }
-            
-            // Per-host silent channel — the persistent live status for
-            // every active SSH session (`Connected to host:title`, etc.).
-            // Importance LOW so the OS doesn't surface it as a heads-up
-            // banner; sound and vibration explicitly off.
+
+            // ── Active Sessions ───────────────────────────────────────────────────
+            // Persistent per-host status row ("Connected to host:port-ssh") for
+            // every active terminal session. Always present while a session is live;
+            // auto-cleared 30 s after disconnect. Never beeps or vibrates — the user
+            // controls the foreground service through this notification, not the other
+            // way around. Monitoring-only connections (dashboard / HostDetail) are
+            // intentionally excluded and will never appear here.
+            // Importance LOW: status rows must never interrupt the user.
             val sshSilent = NotificationChannel(
                 CHANNEL_SSH_SILENT,
-                "SSH Sessions (silent)",
+                "Active Sessions",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Per-host SSH session status (silent)"
+                description = "Ongoing status for each open SSH terminal session"
                 setShowBadge(false)
                 enableVibration(false)
                 setSound(null, null)
             }
 
-            // Per-host alert channel — only used when a connection's
-            // notif_sound_mode / notif_vibrate_mode allow it. Lives at
-            // IMPORTANCE_HIGH so the posted alert can actually beep /
-            // vibrate; real attentional cost is bounded by setTimeoutAfter.
+            // ── Session Alerts ────────────────────────────────────────────────────
+            // One-shot audible/vibrating alert for terminal session events (connect,
+            // disconnect, unexpected drop). Only fires when the per-connection
+            // notif_sound_mode / notif_vibrate_mode setting allows it — defaults to
+            // NEVER so most users won't hear anything from this channel.
+            // Auto-cleared after 30 s so it doesn't accumulate in the shade.
+            // Importance HIGH: the user explicitly opted in, so the alert must be
+            // able to beep and vibrate.
             val sshAlerts = NotificationChannel(
                 CHANNEL_SSH_ALERTS,
-                "SSH Sessions (alerts)",
+                "Session Alerts",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "SSH session events that should sound or vibrate"
+                description = "Sound or vibration alerts for SSH session connect/disconnect events"
                 setShowBadge(true)
                 enableVibration(true)
             }
 
-            // Host monitoring — down/recovery alerts. HIGH so they surface
-            // as heads-up banners; sound + vibration on by default.
+            // ── Host Monitoring Alerts ────────────────────────────────────────────
+            // Down and recovery alerts for hosts configured in the Multi-host
+            // Dashboard. Fires when: a host fails its TCP probe for the first time
+            // (notifyHostDown), repeatedly fails after the cooldown window
+            // (notifyHostStillDown), or recovers (notifyHostRecovered).
+            // Only fires when MonitorSlot.alertOnDown / alertOnRecovery is true.
+            // Importance HIGH: an outage alert should surface immediately.
             val hostMonitoring = NotificationChannel(
                 CHANNEL_HOST_MONITORING,
-                "Host Monitoring",
+                "Host Monitoring Alerts",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Alerts when a monitored host goes down or recovers"
+                description = "Alerts when a monitored host goes down or comes back online"
                 setShowBadge(true)
                 enableVibration(true)
             }
 
-            // Metric threshold — CPU/memory/disk over threshold. DEFAULT so
-            // it doesn't intrude as aggressively as a full outage alert.
+            // ── Performance Alerts ────────────────────────────────────────────────
+            // Threshold-breach alerts for CPU, memory, disk, and load average.
+            // Fires only when MonitorSlot.enablePerformanceChecks is true AND a live
+            // SSH session is already open (no new connections from background).
+            // Quieter than the down/recovery channel — sustained high resource usage
+            // is worth knowing about but is not the same urgency as a full outage.
+            // Importance DEFAULT: shows in the shade but does not interrupt.
             val hostMetrics = NotificationChannel(
                 CHANNEL_HOST_METRICS,
-                "Host Metrics",
+                "Performance Alerts",
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
-                description = "Alerts when CPU, memory, or disk exceed configured thresholds"
+                description = "Alerts when CPU, memory, disk, or load exceed configured thresholds"
                 setShowBadge(true)
                 enableVibration(false)
                 setSound(null, null)
             }
 
-            // Remove the legacy ssh_connection_v2 channel that was registered
-            // but never posted to — its role is covered by ssh_silent_v3 and
-            // ssh_alerts_v3. Delete it so it no longer appears in system settings.
+            // Remove the legacy ssh_connection_v2 channel that was registered in an
+            // earlier release but never posted to. Its role is covered by
+            // ssh_silent_v3 (status) and ssh_alerts_v3 (events). Deleting it removes
+            // the dead entry from Android Settings → App notifications.
             notificationManager.deleteNotificationChannel("ssh_connection_v2")
 
             notificationManager.createNotificationChannels(listOf(
@@ -200,7 +231,7 @@ object NotificationHelper {
                 hostMetrics
             ))
 
-            Logger.d("NotificationHelper", "Created notification channels (ssh_service, ssh_silent, ssh_alerts, file_transfer, errors, host_monitoring, host_metrics)")
+            Logger.d("NotificationHelper", "Registered 7 notification channels: Session Service, Active Sessions, Session Alerts, File Transfers, Connection Errors, Host Monitoring Alerts, Performance Alerts")
         }
     }
 

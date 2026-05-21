@@ -171,6 +171,15 @@ class HostAvailabilityWorker(
             return Result.success()
         }
 
+        // Gate 3: global notification default.
+        // When false, all monitoring notifications are suppressed regardless of
+        // per-host alertOnDown / alertOnRecovery flags. Per-host flags still take
+        // effect when this is true — they can suppress individual hosts below the
+        // global level, but cannot enable notifications above it.
+        // (Group-level notification settings are a planned future addition that
+        // will sit between the global default and the per-host flag in precedence.)
+        val globalNotificationsEnabled = prefs.getBoolean("monitoring_notifications_enabled", true)
+
         val app = TabSSHApplication.get()
         val db = app.database
         val allSlots = db.monitorSlotDao().getEnabledSlots()
@@ -224,7 +233,10 @@ class HostAvailabilityWorker(
                                 stampUp = false
                             )
 
-                            if (slot.alertOnDown) {
+                            // Notification precedence: global default → per-host flag.
+                            // (Group-level setting is a planned future addition between
+                            // these two tiers.) Both must be true for a notification to fire.
+                            if (globalNotificationsEnabled && slot.alertOnDown) {
                                 when {
                                     firstFailure -> {
                                         Logger.i(TAG, "${profile.host}: went down (first failure)")
@@ -248,7 +260,8 @@ class HostAvailabilityWorker(
                                 stampUp = justRecovered && slot.alertOnRecovery
                             )
 
-                            if (justRecovered && slot.alertOnRecovery) {
+                            // Notification precedence: global default → per-host flag.
+                            if (globalNotificationsEnabled && justRecovered && slot.alertOnRecovery) {
                                 Logger.i(TAG, "${profile.host}: recovered")
                                 NotificationHelper.notifyHostRecovered(appContext, profile)
                             }
@@ -260,7 +273,7 @@ class HostAvailabilityWorker(
                                     lastCheckedAt = probeTime,
                                     isCurrentlyDown = false,
                                     consecutiveFailures = 0
-                                ), profile)
+                                ), profile, globalNotificationsEnabled)
                             }
                         }
                     }
@@ -287,17 +300,23 @@ class HostAvailabilityWorker(
     /**
      * Piggyback SSH metrics check on an already-open session.
      * Never opens a new SSH connection — if no live session exists, returns.
+     *
+     * [notificationsEnabled] is the resolved global default; threshold alerts
+     * are skipped entirely when false, regardless of per-slot threshold config.
      */
     private suspend fun checkMetrics(
         app: TabSSHApplication,
         slot: io.github.tabssh.storage.database.entities.MonitorSlot,
-        profile: io.github.tabssh.storage.database.entities.ConnectionProfile
+        profile: io.github.tabssh.storage.database.entities.ConnectionProfile,
+        notificationsEnabled: Boolean
     ) {
         val ssh = app.sshSessionManager.getConnection(slot.connectionId) ?: return
         if (!ssh.isConnected()) return
 
         val result = runCatching { MetricsCollector(ssh).collectMetrics() }
         val metrics = result.getOrNull()?.getOrNull() ?: return
+
+        if (!notificationsEnabled) return
 
         // CPU threshold — uses 5-minute load average normalised by core count so
         // momentary spikes don't trigger alerts. load5min / coreCount × 100 gives

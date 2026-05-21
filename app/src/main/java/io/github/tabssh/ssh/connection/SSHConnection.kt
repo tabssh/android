@@ -42,6 +42,18 @@ class SSHConnection(
     private val context: android.content.Context
 ) {
     /**
+     * True when this connection was created by [SSHSessionManager.connectForMonitoring]
+     * rather than [SSHSessionManager.connectToServer].
+     *
+     * Monitoring connections are invisible to the session notification layer:
+     * [SSHConnectionService] skips [renderHostNotification] for any profile ID
+     * whose live [SSHConnection] has this flag set.  The flag is cleared to false
+     * when [connectToServer] promotes an existing monitoring connection to a full
+     * terminal session so the notification appears at the right moment.
+     */
+    @Volatile var isMonitoringOnly: Boolean = false
+
+    /**
      * Last terminal title parsed by Termux from the OSC 0/1/2 escape
      * sequences (the value most shells set on every prompt — e.g.
      * `user@host:cwd`). Set by [SSHTab] from its TermuxBridgeListener.

@@ -367,6 +367,14 @@ class SSHConnectionService : Service() {
             override fun onConnectionStateChanged(profileId: String, state: ConnectionState) {
                 updateConnectionCount()
                 serviceScope.launch(Dispatchers.Main) {
+                    // Monitoring-only connections are invisible to the notification
+                    // layer.  connectForMonitoring() sets isMonitoringOnly = true;
+                    // connectToServer() clears it.  Checking here prevents the
+                    // spurious "Connected to host:port-ssh" notification that would
+                    // otherwise appear whenever a dashboard or HostDetailActivity
+                    // session connects while SSHConnectionService is already running.
+                    val isMonitoring = app.sshSessionManager.getConnection(profileId)?.isMonitoringOnly == true
+                    if (isMonitoring) return@launch
                     when (state) {
                         ConnectionState.CONNECTED -> {
                             disconnectedProfiles.remove(profileId)
@@ -493,13 +501,16 @@ class SSHConnectionService : Service() {
     private fun refreshAllHostNotifications() {
         try {
             val activeConns = app.sshSessionManager.getActiveConnections()
-            activeConns.forEach { conn ->
+            // Exclude monitoring-only connections — they don't own a session
+            // notification and must not refresh (or create) one here.
+            val terminalConns = activeConns.filter { !it.isMonitoringOnly }
+            terminalConns.forEach { conn ->
                 val s = conn.connectionState.value
                 if (s == ConnectionState.CONNECTED || s == ConnectionState.CONNECTING) {
                     renderHostNotification(conn.profile.id, disconnectingState = false)
                 }
             }
-            val connectedCount = activeConns.count { it.connectionState.value == ConnectionState.CONNECTED }
+            val connectedCount = terminalConns.count { it.connectionState.value == ConnectionState.CONNECTED }
             io.github.tabssh.utils.NotificationHelper.postSshGroupSummary(this, connectedCount)
         } catch (e: Exception) {
             Logger.w("SSHConnectionService", "Failed to refresh host notifications", e)
