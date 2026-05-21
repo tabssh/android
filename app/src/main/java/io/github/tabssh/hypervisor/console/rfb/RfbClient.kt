@@ -545,27 +545,30 @@ class RfbClient(
     /**
      * Best-effort handler for server message types outside the RFB 3.8 core spec.
      *
-     * Proxmox / QEMU sometimes sends proprietary extension messages that we have
-     * not negotiated for. We cannot know their payload length in general, so we
-     * log and continue without consuming any bytes. If the unknown message has a
-     * payload the stream will desync and the next message parse will likely fail
-     * with a different error — that is still better than always dropping the
-     * connection on the first non-standard message.
+     * Known zero-payload types are silently consumed.  Truly unknown types
+     * cannot be safely skipped (RFB has no length prefix), so we fail fast
+     * with a clean error rather than letting the stream desync silently.
      *
      * Known observed types:
-     *   204 (0xCC) — QEMU/Proxmox audio or display notification; appears to carry
-     *                no payload in the sessions observed. Skipping it safely keeps
-     *                the VNC session alive.
+     *   204 (0xCC) — QEMU/Proxmox display-mode notification; carries no
+     *                payload.  Observed on Proxmox 7/8 vncproxy sessions.
      */
     private fun handleUnknownServerMessage(msgType: Int) {
-        // RFB server messages carry no length prefix — there is no safe way to
-        // skip an unknown message's payload. Continuing would desync the stream
-        // and silently corrupt all subsequent message reads. Failing fast here
-        // produces a clean error instead of confusing downstream garbage.
-        val hex = msgType.toString(16).uppercase()
-        Logger.e(TAG, "Unrecognised server message type $msgType (0x$hex) — cannot safely skip; closing session")
-        running.set(false)
-        throw java.io.IOException("Unknown RFB server message type 0x$hex — session closed to avoid stream desync")
+        when (msgType) {
+            0xCC -> {
+                // Zero-payload QEMU/Proxmox display notification — safe to ignore.
+                Logger.d(TAG, "Skipping zero-payload QEMU/Proxmox server message 0xCC")
+            }
+            else -> {
+                // RFB server messages carry no length prefix — there is no safe way
+                // to skip an unknown message's payload.  Fail fast so the caller
+                // gets a clean error instead of stream desync producing garbage.
+                val hex = msgType.toString(16).uppercase()
+                Logger.e(TAG, "Unrecognised server message type $msgType (0x$hex) — cannot safely skip; closing session")
+                running.set(false)
+                throw java.io.IOException("Unknown RFB server message type 0x$hex — session closed to avoid stream desync")
+            }
+        }
     }
 
     private fun handleFramebufferUpdate() {
@@ -782,8 +785,12 @@ class RfbClient(
      * stays permanently black: the first real FramebufferUpdate is queued
      * behind the fence and never arrives.
      *
-     * We respond immediately by echoing the same flags (with the BlockBefore
-     * request bit cleared and Request bit cleared) and the same opaque data.
+     * We respond by echoing the SAME flags.  Per the Fence extension spec,
+     * the client must echo the server's flags verbatim (only the Request bit,
+     * bit 31, should be cleared — but server-sent ServerFence messages never
+     * set it, so the reply is always flags as-is).  If we clear SyncNext
+     * (bit 2) before replying, QEMU/Proxmox does not recognise the response
+     * as a valid acknowledgement and keeps the update queue blocked forever.
      */
     private fun handleServerFence() {
         din.skipBytes(3) // padding
@@ -792,10 +799,12 @@ class RfbClient(
         val data = if (len > 0) ByteArray(len).also { din.readFully(it) } else ByteArray(0)
         Logger.d(TAG, "ServerFence flags=0x${flags.toString(16).uppercase()} len=$len")
 
-        // Echo the fence back so the server unblocks its update queue.
-        // Clear the request bits (bit 0 = BlockBefore, bit 1 = BlockAfter,
-        // bit 2 = SyncNext) so we don't inadvertently trigger another fence.
-        val replyFlags = flags and 0x7.inv()
+        // Echo verbatim — clear only the Request bit (0x80000000) which the
+        // server never sets in a ServerFence but which we must not reflect
+        // as a request back to the server.  All other bits (BlockBefore,
+        // BlockAfter, SyncNext) must be preserved so the server knows which
+        // fence this reply belongs to and unblocks its update queue.
+        val replyFlags = flags and 0x7FFFFFFF
         synchronized(outLock) {
             dout.writeByte(RfbConstants.C2S_CLIENT_FENCE)
             dout.writeByte(0); dout.writeByte(0); dout.writeByte(0) // padding
@@ -813,8 +822,9 @@ class RfbClient(
      * Format (after the 10-byte rect header):
      *   u32 flags · u8 length · length bytes data
      *
-     * We echo it back the same way as [handleServerFence] to unblock the
-     * server's update queue.
+     * Same echo-verbatim rule as [handleServerFence]: preserve all flag bits
+     * except the Request bit (31) so the server can match this reply to its
+     * outstanding fence and unblock further updates.
      */
     private fun handleInlineFence() {
         val flags = din.readInt()
@@ -822,7 +832,7 @@ class RfbClient(
         val data = if (len > 0) ByteArray(len).also { din.readFully(it) } else ByteArray(0)
         Logger.d(TAG, "Inline Fence pseudo-rect flags=0x${flags.toString(16).uppercase()} len=$len")
 
-        val replyFlags = flags and 0x7.inv()
+        val replyFlags = flags and 0x7FFFFFFF // clear Request bit only
         synchronized(outLock) {
             dout.writeByte(RfbConstants.C2S_CLIENT_FENCE)
             dout.writeByte(0); dout.writeByte(0); dout.writeByte(0)

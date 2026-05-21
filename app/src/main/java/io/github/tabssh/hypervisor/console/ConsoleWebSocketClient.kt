@@ -291,6 +291,15 @@ class ConsoleWebSocketClient(
                                     return@onMessage
                                 }
                             }
+                            ConsoleProtocol.PROXMOX_VNC -> {
+                                // RFB is a binary-only protocol. Proxmox vncproxy may send
+                                // WebSocket text frames for protocol-level signalling (e.g.
+                                // auth acknowledgements) that must never enter the RFB byte
+                                // stream — writing them to the pipe would corrupt the RFB
+                                // handshake and produce a permanently black screen.
+                                Logger.d(TAG, "PROXMOX_VNC: ignoring text frame (RFB is binary-only): '${text.take(80)}'")
+                                return@onMessage
+                            }
                             else -> text // Raw text for other protocols
                         }
 
