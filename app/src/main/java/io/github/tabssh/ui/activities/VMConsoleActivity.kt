@@ -3,10 +3,14 @@ package io.github.tabssh.ui.activities
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
+import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsAnimationCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
@@ -99,11 +103,11 @@ class VMConsoleActivity : AppCompatActivity() {
     private lateinit var vncView: VncView
     private lateinit var progressBar: ProgressBar
     private lateinit var statusText: TextView
+    private lateinit var consoleContent: LinearLayout
 
     private var consoleManager: HypervisorConsoleManager? = null
     private var termuxBridge: TermuxBridge? = null
     private var isConnected = false
-    private var isRecreated = false
     /** True when the active console is graphical (VNC); false for text (serial). */
     private var isGraphicalMode = false
     /** Socket to close when a direct VNC host connection ends. */
@@ -136,7 +140,6 @@ class VMConsoleActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_vm_console)
-        isRecreated = savedInstanceState != null
 
         app = application as TabSSHApplication
 
@@ -145,6 +148,13 @@ class VMConsoleActivity : AppCompatActivity() {
         vncView = findViewById(R.id.vnc_view)
         progressBar = findViewById(R.id.progress_bar)
         statusText = findViewById(R.id.status_text)
+        consoleContent = findViewById(R.id.console_content)
+
+        // Pan the console content upward as the soft keyboard animates in/out
+        // so the session stays visible above the IME (adjustNothing keeps the
+        // window from resizing, which would otherwise send spurious EDS requests
+        // to the VNC server on every keyboard show/hide).
+        setupKeyboardPan()
 
         // Modern back-press handling — Activity.onBackPressed() is
         // deprecated, the OnBackPressedDispatcher API is the supported
@@ -873,12 +883,7 @@ class VMConsoleActivity : AppCompatActivity() {
 
     private fun createConsoleListener() = object : ConsoleEventListener {
         override fun onConnected(vmName: String) {
-            runOnUiThread {
-                hideProgress()
-                if (!isRecreated) {
-                    Toast.makeText(this@VMConsoleActivity, "Connected to $vmName", Toast.LENGTH_SHORT).show()
-                }
-            }
+            runOnUiThread { hideProgress() }
         }
 
         override fun onDisconnected(reason: String) {
@@ -951,6 +956,50 @@ class VMConsoleActivity : AppCompatActivity() {
         // inline status. Toasts vanish; users that want to file a bug
         // need a way to capture the exact message.
         io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(this, "VM Console Error", message)
+    }
+
+    /**
+     * Pan [consoleContent] upward as the IME animates in/out so the session
+     * remains fully visible above the soft keyboard.
+     *
+     * The window uses `adjustNothing` so Android never resizes the view — which
+     * would otherwise send a spurious EDS (Extended Desktop Size) request to the
+     * VNC server on every keyboard show/hide.  We compensate by translating the
+     * content ourselves, frame-synced with the keyboard animation via
+     * [WindowInsetsAnimationCompat].
+     *
+     * Navigation-bar insets are subtracted because they are already consumed by
+     * the root view's `fitsSystemWindows=true` padding; only the extra height
+     * added by the IME needs to be compensated.
+     */
+    private fun setupKeyboardPan() {
+        ViewCompat.setWindowInsetsAnimationCallback(
+            window.decorView,
+            object : WindowInsetsAnimationCompat.Callback(DISPATCH_MODE_STOP) {
+
+                override fun onProgress(
+                    insets: WindowInsetsCompat,
+                    runningAnimations: MutableList<WindowInsetsAnimationCompat>
+                ): WindowInsetsCompat {
+                    applyImeShift(insets)
+                    return insets
+                }
+
+                override fun onEnd(animation: WindowInsetsAnimationCompat) {
+                    super.onEnd(animation)
+                    // Snap to the settled position in case floating-point
+                    // accumulation left a sub-pixel gap.
+                    val insets = ViewCompat.getRootWindowInsets(window.decorView) ?: return
+                    applyImeShift(insets)
+                }
+            }
+        )
+    }
+
+    private fun applyImeShift(insets: WindowInsetsCompat) {
+        val imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+        val navBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+        consoleContent.translationY = -(imeBottom - navBottom).coerceAtLeast(0).toFloat()
     }
 
     /**

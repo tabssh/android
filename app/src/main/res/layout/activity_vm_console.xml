@@ -15,8 +15,11 @@
     android:fitsSystemWindows="true"
     tools:context=".ui.activities.VMConsoleActivity">
 
-    <!-- Vertical stack: terminal grows, keyboard wraps at the bottom. -->
+    <!-- Vertical stack: terminal grows, keyboard wraps at the bottom.
+         ID is used by VMConsoleActivity to pan the content upward when
+         the soft keyboard is visible (adjustNothing + manual translation). -->
     <LinearLayout
+        android:id="@+id/console_content"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical">
