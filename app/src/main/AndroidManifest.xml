@@ -213,6 +213,7 @@
             android:exported="false"
             android:label="VM Console"
             android:theme="@style/Theme.TabSSH"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
             android:windowSoftInputMode="adjustNothing" />
 
         <!-- Hypervisor Edit activity -->
