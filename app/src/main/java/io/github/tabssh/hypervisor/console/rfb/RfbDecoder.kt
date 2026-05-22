@@ -550,8 +550,56 @@ class RfbDecoder(private val fmt: PixelFormat) {
                         }
                     }
 
-                    else -> {
-                        Logger.w(TAG, "Unknown Tight filter $filterId for rect $x,$y ${w}×$h")
+                    else -> if (filterId >= 0x80) {
+                        // Old-style Tight palette filter used by QEMU vnc-tight.c.
+                        // The original Tight protocol (pre-TigerVNC) encodes the palette
+                        // filter as a single byte where bit 7 = 1 signals palette mode and
+                        // bits 6..0 = nColors - 1 (instead of the TigerVNC convention of
+                        // filterId = 0x01 followed by a separate nColors byte).
+                        // Example: filterId = 0x82 → palette with 3 colours.
+                        // Observed from QEMU 6.x/7.x libvirt VNC (proxmox-test).
+                        val numColors = (filterId and 0x7F) + 1
+                        val palette = IntArray(numColors)
+                        val pbBuf = ByteArray(cp)
+                        for (i in 0 until numColors) {
+                            din.readFully(pbBuf)
+                            palette[i] = fmt.cpixelToArgb(pbBuf)
+                        }
+                        val dataSize = if (numColors == 2) ((w + 7) / 8) * h else w * h
+                        val data = readTightData(din, streamIdx, dataSize)
+                        if (numColors == 2) {
+                            var di = 0
+                            for (row in 0 until h) {
+                                val base = (y + row) * fbW + x
+                                var col = 0
+                                while (col < w) {
+                                    val b = data[di++].toInt() and 0xFF
+                                    for (bit in 7 downTo 0) {
+                                        if (col >= w) break
+                                        fb[base + col++] = palette[(b ushr bit) and 1]
+                                    }
+                                }
+                            }
+                        } else {
+                            var di = 0
+                            for (row in 0 until h) {
+                                val base = (y + row) * fbW + x
+                                for (col in 0 until w) {
+                                    fb[base + col] = palette[data[di++].toInt() and 0xFF]
+                                }
+                            }
+                        }
+                        Logger.d(TAG, "Old-style Tight palette filterId=0x${filterId.toString(16)} " +
+                            "($numColors colours) for rect $x,$y ${w}×$h")
+                    } else {
+                        // filterId 0x03..0x7F: not defined in any known Tight variant.
+                        // Returning without reading would desync the stream (the rect
+                        // payload stays in the buffer and poisons subsequent reads).
+                        // Throw to close the session cleanly with a meaningful error.
+                        throw java.io.IOException(
+                            "Unknown Tight filter 0x${filterId.toString(16)} at $x,$y ${w}×$h" +
+                            " — stream state unknown, terminating"
+                        )
                     }
                 }
             }

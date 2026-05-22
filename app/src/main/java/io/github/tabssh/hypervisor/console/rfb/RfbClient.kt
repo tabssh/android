@@ -595,6 +595,12 @@ class RfbClient(
      * with encoding 0xFFFFFFCC (-52) instead of the standard -308; that is now
      * handled explicitly in [handleFramebufferUpdate].
      *
+     * 0x80 (128) seen from libvirt QEMU sessions is likewise NOT genuine — it is
+     * a stray byte from a Tight rectangle whose payload was not consumed because
+     * the old-style palette filterId (≥ 0x80) was unrecognised.  That is now
+     * handled in [RfbDecoder.decodeTight]; fixing the Tight decoder prevents 0x80
+     * from ever reaching this handler.
+     *
      * 0xE0 (224) IS a genuine top-level message from some QEMU-based VPS hosts
      * (observed on SSDnodes).  It is handled as zero-payload in [eventLoop] to
      * keep the session alive rather than closing it here.
