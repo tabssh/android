@@ -720,6 +720,9 @@ class RfbClient(
                 RfbConstants.ENC_DESKTOP_NAME -> {
                     // DesktopName: U32 name-length + UTF-8 name bytes.
                     val nameLen = din.readInt()
+                    if (nameLen < 0 || nameLen > 1_048_576) throw java.io.IOException(
+                        "DesktopName length out of range: $nameLen"
+                    )
                     if (nameLen > 0) {
                         val nameBytes = ByteArray(nameLen)
                         din.readFully(nameBytes)
@@ -869,8 +872,10 @@ class RfbClient(
                     }
                     RfbConstants.QEMU_AUDIO_DATA -> {
                         val len = din.readInt()
-                        var remaining = len.toLong()
-                        while (remaining > 0) remaining -= din.skip(remaining)
+                        if (len < 0 || len > 1_048_576) throw java.io.IOException(
+                            "QEMU audio payload too large: $len bytes"
+                        )
+                        if (len > 0) din.skipBytes(len)
                     }
                     else -> Logger.w(TAG, "Unknown QEMU audio op $op")
                 }

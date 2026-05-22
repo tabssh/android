@@ -36,6 +36,15 @@ class RfbDecoder(private val fmt: PixelFormat) {
         private const val ZRLE_BUF = 512 * 1024   // initial inflate buffer
 
         /**
+         * Maximum uncompressed bytes for a single rectangle.
+         * A 4K display (3840×2160) at 4 bpp = 33,177,600 bytes; 64 MB covers
+         * every real-world framebuffer while guarding against malicious or
+         * corrupt servers that send fake dimensions causing Int overflow or
+         * multi-GB allocations.
+         */
+        private const val MAX_RECT_BYTES = 64L * 1024 * 1024
+
+        /**
          * The complete set of encoding values that [decodeRect] can handle.
          * RfbClient uses this to guard calls to [decodeRect] — any encoding
          * not in this set is a pseudo-encoding or vendor extension with zero
@@ -262,7 +271,7 @@ class RfbDecoder(private val fmt: PixelFormat) {
         din.readFully(compData)
 
         zlibInflater.setInput(compData)
-        val expectedSize = w * h * fmt.bytesPerPixel
+        val expectedSize = safeRectBytes(w, h, fmt.bytesPerPixel)
         val plain = ByteArray(expectedSize)
         var totalOut = 0
         try {
@@ -408,18 +417,26 @@ class RfbDecoder(private val fmt: PixelFormat) {
 
     // ── Tight ────────────────────────────────────────────────────────────────
     //
-    // Tight encoding (RFC extension by Const). Compression-control byte:
+    // Tight encoding (original Const / QEMU dialect). Compression-control byte:
     //   bits 3..0 — reset flags for each of the 4 zlib streams
-    //   bits 7..4 — compression type
-    //     0x0..0x3 — BasicCompression, stream index = (type & 3)
-    //     0x8       — FillCompression (solid colour)
+    //   bits 7..4 — compression type (compType = cc >> 4):
+    //     0x0..0x3 — BasicCompression, NO filter byte (implicit CopyFilter)
+    //                stream index = compType & 3
+    //     0x4..0x7 — BasicCompression WITH ExplicitFilter (bit 2 of compType set)
+    //                stream index = compType & 3; a FilterID byte follows:
+    //                  0x00 (Copy)     — raw cpixels
+    //                  0x01 (Palette)  — TigerVNC new-style: nColors byte + palette
+    //                  0x02 (Gradient) — delta-prediction per channel
+    //                  0x80..0xFF      — old-style palette: nColors = (id & 0x7F) + 1
+    //     0x8       — FillCompression (solid colour, no filter byte)
     //     0x9       — JPEG
     //     0xA       — PNG (extended Tight, TigerVNC ≥ 1.3)
     //
-    // BasicCompression reads a FilterID byte:
-    //   0 (Copy)     — raw pixels, cpixelBytes each
-    //   1 (Palette)  — palette + indexed data (1 bpp if 2 colours, 8 bpp otherwise)
-    //   2 (Gradient) — delta-prediction per channel
+    // IMPORTANT: compTypes 0x0..0x3 carry NO FilterID byte. This is the original
+    // Tight spec and how QEMU (vnc-enc-tight.c) emits full-colour copy rects
+    // (cc = stream_index << 4, ExplicitFilter bit = 0). Always reading a FilterID
+    // for these compTypes would consume the first byte of the compressed data,
+    // causing stream desync for every QEMU copy rect.
 
     private fun decodeTight(
         din: DataInputStream, fb: IntArray, fbW: Int,
@@ -464,142 +481,164 @@ class RfbDecoder(private val fmt: PixelFormat) {
             else -> {
                 // BasicCompression: stream index = compType & 3
                 val streamIdx = compType and 0x3
-                val filterId = din.readUnsignedByte()
 
-                when (filterId) {
-                    RfbConstants.TIGHT_FILTER_COPY -> {
-                        val dataSize = w * h * cp
-                        val data = readTightData(din, streamIdx, dataSize)
-                        var idx = 0
-                        for (row in 0 until h) {
-                            val base = (y + row) * fbW + x
-                            for (col in 0 until w) {
-                                fb[base + col] = fmt.cpixelToArgb(data, idx)
-                                idx += cp
-                            }
+                if (compType and 0x04 == 0) {
+                    // No ExplicitFilter bit (compTypes 0x0..0x3).
+                    // Original Tight / QEMU dialect: implicit CopyFilter, no FilterID byte.
+                    // QEMU vnc-enc-tight.c emits cc = stream_index << 4 for full-colour
+                    // copy rects; reading a FilterID here would consume the first byte of
+                    // compressed data, desyncing the stream for every QEMU copy rect.
+                    val dataSize = safeRectBytes(w, h, cp)
+                    val data = readTightData(din, streamIdx, dataSize)
+                    var idx = 0
+                    for (row in 0 until h) {
+                        val base = (y + row) * fbW + x
+                        for (col in 0 until w) {
+                            fb[base + col] = fmt.cpixelToArgb(data, idx)
+                            idx += cp
                         }
                     }
+                } else {
+                    // ExplicitFilter bit set (compTypes 0x4..0x7): read FilterID byte.
+                    val filterId = din.readUnsignedByte()
 
-                    RfbConstants.TIGHT_FILTER_PALETTE -> {
-                        val numColors = din.readUnsignedByte() + 1
-                        val palette = IntArray(numColors)
-                        val pbBuf = ByteArray(cp)
-                        for (i in 0 until numColors) {
-                            din.readFully(pbBuf)
-                            palette[i] = fmt.cpixelToArgb(pbBuf)
-                        }
-                        // 2 colours → 1 bpp packed; >2 colours → 8 bpp indices
-                        val dataSize = if (numColors == 2) ((w + 7) / 8) * h else w * h
-                        val data = readTightData(din, streamIdx, dataSize)
-
-                        if (numColors == 2) {
-                            var di = 0
-                            for (row in 0 until h) {
-                                val base = (y + row) * fbW + x
-                                var col = 0
-                                while (col < w) {
-                                    val b = data[di++].toInt() and 0xFF
-                                    for (bit in 7 downTo 0) {
-                                        if (col >= w) break
-                                        fb[base + col++] = palette[(b ushr bit) and 1]
-                                    }
-                                }
-                            }
-                        } else {
-                            var di = 0
+                    when (filterId) {
+                        RfbConstants.TIGHT_FILTER_COPY -> {
+                            val dataSize = safeRectBytes(w, h, cp)
+                            val data = readTightData(din, streamIdx, dataSize)
+                            var idx = 0
                             for (row in 0 until h) {
                                 val base = (y + row) * fbW + x
                                 for (col in 0 until w) {
-                                    fb[base + col] = palette[data[di++].toInt() and 0xFF]
+                                    fb[base + col] = fmt.cpixelToArgb(data, idx)
+                                    idx += cp
                                 }
                             }
                         }
-                    }
 
-                    RfbConstants.TIGHT_FILTER_GRADIENT -> {
-                        // Gradient (delta) filter: actual = raw + prediction (per channel)
-                        // Prediction = left + above − above_left, clamped [0, 255]
-                        val dataSize = w * h * cp
-                        val data = readTightData(din, streamIdx, dataSize)
+                        RfbConstants.TIGHT_FILTER_PALETTE -> {
+                            val numColors = din.readUnsignedByte() + 1
+                            val palette = IntArray(numColors)
+                            val pbBuf = ByteArray(cp)
+                            for (i in 0 until numColors) {
+                                din.readFully(pbBuf)
+                                palette[i] = fmt.cpixelToArgb(pbBuf)
+                            }
+                            // 2 colours → 1 bpp packed; >2 colours → 8 bpp indices
+                            val dataSize = if (numColors == 2) safeRectBytes((w + 7) / 8, h, 1)
+                                           else safeRectBytes(w, h, 1)
+                            val data = readTightData(din, streamIdx, dataSize)
 
-                        val prevRow = ByteArray(w * cp)  // previous decoded row
-                        val currRow = ByteArray(w * cp)  // current row being decoded
-
-                        for (row in 0 until h) {
-                            val srcOff = row * w * cp
-                            val dstBase = (y + row) * fbW + x
-                            for (col in 0 until w) {
-                                for (c in 0 until cp) {
-                                    val raw = data[srcOff + col * cp + c].toInt() and 0xFF
-                                    val est = when {
-                                        row == 0 && col == 0 -> 0
-                                        row == 0 -> currRow[(col - 1) * cp + c].toInt() and 0xFF
-                                        col == 0 -> prevRow[c].toInt() and 0xFF
-                                        else -> {
-                                            val left     = currRow[(col - 1) * cp + c].toInt() and 0xFF
-                                            val above    = prevRow[col * cp + c].toInt() and 0xFF
-                                            val aboveLeft = prevRow[(col - 1) * cp + c].toInt() and 0xFF
-                                            (left + above - aboveLeft).coerceIn(0, 255)
+                            if (numColors == 2) {
+                                var di = 0
+                                for (row in 0 until h) {
+                                    val base = (y + row) * fbW + x
+                                    var col = 0
+                                    while (col < w) {
+                                        val b = data[di++].toInt() and 0xFF
+                                        for (bit in 7 downTo 0) {
+                                            if (col >= w) break
+                                            fb[base + col++] = palette[(b ushr bit) and 1]
                                         }
                                     }
-                                    currRow[col * cp + c] = ((raw + est) and 0xFF).toByte()
                                 }
-                                fb[dstBase + col] = fmt.cpixelToArgb(currRow, col * cp)
-                            }
-                            currRow.copyInto(prevRow)
-                        }
-                    }
-
-                    else -> if (filterId >= 0x80) {
-                        // Old-style Tight palette filter used by QEMU vnc-tight.c.
-                        // The original Tight protocol (pre-TigerVNC) encodes the palette
-                        // filter as a single byte where bit 7 = 1 signals palette mode and
-                        // bits 6..0 = nColors - 1 (instead of the TigerVNC convention of
-                        // filterId = 0x01 followed by a separate nColors byte).
-                        // Example: filterId = 0x82 → palette with 3 colours.
-                        // Observed from QEMU 6.x/7.x libvirt VNC (proxmox-test).
-                        val numColors = (filterId and 0x7F) + 1
-                        val palette = IntArray(numColors)
-                        val pbBuf = ByteArray(cp)
-                        for (i in 0 until numColors) {
-                            din.readFully(pbBuf)
-                            palette[i] = fmt.cpixelToArgb(pbBuf)
-                        }
-                        val dataSize = if (numColors == 2) ((w + 7) / 8) * h else w * h
-                        val data = readTightData(din, streamIdx, dataSize)
-                        if (numColors == 2) {
-                            var di = 0
-                            for (row in 0 until h) {
-                                val base = (y + row) * fbW + x
-                                var col = 0
-                                while (col < w) {
-                                    val b = data[di++].toInt() and 0xFF
-                                    for (bit in 7 downTo 0) {
-                                        if (col >= w) break
-                                        fb[base + col++] = palette[(b ushr bit) and 1]
+                            } else {
+                                var di = 0
+                                for (row in 0 until h) {
+                                    val base = (y + row) * fbW + x
+                                    for (col in 0 until w) {
+                                        fb[base + col] = palette[data[di++].toInt() and 0xFF]
                                     }
                                 }
                             }
-                        } else {
-                            var di = 0
+                        }
+
+                        RfbConstants.TIGHT_FILTER_GRADIENT -> {
+                            // Gradient (delta) filter: actual = raw + prediction (per channel)
+                            // Prediction = left + above − above_left, clamped [0, 255]
+                            val dataSize = safeRectBytes(w, h, cp)
+                            val data = readTightData(din, streamIdx, dataSize)
+
+                            val prevRow = ByteArray(w * cp)  // previous decoded row
+                            val currRow = ByteArray(w * cp)  // current row being decoded
+
                             for (row in 0 until h) {
-                                val base = (y + row) * fbW + x
+                                val srcOff = row * w * cp
+                                val dstBase = (y + row) * fbW + x
                                 for (col in 0 until w) {
-                                    fb[base + col] = palette[data[di++].toInt() and 0xFF]
+                                    for (c in 0 until cp) {
+                                        val raw = data[srcOff + col * cp + c].toInt() and 0xFF
+                                        val est = when {
+                                            row == 0 && col == 0 -> 0
+                                            row == 0 -> currRow[(col - 1) * cp + c].toInt() and 0xFF
+                                            col == 0 -> prevRow[c].toInt() and 0xFF
+                                            else -> {
+                                                val left      = currRow[(col - 1) * cp + c].toInt() and 0xFF
+                                                val above     = prevRow[col * cp + c].toInt() and 0xFF
+                                                val aboveLeft = prevRow[(col - 1) * cp + c].toInt() and 0xFF
+                                                (left + above - aboveLeft).coerceIn(0, 255)
+                                            }
+                                        }
+                                        currRow[col * cp + c] = ((raw + est) and 0xFF).toByte()
+                                    }
+                                    fb[dstBase + col] = fmt.cpixelToArgb(currRow, col * cp)
                                 }
+                                currRow.copyInto(prevRow)
                             }
                         }
-                        Logger.d(TAG, "Old-style Tight palette filterId=0x${filterId.toString(16)} " +
-                            "($numColors colours) for rect $x,$y ${w}×$h")
-                    } else {
-                        // filterId 0x03..0x7F: not defined in any known Tight variant.
-                        // Returning without reading would desync the stream (the rect
-                        // payload stays in the buffer and poisons subsequent reads).
-                        // Throw to close the session cleanly with a meaningful error.
-                        throw java.io.IOException(
-                            "Unknown Tight filter 0x${filterId.toString(16)} at $x,$y ${w}×$h" +
-                            " — stream state unknown, terminating"
-                        )
+
+                        else -> if (filterId >= 0x80) {
+                            // Old-style Tight palette filter used by QEMU vnc-tight.c.
+                            // The original Tight protocol (pre-TigerVNC) encodes the palette
+                            // filter as a single byte where bit 7 = 1 signals palette mode and
+                            // bits 6..0 = nColors - 1 (instead of the TigerVNC convention of
+                            // filterId = 0x01 followed by a separate nColors byte).
+                            // Example: filterId = 0x82 → palette with 3 colours.
+                            // Observed from QEMU 6.x/7.x libvirt VNC (proxmox-test).
+                            val numColors = (filterId and 0x7F) + 1
+                            val palette = IntArray(numColors)
+                            val pbBuf = ByteArray(cp)
+                            for (i in 0 until numColors) {
+                                din.readFully(pbBuf)
+                                palette[i] = fmt.cpixelToArgb(pbBuf)
+                            }
+                            val dataSize = if (numColors == 2) safeRectBytes((w + 7) / 8, h, 1)
+                                           else safeRectBytes(w, h, 1)
+                            val data = readTightData(din, streamIdx, dataSize)
+                            if (numColors == 2) {
+                                var di = 0
+                                for (row in 0 until h) {
+                                    val base = (y + row) * fbW + x
+                                    var col = 0
+                                    while (col < w) {
+                                        val b = data[di++].toInt() and 0xFF
+                                        for (bit in 7 downTo 0) {
+                                            if (col >= w) break
+                                            fb[base + col++] = palette[(b ushr bit) and 1]
+                                        }
+                                    }
+                                }
+                            } else {
+                                var di = 0
+                                for (row in 0 until h) {
+                                    val base = (y + row) * fbW + x
+                                    for (col in 0 until w) {
+                                        fb[base + col] = palette[data[di++].toInt() and 0xFF]
+                                    }
+                                }
+                            }
+                            Logger.d(TAG, "Old-style Tight palette filterId=0x${filterId.toString(16)} " +
+                                "($numColors colours) for rect $x,$y ${w}×$h")
+                        } else {
+                            // filterId 0x03..0x7F: not defined in any known Tight variant.
+                            // Returning without reading would desync the stream (the rect
+                            // payload stays in the buffer and poisons subsequent reads).
+                            // Throw to close the session cleanly with a meaningful error.
+                            throw java.io.IOException(
+                                "Unknown Tight filter 0x${filterId.toString(16)} at $x,$y ${w}×$h" +
+                                " — stream state unknown, terminating"
+                            )
+                        }
                     }
                 }
             }
@@ -607,6 +646,19 @@ class RfbDecoder(private val fmt: PixelFormat) {
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
+
+    /**
+     * Compute w × h × bytesPerPixel, guarding against Int overflow and
+     * unreasonably large allocations from malicious or corrupt servers.
+     * Throws [java.io.IOException] if the result exceeds [MAX_RECT_BYTES].
+     */
+    private fun safeRectBytes(w: Int, h: Int, bytesPerPixel: Int): Int {
+        val size = w.toLong() * h.toLong() * bytesPerPixel.toLong()
+        if (size > MAX_RECT_BYTES) throw java.io.IOException(
+            "Rect ${w}×$h × $bytesPerPixel bpp = $size bytes exceeds ${MAX_RECT_BYTES}-byte safety limit"
+        )
+        return size.toInt()
+    }
 
     private fun fillRect(fb: IntArray, fbW: Int, x: Int, y: Int, w: Int, h: Int, color: Int) {
         for (row in 0 until h) {
