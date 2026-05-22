@@ -7,6 +7,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import com.google.android.material.button.MaterialButton
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsAnimationCompat
@@ -104,6 +105,11 @@ class VMConsoleActivity : AppCompatActivity() {
     private lateinit var progressBar: ProgressBar
     private lateinit var statusText: TextView
     private lateinit var consoleContent: LinearLayout
+
+    // VNC toolbar button references — non-null while in graphical mode
+    private var vncCtrlBtn: MaterialButton? = null
+    private var vncAltBtn:  MaterialButton? = null
+    private var vncWinBtn:  MaterialButton? = null
 
     private var consoleManager: HypervisorConsoleManager? = null
     private var termuxBridge: TermuxBridge? = null
@@ -826,6 +832,11 @@ class VMConsoleActivity : AppCompatActivity() {
                     // vncConsoleChannel (custom keyboard taps would otherwise
                     // be silently dropped).
                     isGraphicalMode = false
+                    // Restore the keyboard bar; hide the VNC toolbar.
+                    clearArmedModifierButtons()
+                    vncConsoleChannel?.clearArmedModifiers()
+                    findViewById<View>(R.id.vnc_toolbar)?.visibility = View.GONE
+                    findViewById<View>(R.id.multi_row_keyboard).visibility = View.VISIBLE
                     vncConsoleChannel?.close()
                     vncConsoleChannel = null
                     activeRfbClient = null
@@ -876,6 +887,9 @@ class VMConsoleActivity : AppCompatActivity() {
         rfb.start()
 
         runOnUiThread {
+            // Hide the text-console keyboard bar; show the VNC-specific toolbar.
+            findViewById<View>(R.id.multi_row_keyboard).visibility = View.GONE
+            setupVncToolbar(channel)
             hideProgress()
             refreshFloatingControls()
         }
@@ -1112,6 +1126,137 @@ class VMConsoleActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Wire the VNC floating toolbar buttons to [channel].
+     * Called from [switchToGraphical] on the main thread.
+     */
+    private fun setupVncToolbar(channel: VncConsoleChannel) {
+        val toolbar = findViewById<View>(R.id.vnc_toolbar) ?: return
+        toolbar.visibility = View.VISIBLE
+
+        vncCtrlBtn = toolbar.findViewById(R.id.vnc_btn_ctrl)
+        vncAltBtn  = toolbar.findViewById(R.id.vnc_btn_alt)
+        vncWinBtn  = toolbar.findViewById(R.id.vnc_btn_win)
+
+        // When armed mods are consumed by a key, un-highlight the modifier buttons.
+        channel.onArmedModsConsumed = { runOnUiThread { refreshModifierButtons(channel) } }
+
+        // Keyboard toggle
+        toolbar.findViewById<MaterialButton>(R.id.vnc_btn_keyboard)?.setOnClickListener {
+            val view = window.decorView
+            val imeType = androidx.core.view.WindowInsetsCompat.Type.ime()
+            val visible = androidx.core.view.ViewCompat.getRootWindowInsets(view)
+                ?.isVisible(imeType) == true
+            val ic = androidx.core.view.WindowCompat.getInsetsController(window, view)
+            if (visible) ic.hide(imeType) else {
+                vncView.requestFocus()
+                ic.show(imeType)
+            }
+        }
+
+        // Sticky modifiers — toggle arm state, update button highlight.
+        vncCtrlBtn?.setOnClickListener {
+            channel.armModifier(VncConsoleChannel.VncModifier.CTRL)
+            refreshModifierButtons(channel)
+        }
+        vncAltBtn?.setOnClickListener {
+            channel.armModifier(VncConsoleChannel.VncModifier.ALT)
+            refreshModifierButtons(channel)
+        }
+        vncWinBtn?.setOnClickListener {
+            channel.armModifier(VncConsoleChannel.VncModifier.WIN)
+            refreshModifierButtons(channel)
+        }
+
+        // Immediate key sends
+        toolbar.findViewById<MaterialButton>(R.id.vnc_btn_esc)?.setOnClickListener {
+            channel.sendKey(RfbConstants.KEY_ESCAPE)
+        }
+        toolbar.findViewById<MaterialButton>(R.id.vnc_btn_tab)?.setOnClickListener {
+            channel.sendKey(RfbConstants.KEY_TAB)
+        }
+
+        // F-key picker
+        toolbar.findViewById<MaterialButton>(R.id.vnc_btn_fkeys)?.setOnClickListener {
+            showFKeyPicker(channel)
+        }
+
+        // More overflow menu
+        toolbar.findViewById<MaterialButton>(R.id.vnc_btn_more)?.setOnClickListener { anchor ->
+            showVncMoreMenu(anchor, channel)
+        }
+    }
+
+    private fun refreshModifierButtons(channel: VncConsoleChannel) {
+        vncCtrlBtn?.isChecked = channel.isModifierArmed(VncConsoleChannel.VncModifier.CTRL)
+        vncAltBtn?.isChecked  = channel.isModifierArmed(VncConsoleChannel.VncModifier.ALT)
+        vncWinBtn?.isChecked  = channel.isModifierArmed(VncConsoleChannel.VncModifier.WIN)
+    }
+
+    private fun clearArmedModifierButtons() {
+        vncCtrlBtn?.isChecked = false
+        vncAltBtn?.isChecked  = false
+        vncWinBtn?.isChecked  = false
+        vncCtrlBtn = null
+        vncAltBtn  = null
+        vncWinBtn  = null
+    }
+
+    private fun showFKeyPicker(channel: VncConsoleChannel) {
+        val keys = arrayOf("F1","F2","F3","F4","F5","F6","F7","F8","F9","F10","F11","F12")
+        val keysyms = longArrayOf(
+            RfbConstants.KEY_F1,
+            RfbConstants.KEY_F2,
+            RfbConstants.KEY_F3,
+            RfbConstants.KEY_F4,
+            RfbConstants.KEY_F5,
+            RfbConstants.KEY_F6,
+            RfbConstants.KEY_F7,
+            RfbConstants.KEY_F8,
+            RfbConstants.KEY_F9,
+            RfbConstants.KEY_F10,
+            RfbConstants.KEY_F11,
+            RfbConstants.KEY_F12,
+        )
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Function keys")
+            .setItems(keys) { _, i -> channel.sendKey(keysyms[i]) }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showVncMoreMenu(anchor: View, channel: VncConsoleChannel) {
+        val items = arrayOf(
+            "Send Ctrl+Alt+Del",
+            "Send text…",
+            "Copy screen",
+            "Zoom to fit",
+            "Zoom 1:1",
+            "Disconnect"
+        )
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("VNC options")
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> {
+                        // Ctrl+Alt+Del: arm Ctrl+Alt, then send Delete key.
+                        val ch = vncConsoleChannel ?: return@setItems
+                        ch.armModifier(VncConsoleChannel.VncModifier.CTRL)
+                        ch.armModifier(VncConsoleChannel.VncModifier.ALT)
+                        ch.sendKey(RfbConstants.KEY_DELETE)
+                        runOnUiThread { refreshModifierButtons(ch) }
+                    }
+                    1 -> showSendTextDialog()
+                    2 -> copyScreenToClipboard()
+                    3 -> vncView.resetZoom()
+                    4 -> vncView.zoomActual()
+                    5 -> confirmDisconnectThenFinish()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     private fun setupFloatingControls() {
         findViewById<android.widget.ImageButton>(R.id.btn_disconnect).setOnClickListener {
             confirmDisconnectThenFinish()
@@ -1171,6 +1316,7 @@ class VMConsoleActivity : AppCompatActivity() {
         // down — prevents spurious E/ "Pipe closed" on user-initiated close.
         activeRfbClient?.stop()
         activeRfbClient = null
+        clearArmedModifierButtons()
         vncConsoleChannel?.close()
         vncConsoleChannel = null
         // Clear VncView callbacks — they capture the now-closed VncConsoleChannel.
@@ -1198,6 +1344,7 @@ class VMConsoleActivity : AppCompatActivity() {
         connectionJob = null
         activeRfbClient?.stop()
         activeRfbClient = null
+        clearArmedModifierButtons()
         vncConsoleChannel?.close()
         vncConsoleChannel = null
         consoleManager?.disconnect()

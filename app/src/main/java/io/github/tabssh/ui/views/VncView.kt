@@ -93,26 +93,19 @@ class VncView @JvmOverloads constructor(
 
         override fun onSingleTapUp(e: MotionEvent): Boolean {
             // Pointer down/up for this tap is already fired by onTouchEvent
-            // ACTION_DOWN / ACTION_UP — no need to call firePointer here, which
-            // would produce a duplicate second click sent to the VM.
-            //
-            // Only toggle the Android soft keyboard so the user can type without
-            // needing a dedicated button.  Use WindowInsetsController (the modern
-            // API) instead of InputMethodManager.showSoftInput(SHOW_IMPLICIT),
-            // which is unreliable on Android 11+ and silently ignored when the
-            // IME is already visible.
-            val imeType = androidx.core.view.WindowInsetsCompat.Type.ime()
-            val visible = androidx.core.view.ViewCompat.getRootWindowInsets(this@VncView)
-                ?.isVisible(imeType) == true
-            val activity = context as? android.app.Activity ?: return true
-            val ic = androidx.core.view.WindowCompat
-                .getInsetsController(activity.window, this@VncView)
-            if (visible) {
-                ic.hide(imeType)
-            } else {
-                requestFocus()
-                ic.show(imeType)
-            }
+            // ACTION_DOWN / ACTION_UP — do not toggle the keyboard here, which
+            // would show the IME on every GUI button tap inside the VNC session.
+            // Use the VNC toolbar's keyboard button instead.
+            return true
+        }
+
+        override fun onDoubleTap(e: MotionEvent): Boolean {
+            // Toggle between fit-to-screen and 2× zoom.
+            userScale = if (userScale > 1.05f) 1.0f else 2.0f
+            panX = 0f
+            panY = 0f
+            recomputeFitScale()
+            postInvalidate()
             return true
         }
 
@@ -441,6 +434,25 @@ class VncView @JvmOverloads constructor(
                 return super.sendKeyEvent(event)
             }
         }
+    }
+
+    // ── Zoom helpers (called from VMConsoleActivity VNC toolbar) ─────────
+
+    /** Reset zoom and pan to fit-to-screen (same as first load). */
+    fun resetZoom() {
+        userScale = 1.0f
+        panX = 0f
+        panY = 0f
+        recomputeFitScale()
+        postInvalidate()
+    }
+
+    /** Zoom to 1:1 pixel mapping (userScale = 1 / fitScale). */
+    fun zoomActual() {
+        if (fitScale > 0f) userScale = 1f / fitScale
+        panX = 0f
+        panY = 0f
+        postInvalidate()
     }
 
     // ── Cleanup ───────────────────────────────────────────────────────────

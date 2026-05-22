@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Compact toolbar shown in VNC/graphical console mode in place of
+  MultiRowKeyboardView.  Lives inside console_content so it pans with
+  the rest of the UI when the soft keyboard opens.
+
+  Buttons (left → right):
+    ⌨  keyboard toggle
+    ──────────────────
+    Ctrl  Alt  Win   (sticky one-shot modifiers; highlighted when armed)
+    ──────────────────
+    Esc  Tab  F…     (immediate key sends / F-key picker)
+    ──────────────────
+    ⋮                (overflow: Ctrl+Alt+Del, send text, copy screen, zoom, disconnect)
+-->
+<HorizontalScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/vnc_toolbar"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:scrollbars="none"
+    android:fadeScrollbars="true"
+    android:background="#CC1A1A1A">
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="6dp"
+        android:paddingEnd="6dp"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp">
+
+        <!-- Keyboard toggle -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/vnc_btn_keyboard"
+            style="@style/Widget.Material3.Button.IconButton"
+            app:icon="@drawable/ic_keyboard"
+            android:contentDescription="Toggle keyboard"
+            android:layout_marginEnd="2dp" />
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="24dp"
+            android:background="#44FFFFFF"
+            android:layout_marginStart="2dp"
+            android:layout_marginEnd="4dp" />
+
+        <!-- Sticky modifier: Ctrl -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/vnc_btn_ctrl"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:text="Ctrl"
+            android:textSize="12sp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:checkable="true"
+            android:layout_marginEnd="2dp" />
+
+        <!-- Sticky modifier: Alt -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/vnc_btn_alt"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:text="Alt"
+            android:textSize="12sp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:checkable="true"
+            android:layout_marginEnd="2dp" />
+
+        <!-- Sticky modifier: Win/Super -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/vnc_btn_win"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:text="Win"
+            android:textSize="12sp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:checkable="true"
+            android:layout_marginEnd="2dp" />
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="24dp"
+            android:background="#44FFFFFF"
+            android:layout_marginStart="2dp"
+            android:layout_marginEnd="4dp" />
+
+        <!-- Escape -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/vnc_btn_esc"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:text="Esc"
+            android:textSize="12sp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:layout_marginEnd="2dp" />
+
+        <!-- Tab -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/vnc_btn_tab"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:text="Tab"
+            android:textSize="12sp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:layout_marginEnd="2dp" />
+
+        <!-- F-key picker -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/vnc_btn_fkeys"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:text="F…"
+            android:textSize="12sp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:layout_marginEnd="2dp" />
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="24dp"
+            android:background="#44FFFFFF"
+            android:layout_marginStart="2dp"
+            android:layout_marginEnd="4dp" />
+
+        <!-- Overflow / more -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/vnc_btn_more"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:text="⋮"
+            android:textSize="16sp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp" />
+
+    </LinearLayout>
+
+</HorizontalScrollView>

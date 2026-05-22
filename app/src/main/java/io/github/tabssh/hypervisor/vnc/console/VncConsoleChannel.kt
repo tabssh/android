@@ -5,6 +5,7 @@ import io.github.tabssh.hypervisor.console.rfb.RfbClient
 import io.github.tabssh.hypervisor.console.rfb.RfbConstants
 import io.github.tabssh.hypervisor.console.rfb.RfbListener
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Keyboard + resize bridge between the Android UI and an [RfbClient] running in
@@ -36,6 +37,49 @@ import java.util.concurrent.Executors
  * is preserved because the executor is strictly FIFO.
  */
 class VncConsoleChannel(private val rfbClient: RfbClient) {
+
+    enum class VncModifier(val keysym: Long, internal val bit: Int) {
+        CTRL(RfbConstants.KEY_CTRL_L, 1),
+        ALT(RfbConstants.KEY_ALT_L,  2),
+        WIN(RfbConstants.KEY_SUPER_L, 4)
+    }
+
+    /** Bitmask of currently armed one-shot modifiers. UI thread writes; IO thread reads+clears. */
+    private val armedModMask = AtomicInteger(0)
+
+    /**
+     * Called on the IO thread immediately after armed modifiers are consumed
+     * (wrapped around a key and cleared). Wire to refresh toolbar button states.
+     */
+    var onArmedModsConsumed: (() -> Unit)? = null
+
+    /** Toggle the armed state of [mod]. Call from the UI thread when a toolbar modifier button is tapped. */
+    fun armModifier(mod: VncModifier) {
+        armedModMask.updateAndGet { it xor mod.bit }
+    }
+
+    /** Returns true if [mod] is currently armed (highlight the toolbar button). */
+    fun isModifierArmed(mod: VncModifier): Boolean = (armedModMask.get() and mod.bit) != 0
+
+    /** Disarm all modifiers (e.g. when the VNC session ends). */
+    fun clearArmedModifiers() { armedModMask.set(0) }
+
+    /**
+     * Atomically read and clear the armed modifier mask.
+     * Returns the list of modifier keysyms to send down before the key and up after it.
+     * Calls [onArmedModsConsumed] if any mods were consumed.
+     */
+    private fun consumeArmedMods(): List<Long> {
+        val mask = armedModMask.getAndSet(0)
+        if (mask == 0) return emptyList()
+        val mods = buildList {
+            if (mask and VncModifier.CTRL.bit != 0) add(RfbConstants.KEY_CTRL_L)
+            if (mask and VncModifier.ALT.bit  != 0) add(RfbConstants.KEY_ALT_L)
+            if (mask and VncModifier.WIN.bit  != 0) add(RfbConstants.KEY_SUPER_L)
+        }
+        onArmedModsConsumed?.invoke()
+        return mods
+    }
 
     /** Pixel width of one terminal character cell (used for SetDesktopSize via [resize]). */
     var fontW: Int = 8
@@ -101,7 +145,10 @@ class VncConsoleChannel(private val rfbClient: RfbClient) {
      * release the background thread.  Any sends queued before this call will
      * still be delivered; sends after this call are silently dropped.
      */
-    fun close() { writeExecutor.shutdownNow() }
+    fun close() {
+        clearArmedModifiers()
+        writeExecutor.shutdownNow()
+    }
 
     /**
      * Resize the VNC server's framebuffer to exactly [w]×[h] pixels.
@@ -170,10 +217,16 @@ class VncConsoleChannel(private val rfbClient: RfbClient) {
     }
 
     /**
-     * Send a single keysym as a down+up pair.
+     * Send a single keysym as a down+up pair, preceded by any armed one-shot
+     * modifiers (Ctrl/Alt/Win) which are automatically cleared after sending.
      * Safe to call from any thread including the main thread.
      */
-    fun sendKey(keysym: Long) = io { sendKeyDirect(keysym) }
+    fun sendKey(keysym: Long) = io {
+        val mods = consumeArmedMods()
+        for (m in mods) rfbClient.sendKeyEvent(m, true)
+        sendKeyDirect(keysym)
+        for (m in mods.reversed()) rfbClient.sendKeyEvent(m, false)
+    }
 
     /**
      * Translate an Android [KeyEvent] to RFB key events and send them.
@@ -218,10 +271,17 @@ class VncConsoleChannel(private val rfbClient: RfbClient) {
     fun sendSequence(seq: String) = io { sendSequenceDirect(seq) }
 
     /**
-     * Send a string of plain text as a series of Unicode keysyms.
+     * Send a string of plain text as a series of Unicode keysyms, preceded by
+     * any armed one-shot modifiers (Ctrl/Alt/Win) which are automatically cleared
+     * after sending.
      * Safe to call from any thread including the main thread.
      */
-    fun sendText(text: String) = io { text.forEach { sendCharDirect(it) } }
+    fun sendText(text: String) = io {
+        val mods = consumeArmedMods()
+        for (m in mods) rfbClient.sendKeyEvent(m, true)
+        text.forEach { sendCharDirect(it) }
+        for (m in mods.reversed()) rfbClient.sendKeyEvent(m, false)
+    }
 
     /**
      * Send a raw keysym with an explicit down/up state.

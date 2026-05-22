@@ -46,6 +46,15 @@
             android:focusableInTouchMode="true"
             android:background="@android:color/black" />
 
+        <!-- VNC floating toolbar — shown in graphical/VNC mode; hidden in text/serial mode.
+             Positioned here (inside console_content) so it pans upward with the rest of the
+             UI when the soft keyboard opens, and sits just above the IME. -->
+        <include
+            layout="@layout/view_vnc_toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone" />
+
         <io.github.tabssh.ui.keyboard.MultiRowKeyboardView
             android:id="@+id/multi_row_keyboard"
             android:layout_width="match_parent"
