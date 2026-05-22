@@ -958,11 +958,22 @@ class VMConsoleActivity : AppCompatActivity() {
      * This intercepts key events from the Android IME and hardware keyboard before
      * the default dispatch chain so they reach the RFB layer as X11 keysyms rather
      * than being consumed by the focused view.
+     *
+     * Both ACTION_DOWN and ACTION_UP are consumed in VNC mode:
+     *  - ACTION_DOWN  → [VncConsoleChannel.sendKeyEvent] sends the complete down+up
+     *    keysym pair to the RFB server, then returns true so the event is consumed.
+     *  - ACTION_UP    → [VncConsoleChannel.sendKeyEvent] returns false (it only acts
+     *    on ACTION_DOWN).  Without an explicit consume here, Android's default dispatch
+     *    would reach [VncView.onKeyUp], which maps the key code to a keysym and invokes
+     *    [VncConsoleChannel.sendRawKeyEvent] with down=false — producing a second KeyUp
+     *    for every key that has an explicit keysym mapping (Enter, arrows, F-keys, …).
+     *    Consuming ACTION_UP prevents that duplicate.
      */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val channel = vncConsoleChannel
         if (isGraphicalMode && channel != null) {
             if (channel.sendKeyEvent(event)) return true
+            if (event.action == KeyEvent.ACTION_UP) return true
         }
         return super.dispatchKeyEvent(event)
     }

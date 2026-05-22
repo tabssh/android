@@ -8,6 +8,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.net.Socket
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.TrustManager
@@ -57,6 +58,22 @@ class RfbClient(
     companion object {
         private const val TAG = "RfbClient"
         private const val RFB_VERSION = "RFB 003.008\n"
+
+        /**
+         * If this many milliseconds pass without receiving a FramebufferUpdate,
+         * the keepalive thread sends a non-incremental FBUR so the server always
+         * has an outstanding request.
+         *
+         * QEMU discards (rather than queues) stale FBURs on some builds: after
+         * responding to the initial FBUR with the first framebuffer dump, it
+         * waits for the NEXT FBUR before queuing subsequent dirty-region updates.
+         * When the client's FBUR loop only fires after receiving an update, a
+         * static screen (no server-side changes) means no FBUR is ever re-sent —
+         * so QEMU has no pending request when keyboard input later makes the
+         * framebuffer dirty, and the update is silently dropped.  The keepalive
+         * ensures a FBUR is always outstanding.
+         */
+        private const val KEEPALIVE_MS = 2_000L
 
         /**
          * Encodings advertised to the server, in preference order.
@@ -134,6 +151,14 @@ class RfbClient(
 
     private val running = AtomicBoolean(false)
     private var readerThread: Thread? = null
+    private var keepaliveThread: Thread? = null
+
+    /**
+     * Timestamp (epoch ms) of the most recent FramebufferUpdate received from
+     * the server, or 0 before the first update arrives.  Written only on the
+     * reader thread; read from the keepalive thread — AtomicLong for visibility.
+     */
+    private val lastUpdateTimeMs = AtomicLong(0L)
 
     // Framebuffer state (mutated only on reader thread; shared to listener via callbacks)
     private var fbWidth = 0
@@ -161,6 +186,10 @@ class RfbClient(
             it.isDaemon = true
             it.start()
         }
+        keepaliveThread = Thread(::keepaliveLoop, "RfbClient-keepalive").also {
+            it.isDaemon = true
+            it.start()
+        }
     }
 
     /** Tear down the reader thread and close the transport streams. */
@@ -168,6 +197,8 @@ class RfbClient(
         running.set(false)
         readerThread?.interrupt()
         readerThread = null
+        keepaliveThread?.interrupt()
+        keepaliveThread = null
         try { inputStream.close() } catch (_: Exception) {}
         try { outputStream.close() } catch (_: Exception) {}
         // decoder is only initialized after serverInit() completes; guard against
@@ -525,6 +556,9 @@ class RfbClient(
     }
 
     private fun sendFullUpdateRequest() {
+        // Seed the keepalive timer so the 2-second window starts from first
+        // request, not from object construction.
+        lastUpdateTimeMs.set(System.currentTimeMillis())
         sendUpdateRequest(0, 0, fbWidth, fbHeight, incremental = false)
     }
 
@@ -535,6 +569,54 @@ class RfbClient(
             dout.writeShort(x); dout.writeShort(y)
             dout.writeShort(w); dout.writeShort(h)
             dout.flush()
+        }
+    }
+
+    /**
+     * Runs on [keepaliveThread] alongside the reader thread.
+     *
+     * Every [KEEPALIVE_MS] / 2 milliseconds, checks whether the server has
+     * been quiet for [KEEPALIVE_MS].  If so, sends a non-incremental
+     * FramebufferUpdateRequest so the server always has an outstanding FBUR.
+     *
+     * This is necessary for QEMU-based servers that discard (rather than
+     * queue) FBURs: after answering the initial FBUR with the first screen
+     * dump, QEMU waits for the next FBUR before delivering dirty-region
+     * updates triggered by keyboard input.  Without a keepalive, a static
+     * screen means no FBUR is ever re-sent — keyboard input changes the
+     * framebuffer but QEMU has no pending request and silently drops the
+     * update.
+     *
+     * The keepalive sends a full (non-incremental) request rather than an
+     * incremental one so any missed pixels are also repaired.
+     */
+    private fun keepaliveLoop() {
+        val halfInterval = KEEPALIVE_MS / 2
+        try {
+            // Give the handshake + first update time to arrive before we
+            // start monitoring.  This avoids a spurious keepalive during the
+            // initial connection setup where lastUpdateTimeMs = 0.
+            Thread.sleep(KEEPALIVE_MS)
+        } catch (_: InterruptedException) { return }
+
+        while (running.get()) {
+            val last = lastUpdateTimeMs.get()
+            val now  = System.currentTimeMillis()
+            if (last > 0 && now - last >= KEEPALIVE_MS && fbWidth > 0 && fbHeight > 0) {
+                Logger.d(TAG, "FBUR keepalive: no update for ${now - last} ms — re-requesting full frame")
+                try {
+                    sendUpdateRequest(0, 0, fbWidth, fbHeight, incremental = false)
+                    // Advance the timer so we don't spam if the server is genuinely
+                    // silent (e.g. static console with no input).
+                    lastUpdateTimeMs.set(System.currentTimeMillis())
+                } catch (e: Exception) {
+                    if (running.get()) Logger.w(TAG, "FBUR keepalive send failed: ${e.message}")
+                    break
+                }
+            }
+            try {
+                Thread.sleep(halfInterval)
+            } catch (_: InterruptedException) { break }
         }
     }
 
@@ -613,6 +695,8 @@ class RfbClient(
     }
 
     private fun handleFramebufferUpdate() {
+        // Reset the keepalive timer: the server is alive and responding.
+        lastUpdateTimeMs.set(System.currentTimeMillis())
         din.skipBytes(1) // padding
         val numRects = din.readUnsignedShort()
 
