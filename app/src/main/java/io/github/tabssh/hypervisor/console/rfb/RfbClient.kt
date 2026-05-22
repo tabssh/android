@@ -563,6 +563,7 @@ class RfbClient(
     }
 
     private fun sendUpdateRequest(x: Int, y: Int, w: Int, h: Int, incremental: Boolean) {
+        Logger.d(TAG, "FBUR: ${if (incremental) "incr" else "full"} ${w}×${h}@($x,$y)")
         synchronized(outLock) {
             dout.writeByte(RfbConstants.C2S_FRAMEBUFFER_UPDATE_REQUEST)
             dout.writeByte(if (incremental) 1 else 0)
@@ -608,7 +609,7 @@ class RfbClient(
                     sendUpdateRequest(0, 0, fbWidth, fbHeight, incremental = false)
                     // Advance the timer so we don't spam if the server is genuinely
                     // silent (e.g. static console with no input).
-                    lastUpdateTimeMs.set(System.currentTimeMillis())
+                    lastUpdateTimeMs.compareAndSet(last, System.currentTimeMillis())
                 } catch (e: Exception) {
                     if (running.get()) Logger.w(TAG, "FBUR keepalive send failed: ${e.message}")
                     break
@@ -699,6 +700,7 @@ class RfbClient(
         lastUpdateTimeMs.set(System.currentTimeMillis())
         din.skipBytes(1) // padding
         val numRects = din.readUnsignedShort()
+        Logger.d(TAG, "FBU: numRects=${if (numRects == 0xFFFF) "unlimited(0xFFFF)" else "$numRects"}")
 
         // numRects == 0xFFFF means "unlimited"; stop on ENC_LAST_RECT instead
         var i = 0
@@ -1162,6 +1164,7 @@ class RfbClient(
         // Guard: fbWidth/fbHeight are 0 until serverInit() completes. coerceIn(0, -1)
         // throws IllegalArgumentException, which would crash the caller's thread.
         if (fbWidth <= 0 || fbHeight <= 0) return
+        Logger.d(TAG, "PointerEvent x=$x y=$y mask=$buttonMask")
         synchronized(outLock) {
             dout.writeByte(RfbConstants.C2S_POINTER_EVENT)
             dout.writeByte(buttonMask)
