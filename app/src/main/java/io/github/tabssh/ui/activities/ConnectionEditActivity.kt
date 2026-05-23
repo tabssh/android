@@ -143,8 +143,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             connectionId != null -> loadConnection(connectionId)
             else -> {
                 // New connection — pre-fill the preferred default username.
-                val defaultUser = io.github.tabssh.storage.preferences.PreferenceManager(this)
-                    .getDefaultUsername()
+                val defaultUser = app.preferencesManager.getDefaultUsername()
                 if (defaultUser.isNotBlank()) {
                     binding.editUsername.setText(defaultUser)
                 }

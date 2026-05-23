@@ -1434,8 +1434,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             val atIdx = input.indexOf("@")
             input.substring(0, atIdx) to input.substring(atIdx + 1)
         } else {
-            val prefs = io.github.tabssh.storage.preferences.PreferenceManager(this)
-            val defaultUser = prefs.getDefaultUsername().trim()
+            val defaultUser = app.preferencesManager.getDefaultUsername().trim()
             val user = if (defaultUser.isNotEmpty()) defaultUser else "root"
             user to input
         }
