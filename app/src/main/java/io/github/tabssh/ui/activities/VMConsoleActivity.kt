@@ -601,8 +601,12 @@ class VMConsoleActivity : AppCompatActivity() {
     /**
      * Path 2 — Direct VncHost: load the host from DB, resolve credentials,
      * establish a TCP connection, and hand off to [switchToGraphical].
+     *
+     * @param disableResize When true, [RfbClient.canRequestResize] is set to false before
+     *   starting the session. Used for reconnects after a server closes the connection
+     *   in response to a resize request it cannot service.
      */
-    private suspend fun connectVncHost(vncHostId: String) {
+    private suspend fun connectVncHost(vncHostId: String, disableResize: Boolean = false) {
         val app = application as TabSSHApplication
         val host = withContext(Dispatchers.IO) {
             app.database.vncHostDao().getById(vncHostId)
@@ -635,6 +639,7 @@ class VMConsoleActivity : AppCompatActivity() {
         val (rfbClient, socket) = withContext(Dispatchers.IO) {
             VncDirectConnector.connect(host, password, username, this@VMConsoleActivity)
         }
+        if (disableResize) rfbClient.canRequestResize = false
         directVncSocket = socket
         val connection = HypervisorConsoleManager.ConsoleConnection.Graphical(
             vmName = host.name,
@@ -851,6 +856,28 @@ class VMConsoleActivity : AppCompatActivity() {
                     vncView.onTextInput = null
                     vncView.onBackspace = null
                     vncView.onViewSizeReady = null
+
+                    // For direct VncHost connections: the server closed immediately
+                    // after rejecting our resize request (QEMU behaviour for servers
+                    // that don't support ExtendedDesktopSize).  Automatically reconnect
+                    // with resize suppressed so the user keeps a working session at the
+                    // server's native resolution, instead of landing on a dead screen.
+                    val vncHostId = intent.getStringExtra(EXTRA_VNC_HOST_ID)
+                    if (reason == "Server closed after resize rejection" && vncHostId != null
+                            && !isFinishing && !isDestroyed) {
+                        showProgress("Reconnecting without resize…")
+                        lifecycleScope.launch {
+                            try {
+                                connectVncHost(vncHostId, disableResize = true)
+                            } catch (e: Exception) {
+                                Logger.e(TAG, "Reconnect after resize rejection failed", e)
+                                showStatus("Disconnected: server does not support resize")
+                                refreshFloatingControls()
+                            }
+                        }
+                        return@runOnUiThread
+                    }
+
                     showStatus("Disconnected: $reason")
                     refreshFloatingControls()
                 }

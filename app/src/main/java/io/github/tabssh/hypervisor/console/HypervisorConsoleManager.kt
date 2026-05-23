@@ -260,14 +260,9 @@ class HypervisorConsoleManager {
                 // The caller wires an RfbListener and calls rfbClient.start().
                 // ticket.termproxyTicket is the vncproxy ticket — Proxmox requires
                 // it as the VNC Auth password during the RFB handshake (security type 2).
-                //
-                // canRequestResize=false: Proxmox vncproxy rejects SetDesktopSize
-                // (ExtendedDesktopSize reason=1 status=3) and then closes the WebSocket,
-                // causing a "Pipe closed" error on the next read. Suppress the send entirely.
                 val rfbClient = RfbClient(inputStream, outputStream,
                     vncPassword = ticket.termproxyTicket,
                     consoleMode = true)
-                rfbClient.canRequestResize = false
                 activeRfbClient = rfbClient
                 ConsoleConnection.Graphical(
                     vmName = vmName,
@@ -539,16 +534,9 @@ class HypervisorConsoleManager {
                 // vnc.termproxyTicket is the vncproxy ticket — used as the
                 // VNC Auth password in the RFB handshake (security type 2).
                 // consoleMode=true: exclusive access, console encodings, resize support.
-                // vnc.termproxyTicket is the vncproxy ticket — used as the
-                // VNC Auth password in the RFB handshake (security type 2).
-                // canRequestResize=false: Proxmox vncproxy rejects SetDesktopSize
-                // (ExtendedDesktopSize status=3) and then closes the WebSocket,
-                // causing a "Pipe closed" crash on the next read. Suppress all
-                // resize requests for this server type.
                 val rfbClient = RfbClient(input, output,
                     vncPassword = vnc.termproxyTicket,
                     consoleMode = true)
-                rfbClient.canRequestResize = false
                 activeRfbClient = rfbClient
                 val graphical = ConsoleConnection.Graphical(
                     vmName = vmName,
