@@ -119,11 +119,29 @@ class VncConsoleChannel(private val rfbClient: RfbClient) {
      * this happens when [close] is called while a touch/key event is still
      * in flight from the UI thread.  The session is over; dropping is correct
      * and avoids a [java.util.concurrent.RejectedExecutionException] crash.
+     *
+     * The task itself is wrapped in a try-catch for [java.io.IOException]: on
+     * Proxmox vncproxy connections the RFB output travels through a
+     * PipedOutputStream whose read end is owned by the WebSocket sender.
+     * When the WebSocket closes, the read end dies before [close] shuts down
+     * this executor, so a pointer or key event arriving in that narrow window
+     * throws "Read end dead" inside the task.  The RFB reader thread will
+     * detect the broken stream independently and fire [RfbListener.onDisconnected];
+     * swallowing the IOException here is correct — the event cannot be delivered
+     * and the session is already ending.
      */
     private fun io(block: () -> Unit) {
         if (writeExecutor.isShutdown) return
         try {
-            writeExecutor.execute(block)
+            writeExecutor.execute {
+                try {
+                    block()
+                } catch (_: java.io.IOException) {
+                    // Underlying stream is dead (e.g. PipedOutputStream "Read end dead"
+                    // when the WebSocket closes before the executor shuts down).
+                    // The reader thread handles the session teardown; drop this write.
+                }
+            }
         } catch (_: java.util.concurrent.RejectedExecutionException) {
             // Race between isShutdown check and execute() — session is ending; drop safely.
         }
