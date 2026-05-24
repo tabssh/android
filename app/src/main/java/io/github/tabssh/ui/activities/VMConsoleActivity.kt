@@ -857,20 +857,45 @@ class VMConsoleActivity : AppCompatActivity() {
                     vncView.onBackspace = null
                     vncView.onViewSizeReady = null
 
-                    // For direct VncHost connections: the server closed immediately
-                    // after rejecting our resize request (QEMU behaviour for servers
-                    // that don't support ExtendedDesktopSize).  Automatically reconnect
-                    // with resize suppressed so the user keeps a working session at the
-                    // server's native resolution, instead of landing on a dead screen.
-                    val vncHostId = intent.getStringExtra(EXTRA_VNC_HOST_ID)
-                    if (reason == "Server closed after resize rejection" && vncHostId != null
-                            && !isFinishing && !isDestroyed) {
-                        showProgress("Reconnecting without resize…")
-                        lifecycleScope.launch {
-                            try {
-                                connectVncHost(vncHostId, disableResize = true)
-                            } catch (e: Exception) {
-                                Logger.e(TAG, "Reconnect after resize rejection failed", e)
+                    // The server closed immediately after rejecting our resize request.
+                    // Automatically reconnect with resize suppressed so the user keeps
+                    // a working session at the server's native resolution.
+                    //
+                    // Two paths share this recovery:
+                    //   • Direct VncHost (Path 2): reconnect via connectVncHost with disableResize=true.
+                    //   • Hypervisor VNC (Proxmox vncproxy): re-issue the VNC ticket and
+                    //     reconnect via HypervisorConsoleManager.reconnectGraphicalWithoutResize.
+                    if (reason == "Server closed after resize rejection" && !isFinishing && !isDestroyed) {
+                        val vncHostId = intent.getStringExtra(EXTRA_VNC_HOST_ID)
+                        val mgr = consoleManager
+                        when {
+                            vncHostId != null -> {
+                                showProgress("Reconnecting without resize…")
+                                lifecycleScope.launch {
+                                    try {
+                                        connectVncHost(vncHostId, disableResize = true)
+                                    } catch (e: Exception) {
+                                        Logger.e(TAG, "Reconnect after resize rejection failed", e)
+                                        showStatus("Disconnected: server does not support resize")
+                                        refreshFloatingControls()
+                                    }
+                                }
+                            }
+                            mgr != null -> {
+                                showProgress("Reconnecting without resize…")
+                                lifecycleScope.launch(Dispatchers.IO) {
+                                    try {
+                                        mgr.reconnectGraphicalWithoutResize(createConsoleListener())
+                                    } catch (e: Exception) {
+                                        Logger.e(TAG, "Hypervisor reconnect after resize rejection failed", e)
+                                        withContext(Dispatchers.Main) {
+                                            showStatus("Disconnected: server does not support resize")
+                                            refreshFloatingControls()
+                                        }
+                                    }
+                                }
+                            }
+                            else -> {
                                 showStatus("Disconnected: server does not support resize")
                                 refreshFloatingControls()
                             }

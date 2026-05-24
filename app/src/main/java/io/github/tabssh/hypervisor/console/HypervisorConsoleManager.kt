@@ -568,6 +568,119 @@ class HypervisorConsoleManager {
     }
 
     /**
+     * Reconnect the graphical console without sending SetDesktopSize.
+     *
+     * Called after the VNC server closes the connection in response to a resize
+     * request it cannot service (e.g. older Proxmox vncproxy rejects
+     * ExtendedDesktopSize reason=1 status=3 and then closes the WebSocket).
+     *
+     * Requests a fresh VNC ticket from Proxmox, tears down the old WebSocket
+     * (without erasing stored session state), creates a new [RfbClient] with
+     * [RfbClient.canRequestResize] = false, and fires
+     * [ConsoleEventListener.onSwitchToGraphical] so the UI re-enters graphical
+     * mode seamlessly.
+     *
+     * Only Proxmox VNC is supported — XCP-ng and Xen Orchestra use text consoles.
+     * A null [proxmoxVncFallbackClient] means the session state was lost; the
+     * listener receives an error in that case.
+     */
+    suspend fun reconnectGraphicalWithoutResize(listener: ConsoleEventListener?) {
+        val client = proxmoxVncFallbackClient ?: run {
+            Logger.e(TAG, "reconnectGraphicalWithoutResize: no stored Proxmox client")
+            listener?.onError("Cannot reconnect — session state was lost. Please reconnect manually.")
+            return
+        }
+        val node        = proxmoxVncFallbackNode
+        val vmid        = proxmoxVncFallbackVmid
+        val vmName      = proxmoxVncFallbackVmName
+        val type        = proxmoxVncFallbackType
+        val verifySsl   = proxmoxVncFallbackVerifySsl
+        val pinnedCert  = proxmoxVncFallbackPinnedCert
+        val displayHost = proxmoxVncFallbackDisplayHost
+        val displayPort = proxmoxVncFallbackDisplayPort
+
+        // Tear down the old WebSocket without erasing the fallback params —
+        // we still need them if the reconnect itself fails and the user retries.
+        activeRfbClient?.stop()
+        activeRfbClient = null
+        webSocketClient?.disconnect()
+        webSocketClient = null
+
+        Logger.i(TAG, "reconnectGraphicalWithoutResize: requesting fresh vncproxy ticket for $vmName")
+        val vnc = try {
+            withContext(Dispatchers.IO) { client.getVNCProxy(node, vmid, type) }
+        } catch (e: Exception) {
+            Logger.e(TAG, "reconnectGraphicalWithoutResize: getVNCProxy threw", e)
+            listener?.onError("Reconnect failed — could not obtain a new VNC ticket from Proxmox.")
+            return
+        }
+        if (vnc == null) {
+            Logger.e(TAG, "reconnectGraphicalWithoutResize: vncproxy returned null for $vmName")
+            listener?.onError("Reconnect failed — Proxmox did not return a VNC ticket.")
+            return
+        }
+
+        val vncWsClient = ConsoleWebSocketClient(
+            verifySsl       = verifySsl,
+            protocol        = ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_VNC,
+            pinnedCertSha256 = pinnedCert,
+            displayHost     = displayHost,
+            displayPort     = displayPort
+        )
+        webSocketClient = vncWsClient
+
+        val headers = mapOf("Cookie" to "PVEAuthCookie=${vnc.authCookie}")
+        val connected = vncWsClient.connect(vnc.websocketUrl, headers, object : ConsoleConnectionListener {
+            override fun onConnected() {
+                Logger.i(TAG, "reconnectGraphicalWithoutResize: WebSocket connected for $vmName")
+                val input = vncWsClient.getInputStream() ?: run {
+                    listener?.onError("Reconnect: could not get input stream")
+                    return
+                }
+                val output = vncWsClient.getOutputStream() ?: run {
+                    listener?.onError("Reconnect: could not get output stream")
+                    return
+                }
+                val rfbClient = RfbClient(
+                    inputStream  = input,
+                    outputStream = output,
+                    vncPassword  = vnc.termproxyTicket,
+                    consoleMode  = true
+                )
+                // Server rejected resize on the previous connection — suppress
+                // SetDesktopSize entirely so this reconnect stays stable.
+                rfbClient.canRequestResize = false
+                activeRfbClient = rfbClient
+                val graphical = ConsoleConnection.Graphical(
+                    vmName         = vmName,
+                    hypervisorType = HypervisorType.PROXMOX,
+                    rfbClient      = rfbClient
+                )
+                listener?.onConnected(vmName)
+                listener?.onSwitchToGraphical(graphical)
+            }
+
+            override fun onDisconnected(reason: String) {
+                Logger.i(TAG, "reconnectGraphicalWithoutResize: disconnected ($reason)")
+                listener?.onDisconnected(reason)
+            }
+
+            override fun onError(error: Throwable) {
+                Logger.e(TAG, "reconnectGraphicalWithoutResize: WebSocket error", error)
+                val msg = error.message?.takeIf { it.isNotBlank() }
+                    ?: error.cause?.message?.takeIf { it.isNotBlank() }
+                    ?: "Reconnect failed (${error.javaClass.simpleName})"
+                listener?.onError(msg)
+            }
+        })
+
+        if (!connected) {
+            Logger.e(TAG, "reconnectGraphicalWithoutResize: WebSocket connect returned false for $vmName")
+            listener?.onError("Reconnect failed — WebSocket could not connect to Proxmox.")
+        }
+    }
+
+    /**
      * Wire a text console connection to TermuxBridge for terminal display.
      * Only valid for [ConsoleConnection.Text]; graphical consoles use [RfbClient] directly.
      */
