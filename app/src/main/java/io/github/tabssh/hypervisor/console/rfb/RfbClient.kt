@@ -90,8 +90,17 @@ class RfbClient(
          */
         private val PREFERRED_ENCODINGS = intArrayOf(
             // ── Pixel encodings (preference order) ───────────────────────────
-            RfbConstants.ENC_TIGHT,                    // TigerVNC / libvirt default
-            RfbConstants.ENC_ZRLE,                     // Proxmox preferred
+            // ZRLE is listed before Tight so that QEMU/Proxmox use ZRLE.
+            // QEMU's Tight encoder follows the original Tight spec (always emits
+            // a FilterID byte after the compression-control byte, even for
+            // BasicCompression compTypes 0x0–0x3 where the TigerVNC extension
+            // omits it). Our Tight decoder follows the TigerVNC convention; on
+            // QEMU it reads that FilterID=0x00 as compact_len=0, consuming zero
+            // compressed bytes and leaving the entire payload in the stream →
+            // stream desync → screen frozen. ZRLE is fully spec-compliant and
+            // works correctly with both QEMU and TigerVNC.
+            RfbConstants.ENC_ZRLE,                     // preferred: works with QEMU and TigerVNC
+            RfbConstants.ENC_TIGHT,                    // TigerVNC / libvirt; QEMU uses ZRLE above
             RfbConstants.ENC_ZLIB,
             RfbConstants.ENC_HEXTILE,
             RfbConstants.ENC_CORRE,                    // compact RRE fallback

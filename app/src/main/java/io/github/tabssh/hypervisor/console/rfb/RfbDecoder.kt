@@ -717,6 +717,9 @@ class RfbDecoder(private val fmt: PixelFormat) {
             return buf
         }
         val compLen = readCompactLen(din)
+        if (compLen < 0 || compLen > MAX_RECT_BYTES) throw java.io.IOException(
+            "Tight compact length $compLen out of range for dataSize=$dataSize"
+        )
         val compData = ByteArray(compLen)
         din.readFully(compData)
         return inflateTight(streamIdx, compData, dataSize)
