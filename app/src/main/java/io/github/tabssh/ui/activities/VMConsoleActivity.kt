@@ -1208,6 +1208,20 @@ class VMConsoleActivity : AppCompatActivity() {
             showFKeyPicker(channel)
         }
 
+        // Arrow keys
+        toolbar.findViewById<MaterialButton>(R.id.vnc_btn_arrow_left)?.setOnClickListener {
+            channel.sendKey(RfbConstants.KEY_LEFT)
+        }
+        toolbar.findViewById<MaterialButton>(R.id.vnc_btn_arrow_up)?.setOnClickListener {
+            channel.sendKey(RfbConstants.KEY_UP)
+        }
+        toolbar.findViewById<MaterialButton>(R.id.vnc_btn_arrow_down)?.setOnClickListener {
+            channel.sendKey(RfbConstants.KEY_DOWN)
+        }
+        toolbar.findViewById<MaterialButton>(R.id.vnc_btn_arrow_right)?.setOnClickListener {
+            channel.sendKey(RfbConstants.KEY_RIGHT)
+        }
+
         // More overflow menu
         toolbar.findViewById<MaterialButton>(R.id.vnc_btn_more)?.setOnClickListener { anchor ->
             showVncMoreMenu(anchor, channel)

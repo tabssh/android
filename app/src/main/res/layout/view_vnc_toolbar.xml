@@ -11,6 +11,8 @@
     ──────────────────
     Esc  Tab  F…     (immediate key sends / F-key picker)
     ──────────────────
+    ←  ↑  ↓  →       (arrow keys)
+    ──────────────────
     ⋮                (overflow: Ctrl+Alt+Del, send text, copy screen, zoom, disconnect)
 -->
 <HorizontalScrollView
@@ -154,6 +156,43 @@
             android:paddingEnd="10dp"
             android:paddingTop="6dp"
             android:paddingBottom="6dp"
+            android:layout_marginEnd="2dp" />
+
+        <!-- Arrow keys -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/vnc_btn_arrow_left"
+            style="@style/Widget.Material3.Button.IconButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:icon="@drawable/ic_arrow_left"
+            android:contentDescription="Arrow left"
+            android:layout_marginEnd="2dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/vnc_btn_arrow_up"
+            style="@style/Widget.Material3.Button.IconButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:icon="@drawable/ic_arrow_up"
+            android:contentDescription="Arrow up"
+            android:layout_marginEnd="2dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/vnc_btn_arrow_down"
+            style="@style/Widget.Material3.Button.IconButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:icon="@drawable/ic_arrow_down"
+            android:contentDescription="Arrow down"
+            android:layout_marginEnd="2dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/vnc_btn_arrow_right"
+            style="@style/Widget.Material3.Button.IconButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:icon="@drawable/ic_arrow_right"
+            android:contentDescription="Arrow right"
             android:layout_marginEnd="2dp" />
 
         <View
