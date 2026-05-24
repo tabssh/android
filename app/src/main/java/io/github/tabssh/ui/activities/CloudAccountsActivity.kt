@@ -222,11 +222,13 @@ class CloudAccountsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val account = CloudAccount(name = name, provider = provider.tag)
             try {
-                app.database.cloudAccountDao().upsert(account)
-                app.securePasswordManager.storePassword(
-                    "cloud_token_${account.id}", token,
-                    SecurePasswordManager.StorageLevel.ENCRYPTED
-                )
+                withContext(Dispatchers.IO) {
+                    app.database.cloudAccountDao().upsert(account)
+                    app.securePasswordManager.storePassword(
+                        "cloud_token_${account.id}", token,
+                        SecurePasswordManager.StorageLevel.ENCRYPTED
+                    )
+                }
                 Toast.makeText(this@CloudAccountsActivity, "Saved '${account.name}'", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Logger.e(TAG, "Save cloud account failed", e)
@@ -238,7 +240,9 @@ class CloudAccountsActivity : AppCompatActivity() {
     private fun refreshAccount(account: CloudAccount) {
         Toast.makeText(this, "Refreshing ${account.name}…", Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
-            val token = app.securePasswordManager.retrievePassword("cloud_token_${account.id}")
+            val token = withContext(Dispatchers.IO) {
+                app.securePasswordManager.retrievePassword("cloud_token_${account.id}")
+            }
             if (token.isNullOrBlank()) {
                 runOnUiThread {
                     Toast.makeText(this@CloudAccountsActivity, "Token missing — re-add account", Toast.LENGTH_LONG).show()
@@ -261,7 +265,7 @@ class CloudAccountsActivity : AppCompatActivity() {
                 }
             }
             val candidates = try {
-                provider.fetchInventory(token, account.name)
+                withContext(Dispatchers.IO) { provider.fetchInventory(token, account.name) }
             } catch (e: Exception) {
                 Logger.e(TAG, "Inventory fetch failed", e)
                 runOnUiThread {
@@ -270,12 +274,14 @@ class CloudAccountsActivity : AppCompatActivity() {
                 return@launch
             }
             try {
-                app.database.cloudAccountDao().update(
-                    account.copy(
-                        lastRefreshAt = System.currentTimeMillis(),
-                        lastCount = candidates.size
+                withContext(Dispatchers.IO) {
+                    app.database.cloudAccountDao().update(
+                        account.copy(
+                            lastRefreshAt = System.currentTimeMillis(),
+                            lastCount = candidates.size
+                        )
                     )
-                )
+                }
             } catch (_: Exception) {}
             runOnUiThread { showImportPicker(account, candidates) }
         }
@@ -311,14 +317,13 @@ class CloudAccountsActivity : AppCompatActivity() {
         if (picked.isEmpty()) return
         lifecycleScope.launch {
             try {
+                val (inserted, updated) = withContext(Dispatchers.IO) {
                 val existing = app.database.connectionDao().getAllConnectionsList()
-                var inserted = 0
-                var updated = 0
-                val cloudGroupId = withContext(Dispatchers.IO) {
-                    SystemGroupHelper.getOrCreateSystemGroupId(
-                        app.database, "cloud", "Cloud Instances", "cloud"
-                    )
-                }
+                var ins = 0
+                var upd = 0
+                val cloudGroupId = SystemGroupHelper.getOrCreateSystemGroupId(
+                    app.database, "cloud", "Cloud Instances", "cloud"
+                )
                 for (cand in picked) {
                     val src = extractCloudSource(cand.profile.advancedSettings)
                     val match = existing.firstOrNull { e ->
@@ -336,13 +341,15 @@ class CloudAccountsActivity : AppCompatActivity() {
                                 modifiedAt = System.currentTimeMillis()
                             )
                         )
-                        updated++
+                        upd++
                     } else {
                         app.database.connectionDao().insertConnection(
                             cand.profile.copy(groupId = cloudGroupId)
                         )
-                        inserted++
+                        ins++
                     }
+                }
+                ins to upd
                 }
                 runOnUiThread {
                     Toast.makeText(
@@ -417,8 +424,10 @@ class CloudAccountsActivity : AppCompatActivity() {
             .setPositiveButton("Delete") { _, _ ->
                 lifecycleScope.launch {
                     try {
-                        app.database.cloudAccountDao().delete(account)
-                        app.securePasswordManager.clearPassword("cloud_token_${account.id}")
+                        withContext(Dispatchers.IO) {
+                            app.database.cloudAccountDao().delete(account)
+                            app.securePasswordManager.clearPassword("cloud_token_${account.id}")
+                        }
                     } catch (e: Exception) {
                         Logger.e(TAG, "Delete failed", e)
                     }

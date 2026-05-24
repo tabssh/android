@@ -409,7 +409,7 @@ class SSHConnection(
         }
 
         // Brief back-off so any half-open server-side state can settle.
-        try { Thread.sleep(500) } catch (_: InterruptedException) {}
+        delay(500)
 
         val retrySession = if (jumpHostPort != null) {
             jsch.getSession(effectiveUsername, "localhost", jumpHostPort).also {

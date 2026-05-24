@@ -170,7 +170,7 @@ class SyncSettingsActivity : AppCompatActivity() {
             prefs.edit().putBoolean(PREF_ENABLED, checked).apply()
             if (checked) {
                 lifecycleScope.launch {
-                    val status = syncManager.checkSyncFile()
+                    val status = withContext(Dispatchers.IO) { syncManager.checkSyncFile() }
                     withContext(Dispatchers.Main) {
                         if (status == SyncFileStatus.OK) {
                             workScheduler.schedulePeriodicSync()
@@ -228,7 +228,7 @@ class SyncSettingsActivity : AppCompatActivity() {
                 .setMessage("Remove sync setup. Your local data is NOT affected.")
                 .setPositiveButton("Clear") { _, _ ->
                     lifecycleScope.launch {
-                        syncManager.clearConfiguration()
+                        withContext(Dispatchers.IO) { syncManager.clearConfiguration() }
                         switchEnabled.isChecked = false
                         workScheduler.cancelPeriodicSync()
                         refresh()
@@ -319,7 +319,7 @@ class SyncSettingsActivity : AppCompatActivity() {
                     0 -> createFileLauncher.launch(syncManager.getCreateFileIntent())
                     1 -> openFileLauncher.launch(syncManager.getOpenFileIntent())
                     2 -> lifecycleScope.launch {
-                        syncManager.clearConfiguration()
+                        withContext(Dispatchers.IO) { syncManager.clearConfiguration() }
                         refresh()
                         toast("Location cleared")
                     }
@@ -357,7 +357,7 @@ class SyncSettingsActivity : AppCompatActivity() {
                 pw != cfm        -> confirmLayout?.error  = errMismatch
                 else -> {
                     lifecycleScope.launch {
-                        syncManager.setSyncPassword(pw)
+                        withContext(Dispatchers.IO) { syncManager.setSyncPassword(pw) }
                         refresh()
                         toast("Password set")
                         dialog.dismiss()
@@ -388,8 +388,10 @@ class SyncSettingsActivity : AppCompatActivity() {
         btnSyncNow.isEnabled = false
         lifecycleScope.launch {
             try {
-                val payload = SyncDataCollector(this@SyncSettingsActivity).collectAll()
-                val ok = syncManager.upload(payload)
+                val (payload, ok) = withContext(Dispatchers.IO) {
+                    val p = SyncDataCollector(this@SyncSettingsActivity).collectAll()
+                    p to syncManager.upload(p)
+                }
                 withContext(Dispatchers.Main) {
                     progressSync.visibility = View.GONE
                     btnSyncNow.isEnabled = true
@@ -412,9 +414,9 @@ class SyncSettingsActivity : AppCompatActivity() {
         progressSync.visibility = View.VISIBLE
         lifecycleScope.launch {
             try {
-                val payload = syncManager.download()
+                val payload = withContext(Dispatchers.IO) { syncManager.download() }
                 if (payload != null) {
-                    SyncDataApplier(this@SyncSettingsActivity).applyAll(payload)
+                    withContext(Dispatchers.IO) { SyncDataApplier(this@SyncSettingsActivity).applyAll(payload) }
                     withContext(Dispatchers.Main) {
                         progressSync.visibility = View.GONE
                         refresh()

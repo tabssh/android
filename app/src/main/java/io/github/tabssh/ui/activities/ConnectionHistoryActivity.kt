@@ -17,7 +17,9 @@ import androidx.lifecycle.lifecycleScope
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -68,8 +70,9 @@ class ConnectionHistoryActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
-                val all = app.database.connectionDao().getRecentConnections(500)
-                    .filter { it.lastConnected > 0 }
+                val all = withContext(Dispatchers.IO) {
+                    app.database.connectionDao().getRecentConnections(500)
+                }.filter { it.lastConnected > 0 }
                 runOnUiThread {
                     if (all.isEmpty()) {
                         val empty = TextView(this@ConnectionHistoryActivity).apply {

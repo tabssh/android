@@ -25,7 +25,10 @@ import io.github.tabssh.storage.database.entities.ConnectionProfile
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class ClusterCommandActivity : AppCompatActivity() {
 
@@ -177,7 +180,9 @@ class ClusterCommandActivity : AppCompatActivity() {
 
     private fun showSnippetPicker() {
         lifecycleScope.launch {
-            val snippets = app.database.snippetDao().getAllSnippets().first()
+            val snippets = withContext(Dispatchers.IO) {
+                app.database.snippetDao().getAllSnippets().first()
+            }
 
             if (snippets.isEmpty()) {
                 Toast.makeText(this@ClusterCommandActivity, "No snippets available", Toast.LENGTH_SHORT).show()
@@ -224,6 +229,7 @@ class ClusterCommandActivity : AppCompatActivity() {
                 app.database.connectionDao().getAllConnections(),
                 app.database.connectionGroupDao().getAllGroups()
             ) { connections, groups -> Pair(connections, groups) }
+                .flowOn(Dispatchers.IO)
                 .collectLatest { (connections, groups) ->
                     allConnections = connections
                     allGroupNames = groups.associate { it.id to it.name }

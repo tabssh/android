@@ -21,7 +21,10 @@ import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.Snippet
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import io.github.tabssh.utils.showError
 
 /**
@@ -140,7 +143,7 @@ class SnippetManagerActivity : AppCompatActivity() {
     private fun loadSnippets() {
         lifecycleScope.launch {
             try {
-                app.database.snippetDao().getAllSnippets().collect { snippetList ->
+                app.database.snippetDao().getAllSnippets().flowOn(Dispatchers.IO).collect { snippetList ->
                     allSnippets.clear()
                     allSnippets.addAll(snippetList)
                     
@@ -184,7 +187,9 @@ class SnippetManagerActivity : AppCompatActivity() {
 
         // Setup category autocomplete
         lifecycleScope.launch {
-            val categories = app.database.snippetDao().getAllCategories()
+            val categories = withContext(Dispatchers.IO) {
+                app.database.snippetDao().getAllCategories()
+            }
             val adapter = ArrayAdapter(this@SnippetManagerActivity, android.R.layout.simple_dropdown_item_1line, categories)
             categoryInput.setAdapter(adapter)
         }
@@ -228,7 +233,9 @@ class SnippetManagerActivity : AppCompatActivity() {
 
         // Setup category autocomplete
         lifecycleScope.launch {
-            val categories = app.database.snippetDao().getAllCategories()
+            val categories = withContext(Dispatchers.IO) {
+                app.database.snippetDao().getAllCategories()
+            }
             val adapter = ArrayAdapter(this@SnippetManagerActivity, android.R.layout.simple_dropdown_item_1line, categories)
             categoryInput.setAdapter(adapter)
         }

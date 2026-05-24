@@ -13,7 +13,9 @@ import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Authentication dialog for SSH connections
@@ -109,7 +111,9 @@ class AuthenticationDialog : DialogFragment() {
                     } else {
                         io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.SESSION_ONLY
                     }
-                    app.securePasswordManager.storePassword(connectionId, password, storageLevel)
+                    withContext(Dispatchers.IO) {
+                        app.securePasswordManager.storePassword(connectionId, password, storageLevel)
+                    }
 
                     onAuthenticated?.invoke(password)
                 } catch (e: Exception) {
@@ -128,10 +132,12 @@ class AuthenticationDialog : DialogFragment() {
         if (activity is FragmentActivity) {
             lifecycleScope.launch {
                 try {
-                    val password = app.securePasswordManager.retrievePasswordWithBiometrics(
-                        connectionId,
-                        activity as FragmentActivity
-                    )
+                    val password = withContext(Dispatchers.IO) {
+                        app.securePasswordManager.retrievePasswordWithBiometrics(
+                            connectionId,
+                            activity as FragmentActivity
+                        )
+                    }
                     
                     onAuthenticated?.invoke(password)
                     

@@ -290,7 +290,9 @@ class ConnectionEditActivity : AppCompatActivity() {
     private fun loadSshIdentities() {
         lifecycleScope.launch {
             try {
-                availableIdentities = app.database.identityDao().getAllIdentitiesList()
+                availableIdentities = withContext(Dispatchers.IO) {
+                    app.database.identityDao().getAllIdentitiesList()
+                }
                 availableVncIdentities = emptyList()
 
                 val items = listOf("No Identity") + availableIdentities.map { it.name }
@@ -324,7 +326,9 @@ class ConnectionEditActivity : AppCompatActivity() {
     private fun loadVncIdentities() {
         lifecycleScope.launch {
             try {
-                availableVncIdentities = app.database.vncIdentityDao().getAllIdentitiesList()
+                availableVncIdentities = withContext(Dispatchers.IO) {
+                    app.database.vncIdentityDao().getAllIdentitiesList()
+                }
                 availableIdentities = emptyList()
 
                 val items = listOf("No Identity") + availableVncIdentities.map { it.name }
@@ -529,8 +533,9 @@ class ConnectionEditActivity : AppCompatActivity() {
 
     private fun setupGroupSpinner() {
         lifecycleScope.launch {
-            val groups = app.database.connectionGroupDao().getAllGroups().first()
-                .filter { it.groupType.isEmpty() } // only user groups in the spinner
+            val groups = withContext(Dispatchers.IO) {
+                app.database.connectionGroupDao().getAllGroups().first()
+            }.filter { it.groupType.isEmpty() } // only user groups in the spinner
             val groupsList = mutableListOf("No Group")
             groups.forEach { group -> groupsList.add(group.name) }
 
@@ -615,7 +620,9 @@ class ConnectionEditActivity : AppCompatActivity() {
     private fun loadConnection(connectionId: String) {
         lifecycleScope.launch {
             try {
-                existingProfile = app.database.connectionDao().getConnectionById(connectionId)
+                existingProfile = withContext(Dispatchers.IO) {
+                    app.database.connectionDao().getConnectionById(connectionId)
+                }
                 existingProfile?.let { profile ->
                     populateFields(profile)
                     supportActionBar?.title = "Edit ${profile.name}"
@@ -792,7 +799,9 @@ class ConnectionEditActivity : AppCompatActivity() {
     private fun loadVncHost(vncHostId: String) {
         lifecycleScope.launch {
             try {
-                val vncHost = app.database.vncHostDao().getById(vncHostId)
+                val vncHost = withContext(Dispatchers.IO) {
+                    app.database.vncHostDao().getById(vncHostId)
+                }
                 if (vncHost != null) {
                     populateVncFields(vncHost)
                     supportActionBar?.title = "Edit ${vncHost.name}"
@@ -825,7 +834,9 @@ class ConnectionEditActivity : AppCompatActivity() {
         if (vncHost.identityId == null) {
             lifecycleScope.launch {
                 val stored = try {
-                    app.securePasswordManager.retrievePassword("vnc_host_${vncHost.id}")
+                    withContext(Dispatchers.IO) {
+                        app.securePasswordManager.retrievePassword("vnc_host_${vncHost.id}")
+                    }
                 } catch (e: Exception) {
                     Logger.w("ConnectionEditActivity", "No stored VNC host password: ${e.message}")
                     null
@@ -1638,14 +1649,18 @@ class ConnectionEditActivity : AppCompatActivity() {
                     lifecycleScope.launch {
                         try {
                             val groupDao = app.database.connectionGroupDao()
-                            val existing = groupDao.getGroupByName(groupName)
+                            val existing = withContext(Dispatchers.IO) {
+                                groupDao.getGroupByName(groupName)
+                            }
                             val groupId = if (existing != null) {
                                 existing.id
                             } else {
                                 val newGroup = io.github.tabssh.storage.database.entities.ConnectionGroup(
                                     name = groupName, icon = "folder", sortOrder = 0
                                 )
-                                groupDao.insertGroup(newGroup)
+                                withContext(Dispatchers.IO) {
+                                    groupDao.insertGroup(newGroup)
+                                }
                                 newGroup.id
                             }
                             selectedGroupId = groupId

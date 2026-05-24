@@ -18,6 +18,7 @@ import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.flowOn
 import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.ui.adapters.TerminalPagerAdapter
 import io.github.tabssh.ui.views.TerminalView
@@ -2313,12 +2314,14 @@ private fun showSnippetsPickerForActiveTab() {
                 val json = org.json.JSONArray(ids).toString()
                 lifecycleScope.launch {
                     try {
-                        app.database.workspaceDao().upsert(
-                            io.github.tabssh.storage.database.entities.Workspace(
-                                name = name,
-                                connectionIdsJson = json
+                        withContext(Dispatchers.IO) {
+                            app.database.workspaceDao().upsert(
+                                io.github.tabssh.storage.database.entities.Workspace(
+                                    name = name,
+                                    connectionIdsJson = json
+                                )
                             )
-                        )
+                        }
                         runOnUiThread {
                             Toast.makeText(this@TabTerminalActivity, "Saved workspace '$name'", Toast.LENGTH_SHORT).show()
                         }
@@ -2334,7 +2337,7 @@ private fun showSnippetsPickerForActiveTab() {
     private fun showOpenWorkspaceDialog() {
         lifecycleScope.launch {
             val all = try {
-                app.database.workspaceDao().getAll()
+                withContext(Dispatchers.IO) { app.database.workspaceDao().getAll() }
             } catch (e: Exception) {
                 Logger.e("TabTerminalActivity", "Load workspaces failed", e)
                 emptyList()
@@ -2398,7 +2401,7 @@ private fun showSnippetsPickerForActiveTab() {
                 val ws = all[which]
                 lifecycleScope.launch {
                     try {
-                        app.database.workspaceDao().delete(ws)
+                        withContext(Dispatchers.IO) { app.database.workspaceDao().delete(ws) }
                         runOnUiThread {
                             Toast.makeText(this@TabTerminalActivity, "Deleted '${ws.name}'", Toast.LENGTH_SHORT).show()
                         }
@@ -2433,7 +2436,7 @@ private fun showSnippetsPickerForActiveTab() {
         }
         lifecycleScope.launch {
             val recent = try {
-                app.database.connectionDao().getFrequentlyUsedConnections(20)
+                withContext(Dispatchers.IO) { app.database.connectionDao().getFrequentlyUsedConnections(20) }
             } catch (e: Exception) {
                 Logger.e("TabTerminalActivity", "Recent fetch failed for split picker", e)
                 emptyList()
@@ -2564,9 +2567,11 @@ private fun showSnippetsPickerForActiveTab() {
                 val name = input.text.toString().trim().ifBlank { "Macro ${System.currentTimeMillis()}" }
                 lifecycleScope.launch {
                     try {
-                        app.database.macroDao().insertMacro(
-                            io.github.tabssh.storage.database.entities.Macro.fromBytes(name, bytes)
-                        )
+                        withContext(Dispatchers.IO) {
+                            app.database.macroDao().insertMacro(
+                                io.github.tabssh.storage.database.entities.Macro.fromBytes(name, bytes)
+                            )
+                        }
                         Toast.makeText(this@TabTerminalActivity, "Saved \"$name\"", Toast.LENGTH_SHORT).show()
                     } catch (e: Exception) {
                         Logger.e("TabTerminalActivity", "Failed to save macro", e)
@@ -2589,7 +2594,7 @@ private fun showSnippetsPickerForActiveTab() {
             return
         }
         lifecycleScope.launch {
-            val macros = try { app.database.macroDao().getAllMacrosList() }
+            val macros = try { withContext(Dispatchers.IO) { app.database.macroDao().getAllMacrosList() } }
                 catch (e: Exception) {
                     Logger.e("TabTerminalActivity", "Failed to load macros", e)
                     emptyList()
@@ -2608,7 +2613,7 @@ private fun showSnippetsPickerForActiveTab() {
                     // any sibling code (broadcast input, etc.) sees it.
                     active.termuxBridge.write(bytes)
                     lifecycleScope.launch {
-                        try { app.database.macroDao().incrementUsageCount(m.id) }
+                        try { withContext(Dispatchers.IO) { app.database.macroDao().incrementUsageCount(m.id) } }
                         catch (_: Exception) {}
                     }
                 }
@@ -2893,7 +2898,9 @@ private fun showSnippetsPickerForActiveTab() {
         // Recent connections (top 20 most-used)
         lifecycleScope.launch {
             try {
-                val recent = app.database.connectionDao().getFrequentlyUsedConnections(20)
+                val recent = withContext(Dispatchers.IO) {
+                    app.database.connectionDao().getFrequentlyUsedConnections(20)
+                }
                 runOnUiThread {
                     recent.forEach { profile ->
                         items += io.github.tabssh.ui.views.PaletteDialog.Item(
@@ -3009,7 +3016,7 @@ private fun showSnippetsPickerForActiveTab() {
     private fun showConnectionSelector() {
         lifecycleScope.launch {
             val connections = try {
-                app.database.connectionDao().getRecentConnections(50)
+                withContext(Dispatchers.IO) { app.database.connectionDao().getRecentConnections(50) }
             } catch (e: Exception) {
                 Logger.e("TabTerminalActivity", "Failed to load connections for picker", e)
                 emptyList()
@@ -3040,7 +3047,7 @@ private fun showSnippetsPickerForActiveTab() {
     private fun showSnippetsDialog() {
         lifecycleScope.launch {
             try {
-                val snippets = app.database.snippetDao().getFrequentlyUsedSnippets(20)
+                val snippets = withContext(Dispatchers.IO) { app.database.snippetDao().getFrequentlyUsedSnippets(20) }
 
                 if (snippets.isEmpty()) {
                     // Show create snippet dialog if no snippets exist
@@ -3094,7 +3101,7 @@ private fun showSnippetsPickerForActiveTab() {
                     terminal?.sendText(snippet.command)
 
                     // Increment usage count
-                    app.database.snippetDao().incrementUsageCount(snippet.id)
+                    withContext(Dispatchers.IO) { app.database.snippetDao().incrementUsageCount(snippet.id) }
 
                     Logger.d("TabTerminalActivity", "Inserted snippet: ${snippet.name}")
                 }
@@ -3172,7 +3179,7 @@ private fun showSnippetsPickerForActiveTab() {
 
                 getActiveTerminalView()?.sendText(snippet.applyVariables(values))
                 lifecycleScope.launch {
-                    app.database.snippetDao().incrementUsageCount(snippet.id)
+                    withContext(Dispatchers.IO) { app.database.snippetDao().incrementUsageCount(snippet.id) }
                 }
                 Logger.d("TabTerminalActivity", "Inserted snippet with variables: ${snippet.name}")
             }
@@ -3238,7 +3245,7 @@ private fun showSnippetsPickerForActiveTab() {
                             command = command,
                             category = category
                         )
-                        app.database.snippetDao().insertSnippet(snippet)
+                        withContext(Dispatchers.IO) { app.database.snippetDao().insertSnippet(snippet) }
                         showToast("Snippet created: $name")
                         Logger.d("TabTerminalActivity", "Created snippet: $name")
                     }
@@ -3253,7 +3260,7 @@ private fun showSnippetsPickerForActiveTab() {
      */
     private fun showAllSnippetsDialog() {
         lifecycleScope.launch {
-            val allSnippets = app.database.snippetDao().getFrequentlyUsedSnippets(100)
+            val allSnippets = withContext(Dispatchers.IO) { app.database.snippetDao().getFrequentlyUsedSnippets(100) }
 
             if (allSnippets.isEmpty()) {
                 showToast("No snippets yet")
@@ -3300,7 +3307,7 @@ private fun showSnippetsPickerForActiveTab() {
      */
     private fun searchAndShowSnippets(query: String) {
         lifecycleScope.launch {
-            app.database.snippetDao().searchSnippets(query).collect { results ->
+            app.database.snippetDao().searchSnippets(query).flowOn(Dispatchers.IO).collect { results ->
                 if (results.isEmpty()) {
                     showToast("No matching snippets")
                     return@collect

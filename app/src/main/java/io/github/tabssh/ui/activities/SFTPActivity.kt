@@ -20,7 +20,9 @@ import io.github.tabssh.sftp.TransferListener
 import io.github.tabssh.ui.adapters.FileAdapter
 import io.github.tabssh.ui.adapters.TransferAdapter
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import io.github.tabssh.utils.showError
 
@@ -114,22 +116,25 @@ class SFTPActivity : AppCompatActivity() {
         
         lifecycleScope.launch {
             try {
-                val connection = app.sshSessionManager.getConnection(connectionId)
+                val connection = withContext(Dispatchers.IO) {
+                    app.sshSessionManager.getConnection(connectionId)
+                }
                 if (connection == null) {
                     Logger.e("SFTPActivity", "Connection not found: $connectionId")
                     finish()
                     return@launch
                 }
-                
+
                 sftpManager = SFTPManager(connection)
-                val connected = sftpManager.connect()
+                val connected = withContext(Dispatchers.IO) { sftpManager.connect() }
 
                 if (connected) {
                     Logger.i("SFTPActivity", "SFTP connected successfully")
                     // Wave 8.5 — register this initial connection as the first tab.
                     val displayName = try {
-                        app.database.connectionDao().getConnectionById(connectionId)?.getDisplayName()
-                            ?: connectionId.take(8)
+                        withContext(Dispatchers.IO) {
+                            app.database.connectionDao().getConnectionById(connectionId)?.getDisplayName()
+                        } ?: connectionId.take(8)
                     } catch (_: Exception) { connectionId.take(8) }
                     sftpTabs.add(SftpTab(connectionId, displayName, sftpManager, "/"))
                     activeSftpTabIndex = 0
@@ -207,7 +212,7 @@ class SFTPActivity : AppCompatActivity() {
 
     private fun showAddSftpTabPicker() {
         lifecycleScope.launch {
-            val candidates = try { app.database.connectionDao().getRecentConnections(50) } catch (_: Exception) { emptyList() }
+            val candidates = try { withContext(Dispatchers.IO) { app.database.connectionDao().getRecentConnections(50) } } catch (_: Exception) { emptyList() }
                 .filter { c ->
                     // Only those with an active SSH connection — opening a fresh SSH
                     // just for SFTP would mean a separate auth dialog flow.
@@ -236,13 +241,13 @@ class SFTPActivity : AppCompatActivity() {
             return
         }
         lifecycleScope.launch {
-            val conn = app.sshSessionManager.getConnection(profile.id)
+            val conn = withContext(Dispatchers.IO) { app.sshSessionManager.getConnection(profile.id) }
             if (conn == null) {
                 runOnUiThread { showError("SSH session not active", "Error") }
                 return@launch
             }
             val mgr = SFTPManager(conn)
-            val ok = mgr.connect()
+            val ok = withContext(Dispatchers.IO) { mgr.connect() }
             runOnUiThread {
                 if (!ok) {
                     showError("Failed to open SFTP for ${profile.getDisplayName()}", "Error")
@@ -348,11 +353,13 @@ class SFTPActivity : AppCompatActivity() {
             try {
                 val directory = File(path)
                 if (directory.exists() && directory.isDirectory) {
-                    val files = directory.listFiles()?.toList() ?: emptyList()
-                    
+                    val files = withContext(Dispatchers.IO) {
+                        directory.listFiles()?.toList() ?: emptyList()
+                    }
+
                     localFiles.clear()
                     localFiles.addAll(files.sortedWith(compareBy<File> { !it.isDirectory }.thenBy { it.name }))
-                    
+
                     runOnUiThread {
                         localFileAdapter.notifyDataSetChanged()
                         binding.textLocalPath.text = path
@@ -377,7 +384,7 @@ class SFTPActivity : AppCompatActivity() {
         binding.emptyRemote.visibility = View.GONE
         lifecycleScope.launch {
             try {
-                val files = sftpManager.listRemoteFiles(path)
+                val files = withContext(Dispatchers.IO) { sftpManager.listRemoteFiles(path) }
 
                 remoteFiles.clear()
                 remoteFiles.addAll(files)
@@ -461,16 +468,18 @@ class SFTPActivity : AppCompatActivity() {
         
         lifecycleScope.launch {
             try {
-                var successCount = 0
-                for (file in selectedFiles) {
-                    if (file.isDirectory) continue
-                    
-                    // Use correct API: uploadFile(localFile, remotePath)
-                    sftpManager?.uploadFile(
-                        localFile = file,
-                        remotePath = currentRemotePath + "/" + file.name
-                    )
-                    successCount++
+                val successCount = withContext(Dispatchers.IO) {
+                    var count = 0
+                    for (file in selectedFiles) {
+                        if (file.isDirectory) continue
+                        // Use correct API: uploadFile(localFile, remotePath)
+                        sftpManager?.uploadFile(
+                            localFile = file,
+                            remotePath = currentRemotePath + "/" + file.name
+                        )
+                        count++
+                    }
+                    count
                 }
                 showToast("✅ Uploaded $successCount file(s)")
                 localFileAdapter?.clearSelection()
@@ -512,12 +521,15 @@ class SFTPActivity : AppCompatActivity() {
         val client = io.github.tabssh.sftp.SCPClient(ssh)
         val selected = localFileAdapter?.getSelectedFiles() ?: return
         lifecycleScope.launch {
-            var ok = 0
-            var fail = 0
-            for (file in selected) {
-                if (file.isDirectory) continue
-                val remote = "$currentRemotePath/${file.name}"
-                if (client.uploadFile(file, remote, null)) ok++ else fail++
+            val (ok, fail) = withContext(Dispatchers.IO) {
+                var okCount = 0
+                var failCount = 0
+                for (file in selected) {
+                    if (file.isDirectory) continue
+                    val remote = "$currentRemotePath/${file.name}"
+                    if (client.uploadFile(file, remote, null)) okCount++ else failCount++
+                }
+                okCount to failCount
             }
             runOnUiThread {
                 showToast("SCP: $ok ok, $fail failed")
@@ -538,17 +550,19 @@ class SFTPActivity : AppCompatActivity() {
         
         lifecycleScope.launch {
             try {
-                var successCount = 0
-                for (file in selectedFiles) {
-                    if (file.isDirectory) continue
-                    
-                    val localFile = File(currentLocalPath, file.name)
-                    // Use correct API: downloadFile(remotePath, localFile)
-                    sftpManager?.downloadFile(
-                        remotePath = file.path,
-                        localFile = localFile
-                    )
-                    successCount++
+                val successCount = withContext(Dispatchers.IO) {
+                    var count = 0
+                    for (file in selectedFiles) {
+                        if (file.isDirectory) continue
+                        val localFile = File(currentLocalPath, file.name)
+                        // Use correct API: downloadFile(remotePath, localFile)
+                        sftpManager?.downloadFile(
+                            remotePath = file.path,
+                            localFile = localFile
+                        )
+                        count++
+                    }
+                    count
                 }
                 showToast("✅ Downloaded $successCount file(s)")
                 remoteFileAdapter?.clearSelection()
@@ -583,7 +597,7 @@ class SFTPActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val newPath = "$currentRemotePath/$folderName"
-                val created = sftpManager.createRemoteDirectory(newPath)
+                val created = withContext(Dispatchers.IO) { sftpManager.createRemoteDirectory(newPath) }
                 
                 if (created) {
                     showToast("Folder created: $folderName")
@@ -729,7 +743,7 @@ class SFTPActivity : AppCompatActivity() {
             .setView(container)
             .setPositiveButton("Apply") { _, _ ->
                 lifecycleScope.launch {
-                    val ok = sftpManager.changeRemotePermissions(file.path, mode[0])
+                    val ok = withContext(Dispatchers.IO) { sftpManager.changeRemotePermissions(file.path, mode[0]) }
                     runOnUiThread {
                         Toast.makeText(
                             this@SFTPActivity,
@@ -807,62 +821,64 @@ class SFTPActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val remotePath = "$currentRemotePath/${localFile.name}"
-                
-                val transferTask = sftpManager.uploadFile(
-                    localFile = localFile,
-                    remotePath = remotePath,
-                    listener = object : TransferListener {
-                        override fun onProgress(transfer: TransferTask, bytesTransferred: Long, totalBytes: Long) {
-                            runOnUiThread {
-                                updateTransferProgress(transfer)
-                                
-                                // Update notification with progress
-                                io.github.tabssh.utils.NotificationHelper.showFileTransferProgress(
-                                    this@SFTPActivity,
-                                    transfer.id.hashCode(),
-                                    localFile.name,
-                                    bytesTransferred,
-                                    totalBytes,
-                                    isUpload = true
-                                )
+
+                val transferTask = withContext(Dispatchers.IO) {
+                    sftpManager.uploadFile(
+                        localFile = localFile,
+                        remotePath = remotePath,
+                        listener = object : TransferListener {
+                            override fun onProgress(transfer: TransferTask, bytesTransferred: Long, totalBytes: Long) {
+                                runOnUiThread {
+                                    updateTransferProgress(transfer)
+
+                                    // Update notification with progress
+                                    io.github.tabssh.utils.NotificationHelper.showFileTransferProgress(
+                                        this@SFTPActivity,
+                                        transfer.id.hashCode(),
+                                        localFile.name,
+                                        bytesTransferred,
+                                        totalBytes,
+                                        isUpload = true
+                                    )
+                                }
                             }
-                        }
-                        
-                        override fun onCompleted(transfer: TransferTask, result: io.github.tabssh.sftp.TransferResult) {
-                            runOnUiThread {
-                                handleTransferCompleted(transfer, result)
-                                loadRemoteDirectory(currentRemotePath) // Refresh remote files
-                                
-                                // Show completion notification
-                                when (result) {
-                                    is io.github.tabssh.sftp.TransferResult.Success -> {
-                                        io.github.tabssh.utils.NotificationHelper.showFileTransferComplete(
-                                            this@SFTPActivity,
-                                            transfer.id.hashCode(),
-                                            localFile.name,
-                                            isUpload = true
-                                        )
-                                    }
-                                    is io.github.tabssh.sftp.TransferResult.Error -> {
-                                        io.github.tabssh.utils.NotificationHelper.showConnectionError(
-                                            this@SFTPActivity,
-                                            localFile.name,
-                                            "Upload failed: ${result.message}"
-                                        )
-                                    }
-                                    is io.github.tabssh.sftp.TransferResult.Cancelled -> {
-                                        // Cancel notification silently
-                                        io.github.tabssh.utils.NotificationHelper.cancelNotification(
-                                            this@SFTPActivity,
-                                            transfer.id.hashCode()
-                                        )
+
+                            override fun onCompleted(transfer: TransferTask, result: io.github.tabssh.sftp.TransferResult) {
+                                runOnUiThread {
+                                    handleTransferCompleted(transfer, result)
+                                    loadRemoteDirectory(currentRemotePath) // Refresh remote files
+
+                                    // Show completion notification
+                                    when (result) {
+                                        is io.github.tabssh.sftp.TransferResult.Success -> {
+                                            io.github.tabssh.utils.NotificationHelper.showFileTransferComplete(
+                                                this@SFTPActivity,
+                                                transfer.id.hashCode(),
+                                                localFile.name,
+                                                isUpload = true
+                                            )
+                                        }
+                                        is io.github.tabssh.sftp.TransferResult.Error -> {
+                                            io.github.tabssh.utils.NotificationHelper.showConnectionError(
+                                                this@SFTPActivity,
+                                                localFile.name,
+                                                "Upload failed: ${result.message}"
+                                            )
+                                        }
+                                        is io.github.tabssh.sftp.TransferResult.Cancelled -> {
+                                            // Cancel notification silently
+                                            io.github.tabssh.utils.NotificationHelper.cancelNotification(
+                                                this@SFTPActivity,
+                                                transfer.id.hashCode()
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                )
-                
+                    )
+                }
+
                 activeTransfers.add(transferTask)
                 transferAdapter.notifyItemInserted(activeTransfers.size - 1)
                 refreshTransferCardVisibility()
@@ -880,62 +896,64 @@ class SFTPActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val localFile = File(currentLocalPath, remoteFile.name)
-                
-                val transferTask = sftpManager.downloadFile(
-                    remotePath = remoteFile.path,
-                    localFile = localFile,
-                    listener = object : TransferListener {
-                        override fun onProgress(transfer: TransferTask, bytesTransferred: Long, totalBytes: Long) {
-                            runOnUiThread {
-                                updateTransferProgress(transfer)
-                                
-                                // Update notification with progress
-                                io.github.tabssh.utils.NotificationHelper.showFileTransferProgress(
-                                    this@SFTPActivity,
-                                    transfer.id.hashCode(),
-                                    remoteFile.name,
-                                    bytesTransferred,
-                                    totalBytes,
-                                    isUpload = false
-                                )
+
+                val transferTask = withContext(Dispatchers.IO) {
+                    sftpManager.downloadFile(
+                        remotePath = remoteFile.path,
+                        localFile = localFile,
+                        listener = object : TransferListener {
+                            override fun onProgress(transfer: TransferTask, bytesTransferred: Long, totalBytes: Long) {
+                                runOnUiThread {
+                                    updateTransferProgress(transfer)
+
+                                    // Update notification with progress
+                                    io.github.tabssh.utils.NotificationHelper.showFileTransferProgress(
+                                        this@SFTPActivity,
+                                        transfer.id.hashCode(),
+                                        remoteFile.name,
+                                        bytesTransferred,
+                                        totalBytes,
+                                        isUpload = false
+                                    )
+                                }
                             }
-                        }
-                        
-                        override fun onCompleted(transfer: TransferTask, result: io.github.tabssh.sftp.TransferResult) {
-                            runOnUiThread {
-                                handleTransferCompleted(transfer, result)
-                                loadLocalDirectory(currentLocalPath) // Refresh local files
-                                
-                                // Show completion notification
-                                when (result) {
-                                    is io.github.tabssh.sftp.TransferResult.Success -> {
-                                        io.github.tabssh.utils.NotificationHelper.showFileTransferComplete(
-                                            this@SFTPActivity,
-                                            transfer.id.hashCode(),
-                                            remoteFile.name,
-                                            isUpload = false
-                                        )
-                                    }
-                                    is io.github.tabssh.sftp.TransferResult.Error -> {
-                                        io.github.tabssh.utils.NotificationHelper.showConnectionError(
-                                            this@SFTPActivity,
-                                            remoteFile.name,
-                                            "Download failed: ${result.message}"
-                                        )
-                                    }
-                                    is io.github.tabssh.sftp.TransferResult.Cancelled -> {
-                                        // Cancel notification silently
-                                        io.github.tabssh.utils.NotificationHelper.cancelNotification(
-                                            this@SFTPActivity,
-                                            transfer.id.hashCode()
-                                        )
+
+                            override fun onCompleted(transfer: TransferTask, result: io.github.tabssh.sftp.TransferResult) {
+                                runOnUiThread {
+                                    handleTransferCompleted(transfer, result)
+                                    loadLocalDirectory(currentLocalPath) // Refresh local files
+
+                                    // Show completion notification
+                                    when (result) {
+                                        is io.github.tabssh.sftp.TransferResult.Success -> {
+                                            io.github.tabssh.utils.NotificationHelper.showFileTransferComplete(
+                                                this@SFTPActivity,
+                                                transfer.id.hashCode(),
+                                                remoteFile.name,
+                                                isUpload = false
+                                            )
+                                        }
+                                        is io.github.tabssh.sftp.TransferResult.Error -> {
+                                            io.github.tabssh.utils.NotificationHelper.showConnectionError(
+                                                this@SFTPActivity,
+                                                remoteFile.name,
+                                                "Download failed: ${result.message}"
+                                            )
+                                        }
+                                        is io.github.tabssh.sftp.TransferResult.Cancelled -> {
+                                            // Cancel notification silently
+                                            io.github.tabssh.utils.NotificationHelper.cancelNotification(
+                                                this@SFTPActivity,
+                                                transfer.id.hashCode()
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                )
-                
+                    )
+                }
+
                 activeTransfers.add(transferTask)
                 transferAdapter.notifyItemInserted(activeTransfers.size - 1)
                 refreshTransferCardVisibility()
@@ -1014,7 +1032,7 @@ class SFTPActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val newPath = "${File(file.path).parent}/$newName"
-                val success = sftpManager.renameRemoteFile(file.path, newPath)
+                val success = withContext(Dispatchers.IO) { sftpManager.renameRemoteFile(file.path, newPath) }
                 
                 if (success) {
                     showToast("Renamed to $newName")
@@ -1044,7 +1062,7 @@ class SFTPActivity : AppCompatActivity() {
     private fun performRemoteDelete(file: RemoteFileInfo) {
         lifecycleScope.launch {
             try {
-                val success = sftpManager.deleteRemoteFile(file.path, file.isDirectory)
+                val success = withContext(Dispatchers.IO) { sftpManager.deleteRemoteFile(file.path, file.isDirectory) }
                 
                 if (success) {
                     showToast("Deleted ${file.name}")

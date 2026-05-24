@@ -17,7 +17,9 @@ import io.github.tabssh.ui.activities.ConnectionEditActivity
 import io.github.tabssh.ui.activities.TabTerminalActivity
 import io.github.tabssh.ui.adapters.ConnectionAdapter
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Fragment showing top 10 most frequently used connections
@@ -134,7 +136,9 @@ class FrequentConnectionsFragment : Fragment() {
             .setPositiveButton("Delete") { _, _ ->
                 lifecycleScope.launch {
                     try {
-                        app.database.connectionDao().deleteConnection(connection)
+                        withContext(Dispatchers.IO) {
+                            app.database.connectionDao().deleteConnection(connection)
+                        }
                         Logger.d("FrequentConnectionsFragment", "Connection deleted: ${connection.name}")
                     } catch (e: Exception) {
                         Logger.e("FrequentConnectionsFragment", "Failed to delete connection", e)
@@ -149,8 +153,10 @@ class FrequentConnectionsFragment : Fragment() {
         lifecycleScope.launch {
             try {
                 // Get top 10 connections by hybrid score
-                val connections = app.database.connectionDao().getFrequentlyUsedConnections(10)
-                
+                val connections = withContext(Dispatchers.IO) {
+                    app.database.connectionDao().getFrequentlyUsedConnections(10)
+                }
+
                 if (connections.isEmpty()) {
                     recyclerView.visibility = View.GONE
                     emptyLayout.visibility = View.VISIBLE

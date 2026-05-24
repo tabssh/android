@@ -29,7 +29,9 @@ import io.github.tabssh.themes.definitions.BuiltInThemes
 import io.github.tabssh.themes.definitions.ImportThemeResult
 import io.github.tabssh.themes.definitions.Theme
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Wave 2.4 — In-app theme editor.
@@ -338,7 +340,7 @@ class ThemeEditorActivity : AppCompatActivity() {
             ansiColors = ansi.copyOf()
         )
         lifecycleScope.launch {
-            when (val r = app.themeManager.saveCustomTheme(theme)) {
+            when (val r = withContext(Dispatchers.IO) { app.themeManager.saveCustomTheme(theme) }) {
                 is ImportThemeResult.Success -> {
                     Toast.makeText(this@ThemeEditorActivity, "Saved '${r.theme.name}'", Toast.LENGTH_SHORT).show()
                     Logger.i(TAG, "Saved custom theme ${r.theme.id}")

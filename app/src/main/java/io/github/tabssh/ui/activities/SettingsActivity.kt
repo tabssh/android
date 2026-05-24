@@ -13,7 +13,10 @@ import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.ui.activities.SyncSettingsActivity
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class SettingsActivity :
     AppCompatActivity(),
@@ -312,7 +315,9 @@ class SecuritySettingsFragment : PreferenceFragmentCompat() {
             // Clear host keys from database
             lifecycleScope.launch {
                 try {
-                    app.database.hostKeyDao().deleteAllHostKeys()
+                    withContext(Dispatchers.IO) {
+                        app.database.hostKeyDao().deleteAllHostKeys()
+                    }
                     android.widget.Toast.makeText(requireContext(), "Known hosts cleared", android.widget.Toast.LENGTH_SHORT).show()
                     Logger.i("Settings", "Cleared all known hosts")
                 } catch (e: Exception) {
@@ -624,7 +629,9 @@ class AuditSettingsFragment : PreferenceFragmentCompat() {
                 .setMessage("Delete all audit log entries? This cannot be undone.")
                 .setPositiveButton("Clear") { _, _ ->
                     lifecycleScope.launch {
-                        app.auditLogManager.deleteAllLogs()
+                        withContext(Dispatchers.IO) {
+                            app.auditLogManager.deleteAllLogs()
+                        }
                         android.widget.Toast.makeText(requireContext(), "Audit logs cleared", android.widget.Toast.LENGTH_SHORT).show()
                     }
                 }
@@ -640,21 +647,25 @@ class AuditSettingsFragment : PreferenceFragmentCompat() {
         lifecycleScope.launch {
             try {
                 val app = requireActivity().application as TabSSHApplication
-                val logs = app.database.auditLogDao().getRecent(1000) // Get last 1000 logs
-                
+                val logs = withContext(Dispatchers.IO) {
+                    app.database.auditLogDao().getRecent(1000) // Get last 1000 logs
+                }
+
                 val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
                     .format(java.util.Date())
                 val filename = "audit_logs_$timestamp.csv"
-                
+
                 val file = java.io.File(requireContext().getExternalFilesDir(null), filename)
-                file.writeText(buildString {
-                    append("Timestamp,Connection,Session,EventType,Command,Output\n")
-                    logs.forEach { log ->
-                        append("${log.timestamp},${log.connectionId},${log.sessionId},")
-                        append("${log.eventType},\"${log.command ?: ""}\",")
-                        append("\"${log.output ?: ""}\"\n")
-                    }
-                })
+                withContext(Dispatchers.IO) {
+                    file.writeText(buildString {
+                        append("Timestamp,Connection,Session,EventType,Command,Output\n")
+                        logs.forEach { log ->
+                            append("${log.timestamp},${log.connectionId},${log.sessionId},")
+                            append("${log.eventType},\"${log.command ?: ""}\",")
+                            append("\"${log.output ?: ""}\"\n")
+                        }
+                    })
+                }
                 
                 android.widget.Toast.makeText(
                     requireContext(),
@@ -692,15 +703,17 @@ class TaskerSettingsFragment : PreferenceFragmentCompat() {
         // Load connection list for allowed connections
         val app = requireActivity().application as TabSSHApplication
         lifecycleScope.launch {
-            app.database.connectionDao().getAllConnections().collect { connections ->
-                val entries = connections.map { it.name }.toTypedArray()
-                val values = connections.map { it.id.toString() }.toTypedArray()
-                
-                findPreference<androidx.preference.MultiSelectListPreference>("tasker_allowed_connections")?.apply {
-                    this.entries = entries
-                    this.entryValues = values
+            app.database.connectionDao().getAllConnections()
+                .flowOn(Dispatchers.IO)
+                .collect { connections ->
+                    val entries = connections.map { it.name }.toTypedArray()
+                    val values = connections.map { it.id.toString() }.toTypedArray()
+
+                    findPreference<androidx.preference.MultiSelectListPreference>("tasker_allowed_connections")?.apply {
+                        this.entries = entries
+                        this.entryValues = values
+                    }
                 }
-            }
         }
     }
     

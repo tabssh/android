@@ -17,7 +17,9 @@ import io.github.tabssh.ssh.forwarding.PortForwardingManager
 import io.github.tabssh.ssh.forwarding.TunnelType
 import io.github.tabssh.ui.adapters.TunnelAdapter
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Activity for managing SSH port forwarding tunnels
@@ -74,7 +76,9 @@ class PortForwardingActivity : AppCompatActivity() {
         val app = application as io.github.tabssh.TabSSHApplication
         lifecycleScope.launch {
             val candidates = try {
-                app.database.connectionDao().getRecentConnections(50)
+                withContext(Dispatchers.IO) {
+                    app.database.connectionDao().getRecentConnections(50)
+                }
             } catch (e: Exception) {
                 Logger.e("PortForwardingActivity", "Recent fetch failed", e)
                 emptyList()
