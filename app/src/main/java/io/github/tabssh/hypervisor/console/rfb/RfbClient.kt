@@ -604,7 +604,6 @@ class RfbClient(
             val last = lastUpdateTimeMs.get()
             val now  = System.currentTimeMillis()
             if (last > 0 && now - last >= KEEPALIVE_MS && fbWidth > 0 && fbHeight > 0) {
-                Logger.d(TAG, "FBUR keepalive: no update for ${now - last} ms — re-requesting full frame")
                 try {
                     sendUpdateRequest(0, 0, fbWidth, fbHeight, incremental = false)
                     // Advance the timer so we don't spam if the server is genuinely

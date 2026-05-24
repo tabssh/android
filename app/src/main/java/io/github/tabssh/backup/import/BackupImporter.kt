@@ -593,7 +593,7 @@ class BackupImporter(
             preferenceManager.setTerminalTheme(t.optString("theme", "dracula"))
             preferenceManager.setFontSize(t.optDouble("fontSize", 14.0).toFloat())
             preferenceManager.setFontFamily(t.optString("fontFamily", "Roboto Mono"))
-            preferenceManager.setCursorStyle(t.optString("cursorStyle", "block"))
+            preferenceManager.setCursorStyle(t.optString("cursorStyle", "bar"))
             preferenceManager.setCursorBlink(t.optBoolean("cursorBlink", true))
             preferenceManager.setScrollbackLines(t.optInt("scrollbackLines", 1000))
             preferenceManager.setBellNotificationEnabled(t.optBoolean("terminalBell", false))

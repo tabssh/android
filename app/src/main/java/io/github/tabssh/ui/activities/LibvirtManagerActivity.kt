@@ -8,6 +8,9 @@ import android.view.ViewGroup
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.ActivityResult
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
@@ -60,6 +63,32 @@ class LibvirtManagerActivity : AppCompatActivity() {
     private var hypervisorProfile: HypervisorProfile? = null
     private val vms = mutableListOf<LibvirtVm>()
     private lateinit var adapter: VmAdapter
+
+    /**
+     * Tracks the VM whose console was most recently launched so the result
+     * launcher can reopen it (with resize suppressed) when [VMConsoleActivity]
+     * returns after a resize-rejection disconnect.
+     */
+    private var pendingConsoleVm: LibvirtVm? = null
+
+    /**
+     * Result launcher for [VMConsoleActivity]. When the activity returns with
+     * [VMConsoleActivity.EXTRA_DISABLE_RESIZE]=true it means the server closed
+     * the connection after rejecting our SetDesktopSize request. We reopen the
+     * console immediately with resize suppressed so the user keeps a working
+     * session at the server's native resolution.
+     */
+    private val consoleLauncher: ActivityResultLauncher<Intent> =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult ->
+            val disableResize = result.data
+                ?.getBooleanExtra(VMConsoleActivity.EXTRA_DISABLE_RESIZE, false) == true
+            val vm = pendingConsoleVm
+            val client = apiClient
+            if (disableResize && vm != null && client != null) {
+                Logger.i(TAG, "Reopening VNC console for '${vm.name}' with resize suppressed")
+                openConsole(vm, client, disableResize = true)
+            }
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -216,8 +245,13 @@ class LibvirtManagerActivity : AppCompatActivity() {
      * Open a VNC console for [vm]. If the domain has no VNC display configured
      * (LibvirtException "VNC not configured"), auto-detect the VM's IP via virsh
      * and offer SSH as a fallback.
+     *
+     * @param disableResize When true, [VMConsoleActivity.EXTRA_DISABLE_RESIZE] is added to
+     *   the intent so the console suppresses SetDesktopSize for this session. Used when
+     *   relaunching after the server closed the connection due to a resize rejection.
      */
-    private fun openConsole(vm: LibvirtVm, client: LibvirtApiClient) {
+    private fun openConsole(vm: LibvirtVm, client: LibvirtApiClient, disableResize: Boolean = false) {
+        pendingConsoleVm = vm
         lifecycleScope.launch {
             showProgress("Opening console for ${vm.name}…")
             try {
@@ -226,9 +260,10 @@ class LibvirtManagerActivity : AppCompatActivity() {
                 val intent = Intent(this@LibvirtManagerActivity, VMConsoleActivity::class.java).apply {
                     putExtra(VMConsoleActivity.EXTRA_DIRECT_VNC, true)
                     putExtra(VMConsoleActivity.EXTRA_VM_NAME, vm.name)
+                    if (disableResize) putExtra(VMConsoleActivity.EXTRA_DISABLE_RESIZE, true)
                 }
                 hideProgress()
-                startActivity(intent)
+                consoleLauncher.launch(intent)
             } catch (e: LibvirtException) {
                 Logger.w(TAG, "VNC unavailable for ${vm.name}: ${e.message}")
                 hideProgress()

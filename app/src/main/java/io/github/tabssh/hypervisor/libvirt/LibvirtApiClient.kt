@@ -250,8 +250,13 @@ class LibvirtApiClient(
             ch.setPort(vncPort)
             ch.setOrgIPAddress("127.0.0.1")
             ch.setOrgPort(0)
+            // JSch requires getInputStream/getOutputStream to be called BEFORE
+            // connect() — calling them after triggers a "getInputStream() should
+            // be called before connect()" warning and may return stale references.
+            val ins = ch.inputStream
+            val out = ch.outputStream
             ch.connect(CONNECT_TIMEOUT_MS)
-            Pair(ch.inputStream, ch.outputStream)
+            Pair(ins, out)
         }
 
     // ── Lifecycle ────────────────────────────────────────────────────────────

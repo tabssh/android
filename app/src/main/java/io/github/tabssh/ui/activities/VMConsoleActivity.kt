@@ -3,6 +3,7 @@ package io.github.tabssh.ui.activities
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
+import android.view.inputmethod.InputMethodManager
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -88,6 +89,12 @@ class VMConsoleActivity : AppCompatActivity() {
         const val EXTRA_DIRECT_VNC = "direct_vnc"
         /** String — VncHost UUID; when set, connect directly to that host. */
         const val EXTRA_VNC_HOST_ID = "vnc_host_id"
+        /**
+         * Boolean — when true, [RfbClient.canRequestResize] is set to false at session start.
+         * Set in the activity result when the server closed the connection after a resize
+         * rejection so the caller can relaunch without triggering another resize.
+         */
+        const val EXTRA_DISABLE_RESIZE = "disable_resize"
 
         // Ad-hoc direct VNC extras — connect without a DB entry.
         // Useful for one-shot connections and debug sessions.
@@ -590,6 +597,11 @@ class VMConsoleActivity : AppCompatActivity() {
             vncPassword = null,
             consoleMode = true
         )
+        // Honour the resize-suppression flag set by LibvirtManagerActivity when
+        // relaunching after the server closed the connection due to a resize rejection.
+        if (intent.getBooleanExtra(EXTRA_DISABLE_RESIZE, false)) {
+            rfbClient.canRequestResize = false
+        }
         val connection = HypervisorConsoleManager.ConsoleConnection.Graphical(
             vmName = vmName,
             hypervisorType = HypervisorConsoleManager.HypervisorType.LIBVIRT,
@@ -820,6 +832,13 @@ class VMConsoleActivity : AppCompatActivity() {
                     // NOT auto-shown here — the user can tap the framebuffer to
                     // toggle it when needed.
                     vncView.requestFocus()
+                    // restartInput tells the IME to rebind its InputConnection to
+                    // vncView.  Without it the IME keeps the stale connection to
+                    // the previous focused view (typically the terminal), so soft-
+                    // keyboard commitText() events never reach VncView.onTextInput
+                    // and typed characters are silently discarded.
+                    (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager)
+                        .restartInput(vncView)
                     hideProgress()
                     refreshFloatingControls()
                 }
@@ -896,8 +915,15 @@ class VMConsoleActivity : AppCompatActivity() {
                                 }
                             }
                             else -> {
-                                showStatus("Disconnected: server does not support resize")
-                                refreshFloatingControls()
+                                // Libvirt path (Path 1): streams are one-shot from
+                                // VncStreamHolder — we cannot reconnect here. Signal the
+                                // caller (LibvirtManagerActivity) to re-open a fresh VNC
+                                // channel with resize suppressed. The activity result
+                                // carries EXTRA_DISABLE_RESIZE=true so the caller knows
+                                // to set rfbClient.canRequestResize=false on the next
+                                // session.
+                                setResult(RESULT_OK, android.content.Intent().putExtra(EXTRA_DISABLE_RESIZE, true))
+                                finish()
                             }
                         }
                         return@runOnUiThread
@@ -1202,6 +1228,8 @@ class VMConsoleActivity : AppCompatActivity() {
             val ic = androidx.core.view.WindowCompat.getInsetsController(window, view)
             if (visible) ic.hide(imeType) else {
                 vncView.requestFocus()
+                (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager)
+                    .restartInput(vncView)
                 ic.show(imeType)
             }
         }

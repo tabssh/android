@@ -29,7 +29,7 @@ BLUE := \033[0;34m
 YELLOW := \033[1;33m
 NC := \033[0m
 
-.PHONY: build check clean install logs image fetch-mosh fetch-fonts help
+.PHONY: build check clean install logs image fetch-mosh fetch-fonts adb-reconnect help
 
 .DEFAULT_GOAL := help
 
@@ -65,6 +65,16 @@ clean: ## Clean build artifacts
 	@echo -e "$(GREEN)✅ Cleaned$(NC)"
 
 ADB := $(shell command -v adb 2>/dev/null || find /opt/android /opt/android-sdk -name adb -type f 2>/dev/null | head -1)
+
+adb-reconnect: ## Reconnect to phone over WireGuard (use after phone reboot)
+	@PORT=$$(ssh phone 'getprop service.adb.tls.port 2>/dev/null'); \
+	if [ -n "$$PORT" ] && [ "$$PORT" != "0" ]; then \
+		echo "Connecting to phone on wireless-debug port $$PORT..."; \
+		$(ADB) connect 10.200.0.2:$$PORT; \
+	else \
+		echo "Wireless debugging not active. Enable it in Developer Options, then retry."; \
+		exit 1; \
+	fi
 
 install: ## Install APK to device
 	@$(ADB) install -r $(BINARIES)/tabssh-android-universal.apk

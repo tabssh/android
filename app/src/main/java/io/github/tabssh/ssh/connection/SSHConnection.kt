@@ -1267,6 +1267,11 @@ class SSHConnection(
                 exec.setPtySize(80, 24, 0, 0) // Will be updated by terminal
                 applyEnvVarsTo(exec)
                 applyForwardingFlags(currentSession, exec)
+                // JSch requires getInputStream/getOutputStream to be called BEFORE
+                // connect() to set up the piped stream infrastructure; accessing them
+                // after connect() triggers a warning and may return stale references.
+                @Suppress("UNUSED_VARIABLE") val _execIn  = exec.inputStream
+                @Suppress("UNUSED_VARIABLE") val _execOut = exec.outputStream
                 exec.connect()
                 shellChannel = exec
                 openChannels.add(exec)
@@ -1281,6 +1286,11 @@ class SSHConnection(
             // Wave 1.2: per-host env vars before channel.connect()
             applyEnvVarsTo(shell)
             applyForwardingFlags(currentSession, shell)
+            // JSch requires getInputStream/getOutputStream to be called BEFORE
+            // connect() — accessing after connect() triggers a warning and may
+            // return stale references.
+            @Suppress("UNUSED_VARIABLE") val _shellIn  = shell.inputStream
+            @Suppress("UNUSED_VARIABLE") val _shellOut = shell.outputStream
             shell.connect()
 
             shellChannel = shell
