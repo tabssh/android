@@ -298,6 +298,15 @@
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
+        <activity
+            android:name=".ui.activities.ImportExportActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.activities.SettingsActivity" />
+
+        <activity
+            android:name=".ui.activities.VncHostsActivity"
+            android:exported="false" />
+
         <!-- QR Pairing — Pair from desktop (see QR_PAIRING.md) -->
         <activity
             android:name=".ui.activities.ImportFromQrActivity"

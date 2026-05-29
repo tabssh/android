@@ -56,6 +56,12 @@
         android:icon="@android:drawable/ic_menu_manage"
         android:fragment="io.github.tabssh.ui.activities.TaskerSettingsFragment" />
 
+    <Preference
+        android:key="import_export"
+        android:title="Import / Export"
+        android:summary="Backup, restore, SSH config, and bulk import"
+        android:icon="@android:drawable/ic_menu_upload" />
+
     <PreferenceCategory
         android:title="About">
 

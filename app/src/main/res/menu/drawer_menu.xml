@@ -3,8 +3,9 @@
   Navigation drawer — items that are accessible via a main tab are NOT
   duplicated here; the drawer covers everything that has no natural tab home.
 
-  Groups: Quick → Manage → Connect → Insights → Import/Export → Settings → Diagnostics
+  Groups: Quick → Accounts → Manage → Connect → Insights → Settings → Diagnostics
   Tabs handle: Frequent | Hosts | Identities | Stats | VMs
+  Import/Export moved to Settings screen.
 -->
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
 
@@ -16,6 +17,19 @@
             android:title="Quick Connect" />
     </group>
 
+    <item android:title="Accounts">
+        <menu>
+            <item
+                android:id="@+id/nav_cloud_accounts"
+                android:icon="@android:drawable/ic_menu_upload"
+                android:title="Cloud Accounts" />
+            <item
+                android:id="@+id/nav_vnc_hosts"
+                android:icon="@android:drawable/ic_menu_view"
+                android:title="VNC Hosts" />
+        </menu>
+    </item>
+
     <item android:title="Manage">
         <menu>
             <item
@@ -26,10 +40,6 @@
                 android:id="@+id/nav_manage_groups"
                 android:icon="@android:drawable/ic_menu_agenda"
                 android:title="Groups" />
-            <item
-                android:id="@+id/nav_cloud_accounts"
-                android:icon="@android:drawable/ic_menu_upload"
-                android:title="Cloud Accounts" />
         </menu>
     </item>
 
@@ -56,35 +66,6 @@
                 android:id="@+id/nav_connection_history"
                 android:icon="@android:drawable/ic_menu_recent_history"
                 android:title="Connection History" />
-        </menu>
-    </item>
-
-    <item android:title="Import / Export">
-        <menu>
-            <item
-                android:id="@+id/nav_import_ssh_config"
-                android:icon="@android:drawable/ic_menu_upload"
-                android:title="Import SSH Config" />
-            <item
-                android:id="@+id/nav_export_ssh_config"
-                android:icon="@android:drawable/ic_menu_save"
-                android:title="Export SSH Config" />
-            <item
-                android:id="@+id/nav_bulk_import"
-                android:icon="@android:drawable/ic_menu_upload"
-                android:title="Bulk Import (CSV / JSON / PuTTY / Terraform)" />
-            <item
-                android:id="@+id/nav_pair_from_desktop"
-                android:icon="@android:drawable/ic_menu_camera"
-                android:title="Pair from Desktop (QR)" />
-            <item
-                android:id="@+id/nav_import_connections"
-                android:icon="@android:drawable/ic_menu_upload"
-                android:title="Import Backup" />
-            <item
-                android:id="@+id/nav_export_connections"
-                android:icon="@android:drawable/ic_menu_save"
-                android:title="Export Backup" />
         </menu>
     </item>
 

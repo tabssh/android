@@ -29,10 +29,8 @@ import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.ConnectionGroup
 import io.github.tabssh.storage.database.entities.Identity
-import io.github.tabssh.storage.database.entities.VncHost
 import io.github.tabssh.ui.activities.ConnectionEditActivity
 import io.github.tabssh.ui.activities.TabTerminalActivity
-import io.github.tabssh.ui.activities.VMConsoleActivity
 import io.github.tabssh.ui.adapters.ConnectionAdapter
 import io.github.tabssh.ui.adapters.GroupedConnectionAdapter
 import io.github.tabssh.ui.models.ConnectionListItem
@@ -68,7 +66,6 @@ class ConnectionsFragment : Fragment() {
     private var allConnections = listOf<ConnectionProfile>()
     private var allGroups = listOf<ConnectionGroup>()
     private var allIdentities = listOf<Identity>()
-    private var allVncHosts = listOf<VncHost>()
     private var currentSearchQuery = ""
     private var currentSortOption = SortOption.NAME_ASC
     private var currentGroupSortOption = GroupSortOption.NAME_ASC
@@ -381,14 +378,6 @@ class ConnectionsFragment : Fragment() {
     }
     
     private fun openConnection(connection: ConnectionProfile) {
-        if (connection.id.startsWith("vnc:")) {
-            val realId = connection.id.removePrefix("vnc:")
-            Logger.d("ConnectionsFragment", "Opening VNC connection: ${connection.name}")
-            startActivity(Intent(requireContext(), VMConsoleActivity::class.java).apply {
-                putExtra(VMConsoleActivity.EXTRA_VNC_HOST_ID, realId)
-            })
-            return
-        }
         Logger.d("ConnectionsFragment", "Opening connection: ${connection.name}")
         // Prompt to reattach if a tab already exists for this profile —
         // ConnectionLauncher handles the dialog + the no-existing-tab fast path.
@@ -396,25 +385,6 @@ class ConnectionsFragment : Fragment() {
     }
     
     private fun showConnectionMenu(connection: ConnectionProfile) {
-        if (connection.id.startsWith("vnc:")) {
-            // VNC hosts: no SFTP, no duplicate (VncHost has its own edit form).
-            val items = arrayOf("Connect", "Edit", "Delete")
-            AlertDialog.Builder(requireContext())
-                .setTitle(connection.name)
-                .setItems(items) { _, which ->
-                    when (which) {
-                        0 -> openConnection(connection)
-                        1 -> {
-                            val realId = connection.id.removePrefix("vnc:")
-                            startActivity(ConnectionEditActivity.createVncIntent(requireContext(), realId))
-                        }
-                        2 -> deleteVncHost(connection)
-                    }
-                }
-                .show()
-            return
-        }
-
         // Order: Connect → Browse Files → Edit → Duplicate → Delete.
         // "Browse Files" sits between Connect and Edit per UX feedback —
         // it's a top-level action a user reaches for as often as Connect,
@@ -433,25 +403,6 @@ class ConnectionsFragment : Fragment() {
                     4 -> deleteConnection(connection)
                 }
             }
-            .show()
-    }
-
-    private fun deleteVncHost(connection: ConnectionProfile) {
-        AlertDialog.Builder(requireContext())
-            .setTitle("Delete VNC Connection")
-            .setMessage("Are you sure you want to delete '${connection.name}'?")
-            .setPositiveButton("Delete") { _, _ ->
-                val realId = connection.id.removePrefix("vnc:")
-                lifecycleScope.launch {
-                    try {
-                        app.database.vncHostDao().deleteById(realId)
-                        Logger.d("ConnectionsFragment", "VNC host deleted: ${connection.name}")
-                    } catch (e: Exception) {
-                        Logger.e("ConnectionsFragment", "Failed to delete VNC host", e)
-                    }
-                }
-            }
-            .setNegativeButton("Cancel", null)
             .show()
     }
 
@@ -1107,14 +1058,12 @@ class ConnectionsFragment : Fragment() {
                 try {
                     combine(
                         app.database.connectionDao().getAllConnections(),
-                        app.database.connectionGroupDao().getAllGroups(),
-                        app.database.vncHostDao().getAllHosts()
-                    ) { connections, groups, vncHosts ->
-                        Triple(connections, groups, vncHosts)
-                    }.collect { (connections, groups, vncHosts) ->
+                        app.database.connectionGroupDao().getAllGroups()
+                    ) { connections, groups ->
+                        Pair(connections, groups)
+                    }.collect { (connections, groups) ->
                         allConnections = connections
                         allGroups = groups
-                        allVncHosts = vncHosts
 
                         if (useGroupedView) {
                             applyGroupedView()
@@ -1122,7 +1071,7 @@ class ConnectionsFragment : Fragment() {
                             applySortAndFilter()
                         }
 
-                        Logger.d("ConnectionsFragment", "Loaded ${connections.size} connections, ${groups.size} groups, ${vncHosts.size} VNC hosts")
+                        Logger.d("ConnectionsFragment", "Loaded ${connections.size} connections, ${groups.size} groups")
                     }
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e
@@ -1133,30 +1082,9 @@ class ConnectionsFragment : Fragment() {
         }
     }
 
-    /**
-     * Convert a [VncHost] into a synthetic [ConnectionProfile] used only for
-     * display inside this fragment. The ID prefix `"vnc:"` is the discriminator
-     * used by [openConnection], [showConnectionMenu], etc. to route actions to
-     * VNC-specific paths rather than SSH paths.
-     */
-    private fun VncHost.toSyntheticProfile(): ConnectionProfile = ConnectionProfile(
-        id       = "vnc:$id",
-        name     = name,
-        host     = host,
-        port     = effectivePort,
-        username = "",
-        groupId  = groupId,
-        colorTag = colorTag,
-        lastConnected = lastConnected
-    )
-    
     private fun applyGroupedView() {
         // Build ConnectionListItem list
         val items = mutableListOf<ConnectionListItem>()
-
-        // Merge VNC hosts as synthetic ConnectionProfiles alongside SSH connections.
-        val vncProfiles = allVncHosts.map { it.toSyntheticProfile() }
-        val allProfilesMerged = allConnections + vncProfiles
 
         // Add grouped connections — user groups first, VM Hosts groups at the end,
         // cloud groups hidden entirely (their connections don't appear in this view).
@@ -1173,7 +1101,7 @@ class ConnectionsFragment : Fragment() {
             .sortedBy { it.name.lowercase() }
         val sortedGroups = userGroups + vmGroups
         for (group in sortedGroups) {
-            val groupConnections = allProfilesMerged.filter { it.groupId == group.id }
+            val groupConnections = allConnections.filter { it.groupId == group.id }
             if (groupConnections.isNotEmpty()) {
                 // Add group header
                 items.add(ConnectionListItem.GroupHeader(
@@ -1200,7 +1128,7 @@ class ConnectionsFragment : Fragment() {
         // shown in the Hosts view at all.
         val existingGroupIds = allGroups.map { it.id }.toSet()
         val cloudGroupIds = allGroups.filter { it.groupType == "cloud" }.map { it.id }.toSet()
-        val ungroupedConnections = allProfilesMerged.filter {
+        val ungroupedConnections = allConnections.filter {
             (it.groupId == null || it.groupId !in existingGroupIds) && it.groupId !in cloudGroupIds
         }
         if (ungroupedConnections.isNotEmpty()) {
@@ -1266,11 +1194,10 @@ class ConnectionsFragment : Fragment() {
     }
 
     private fun filterConnections(query: String) {
-        val allProfilesMerged = allConnections + allVncHosts.map { it.toSyntheticProfile() }
         val filtered = if (query.isEmpty()) {
-            allProfilesMerged
+            allConnections
         } else {
-            allProfilesMerged.filter { connection ->
+            allConnections.filter { connection ->
                 connection.name.contains(query, ignoreCase = true) ||
                 connection.host.contains(query, ignoreCase = true) ||
                 connection.username.contains(query, ignoreCase = true)

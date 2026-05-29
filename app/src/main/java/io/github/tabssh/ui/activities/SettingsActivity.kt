@@ -92,6 +92,11 @@ class SettingsMainFragment : PreferenceFragmentCompat() {
             true
         }
 
+        findPreference<Preference>("import_export")?.setOnPreferenceClickListener {
+            startActivity(Intent(requireContext(), ImportExportActivity::class.java))
+            true
+        }
+
         findPreference<Preference>("about_version")?.apply {
             try {
                 val versionName = io.github.tabssh.BuildConfig.VERSION_NAME ?: "1.0.0"
