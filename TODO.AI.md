@@ -60,6 +60,302 @@
 
 ---
 
+## 🔶 Cloud Accounts — Manager UI + Power Controls + Edit (active work)
+
+**Goal:** Every cloud account tap opens a full manager screen showing live instance state with
+Start / Stop / Restart / Force Restart / Connect actions — identical UX to OciManagerActivity.
+Accounts must also be editable after creation.
+
+**Dependency order:** A → B+C (parallel) → D → E+F (parallel) → G → H
+
+---
+
+### A: Data model + interface (do first — everything else depends on this) ☐
+
+**A1** — Create `CloudInstanceState` data class
+File: `app/src/main/java/io/github/tabssh/cloud/CloudInstanceState.kt` (NEW)
+
+Fields: `id: String`, `name: String`, `ip: String?`, `privateIp: String?`,
+`status: String` (normalized: "running"|"stopped"|"starting"|"stopping"|"rebooting"|"unknown"),
+`rawStatus: String` (provider-verbatim, shown in badge),
+`region: String?`, `metadata: Map<String,String>` (zone, shape, etc.)
+
+Normalization map (apply in each client):
+- running/active/RUNNING → "running"
+- off/offline/stopped/STOPPED/TERMINATED → "stopped"
+- booting/starting/STARTING/pending → "starting"
+- shutting_down/stopping/STOPPING → "stopping"
+- rebooting/REBOOTING/rebooting → "rebooting"
+- anything else → "unknown"
+
+**A2** — Extend `CloudProvider` interface
+File: `app/src/main/java/io/github/tabssh/cloud/CloudProvider.kt`
+
+Add 5 new methods to the existing interface:
+```
+suspend fun fetchLiveInstances(bearerToken: String): List<CloudInstanceState>
+suspend fun startInstance(bearerToken: String, instanceId: String): Boolean
+suspend fun stopInstance(bearerToken: String, instanceId: String): Boolean
+suspend fun restartInstance(bearerToken: String, instanceId: String): Boolean
+suspend fun forceRestartInstance(bearerToken: String, instanceId: String): Boolean
+```
+
+**A3** — Add provider factory extension to `CloudProvider.kt`
+```kotlin
+fun CloudProviderType.newClient(): CloudProvider = when (this) {
+    DIGITALOCEAN -> DigitalOceanClient(); HETZNER -> HetznerClient(); LINODE -> LinodeClient()
+    VULTR -> VultrClient(); AWS -> AwsEc2Client(); GCP -> GcpComputeClient()
+    AZURE -> AzureVmClient(); OCI -> OciCloudClient()
+}
+```
+Replace all 3 existing `when` switches (CloudAccountsFragment, CloudAccountsActivity,
+and the new CloudAccountManagerActivity) with `CloudProviderType.fromTag(...)?.newClient()`.
+
+---
+
+### B: Power actions in all 8 clients (parallel, each independent) ☐
+
+Implement `fetchLiveInstances` + the 4 power methods in each client.
+All use the same auth scheme already in `fetchInventory` for that client.
+
+**B1 — DigitalOceanClient** (bearer token)
+- `fetchLiveInstances`: GET `/v2/droplets?per_page=200`; map `status` (new→starting, active→running, off/archive→stopped)
+- `startInstance`: POST `/v2/droplets/{id}/actions` body `{"type":"power_on"}`
+- `stopInstance`: POST `/v2/droplets/{id}/actions` body `{"type":"shutdown"}`
+- `restartInstance`: POST `/v2/droplets/{id}/actions` body `{"type":"reboot"}`
+- `forceRestartInstance`: POST `/v2/droplets/{id}/actions` body `{"type":"power_cycle"}`
+- Success: HTTP 201; check `"action"."status" != "errored"`
+
+**B2 — HetznerClient** (bearer token)
+- `fetchLiveInstances`: GET `/v1/servers?per_page=200`; map `status` (running→running, off→stopped, starting→starting, stopping→stopping, restarting→rebooting)
+- `startInstance`: POST `/v1/servers/{id}/actions/power_on`
+- `stopInstance`: POST `/v1/servers/{id}/actions/power_off`
+- `restartInstance`: POST `/v1/servers/{id}/actions/reboot`
+- `forceRestartInstance`: POST `/v1/servers/{id}/actions/reset`
+- Success: HTTP 201
+
+**B3 — LinodeClient** (bearer token)
+- `fetchLiveInstances`: GET `/v4/linode/instances?page_size=200`; map `status` (running→running, offline→stopped, booting→starting, shutting_down→stopping, rebooting→rebooting)
+- `startInstance`: POST `/v4/linode/instances/{id}/boot`
+- `stopInstance`: POST `/v4/linode/instances/{id}/shutdown`
+- `restartInstance`: POST `/v4/linode/instances/{id}/reboot`
+- `forceRestartInstance`: POST `/v4/linode/instances/{id}/reboot` (Linode has no hard reset — same as restart; note this in a comment)
+- Success: HTTP 200
+
+**B4 — VultrClient** (bearer token)
+- `fetchLiveInstances`: GET `/v2/instances?per_page=200`; use `power_status` (running→running, stopped→stopped); check `server_status` as fallback
+- `startInstance`: POST `/v2/instances/{id}/start`
+- `stopInstance`: POST `/v2/instances/{id}/halt`
+- `restartInstance`: POST `/v2/instances/{id}/reboot`
+- `forceRestartInstance`: POST `/v2/instances/{id}/reboot` (Vultr has no hard reset)
+- Success: HTTP 204
+
+**B5 — AwsEc2Client** (AKID:SECRET:REGION packed string, SigV4)
+- `fetchLiveInstances`: existing `DescribeInstances` XML call but include all states (remove RUNNING-only filter); map `instanceState.name` (running→running, stopped→stopped, pending→starting, stopping→stopping, shutting-down→stopping)
+- **Important:** `CloudInstanceState.id` must carry the EC2 instance ID (`i-xxxx`), not the DNS name
+- `startInstance`: GET `?Action=StartInstances&InstanceId.1={id}`
+- `stopInstance`: GET `?Action=StopInstances&InstanceId.1={id}`
+- `restartInstance`: GET `?Action=RebootInstances&InstanceId.1={id}`
+- `forceRestartInstance`: GET `?Action=RebootInstances&InstanceId.1={id}` (EC2 has no separate force restart — same as reboot; comment this)
+- Success: HTTP 200 with `<return>true</return>`
+
+**B6 — GcpComputeClient** (service-account JSON, JWT auth)
+- `fetchLiveInstances`: existing `/aggregated/instances` call but include all states; map `status` (RUNNING→running, TERMINATED/STOPPED→stopped, STOPPING→stopping, STAGING/PROVISIONING→starting)
+- **Important:** store `zone` (last segment of `zone` field) in `metadata["zone"]` and instance `name` in `id` (GCP power URLs use name + zone, not numeric ID)
+- Access token: re-request for each call (existing pattern)
+- `startInstance(name)`: POST `/compute/v1/projects/{proj}/zones/{meta["zone"]}/instances/{name}/start`
+- `stopInstance(name)`: POST same base + `/stop`
+- `restartInstance(name)`: POST same base + `/reset` (GCP reset = hard power cycle; graceful restart requires SSH to OS — note this in comment)
+- `forceRestartInstance(name)`: same as restartInstance for GCP
+- Success: HTTP 200
+
+**B7 — AzureVmClient** (TENANT:CLIENT_ID:CLIENT_SECRET:SUBSCRIPTION_ID, OAuth2)
+- `fetchLiveInstances`: existing list-VMs call + `?$expand=instanceView`; parse power state from `properties.instanceView.statuses[]` where `code` starts with `"PowerState/"`; map "running"→running, "stopped/deallocated"→stopped, "starting"→starting, "stopping"→stopping
+- Store VM name (last segment of `id`) in `CloudInstanceState.id`; store resource group in `metadata["resourceGroup"]`
+- Access token: re-request (existing pattern)
+- `startInstance`: POST `/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Compute/virtualMachines/{name}/start?api-version=2023-03-01`
+- `stopInstance`: POST same base + `/deallocate` (deallocate = no billing vs powerOff which still bills)
+- `restartInstance`: POST same base + `/restart`
+- `forceRestartInstance`: POST same base + `/restart?skipShutdown=true`
+- Success: HTTP 200 or 202 (accept both; 202 = async accepted)
+
+**B8 — OciCloudClient** (JSON-packed credentials → OciApiClient)
+- `fetchLiveInstances`: `apiClient.listInstances(compartment)` — already returns all states; map `lifecycleState` (RUNNING→running, STOPPED→stopped, STARTING→starting, STOPPING/TERMINATING→stopping)
+- Only call `getInstancePublicIp` for RUNNING instances
+- `startInstance(id)`: `apiClient.instanceAction(id, OciInstanceAction.START)`
+- `stopInstance(id)`: `apiClient.instanceAction(id, OciInstanceAction.SOFTSTOP)`
+- `restartInstance(id)`: `apiClient.instanceAction(id, OciInstanceAction.SOFTRESET)`
+- `forceRestartInstance(id)`: `apiClient.instanceAction(id, OciInstanceAction.RESET)`
+
+---
+
+### C: New layout files ☐
+
+**C1** — `app/src/main/res/layout/activity_cloud_manager.xml` (NEW)
+Mirror `activity_oci_manager.xml`:
+- `AppBarLayout` + `MaterialToolbar` id=`toolbar`
+- Horizontal row: `MaterialButton` "Refresh" id=`btn_refresh`
+- `ProgressBar` horizontal indeterminate id=`progress_bar` visibility=gone
+- `TextView` id=`status_text` centered visibility=gone
+- `RecyclerView` id=`instance_recycler` weight=1 clipToPadding=false paddingBottom=72dp
+
+**C2** — `app/src/main/res/layout/item_cloud_instance.xml` (NEW)
+`MaterialCardView` (margin 8dp, elevation 2dp):
+```
+┌─────────────────────────────────────────────────────────┐
+│  [STATE BADGE]  Instance Name                  Region   │
+│                 192.0.2.1                               │
+├─────────────────────────────────────────────────────────┤
+│  [Connect]  [Start]  [Stop]  [Restart]  [Force Restart] │
+└─────────────────────────────────────────────────────────┘
+```
+IDs: `tv_instance_name`, `tv_instance_ip` (gone when null), `tv_instance_region` (gone when null),
+`tv_state_badge` (colored pill — tint from status), `btn_connect`, `btn_start`, `btn_stop`,
+`btn_restart`, `btn_force_restart`
+
+State badge tints (use `MaterialCardView` background + `TextView` foreground):
+- running → green (`@color/state_running` or similar)
+- stopped → neutral grey
+- starting/stopping/rebooting → amber
+- unknown → surface
+
+---
+
+### D: `CloudAccountManagerActivity` ☐
+
+**File:** `app/src/main/java/io/github/tabssh/ui/activities/CloudAccountManagerActivity.kt` (NEW)
+
+Pattern: `OciManagerActivity` generalized for any `CloudProvider`.
+
+```kotlin
+class CloudAccountManagerActivity : AppCompatActivity() {
+    companion object {
+        const val EXTRA_ACCOUNT_ID = "cloud_account_id"
+    }
+}
+```
+
+**Startup flow:**
+1. `intent.getStringExtra(EXTRA_ACCOUNT_ID)` → finish with error if null
+2. Load `CloudAccount` from Room on IO
+3. Load token: `securePasswordManager.retrievePassword("cloud_token_${account.id}")`
+4. Build provider: `CloudProviderType.fromTag(account.provider)?.newClient()` (from A3)
+5. Toolbar title = `account.name` + provider display name
+6. Call `loadInstances()`
+
+**`loadInstances()`:** show progress → `provider.fetchLiveInstances(token)` on IO → update adapter → hide progress
+
+**`performAction(inst, action: CloudAction)` where `CloudAction = enum {START,STOP,RESTART,FORCE_RESTART}`:**
+- show progress
+- call matching provider method on IO
+- Toast result
+- `delay(2000)` then `loadInstances()`
+
+**Button visibility in adapter (from `CloudInstanceState.status`):**
+- `"running"`: connect (if ip != null) + stop + restart + forceRestart visible; start gone
+- `"stopped"`: start visible; all others gone
+- transitional states: all buttons gone (show spinner or "in progress" label)
+- `"unknown"`: all buttons gone
+
+**`handleSshConnect(inst: CloudInstanceState)`:**
+- If `inst.ip == null`: Toast "No IP — start instance first", return
+- Look up existing `ConnectionProfile` by `host == inst.ip` and `port == 22`
+- Show SSH config dialog: username (provider default — see defaults table below), port 22,
+  auth method (PASSWORD/PUBLIC_KEY), key picker when PUBLIC_KEY
+- On connect: upsert `ConnectionProfile` (groupId = SystemGroupHelper "cloud" group),
+  start `TabTerminalActivity.createIntent(profile, autoConnect=true)`
+
+**Default SSH usernames by provider:**
+- DigitalOcean, Hetzner, Linode, Vultr → `root`
+- AWS → `ec2-user`
+- GCP → `""` (empty — show hint "varies by OS image")
+- Azure → `azureuser`
+- OCI → `opc`
+
+**Register in `AndroidManifest.xml`:**
+Add `<activity android:name=".ui.activities.CloudAccountManagerActivity" />` alongside other managers.
+
+---
+
+### E: Edit cloud account ☐
+
+**E1** — Add edit button to `item_cloud_account.xml`
+Check the layout; add an edit icon button (pencil) id=`btn_edit` beside the existing refresh/delete buttons.
+
+**E2** — `showEditAccountDialog(account: CloudAccount)` in `CloudAccountsFragment.kt`
+- Load token: `app.securePasswordManager.retrievePassword("cloud_token_${account.id}")`
+- For non-OCI: reuse `dialog_add_cloud_account` layout; pre-fill name + token; lock provider spinner (disabled — type can't change after creation); on save: upsert + re-store token + update `modifiedAt`
+- For OCI: call `showOciCredentialsDialog(account.name)` pre-populated: parse stored JSON → fill all 7 fields
+
+**E3** — Wire `onEdit` callback in `CloudAccountAdapter`
+Add `onEdit: (CloudAccount) -> Unit` param; bind `b.btnEdit.setOnClickListener { onEdit(account) }`;
+pass `{ showEditAccountDialog(it) }` from `onViewCreated`.
+
+---
+
+### F: OCI credentials — file import ☐
+
+**F1** — Add "📂 Import .oci/config" button to `showOciCredentialsDialog`
+In `CloudAccountsFragment.kt`:
+- Register `ActivityResultLauncher<Intent>` in `onCreate`/`onAttach` for `ACTION_OPEN_DOCUMENT`
+- Button tap: launch file picker with MIME `*/*`
+- On result: read file bytes → `OciConfigParser.parse(text)` (already exists at `io.github.tabssh.hypervisor.oci.OciConfigParser`)
+- Pre-fill: tenancy, user, fingerprint, region from first parsed profile
+- PEM key: `key_file` path from config — if accessible via SAF read it; otherwise prompt user to select the key file separately with a second picker
+
+---
+
+### G: Wire CloudAccountsFragment to launch manager activity ☐
+
+**File:** `app/src/main/java/io/github/tabssh/ui/fragments/CloudAccountsFragment.kt`
+
+In `onViewCreated`, change the `onItemClick` lambda:
+```kotlin
+onItemClick = { account ->
+    startActivity(
+        Intent(requireContext(), CloudAccountManagerActivity::class.java)
+            .putExtra(CloudAccountManagerActivity.EXTRA_ACCOUNT_ID, account.id)
+    )
+}
+```
+Keep the old `showAccountHosts()` method — it's still called from `CloudAccountsActivity`.
+
+---
+
+### H: Cleanup ☐
+
+**H1** — Fix `switchEnabled` in `CloudAccountsFragment`
+Currently hardcoded to `true` with no listener. Either wire it to toggle `account.enabled`
++ `cloudAccountDao().update(...)`, OR remove the switch from `item_cloud_account.xml` entirely
+if per-account enable/disable is not needed for v1.
+
+**H2** — Mark `CloudAccountsActivity` as legacy
+Add `@Deprecated("Use CloudAccountsFragment inside InfraFragment")` kdoc.
+The class can stay as-is otherwise — it's still reachable from an edge path.
+
+---
+
+### Default SSH usernames reference (for D and E)
+
+| Provider | Default username |
+|---|---|
+| DigitalOcean | `root` |
+| Hetzner | `root` |
+| Linode | `root` |
+| Vultr | `root` |
+| AWS EC2 | `ec2-user` |
+| GCP Compute | `""` (empty — varies by image) |
+| Azure | `azureuser` |
+| OCI | `opc` |
+
+---
+
+## ✅ Recently Shipped (this session)
+
+- **`3905de0f8f63`** 🐛 Long-press terminal menu: trimmed 9→7 items; toggle labels now computed live inside `post{}` ("Show/Hide system keyboard", "Show/Hide key bar"); Font size + Close tab removed (both live in ☰ palette). OCI added to Cloud Accounts: `CloudProviderType.OCI`, `OciCloudClient` (JSON-packed creds → OciApiClient), multi-field credentials dialog in `CloudAccountsFragment`, token field hides when OCI selected, `HypervisorEditActivity` OCI entry labeled legacy.
+
+---
+
 ## 📋 Documented but not yet implemented
 
 These are in the codebase or spec but **not** working end-to-end. Post-v1 roadmap only.
