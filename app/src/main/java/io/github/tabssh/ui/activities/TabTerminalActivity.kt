@@ -57,6 +57,8 @@ class TabTerminalActivity : AppCompatActivity() {
         // activity reads this in handleIntent(), looks up the tab in the
         // shared TabManager, and switches to its index.
         const val EXTRA_TAB_ID = "tab_id"
+        // Preference key that persists whether the custom function-key bar is visible.
+        const val PREF_KEY_BAR_VISIBLE = "key_bar_visible"
 
         fun createIntent(context: Context, profile: ConnectionProfile, autoConnect: Boolean = true): Intent {
             return Intent(context, TabTerminalActivity::class.java).apply {
@@ -2878,6 +2880,10 @@ private fun showSnippetsPickerForActiveTab() {
         items += io.github.tabssh.ui.views.PaletteDialog.Item("Increase font size", "Ctrl+= (or Volume Up)") { adjustFontSize(+2) }
         items += io.github.tabssh.ui.views.PaletteDialog.Item("Decrease font size", "Ctrl+- (or Volume Down)") { adjustFontSize(-2) }
         items += io.github.tabssh.ui.views.PaletteDialog.Item("Toggle keyboard", null) { toggleKeyboard() }
+        val barLabel = if (customKeyboardVisible) "Hide key bar" else "Show key bar"
+        items += io.github.tabssh.ui.views.PaletteDialog.Item(barLabel, "Show or hide the custom function-key bar") {
+            if (customKeyboardVisible) hideCustomKeyboardBar() else showCustomKeyboardBar()
+        }
         items += io.github.tabssh.ui.views.PaletteDialog.Item("Paste from clipboard", null) { pasteFromClipboard() }
         io.github.tabssh.ui.views.PaletteDialog.show(this, "Command Palette", items)
     }
@@ -3488,6 +3494,12 @@ private fun showSnippetsPickerForActiveTab() {
     }
     
     private fun setupCustomKeyboard() {
+        // Restore the user's bar-visibility preference (default: visible).
+        val barVisible = app.preferencesManager.getBoolean(PREF_KEY_BAR_VISIBLE, true)
+        customKeyboardVisible = barVisible
+        binding.multiRowKeyboard.visibility =
+            if (barVisible) android.view.View.VISIBLE else android.view.View.GONE
+
         // Wire listeners synchronously — these are cheap.
         binding.multiRowKeyboard.setOnKeyClickListener { key ->
             handleCustomKeyPress(key)
@@ -3554,18 +3566,23 @@ private fun showSnippetsPickerForActiveTab() {
 
         when (key.id) {
             "PASTE" -> {
-                // Retained for users on older keyboard customisations that
-                // still ship the legacy PASTE key. Default 3+ row layouts
-                // emit "MENU" now (which contains Paste).
-                Logger.d("TabTerminalActivity", "Paste action")
+                // Compat fallback for saved layouts that still contain the
+                // legacy PASTE key — the default palette now uses CLIPBOARD.
+                Logger.d("TabTerminalActivity", "Paste action (legacy key)")
                 pasteFromClipboard()
+            }
+            "CLIPBOARD" -> {
+                Logger.d("TabTerminalActivity", "Clipboard menu")
+                showClipboardMenu()
             }
             "MENU" -> {
                 Logger.d("TabTerminalActivity", "Menu key — opening terminal bottom sheet")
                 showTerminalMenu()
             }
             "SEL" -> {
-                Logger.d("TabTerminalActivity", "Select key — arming drag-select on next touch")
+                // Compat fallback for saved layouts that still contain the
+                // legacy SEL key — the default palette now uses CLIPBOARD.
+                Logger.d("TabTerminalActivity", "Select key (legacy) — arming drag-select on next touch")
                 getActiveTerminalView()?.armSelectionForNextDrag()
                 Toast.makeText(
                     this,
@@ -3611,10 +3628,39 @@ private fun showSnippetsPickerForActiveTab() {
     private fun hideCustomKeyboardBar() {
         customKeyboardVisible = false
         binding.multiRowKeyboard.visibility = android.view.View.GONE
+        app.preferencesManager.setBoolean(PREF_KEY_BAR_VISIBLE, false)
     }
 
     private fun showCustomKeyboardBar() {
         customKeyboardVisible = true
         binding.multiRowKeyboard.visibility = android.view.View.VISIBLE
+        app.preferencesManager.setBoolean(PREF_KEY_BAR_VISIBLE, true)
     }
+
+    /**
+     * Show a dialog with Copy / Paste / Select All clipboard actions.
+     * Replaces the old SEL and PASTE keyboard keys — both actions live here
+     * together with a Select All shortcut (sends Ctrl+A).
+     */
+    private fun showClipboardMenu() {
+        val actions = arrayOf("📋  Paste", "✂️  Copy (select text)", "☑️  Select All (Ctrl+A)")
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Clipboard")
+            .setItems(actions) { _, which ->
+                when (which) {
+                    0 -> pasteFromClipboard()
+                    1 -> {
+                        getActiveTerminalView()?.armSelectionForNextDrag()
+                        Toast.makeText(
+                            this,
+                            "Drag on the terminal to select. Tap Copy when done.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    2 -> getActiveTerminalView()?.sendText("")
+                }
+            }
+            .show()
+    }
+
 }

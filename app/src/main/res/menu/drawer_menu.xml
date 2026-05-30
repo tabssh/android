@@ -20,10 +20,6 @@
     <item android:title="Accounts">
         <menu>
             <item
-                android:id="@+id/nav_cloud_accounts"
-                android:icon="@android:drawable/ic_menu_upload"
-                android:title="Cloud Accounts" />
-            <item
                 android:id="@+id/nav_vnc_hosts"
                 android:icon="@android:drawable/ic_menu_view"
                 android:title="VNC Hosts" />

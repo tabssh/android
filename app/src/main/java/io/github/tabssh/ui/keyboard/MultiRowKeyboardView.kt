@@ -418,7 +418,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
          *
          * Layout — row 1: CTL(2×) TAB(2×) ALT : / ↑ ↓ ← →
          *          row 2: ENT(2×) ESC(2×) HOME END PGUP PGDN FN
-         *          row 3: | \ - ~ _ ` $ * < > SEL
+         *          row 3: | \ - ~ _ ` $ * < > 📋 (clipboard menu)
          *          row 4: F1-F6
          *          row 5: F7-F12
          *
@@ -447,7 +447,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
             val end   = KeyboardKey("END",   "END",  "[F")
             val pgup  = KeyboardKey("PGUP",  "PGUP", "[5~")
             val pgdn  = KeyboardKey("PGDN",  "PGDN", "[6~")
-            val sel   = KeyboardKey("SEL",   "SEL",  "", KeyboardKey.KeyCategory.ACTION)
+            val clip  = KeyboardKey("CLIPBOARD", "📋", "", KeyboardKey.KeyCategory.ACTION)
 
             // Row 1 (all layouts): CTL(2×) TAB(2×) ALT : / ↑ ↓ ← →
             val row1 = listOf(ctl, tab, alt, colon, slash, up, down, left, right)
@@ -455,7 +455,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
             // Row 2 (layouts ≥ 2): ENT(2×) ESC(2×) HOME END PGUP PGDN FN
             val row2 = listOf(ent, esc, home, end, pgup, pgdn, fn)
 
-            // Row 3 (layouts ≥ 3): shell/vim symbols + SEL
+            // Row 3 (layouts ≥ 3): shell/vim symbols + clipboard menu button
             val row3 = listOf(
                 KeyboardKey("PIPE",       "|",  "|",  KeyboardKey.KeyCategory.SYMBOL),
                 KeyboardKey("BACKSLASH",  "\\", "\\", KeyboardKey.KeyCategory.SYMBOL),
@@ -467,7 +467,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
                 KeyboardKey("STAR",       "*",  "*",  KeyboardKey.KeyCategory.SYMBOL),
                 KeyboardKey("LT",         "<",  "<",  KeyboardKey.KeyCategory.SYMBOL),
                 KeyboardKey("GT",         ">",  ">",  KeyboardKey.KeyCategory.SYMBOL),
-                sel
+                clip
             )
 
             // Row 4 (layouts ≥ 4): F1-F6

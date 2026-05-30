@@ -240,7 +240,6 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             // Manage
             R.id.nav_snippets -> startActivity(Intent(this, SnippetManagerActivity::class.java))
             R.id.nav_manage_groups -> startActivity(Intent(this, GroupManagementActivity::class.java))
-            R.id.nav_cloud_accounts -> startActivity(Intent(this, CloudAccountsActivity::class.java))
 
             // Connect
             R.id.nav_port_forwarding -> startActivity(Intent(this, PortForwardingActivity::class.java))

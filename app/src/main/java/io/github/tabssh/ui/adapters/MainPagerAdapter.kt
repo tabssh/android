@@ -18,15 +18,15 @@ import io.github.tabssh.ui.fragments.*
 class MainPagerAdapter(activity: FragmentActivity) : FragmentStateAdapter(activity) {
 
     // Mobile-first labels — long words don't fit 5 tabs on a phone.
-    // "Connections" → "Hosts", "Performance" → "Stats", "Hypervisors" →
-    // "VMs". Tab content is unchanged; the underlying fragments still
-    // refer to themselves with the longer names internally.
+    // "Connections" → "Hosts", "Performance" → "Stats". The "VMs" tab is
+    // now "Infra" — it combines Hypervisors and Cloud Accounts in two
+    // sub-tabs so both live inside one main-tab slot.
     private val tabTitles = listOf(
         "Frequent",
         "Hosts",
         "Identities",
         "Stats",
-        "VMs"
+        "Infra"
     )
 
     override fun getItemCount(): Int = tabTitles.size
@@ -36,7 +36,7 @@ class MainPagerAdapter(activity: FragmentActivity) : FragmentStateAdapter(activi
         1 -> ConnectionsFragment.newInstance()
         2 -> IdentitiesFragment.newInstance()
         3 -> PerformanceFragment.newInstance()
-        4 -> HypervisorsFragment.newInstance()
+        4 -> InfraFragment.newInstance()
         else -> error("Invalid tab position $position")
     }
 

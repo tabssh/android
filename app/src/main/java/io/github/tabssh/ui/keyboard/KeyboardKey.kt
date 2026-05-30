@@ -100,8 +100,11 @@ data class KeyboardKey(
             KeyboardKey("FN", "FN", "", KeyCategory.MODIFIER),
 
             // Actions
-            KeyboardKey("PASTE", "📋", "", KeyCategory.ACTION),
-            KeyboardKey("SEL", "SEL", "", KeyCategory.ACTION),
+            // CLIPBOARD opens a Copy / Paste / Select All popup menu.
+            // The old PASTE and SEL keys are removed from the palette;
+            // their handlers remain in TabTerminalActivity for
+            // backwards-compat with any saved custom layouts.
+            KeyboardKey("CLIPBOARD", "📋", "", KeyCategory.ACTION),
             KeyboardKey("TOGGLE", "⌨", "", KeyCategory.ACTION)
         )
     }
