@@ -22,17 +22,9 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
-import io.github.tabssh.cloud.AwsEc2Client
-import io.github.tabssh.cloud.AzureVmClient
-import io.github.tabssh.cloud.CloudProvider
 import io.github.tabssh.cloud.CloudProviderType
-import io.github.tabssh.cloud.DigitalOceanClient
-import io.github.tabssh.cloud.GcpComputeClient
-import io.github.tabssh.cloud.HetznerClient
-import io.github.tabssh.cloud.OciCloudClient
 import io.github.tabssh.cloud.ImportCandidate
-import io.github.tabssh.cloud.LinodeClient
-import io.github.tabssh.cloud.VultrClient
+import io.github.tabssh.cloud.newClient
 import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.databinding.ActivityCloudAccountsBinding
 import io.github.tabssh.databinding.ItemCloudAccountBinding
@@ -47,6 +39,9 @@ import java.util.Date
 import java.util.Locale
 
 /**
+ * @deprecated Use [io.github.tabssh.ui.fragments.CloudAccountsFragment] embedded inside the
+ * main navigation instead. This standalone activity is retained for deep-link back-compat only.
+ *
  * Wave 5.1 — Cloud accounts management + inventory refresh.
  *
  * Lists configured cloud accounts. Each account shows last-refresh time
@@ -58,6 +53,7 @@ import java.util.Locale
  * [SecurePasswordManager] under `cloud_token_${accountId}` so the cloud
  * account row can be dumped to logs/sync without leaking creds.
  */
+@Deprecated("Use CloudAccountsFragment via main navigation instead")
 class CloudAccountsActivity : AppCompatActivity() {
 
     private companion object {
@@ -250,22 +246,14 @@ class CloudAccountsActivity : AppCompatActivity() {
                 }
                 return@launch
             }
-            val provider: CloudProvider = when (CloudProviderType.fromTag(account.provider)) {
-                CloudProviderType.DIGITALOCEAN -> DigitalOceanClient()
-                CloudProviderType.HETZNER -> HetznerClient()
-                CloudProviderType.LINODE -> LinodeClient()
-                CloudProviderType.VULTR -> VultrClient()
-                CloudProviderType.AWS -> AwsEc2Client()
-                CloudProviderType.GCP -> GcpComputeClient()
-                CloudProviderType.AZURE -> AzureVmClient()
-                CloudProviderType.OCI -> OciCloudClient()
-                null -> {
-                    runOnUiThread {
-                        Toast.makeText(this@CloudAccountsActivity, "Unknown provider: ${account.provider}", Toast.LENGTH_LONG).show()
-                    }
-                    return@launch
+            val providerType = CloudProviderType.fromTag(account.provider)
+            if (providerType == null) {
+                runOnUiThread {
+                    Toast.makeText(this@CloudAccountsActivity, "Unknown provider: ${account.provider}", Toast.LENGTH_LONG).show()
                 }
+                return@launch
             }
+            val provider = providerType.newClient()
             val candidates = try {
                 withContext(Dispatchers.IO) { provider.fetchInventory(token, account.name) }
             } catch (e: Exception) {

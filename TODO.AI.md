@@ -60,7 +60,7 @@
 
 ---
 
-## 🔶 Cloud Accounts — Manager UI + Power Controls + Edit (active work)
+## ✅ Cloud Accounts — Manager UI + Power Controls + Edit (shipped)
 
 **Goal:** Every cloud account tap opens a full manager screen showing live instance state with
 Start / Stop / Restart / Force Restart / Connect actions — identical UX to OciManagerActivity.
@@ -70,7 +70,7 @@ Accounts must also be editable after creation.
 
 ---
 
-### A: Data model + interface (do first — everything else depends on this) ☐
+### A: Data model + interface ✅
 
 **A1** — Create `CloudInstanceState` data class
 File: `app/src/main/java/io/github/tabssh/cloud/CloudInstanceState.kt` (NEW)
@@ -113,7 +113,7 @@ and the new CloudAccountManagerActivity) with `CloudProviderType.fromTag(...)?.n
 
 ---
 
-### B: Power actions in all 8 clients (parallel, each independent) ☐
+### B: Power actions in all 8 clients ✅
 
 Implement `fetchLiveInstances` + the 4 power methods in each client.
 All use the same auth scheme already in `fetchInventory` for that client.
@@ -189,7 +189,7 @@ All use the same auth scheme already in `fetchInventory` for that client.
 
 ---
 
-### C: New layout files ☐
+### C: New layout files ✅
 
 **C1** — `app/src/main/res/layout/activity_cloud_manager.xml` (NEW)
 Mirror `activity_oci_manager.xml`:
@@ -221,7 +221,7 @@ State badge tints (use `MaterialCardView` background + `TextView` foreground):
 
 ---
 
-### D: `CloudAccountManagerActivity` ☐
+### D: `CloudAccountManagerActivity` ✅
 
 **File:** `app/src/main/java/io/github/tabssh/ui/activities/CloudAccountManagerActivity.kt` (NEW)
 
@@ -277,7 +277,7 @@ Add `<activity android:name=".ui.activities.CloudAccountManagerActivity" />` alo
 
 ---
 
-### E: Edit cloud account ☐
+### E: Edit cloud account ✅
 
 **E1** — Add edit button to `item_cloud_account.xml`
 Check the layout; add an edit icon button (pencil) id=`btn_edit` beside the existing refresh/delete buttons.
@@ -293,7 +293,7 @@ pass `{ showEditAccountDialog(it) }` from `onViewCreated`.
 
 ---
 
-### F: OCI credentials — file import ☐
+### F: OCI credentials — file import ✅
 
 **F1** — Add "📂 Import .oci/config" button to `showOciCredentialsDialog`
 In `CloudAccountsFragment.kt`:
@@ -305,7 +305,7 @@ In `CloudAccountsFragment.kt`:
 
 ---
 
-### G: Wire CloudAccountsFragment to launch manager activity ☐
+### G: Wire CloudAccountsFragment to launch manager activity ✅
 
 **File:** `app/src/main/java/io/github/tabssh/ui/fragments/CloudAccountsFragment.kt`
 
@@ -322,7 +322,7 @@ Keep the old `showAccountHosts()` method — it's still called from `CloudAccoun
 
 ---
 
-### H: Cleanup ☐
+### H: Cleanup ✅
 
 **H1** — Fix `switchEnabled` in `CloudAccountsFragment`
 Currently hardcoded to `true` with no listener. Either wire it to toggle `account.enabled`

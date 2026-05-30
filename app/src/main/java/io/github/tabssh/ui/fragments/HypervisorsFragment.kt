@@ -21,7 +21,6 @@ import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.ui.activities.HypervisorEditActivity
 import io.github.tabssh.ui.activities.LibvirtManagerActivity
-import io.github.tabssh.ui.activities.OciManagerActivity
 import io.github.tabssh.ui.activities.ProxmoxManagerActivity
 import io.github.tabssh.ui.activities.VMwareManagerActivity
 import io.github.tabssh.ui.activities.XCPngManagerActivity
@@ -160,12 +159,20 @@ class HypervisorsFragment : Fragment() {
     private fun openHypervisorManager(hypervisor: HypervisorProfile) {
         if (!isAdded) return
 
+        if (hypervisor.type == HypervisorType.OCI) {
+            androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setTitle("OCI Hypervisor")
+                .setMessage("OCI has moved to Cloud Accounts. Manage your OCI instances from the Cloud Accounts tab.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
         val intent = when (hypervisor.type) {
             HypervisorType.PROXMOX -> Intent(requireContext(), ProxmoxManagerActivity::class.java)
-            HypervisorType.VMWARE -> Intent(requireContext(), VMwareManagerActivity::class.java)
-            HypervisorType.XCPNG -> Intent(requireContext(), XCPngManagerActivity::class.java)
-            HypervisorType.OCI -> Intent(requireContext(), OciManagerActivity::class.java)
+            HypervisorType.VMWARE  -> Intent(requireContext(), VMwareManagerActivity::class.java)
+            HypervisorType.XCPNG   -> Intent(requireContext(), XCPngManagerActivity::class.java)
             HypervisorType.LIBVIRT -> Intent(requireContext(), LibvirtManagerActivity::class.java)
+            else -> return
         }
         intent.putExtra("hypervisor_id", hypervisor.id)
         startActivity(intent)

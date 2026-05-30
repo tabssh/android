@@ -77,7 +77,7 @@ class HypervisorAdapter(
                 HypervisorType.PROXMOX -> "🌐"
                 HypervisorType.XCPNG -> "☁️"
                 HypervisorType.VMWARE -> "📦"
-                HypervisorType.OCI -> "🏛️"
+                HypervisorType.OCI -> "🔶"
                 HypervisorType.LIBVIRT -> "🖥️"
             }
 
@@ -89,7 +89,7 @@ class HypervisorAdapter(
                 HypervisorType.PROXMOX -> "Proxmox"
                 HypervisorType.XCPNG -> "XCP-ng"
                 HypervisorType.VMWARE -> "VMware"
-                HypervisorType.OCI -> "OCI"
+                HypervisorType.OCI -> "OCI (→ Cloud Accounts)"
                 HypervisorType.LIBVIRT -> "QEMU/libvirt"
             }
 

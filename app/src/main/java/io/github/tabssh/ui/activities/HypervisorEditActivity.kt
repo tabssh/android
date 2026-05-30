@@ -15,8 +15,6 @@ import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.crypto.storage.HypervisorPasswordStore
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.HypervisorType
-import io.github.tabssh.hypervisor.oci.OciApiClient
-import io.github.tabssh.hypervisor.oci.OciKeyMaterial
 import io.github.tabssh.hypervisor.proxmox.ProxmoxApiClient
 import io.github.tabssh.hypervisor.xcpng.XCPngApiClient
 import io.github.tabssh.hypervisor.vmware.VMwareApiClient
@@ -80,6 +78,18 @@ class HypervisorEditActivity : AppCompatActivity() {
     private var hypervisorId: Long? = null
     private var editingHypervisor: HypervisorProfile? = null
     private var linkedConnectionId: String? = null
+
+    /**
+     * The types available in the spinner. OCI is intentionally omitted — new OCI
+     * hypervisor connections should be managed via Cloud Accounts. HypervisorType.OCI
+     * stays in the enum to preserve existing DB ordinals; we just hide it in the UI.
+     */
+    private val hypervisorTypes = listOf(
+        HypervisorType.PROXMOX,
+        HypervisorType.XCPNG,
+        HypervisorType.VMWARE,
+        HypervisorType.LIBVIRT
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -206,7 +216,7 @@ class HypervisorEditActivity : AppCompatActivity() {
         if (accountChosen) {
             layoutRealm.visibility = View.GONE
         } else {
-            val isProxmox = spinnerType.selectedItemPosition == HypervisorType.PROXMOX.ordinal
+            val isProxmox = hypervisorTypes.getOrNull(spinnerType.selectedItemPosition) == HypervisorType.PROXMOX
             layoutRealm.visibility = if (isProxmox) View.VISIBLE else View.GONE
         }
     }
@@ -285,13 +295,18 @@ class HypervisorEditActivity : AppCompatActivity() {
     }
 
     private fun setupSpinner() {
-        // Order MUST match HypervisorType ordinals (PROXMOX=0, XCPNG=1,
-        // VMWARE=2, OCI=3, LIBVIRT=4) — `loadHypervisor()` calls
-        // `spinnerType.setSelection(hypervisor.type.ordinal)`.
-        // OCI is kept in the list for backwards-compat with existing accounts;
-        // new OCI credentials should be added via the Cloud Accounts tab instead.
-        val types = arrayOf("Proxmox", "XCP-ng", "VMware", "OCI (legacy — use Cloud Accounts)", "QEMU/libvirt")
-        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, types)
+        // Build labels from the explicit hypervisorTypes list (OCI excluded).
+        // Spinner positions map to hypervisorTypes indices, not raw enum ordinals.
+        val labels = hypervisorTypes.map { type ->
+            when (type) {
+                HypervisorType.PROXMOX -> "Proxmox"
+                HypervisorType.XCPNG   -> "XCP-ng"
+                HypervisorType.VMWARE  -> "VMware"
+                HypervisorType.LIBVIRT -> "QEMU/libvirt"
+                else -> type.name
+            }
+        }
+        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, labels)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         spinnerType.adapter = adapter
 
@@ -302,7 +317,6 @@ class HypervisorEditActivity : AppCompatActivity() {
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
-        // Set default ports
         updateUIForType(0)
     }
 
@@ -414,21 +428,15 @@ class HypervisorEditActivity : AppCompatActivity() {
         }
 
         // Update port based on hypervisor type
-        val currentType = spinnerType.selectedItemPosition
-        when (currentType) {
-            0 -> { // Proxmox
+        when (hypervisorTypes.getOrNull(spinnerType.selectedItemPosition)) {
+            HypervisorType.PROXMOX -> {
                 editPort.setText("8006")
                 editRealm.setText("pam")
             }
-            1 -> { // XCP-ng
-                editPort.setText("443")
-            }
-            2 -> { // VMware
-                editPort.setText("443")
-            }
-            4 -> { // QEMU/libvirt — SSH, keep the connection's port as-is (usually 22)
-                editPort.setText(connection.port.toString())
-            }
+            HypervisorType.XCPNG -> editPort.setText("443")
+            HypervisorType.VMWARE -> editPort.setText("443")
+            HypervisorType.LIBVIRT -> editPort.setText(connection.port.toString())
+            else -> {}
         }
 
         // Show confirmation
@@ -455,57 +463,51 @@ class HypervisorEditActivity : AppCompatActivity() {
     }
 
     private fun updateUIForType(typePosition: Int) {
-        // OCI uses API-key + HTTP signatures — host/port/username/password don't apply.
-        // Account dropdown is shown for both password-type (v32) and OCI (v33+)
-        // but filtered to the matching authType.
-        // LIBVIRT uses SSH (host/port/username/password apply, no OCI section, no SSL switch).
-        val isOci = typePosition == HypervisorType.OCI.ordinal
-        val isLibvirt = typePosition == HypervisorType.LIBVIRT.ordinal
-        // SSH identity picker is LIBVIRT-only; hide it first, show inside when block below.
+        val selectedType = hypervisorTypes.getOrNull(typePosition) ?: return
+        val isLibvirt = selectedType == HypervisorType.LIBVIRT
+        // SSH identity picker is LIBVIRT-only
         layoutSshIdentity.visibility = if (isLibvirt) View.VISIBLE else View.GONE
-        layoutHost.visibility = if (isOci) View.GONE else View.VISIBLE
-        layoutPort.visibility = if (isOci) View.GONE else View.VISIBLE
-        layoutUsername.visibility = if (isOci) View.GONE else View.VISIBLE
-        layoutPassword.visibility = if (isOci) View.GONE else View.VISIBLE
+        // OCI panel is not exposed via this spinner; hide it always
+        layoutOci.visibility = View.GONE
+        layoutHost.visibility = View.VISIBLE
+        layoutPort.visibility = View.VISIBLE
+        layoutUsername.visibility = View.VISIBLE
+        layoutPassword.visibility = View.VISIBLE
         // SSL verify does not apply to SSH-backed libvirt connections
-        switchVerifySsl.visibility = if (isOci || isLibvirt) View.GONE else View.VISIBLE
-        // Account dropdown always visible; filter changes by type
+        switchVerifySsl.visibility = if (isLibvirt) View.GONE else View.VISIBLE
         layoutAccount.visibility = View.VISIBLE
-        // "Open Identities" guidance button only shown for OCI
-        layoutOci.visibility = if (isOci) View.VISIBLE else View.GONE
 
-        // Reload the account dropdown with the correct authType filter
         refreshAccountDropdownForType(typePosition)
 
-        when (typePosition) {
-            0 -> { // Proxmox
+        when (selectedType) {
+            HypervisorType.PROXMOX -> {
                 applyTypeDefaultPort("8006")
                 layoutRealm.visibility = View.VISIBLE
                 if (editRealm.text.toString().isEmpty()) editRealm.setText("pam")
                 layoutApiType.visibility = View.GONE
                 textApiTypeHint.visibility = View.GONE
             }
-            1 -> { // XCP-ng
+            HypervisorType.XCPNG -> {
                 applyTypeDefaultPort("443")
                 layoutRealm.visibility = View.GONE
                 layoutApiType.visibility = View.VISIBLE
                 textApiTypeHint.visibility = View.VISIBLE
                 textApiTypeHint.text = "Auto: Try XO REST → XCP-ng XML-RPC\nDirect: XCP-ng host (XML-RPC)\nCentralized: Xen Orchestra (REST API)"
             }
-            2 -> { // VMware
+            HypervisorType.VMWARE -> {
                 applyTypeDefaultPort("443")
                 layoutRealm.visibility = View.GONE
                 layoutApiType.visibility = View.VISIBLE
                 textApiTypeHint.visibility = View.VISIBLE
                 textApiTypeHint.text = "Auto: Try vCenter → ESXi\nDirect: ESXi host\nCentralized: vCenter/vSphere"
             }
-            3 -> { // OCI
+            HypervisorType.LIBVIRT -> {
+                applyTypeDefaultPort("22")
                 layoutRealm.visibility = View.GONE
                 layoutApiType.visibility = View.GONE
                 textApiTypeHint.visibility = View.GONE
             }
-            4 -> { // QEMU/libvirt (SSH-tunnelled VNC)
-                applyTypeDefaultPort("22")
+            else -> {
                 layoutRealm.visibility = View.GONE
                 layoutApiType.visibility = View.GONE
                 textApiTypeHint.visibility = View.GONE
@@ -522,14 +524,9 @@ class HypervisorEditActivity : AppCompatActivity() {
      * list; otherwise clears to "(none)".
      */
     private fun refreshAccountDropdownForType(typePosition: Int) {
-        val ociFilter = typePosition == HypervisorType.OCI.ordinal
-        val filtered = availableAccounts.filter { acc ->
-            if (ociFilter) acc.authType == "oci_api_key"
-            else acc.authType != "oci_api_key"
-        }
-        val labels = mutableListOf(
-            if (ociFilter) "(none — select OCI identity)" else "(none — use inline credentials)"
-        )
+        // OCI accounts are never shown via this spinner; filter them out for all types
+        val filtered = availableAccounts.filter { acc -> acc.authType != "oci_api_key" }
+        val labels = mutableListOf("(none — use inline credentials)")
         labels += filtered.map { it.getDisplayName() }
         dropdownAccount.setAdapter(
             ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, labels)
@@ -557,11 +554,23 @@ class HypervisorEditActivity : AppCompatActivity() {
                     app.database.hypervisorDao().getById(id)
                 }
                 if (hypervisor != null) {
+                    // OCI profiles are no longer editable here; direct users to Cloud Accounts.
+                    if (hypervisor.type == HypervisorType.OCI) {
+                        com.google.android.material.snackbar.Snackbar.make(
+                            findViewById(android.R.id.content),
+                            "OCI hypervisors have moved to Cloud Accounts. Manage them there.",
+                            com.google.android.material.snackbar.Snackbar.LENGTH_LONG
+                        ).show()
+                        finish()
+                        return@launch
+                    }
+
                     editingHypervisor = hypervisor
                     linkedConnectionId = hypervisor.linkedConnectionId
 
                     editName.setText(hypervisor.name)
-                    spinnerType.setSelection(hypervisor.type.ordinal)
+                    val typeIdx = hypervisorTypes.indexOf(hypervisor.type).takeIf { it >= 0 } ?: 0
+                    spinnerType.setSelection(typeIdx)
                     editHost.setText(hypervisor.host)
                     editPort.setText(hypervisor.port.toString())
                     editUsername.setText(hypervisor.username)
@@ -654,7 +663,7 @@ class HypervisorEditActivity : AppCompatActivity() {
         
         lifecycleScope.launch {
             try {
-                val type = HypervisorType.values()[spinnerType.selectedItemPosition]
+                val type = hypervisorTypes[spinnerType.selectedItemPosition]
                 val host = editHost.text.toString()
                 val port = editPort.text.toString().toInt()
                 val verifySsl = switchVerifySsl.isChecked
@@ -685,16 +694,13 @@ class HypervisorEditActivity : AppCompatActivity() {
                         client.authenticate()
                     }
                     HypervisorType.XCPNG -> {
-                        // XCP-ng uses XML-RPC API
                         val client = XCPngApiClient(host, port, username, password, verifySsl)
                         client.authenticate()
                     }
                     HypervisorType.VMWARE -> {
-                        // VMware uses REST API
                         val client = VMwareApiClient(host, username, password, verifySsl)
                         client.authenticate()
                     }
-                    HypervisorType.OCI -> testOciConnection()
                     HypervisorType.LIBVIRT -> {
                         // SSH-based; just do a quick connect/disconnect
                         val client = io.github.tabssh.hypervisor.libvirt.LibvirtApiClient(
@@ -713,6 +719,11 @@ class HypervisorEditActivity : AppCompatActivity() {
                         client.connect()
                         client.disconnect()
                         true
+                    }
+                    else -> {
+                        Toast.makeText(this@HypervisorEditActivity,
+                            "Test not supported for this type", Toast.LENGTH_SHORT).show()
+                        false
                     }
                 }
                 
@@ -735,74 +746,7 @@ class HypervisorEditActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
-                val type = HypervisorType.values()[spinnerType.selectedItemPosition]
-
-                // OCI: host/port/username/password don't apply. The OCI
-                // identity (account) is linked via selectedAccountId; the
-                // account row carries all OCI metadata (tenancy, user, region,
-                // fingerprint) and its Keystore alias holds the PEM key.
-                if (type == HypervisorType.OCI) {
-                    val ociAccountId = selectedAccountId
-                    if (ociAccountId == null) {
-                        Toast.makeText(
-                            this@HypervisorEditActivity,
-                            "Select an OCI identity from the dropdown (or create one in the Identities screen).",
-                            Toast.LENGTH_LONG
-                        ).show()
-                        return@launch
-                    }
-                    val ociAccount = try {
-                        app.database.hypervisorAccountDao().getById(ociAccountId)
-                    } catch (e: Exception) { null }
-                    if (ociAccount == null || ociAccount.authType != "oci_api_key") {
-                        Toast.makeText(
-                            this@HypervisorEditActivity,
-                            "Selected identity is not an OCI API key identity.",
-                            Toast.LENGTH_LONG
-                        ).show()
-                        return@launch
-                    }
-                    // Preserve OCI columns from account; region stored in `host` for display
-                    val baseRow = editingHypervisor ?: HypervisorProfile(
-                        id = 0,
-                        name = editName.text.toString(),
-                        type = HypervisorType.OCI,
-                        host = ociAccount.ociRegion ?: "",
-                        port = 443,
-                        username = "",
-                        password = "",
-                        verifySsl = true,
-                        accountId = ociAccountId,
-                        ociTenancyOcid = ociAccount.ociTenancyOcid,
-                        ociUserOcid = ociAccount.ociUserOcid,
-                        ociRegion = ociAccount.ociRegion,
-                        ociFingerprint = ociAccount.ociFingerprint,
-                        ociCompartmentOcid = ociAccount.ociCompartmentOcid,
-                        notes = editNotes.text.toString().takeIf { it.isNotBlank() }
-                    )
-                    val ociRow = baseRow.copy(
-                        name = editName.text.toString(),
-                        accountId = ociAccountId,
-                        ociTenancyOcid = ociAccount.ociTenancyOcid,
-                        ociUserOcid = ociAccount.ociUserOcid,
-                        ociRegion = ociAccount.ociRegion,
-                        ociFingerprint = ociAccount.ociFingerprint,
-                        ociCompartmentOcid = ociAccount.ociCompartmentOcid,
-                        notes = editNotes.text.toString().takeIf { it.isNotBlank() }
-                    )
-                    if (hypervisorId != null) {
-                        app.database.hypervisorDao().update(ociRow)
-                    } else {
-                        app.database.hypervisorDao().insert(ociRow)
-                    }
-                    Toast.makeText(
-                        this@HypervisorEditActivity,
-                        "${if (hypervisorId != null) "Updated" else "Added"} ${ociRow.name}",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    finish()
-                    return@launch
-                }
+                val type = hypervisorTypes[spinnerType.selectedItemPosition]
 
                 // Get API type override value
                 val apiTypeEntries = resources.getStringArray(R.array.api_type_entries)
@@ -893,111 +837,10 @@ class HypervisorEditActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Test an OCI connection. Works in two modes:
-     * 1. **Saved profile** — looks up the saved HypervisorProfile row and resolves
-     *    credentials from the linked HypervisorAccount (v33+) or the legacy
-     *    per-profile Keystore aliases (older rows).
-     * 2. **New, unsaved profile** — when `editingHypervisor` is null and no saved
-     *    profile can be fetched, falls back to `selectedAccountId` so the user can
-     *    test a freshly chosen OCI identity before saving the profile.
-     */
-    private suspend fun testOciConnection(): Boolean {
-        val existing = editingHypervisor
-            ?: hypervisorId?.let {
-                withContext(Dispatchers.IO) { app.database.hypervisorDao().getById(it) }
-            }
-
-        // Resolve which account to use for credential lookup:
-        //  - Saved profile → prefer profile.accountId, then selectedAccountId (in-flight change)
-        //  - New profile   → use selectedAccountId directly so the user can test before saving
-        val accountId: Long? = existing?.accountId ?: selectedAccountId
-
-        if (existing == null && accountId == null) {
-            // No saved profile and no account selected — nothing to test against.
-            Toast.makeText(this, "Select an OCI identity first", Toast.LENGTH_LONG).show()
-            return false
-        }
-        if (existing != null && existing.type != HypervisorType.OCI) {
-            Toast.makeText(this, "This profile is not an OCI hypervisor", Toast.LENGTH_LONG).show()
-            return false
-        }
-
-        // Resolve OCI metadata: prefer account row, fall back to profile columns
-        val account = if (accountId != null) {
-            withContext(Dispatchers.IO) {
-                try { app.database.hypervisorAccountDao().getById(accountId) }
-                catch (e: Exception) { null }
-            }
-        } else null
-
-        val tenancy     = account?.ociTenancyOcid  ?: existing?.ociTenancyOcid
-        val user        = account?.ociUserOcid      ?: existing?.ociUserOcid
-        val region      = account?.ociRegion        ?: existing?.ociRegion
-        val fingerprint = account?.ociFingerprint   ?: existing?.ociFingerprint
-        if (tenancy.isNullOrBlank() || user.isNullOrBlank() ||
-            region.isNullOrBlank() || fingerprint.isNullOrBlank()
-        ) {
-            Toast.makeText(
-                this, "OCI identity is missing required fields — edit it in Identities",
-                Toast.LENGTH_LONG
-            ).show()
-            return false
-        }
-
-        // legacyProfileId is only meaningful for saved profiles; new profiles don't
-        // have a persisted ID yet so we pass null (account-keyed alias only).
-        val legacyProfileId = existing?.id
-        val pem = withContext(Dispatchers.IO) {
-            if (accountId != null) {
-                HypervisorPasswordStore.retrieveOciAccountKey(
-                    this@HypervisorEditActivity, accountId, legacyProfileId
-                )
-            } else {
-                app.securePasswordManager.retrievePassword("oci_private_key_${existing!!.id}")
-            }
-        }
-        if (pem.isNullOrBlank()) {
-            Toast.makeText(
-                this, "Private key not found — add it to the OCI identity in Identities",
-                Toast.LENGTH_LONG
-            ).show()
-            return false
-        }
-        val passphrase = withContext(Dispatchers.IO) {
-            if (accountId != null) {
-                HypervisorPasswordStore.retrieveOciAccountPassphrase(
-                    this@HypervisorEditActivity, accountId, legacyProfileId
-                )?.takeIf { it.isNotEmpty() }
-            } else {
-                app.securePasswordManager.retrievePassword("oci_passphrase_${existing!!.id}")
-                    ?.takeIf { it.isNotEmpty() }
-            }
-        }
-        return try {
-            val km = withContext(Dispatchers.Default) {
-                OciKeyMaterial.fromPem(pem, passphrase?.toCharArray())
-            }
-            val client = OciApiClient(tenancy, user, fingerprint, region, km,
-                verifySsl = existing?.verifySsl ?: true,
-                pinnedCertSha256 = existing?.pinnedCertSha256)
-            client.validateCredentials()
-        } catch (e: Exception) {
-            Logger.e("HypervisorEditActivity", "OCI test failed", e)
-            false
-        }
-    }
-
     private fun validateFields(): Boolean {
         if (editName.text.toString().isBlank()) {
             editName.error = "Name is required"
             return false
-        }
-        // OCI fields are populated by the wizard, not from this screen — we
-        // skip the host/port/username/password validation. Test/save for OCI
-        // is gated on the existing row carrying the right OCI columns.
-        if (spinnerType.selectedItemPosition == HypervisorType.OCI.ordinal) {
-            return true
         }
         if (editHost.text.toString().isBlank()) {
             editHost.error = "Host is required"
@@ -1016,7 +859,7 @@ class HypervisorEditActivity : AppCompatActivity() {
             }
             // Password is optional for LIBVIRT when an SSH key identity is
             // selected — the key alone is sufficient for pubkey auth.
-            val isLibvirtWithKey = spinnerType.selectedItemPosition == HypervisorType.LIBVIRT.ordinal
+            val isLibvirtWithKey = hypervisorTypes.getOrNull(spinnerType.selectedItemPosition) == HypervisorType.LIBVIRT
                 && selectedSshIdentityId != null
             if (!isLibvirtWithKey && editPassword.text.toString().isBlank()) {
                 editPassword.error = "Password is required"

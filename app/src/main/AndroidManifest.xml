@@ -298,6 +298,15 @@
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- Cloud account per-instance manager (start/stop/connect) -->
+        <activity
+            android:name=".ui.activities.CloudAccountManagerActivity"
+            android:exported="false"
+            android:label="Cloud Instances"
+            android:theme="@style/Theme.TabSSH"
+            android:parentActivityName=".ui.activities.MainActivity"
+            android:windowSoftInputMode="adjustResize" />
+
         <activity
             android:name=".ui.activities.ImportExportActivity"
             android:exported="false"

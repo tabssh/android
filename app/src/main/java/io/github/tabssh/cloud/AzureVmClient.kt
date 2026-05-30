@@ -5,8 +5,10 @@ import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -51,6 +53,9 @@ class AzureVmClient : CloudProvider {
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
+
+    /** Cached instances from the last fetchLiveInstances call; used to resolve resource group for power actions. */
+    private var cachedInstances: List<CloudInstanceState> = emptyList()
 
     override suspend fun fetchInventory(
         bearerToken: String,
@@ -110,6 +115,122 @@ class AzureVmClient : CloudProvider {
         }
         Logger.i("AzureVmClient", "Fetched ${out.size} Azure VMs for sub=$subscriptionId account=$accountName")
         out
+    }
+
+    override suspend fun fetchLiveInstances(bearerToken: String): List<CloudInstanceState> =
+        withContext(Dispatchers.IO) {
+            val parts = bearerToken.split(":", limit = 4)
+            if (parts.size != 4) throw IllegalStateException("Azure token must be 'TENANT:CLIENT_ID:CLIENT_SECRET:SUBSCRIPTION_ID'")
+            val (tenant, clientId, clientSecret, subscriptionId) = parts
+
+            val accessToken = exchangeForAccessToken(tenant, clientId, clientSecret)
+
+            // Request instanceView expansion so power state is included in one call.
+            val vms = jsonGet(
+                "https://management.azure.com/subscriptions/$subscriptionId/providers/Microsoft.Compute/virtualMachines?\$expand=instanceView&api-version=2023-03-01",
+                accessToken
+            ).optJSONArray("value") ?: return@withContext emptyList<CloudInstanceState>()
+
+            val publicIps = fetchPublicIpsByNicId(subscriptionId, accessToken)
+
+            val out = mutableListOf<CloudInstanceState>()
+            for (i in 0 until vms.length()) {
+                val vm = vms.optJSONObject(i) ?: continue
+                val name = vm.optString("name", "azure-vm")
+                val location = vm.optString("location", "")
+
+                // Extract resource group from the VM resource id (/subscriptions/.../resourceGroups/RG/providers/...)
+                val vmId = vm.optString("id", "")
+                val resourceGroup = vmId.split("/").let { parts2 ->
+                    val idx = parts2.indexOfFirst { it.equals("resourceGroups", ignoreCase = true) }
+                    if (idx >= 0 && idx + 1 < parts2.size) parts2[idx + 1] else ""
+                }
+
+                // Parse power state from instanceView statuses
+                val props = vm.optJSONObject("properties")
+                val statuses = props?.optJSONObject("instanceView")?.optJSONArray("statuses")
+                var rawStatus = "unknown"
+                if (statuses != null) {
+                    for (j in 0 until statuses.length()) {
+                        val code = statuses.optJSONObject(j)?.optString("code", "").orEmpty()
+                        if (code.startsWith("PowerState/")) {
+                            rawStatus = code.removePrefix("PowerState/")
+                            break
+                        }
+                    }
+                }
+                val normStatus = when (rawStatus) {
+                    "running" -> "running"
+                    "deallocated", "stopped" -> "stopped"
+                    "starting" -> "starting"
+                    "stopping", "deallocating" -> "stopping"
+                    else -> "unknown"
+                }
+
+                val nicArray = props?.optJSONObject("networkProfile")?.optJSONArray("networkInterfaces")
+                var pubIp: String? = null
+                if (nicArray != null) {
+                    for (j in 0 until nicArray.length()) {
+                        val nicId = nicArray.optJSONObject(j)?.optString("id") ?: continue
+                        pubIp = publicIps[nicId]
+                        if (!pubIp.isNullOrBlank()) break
+                    }
+                }
+
+                out += CloudInstanceState(
+                    id = name,
+                    name = name,
+                    ip = pubIp?.ifBlank { null },
+                    privateIp = null,
+                    status = normStatus,
+                    rawStatus = rawStatus,
+                    region = location.ifBlank { null },
+                    metadata = mapOf("resourceGroup" to resourceGroup, "subscription" to subscriptionId)
+                )
+            }
+            cachedInstances = out
+            out
+        }
+
+    override suspend fun startInstance(bearerToken: String, instanceId: String): Boolean =
+        azureVmAction(bearerToken, instanceId, "start")
+
+    override suspend fun stopInstance(bearerToken: String, instanceId: String): Boolean =
+        azureVmAction(bearerToken, instanceId, "deallocate")
+
+    override suspend fun restartInstance(bearerToken: String, instanceId: String): Boolean =
+        azureVmAction(bearerToken, instanceId, "restart")
+
+    /** Azure restart with skipShutdown=true skips the guest OS shutdown sequence. */
+    override suspend fun forceRestartInstance(bearerToken: String, instanceId: String): Boolean =
+        azureVmAction(bearerToken, instanceId, "restart?skipShutdown=true")
+
+    private suspend fun azureVmAction(
+        bearerToken: String,
+        instanceId: String,
+        action: String
+    ): Boolean = withContext(Dispatchers.IO) {
+        val parts = bearerToken.split(":", limit = 4)
+        if (parts.size != 4) return@withContext false
+        val (tenant, clientId, clientSecret, subscriptionId) = parts
+
+        val rg = cachedInstances.firstOrNull { it.id == instanceId }?.metadata?.get("resourceGroup")
+            ?: return@withContext false
+
+        val accessToken = try {
+            exchangeForAccessToken(tenant, clientId, clientSecret)
+        } catch (_: Exception) { return@withContext false }
+
+        val url = "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Compute/virtualMachines/$instanceId/$action?api-version=2023-03-01"
+        val body = "{}".toRequestBody("application/json".toMediaTypeOrNull())
+        val req = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer $accessToken")
+            .post(body)
+            .build()
+        http.newCall(req).execute().use { resp ->
+            resp.code == 200 || resp.code == 202 || resp.isSuccessful
+        }
     }
 
     private fun exchangeForAccessToken(tenant: String, clientId: String, clientSecret: String): String {

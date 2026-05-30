@@ -4,8 +4,10 @@ import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -125,6 +127,143 @@ class AwsEc2Client : CloudProvider {
 
         parseInstances(xml, region, accountName).also {
             Logger.i("AwsEc2Client", "Fetched ${it.size} EC2 instances for account=$accountName region=$region")
+        }
+    }
+
+    override suspend fun fetchLiveInstances(bearerToken: String): List<CloudInstanceState> =
+        withContext(Dispatchers.IO) {
+            val parts = bearerToken.split(":", limit = 3)
+            if (parts.size != 3) throw IllegalStateException("AWS token must be 'AKID:SECRET:REGION'")
+            val (accessKey, secretKey, region) = parts
+
+            val xml = awsGetXml(
+                accessKey, secretKey, region,
+                "Action=DescribeInstances&Version=2016-11-15"
+            )
+
+            val instanceBlocks = Regex(
+                """<instancesSet>([\s\S]*?)</instancesSet>"""
+            ).findAll(xml).flatMap { container ->
+                Regex("""<item>([\s\S]*?)</item>""").findAll(container.groupValues[1])
+            }.map { it.groupValues[1] }.toList()
+
+            val out = mutableListOf<CloudInstanceState>()
+            for (block in instanceBlocks) {
+                val instanceId = tagValue(block, "instanceId").orEmpty()
+                val rawState = tagValue(block, "name").orEmpty()
+                val normStatus = when (rawState) {
+                    "running" -> "running"
+                    "stopped", "terminated" -> "stopped"
+                    "pending" -> "starting"
+                    "stopping", "shutting-down" -> "stopping"
+                    else -> "unknown"
+                }
+                val publicIp = tagValue(block, "ipAddress")
+                val privateIp = tagValue(block, "privateIpAddress")
+                val nameTag = extractNameTag(block).orEmpty()
+                out += CloudInstanceState(
+                    id = instanceId,
+                    name = nameTag.ifBlank { instanceId },
+                    ip = publicIp,
+                    privateIp = privateIp,
+                    status = normStatus,
+                    rawStatus = rawState,
+                    region = region
+                )
+            }
+            out
+        }
+
+    override suspend fun startInstance(bearerToken: String, instanceId: String): Boolean =
+        awsInstanceAction(bearerToken, instanceId, "StartInstances")
+
+    override suspend fun stopInstance(bearerToken: String, instanceId: String): Boolean =
+        awsInstanceAction(bearerToken, instanceId, "StopInstances")
+
+    override suspend fun restartInstance(bearerToken: String, instanceId: String): Boolean =
+        awsInstanceAction(bearerToken, instanceId, "RebootInstances")
+
+    /** EC2 has no separate force restart — same as graceful reboot. */
+    override suspend fun forceRestartInstance(bearerToken: String, instanceId: String): Boolean =
+        awsInstanceAction(bearerToken, instanceId, "RebootInstances")
+
+    private suspend fun awsInstanceAction(
+        bearerToken: String,
+        instanceId: String,
+        action: String
+    ): Boolean = withContext(Dispatchers.IO) {
+        val parts = bearerToken.split(":", limit = 3)
+        if (parts.size != 3) return@withContext false
+        val (accessKey, secretKey, region) = parts
+
+        val query = "Action=$action&InstanceId.1=$instanceId&Version=2016-11-15"
+        val host = "ec2.$region.amazonaws.com"
+        val service = "ec2"
+        val now = Date()
+        val amzDate = AMZ_DATE_FMT.get()!!.format(now)
+        val dateStamp = DATE_FMT.get()!!.format(now)
+        val canonicalQuery = canonicalQueryString(query)
+        val payloadHash = sha256Hex("")
+        val canonicalHeaders = "host:$host\nx-amz-content-sha256:$payloadHash\nx-amz-date:$amzDate\n"
+        val signedHeaders = "host;x-amz-content-sha256;x-amz-date"
+        val canonicalRequest = "GET\n/\n$canonicalQuery\n$canonicalHeaders\n$signedHeaders\n$payloadHash"
+        val credentialScope = "$dateStamp/$region/$service/aws4_request"
+        val stringToSign = "AWS4-HMAC-SHA256\n$amzDate\n$credentialScope\n${sha256Hex(canonicalRequest)}"
+        val signingKey = deriveSigningKey(secretKey, dateStamp, region, service)
+        val signature = hexHmacSha256(signingKey, stringToSign)
+        val auth = "AWS4-HMAC-SHA256 Credential=$accessKey/$credentialScope, " +
+            "SignedHeaders=$signedHeaders, Signature=$signature"
+
+        val req = Request.Builder()
+            .url("https://$host/?$canonicalQuery")
+            .header("Host", host)
+            .header("X-Amz-Date", amzDate)
+            .header("X-Amz-Content-Sha256", payloadHash)
+            .header("Authorization", auth)
+            .header("Accept", "application/xml")
+            .get()
+            .build()
+        http.newCall(req).execute().use { resp -> resp.isSuccessful }
+    }
+
+    private fun awsGetXml(
+        accessKey: String,
+        secretKey: String,
+        region: String,
+        query: String
+    ): String {
+        val host = "ec2.$region.amazonaws.com"
+        val service = "ec2"
+        val now = Date()
+        val amzDate = AMZ_DATE_FMT.get()!!.format(now)
+        val dateStamp = DATE_FMT.get()!!.format(now)
+        val canonicalQuery = canonicalQueryString(query)
+        val payloadHash = sha256Hex("")
+        val canonicalHeaders = "host:$host\nx-amz-content-sha256:$payloadHash\nx-amz-date:$amzDate\n"
+        val signedHeaders = "host;x-amz-content-sha256;x-amz-date"
+        val canonicalRequest = "GET\n/\n$canonicalQuery\n$canonicalHeaders\n$signedHeaders\n$payloadHash"
+        val credentialScope = "$dateStamp/$region/$service/aws4_request"
+        val stringToSign = "AWS4-HMAC-SHA256\n$amzDate\n$credentialScope\n${sha256Hex(canonicalRequest)}"
+        val signingKey = deriveSigningKey(secretKey, dateStamp, region, service)
+        val signature = hexHmacSha256(signingKey, stringToSign)
+        val auth = "AWS4-HMAC-SHA256 Credential=$accessKey/$credentialScope, " +
+            "SignedHeaders=$signedHeaders, Signature=$signature"
+
+        val req = Request.Builder()
+            .url("https://$host/?$canonicalQuery")
+            .header("Host", host)
+            .header("X-Amz-Date", amzDate)
+            .header("X-Amz-Content-Sha256", payloadHash)
+            .header("Authorization", auth)
+            .header("Accept", "application/xml")
+            .get()
+            .build()
+        return http.newCall(req).execute().use { resp ->
+            val body = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) {
+                throw IllegalStateException("AWS EC2 HTTP ${resp.code}: ${extractAwsError(body) ?: resp.message}")
+            }
+            body
         }
     }
 

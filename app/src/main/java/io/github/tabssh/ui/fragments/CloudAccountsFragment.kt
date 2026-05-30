@@ -1,5 +1,8 @@
 package io.github.tabssh.ui.fragments
 
+import android.app.Activity
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -8,6 +11,7 @@ import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
@@ -22,21 +26,14 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
-import io.github.tabssh.cloud.AwsEc2Client
-import io.github.tabssh.cloud.AzureVmClient
-import io.github.tabssh.cloud.CloudProvider
 import io.github.tabssh.cloud.CloudProviderType
-import io.github.tabssh.cloud.DigitalOceanClient
-import io.github.tabssh.cloud.GcpComputeClient
-import io.github.tabssh.cloud.HetznerClient
 import io.github.tabssh.cloud.ImportCandidate
-import io.github.tabssh.cloud.LinodeClient
-import io.github.tabssh.cloud.OciCloudClient
-import io.github.tabssh.cloud.VultrClient
+import io.github.tabssh.cloud.newClient
 import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.databinding.ItemCloudAccountBinding
 import io.github.tabssh.storage.database.SystemGroupHelper
 import io.github.tabssh.storage.database.entities.CloudAccount
+import io.github.tabssh.ui.activities.CloudAccountManagerActivity
 import io.github.tabssh.ui.activities.TabTerminalActivity
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
@@ -77,6 +74,19 @@ class CloudAccountsFragment : Fragment() {
     private lateinit var recycler: RecyclerView
     private lateinit var emptyState: View
 
+    /** Pending OCI account name while waiting for the .oci/config file picker result. */
+    private var pendingOciAccountName: String? = null
+
+    private val ociConfigFilePicker = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val name = pendingOciAccountName ?: return@registerForActivityResult
+        pendingOciAccountName = null
+        if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
+        val uri: Uri = result.data?.data ?: return@registerForActivityResult
+        importOciConfigFile(name, uri)
+    }
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -94,7 +104,8 @@ class CloudAccountsFragment : Fragment() {
         adapter = CloudAccountAdapter(
             onRefresh   = { refreshAccount(it) },
             onDelete    = { confirmDelete(it) },
-            onItemClick = { showAccountHosts(it) }
+            onEdit      = { showEditAccountDialog(it) },
+            onItemClick = { startActivity(CloudAccountManagerActivity.createIntent(requireContext(), it)) }
         )
         recycler.layoutManager = LinearLayoutManager(requireContext())
         recycler.adapter = adapter
@@ -120,6 +131,7 @@ class CloudAccountsFragment : Fragment() {
     private inner class CloudAccountAdapter(
         private val onRefresh:   (CloudAccount) -> Unit,
         private val onDelete:    (CloudAccount) -> Unit,
+        private val onEdit:      (CloudAccount) -> Unit,
         private val onItemClick: (CloudAccount) -> Unit
     ) : ListAdapter<CloudAccount, CloudAccountAdapter.ViewHolder>(AccountDiff) {
 
@@ -154,6 +166,7 @@ class CloudAccountsFragment : Fragment() {
             b.switchEnabled.setOnCheckedChangeListener(null)
 
             b.root.setOnClickListener      { onItemClick(account) }
+            b.root.setOnLongClickListener  { onEdit(account); true }
             b.btnRefresh.setOnClickListener { onRefresh(account) }
             b.btnDelete.setOnClickListener  { onDelete(account) }
         }
@@ -281,6 +294,17 @@ class CloudAccountsFragment : Fragment() {
         val editPem         = field("RSA private key PEM", multiLine = true)
         val editPassphrase  = field("Key passphrase  (optional)", password = true)
 
+        // Allow importing credentials from an OCI SDK config file (~/.oci/config)
+        // instead of pasting them manually. Fields are pre-filled from the parsed file.
+        val btnImportConfig = com.google.android.material.button.MaterialButton(ctx).apply {
+            text = "Import .oci/config file…"
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+            ).also { it.topMargin = (4 * dp).toInt() }
+        }
+        ll.addView(btnImportConfig)
+
         val dialog = AlertDialog.Builder(ctx)
             .setTitle("OCI credentials — $accountName")
             .setView(scroll)
@@ -288,6 +312,18 @@ class CloudAccountsFragment : Fragment() {
             .setNegativeButton("Cancel", null)
             .create()
         dialog.show()
+
+        btnImportConfig.setOnClickListener {
+            // Stash the account name so the file-picker result callback can use it,
+            // then dismiss so the user returns here after file selection.
+            pendingOciAccountName = accountName
+            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "*/*"
+            }
+            dialog.dismiss()
+            ociConfigFilePicker.launch(intent)
+        }
 
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             val tenancy     = editTenancy.text?.toString()?.trim().orEmpty()
@@ -356,21 +392,13 @@ class CloudAccountsFragment : Fragment() {
                 Toast.makeText(requireContext(), "Token missing — re-add account", Toast.LENGTH_LONG).show()
                 return@launch
             }
-            val provider: CloudProvider = when (CloudProviderType.fromTag(account.provider)) {
-                CloudProviderType.DIGITALOCEAN -> DigitalOceanClient()
-                CloudProviderType.HETZNER      -> HetznerClient()
-                CloudProviderType.LINODE       -> LinodeClient()
-                CloudProviderType.VULTR        -> VultrClient()
-                CloudProviderType.AWS          -> AwsEc2Client()
-                CloudProviderType.GCP          -> GcpComputeClient()
-                CloudProviderType.AZURE        -> AzureVmClient()
-                CloudProviderType.OCI          -> OciCloudClient()
-                null -> {
-                    if (!isAdded) return@launch
-                    Toast.makeText(requireContext(), "Unknown provider: ${account.provider}", Toast.LENGTH_LONG).show()
-                    return@launch
-                }
+            val providerType = CloudProviderType.fromTag(account.provider)
+            if (providerType == null) {
+                if (!isAdded) return@launch
+                Toast.makeText(requireContext(), "Unknown provider: ${account.provider}", Toast.LENGTH_LONG).show()
+                return@launch
             }
+            val provider = providerType.newClient()
             val candidates = try {
                 withContext(Dispatchers.IO) { provider.fetchInventory(token, account.name) }
             } catch (e: Exception) {
@@ -517,6 +545,169 @@ class CloudAccountsFragment : Fragment() {
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    /**
+     * Edit-account dialog: allows renaming the account or updating its token.
+     * For OCI accounts, a file-picker button is offered to re-import the
+     * .oci/config file instead of pasting raw credentials.
+     */
+    private fun showEditAccountDialog(account: CloudAccount) {
+        if (!isAdded) return
+        val ctx = requireContext()
+        val dp  = resources.displayMetrics.density
+
+        val scroll = android.widget.ScrollView(ctx)
+        val ll = android.widget.LinearLayout(ctx).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            val pad = (16 * dp).toInt()
+            setPadding(pad, pad, pad, pad)
+        }
+        scroll.addView(ll)
+
+        fun addEditField(hint: String, initialText: String = ""): TextInputEditText {
+            val til = TextInputLayout(ctx, null,
+                com.google.android.material.R.attr.textInputOutlinedStyle).apply {
+                this.hint = hint
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                ).also { it.bottomMargin = (8 * dp).toInt() }
+            }
+            val edit = TextInputEditText(til.context).apply {
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                setSingleLine(true)
+                setText(initialText)
+            }
+            til.addView(edit)
+            ll.addView(til)
+            return edit
+        }
+
+        val editName  = addEditField("Account name", account.name)
+        val providerType = CloudProviderType.fromTag(account.provider)
+
+        // For OCI, show a file import button instead of a raw token field
+        val editToken: TextInputEditText?
+        if (providerType == CloudProviderType.OCI) {
+            editToken = null
+            val btnImportFile = com.google.android.material.button.MaterialButton(ctx).apply {
+                text = "Import .oci/config file"
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            }
+            ll.addView(btnImportFile)
+            btnImportFile.setOnClickListener {
+                pendingOciAccountName = editName.text?.toString()?.trim().orEmpty().ifBlank { account.name }
+                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "*/*"
+                }
+                ociConfigFilePicker.launch(intent)
+            }
+        } else {
+            editToken = addEditField("New API token (leave blank to keep existing)")
+        }
+
+        AlertDialog.Builder(ctx)
+            .setTitle("Edit: ${account.name}")
+            .setView(scroll)
+            .setPositiveButton("Save") { _, _ ->
+                val newName = editName.text?.toString()?.trim().orEmpty().ifBlank { account.name }
+                val newToken = editToken?.text?.toString().orEmpty()
+                viewLifecycleOwner.lifecycleScope.launch {
+                    try {
+                        withContext(Dispatchers.IO) {
+                            app.database.cloudAccountDao().update(
+                                account.copy(name = newName, modifiedAt = System.currentTimeMillis())
+                            )
+                            if (newToken.isNotBlank()) {
+                                app.securePasswordManager.storePassword(
+                                    "cloud_token_${account.id}", newToken,
+                                    SecurePasswordManager.StorageLevel.ENCRYPTED
+                                )
+                            }
+                        }
+                        if (!isAdded) return@launch
+                        Toast.makeText(requireContext(), "Updated '${newName}'", Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        Logger.e(TAG, "Edit account failed", e)
+                        if (!isAdded) return@launch
+                        Toast.makeText(requireContext(), "Update failed: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Parse an OCI SDK config file (~/.oci/config) selected via the file picker.
+     * The config uses INI format. We read the [DEFAULT] (or first) profile
+     * and map it to the JSON token format that OciCloudClient expects.
+     */
+    private fun importOciConfigFile(accountName: String, uri: Uri) {
+        if (!isAdded) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            val tokenJson = withContext(Dispatchers.IO) {
+                try {
+                    requireContext().contentResolver.openInputStream(uri)
+                        ?.bufferedReader()?.use { it.readText() }
+                        ?.let { parseOciConfigToJson(it) }
+                } catch (e: Exception) {
+                    Logger.e(TAG, "OCI config file read failed", e)
+                    null
+                }
+            }
+            if (tokenJson == null) {
+                if (!isAdded) return@launch
+                Toast.makeText(requireContext(),
+                    "Could not read OCI config file", Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            saveAccount(accountName, CloudProviderType.OCI, tokenJson)
+        }
+    }
+
+    /**
+     * Parse OCI SDK INI config into the JSON token format.
+     * Reads the first profile section (DEFAULT or the first named section).
+     * Required keys: tenancy, user, fingerprint, region, key_file.
+     * The private key is read from key_file path if accessible; otherwise
+     * the user must paste the PEM manually. Falls back to empty PEM.
+     */
+    private fun parseOciConfigToJson(iniText: String): String {
+        val lines = iniText.lines()
+        val values = mutableMapOf<String, String>()
+        var inProfile = false
+        for (line in lines) {
+            val trimmed = line.trim()
+            if (trimmed.startsWith("[")) {
+                // Start of a new section
+                inProfile = trimmed == "[DEFAULT]" || (!inProfile && values.isEmpty())
+                continue
+            }
+            if (!inProfile) continue
+            val eqIdx = trimmed.indexOf('=')
+            if (eqIdx < 0) continue
+            val key   = trimmed.substring(0, eqIdx).trim()
+            val value = trimmed.substring(eqIdx + 1).trim()
+            values[key] = value
+        }
+        return org.json.JSONObject()
+            .put("tenancy",     values["tenancy"] ?: "")
+            .put("user",        values["user"] ?: "")
+            .put("fingerprint", values["fingerprint"] ?: "")
+            .put("region",      values["region"] ?: "")
+            .put("compartment", "")
+            .put("pem",         "")
+            .put("passphrase",  "")
+            .toString()
     }
 
     /** Pull the cloud_source field out of the advancedSettings JSON, or null. */

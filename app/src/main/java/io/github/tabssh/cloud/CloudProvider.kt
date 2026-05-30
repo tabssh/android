@@ -23,6 +23,24 @@ interface CloudProvider {
      * failure — caller catches and reports to the user.
      */
     suspend fun fetchInventory(bearerToken: String, accountName: String): List<ImportCandidate>
+
+    /**
+     * Fetch live instance states with power status, IP, and region info.
+     * Returns all instances regardless of state.
+     */
+    suspend fun fetchLiveInstances(bearerToken: String): List<CloudInstanceState>
+
+    /** Start a stopped instance. Returns true if the request was accepted. */
+    suspend fun startInstance(bearerToken: String, instanceId: String): Boolean
+
+    /** Stop a running instance (graceful). Returns true if the request was accepted. */
+    suspend fun stopInstance(bearerToken: String, instanceId: String): Boolean
+
+    /** Restart a running instance (graceful reboot). Returns true if accepted. */
+    suspend fun restartInstance(bearerToken: String, instanceId: String): Boolean
+
+    /** Force restart a running instance (hard power cycle). Returns true if accepted. */
+    suspend fun forceRestartInstance(bearerToken: String, instanceId: String): Boolean
 }
 
 /**
@@ -54,3 +72,18 @@ data class ImportCandidate(
     val sourceLabel: String,    // e.g. "DigitalOcean / nyc3"
     val skipped: String? = null // non-null = candidate skipped, with reason
 )
+
+/**
+ * Factory extension: create the appropriate [CloudProvider] implementation
+ * for each [CloudProviderType] value.
+ */
+fun CloudProviderType.newClient(): CloudProvider = when (this) {
+    CloudProviderType.DIGITALOCEAN -> DigitalOceanClient()
+    CloudProviderType.HETZNER -> HetznerClient()
+    CloudProviderType.LINODE -> LinodeClient()
+    CloudProviderType.VULTR -> VultrClient()
+    CloudProviderType.AWS -> AwsEc2Client()
+    CloudProviderType.GCP -> GcpComputeClient()
+    CloudProviderType.AZURE -> AzureVmClient()
+    CloudProviderType.OCI -> OciCloudClient()
+}

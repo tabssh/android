@@ -568,12 +568,16 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
      * Open the appropriate hypervisor manager activity
      */
     private fun openHypervisorManager(hypervisor: HypervisorProfile) {
+        if (hypervisor.type == HypervisorType.OCI) {
+            Toast.makeText(this, "OCI is now managed under Cloud Accounts", Toast.LENGTH_SHORT).show()
+            return
+        }
         val intent = when (hypervisor.type) {
             HypervisorType.PROXMOX -> Intent(this, ProxmoxManagerActivity::class.java)
             HypervisorType.XCPNG -> Intent(this, XCPngManagerActivity::class.java)
             HypervisorType.VMWARE -> Intent(this, VMwareManagerActivity::class.java)
-            HypervisorType.OCI -> Intent(this, OciManagerActivity::class.java)
             HypervisorType.LIBVIRT -> Intent(this, LibvirtManagerActivity::class.java)
+            else -> return
         }
         intent.putExtra("hypervisor_id", hypervisor.id)
         startActivity(intent)
