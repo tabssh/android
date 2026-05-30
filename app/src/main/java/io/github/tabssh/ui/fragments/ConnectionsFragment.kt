@@ -1194,19 +1194,30 @@ class ConnectionsFragment : Fragment() {
     }
 
     private fun filterConnections(query: String) {
-        val filtered = if (query.isEmpty()) {
-            allConnections
-        } else {
-            allConnections.filter { connection ->
-                connection.name.contains(query, ignoreCase = true) ||
-                connection.host.contains(query, ignoreCase = true) ||
-                connection.username.contains(query, ignoreCase = true)
-            }
+        // When grouped view is active and the query is cleared, delegate back
+        // to applyGroupedView() so the RecyclerView shows the grouped adapter again.
+        if (useGroupedView && query.isEmpty()) {
+            applyGroupedView()
+            return
         }
-        
+
+        // Search mode: switch RecyclerView to the flat adapter so results are visible.
+        // applyGroupedView() sets recyclerView.adapter = groupedAdapter; we must undo
+        // that when the user starts typing, otherwise submitList() goes to the wrong adapter.
+        if (recyclerView.adapter !== adapter) {
+            recyclerView.adapter = adapter
+        }
+
+        val filtered = allConnections.filter { connection ->
+            query.isEmpty() ||
+            connection.name.contains(query, ignoreCase = true) ||
+            connection.host.contains(query, ignoreCase = true) ||
+            connection.username.contains(query, ignoreCase = true)
+        }
+
         // Apply sort
         val sorted = applySortToList(filtered)
-        
+
         if (sorted.isEmpty()) {
             recyclerView.visibility = View.GONE
             emptyLayout.visibility = View.VISIBLE
