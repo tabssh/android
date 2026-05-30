@@ -1,0 +1,3 @@
+o/.gradle-instrumented-classpath.marker
+o/.gradle-agent-instrumented.marker
+o/instrumented/instrumented-toml4j-0.7.2.jar

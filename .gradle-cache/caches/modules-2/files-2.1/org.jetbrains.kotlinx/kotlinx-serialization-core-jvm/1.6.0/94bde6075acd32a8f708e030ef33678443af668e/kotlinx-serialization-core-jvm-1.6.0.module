@@ -1,0 +1,135 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../kotlinx-serialization-core/1.6.0/kotlinx-serialization-core-1.6.0.module",
+    "group": "org.jetbrains.kotlinx",
+    "module": "kotlinx-serialization-core",
+    "version": "1.6.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "7.6.1"
+    }
+  },
+  "variants": [
+    {
+      "name": "jvmApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "1.9.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-bom",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "attributes": {
+            "org.gradle.category": "platform"
+          },
+          "endorseStrictVersions": true
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib-common",
+          "version": {
+            "requires": "1.9.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "kotlinx-serialization-core-jvm-1.6.0.jar",
+          "url": "kotlinx-serialization-core-jvm-1.6.0.jar",
+          "size": 417995,
+          "sha512": "00acbea5ea23eef514f410487466c5a13a08c0fd05cedf22a980a788184d95bc8033bb845c75f54a92dd6d104560e7b4c0141b092521349fea072f1bd89f6470",
+          "sha256": "ec35128c4fb9044e99bbcf07f05ef2543bfa6d42030d7aadabaeacffb16e72c5",
+          "sha1": "94b35f721f1029b3b8d46fb277b4e53fb1a0a510",
+          "md5": "839a123c7f0e10641f88a667d4bee1ef"
+        }
+      ]
+    },
+    {
+      "name": "jvmRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "1.9.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-bom",
+          "version": {
+            "requires": "1.6.0"
+          },
+          "attributes": {
+            "org.gradle.category": "platform"
+          },
+          "endorseStrictVersions": true
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib-common",
+          "version": {
+            "requires": "1.9.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "kotlinx-serialization-core-jvm-1.6.0.jar",
+          "url": "kotlinx-serialization-core-jvm-1.6.0.jar",
+          "size": 417995,
+          "sha512": "00acbea5ea23eef514f410487466c5a13a08c0fd05cedf22a980a788184d95bc8033bb845c75f54a92dd6d104560e7b4c0141b092521349fea072f1bd89f6470",
+          "sha256": "ec35128c4fb9044e99bbcf07f05ef2543bfa6d42030d7aadabaeacffb16e72c5",
+          "sha1": "94b35f721f1029b3b8d46fb277b4e53fb1a0a510",
+          "md5": "839a123c7f0e10641f88a667d4bee1ef"
+        }
+      ]
+    },
+    {
+      "name": "jvmSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "files": [
+        {
+          "name": "kotlinx-serialization-core-jvm-1.6.0-sources.jar",
+          "url": "kotlinx-serialization-core-jvm-1.6.0-sources.jar",
+          "size": 104396,
+          "sha512": "64d007ae3621703dc7ecdbb3acdec8354c16a91aa465d6f3aa5f0235283fff0ae5c0018f9cceb8785353ae28ac29890a132e962a36c1c80cf459d8ec9db1ed37",
+          "sha256": "f63c88523c69fe7be7b89f4464b707719a7a4effff90b66e213dde1e1ffba502",
+          "sha1": "ba0a13ea78e48b16aafd82157973da9472aff844",
+          "md5": "5ddcffc4918a240e60ef79881ecc5ddb"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,112 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "com.fasterxml.jackson.module",
+    "module": "jackson-module-afterburner",
+    "version": "2.15.2",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "maven": {
+      "version": "3.9.2"
+    }
+  },
+  "variants": [
+    {
+      "name": "apiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api"
+      },
+      "dependencies": [
+        {
+          "group": "com.fasterxml.jackson.core",
+          "module": "jackson-core",
+          "version": {
+            "requires": "2.15.2"
+          }
+        },
+        {
+          "group": "com.fasterxml.jackson.core",
+          "module": "jackson-databind",
+          "version": {
+            "requires": "2.15.2"
+          }
+        },
+        {
+          "group": "com.fasterxml.jackson",
+          "module": "jackson-bom",
+          "version": {
+            "requires": "2.15.2"
+          },
+          "attributes": {
+            "org.gradle.category": "platform"
+          },
+          "endorseStrictVersions": true
+        }
+      ],
+      "files": [
+        {
+          "name": "jackson-module-afterburner-2.15.2.jar",
+          "url": "jackson-module-afterburner-2.15.2.jar",
+          "size": 89432,
+          "sha512": "4fb0f45dd0bf62315d55db09a77cec53ab4ebf92816d58036027975a98045bcd64a334d159b4eefd74befb32eb455f3f5c65e11ec031275b0866724f99ea497c",
+          "sha256": "1fb9b7dba3c16e88a92fd737adda2feff8930feaa1f800547bc3366d5175a9f",
+          "sha1": "3f606198d701b245e6a1d5ac3fd8be60d799989f",
+          "md5": "8beceb16f9a86be1f2677d6f005e7c58"
+        }
+      ]
+    },
+    {
+      "name": "runtimeElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "com.fasterxml.jackson.core",
+          "module": "jackson-core",
+          "version": {
+            "requires": "2.15.2"
+          }
+        },
+        {
+          "group": "com.fasterxml.jackson.core",
+          "module": "jackson-databind",
+          "version": {
+            "requires": "2.15.2"
+          }
+        },
+        {
+          "group": "com.fasterxml.jackson",
+          "module": "jackson-bom",
+          "version": {
+            "requires": "2.15.2"
+          },
+          "attributes": {
+            "org.gradle.category": "platform"
+          },
+          "endorseStrictVersions": true
+        }
+      ],
+      "files": [
+        {
+          "name": "jackson-module-afterburner-2.15.2.jar",
+          "url": "jackson-module-afterburner-2.15.2.jar",
+          "size": 89432,
+          "sha512": "4fb0f45dd0bf62315d55db09a77cec53ab4ebf92816d58036027975a98045bcd64a334d159b4eefd74befb32eb455f3f5c65e11ec031275b0866724f99ea497c",
+          "sha256": "1fb9b7dba3c16e88a92fd737adda2feff8930feaa1f800547bc3366d5175a9f",
+          "sha1": "3f606198d701b245e6a1d5ac3fd8be60d799989f",
+          "md5": "8beceb16f9a86be1f2677d6f005e7c58"
+        }
+      ]
+    }
+  ]
+}

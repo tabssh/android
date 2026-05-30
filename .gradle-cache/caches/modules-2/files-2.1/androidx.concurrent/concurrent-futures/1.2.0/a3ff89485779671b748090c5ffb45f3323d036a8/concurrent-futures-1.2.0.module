@@ -1,0 +1,171 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "androidx.concurrent",
+    "module": "concurrent-futures",
+    "version": "1.2.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.8-rc-1"
+    }
+  },
+  "variants": [
+    {
+      "name": "apiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.version": 8,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api"
+      },
+      "dependencies": [
+        {
+          "group": "androidx.annotation",
+          "module": "annotation",
+          "version": {
+            "requires": "1.1.0"
+          }
+        },
+        {
+          "group": "com.google.guava",
+          "module": "listenablefuture",
+          "version": {
+            "requires": "1.0"
+          }
+        }
+      ],
+      "dependencyConstraints": [
+        {
+          "group": "androidx.concurrent",
+          "module": "concurrent-futures-ktx",
+          "version": {
+            "requires": "1.2.0"
+          },
+          "reason": "concurrent-futures is in atomic group androidx.concurrent"
+        }
+      ],
+      "files": [
+        {
+          "name": "concurrent-futures-1.2.0.jar",
+          "url": "concurrent-futures-1.2.0.jar",
+          "size": 26311,
+          "sha512": "76ff67cd4a68d070b3ec31cb970b82fe774bb76b068423c6c16beb72300a1635e3edaabcb146a9b1943ae8edc45458d562c5597cdc88cfd2476aa4083cb95a0b",
+          "sha256": "4810315a798690b5d3bb40c92bcd41c045fd2c36bbfc50b27cbac3d6a0eda190",
+          "sha1": "6a1dfd69226e148898410721f4b14315343d1429",
+          "md5": "f322aa6f5f2ea260635698e1dd351fa2"
+        }
+      ]
+    },
+    {
+      "name": "runtimeElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.version": 8,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "androidx.annotation",
+          "module": "annotation",
+          "version": {
+            "requires": "1.1.0"
+          }
+        },
+        {
+          "group": "com.google.guava",
+          "module": "listenablefuture",
+          "version": {
+            "requires": "1.0"
+          }
+        }
+      ],
+      "dependencyConstraints": [
+        {
+          "group": "androidx.concurrent",
+          "module": "concurrent-futures-ktx",
+          "version": {
+            "requires": "1.2.0"
+          },
+          "reason": "concurrent-futures is in atomic group androidx.concurrent"
+        }
+      ],
+      "files": [
+        {
+          "name": "concurrent-futures-1.2.0.jar",
+          "url": "concurrent-futures-1.2.0.jar",
+          "size": 26311,
+          "sha512": "76ff67cd4a68d070b3ec31cb970b82fe774bb76b068423c6c16beb72300a1635e3edaabcb146a9b1943ae8edc45458d562c5597cdc88cfd2476aa4083cb95a0b",
+          "sha256": "4810315a798690b5d3bb40c92bcd41c045fd2c36bbfc50b27cbac3d6a0eda190",
+          "sha1": "6a1dfd69226e148898410721f4b14315343d1429",
+          "md5": "f322aa6f5f2ea260635698e1dd351fa2"
+        }
+      ]
+    },
+    {
+      "name": "sourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencyConstraints": [
+        {
+          "group": "androidx.concurrent",
+          "module": "concurrent-futures-ktx",
+          "version": {
+            "requires": "1.2.0"
+          },
+          "reason": "concurrent-futures is in atomic group androidx.concurrent"
+        }
+      ],
+      "files": [
+        {
+          "name": "concurrent-futures-1.2.0-sources.jar",
+          "url": "concurrent-futures-1.2.0-sources.jar",
+          "size": 19788,
+          "sha512": "061fc60e37bf5739c4d07f1f27666ea25ab3fdcaf41091a016db9e9227c9057f588a7a68f58a83bb2776f88176d3c7f054fd01c72e33bb02c5cced768ba72f75",
+          "sha256": "38b32cece3cce08eb0e3fb27595325f57e7a6272f085d74288f08417daf7b04f",
+          "sha1": "b75455595144d3f2c427a795bc9bf845ec62173f",
+          "md5": "744a3cb2f8dfe99e5be1e0888f001460"
+        }
+      ]
+    },
+    {
+      "name": "libraryVersionMetadata",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.usage": "library-version-metadata"
+      },
+      "dependencyConstraints": [
+        {
+          "group": "androidx.concurrent",
+          "module": "concurrent-futures-ktx",
+          "version": {
+            "requires": "1.2.0"
+          },
+          "reason": "concurrent-futures is in atomic group androidx.concurrent"
+        }
+      ],
+      "files": [
+        {
+          "name": "concurrent-futures-1.2.0-versionMetadata.json",
+          "url": "concurrent-futures-1.2.0-versionMetadata.json",
+          "size": 856,
+          "sha512": "61db99529ae095c3734aae3a1b0399fa16985815fefe6d3d40d25e601922eec9552202c17da67eb97f3ce48f7838d9326fea5cde507a765f2225b61bdd96092c",
+          "sha256": "c7c531070c8a6088390e06ac8ab149aaf786bf786ad2ecdbb183b5896e91991d",
+          "sha1": "e22fe000d284fd447bc7f04efc1923c416217b65",
+          "md5": "9ab745ae63f8358b33a6f3bcb1c1c4c8"
+        }
+      ]
+    }
+  ]
+}

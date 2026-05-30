@@ -1,0 +1,135 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../kotlinx-serialization-core/1.6.3/kotlinx-serialization-core-1.6.3.module",
+    "group": "org.jetbrains.kotlinx",
+    "module": "kotlinx-serialization-core",
+    "version": "1.6.3",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "7.6.1"
+    }
+  },
+  "variants": [
+    {
+      "name": "jvmApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "1.9.22"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-bom",
+          "version": {
+            "requires": "1.6.3"
+          },
+          "attributes": {
+            "org.gradle.category": "platform"
+          },
+          "endorseStrictVersions": true
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib-common",
+          "version": {
+            "requires": "1.9.22"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "kotlinx-serialization-core-jvm-1.6.3.jar",
+          "url": "kotlinx-serialization-core-jvm-1.6.3.jar",
+          "size": 420348,
+          "sha512": "ea9d9ca6e1bdd6966d0d41996de09fa3ffee3d030ed405ffdc1a0b412e0b68a8ae7d4f5a391a8a1e52bdd135a321f78e4423c92c03727dae79a6619633a1b0b7",
+          "sha256": "29c821a8d4e25cbfe4f2ce96cdd4526f61f8f4e69a135f9612a34a81d93b65f1",
+          "sha1": "6b6c17d0312ba7192893adea9d52959941d0119b",
+          "md5": "a53de86f751fdde057be40958fad42ac"
+        }
+      ]
+    },
+    {
+      "name": "jvmRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "1.9.22"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-bom",
+          "version": {
+            "requires": "1.6.3"
+          },
+          "attributes": {
+            "org.gradle.category": "platform"
+          },
+          "endorseStrictVersions": true
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib-common",
+          "version": {
+            "requires": "1.9.22"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "kotlinx-serialization-core-jvm-1.6.3.jar",
+          "url": "kotlinx-serialization-core-jvm-1.6.3.jar",
+          "size": 420348,
+          "sha512": "ea9d9ca6e1bdd6966d0d41996de09fa3ffee3d030ed405ffdc1a0b412e0b68a8ae7d4f5a391a8a1e52bdd135a321f78e4423c92c03727dae79a6619633a1b0b7",
+          "sha256": "29c821a8d4e25cbfe4f2ce96cdd4526f61f8f4e69a135f9612a34a81d93b65f1",
+          "sha1": "6b6c17d0312ba7192893adea9d52959941d0119b",
+          "md5": "a53de86f751fdde057be40958fad42ac"
+        }
+      ]
+    },
+    {
+      "name": "jvmSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "files": [
+        {
+          "name": "kotlinx-serialization-core-jvm-1.6.3-sources.jar",
+          "url": "kotlinx-serialization-core-jvm-1.6.3-sources.jar",
+          "size": 104979,
+          "sha512": "54d3b3a2ed0a286918c2062139b0f9b773baf110d707da6a4122314f2e2356e5e3d80d01a7f7bf4fde7848433d418fff3eefaa847f3c338dddeaac78c0d0fd3c",
+          "sha256": "5d873e2532ed1bb413a7698ddce0b85bc82a4018ad2b8a327fadf51c704cee8e",
+          "sha1": "56b37fbc772da497d4c43a0a1cf6a392debdb560",
+          "md5": "7a31b8db742f080c476ac5ea047fce49"
+        }
+      ]
+    }
+  ]
+}

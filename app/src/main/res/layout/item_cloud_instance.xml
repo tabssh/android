@@ -79,7 +79,7 @@
             android:fontFamily="monospace"
             android:layout_marginTop="@dimen/space_xs" />
 
-        <!-- Row 3: action buttons — power toggle + connect + restart + force restart -->
+        <!-- Row 3a: primary actions — always visible -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -103,9 +103,19 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginEnd="@dimen/space_xs"
                 android:text="Connect"
                 android:minHeight="@dimen/min_touch_target" />
+
+        </LinearLayout>
+
+        <!-- Row 3b: restart actions — visible only when instance is running -->
+        <LinearLayout
+            android:id="@+id/row_restart_actions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="@dimen/space_xs"
+            android:visibility="gone">
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_restart"
@@ -115,8 +125,7 @@
                 android:layout_weight="1"
                 android:layout_marginEnd="@dimen/space_xs"
                 android:text="Restart"
-                android:minHeight="@dimen/min_touch_target"
-                android:visibility="gone" />
+                android:minHeight="@dimen/min_touch_target" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_force_restart"
@@ -125,8 +134,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="Force Restart"
-                android:minHeight="@dimen/min_touch_target"
-                android:visibility="gone" />
+                android:minHeight="@dimen/min_touch_target" />
 
         </LinearLayout>
 

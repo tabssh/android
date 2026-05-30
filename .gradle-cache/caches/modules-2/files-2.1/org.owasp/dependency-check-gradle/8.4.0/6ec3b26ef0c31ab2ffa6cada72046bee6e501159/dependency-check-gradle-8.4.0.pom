@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <!-- This module was also published with a richer model, Gradle metadata,  -->
+  <!-- which should be used instead. Do not delete the following line which  -->
+  <!-- is to indicate to Gradle or any Gradle module metadata file consumer  -->
+  <!-- that they should prefer consuming it instead. -->
+  <!-- do_not_remove: published-with-gradle-metadata -->
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>org.owasp</groupId>
+  <artifactId>dependency-check-gradle</artifactId>
+  <version>8.4.0</version>
+  <name>dependency-check-gradle</name>
+  <description>OWASP dependency-check gradle plugin is a software composition analysis tool used to find known vulnerable dependencies.</description>
+  <url>https://jeremylong.github.io/DependencyCheck/</url>
+  <licenses>
+    <license>
+      <name>The Apache License, Version 2.0</name>
+      <url>https://github.com/dependency-check/dependency-check-gradle/blob/main/LICENSE.txt</url>
+    </license>
+  </licenses>
+  <developers>
+    <developer>
+      <id>jlong</id>
+      <name>Jeremy Long</name>
+      <email>jeremy.long@owasp.org</email>
+    </developer>
+  </developers>
+  <scm>
+    <connection>scm:git:https://github.com/dependency-check/dependency-check-gradle.git</connection>
+    <developerConnection>scm:git:https://github.com/dependency-check/dependency-check-gradle.git</developerConnection>
+    <url>https://github.com/dependency-check/dependency-check-gradle</url>
+  </scm>
+  <dependencies>
+    <dependency>
+      <groupId>org.owasp</groupId>
+      <artifactId>dependency-check-core</artifactId>
+      <version>8.4.0</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.owasp</groupId>
+      <artifactId>dependency-check-utils</artifactId>
+      <version>8.4.0</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>net.gpedro.integrations.slack</groupId>
+      <artifactId>slack-webhook</artifactId>
+      <version>1.4.0</version>
+      <scope>compile</scope>
+    </dependency>
+  </dependencies>
+</project>

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.github.mwiede</groupId>
+  <artifactId>jsch</artifactId>
+  <version>2.27.7</version>
+  <name>JSch</name>
+  <description>JSch is a pure Java implementation of SSH2</description>
+  <url>https://github.com/mwiede/jsch</url>
+  <licenses>
+    <license>
+      <name>Revised BSD</name>
+      <url>https://github.com/mwiede/jsch/blob/master/LICENSE.txt</url>
+    </license>
+    <license>
+      <name>Revised BSD</name>
+      <url>https://github.com/mwiede/jsch/blob/master/LICENSE.JZlib.txt</url>
+    </license>
+    <license>
+      <name>ISC</name>
+      <url>https://github.com/mwiede/jsch/blob/master/LICENSE.jBCrypt.txt</url>
+    </license>
+  </licenses>
+  <developers>
+    <developer>
+      <id>ymnk</id>
+      <name>Atsuhiko Yamanaka</name>
+      <email>ymnk at jcraft D0t com</email>
+      <url>https://github.com/ymnk</url>
+      <organization>JCraft,Inc.</organization>
+      <organizationUrl>http://www.jcraft.com/</organizationUrl>
+      <roles>
+        <role>architect</role>
+        <role>developer</role>
+      </roles>
+      <timezone>+9</timezone>
+    </developer>
+    <developer>
+      <id>mwiede</id>
+      <name>Matthias Wiedemann</name>
+      <email>mwiede@gmx.de</email>
+      <organization>Community</organization>
+      <organizationUrl>https://github.com/mwiede</organizationUrl>
+    </developer>
+    <developer>
+      <id>norrisjeremy</id>
+      <name>Jeremy Norris</name>
+      <organization>Community</organization>
+      <organizationUrl>https://github.com/norrisjeremy</organizationUrl>
+    </developer>
+  </developers>
+  <scm>
+    <connection>scm:git:https://github.com/mwiede/jsch.git</connection>
+    <developerConnection>scm:git:https://github.com/mwiede/jsch.git</developerConnection>
+    <tag>jsch-2.27.7</tag>
+    <url>https://github.com/mwiede/jsch</url>
+  </scm>
+</project>

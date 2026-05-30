@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:ns1="urn:oasis:names:tc:xliff:document:1.2">
+    <string msgid="6083905920877235314" name="copy">"Kopiér"</string>
+    <string msgid="2427401033573778270" name="expand_button_title">"Avansert"</string>
+    <string msgid="6573031135582639649" name="not_set">"Ikke angitt"</string>
+    <string msgid="6685851473431805375" name="preference_copied">"«<ns1:g id="SUMMARY">%1$s</ns1:g>» er kopiert til utklippstavlen."</string>
+    <string msgid="9167775378838880170" name="summary_collapsed_preference_list">"<ns1:g id="CURRENT_ITEMS">%1$s</ns1:g>, <ns1:g id="ADDED_ITEMS">%2$s</ns1:g>"</string>
+    <string msgid="3140233346420563315" name="v7_preference_off">"AV"</string>
+    <string msgid="89551595707643515" name="v7_preference_on">"PÅ"</string>
+</resources>

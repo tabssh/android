@@ -1,0 +1,3 @@
+o/.gradle-instrumented-classpath.marker
+o/.gradle-agent-instrumented.marker
+o/instrumented/instrumented-jsoup-1.16.1.jar

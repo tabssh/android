@@ -72,11 +72,10 @@ class CloudInstanceAdapter(
         b.btnConnect.isEnabled = isRunning && !inst.ip.isNullOrBlank()
         b.btnConnect.setOnClickListener { onConnect(inst) }
 
-        // Restart and Force Restart visible only when running
-        b.btnRestart.visibility = if (isRunning) View.VISIBLE else View.GONE
+        // Restart and Force Restart row visible only when running; hide the whole row
+        // so it takes up no space when the instance is stopped.
+        b.rowRestartActions.visibility = if (isRunning) View.VISIBLE else View.GONE
         b.btnRestart.setOnClickListener { onRestart(inst) }
-
-        b.btnForceRestart.visibility = if (isRunning) View.VISIBLE else View.GONE
         b.btnForceRestart.setOnClickListener { onForceRestart(inst) }
     }
 

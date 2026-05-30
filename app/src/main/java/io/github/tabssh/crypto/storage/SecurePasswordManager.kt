@@ -164,8 +164,11 @@ class SecurePasswordManager(private val context: Context) {
             editor.putInt("$PREF_STORAGE_LEVEL_PREFIX$connectionId", 
                 if (useBiometric) StorageLevel.BIOMETRIC.value else StorageLevel.ENCRYPTED.value)
             editor.putLong("$PREF_TIMESTAMP_PREFIX$connectionId", System.currentTimeMillis())
-            editor.apply()
-            
+            // Use commit() (synchronous) since this is always called from a background thread
+            // (Dispatchers.IO). apply() queues an async write; if the process is killed before
+            // it flushes, the credential is silently lost.
+            editor.commit()
+
             // Clear session password since we have persistent storage
             sessionPasswords.remove(connectionId)
             

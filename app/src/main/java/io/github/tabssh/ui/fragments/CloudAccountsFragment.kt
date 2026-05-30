@@ -103,8 +103,19 @@ class CloudAccountsFragment : Fragment() {
     private val ociConfigFilePicker = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
-        val uri = result.data?.data ?: return@registerForActivityResult
+        if (result.resultCode != Activity.RESULT_OK) {
+            // User pressed back or cancelled — put the dialog back so they can retry.
+            if (isAdded) showOciCredentialsDialog()
+            return@registerForActivityResult
+        }
+        val uri = result.data?.data
+        if (uri == null) {
+            if (isAdded) {
+                Toast.makeText(requireContext(), "No file selected", Toast.LENGTH_LONG).show()
+                showOciCredentialsDialog()
+            }
+            return@registerForActivityResult
+        }
         viewLifecycleOwner.lifecycleScope.launch {
             val parsed = withContext(Dispatchers.IO) {
                 try {
@@ -118,7 +129,8 @@ class CloudAccountsFragment : Fragment() {
             }
             if (parsed == null) {
                 if (!isAdded) return@launch
-                Toast.makeText(requireContext(), "Could not read OCI config file", Toast.LENGTH_LONG).show()
+                Toast.makeText(requireContext(), "Could not read OCI config file — check the file and try again", Toast.LENGTH_LONG).show()
+                showOciCredentialsDialog()
                 return@launch
             }
             // Merge parsed fields into state; preserve pem/passphrase/compartment already entered.
@@ -139,8 +151,19 @@ class CloudAccountsFragment : Fragment() {
     private val ociKeyFilePicker = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
-        val uri = result.data?.data ?: return@registerForActivityResult
+        if (result.resultCode != Activity.RESULT_OK) {
+            // User pressed back or cancelled — put the dialog back so they can retry.
+            if (isAdded) showOciCredentialsDialog()
+            return@registerForActivityResult
+        }
+        val uri = result.data?.data
+        if (uri == null) {
+            if (isAdded) {
+                Toast.makeText(requireContext(), "No file selected", Toast.LENGTH_LONG).show()
+                showOciCredentialsDialog()
+            }
+            return@registerForActivityResult
+        }
         viewLifecycleOwner.lifecycleScope.launch {
             val pem = withContext(Dispatchers.IO) {
                 try {
@@ -153,7 +176,8 @@ class CloudAccountsFragment : Fragment() {
             }
             if (pem == null) {
                 if (!isAdded) return@launch
-                Toast.makeText(requireContext(), "Could not read key file", Toast.LENGTH_LONG).show()
+                Toast.makeText(requireContext(), "Could not read key file — check the file and try again", Toast.LENGTH_LONG).show()
+                showOciCredentialsDialog()
                 return@launch
             }
             pendingOciState = pendingOciState?.copy(pem = pem)
@@ -466,6 +490,10 @@ class CloudAccountsFragment : Fragment() {
     /**
      * Persists an OCI account. If existing is non-null the row is updated in
      * place (no duplicate UUID); otherwise a new account is inserted.
+     *
+     * DB and credential storage are kept in sync: if storePassword() fails for
+     * any reason (Keystore unavailable, device has no screen lock, etc.) the DB
+     * change is rolled back so we never have an account row with a missing token.
      */
     private fun saveOrUpdateOciAccount(name: String, existing: CloudAccount?, tokenJson: String) {
         viewLifecycleOwner.lifecycleScope.launch {
@@ -475,17 +503,27 @@ class CloudAccountsFragment : Fragment() {
                         app.database.cloudAccountDao().update(
                             existing.copy(name = name, modifiedAt = System.currentTimeMillis())
                         )
-                        app.securePasswordManager.storePassword(
+                        val stored = app.securePasswordManager.storePassword(
                             "cloud_token_${existing.id}", tokenJson,
                             SecurePasswordManager.StorageLevel.ENCRYPTED
                         )
+                        if (!stored) {
+                            // Roll back the name change so the record stays consistent.
+                            app.database.cloudAccountDao().update(existing)
+                            throw Exception("Credential storage failed — check device security settings (screen lock required)")
+                        }
                     } else {
                         val account = CloudAccount(name = name, provider = CloudProviderType.OCI.tag)
                         app.database.cloudAccountDao().upsert(account)
-                        app.securePasswordManager.storePassword(
+                        val stored = app.securePasswordManager.storePassword(
                             "cloud_token_${account.id}", tokenJson,
                             SecurePasswordManager.StorageLevel.ENCRYPTED
                         )
+                        if (!stored) {
+                            // Roll back the DB insert so there is no orphaned account row.
+                            app.database.cloudAccountDao().delete(account)
+                            throw Exception("Credential storage failed — check device security settings (screen lock required)")
+                        }
                     }
                 }
                 if (!isAdded) return@launch

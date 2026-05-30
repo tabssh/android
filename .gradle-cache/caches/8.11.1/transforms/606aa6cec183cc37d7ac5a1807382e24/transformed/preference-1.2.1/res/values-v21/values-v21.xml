@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="preference_dropdown_padding_start">72dp</dimen>
+    <style name="PreferenceSummaryTextStyle">
+        <item name="android:textAppearance">?android:attr/textAppearanceListItemSecondary</item>
+    </style>
+    <style name="PreferenceThemeOverlay" parent="BasePreferenceThemeOverlay">
+        <item name="preferenceCategoryTitleTextColor">?android:attr/colorAccent</item>
+    </style>
+</resources>

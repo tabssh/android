@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.journeyapps</groupId>
+  <artifactId>zxing-android-embedded</artifactId>
+  <version>4.3.0</version>
+  <packaging>aar</packaging>
+  <name>zxing-android-embedded</name>
+  <description>Barcode scanner library for Android, based on the ZXing decoder</description>
+  <url>https://github.com/journeyapps/zxing-android-embedded</url>
+  <licenses>
+    <license>
+      <name>The Apache License, Version 2.0</name>
+      <url>https://github.com/journeyapps/zxing-android-embedded/blob/master/COPYING</url>
+    </license>
+  </licenses>
+  <developers>
+    <developer>
+      <id/>
+      <name>Ralf Kistner</name>
+      <email>ralf@journeyapps.com</email>
+      <organization>Journey Mobile, Inc</organization>
+      <organizationUrl>https://journeyapps.com</organizationUrl>
+    </developer>
+  </developers>
+  <scm>
+    <connection>scm:git:github.com/journeyapps/zxing-android-embedded.git</connection>
+    <developerConnection>scm:git:ssh://github.com/journeyapps/zxing-android-embedded.git</developerConnection>
+    <url>https://github.com/journeyapps/zxing-android-embedded</url>
+  </scm>
+  <dependencies>
+    <dependency>
+      <groupId>com.google.zxing</groupId>
+      <artifactId>core</artifactId>
+      <version>3.4.1</version>
+      <scope>api</scope>
+    </dependency>
+  </dependencies>
+</project>

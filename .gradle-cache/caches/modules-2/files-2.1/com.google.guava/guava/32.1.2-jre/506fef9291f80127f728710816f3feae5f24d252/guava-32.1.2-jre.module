@@ -1,0 +1,295 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "com.google.guava",
+    "module": "guava",
+    "version": "32.1.2-jre",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "maven": {
+      "version": "3.8.2",
+      "buildId": "Apache Maven 3.8.2 (ea98e05a04480131370aa0c110b8c54cf726c06f)"
+    }
+  },
+  "variants": [
+    {
+      "name": "jreApiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.version": "8",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api"
+      },
+      "dependencies": [
+        {
+          "group": "com.google.guava",
+          "module": "guava-parent",
+          "version": {
+            "requires": "32.1.2-jre"
+          },
+          "attributes": {
+            "org.gradle.category": "platform"
+          }
+        },
+        {
+          "group": "com.google.guava",
+          "module": "failureaccess",
+          "version": {
+            "requires": "1.0.1"
+          }
+        },
+        {
+          "group": "com.google.guava",
+          "module": "listenablefuture",
+          "version": {
+            "requires": "9999.0-empty-to-avoid-conflict-with-guava"
+          }
+        },
+        {
+          "group": "com.google.code.findbugs",
+          "module": "jsr305"
+        },
+        {
+          "group": "org.checkerframework",
+          "module": "checker-qual"
+        },
+        {
+          "group": "com.google.errorprone",
+          "module": "error_prone_annotations"
+        },
+        {
+          "group": "com.google.j2objc",
+          "module": "j2objc-annotations"
+        }
+      ],
+      "files": [
+        {
+          "name": "guava-32.1.2-jre.jar",
+          "url": "guava-32.1.2-jre.jar"
+        }
+      ],
+      "capabilities": [
+        {
+          "group": "com.google.guava",
+          "name": "guava",
+          "version": "32.1.2-jre"
+        },
+        {
+          "group": "com.google.collections",
+          "name": "google-collections",
+          "version": "32.1.2-jre"
+        }
+      ]
+    },
+    {
+      "name": "jreRuntimeElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.version": "8",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "com.google.guava",
+          "module": "guava-parent",
+          "version": {
+            "requires": "32.1.2-jre"
+          },
+          "attributes": {
+            "org.gradle.category": "platform"
+          }
+        },
+        {
+          "group": "com.google.guava",
+          "module": "failureaccess",
+          "version": {
+            "requires": "1.0.1"
+          }
+        },
+        {
+          "group": "com.google.guava",
+          "module": "listenablefuture",
+          "version": {
+            "requires": "9999.0-empty-to-avoid-conflict-with-guava"
+          }
+        },
+        {
+          "group": "com.google.code.findbugs",
+          "module": "jsr305"
+        },
+        {
+          "group": "org.checkerframework",
+          "module": "checker-qual"
+        },
+        {
+          "group": "com.google.errorprone",
+          "module": "error_prone_annotations"
+        }
+      ],
+      "files": [
+        {
+          "name": "guava-32.1.2-jre.jar",
+          "url": "guava-32.1.2-jre.jar"
+        }
+      ],
+      "capabilities": [
+        {
+          "group": "com.google.guava",
+          "name": "guava",
+          "version": "32.1.2-jre"
+        },
+        {
+          "group": "com.google.collections",
+          "name": "google-collections",
+          "version": "32.1.2-jre"
+        }
+      ]
+    },
+    {
+      "name": "androidApiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.version": "8",
+        "org.gradle.jvm.environment": "android",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api"
+      },
+      "dependencies": [
+        {
+          "group": "com.google.guava",
+          "module": "guava-parent",
+          "version": {
+            "requires": "32.1.2-android"
+          },
+          "attributes": {
+            "org.gradle.category": "platform"
+          }
+        },
+        {
+          "group": "com.google.guava",
+          "module": "failureaccess",
+          "version": {
+            "requires": "1.0.1"
+          }
+        },
+        {
+          "group": "com.google.guava",
+          "module": "listenablefuture",
+          "version": {
+            "requires": "9999.0-empty-to-avoid-conflict-with-guava"
+          }
+        },
+        {
+          "group": "com.google.code.findbugs",
+          "module": "jsr305"
+        },
+        {
+          "group": "org.checkerframework",
+          "module": "checker-qual"
+        },
+        {
+          "group": "com.google.errorprone",
+          "module": "error_prone_annotations"
+        },
+        {
+          "group": "com.google.j2objc",
+          "module": "j2objc-annotations"
+        }
+      ],
+      "files": [
+        {
+          "name": "guava-32.1.2-android.jar",
+          "url": "../32.1.2-android/guava-32.1.2-android.jar"
+        }
+      ],
+      "capabilities": [
+        {
+          "group": "com.google.guava",
+          "name": "guava",
+          "version": "32.1.2-jre"
+        },
+        {
+          "group": "com.google.collections",
+          "name": "google-collections",
+          "version": "32.1.2-jre"
+        }
+      ]
+    },
+    {
+      "name": "androidRuntimeElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.version": "8",
+        "org.gradle.jvm.environment": "android",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "com.google.guava",
+          "module": "guava-parent",
+          "version": {
+            "requires": "32.1.2-android"
+          },
+          "attributes": {
+            "org.gradle.category": "platform"
+          }
+        },
+        {
+          "group": "com.google.guava",
+          "module": "failureaccess",
+          "version": {
+            "requires": "1.0.1"
+          }
+        },
+        {
+          "group": "com.google.guava",
+          "module": "listenablefuture",
+          "version": {
+            "requires": "9999.0-empty-to-avoid-conflict-with-guava"
+          }
+        },
+        {
+          "group": "com.google.code.findbugs",
+          "module": "jsr305"
+        },
+        {
+          "group": "org.checkerframework",
+          "module": "checker-qual"
+        },
+        {
+          "group": "com.google.errorprone",
+          "module": "error_prone_annotations"
+        }
+      ],
+      "files": [
+        {
+          "name": "guava-32.1.2-android.jar",
+          "url": "../32.1.2-android/guava-32.1.2-android.jar"
+        }
+      ],
+      "capabilities": [
+        {
+          "group": "com.google.guava",
+          "name": "guava",
+          "version": "32.1.2-jre"
+        },
+        {
+          "group": "com.google.collections",
+          "name": "google-collections",
+          "version": "32.1.2-jre"
+        }
+      ]
+    }
+  ]
+}
