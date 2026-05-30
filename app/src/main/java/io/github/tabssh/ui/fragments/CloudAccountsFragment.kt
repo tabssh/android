@@ -31,6 +31,7 @@ import io.github.tabssh.cloud.GcpComputeClient
 import io.github.tabssh.cloud.HetznerClient
 import io.github.tabssh.cloud.ImportCandidate
 import io.github.tabssh.cloud.LinodeClient
+import io.github.tabssh.cloud.OciCloudClient
 import io.github.tabssh.cloud.VultrClient
 import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.databinding.ItemCloudAccountBinding
@@ -66,6 +67,7 @@ class CloudAccountsFragment : Fragment() {
             "aws"          -> "🟡"
             "gcp"          -> "🔵"
             "azure"        -> "🔷"
+            "oci"          -> "🔶"
             else           -> "☁️"
         }
     }
@@ -183,27 +185,140 @@ class CloudAccountsFragment : Fragment() {
 
         spinProvider.setOnItemClickListener { _, _, position, _ ->
             val pt = CloudProviderType.entries[position]
-            tvTokenHelp.text = pt.tokenHelp
-            tilToken.helperText = pt.tokenHelp
+            val isOci = pt == CloudProviderType.OCI
+            tilToken.visibility  = if (isOci) android.view.View.GONE else android.view.View.VISIBLE
+            tvTokenHelp.text     = if (isOci) "Credentials are entered in the next step." else pt.tokenHelp
+            tilToken.helperText  = if (isOci) "" else pt.tokenHelp
         }
 
-        AlertDialog.Builder(ctx)
+        val dialog = AlertDialog.Builder(ctx)
             .setTitle("Add cloud account")
             .setView(dialogView)
-            .setPositiveButton("Save") { _, _ ->
-                val name           = editName.text?.toString()?.trim().orEmpty()
-                val token          = editToken.text?.toString().orEmpty()
-                val selectedLabel  = spinProvider.text?.toString().orEmpty()
-                val providerType   = CloudProviderType.entries
-                    .firstOrNull { it.displayName == selectedLabel }
-                    ?: CloudProviderType.entries.first()
-
-                if (name.isBlank())  { tilName.error = "Account name is required";  return@setPositiveButton }
-                if (token.isBlank()) { tilToken.error = "API token is required"; return@setPositiveButton }
-                saveAccount(name, providerType, token)
-            }
+            .setPositiveButton("Save") { _, _ -> /* overridden below */ }
             .setNegativeButton("Cancel", null)
-            .show()
+            .create()
+        dialog.show()
+
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val name = editName.text?.toString()?.trim().orEmpty()
+            if (name.isBlank()) {
+                tilName.error = "Account name is required"
+                return@setOnClickListener
+            }
+            val selectedLabel = spinProvider.text?.toString().orEmpty()
+            val providerType  = CloudProviderType.entries
+                .firstOrNull { it.displayName == selectedLabel }
+                ?: CloudProviderType.entries.first()
+
+            if (providerType == CloudProviderType.OCI) {
+                dialog.dismiss()
+                showOciCredentialsDialog(name)
+                return@setOnClickListener
+            }
+
+            val token = editToken.text?.toString().orEmpty()
+            if (token.isBlank()) {
+                tilToken.error = "API token is required"
+                return@setOnClickListener
+            }
+            dialog.dismiss()
+            saveAccount(name, providerType, token)
+        }
+    }
+
+    /**
+     * Multi-field credentials dialog for OCI accounts. Collects tenancy OCID,
+     * user OCID, fingerprint, region, compartment (optional), PEM private key,
+     * and an optional passphrase, then packs them as JSON for [saveAccount].
+     */
+    private fun showOciCredentialsDialog(accountName: String) {
+        if (!isAdded) return
+        val ctx = requireContext()
+        val dp  = resources.displayMetrics.density
+
+        val scroll = android.widget.ScrollView(ctx)
+        val ll = android.widget.LinearLayout(ctx).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            val pad = (16 * dp).toInt()
+            setPadding(pad, pad, pad, pad)
+        }
+        scroll.addView(ll)
+
+        fun field(hint: String, multiLine: Boolean = false, password: Boolean = false): TextInputEditText {
+            val til = TextInputLayout(ctx, null,
+                com.google.android.material.R.attr.textInputOutlinedStyle).apply {
+                this.hint = hint
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                ).also { it.bottomMargin = (8 * dp).toInt() }
+            }
+            val edit = TextInputEditText(til.context).apply {
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                inputType = when {
+                    multiLine -> android.text.InputType.TYPE_CLASS_TEXT or
+                                 android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+                    password  -> android.text.InputType.TYPE_CLASS_TEXT or
+                                 android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+                    else      -> android.text.InputType.TYPE_CLASS_TEXT
+                }
+                if (!multiLine) setSingleLine(true)
+                if (multiLine) { minLines = 3; maxLines = 12 }
+            }
+            til.addView(edit)
+            ll.addView(til)
+            return edit
+        }
+
+        val editTenancy     = field("Tenancy OCID  (ocid1.tenancy.oc1.…)")
+        val editUser        = field("User OCID  (ocid1.user.oc1.…)")
+        val editFingerprint = field("API key fingerprint  (aa:bb:cc:…)")
+        val editRegion      = field("Region  (e.g. us-ashburn-1)")
+        val editCompartment = field("Compartment OCID  (optional — blank = root)")
+        val editPem         = field("RSA private key PEM", multiLine = true)
+        val editPassphrase  = field("Key passphrase  (optional)", password = true)
+
+        val dialog = AlertDialog.Builder(ctx)
+            .setTitle("OCI credentials — $accountName")
+            .setView(scroll)
+            .setPositiveButton("Save") { _, _ -> /* overridden below */ }
+            .setNegativeButton("Cancel", null)
+            .create()
+        dialog.show()
+
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val tenancy     = editTenancy.text?.toString()?.trim().orEmpty()
+            val user        = editUser.text?.toString()?.trim().orEmpty()
+            val fingerprint = editFingerprint.text?.toString()?.trim().orEmpty()
+            val region      = editRegion.text?.toString()?.trim().orEmpty()
+            val compartment = editCompartment.text?.toString()?.trim().orEmpty()
+            val pem         = editPem.text?.toString()?.trim().orEmpty()
+            val passphrase  = editPassphrase.text?.toString().orEmpty()
+
+            if (tenancy.isBlank() || user.isBlank() || fingerprint.isBlank() ||
+                    region.isBlank() || pem.isBlank()) {
+                Toast.makeText(ctx,
+                    "Tenancy, User, Fingerprint, Region, and PEM key are required",
+                    Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+
+            val tokenJson = org.json.JSONObject()
+                .put("tenancy",     tenancy)
+                .put("user",        user)
+                .put("fingerprint", fingerprint)
+                .put("region",      region)
+                .put("compartment", compartment)
+                .put("pem",         pem)
+                .put("passphrase",  passphrase)
+                .toString()
+
+            dialog.dismiss()
+            saveAccount(accountName, CloudProviderType.OCI, tokenJson)
+        }
     }
 
     // ── Business logic ────────────────────────────────────────────────────────
@@ -249,6 +364,7 @@ class CloudAccountsFragment : Fragment() {
                 CloudProviderType.AWS          -> AwsEc2Client()
                 CloudProviderType.GCP          -> GcpComputeClient()
                 CloudProviderType.AZURE        -> AzureVmClient()
+                CloudProviderType.OCI          -> OciCloudClient()
                 null -> {
                     if (!isAdded) return@launch
                     Toast.makeText(requireContext(), "Unknown provider: ${account.provider}", Toast.LENGTH_LONG).show()

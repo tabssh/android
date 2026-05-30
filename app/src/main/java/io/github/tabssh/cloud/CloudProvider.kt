@@ -36,7 +36,8 @@ enum class CloudProviderType(val tag: String, val displayName: String, val token
     VULTR("vultr", "Vultr", "API key"),
     AWS("aws", "AWS EC2", "AKID:SECRET:REGION (e.g. AKIA…:wJal…:us-east-1)"),
     GCP("gcp", "GCP Compute Engine", "Paste full service-account JSON"),
-    AZURE("azure", "Azure VMs", "TENANT:CLIENT_ID:CLIENT_SECRET:SUBSCRIPTION_ID");
+    AZURE("azure", "Azure VMs", "TENANT:CLIENT_ID:CLIENT_SECRET:SUBSCRIPTION_ID"),
+    OCI("oci", "Oracle Cloud (OCI)", "Multi-field — tap 'Configure OCI…' after choosing this provider");
 
     companion object {
         fun fromTag(tag: String): CloudProviderType? = entries.firstOrNull { it.tag == tag }

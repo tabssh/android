@@ -29,6 +29,7 @@ import io.github.tabssh.cloud.CloudProviderType
 import io.github.tabssh.cloud.DigitalOceanClient
 import io.github.tabssh.cloud.GcpComputeClient
 import io.github.tabssh.cloud.HetznerClient
+import io.github.tabssh.cloud.OciCloudClient
 import io.github.tabssh.cloud.ImportCandidate
 import io.github.tabssh.cloud.LinodeClient
 import io.github.tabssh.cloud.VultrClient
@@ -257,6 +258,7 @@ class CloudAccountsActivity : AppCompatActivity() {
                 CloudProviderType.AWS -> AwsEc2Client()
                 CloudProviderType.GCP -> GcpComputeClient()
                 CloudProviderType.AZURE -> AzureVmClient()
+                CloudProviderType.OCI -> OciCloudClient()
                 null -> {
                     runOnUiThread {
                         Toast.makeText(this@CloudAccountsActivity, "Unknown provider: ${account.provider}", Toast.LENGTH_LONG).show()

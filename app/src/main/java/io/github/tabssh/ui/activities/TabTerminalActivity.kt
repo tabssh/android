@@ -893,31 +893,17 @@ class TabTerminalActivity : AppCompatActivity() {
      * connection info, close the current tab.
      */
     private fun showTextContextMenu(x: Float, y: Float) {
-        // Terminal-focused long-press menu. Copy / Paste have moved to
-        // dedicated keys on the multi-row keyboard bar; selection has
-        // its own arm-then-drag flow (SEL key); tabs/navigation lives
-        // under the ☰ key. Everything left here is terminal behaviour.
-        // "Cluster…" sends a typed command to every open session (with
-        // a confirm step) — useful for broadcasting `apt update`, etc.
-        val items = arrayOf(
-            "Copy screen",
-            "Find in scrollback…",
-            "Cluster: send to all sessions…",
-            "Snippets…",
-            "Font size…",
-            "Toggle keyboard",
-            "Toggle keyboard layout (rows)",
-            "Share connection info",
-            "Close this tab"
-        )
-
+        // Terminal-focused long-press menu — fast contextual actions only.
+        // Font size and Close tab live in the Command Palette (☰).
+        // Clipboard operations live on the 📋 key in the function bar.
+        // "Cluster…" broadcasts to every open session after a confirm step.
+        // Toggle labels are computed at show-time so they reflect actual state.
         Logger.d("TabTerminalActivity", "showTextContextMenu — building dialog")
         // Defer show() to the next main-thread tick so the in-flight long-press
         // touch sequence finishes dispatching before the dialog window appears.
         // Otherwise the ACTION_UP from the user's finger-lift can hit the
         // freshly-shown dialog at a coord outside its bounds and instantly
-        // dismiss it via tap-outside-cancel — which is exactly the symptom
-        // the user reported (long-press logs fire but no menu visible).
+        // dismiss it via tap-outside-cancel.
         // setCanceledOnTouchOutside(false) is belt-and-suspenders.
         binding.root.post {
             if (isFinishing || isDestroyed) {
@@ -925,6 +911,23 @@ class TabTerminalActivity : AppCompatActivity() {
                 return@post
             }
             try {
+                // Read IME visibility here (inside post, after layout pass) so
+                // the label is accurate at the moment the dialog appears.
+                val imeVisible = androidx.core.view.ViewCompat
+                    .getRootWindowInsets(binding.root)
+                    ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
+                val sysKeyLabel = if (imeVisible) "Hide system keyboard" else "Show system keyboard"
+                val barLabel    = if (customKeyboardVisible) "Hide key bar" else "Show key bar"
+
+                val items = arrayOf(
+                    "Copy screen",
+                    "Find in scrollback…",
+                    "Cluster: send to all sessions…",
+                    "Snippets…",
+                    sysKeyLabel,
+                    barLabel,
+                    "Share connection info"
+                )
                 val dlg = androidx.appcompat.app.AlertDialog.Builder(this)
                     .setTitle("Terminal")
                     .setItems(items) { _, which ->
@@ -933,11 +936,10 @@ class TabTerminalActivity : AppCompatActivity() {
                             1 -> showSearchOverlay()
                             2 -> showClusterBroadcastDialog()
                             3 -> showSnippetsPickerForActiveTab()
-                            4 -> showFontSizeDialog()
-                            5 -> toggleKeyboard()
-                            6 -> toggleCustomKeyboard()
-                            7 -> shareSession()
-                            8 -> closeActiveTabConfirmed()
+                            4 -> toggleKeyboard()
+                            5 -> if (customKeyboardVisible) hideCustomKeyboardBar()
+                                 else showCustomKeyboardBar()
+                            6 -> shareSession()
                         }
                     }
                     .setNegativeButton("Cancel", null)

@@ -288,7 +288,9 @@ class HypervisorEditActivity : AppCompatActivity() {
         // Order MUST match HypervisorType ordinals (PROXMOX=0, XCPNG=1,
         // VMWARE=2, OCI=3, LIBVIRT=4) — `loadHypervisor()` calls
         // `spinnerType.setSelection(hypervisor.type.ordinal)`.
-        val types = arrayOf("Proxmox", "XCP-ng", "VMware", "OCI", "QEMU/libvirt")
+        // OCI is kept in the list for backwards-compat with existing accounts;
+        // new OCI credentials should be added via the Cloud Accounts tab instead.
+        val types = arrayOf("Proxmox", "XCP-ng", "VMware", "OCI (legacy — use Cloud Accounts)", "QEMU/libvirt")
         val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, types)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         spinnerType.adapter = adapter
