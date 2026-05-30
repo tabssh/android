@@ -1,4 +1,4 @@
-# 📱 TabSSH - Modern SSH Client for Android
+# 📱 TabSSH — Modern SSH Client for Android
 
 <p align="center">
   <img src="https://img.shields.io/badge/Platform-Android-green.svg" alt="Platform">
@@ -10,170 +10,154 @@
 </p>
 
 <p align="center">
-  A beautiful, modern, open-source SSH client for Android with true browser-style tabs, enterprise security, and comprehensive accessibility features.
+  A beautiful, modern, open-source SSH client for Android with true browser-style tabs,<br>
+  enterprise security, hypervisor management, and cloud provider integration.
 </p>
 
 ---
 
 ## ✨ Features
 
-### Core SSH Functionality
-- 📑 **Browser-Style Tabs** - Multiple concurrent SSH sessions with intuitive tab management
-- 🪟 **Multi-Tab Same Host** - Open one profile in two tabs and get **two independent shells** on a single SSH session (per-tab `ChannelShell`, shared JSch session)
-- 🔐 **Multiple Authentication Methods** - Password, public key (RSA, ECDSA, Ed25519, DSA), keyboard-interactive
-- 🔑 **Universal SSH Key Support** - OpenSSH, PEM, PKCS#8, PuTTY formats with import/generation
-- 🖥️ **Full Terminal Emulation** - Termux TerminalEmulator (VT100/ANSI, 256 colors, vim/htop/tmux fully functional)
-- 📁 **Integrated SFTP Browser** - Beautiful file manager with upload/download progress
-- 🔌 **Port Forwarding** - Local and remote port forwarding support
-- 🖼️ **X11 Forwarding** - Run graphical applications remotely
-- 🌐 **SSH Config Import** - Import existing ~/.ssh/config files (RemoteCommand + SendEnv supported)
-- 📋 **Clipboard Integration** - Copy/paste with proper encoding
-- 🌐 **IPv4 / IPv6 selection** - Per-host `auto` / `ipv4` / `ipv6` mode with toast on family fallback
-- ❤️ **Always-on Keepalive** - 60s `serverAliveInterval` baked in; idle sessions survive carrier NAT timeouts and Wi-Fi sleep
-- 🚀 **Tmux/Screen auto-launch** - Per-profile auto-attach / create-new for `tmux` / `screen` / `zellij`, plus `postConnectScript` lines
+### Core SSH
 
-### Security Features
-- 🔒 **Hardware-Backed Encryption** - Android Keystore integration for secure key storage
-- 👆 **Biometric Authentication** - Fingerprint and face unlock support
-- 🔐 **No Plaintext Storage** - All passwords encrypted with AES-256
-- 🛡️ **Host Key Verification** - SHA256 fingerprints with MITM detection
-- 🚫 **Screenshot Protection** - Prevent sensitive data leaks
-- 🔐 **Auto-Lock** - Configurable timeout and background locking
-- 📜 **Certificate Pinning** - Enhanced connection security
+- 📑 **Browser-Style Tabs** — Multiple concurrent SSH sessions; each tab gets its own `ChannelShell` on a shared JSch session
+- 🔐 **Auth Methods** — Password, public key (RSA/ECDSA/Ed25519/DSA), keyboard-interactive
+- 🔑 **Universal Key Support** — OpenSSH, PEM, PKCS#8, PuTTY; import or generate in-app
+- 🖥️ **Full Terminal Emulation** — Termux TerminalEmulator (VT100/ANSI, 256 colors, vim/htop/tmux fully functional)
+- 📁 **Integrated SFTP** — File manager with upload/download progress, remote editor, chmod
+- 🔌 **Port Forwarding** — Local, remote, and dynamic (SOCKS5) forwarding
+- 🖼️ **X11 Forwarding** — Run graphical apps remotely via Termux:X11 or XServer XSDL
+- 🌐 **SSH Config Import** — `~/.ssh/config` with RemoteCommand, SendEnv, RequestTTY, ProxyJump
+- ❤️ **Always-on Keepalive** — 60s serverAliveInterval; idle sessions survive carrier NAT and Wi-Fi sleep
+- 🚀 **Tmux/Screen auto-launch** — Per-profile auto-attach/create for tmux/screen/zellij + postConnectScript
+- 🌐 **IPv4 / IPv6 selection** — Per-host auto/ipv4/ipv6 with fallback toast
+- 🔗 **ProxyJump** — Multi-hop connections through bastion hosts
+- ⏺️ **Session Recording** — Capture and replay raw terminal sessions
 
-### Modern UI/UX
-- 🎨 **Material Design 3** - Beautiful, modern interface following Google's latest design guidelines
-- 🌈 **23 Built-in Themes** - Dracula, Solarized (Light/Dark), Nord, Monokai, One Dark, Tokyo Night, Gruvbox, and 16 more
-- 🎨 **Custom Theme Editor** - Full GUI editor in Settings → General → Appearance; import/export JSON theme definitions with WCAG 2.1 contrast validation
-- ⌨️ **Custom Keyboard** - SSH-optimized 1–5 row on-screen keyboard. Default rows reordered for vim/tmux/coding (ESC + CTL/ALT/FN + `:` + `/` + arrows on row 1, navigation on row 2, coding symbols `| \ - _ ~ $ * < >` on row 3). **Drag-to-reorder** keys within any row directly in the keyboard editor
-- ⌨️ **Hardware keyboard polish** - AltGr distinguished from real Alt; xterm-style modifier-encoded arrows / HOME / END / PG family (e.g. ESC `[1;5C` for Ctrl-Right) for tmux pane nav, vim word-jump, bash readline word-delete
-- 🗂️ **Tabs at top** - TabBar sits flush at the top of the screen (no toolbar chrome); navigation drawer reachable via left-edge swipe
-- 👆 **Edge-swipe tab switching** - Single-finger fling within 24dp of the left/right edge switches tabs (backup path for users who turned off ViewPager2 swipe-mode)
-- 🔁 **Active Sessions strip** - Top of the Connections tab shows running tabs with dynamic terminal title (OSC 0/2) and connection-state dot; tap to focus
-- 💡 **Smart Tooltips** - Helpful hints for settings and configuration options
-- 📊 **Visual Indicators** - Connection state, unread output, usage statistics
-- 🔄 **Tab Management** - Drag-to-reorder, Ctrl+Tab switching, persistent sessions
-- 📋 **Copyable error dialogs** - Every error dialog has a Copy button so users can grab the exact message for bug reports
+### Security
 
-### Accessibility & Inclusivity
-- ♿ **TalkBack Support** - Full screen reader compatibility
-- 🔆 **High Contrast Modes** - Enhanced visibility for low vision users
-- 📏 **Large Text Support** - Adjustable font sizes (8-32pt)
-- ⌨️ **Keyboard Navigation** - Full keyboard accessibility
-- 🌐 **Multi-Language** - English, Spanish, French, German (automatic detection)
+- 🔒 **Hardware-Backed Encryption** — Android Keystore integration (hardware security module when available)
+- 👆 **Biometric Authentication** — Fingerprint and face unlock
+- 🔐 **No Plaintext Storage** — All credentials encrypted with AES-256-GCM
+- 🛡️ **Host Key Verification** — TOFU with SHA256 fingerprints and MITM detection
+- 🚫 **Screenshot Protection** — Prevents sensitive data from leaking to recents or screenshots
+- 🔐 **Auto-Lock** — Configurable timeout; session credentials zeroed on background
+- 📋 **Clipboard Auto-Clear** — Configurable TTL for pasted passwords
 
-### Advanced Features
-- 📡 **Background Host Monitoring** - Settings → Monitoring: periodic TCP reachability probes with down/recovery notifications, configurable alert cooldown (15 min–12 h), CPU/memory/disk threshold alerts via existing SSH sessions, OEM battery-saver guidance
-- 📱 **Mosh Protocol** - Mobile shell for unstable connections with roaming support
-- 💾 **Backup & Restore** - Export/import all settings and connections as encrypted ZIP
-- 🔄 **Session Persistence** - Resume sessions after app restart or reboot
-- 📊 **Connection Statistics** - Track usage, last connected, connection count
-- ☁️ **Cloud Sync** - Storage Access Framework (works with **any** provider — Google Drive, Dropbox, OneDrive, Nextcloud, local storage), AES-256-GCM encryption with PBKDF2, and 3-way merge with conflict UI. **No Google services dependency** — runs on de-Googled ROMs.
-- 📝 **Custom Fonts** - 8 monospace fonts: Cascadia Code, Fira Code, JetBrains Mono, and more
-- 🏠 **Home Screen Widgets** - Quick connect from home screen
-- 🌐 **Hypervisor Management** - Proxmox VE, VMware vSphere, XCP-ng, **Xen Orchestra** (REST API + WebSocket), Oracle Cloud Infrastructure (OCI Compute), and **QEMU/libvirt** (SSH-tunnelled VNC)
-  - **Proxmox VE** - Full REST API; list/start/stop/shutdown/reboot/reset VMs and LXC containers; serial console (termproxy) + VNC graphical console
-  - **XCP-ng / Xen Orchestra** - XML-RPC direct host or Xen Orchestra REST + WebSocket; real-time VM state updates; snapshot and backup operations; pool/host info; auto-detects XO vs. direct
-  - **VMware vSphere / ESXi** - REST API; auto-detects ESXi vs. vCenter; VM power management
-  - **QEMU/libvirt (KVM)** - SSH tunnel to hypervisor host; `virsh list` domain enumeration; start / graceful-shutdown / graceful-reboot / hard-reset power actions; VNC console tunnelled over SSH (no VNC port exposure required); works with any libvirt-managed QEMU/KVM host
-  - **OCI Compute** - Path A onboarding (import `~/.oci/config` + `.pem` via SAF); RSA-SHA256 HTTP signed requests; list/start/stop/softstop/reset/softreset instances; public/private IP via VNIC walk. API-key only — `security_token_file=` configs rejected
-  - **Reusable Hypervisor Accounts** - Shared credential rows (username + Keystore-stored password) referenced by multiple hypervisor profiles
-- 🖥️ **VM Serial Console** - Connect to VMs via hypervisor serial console (no VM network required; works during OS install)
-- 🔗 **Identity Abstraction** - Reusable credentials across multiple connections
-- 📂 **Connection Groups** - Organize connections into folders with expand/collapse
-- 🔍 **Search & Sort** - Real-time search with 8 sort options (name, host, usage, date)
-- 📱 **Mobile UX** - Swipe between tabs, volume keys adjust font, click URLs to open
-- 📊 **Logging Systems** - App log, debug log, host logs, audit logs. Each cold start logs `## apk built from: <commit> ##` once per commit-id change so bug reports always carry the exact build.
-- 🎮 **Automation** - Tasker integration, intent-based actions, deep links
-- 📝 **Snippets with variables** - Quick command library with `{?name:default|hint}` placeholders, per-snippet recall of last used value
-- ⏺️ **Recordable macros** - Capture raw byte sequences (escape codes, paste payloads, modifier-composed Ctrl/Alt) and replay verbatim into any tab — distinct from snippets, useful for replaying complex tmux/screen flows
+### UI/UX
 
-### Privacy & Open Source
-- 🎯 **Zero Trackers** - No analytics, no ads, complete privacy
-- 📖 **Open Source** - MIT licensed, fully auditable code
-- 🔍 **No Telemetry** - No data collection whatsoever
-- 🆓 **Forever Free** - No premium features, no in-app purchases
+- 🎨 **Material Design 3** — Google's latest design system throughout
+- 🌈 **23 Built-in Themes** — Dracula, Solarized (Light/Dark), Nord, Monokai, One Dark, Tokyo Night, Gruvbox, and 16 more
+- 🎨 **Custom Theme Editor** — Full GUI in Settings → Appearance; import/export JSON with WCAG 2.1 contrast validation
+- ⌨️ **Custom SSH Keyboard** — 1–5 row on-screen bar optimized for vim/tmux/coding; drag-to-reorder keys within rows
+- ⌨️ **Hardware Keyboard** — AltGr distinct from Alt; xterm modifier-encoded arrows (Ctrl-Right = `ESC[1;5C`), HOME/END/PG family
+- 🗂️ **Tabs at Top** — TabBar flush at top; no toolbar chrome; navigation drawer via left-edge swipe
+- 👆 **Edge-Swipe Tabs** — Single-finger fling within 24dp of left/right edge switches tabs
+- 🔁 **Active Sessions Strip** — Running tabs with live OSC 0/2 terminal title and connection-state dot
+- 📋 **Copyable Error Dialogs** — Every error dialog has a Copy button for clean bug reports
+- 🔍 **Find in Scrollback** — Floating search bar with prev/next, match counter, amber highlights, Ctrl+Shift+F shortcut
+
+### Accessibility
+
+- ♿ **TalkBack** — Full screen reader support
+- 🔆 **High Contrast** — Enhanced visibility for low vision users
+- 📏 **Adjustable Fonts** — 8–32pt, 8 monospace families (Cascadia Code, Fira Code, JetBrains Mono, and more)
+- ⌨️ **Keyboard Navigation** — Fully keyboard-accessible
+- 🌐 **Translations** — English, Spanish, French, German
+
+### Advanced
+
+- 📡 **Background Monitoring** — Periodic TCP reachability probes; down/recovery notifications; CPU/memory/disk threshold alerts via SSH; configurable cooldown (15 min–12 h)
+- 📱 **Mosh Protocol** — Mobile shell for unstable connections with roaming support
+- 💾 **Backup & Restore** — Export/import all settings as encrypted ZIP
+- ☁️ **Cloud Sync** — Storage Access Framework (Google Drive, Dropbox, OneDrive, Nextcloud, local — no Google services dependency); AES-256-GCM + PBKDF2 + 3-way merge with conflict UI
+- 🏠 **Home Screen Widgets** — Quick-connect from launcher
+- 📂 **Connection Groups** — Folders with expand/collapse; group badges in search
+- 🔍 **Search & Sort** — Real-time search, 8 sort options
+- 📊 **Connection Statistics** — Last connected, usage count, per-host logs
+- 📝 **Snippets** — Quick command library with `{?name:default|hint}` variable placeholders
+- ⏺️ **Macros** — Capture and replay raw byte sequences (escape codes, modifier-composed Ctrl/Alt)
+- 🎮 **Automation** — Tasker integration, intent-based actions, deep links
+- 📊 **Multi-Host Dashboard** — Side-by-side CPU/memory/disk metrics across hosts; dashboard groups independent from connection groups
+
+### Hypervisor Management
+
+Manage virtual machines directly from TabSSH — no separate app required.
+
+- **Proxmox VE** — Full REST API; list/start/stop/shutdown/reboot/reset VMs and LXC containers; serial console (termproxy) with automatic VNC fallback; `last_connected` tracking
+- **XCP-ng / Xen Orchestra** — XML-RPC direct host or Xen Orchestra REST + WebSocket; real-time VM state; snapshot/backup operations; pool/host info; auto-detects XO vs. direct
+- **VMware vSphere / ESXi** — REST API; auto-detects ESXi vs. vCenter; full VM power management
+- **QEMU/libvirt (KVM)** — SSH tunnel to host; `virsh list` domain enumeration; start/shutdown/reboot/hard-reset; VNC console tunnelled over SSH (no VNC port exposure required); SSH fallback via ProxyJump when VNC not configured
+
+> **OCI Compute** has moved to **Cloud Accounts** (see below) for a unified multi-cloud experience.
+
+### Cloud Provider Management ☁️
+
+Manage instances across 8 cloud providers from a single Cloud Accounts screen.
+
+- **DigitalOcean** · **Hetzner** · **Linode** · **Vultr** · **AWS EC2** · **Google Cloud Compute** · **Azure VMs** · **Oracle Cloud (OCI)**
+- Live instance state (running / stopped / transitioning) with color-coded status dots
+- **Start / Stop** power toggle per instance
+- **Restart** (graceful) and **Force Restart** (hard power-cycle) for running instances
+- **Connect** shortcut — launches SSH session to running instances with a public IP
+- Accounts editable after creation; OCI credentials importable from `~/.oci/config` via file picker
+
+### VNC Console *(alpha)* 🖥️
+
+Pixel-perfect graphical console access to VMs — no separate VNC viewer required.
+
+- RFB protocol client with Tight, ZRLE, CopyRect, Hextile, CoRRE, RRE encoding support
+- ServerFence / ClientFence handshake (required for Proxmox vncproxy)
+- ExtendedDesktopSize (SetDesktopSize) resize negotiation
+- VNC password authentication
+- X11 keysym translation from Android `KeyEvent` — all modifier keys (Ctrl, Alt, Shift, Super), F1–F12, arrow cluster, Home/End/PgUp/PgDn
+- Custom SSH keyboard bar and system keyboard both work inside VNC sessions
+- Tunnelled over SSH for QEMU/libvirt — no VNC port needs to be exposed to the network
 
 ---
 
 ## 📦 Installation
 
-### Download from GitHub Releases
+### GitHub Releases
 
-Download the latest release from [GitHub Releases](https://github.com/tabssh/android/releases):
+Download from [Releases](https://github.com/tabssh/android/releases):
 
-- **tabssh-universal.apk** (30MB) - Works on all devices **(recommended)**
-- **tabssh-arm64-v8a.apk** - Modern ARM 64-bit devices
-- **tabssh-armeabi-v7a.apk** - Older ARM 32-bit devices
-- **tabssh-x86_64.apk** - x86 64-bit devices
-- **tabssh-x86.apk** - x86 32-bit devices
+| APK | Use case |
+|---|---|
+| `tabssh-universal.apk` | **Recommended** — all devices |
+| `tabssh-arm64-v8a.apk` | Modern 64-bit ARM |
+| `tabssh-armeabi-v7a.apk` | Older 32-bit ARM |
+| `tabssh-x86_64.apk` | x86 64-bit |
+| `tabssh-x86.apk` | x86 32-bit |
 
-### Installation Steps
-
-1. Download `tabssh-universal.apk` from the latest release
-2. Enable "Install from Unknown Sources" in Android Settings → Security
-3. Open the downloaded APK file
-4. Tap "Install" and wait for installation to complete
-5. Launch TabSSH from your app drawer
-6. Grant required permissions (Storage, Notifications)
-7. Start connecting to your servers!
+1. Download `tabssh-universal.apk`
+2. Enable **Install from Unknown Sources** in Android Settings → Security
+3. Open the APK and tap **Install**
+4. Launch TabSSH, grant Storage + Notification permissions
+5. Add a connection and connect
 
 ### F-Droid
 
-TabSSH is available for F-Droid. Submission metadata is prepared in `fdroid-submission/`.
+Submission metadata is prepared in `fdroid-submission/`. Listing pending review.
 
-### System Requirements
+### Requirements
 
-- **Minimum:** Android 5.0 (API 21) - Lollipop
-- **Recommended:** Android 8.0+ (API 26) for best experience
-- **Storage:** 50MB free space
-- **RAM:** 512MB minimum, 1GB+ recommended
+- **Minimum:** Android 5.0 (API 21)
+- **Recommended:** Android 8.0+ (API 26) for best performance
+- **Storage:** 50 MB free
+- **RAM:** 512 MB minimum
 
 ---
 
 ## 🚀 Quick Start
 
-### For End Users
-
-1. **Add a Connection:**
-   - Tap the "+" button
-   - Enter hostname, port, username
-   - Choose authentication method (password or SSH key)
-   - Save the connection
-
-2. **Connect:**
-   - Tap the connection profile
-   - Enter password or unlock with biometrics
-   - Accept host key fingerprint (first connection only)
-   - You're connected!
-
-3. **Use Tabs:**
-   - Tap "+" in the top bar to open new tabs
-   - Swipe or tap tabs to switch
-   - Long-press to close tabs
-
-4. **SFTP File Transfer:**
-   - Tap the folder icon in the connection
-   - Browse files, upload/download
-
-### For Developers
-
-```bash
-# Clone the repository
-git clone https://github.com/tabssh/android.git
-cd android
-
-# Build with Docker (recommended)
-make build
-
-# Or build with local Gradle
-./gradlew assembleDebug
-
-# Install to connected device
-make install
-
-# View logs
-make logs
+```
+Add connection → Tap "+" → enter host/port/username → save
+Connect        → Tap profile → accept host key → connected
+New tab        → Tap "+" in TabBar, or Ctrl+T
+SFTP           → Tap the folder icon in an active session
+VNC console    → Hypervisors → tap VM → tap VNC/Console
+Cloud          → Cloud Accounts → tap account → view live instances
 ```
 
 ---
@@ -182,326 +166,142 @@ make logs
 
 ### Prerequisites
 
-**Option 1: Docker (Recommended)**
-- Docker 20.10+
-- Docker Compose 2.0+
-- 8GB RAM minimum
+**Docker (recommended)**
+- Docker 20.10+ and Docker Compose 2.0+
 
-**Option 2: Local Build**
-- Android SDK 34
-- JDK 17 (Temurin or OpenJDK)
-- Gradle 8.11.1+
-- 16GB RAM recommended
+**Local build**
+- Android SDK 34, JDK 17 (Temurin/OpenJDK), Gradle 8.11.1+
 
 ### Build Commands
 
 ```bash
-# Build debug APKs (Docker)
-make build
-
-# Build release APKs
-make release
-
-# Clean build artifacts
-make clean
-
-# Run tests
-./gradlew test
-
-# Check for compilation errors
-./gradlew compileDebugKotlin
-
-# Lint code
-./gradlew lint
-
-# Generate documentation
-./gradlew dokkaHtml
+make build      # Debug APKs → ./binaries/   (~5 min, Docker-cached)
+make check      # Compile-only check         (~2 min, Docker-cached)
+make install    # Install to connected device
+make logs       # Tail logcat
+make test       # Run UI tests
+make clean      # Remove build artifacts
 ```
+
+Production releases are built by the `release.yml` workflow on tag push (`v*`).
 
 ### Project Structure
 
 ```
 android/
-├── app/                          # Android application source
-│   ├── src/main/java/io/github/tabssh/
-│   │   ├── accessibility/        # Accessibility features
-│   │   ├── backup/               # Backup/restore system
-│   │   ├── crypto/               # Cryptography & key management
-│   │   ├── ssh/                  # SSH connection handling
-│   │   ├── sftp/                 # SFTP file transfer
-│   │   ├── terminal/             # Terminal emulator
-│   │   ├── themes/               # Theme management
-│   │   ├── ui/                   # User interface
-│   │   └── sync/                 # SAF-based universal cloud sync (any provider)
-│   ├── src/main/res/             # Resources (layouts, strings, themes)
-│   └── build.gradle              # App-level build configuration
-├── .github/                      # GitHub Actions workflows & templates
-│   ├── workflows/                # CI/CD pipelines
-│   ├── ISSUE_TEMPLATE/           # Issue templates
-│   └── CONTRIBUTING.md           # Contribution guidelines
-├── scripts/                      # Build & automation scripts
-├── metadata/                     # App metadata
-├── fdroid-submission/            # F-Droid submission files
-├── .github/                      # GitHub Actions workflows
-├── scripts/                      # Build & utility scripts
-├── Makefile                      # Build automation
-├── build.gradle                  # Project-level build config
-├── CLAUDE.md                     # Development tracker (103KB)
-├── CHANGELOG.md                  # Version history
-├── LICENSE.md                    # MIT license
-└── README.md                     # This file
+├── app/src/main/java/io/github/tabssh/
+│   ├── cloud/          # Cloud provider clients + CloudInstanceState
+│   ├── crypto/         # AES-GCM, Keystore wrappers, key storage
+│   ├── hypervisor/     # Proxmox, XCP-ng, VMware, libvirt, OCI API clients
+│   ├── ssh/            # SSHConnection, SSHSessionManager, port forwarding, X11
+│   ├── sftp/           # SFTP browser and file transfer
+│   ├── terminal/       # TermuxBridge, TerminalView, VNC RFB client
+│   ├── storage/        # Room DB (v36, 35 migrations), DAOs, entities
+│   ├── sync/           # SAF-based 3-way merge sync
+│   ├── backup/         # Encrypted ZIP backup/restore
+│   └── ui/             # Activities, Fragments, Adapters, ViewModels
+├── app/src/main/res/   # Layouts, strings, themes, drawables
+├── app/schemas/        # Room migration JSON schemas
+├── .github/workflows/  # CI/CD (android-ci, release)
+├── docker/             # Dockerfile.build (toolchain image)
+├── scripts/            # Build and automation scripts
+├── fdroid-submission/  # F-Droid metadata
+├── Makefile
+└── release.txt         # Version pin (0.0.9)
 ```
-
-### Running Tests
-
-```bash
-# Unit tests
-./gradlew test
-
-# Instrumentation tests (requires connected device/emulator)
-./gradlew connectedAndroidTest
-
-# Test coverage
-./gradlew jacocoTestReport
-
-# Specific test class
-./gradlew test --tests SSHConnectionTest
-```
-
-### Code Style
-
-We follow the [Kotlin Coding Conventions](https://kotlinlang.org/docs/coding-conventions.html):
-
-- 4 spaces for indentation
-- 120 character line limit
-- Use meaningful variable names
-- Document public APIs with KDoc
-- Use `@SuppressLint` sparingly with justification
 
 ---
 
 ## 🔐 Security
 
-### Reporting Security Issues
+**Report vulnerabilities privately:** `git-admin+security@casjaysdev.pro` — we respond within 48 hours.
 
-**DO NOT** open public issues for security vulnerabilities.
-
-Instead, please email: **git-admin+security@casjaysdev.pro**
-
-We will respond within 48 hours and work with you to resolve the issue responsibly.
-
-### Security Features
-
-- All passwords encrypted with AES-256-GCM
-- Private keys stored in Android Keystore (hardware-backed when available)
-- Host key verification with SHA256 fingerprints
-- No telemetry or analytics
-- No network requests except SSH connections
-- Regular security audits
-- Dependency scanning with OWASP Dependency-Check
-
-### Security Audits
-
-- Last audit: 2024-12-18
-- No critical vulnerabilities found
-- All dependencies up to date
+- AES-256-GCM for all stored credentials
+- Android Keystore (hardware-backed when available)
+- Host key TOFU with SHA256 fingerprints
+- Zero telemetry, zero analytics, zero external network requests except SSH/cloud connections
+- Session credentials zeroed from memory when the app backgrounds
+- OWASP Dependency-Check in CI
 
 ---
 
 ## 🎨 Themes
 
-TabSSH includes **23 professionally designed themes**:
+23 built-in themes: **Dracula**, **Solarized Light/Dark**, **Nord**, **Monokai**, **One Dark**, **Tokyo Night**, **Gruvbox**, **High Contrast**, and 14 more.
 
-- 🦇 **Dracula** - Dark theme with vibrant colors
-- ☀️ **Solarized Light** - Precision colors for readability
-- 🌙 **Solarized Dark** - Low-contrast dark theme
-- ❄️ **Nord** - Arctic, north-bluish color palette
-- 🌲 **Monokai** - Sublime Text inspired
-- 🎯 **One Dark** - Atom's iconic dark theme
-- 🌃 **Tokyo Night** - Clean, dark Tokyo-inspired theme
-- 🏔️ **Gruvbox** - Retro groove warm theme
-- ♿ **High Contrast** - Maximum accessibility
-- … and 14 more built-in options
+**Custom themes:** Settings → General → Appearance → Theme Editor. Import/export JSON:
 
-### Custom Theme Editor
-
-Create and share your own themes via the full GUI editor: **Settings → General → Appearance → Theme Editor**. Import/export JSON with automatic WCAG 2.1 contrast validation.
-
-Example theme structure:
 ```json
 {
-  "name": "My Custom Theme",
+  "name": "My Theme",
   "colors": {
     "background": "#1e1e1e",
     "foreground": "#d4d4d4",
-    "cursor": "#00ff00",
-    "black": "#000000",
-    "red": "#cd3131",
-    ...
+    "cursor": "#00ff00"
   }
 }
 ```
 
 ---
 
-## 📚 Documentation
+## 📊 Stats
 
-- **[CHANGELOG.md](CHANGELOG.md)** - Version history and release notes
-- **[CLAUDE.md](CLAUDE.md)** - Development tracker and project status  
-- **[LICENSE.md](LICENSE.md)** - MIT license details
-- **[.github/CONTRIBUTING.md](.github/CONTRIBUTING.md)** - How to contribute
-- **[scripts/README.md](scripts/README.md)** - Build scripts documentation
+| Metric | Value |
+|---|---|
+| Kotlin files | 258 |
+| Lines of code | ~65,000 |
+| Activities | 31 |
+| Fragments | 7 |
+| Services | 1 (`SSHConnectionService`) |
+| Built-in themes | 23 |
+| Translations | 4 (EN/ES/FR/DE) |
+| APK variants | 5 (universal + 4 arch-specific) |
+| Hypervisor backends | 4 (Proxmox, XCP-ng, VMware, QEMU/libvirt) |
+| Cloud providers | 8 (DO, Hetzner, Linode, Vultr, AWS, GCP, Azure, OCI) |
+| Room DB version | 36 (35 forward migrations from v1) |
+| Trackers | 0 |
 
 ---
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see [CONTRIBUTING.md](.github/CONTRIBUTING.md) for guidelines.
+See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for guidelines.
 
-### Ways to Contribute
-
-- 🐛 Report bugs
-- 💡 Suggest features
-- 📝 Improve documentation
-- 🌐 Add translations
-- 🎨 Design themes
-- 💻 Submit pull requests
-- ⭐ Star the repository
-
-### Development Workflow
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Run tests (`./gradlew test`)
-5. Commit with descriptive message
-6. Push to your fork
-7. Open a pull request
+```bash
+git checkout -b feature/my-feature
+# make changes
+make check          # must pass
+./gradlew test      # must pass
+# open pull request
+```
 
 ---
 
 ## 📜 License
 
-MIT License - see [LICENSE.md](LICENSE.md) for details.
+MIT — see [LICENSE.md](LICENSE.md).
 
 ```
 Copyright (c) 2024 TabSSH Contributors
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-...
 ```
 
 ---
 
-## 💬 Community & Support
+## 💬 Support
 
-### Get Help
-
-- 🐛 **Bug Reports:** [GitHub Issues](https://github.com/tabssh/android/issues)
-- 💡 **Feature Requests:** [GitHub Issues](https://github.com/tabssh/android/issues)
-- 💬 **Discussions:** [GitHub Discussions](https://github.com/tabssh/android/discussions)
+- 🐛 **Bugs / Features:** [GitHub Issues](https://github.com/tabssh/android/issues)
+- 💬 **Discussion:** [GitHub Discussions](https://github.com/tabssh/android/discussions)
 - 📧 **Email:** git-admin+support@casjaysdev.pro
-- 📖 **Documentation:** [CLAUDE.md](CLAUDE.md), [CHANGELOG.md](CHANGELOG.md), [scripts/README.md](scripts/README.md)
-
-### Social
-
-- 🐦 Twitter: [@tabssh](https://twitter.com/tabssh)
-- 💼 LinkedIn: [TabSSH](https://linkedin.com/company/tabssh)
-- 📱 Matrix: [#tabssh:matrix.org](https://matrix.to/#/#tabssh:matrix.org)
-
-### FAQ
-
-**Q: Is TabSSH really free?**
-A: Yes! Completely free, open source, no ads, no in-app purchases, forever.
-
-**Q: Does TabSSH collect any data?**
-A: No. Zero analytics, zero telemetry, zero data collection. Your data stays on your device.
-
-**Q: Can I use TabSSH without Google Play Services?**
-A: Yes — TabSSH has zero Google services dependency. Cloud sync goes through Android's Storage Access Framework, so you pick whichever storage provider is installed on your device (Nextcloud, Dropbox, ownCloud, local storage, …). Works perfectly on de-Googled ROMs.
-
-**Q: Which devices are supported?**
-A: Any Android 5.0+ device (covers 99%+ of active Android devices).
-
-**Q: How do I import SSH keys?**
-A: Settings → Security → SSH Keys → Import. Supports OpenSSH, PEM, PKCS#8, and PuTTY formats.
-
-**Q: Can I sync settings across devices?**
-A: Yes! Settings → Sync. Uses Android's Storage Access Framework — works with any provider (Google Drive, Dropbox, OneDrive, Nextcloud, local storage). No Google services dependency; runs perfectly on de-Googled ROMs.
 
 ---
 
 ## 🙏 Acknowledgments
 
-TabSSH is built on the shoulders of giants:
-
-- **[JSch](https://github.com/mwiede/jsch)** - Modern SSH implementation (v2.27.7)
-  - Full OpenSSH 8.8+ algorithm support
-  - Modern ciphers: chacha20-poly1305, aes256-gcm, aes128-gcm
-  - Modern KEX: curve25519-sha256, ecdh-sha2-nistp256/384/521
-  - Modern host keys: ssh-ed25519, ecdsa-sha2-nistp256/384/521
-- **[Material Design Components](https://material.io/)** - Beautiful UI framework
-- **[AndroidX Libraries](https://developer.android.com/jetpack/androidx)** - Modern Android development
-- **[BouncyCastle](https://www.bouncycastle.org/)** - Comprehensive cryptography
-- **All contributors** - Thank you for making TabSSH better!
-
-### Special Thanks
-
-- The JuiceSSH team for inspiration
-- The ConnectBot team for pioneering Android SSH
-- The open-source community for making this possible
-
----
-
-## 📊 Stats
-
-- **203 Kotlin files** - ~63,000 lines of code
-- **31 Activities · 7 Fragments · 1 Service** (`SSHConnectionService`)
-- **23 built-in terminal themes** + GUI theme editor
-- **100+ XML resources** — Layouts, themes, strings, translations
-- **4 languages** - English, Spanish, French, German
-- **100% open source** - MIT licensed
-- **0 trackers** - Complete privacy
-- **5 APK variants** - Universal + 4 architecture-specific builds (`tabssh-{arch}.apk`)
-- **6 hypervisor types** — Proxmox, XCP-ng, VMware, OCI, QEMU/libvirt, Xen Orchestra
-- **Database v33** — 32 forward migrations from v1
-
----
-
-## 🗺️ Roadmap
-
-### Current Focus (v0.0.9)
-- [x] Terminal output rendering fixes
-- [x] Copy button on all error messages
-- [x] Full-screen terminal with edge gestures (tabs flush at top, no toolbar chrome)
-- [x] CI/CD keystore handling
-- [x] Keyboard drag-to-reorder in the key editor
-- [x] Background host monitoring with alerts
-- [x] SSH connect concurrency control + exponential backoff
-- [x] Stale / ghost notification fixes
-- [ ] Complete testing and bug fixes
-
-### Future Versions
-- [ ] Mosh protocol full integration
-- [ ] Bluetooth keyboard enhancements
-- [ ] Session recording and replay UI
-- [ ] Advanced port-forwarding manager
-- [ ] Performance profiling pass
-
-See [GitHub Issues](https://github.com/tabssh/android/issues) and [CLAUDE.md](CLAUDE.md) for detailed roadmap.
-
----
-
-## 🌟 Star History
-
-If you find TabSSH useful, please consider starring the repository! It helps others discover the project.
-
-[![Star History Chart](https://api.star-history.com/svg?repos=tabssh/android&type=Date)](https://star-history.com/#tabssh/android&Date)
+- **[JSch (mwiede fork)](https://github.com/mwiede/jsch)** — modern SSH2 (chacha20-poly1305, aes256-gcm, curve25519, ed25519)
+- **[Termux Terminal Emulator](https://github.com/termux/termux-app)** — VT100/ANSI terminal core
+- **[Material Design Components](https://material.io/)** — UI framework
+- **[BouncyCastle](https://www.bouncycastle.org/)** — cryptography
+- The ConnectBot and JuiceSSH teams for pioneering Android SSH
 
 ---
 
@@ -515,62 +315,3 @@ If you find TabSSH useful, please consider starring the repository! It helps oth
   <a href="https://github.com/tabssh/android/issues">Request Feature</a> ·
   <a href=".github/CONTRIBUTING.md">Contribute</a>
 </p>
-
-## 🎊 Latest Updates
-
-### Recent Improvements
-- ✅ **Background Host Monitoring** - TCP reachability probes, down/recovery alerts, CPU/memory/disk thresholds, configurable cooldown
-- ✅ **Keyboard Drag-to-Reorder** - Drag keys within any row directly in the key editor preview
-- ✅ **Tabs at Top** - Toolbar chrome removed; TabBar is now flush at top of screen
-- ✅ **SSH Connect Reliability** - Semaphore (10 concurrent handshakes) + exponential backoff reconnect in MultiHost dashboard
-- ✅ **Notification Fixes** - Stale "Connected to [host]" notifications properly cancelled on disconnect and force-close
-- ✅ **23 Built-in Themes** + GUI theme editor in Settings → General → Appearance
-- ✅ **Cloud Sync** - SAF-based universal sync (any provider) with AES-256-GCM + 3-way conflict merge
-- ✅ **Hypervisor Management** - Proxmox VE, VMware vSphere, XCP-ng, Xen Orchestra, OCI Compute, **QEMU/libvirt (KVM)**
-- ✅ **QEMU/libvirt Console** - VNC console tunnelled over SSH; full VNC-as-console keyboard bridge (X11 keysyms, VT220 sequences, terminal resize via SetDesktopSize); power management (start / shutdown / reboot / hard-reset) — no VNC port exposure required
-- ✅ **VNC Console Keyboard** - System keyboard + custom SSH keyboard bar both work in VNC sessions; Android KeyEvents translate to X11 keysyms via VncConsoleChannel; modifier sequences (Ctrl, Alt, Shift) and all F-keys covered
-- ✅ **Copy Button on All Errors** - Every error dialog has a Copy button for clean bug reports
-
----
-
-
----
-
-## 🎯 Feature Highlights
-
-### What Makes TabSSH Special
-
-**🚀 Fast & Efficient**
-- Hardware-accelerated rendering
-- Optimized for mobile networks
-- Background session persistence
-- Connection pooling
-
-**🔒 Security First**
-- Hardware-backed encryption (Android Keystore)
-- No data collection or telemetry
-- Host key verification with MITM detection
-- Biometric authentication support
-
-**📱 Mobile-Optimized**
-- Full-screen terminal with edge gestures
-- Volume keys adjust font size
-- Swipe between tabs
-- Click URLs to open in browser
-- Custom SSH keyboard
-
-**♿ Accessible**
-- TalkBack screen reader support
-- High contrast modes
-- Adjustable fonts (8-32pt)
-- Keyboard navigation
-- Multi-language support
-
-**🎨 Beautiful Design**
-- Material Design 3
-- 10+ professional themes
-- Custom theme support
-- Smooth animations
-
-See [CHANGELOG.md](CHANGELOG.md) for complete version history.
-
