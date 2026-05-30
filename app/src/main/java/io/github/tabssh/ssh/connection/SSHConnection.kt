@@ -1249,9 +1249,10 @@ class SSHConnection(
             // (`create`), forced-`command="..."` jails in authorized_keys,
             // SFTP-only accounts (`internal-sftp`), gateway/menu hosts.
             //
-            // PTY is always allocated for the exec channel — most real-world
-            // RemoteCommand uses are interactive (need a tty); JSch's
-            // `setPty(true)` is the equivalent of OpenSSH's `RequestTTY yes`.
+            // PTY allocation for exec channels is controlled by the `requestTTY`
+            // key in `advancedSettings` (populated by SSHConfigParser from ~/.ssh/config
+            // or set manually). Semantics match OpenSSH: "yes"/"force" → PTY allocated;
+            // "no"/"auto"/absent → no PTY (exec channels are non-interactive by default).
             //
             // We branch with two parallel blocks rather than a generic
             // `ChannelSession` variable because that class is package-private
@@ -1262,8 +1263,19 @@ class SSHConnection(
             if (remoteCmd != null) {
                 val exec = currentSession.openChannel("exec") as ChannelExec
                 exec.setCommand(remoteCmd)
-                exec.setPty(true)
-                exec.setPtyType(profile.terminalType)
+                // Respect RequestTTY from advancedSettings (set via ~/.ssh/config import or manual edit).
+                // Semantics mirror OpenSSH: "force"/"yes" → allocate PTY; "no" → never; "auto" → no PTY
+                // for exec channels (same as OpenSSH default). Absent value defaults to "auto".
+                val requestTTY = try {
+                    profile.advancedSettings
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { org.json.JSONObject(it).optString("requestTTY", "auto") }
+                        ?: "auto"
+                } catch (_: Exception) { "auto" }
+                if (requestTTY == "yes" || requestTTY == "force") {
+                    exec.setPty(true)
+                    exec.setPtyType(profile.terminalType)
+                }
                 exec.setPtySize(80, 24, 0, 0) // Will be updated by terminal
                 applyEnvVarsTo(exec)
                 applyForwardingFlags(currentSession, exec)
@@ -1275,7 +1287,7 @@ class SSHConnection(
                 exec.connect()
                 shellChannel = exec
                 openChannels.add(exec)
-                Logger.i("SSHConnection", "Opened exec channel with RemoteCommand: ${remoteCmd.take(60)}")
+                Logger.i("SSHConnection", "Opened exec channel: ${remoteCmd.take(60)} (pty=$requestTTY)")
                 return@withContext exec
             }
 

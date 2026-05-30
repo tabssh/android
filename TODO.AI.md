@@ -367,7 +367,7 @@ Local/Remote/Dynamic forwards now apply at connect (`d714a7b4`). Status:
 | `ProxyJump` / `ProxyCommand` | ✅ | columns | ✅ — `SSHConfigParser.kt:299-302` populates `proxy_host`/`proxy_port`/`proxy_username` at parse time. `ProxyCommand` has no JSch equivalent. |
 | `ServerAliveInterval` / `StrictHostKeyChecking` | ✅ | JSON | intentionally ignored (mobile keepalive + TOFU dialog own these) |
 | `ForwardAgent` / `ForwardX11` / `compression` / `connectTimeout` | ✅ | JSON + columns | ✅ |
-| `RequestTTY` | ✅ | JSON | 🔴 — never read by `applyAdvancedSettings()`; PTY is unconditionally allocated regardless of value |
+| `RequestTTY` | ✅ | JSON | ✅ — `SSHConnection.kt` reads `advancedSettings["requestTTY"]`; PTY allocated for exec only when value is `"yes"` or `"force"`; shell channel always gets PTY |
 
 ---
 
