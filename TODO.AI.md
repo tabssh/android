@@ -356,26 +356,6 @@ The class can stay as-is otherwise — it's still reachable from an edge path.
 
 ---
 
-## 📋 Documented but not yet implemented
-
-These are in the codebase or spec but **not** working end-to-end. Post-v1 roadmap only.
-
-| Item | AI.md | Effort | Notes |
-|---|---|---|---|
-| **FIDO2 SSH signing** | §7.1, §16 | ~80h, likely indefinite | `Fido2SshIdentity.kt` throws `JSchException("not yet implemented")`. JSch doesn't support `sk-ecdsa-sha2-nistp256` / `sk-ssh-ed25519` key types. Needs JSch fork or alternate SSH library. |
-| **Chinese / Japanese translations** | §16 | ~4h per language | No translators assigned. English fallback works. Post-v1 when translators are available. |
-| **QR Pairing — desktop side** | §18 | other repo | Mobile decoder is live (`ea4f687f`). Desktop encoder WIP in `tabssh/desktop`. Wire format + interop test vectors in `AI.md §18` / `QR_PAIRING.md`. |
-
----
-
-## 📐 QR Pairing — Desktop side
-
-- **Status:** 🔧 In progress (other instance — see `../desktop/.git/COMMIT_MESS`)
-- **Priority:** MEDIUM
-- **Spec:** [`AI.md §18`](AI.md#18-qr-pairing--desktop--mobile-setup) / `tabssh/desktop/QR_PAIRING.md`
-
-Mobile decoder is in place and waiting for the desktop encoder and interop test vectors. Wire format, encryption parameters, payload schema, and CBOR field names in the spec.
-
 ---
 
 ## 🔧 `advancedSettings` — remaining SSH config directives
@@ -417,5 +397,4 @@ Local/Remote/Dynamic forwards now apply at connect (`d714a7b4`). Status:
 - `CLAUDE.md` — operational runbook (build commands, commit policy, file locations)
 - `FEATURES_AUDIT.md` — have/want/drop matrix vs JuiceSSH and Termius
 - `fdroid-submission/SPEC.md` — F-Droid formatted app description
-- `AI.md §18` — QR pairing wire format (desktop copy at `tabssh/desktop/QR_PAIRING.md`)
 - `release.txt` — single-line version pin, source of truth for `versionName` (currently `0.0.9`)
