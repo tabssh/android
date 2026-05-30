@@ -179,7 +179,7 @@ class XCPngManagerActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e("XCPngManager", "Connection failed", e)
                 statusText.text = "Connection error: ${e.message}"
-                showError("Error: ${e.message}", "Error")
+                showError("Connection failed: xcpng ${profile.name}: ${e.message}", "Error")
                 progressBar.visibility = View.GONE
             }
         }

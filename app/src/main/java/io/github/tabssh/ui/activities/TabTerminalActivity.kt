@@ -1743,13 +1743,13 @@ private fun showSnippetsPickerForActiveTab() {
                     )
                 } else {
                     // Fallback to simple toast if no detailed error available
-                    showError("Connection failed: ${profile.getDisplayName()}", "Error")
+                    showError("Connection failed: ssh ${profile.username}@${profile.host}:${profile.port}", "Error")
 
                     // Show generic error notification
                     io.github.tabssh.utils.NotificationHelper.showConnectionError(
                         this,
                         profile.getDisplayName(),
-                        "Connection failed"
+                        "Connection failed: ssh ${profile.username}@${profile.host}:${profile.port}"
                     )
 
                 // Close activity after connection failure
@@ -1832,7 +1832,7 @@ private fun showSnippetsPickerForActiveTab() {
         } else {
             showError("Telnet connection to ${profile.host}:${profile.port} failed", "Connection Error")
             io.github.tabssh.utils.NotificationHelper.showConnectionError(
-                this, profile.getDisplayName(), "Telnet connect failed"
+                this, profile.getDisplayName(), "Connection failed: telnet ${profile.host}:${profile.port.takeIf { it > 0 } ?: 23}"
             )
             finish()
         }
@@ -2487,7 +2487,7 @@ private fun showSnippetsPickerForActiveTab() {
                 } else {
                     runOnUiThread {
                         pane.visibility = View.GONE
-                        Toast.makeText(this@TabTerminalActivity, "Split telnet failed", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@TabTerminalActivity, "Split failed: telnet ${profile.host}:${profile.port.takeIf { it > 0 } ?: 23}", Toast.LENGTH_LONG).show()
                     }
                 }
                 return@launch
@@ -2495,7 +2495,7 @@ private fun showSnippetsPickerForActiveTab() {
             if (ssh == null) {
                 runOnUiThread {
                     pane.visibility = View.GONE
-                    Toast.makeText(this@TabTerminalActivity, "Split SSH connect failed", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@TabTerminalActivity, "Split failed: ssh ${profile.username}@${profile.host}:${profile.port}", Toast.LENGTH_LONG).show()
                 }
                 return@launch
             }
@@ -2510,7 +2510,7 @@ private fun showSnippetsPickerForActiveTab() {
             } else {
                 runOnUiThread {
                     pane.visibility = View.GONE
-                    Toast.makeText(this@TabTerminalActivity, "Split SSH wire failed", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@TabTerminalActivity, "Split failed: ssh ${profile.username}@${profile.host}:${profile.port}", Toast.LENGTH_LONG).show()
                 }
             }
         }

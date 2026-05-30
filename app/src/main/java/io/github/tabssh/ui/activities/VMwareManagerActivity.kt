@@ -129,7 +129,7 @@ class VMwareManagerActivity : AppCompatActivity() {
                 loadVMs(client)
             } catch (e: Exception) {
                 Logger.e(TAG, "Connect failed", e)
-                showError("Connection failed: ${e.message}")
+                showError("Connection failed: vmware ${profile.name}: ${e.message}")
             }
         }
     }

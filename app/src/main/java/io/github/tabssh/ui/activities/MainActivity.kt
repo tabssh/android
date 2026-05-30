@@ -726,7 +726,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                                 startActivity(intent)
                             } catch (e: Exception) {
                                 Logger.e("MainActivity", "VNC connect failed", e)
-                                Toast.makeText(this@MainActivity, "VNC connect failed: ${e.message}", Toast.LENGTH_LONG).show()
+                                Toast.makeText(this@MainActivity, "Connection failed: vnc $raw:$port: ${e.message}", Toast.LENGTH_LONG).show()
                             }
                         }
                     }

@@ -321,7 +321,7 @@ class PerformanceFragment : Fragment() {
 
                 if (!connected) {
                     progressLoading.visibility = View.GONE
-                    showError("Connection failed")
+                    showError("Connection failed: ssh ${connection.username}@${connection.host}:${connection.port}")
                     return@launch
                 }
 

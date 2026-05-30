@@ -192,7 +192,7 @@ class OciManagerActivity : AppCompatActivity() {
                 refreshInstances()
             } catch (e: Exception) {
                 Logger.e(TAG, "Connect failed", e)
-                showError("Connection failed: ${e.message}")
+                showError("Connection failed: oci ${profile.name}: ${e.message}")
             }
         }
     }

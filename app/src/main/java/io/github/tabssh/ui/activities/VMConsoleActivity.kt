@@ -548,7 +548,8 @@ class VMConsoleActivity : AppCompatActivity() {
                 // error appeared — making it look like the error wasn't being caught.
             } catch (e: Exception) {
                 Logger.e(TAG, "Console connection error", e)
-                showError("Connection failed: ${e.message}")
+                val vmLabel = intent.getStringExtra(EXTRA_VM_NAME) ?: "VM Console"
+                showError("Connection failed: vm $vmLabel: ${e.message}")
             }
         }
     }

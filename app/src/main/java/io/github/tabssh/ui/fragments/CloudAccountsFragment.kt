@@ -376,7 +376,7 @@ class CloudAccountsFragment : Fragment() {
             } catch (e: Exception) {
                 Logger.e(TAG, "Inventory fetch failed", e)
                 if (!isAdded) return@launch
-                Toast.makeText(requireContext(), "Refresh failed: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(requireContext(), "Refresh failed: cloud ${account.name}: ${e.message}", Toast.LENGTH_LONG).show()
                 return@launch
             }
             try {
