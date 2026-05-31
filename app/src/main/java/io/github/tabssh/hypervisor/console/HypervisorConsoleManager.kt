@@ -352,7 +352,7 @@ class HypervisorConsoleManager {
                 return@withContext null
             }
 
-            Thread.sleep(500)
+            delay(500)
 
             val inputStream = xcpClient.getInputStream()
             val outputStream = xcpClient.getOutputStream()
@@ -447,7 +447,7 @@ class HypervisorConsoleManager {
                 return@withContext null
             }
 
-            Thread.sleep(500)
+            delay(500)
 
             val inputStream = xoClient.getInputStream()
             val outputStream = xoClient.getOutputStream()

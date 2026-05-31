@@ -114,7 +114,7 @@ object HypervisorPasswordStore {
         }
 
     /** Delete the Keystore-stored account password — call from account delete. */
-    fun clearAccountPassword(context: Context, accountId: Long) {
+    suspend fun clearAccountPassword(context: Context, accountId: Long) {
         val app = context.applicationContext as? TabSSHApplication ?: return
         try {
             app.securePasswordManager.clearPassword(accountAliasFor(accountId))
@@ -232,7 +232,7 @@ object HypervisorPasswordStore {
         }
 
     /** Delete the stored password — call from hypervisor delete paths. */
-    fun clear(context: Context, id: Long) {
+    suspend fun clear(context: Context, id: Long) {
         val app = context.applicationContext as? TabSSHApplication ?: return
         try {
             app.securePasswordManager.clearPassword(aliasFor(id))
@@ -249,7 +249,7 @@ object HypervisorPasswordStore {
      * No-op for missing aliases; logs (but does not throw) on Keystore
      * exceptions.
      */
-    fun clearOciSecrets(context: Context, id: Long) {
+    suspend fun clearOciSecrets(context: Context, id: Long) {
         val app = context.applicationContext as? TabSSHApplication ?: return
         val pm = app.securePasswordManager
         val aliases = listOf("oci_private_key_$id", "oci_passphrase_$id")
@@ -371,7 +371,7 @@ object HypervisorPasswordStore {
     }
 
     /** Delete all Keystore entries for an OCI account. Call from the delete path. */
-    fun clearOciAccountSecrets(context: Context, accountId: Long) {
+    suspend fun clearOciAccountSecrets(context: Context, accountId: Long) {
         val app = context.applicationContext as? TabSSHApplication ?: return
         val pm = app.securePasswordManager
         listOf("$OCI_KEY_ACCOUNT_PREFIX$accountId", "$OCI_PASS_ACCOUNT_PREFIX$accountId").forEach { alias ->

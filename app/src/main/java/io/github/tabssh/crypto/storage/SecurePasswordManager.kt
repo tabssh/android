@@ -1,9 +1,11 @@
 package io.github.tabssh.crypto.storage
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
 import android.content.Context
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import androidx.biometric.BiometricManager
@@ -59,9 +61,14 @@ class SecurePasswordManager(private val context: Context) {
     
     private val keyStore: KeyStore = KeyStore.getInstance(KEYSTORE_PROVIDER)
     private val sharedPrefs = context.getSharedPreferences(SHARED_PREFS_NAME, Context.MODE_PRIVATE)
-    
+
     // Session-only password storage (in memory)
     private val sessionPasswords = mutableMapOf<String, String>()
+
+    // Lifecycle-independent scope for biometric callback continuations.
+    // Lives as long as the SecurePasswordManager instance (i.e. the process).
+    // SupervisorJob so a failed biometric coroutine doesn't cancel siblings.
+    private val managerScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
     // Security policy settings
     private var defaultStorageLevel = StorageLevel.ENCRYPTED
@@ -287,7 +294,7 @@ class SecurePasswordManager(private val context: Context) {
                         Logger.d("SecurePasswordManager", "Biometric authentication succeeded for password storage")
                         
                         // Store password after successful biometric authentication
-                        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                        managerScope.launch {
                             val success = storeEncryptedPassword(connectionId, password, true)
                             continuation.resume(success)
                         }
@@ -339,7 +346,7 @@ class SecurePasswordManager(private val context: Context) {
                         Logger.d("SecurePasswordManager", "Biometric authentication succeeded for password retrieval")
                         
                         // Retrieve password after successful biometric authentication
-                        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                        managerScope.launch {
                             val password = retrieveEncryptedPassword(connectionId, true)
                             continuation.resume(password)
                         }
@@ -370,18 +377,22 @@ class SecurePasswordManager(private val context: Context) {
     }
     
     /**
-     * Clear password for a connection
+     * Clear password for a connection.
+     *
+     * suspend + IO dispatch: keyStore.deleteEntry() is a hardware-backed
+     * HAL round-trip that blocks the caller thread. Must never run on Main
+     * — calling this without the dispatch would ANR on slow/emulated devices.
+     * The in-memory remove is safe on any thread (ConcurrentHashMap).
      */
-    fun clearPassword(connectionId: String) {
-        // Clear session storage
+    suspend fun clearPassword(connectionId: String) {
+        // In-memory remove is lock-free, do it first regardless of dispatcher.
         sessionPasswords.remove(connectionId)
-        
-        // Clear persistent storage
-        clearPersistedPassword(connectionId)
-        
+        withContext(Dispatchers.IO) {
+            clearPersistedPassword(connectionId)
+        }
         Logger.d("SecurePasswordManager", "Cleared password for $connectionId")
     }
-    
+
     private fun clearPersistedPassword(connectionId: String) {
         // Remove from SharedPreferences
         val editor = sharedPrefs.edit()
@@ -390,8 +401,7 @@ class SecurePasswordManager(private val context: Context) {
         editor.remove("$PREF_STORAGE_LEVEL_PREFIX$connectionId")
         editor.remove("$PREF_TIMESTAMP_PREFIX$connectionId")
         editor.apply()
-        
-        // Remove keys from keystore
+        // Remove keys from keystore — blocking HAL op, must be called from IO dispatcher.
         try {
             keyStore.deleteEntry("$KEY_ALIAS_PREFIX$connectionId")
             keyStore.deleteEntry("$BIOMETRIC_KEY_ALIAS_PREFIX$connectionId")

@@ -36,9 +36,11 @@ import io.github.tabssh.ui.adapters.GroupedConnectionAdapter
 import io.github.tabssh.ui.models.ConnectionListItem
 import io.github.tabssh.utils.logging.Logger
 import androidx.room.withTransaction
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Fragment showing all connections with search and sort
@@ -444,9 +446,11 @@ class ConnectionsFragment : Fragment() {
             .setPositiveButton("Delete") { _, _ ->
                 lifecycleScope.launch {
                     try {
-                        app.database.connectionDao().deleteConnection(connection)
-                        // Clear any stored password for this connection
-                        try { app.securePasswordManager.clearPassword(connection.id) } catch (_: Exception) {}
+                        withContext(Dispatchers.IO) {
+                            app.database.connectionDao().deleteConnection(connection)
+                            // clearPassword is suspend + IO-dispatched (KeyStore HAL round-trip).
+                            try { app.securePasswordManager.clearPassword(connection.id) } catch (_: Exception) {}
+                        }
                         Logger.d("ConnectionsFragment", "Connection deleted: ${connection.name}")
                     } catch (e: Exception) {
                         Logger.e("ConnectionsFragment", "Failed to delete connection", e)
@@ -643,8 +647,12 @@ class ConnectionsFragment : Fragment() {
                     val app = requireActivity().application as io.github.tabssh.TabSSHApplication
                     for (c in selected) {
                         try {
-                            app.database.connectionDao().deleteConnection(c)
-                            try { app.securePasswordManager.clearPassword(c.id) } catch (_: Exception) {}
+                            withContext(Dispatchers.IO) {
+                                app.database.connectionDao().deleteConnection(c)
+                                // clearPassword is suspend + IO-dispatched (KeyStore HAL round-trip).
+                                // Without IO dispatch, N deletions in a loop = N KeyStore round-trips on Main → ANR.
+                                try { app.securePasswordManager.clearPassword(c.id) } catch (_: Exception) {}
+                            }
                             deleted++
                         } catch (e: Exception) {
                             Logger.e("ConnectionsFragment", "Bulk delete failed for ${c.name}", e)
@@ -791,7 +799,9 @@ class ConnectionsFragment : Fragment() {
         dropdownGroup.setAdapter(ArrayAdapter(ctx, android.R.layout.simple_dropdown_item_1line, groupOptions))
 
         // Identity dropdown — populated async from Room flow.
-        lifecycleScope.launch {
+        // viewLifecycleOwner.lifecycleScope cancels when the view is destroyed
+        // (e.g. config change) so we never call setAdapter on a detached view.
+        viewLifecycleOwner.lifecycleScope.launch {
             try {
                 app.database.identityDao().getAllIdentities().collect { identities ->
                     allIdentities = identities

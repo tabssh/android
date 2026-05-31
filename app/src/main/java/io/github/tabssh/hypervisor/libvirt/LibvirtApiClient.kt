@@ -10,6 +10,7 @@ import io.github.tabssh.crypto.storage.HypervisorPasswordStore
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.InputStream
 import java.io.OutputStream
@@ -279,7 +280,7 @@ class LibvirtApiClient(
      * return stdout as a String. Throws if the session is not established or
      * if the channel cannot be opened.
      */
-    private fun runCommand(command: String): String {
+    private suspend fun runCommand(command: String): String {
         val sess = session ?: throw LibvirtException("SSH session not established; call connect() first")
         var ch: ChannelExec? = null
         return try {
@@ -298,7 +299,8 @@ class LibvirtApiClient(
                     val n = output.read(buf, 0, minOf(available, buf.size))
                     if (n > 0) sb.append(String(buf, 0, n, Charsets.UTF_8))
                 } else {
-                    Thread.sleep(50)
+                    // delay() honours coroutine cancellation; Thread.sleep() does not.
+                    delay(50)
                 }
             }
             // Drain any remaining bytes

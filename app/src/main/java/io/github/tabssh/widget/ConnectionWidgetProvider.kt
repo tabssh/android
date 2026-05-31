@@ -15,6 +15,7 @@ import io.github.tabssh.ui.activities.TabTerminalActivity
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /**
@@ -68,7 +69,7 @@ open class ConnectionWidgetProvider : AppWidgetProvider() {
                 // actually blocked the main thread, but launching on IO
                 // matches every other DAO call in the app and is harder
                 // to misread later.
-                CoroutineScope(Dispatchers.IO).launch {
+                CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
                     try {
                         val app = context.applicationContext as TabSSHApplication
                         val connection = app.database.connectionDao().getConnectionById(connectionId)

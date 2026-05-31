@@ -1338,11 +1338,10 @@ private fun showSnippetsPickerForActiveTab() {
             binding.root.addView(performanceOverlay)
             
             // Start updating metrics
+            // lifecycleScope defaults to Main — withContext(Main) would be a redundant no-op.
             performanceUpdateJob = lifecycleScope.launch {
                 app.performanceManager.performanceMetrics.collect { metrics ->
-                    withContext(Dispatchers.Main) {
-                        performanceOverlay?.updateMetrics(metrics)
-                    }
+                    performanceOverlay?.updateMetrics(metrics)
                 }
             }
             
@@ -3337,16 +3336,17 @@ private fun showSnippetsPickerForActiveTab() {
     }
 
     private fun closeCurrentTab() {
-        CoroutineScope(Dispatchers.Main).launch {
+        // lifecycleScope cancels with the activity so teardown work is never orphaned.
+        lifecycleScope.launch {
             val activeIndex = tabManager.getActiveTabIndex()
             if (activeIndex >= 0) {
                 tabManager.closeTab(activeIndex)
             }
         }
     }
-    
+
     private fun disconnectAllTabs() {
-        CoroutineScope(Dispatchers.Main).launch {
+        lifecycleScope.launch {
             tabManager.closeAllTabs()
         }
     }
@@ -3430,8 +3430,8 @@ private fun showSnippetsPickerForActiveTab() {
     override fun onPause() {
         super.onPause()
         
-        // Save session state
-        CoroutineScope(Dispatchers.Main).launch {
+        // saveTabState() is a disk write — dispatch to IO, bound to the activity lifecycle.
+        lifecycleScope.launch(Dispatchers.IO) {
             tabManager.saveTabState()
         }
     }

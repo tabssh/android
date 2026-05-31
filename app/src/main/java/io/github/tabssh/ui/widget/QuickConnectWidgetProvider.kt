@@ -13,7 +13,9 @@ import io.github.tabssh.ui.activities.TabTerminalActivity
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Widget provider for quick SSH connection access
@@ -100,29 +102,30 @@ class QuickConnectWidgetProvider : AppWidgetProvider() {
                 return
             }
 
-            // Load connection profile from database
+            // Load connection profile from database.
+            // Single supervised IO scope — UI updates switch back to Main via
+            // withContext rather than spinning up separate scopes per update.
             val app = context.applicationContext as TabSSHApplication
 
-            CoroutineScope(Dispatchers.IO).launch {
+            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
                 try {
                     val profile = app.database.connectionDao().getConnectionById(connectionId)
 
                     if (profile == null) {
                         Logger.w("QuickConnectWidget", "Connection $connectionId not found")
-                        CoroutineScope(Dispatchers.Main).launch {
+                        withContext(Dispatchers.Main) {
                             updateWidgetWithError(context, appWidgetManager, appWidgetId, "Connection not found")
                         }
                         return@launch
                     }
 
-                    // Update widget UI on main thread
-                    CoroutineScope(Dispatchers.Main).launch {
+                    withContext(Dispatchers.Main) {
                         updateWidgetWithConnection(context, appWidgetManager, appWidgetId, profile)
                     }
 
                 } catch (e: Exception) {
                     Logger.e("QuickConnectWidget", "Failed to load connection for widget", e)
-                    CoroutineScope(Dispatchers.Main).launch {
+                    withContext(Dispatchers.Main) {
                         updateWidgetWithError(context, appWidgetManager, appWidgetId, "Error loading connection")
                     }
                 }
