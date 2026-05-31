@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
@@ -130,6 +131,17 @@ class SettingsMainFragment : PreferenceFragmentCompat() {
 class GeneralSettingsFragment : PreferenceFragmentCompat() {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences_general, rootKey)
+
+        findPreference<Preference>("app_language")?.setOnPreferenceChangeListener { _, newValue ->
+            val lang = newValue as String
+            val localeList = if (lang.isBlank() || lang == "system") {
+                LocaleListCompat.getEmptyLocaleList()
+            } else {
+                LocaleListCompat.forLanguageTags(lang)
+            }
+            AppCompatDelegate.setApplicationLocales(localeList)
+            true
+        }
 
         findPreference<Preference>("app_theme")?.setOnPreferenceChangeListener { _, newValue ->
             val theme = newValue as String

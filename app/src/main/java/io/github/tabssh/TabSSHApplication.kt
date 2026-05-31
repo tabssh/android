@@ -161,6 +161,7 @@ class TabSSHApplication : Application() {
         // mode for the current process; without this, every cold start
         // ignores the saved value and the user perceives "only dark mode".
         applySavedAppTheme()
+        applySavedAppLanguage()
 
         // Create notification channels
         io.github.tabssh.utils.NotificationHelper.createNotificationChannels(this)
@@ -458,6 +459,26 @@ class TabSSHApplication : Application() {
             }
         } catch (e: Exception) {
             Logger.w("TabSSHApplication", "applyWindowSecurityFlags failed: ${e.message}")
+        }
+    }
+
+    private fun applySavedAppLanguage() {
+        // Apply the locale stored under "app_language" at startup so the setting
+        // survives process death. Empty string / "system" clears the override
+        // and follows the device locale.
+        try {
+            val prefs = androidx.preference.PreferenceManager
+                .getDefaultSharedPreferences(this)
+            val lang = prefs.getString("app_language", "en") ?: "en"
+            val localeList = if (lang.isBlank() || lang == "system") {
+                androidx.core.os.LocaleListCompat.getEmptyLocaleList()
+            } else {
+                androidx.core.os.LocaleListCompat.forLanguageTags(lang)
+            }
+            androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(localeList)
+            Logger.d("TabSSHApplication", "Applied saved language: $lang")
+        } catch (e: Exception) {
+            Logger.w("TabSSHApplication", "Failed to apply saved language: ${e.message}")
         }
     }
 
