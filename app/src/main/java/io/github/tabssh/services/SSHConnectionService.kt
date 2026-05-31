@@ -64,6 +64,7 @@ class SSHConnectionService : Service() {
         // Matches NotificationHelper.NOTIFICATION_ID_SERVICE (1001) so the service
         // anchor stays consistent across the one place that references it by name.
         private const val NOTIFICATION_ID = 1001
+        private const val TAG = "SSHConnectionService"
 
         const val ACTION_START_SERVICE = "io.github.tabssh.START_SERVICE"
         const val ACTION_STOP_SERVICE  = "io.github.tabssh.STOP_SERVICE"
@@ -325,6 +326,16 @@ class SSHConnectionService : Service() {
             override fun onConnectionEstablished(profileId: String) {
                 updateConnectionCount()
                 disconnectedProfiles.remove(profileId)
+                // Increment the per-profile connection count and last-connected timestamp.
+                // updateLastConnected uses a single atomic SQL UPDATE (count+1) so there
+                // is no read-modify-write race under concurrent sessions.
+                serviceScope.launch(Dispatchers.IO) {
+                    try {
+                        app.database.connectionDao().updateLastConnected(profileId)
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to update connection stats for $profileId", e)
+                    }
+                }
                 serviceScope.launch(Dispatchers.Main) {
                     renderHostNotification(profileId, disconnectingState = false)
                     val conn = app.sshSessionManager.getConnection(profileId)

@@ -22,7 +22,8 @@ class CloudInstanceAdapter(
     private val onPowerToggle: (CloudInstanceState) -> Unit,
     private val onConnect: (CloudInstanceState) -> Unit,
     private val onRestart: (CloudInstanceState) -> Unit,
-    private val onForceRestart: (CloudInstanceState) -> Unit
+    private val onForceRestart: (CloudInstanceState) -> Unit,
+    private val onEditCredentials: (CloudInstanceState) -> Unit = {}
 ) : ListAdapter<CloudInstanceState, CloudInstanceAdapter.ViewHolder>(DiffCallback) {
 
     inner class ViewHolder(val b: ItemCloudInstanceBinding) : RecyclerView.ViewHolder(b.root)
@@ -77,6 +78,9 @@ class CloudInstanceAdapter(
         b.rowRestartActions.visibility = if (isRunning) View.VISIBLE else View.GONE
         b.btnRestart.setOnClickListener { onRestart(inst) }
         b.btnForceRestart.setOnClickListener { onForceRestart(inst) }
+
+        // Long-press anywhere on the card opens the SSH credentials editor.
+        b.root.setOnLongClickListener { onEditCredentials(inst); true }
     }
 
     private companion object DiffCallback : DiffUtil.ItemCallback<CloudInstanceState>() {

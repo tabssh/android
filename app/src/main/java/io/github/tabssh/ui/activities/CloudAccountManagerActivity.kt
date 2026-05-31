@@ -4,22 +4,29 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
+import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.cloud.CloudInstanceState
 import io.github.tabssh.cloud.CloudProviderType
 import io.github.tabssh.cloud.newClient
+import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.databinding.ActivityCloudManagerBinding
 import io.github.tabssh.storage.database.entities.CloudAccount
+import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.storage.database.entities.Identity
 import io.github.tabssh.ui.adapters.CloudInstanceAdapter
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 /**
  * Per-account instance manager for Cloud Accounts.
@@ -60,10 +67,11 @@ class CloudAccountManagerActivity : AppCompatActivity() {
         binding.toolbar.setNavigationOnClickListener { finish() }
 
         adapter = CloudInstanceAdapter(
-            onPowerToggle  = { inst -> handlePowerToggle(inst) },
-            onConnect      = { inst -> handleConnect(inst) },
-            onRestart      = { inst -> handleRestart(inst, force = false) },
-            onForceRestart = { inst -> handleRestart(inst, force = true) }
+            onPowerToggle     = { inst -> handlePowerToggle(inst) },
+            onConnect         = { inst -> handleConnect(inst) },
+            onRestart         = { inst -> handleRestart(inst, force = false) },
+            onForceRestart    = { inst -> handleRestart(inst, force = true) },
+            onEditCredentials = { inst -> showEditCredentialsDialog(inst) }
         )
         binding.recyclerInstances.layoutManager = LinearLayoutManager(this)
         binding.recyclerInstances.adapter = adapter
@@ -242,25 +250,195 @@ class CloudAccountManagerActivity : AppCompatActivity() {
             Toast.makeText(this, "No public IP available", Toast.LENGTH_SHORT).show()
             return
         }
-
-        // Look for a matching imported connection profile; fall back to creating a temp one
+        val acct = account ?: return
         lifecycleScope.launch {
-            val existing = withContext(Dispatchers.IO) {
-                app.database.connectionDao().getAllConnectionsList().firstOrNull { conn ->
-                    conn.host == ip && conn.port == 22
+            // Load stored per-instance SSH credentials (username / password / identityId / port).
+            // These are stored scoped to the cloud account and never written to the connections DB.
+            val credsJson = withContext(Dispatchers.IO) {
+                app.securePasswordManager.retrievePassword(hostCredKey(acct.id, inst.id))
+            }
+            val creds = credsJson?.let { runCatching { JSONObject(it) }.getOrNull() }
+            val username   = creds?.optString("username").takeIf { !it.isNullOrBlank() } ?: "root"
+            val password   = creds?.optString("password").takeIf { !it.isNullOrBlank() }
+            val identityId = creds?.optString("identityId").takeIf { !it.isNullOrBlank() }
+            val port       = creds?.optInt("port", 22)?.takeIf { it in 1..65535 } ?: 22
+
+            // Build an in-memory ConnectionProfile — never persisted to Room.
+            // The host field is the cloud instance's public IP; name is shown
+            // in the tab bar until the remote sets an OSC 0/2 title.
+            val tempProfile = ConnectionProfile(
+                id         = inst.id,
+                name       = inst.name,
+                host       = ip,
+                port       = port,
+                username   = username,
+                identityId = identityId
+            )
+
+            // If a password was stored, put it in SecurePasswordManager under the
+            // profile ID so SSHConnection can pick it up the same way it does for
+            // regular connection profiles.
+            if (password != null) {
+                withContext(Dispatchers.IO) {
+                    app.securePasswordManager.storePassword(
+                        inst.id, password, SecurePasswordManager.StorageLevel.SESSION_ONLY
+                    )
                 }
             }
-            if (existing != null) {
-                startActivity(
-                    TabTerminalActivity.createIntent(this@CloudAccountManagerActivity, existing, autoConnect = true)
+
+            startActivity(
+                TabTerminalActivity.createIntent(this@CloudAccountManagerActivity, tempProfile, autoConnect = true)
+            )
+        }
+    }
+
+    /**
+     * SharedPreferences key for per-instance SSH credentials.
+     * Scoped to the cloud account so two accounts with the same instance ID
+     * (unlikely but possible across providers) don't collide.
+     */
+    private fun hostCredKey(accountId: String, instanceId: String) =
+        "cloud_host_creds_${accountId}_${instanceId}"
+
+    /**
+     * Edit dialog for SSH credentials associated with a specific cloud instance.
+     * Loads any previously stored creds to pre-fill the form. On save, persists
+     * to SecurePasswordManager — never to the connections DB.
+     *
+     * Long-press on any instance row in the list opens this dialog.
+     */
+    private fun showEditCredentialsDialog(inst: CloudInstanceState) {
+        val acct = account ?: return
+        lifecycleScope.launch {
+            // Load existing creds and identities in parallel (both IO).
+            val (credsJson, identities) = withContext(Dispatchers.IO) {
+                val c = app.securePasswordManager.retrievePassword(hostCredKey(acct.id, inst.id))
+                val ids = app.database.identityDao().getAllIdentitiesList()
+                c to ids
+            }
+            val existing = credsJson?.let { runCatching { JSONObject(it) }.getOrNull() }
+
+            val dp  = resources.displayMetrics.density
+            val ctx = this@CloudAccountManagerActivity
+
+            val scroll = android.widget.ScrollView(ctx)
+            val ll = android.widget.LinearLayout(ctx).apply {
+                orientation = android.widget.LinearLayout.VERTICAL
+                val pad = (16 * dp).toInt()
+                setPadding(pad, pad, pad, pad)
+            }
+            scroll.addView(ll)
+
+            fun field(hint: String, initial: String = "", password: Boolean = false): TextInputEditText {
+                val til = TextInputLayout(ctx, null,
+                    com.google.android.material.R.attr.textInputOutlinedStyle).apply {
+                    this.hint = hint
+                    layoutParams = android.widget.LinearLayout.LayoutParams(
+                        android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).also { it.bottomMargin = (8 * dp).toInt() }
+                    if (password) isPasswordVisibilityToggleEnabled = true
+                }
+                val edit = TextInputEditText(til.context).apply {
+                    layoutParams = android.widget.LinearLayout.LayoutParams(
+                        android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                    )
+                    setSingleLine(true)
+                    inputType = if (password)
+                        android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+                    else
+                        android.text.InputType.TYPE_CLASS_TEXT
+                    setText(initial)
+                }
+                til.addView(edit)
+                ll.addView(til)
+                return edit
+            }
+
+            val editUsername = field("SSH username", existing?.optString("username") ?: "root")
+            val editPassword = field("SSH password (optional)", existing?.optString("password") ?: "", password = true)
+            val editPort     = field("Port", existing?.optInt("port", 22)?.toString() ?: "22")
+
+            // Identity dropdown — "(none)" + all stored identities.
+            val identityTil = TextInputLayout(ctx, null,
+                com.google.android.material.R.attr.textInputOutlinedExposedDropdownMenuStyle).apply {
+                hint = "SSH identity (optional)"
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                ).also { it.bottomMargin = (8 * dp).toInt() }
+            }
+            val identityDropdown = android.widget.AutoCompleteTextView(identityTil.context).apply {
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
                 )
-            } else {
-                // No imported connection — prompt the user to import via the account refresh first
-                AlertDialog.Builder(this@CloudAccountManagerActivity)
-                    .setTitle("Connect to ${inst.name}")
-                    .setMessage("No imported connection found for $ip. Use the cloud account refresh to import this host first.")
-                    .setPositiveButton("OK", null)
-                    .show()
+            }
+            identityTil.addView(identityDropdown)
+            ll.addView(identityTil)
+
+            val noneLabel = "(none)"
+            val identityLabels = listOf(noneLabel) + identities.map { it.getDisplayName() }
+            identityDropdown.setAdapter(
+                ArrayAdapter(ctx, android.R.layout.simple_dropdown_item_1line, identityLabels)
+            )
+            // Pre-select the identity that was previously saved, if any.
+            val preselectedIdentity = existing?.optString("identityId")
+                ?.let { savedId -> identities.firstOrNull { it.id == savedId } }
+            identityDropdown.setText(preselectedIdentity?.getDisplayName() ?: noneLabel, false)
+
+            val dialog = AlertDialog.Builder(ctx)
+                .setTitle("SSH credentials — ${inst.name}")
+                .setView(scroll)
+                .setPositiveButton("Save") { _, _ -> /* overridden */ }
+                .setNegativeButton("Cancel", null)
+                .also { b ->
+                    // Only show Clear if credentials have previously been saved.
+                    if (credsJson != null) {
+                        b.setNeutralButton("Clear") { _, _ ->
+                            lifecycleScope.launch(Dispatchers.IO) {
+                                app.securePasswordManager.clearPassword(hostCredKey(acct.id, inst.id))
+                            }
+                            Toast.makeText(ctx, "Credentials cleared for ${inst.name}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+                .create()
+            dialog.show()
+
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val username = editUsername.text?.toString()?.trim().orEmpty().ifBlank { "root" }
+                val password = editPassword.text?.toString().orEmpty()
+                val port     = editPort.text?.toString()?.toIntOrNull()?.takeIf { it in 1..65535 } ?: 22
+                val selectedLabel = identityDropdown.text?.toString().orEmpty()
+                val selectedIdentity: Identity? = if (selectedLabel == noneLabel) null
+                    else identities.firstOrNull { it.getDisplayName() == selectedLabel }
+
+                val json = JSONObject()
+                    .put("username",   username)
+                    .put("password",   password)
+                    .put("port",       port)
+                    .put("identityId", selectedIdentity?.id ?: "")
+                    .toString()
+
+                lifecycleScope.launch {
+                    val stored = withContext(Dispatchers.IO) {
+                        app.securePasswordManager.storePassword(
+                            hostCredKey(acct.id, inst.id), json,
+                            SecurePasswordManager.StorageLevel.ENCRYPTED
+                        )
+                    }
+                    if (stored) {
+                        val identityLabel = selectedIdentity?.getDisplayName() ?: "no identity"
+                        Toast.makeText(ctx, "Saved: $username:$port ($identityLabel)", Toast.LENGTH_SHORT).show()
+                        dialog.dismiss()
+                    } else {
+                        Toast.makeText(ctx,
+                            "Save failed — check device security settings (screen lock required)",
+                            Toast.LENGTH_LONG).show()
+                    }
+                }
             }
         }
     }
