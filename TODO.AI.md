@@ -15,6 +15,8 @@
 
 ## ✅ Recently Shipped
 
+- **`375dad6465de`** ✨ Connection count tracking + cloud instance SSH credentials — `SSHConnectionService.onConnectionEstablished` increments `connection_count` + `last_connected` via atomic SQL (feeds "Frequently Used" sort); long-press on cloud instance row opens SSH credentials dialog (username/password/port/identity); creds stored in `SecurePasswordManager.ENCRYPTED` scoped to cloud account, never written to Room; `handleConnect()` builds transient in-memory `ConnectionProfile` from stored creds.
+- **`27155abf89ba`** 🐛 Search on Connections tab fixed — `filterConnections()` now swaps adapter back to flat `adapter` before submitting results; prevents search submitting to detached `groupedAdapter`.
 - **`64182c5fcd73`** 🐛 OCI credential persistence + import UX — `editor.apply()` → `editor.commit()` in `SecurePasswordManager`; `saveOrUpdateOciAccount` now checks `storePassword()` return and rolls back DB on Keystore failure; `ociConfigFilePicker`/`ociKeyFilePicker` re-show dialog on cancel/error instead of silently returning; `item_cloud_instance.xml` split into 2 rows of 2 buttons (row 3a: power+connect; row 3b: restart+force restart).
 - **`1f994257bd17`** ✨ RequestTTY directive wired — `SSHConnection.kt` reads `advancedSettings["requestTTY"]`; PTY allocated for exec channels only when value is `"yes"` or `"force"`; shell channel always gets PTY. Semantics match OpenSSH.
 - **`417d072`** ✨ Cloud Accounts Manager UI + Power Controls (A–H complete) — `CloudAccountManagerActivity`, `CloudInstanceAdapter`, 8 cloud client power actions, Start/Stop toggle, Restart/Force Restart, live instance state; OCI removed from Hypervisors spinner (stays in enum for DB compat); contextual connection failure toasts app-wide.
