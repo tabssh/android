@@ -10,6 +10,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import org.json.JSONObject
+import java.net.URLEncoder
 import java.security.KeyFactory
 import java.security.Signature
 import java.security.spec.PKCS8EncodedKeySpec
@@ -67,27 +68,35 @@ class GcpComputeClient : CloudProvider {
         val accessToken = exchangeJwtForAccessToken(clientEmail, privateKeyPem,
             "https://www.googleapis.com/auth/compute.readonly")
 
-        val req = Request.Builder()
-            .url("https://compute.googleapis.com/compute/v1/projects/$projectId/aggregated/instances?maxResults=500")
-            .header("Authorization", "Bearer $accessToken")
-            .header("Accept", "application/json")
-            .get()
-            .build()
-
-        val body = http.newCall(req).execute().use { resp ->
-            val raw = resp.body?.string().orEmpty()
-            if (!resp.isSuccessful) {
-                val msg = try {
-                    JSONObject(raw).optJSONObject("error")?.optString("message") ?: resp.message
-                } catch (_: Exception) { resp.message }
-                throw IllegalStateException("GCP API HTTP ${resp.code}: $msg")
+        val out = mutableListOf<ImportCandidate>()
+        var pageToken: String? = null
+        do {
+            val url = buildString {
+                append("https://compute.googleapis.com/compute/v1/projects/$projectId/aggregated/instances?maxResults=500")
+                if (pageToken != null) append("&pageToken=").append(URLEncoder.encode(pageToken, "UTF-8"))
             }
-            raw
-        }
+            val req = Request.Builder()
+                .url(url)
+                .header("Authorization", "Bearer $accessToken")
+                .header("Accept", "application/json")
+                .get()
+                .build()
+            val body = http.newCall(req).execute().use { resp ->
+                val raw = resp.body?.string().orEmpty()
+                if (!resp.isSuccessful) {
+                    val msg = try {
+                        JSONObject(raw).optJSONObject("error")?.optString("message") ?: resp.message
+                    } catch (_: Exception) { resp.message }
+                    throw IllegalStateException("GCP API HTTP ${resp.code}: $msg")
+                }
+                raw
+            }
+            out += parseInstances(body, projectId, accountName)
+            pageToken = JSONObject(body).optString("nextPageToken").takeIf { it.isNotBlank() }
+        } while (pageToken != null)
 
-        parseInstances(body, projectId, accountName).also {
-            Logger.i("GcpComputeClient", "Fetched ${it.size} GCE instances for project=$projectId account=$accountName")
-        }
+        Logger.i("GcpComputeClient", "Fetched ${out.size} GCE instances for project=$projectId account=$accountName")
+        out
     }
 
     override suspend fun fetchLiveInstances(bearerToken: String): List<CloudInstanceState> =
@@ -108,57 +117,65 @@ class GcpComputeClient : CloudProvider {
             val accessToken = exchangeJwtForAccessToken(clientEmail, privateKeyPem,
                 "https://www.googleapis.com/auth/compute.readonly")
 
-            val req = Request.Builder()
-                .url("https://compute.googleapis.com/compute/v1/projects/$projectId/aggregated/instances?maxResults=500")
-                .header("Authorization", "Bearer $accessToken")
-                .header("Accept", "application/json")
-                .get()
-                .build()
-
-            val rawBody = http.newCall(req).execute().use { resp ->
-                val raw = resp.body?.string().orEmpty()
-                if (!resp.isSuccessful) {
-                    val msg = try {
-                        JSONObject(raw).optJSONObject("error")?.optString("message") ?: resp.message
-                    } catch (_: Exception) { resp.message }
-                    throw IllegalStateException("GCP API HTTP ${resp.code}: $msg")
-                }
-                raw
-            }
-
             val out = mutableListOf<CloudInstanceState>()
-            val root = JSONObject(rawBody)
-            val items = root.optJSONObject("items") ?: return@withContext emptyList<CloudInstanceState>()
-            val zoneKeys = items.keys()
-            while (zoneKeys.hasNext()) {
-                val zoneKey = zoneKeys.next()
-                val zoneObj = items.optJSONObject(zoneKey) ?: continue
-                val instances = zoneObj.optJSONArray("instances") ?: continue
-                val zone = zoneKey.removePrefix("zones/")
-                for (i in 0 until instances.length()) {
-                    val inst = instances.optJSONObject(i) ?: continue
-                    val rawStatus = inst.optString("status", "unknown")
-                    val normStatus = when (rawStatus) {
-                        "RUNNING" -> "running"
-                        "TERMINATED", "STOPPED" -> "stopped"
-                        "STOPPING" -> "stopping"
-                        "STAGING", "PROVISIONING" -> "starting"
-                        else -> "unknown"
-                    }
-                    val publicIp = pickPublicIp(inst)
-                    val privateIp = pickPrivateIp(inst)
-                    out += CloudInstanceState(
-                        id = inst.optString("name", "gce-${inst.optString("id")}"),
-                        name = inst.optString("name", "gce-instance"),
-                        ip = publicIp,
-                        privateIp = privateIp,
-                        status = normStatus,
-                        rawStatus = rawStatus,
-                        region = zone,
-                        metadata = mapOf("zone" to zone, "project" to projectId)
-                    )
+            var pageToken: String? = null
+            do {
+                val url = buildString {
+                    append("https://compute.googleapis.com/compute/v1/projects/$projectId/aggregated/instances?maxResults=500")
+                    if (pageToken != null) append("&pageToken=").append(URLEncoder.encode(pageToken, "UTF-8"))
                 }
-            }
+                val req = Request.Builder()
+                    .url(url)
+                    .header("Authorization", "Bearer $accessToken")
+                    .header("Accept", "application/json")
+                    .get()
+                    .build()
+                val rawBody = http.newCall(req).execute().use { resp ->
+                    val raw = resp.body?.string().orEmpty()
+                    if (!resp.isSuccessful) {
+                        val msg = try {
+                            JSONObject(raw).optJSONObject("error")?.optString("message") ?: resp.message
+                        } catch (_: Exception) { resp.message }
+                        throw IllegalStateException("GCP API HTTP ${resp.code}: $msg")
+                    }
+                    raw
+                }
+                val root = JSONObject(rawBody)
+                val items = root.optJSONObject("items")
+                if (items != null) {
+                    val zoneKeys = items.keys()
+                    while (zoneKeys.hasNext()) {
+                        val zoneKey = zoneKeys.next()
+                        val zoneObj = items.optJSONObject(zoneKey) ?: continue
+                        val instances = zoneObj.optJSONArray("instances") ?: continue
+                        val zone = zoneKey.removePrefix("zones/")
+                        for (i in 0 until instances.length()) {
+                            val inst = instances.optJSONObject(i) ?: continue
+                            val rawStatus = inst.optString("status", "unknown")
+                            val normStatus = when (rawStatus) {
+                                "RUNNING" -> "running"
+                                "TERMINATED", "STOPPED" -> "stopped"
+                                "STOPPING" -> "stopping"
+                                "STAGING", "PROVISIONING" -> "starting"
+                                else -> "unknown"
+                            }
+                            val publicIp = pickPublicIp(inst)
+                            val privateIp = pickPrivateIp(inst)
+                            out += CloudInstanceState(
+                                id = inst.optString("name", "gce-${inst.optString("id")}"),
+                                name = inst.optString("name", "gce-instance"),
+                                ip = publicIp,
+                                privateIp = privateIp,
+                                status = normStatus,
+                                rawStatus = rawStatus,
+                                region = zone,
+                                metadata = mapOf("zone" to zone, "project" to projectId)
+                            )
+                        }
+                    }
+                }
+                pageToken = root.optString("nextPageToken").takeIf { it.isNotBlank() }
+            } while (pageToken != null)
             cachedInstances = out
             out
         }

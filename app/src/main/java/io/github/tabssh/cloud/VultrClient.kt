@@ -9,6 +9,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.net.URLEncoder
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -19,6 +20,9 @@ import java.util.concurrent.TimeUnit
  * Auth:     Authorization: Bearer <api-key>
  *
  * `main_ip` is the public IPv4 (string); `region` is a slug like `nyc`.
+ *
+ * Pagination: `meta.links.next` is a cursor string; append as
+ * `&cursor=<URLencoded>` to the next request. Empty string = last page.
  */
 class VultrClient : CloudProvider {
 
@@ -33,47 +37,40 @@ class VultrClient : CloudProvider {
         bearerToken: String,
         accountName: String
     ): List<ImportCandidate> = withContext(Dispatchers.IO) {
-        val req = Request.Builder()
-            .url("https://api.vultr.com/v2/instances?per_page=200")
-            .header("Authorization", "Bearer $bearerToken")
-            .header("Accept", "application/json")
-            .get()
-            .build()
-
-        val body = http.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) {
-                throw IllegalStateException("Vultr API HTTP ${resp.code}: ${resp.message}")
-            }
-            resp.body?.string().orEmpty()
-        }
-
-        val root = JSONObject(body)
-        val instances = root.optJSONArray("instances")
-            ?: return@withContext emptyList<ImportCandidate>()
-
         val out = mutableListOf<ImportCandidate>()
-        for (i in 0 until instances.length()) {
-            val inst = instances.optJSONObject(i) ?: continue
-            val label = inst.optString("label").ifBlank { inst.optString("hostname", "vultr-${inst.optString("id", "?")}") }
-            val region = inst.optString("region", "")
-            val mainIp = inst.optString("main_ip", "")
-            if (mainIp.isBlank() || mainIp == "0.0.0.0") {
-                Logger.d("VultrClient", "Instance $label has no main_ip — skipping")
-                continue
+        var cursor: String? = null
+        while (true) {
+            val url = buildString {
+                append("https://api.vultr.com/v2/instances?per_page=200")
+                if (cursor != null) append("&cursor=").append(URLEncoder.encode(cursor, "UTF-8"))
             }
-            out += ImportCandidate(
-                profile = ConnectionProfile(
-                    id = UUID.randomUUID().toString(),
-                    name = label,
-                    host = mainIp,
-                    port = 22,
-                    username = "root",
-                    authType = "password",
-                    advancedSettings = """{"cloud_source":"vultr:$accountName","cloud_region":"$region"}""",
-                    createdAt = System.currentTimeMillis()
-                ),
-                sourceLabel = "Vultr / ${region.ifBlank { "?" }}"
-            )
+            val root = doGet(url, bearerToken)
+            val instances = root.optJSONArray("instances") ?: break
+            for (i in 0 until instances.length()) {
+                val inst = instances.optJSONObject(i) ?: continue
+                val label = inst.optString("label").ifBlank { inst.optString("hostname", "vultr-${inst.optString("id", "?")}") }
+                val region = inst.optString("region", "")
+                val mainIp = inst.optString("main_ip", "")
+                if (mainIp.isBlank() || mainIp == "0.0.0.0") {
+                    Logger.d("VultrClient", "Instance $label has no main_ip — skipping")
+                    continue
+                }
+                out += ImportCandidate(
+                    profile = ConnectionProfile(
+                        id = UUID.randomUUID().toString(),
+                        name = label,
+                        host = mainIp,
+                        port = 22,
+                        username = "root",
+                        authType = "password",
+                        advancedSettings = """{"cloud_source":"vultr:$accountName","cloud_region":"$region"}""",
+                        createdAt = System.currentTimeMillis()
+                    ),
+                    sourceLabel = "Vultr / ${region.ifBlank { "?" }}"
+                )
+            }
+            cursor = root.optJSONObject("meta")?.optJSONObject("links")?.optString("next")?.takeIf { it.isNotBlank() }
+            if (cursor == null) break
         }
         Logger.i("VultrClient", "Fetched ${out.size} Vultr instances for account=$accountName")
         out
@@ -81,45 +78,37 @@ class VultrClient : CloudProvider {
 
     override suspend fun fetchLiveInstances(bearerToken: String): List<CloudInstanceState> =
         withContext(Dispatchers.IO) {
-            val req = Request.Builder()
-                .url("https://api.vultr.com/v2/instances?per_page=200")
-                .header("Authorization", "Bearer $bearerToken")
-                .header("Accept", "application/json")
-                .get()
-                .build()
-
-            val body = http.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) {
-                    throw IllegalStateException("Vultr API HTTP ${resp.code}: ${resp.message}")
-                }
-                resp.body?.string().orEmpty()
-            }
-
-            val root = JSONObject(body)
-            val instances = root.optJSONArray("instances")
-                ?: return@withContext emptyList<CloudInstanceState>()
-
             val out = mutableListOf<CloudInstanceState>()
-            for (i in 0 until instances.length()) {
-                val inst = instances.optJSONObject(i) ?: continue
-                // Vultr uses power_status for running/stopped
-                val rawStatus = inst.optString("power_status",
-                    inst.optString("status", "unknown"))
-                val normStatus = CloudInstanceState.normalizeStatus(rawStatus)
-                val mainIp = inst.optString("main_ip", "").ifBlank { null }
-                    ?.takeIf { it != "0.0.0.0" }
-                val region = inst.optString("region", "").ifBlank { null }
-                out += CloudInstanceState(
-                    id = inst.optString("id", ""),
-                    name = inst.optString("label").ifBlank {
-                        inst.optString("hostname", "vultr-${inst.optString("id", "?")}")
-                    },
-                    ip = mainIp,
-                    privateIp = inst.optString("internal_ip", "").ifBlank { null },
-                    status = normStatus,
-                    rawStatus = rawStatus,
-                    region = region
-                )
+            var cursor: String? = null
+            while (true) {
+                val url = buildString {
+                    append("https://api.vultr.com/v2/instances?per_page=200")
+                    if (cursor != null) append("&cursor=").append(URLEncoder.encode(cursor, "UTF-8"))
+                }
+                val root = doGet(url, bearerToken)
+                val instances = root.optJSONArray("instances") ?: break
+                for (i in 0 until instances.length()) {
+                    val inst = instances.optJSONObject(i) ?: continue
+                    val rawStatus = inst.optString("power_status",
+                        inst.optString("status", "unknown"))
+                    val normStatus = CloudInstanceState.normalizeStatus(rawStatus)
+                    val mainIp = inst.optString("main_ip", "").ifBlank { null }
+                        ?.takeIf { it != "0.0.0.0" }
+                    val region = inst.optString("region", "").ifBlank { null }
+                    out += CloudInstanceState(
+                        id = inst.optString("id", ""),
+                        name = inst.optString("label").ifBlank {
+                            inst.optString("hostname", "vultr-${inst.optString("id", "?")}")
+                        },
+                        ip = mainIp,
+                        privateIp = inst.optString("internal_ip", "").ifBlank { null },
+                        status = normStatus,
+                        rawStatus = rawStatus,
+                        region = region
+                    )
+                }
+                cursor = root.optJSONObject("meta")?.optJSONObject("links")?.optString("next")?.takeIf { it.isNotBlank() }
+                if (cursor == null) break
             }
             out
         }
@@ -136,6 +125,20 @@ class VultrClient : CloudProvider {
     /** Vultr has no separate hard reset — same reboot endpoint. */
     override suspend fun forceRestartInstance(bearerToken: String, instanceId: String): Boolean =
         postVultrAction(bearerToken, "/v2/instances/$instanceId/reboot")
+
+    private fun doGet(url: String, bearerToken: String): JSONObject {
+        val req = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer $bearerToken")
+            .header("Accept", "application/json")
+            .get()
+            .build()
+        val body = http.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) throw IllegalStateException("Vultr API HTTP ${resp.code}: ${resp.message}")
+            resp.body?.string().orEmpty()
+        }
+        return JSONObject(body)
+    }
 
     private suspend fun postVultrAction(bearerToken: String, path: String): Boolean =
         withContext(Dispatchers.IO) {

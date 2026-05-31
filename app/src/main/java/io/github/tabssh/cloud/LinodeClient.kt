@@ -21,6 +21,9 @@ import java.util.concurrent.TimeUnit
  * Each instance's `ipv4` field is an array of strings; the first public
  * address is what we want. Linode also returns private 192.168.x and
  * 10.x ranges in the same array, which we skip.
+ *
+ * Pagination: response contains `page` (current, 1-based) and `pages`
+ * (total). Loop from 1 to `pages` incrementing by 1.
  */
 class LinodeClient : CloudProvider {
 
@@ -35,47 +38,37 @@ class LinodeClient : CloudProvider {
         bearerToken: String,
         accountName: String
     ): List<ImportCandidate> = withContext(Dispatchers.IO) {
-        val req = Request.Builder()
-            .url("https://api.linode.com/v4/linode/instances?page_size=200")
-            .header("Authorization", "Bearer $bearerToken")
-            .header("Accept", "application/json")
-            .get()
-            .build()
-
-        val body = http.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) {
-                throw IllegalStateException("Linode API HTTP ${resp.code}: ${resp.message}")
-            }
-            resp.body?.string().orEmpty()
-        }
-
-        val root = JSONObject(body)
-        val data = root.optJSONArray("data")
-            ?: return@withContext emptyList<ImportCandidate>()
-
         val out = mutableListOf<ImportCandidate>()
-        for (i in 0 until data.length()) {
-            val inst = data.optJSONObject(i) ?: continue
-            val label = inst.optString("label", "linode-${inst.optInt("id", 0)}")
-            val region = inst.optString("region", "")
-            val publicV4 = pickPublicV4(inst)
-            if (publicV4.isNullOrBlank()) {
-                Logger.d("LinodeClient", "Instance $label has no public v4 — skipping")
-                continue
+        var page = 1
+        while (true) {
+            val root = doGet("https://api.linode.com/v4/linode/instances?page_size=200&page=$page", bearerToken)
+            val data = root.optJSONArray("data") ?: break
+            for (i in 0 until data.length()) {
+                val inst = data.optJSONObject(i) ?: continue
+                val label = inst.optString("label", "linode-${inst.optInt("id", 0)}")
+                val region = inst.optString("region", "")
+                val publicV4 = pickPublicV4(inst)
+                if (publicV4.isNullOrBlank()) {
+                    Logger.d("LinodeClient", "Instance $label has no public v4 — skipping")
+                    continue
+                }
+                out += ImportCandidate(
+                    profile = ConnectionProfile(
+                        id = UUID.randomUUID().toString(),
+                        name = label,
+                        host = publicV4,
+                        port = 22,
+                        username = "root",
+                        authType = "password",
+                        advancedSettings = """{"cloud_source":"linode:$accountName","cloud_region":"$region"}""",
+                        createdAt = System.currentTimeMillis()
+                    ),
+                    sourceLabel = "Linode / ${region.ifBlank { "?" }}"
+                )
             }
-            out += ImportCandidate(
-                profile = ConnectionProfile(
-                    id = UUID.randomUUID().toString(),
-                    name = label,
-                    host = publicV4,
-                    port = 22,
-                    username = "root",
-                    authType = "password",
-                    advancedSettings = """{"cloud_source":"linode:$accountName","cloud_region":"$region"}""",
-                    createdAt = System.currentTimeMillis()
-                ),
-                sourceLabel = "Linode / ${region.ifBlank { "?" }}"
-            )
+            val totalPages = root.optInt("pages", 1)
+            if (page >= totalPages) break
+            page++
         }
         Logger.i("LinodeClient", "Fetched ${out.size} Linode instances for account=$accountName")
         out
@@ -83,48 +76,38 @@ class LinodeClient : CloudProvider {
 
     override suspend fun fetchLiveInstances(bearerToken: String): List<CloudInstanceState> =
         withContext(Dispatchers.IO) {
-            val req = Request.Builder()
-                .url("https://api.linode.com/v4/linode/instances?page_size=200")
-                .header("Authorization", "Bearer $bearerToken")
-                .header("Accept", "application/json")
-                .get()
-                .build()
-
-            val body = http.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) {
-                    throw IllegalStateException("Linode API HTTP ${resp.code}: ${resp.message}")
-                }
-                resp.body?.string().orEmpty()
-            }
-
-            val root = JSONObject(body)
-            val data = root.optJSONArray("data")
-                ?: return@withContext emptyList<CloudInstanceState>()
-
             val out = mutableListOf<CloudInstanceState>()
-            for (i in 0 until data.length()) {
-                val inst = data.optJSONObject(i) ?: continue
-                val rawStatus = inst.optString("status", "unknown")
-                val normStatus = when (rawStatus) {
-                    "running" -> "running"
-                    "offline" -> "stopped"
-                    "booting" -> "starting"
-                    "shutting_down" -> "stopping"
-                    "rebooting" -> "rebooting"
-                    else -> "unknown"
+            var page = 1
+            while (true) {
+                val root = doGet("https://api.linode.com/v4/linode/instances?page_size=200&page=$page", bearerToken)
+                val data = root.optJSONArray("data") ?: break
+                for (i in 0 until data.length()) {
+                    val inst = data.optJSONObject(i) ?: continue
+                    val rawStatus = inst.optString("status", "unknown")
+                    val normStatus = when (rawStatus) {
+                        "running" -> "running"
+                        "offline" -> "stopped"
+                        "booting" -> "starting"
+                        "shutting_down" -> "stopping"
+                        "rebooting" -> "rebooting"
+                        else -> "unknown"
+                    }
+                    val region = inst.optString("region", "")
+                    val publicV4 = pickPublicV4(inst)
+                    val privateV4 = pickPrivateV4(inst)
+                    out += CloudInstanceState(
+                        id = inst.optInt("id", 0).toString(),
+                        name = inst.optString("label", "linode-${inst.optInt("id", 0)}"),
+                        ip = publicV4,
+                        privateIp = privateV4,
+                        status = normStatus,
+                        rawStatus = rawStatus,
+                        region = region.ifBlank { null }
+                    )
                 }
-                val region = inst.optString("region", "")
-                val publicV4 = pickPublicV4(inst)
-                val privateV4 = pickPrivateV4(inst)
-                out += CloudInstanceState(
-                    id = inst.optInt("id", 0).toString(),
-                    name = inst.optString("label", "linode-${inst.optInt("id", 0)}"),
-                    ip = publicV4,
-                    privateIp = privateV4,
-                    status = normStatus,
-                    rawStatus = rawStatus,
-                    region = region.ifBlank { null }
-                )
+                val totalPages = root.optInt("pages", 1)
+                if (page >= totalPages) break
+                page++
             }
             out
         }
@@ -141,6 +124,20 @@ class LinodeClient : CloudProvider {
     /** Linode has no separate hard reset — same endpoint as graceful reboot. */
     override suspend fun forceRestartInstance(bearerToken: String, instanceId: String): Boolean =
         postLinodeAction(bearerToken, "/v4/linode/instances/$instanceId/reboot")
+
+    private fun doGet(url: String, bearerToken: String): JSONObject {
+        val req = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer $bearerToken")
+            .header("Accept", "application/json")
+            .get()
+            .build()
+        val body = http.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) throw IllegalStateException("Linode API HTTP ${resp.code}: ${resp.message}")
+            resp.body?.string().orEmpty()
+        }
+        return JSONObject(body)
+    }
 
     private suspend fun postLinodeAction(bearerToken: String, path: String): Boolean =
         withContext(Dispatchers.IO) {
