@@ -413,6 +413,16 @@ class SyncDataCollector {
                 }
             }
 
+            // Connection passwords — stored in PreferenceManager SharedPreferences under
+            // "password_{connectionId}" (not SecurePasswordManager). Alias: conn_pw_{id}.
+            database.connectionDao().getAllConnections().first()
+                .filter { c -> c.authType.equals("password", ignoreCase = true) }
+                .forEach { c ->
+                    preferenceManager.getConnectionPassword(c.id)
+                        ?.takeIf { it.isNotEmpty() }
+                        ?.let { out["conn_pw_${c.id}"] = it }
+                }
+
             // SSH private key JSch bytes — stored as "ssh_key_{keyId}"
             if (ks != null) {
                 database.keyDao().getAllKeys().first().forEach { key ->
@@ -642,12 +652,14 @@ class SyncDataCollector {
         if (!notifyRecovery) out["monitoring_notify_recovery"] = notifyRecovery
         val cooldown = defaultPrefs.getString("monitoring_alert_cooldown_minutes", "60") ?: "60"
         if (cooldown != "60") out["monitoring_alert_cooldown_minutes"] = cooldown
-        val cpuThresh = defaultPrefs.getString("monitoring_default_cpu_threshold", "") ?: ""
-        if (cpuThresh.isNotEmpty()) out["monitoring_default_cpu_threshold"] = cpuThresh
-        val memThresh = defaultPrefs.getString("monitoring_default_memory_threshold", "") ?: ""
-        if (memThresh.isNotEmpty()) out["monitoring_default_memory_threshold"] = memThresh
-        val diskThresh = defaultPrefs.getString("monitoring_default_disk_threshold", "") ?: ""
-        if (diskThresh.isNotEmpty()) out["monitoring_default_disk_threshold"] = diskThresh
+        // SeekBarPreference stores its value as Int — read as Int to avoid
+        // ClassCastException when the Preference UI inflates after a sync.
+        val cpuThresh = defaultPrefs.getInt("monitoring_default_cpu_threshold", 0)
+        if (cpuThresh > 0) out["monitoring_default_cpu_threshold"] = cpuThresh
+        val memThresh = defaultPrefs.getInt("monitoring_default_memory_threshold", 0)
+        if (memThresh > 0) out["monitoring_default_memory_threshold"] = memThresh
+        val diskThresh = defaultPrefs.getInt("monitoring_default_disk_threshold", 0)
+        if (diskThresh > 0) out["monitoring_default_disk_threshold"] = diskThresh
         return out
     }
 

@@ -96,11 +96,12 @@ class BackupManager(private val context: Context) {
         try {
             Logger.i("BackupManager", "Creating backup...")
 
-            // Collect all data to backup.
-            // includeSecrets adds a secrets.json with all Keystore-backed
-            // credentials (SSH key bytes, hypervisor/VNC/cloud passwords,
-            // OCI tokens). Only safe inside an encrypted backup envelope.
-            val includeSecrets = encryptBackup && password != null
+            // Collect all data to backup, including all credentials.
+            // includeSecrets is always true — the user controls whether to
+            // encrypt the backup with a password; that is their security
+            // tradeoff to make. Requiring encryption to get secrets would
+            // silently produce incomplete restores on unencrypted backups.
+            val includeSecrets = true
             val backupData = exporter.collectBackupData(includePasswords, includeSecrets)
 
             // Create metadata

@@ -50,16 +50,14 @@ import org.json.JSONObject
  * BackupImporter remains backward compatible with v1.
  *
  * Secrets policy (mirrors §9 sync coverage matrix):
- *   - Connection password (per-host)              — included only when the caller
- *                                                   sets `includePasswords=true`.
- *   - SSH private key material                    — never exported (Keystore-bound).
- *   - StoredKey.certificate (public OpenSSH cert) — included; non-secret.
- *   - Identity.password                           — never exported (encrypted-at-rest
- *                                                   value is Keystore-bound to this
- *                                                   device; unusable on another).
- *   - CloudAccount API token                      — never exported (Keystore-bound).
- *   - HypervisorProfile.password                  — never exported (Keystore-bound).
- *   - OCI PEM private key                         — never exported (Keystore-bound).
+ *   - Connection password (per-host)              — exported in secrets.json (conn_pw_{id}).
+ *   - SSH private key material                    — exported in secrets.json (ssh_keys map).
+ *   - StoredKey.certificate (public OpenSSH cert) — included in keys.json; non-secret.
+ *   - Identity.password                           — exported in secrets.json (identity_{id});
+ *                                                   the Identity row itself has password=null.
+ *   - CloudAccount API token                      — exported in secrets.json (cloud_token_{id}).
+ *   - HypervisorProfile.password                  — exported in secrets.json (hypervisor_{id}).
+ *   - OCI PEM private key                         — exported in secrets.json (oci_private_key_{id}).
  *
  * Tables intentionally excluded from backup:
  *   - tab_sessions   — runtime state, regenerated on next open.
@@ -103,10 +101,10 @@ class BackupExporter(
         const val FILE_VNC_HOSTS         = "vnc_hosts.json"
         const val FILE_VNC_IDENTITIES    = "vnc_identities.json"
         /**
-         * All Keystore-backed credentials (passwords, tokens, OCI PEM keys,
-         * SSH key JSch bytes).  Only written when the backup is encrypted
-         * (see [BackupManager.createBackup] `includeSecrets` parameter).
-         * Never written to an unencrypted backup — plaintext on disk.
+         * All credentials — Keystore-backed passwords, tokens, OCI PEM keys,
+         * SSH key JSch bytes, and connection passwords. Always written by
+         * [BackupManager.createBackup]; the user decides whether to encrypt
+         * the backup file with a password.
          */
         const val FILE_SECRETS           = "secrets.json"
     }
@@ -116,12 +114,12 @@ class BackupExporter(
      * decides whether to encrypt and how to write to disk.
      *
      * @param includePasswords Legacy flag — SSH connection passwords are included
-     *   in the `connections.json` sidecar when true.  Superseded by [includeSecrets]
+     *   in the `connections.json` sidecar when true. Superseded by [includeSecrets]
      *   which covers all credential types; when [includeSecrets] is true this flag
      *   is implicitly treated as true so the two paths are consistent.
-     * @param includeSecrets   When true (only ever set for password-encrypted backups)
-     *   all Keystore-backed credentials are gathered into [FILE_SECRETS].  Never set
-     *   for unencrypted backups — the backup file itself is the only protection.
+     * @param includeSecrets   When true, all credentials (Keystore passwords, tokens,
+     *   OCI keys, SSH key bytes, connection passwords) are gathered into [FILE_SECRETS].
+     *   Always true in [BackupManager.createBackup] — the user controls encryption.
      */
     suspend fun collectBackupData(
         includePasswords: Boolean,
@@ -260,14 +258,15 @@ class BackupExporter(
     /**
      * Gather every Keystore-backed credential into a single JSON object.
      *
-     * Covered credential namespaces (all via [SecurePasswordManager]):
-     *   `identity_{id}`                  — SSH identity password
-     *   `hypervisor_{id}`                — per-host hypervisor password (inline creds)
-     *   `hypervisor_account_{id}`        — hypervisor account password (reusable creds)
-     *   `oci_private_key_account_{id}`   — OCI API private key PEM
-     *   `oci_passphrase_account_{id}`    — OCI API key passphrase
-     *   `vnc_identity_{id}`              — VNC identity password
-     *   `cloud_token_{id}`               — cloud provider API token
+     * Covered credential namespaces:
+     *   `identity_{id}`                  — SSH identity password (SecurePasswordManager)
+     *   `hypervisor_{id}`                — per-host hypervisor password (SecurePasswordManager)
+     *   `hypervisor_account_{id}`        — hypervisor account password (SecurePasswordManager)
+     *   `oci_private_key_account_{id}`   — OCI API private key PEM (SecurePasswordManager)
+     *   `oci_passphrase_account_{id}`    — OCI API key passphrase (SecurePasswordManager)
+     *   `vnc_identity_{id}`              — VNC identity password (SecurePasswordManager)
+     *   `cloud_token_{id}`               — cloud provider API token (SecurePasswordManager)
+     *   `conn_pw_{id}`                   — SSH connection password (PreferenceManager)
      *
      * SSH private key JSch bytes are exported separately under `ssh_keys` keyed
      * by [StoredKey.keyId], re-encrypted under the backup password by the outer
@@ -326,6 +325,16 @@ class BackupExporter(
                     ?.let { passwords["cloud_token_${ca.id}"] = it }
             }
         }
+
+        // Connection passwords — stored in PreferenceManager SharedPreferences under
+        // "password_{connectionId}" (not SecurePasswordManager). Alias: conn_pw_{id}.
+        database.connectionDao().getAllConnections().first()
+            .filter { it.authType.equals("password", ignoreCase = true) }
+            .forEach { c ->
+                preferenceManager.getConnectionPassword(c.id)
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { passwords["conn_pw_${c.id}"] = it }
+            }
 
         // SSH private key JSch bytes
         keyStorage?.let { ks ->
@@ -421,9 +430,11 @@ class BackupExporter(
             put("monitoring_notify_down",                  defaultPrefs.getBoolean("monitoring_notify_down", true))
             put("monitoring_notify_recovery",              defaultPrefs.getBoolean("monitoring_notify_recovery", true))
             put("monitoring_alert_cooldown_minutes",       defaultPrefs.getString("monitoring_alert_cooldown_minutes", "60"))
-            put("monitoring_default_cpu_threshold",        defaultPrefs.getString("monitoring_default_cpu_threshold", ""))
-            put("monitoring_default_memory_threshold",     defaultPrefs.getString("monitoring_default_memory_threshold", ""))
-            put("monitoring_default_disk_threshold",       defaultPrefs.getString("monitoring_default_disk_threshold", ""))
+            // SeekBarPreference stores its value as Int — read as Int so that restore
+            // writes the correct type and the Preference UI does not crash.
+            put("monitoring_default_cpu_threshold",        defaultPrefs.getInt("monitoring_default_cpu_threshold", 0))
+            put("monitoring_default_memory_threshold",     defaultPrefs.getInt("monitoring_default_memory_threshold", 0))
+            put("monitoring_default_disk_threshold",       defaultPrefs.getInt("monitoring_default_disk_threshold", 0))
         })
 
         return root.toString(2)

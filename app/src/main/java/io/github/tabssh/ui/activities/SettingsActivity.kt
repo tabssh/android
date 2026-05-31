@@ -1071,6 +1071,10 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
 class MonitoringSettingsFragment : androidx.preference.PreferenceFragmentCompat() {
 
     override fun onCreatePreferences(savedInstanceState: android.os.Bundle?, rootKey: String?) {
+        // Migrate any SeekBarPreference keys that a previous sync/backup restore
+        // incorrectly wrote as String. SeekBarPreference calls getInt() during
+        // inflation and throws ClassCastException if a String is found instead.
+        sanitizeSeekBarPrefs(requireContext())
         setPreferencesFromResource(R.xml.preferences_monitoring, rootKey)
 
         // Embed the selected entry label into the cooldown summary sentence so
@@ -1187,6 +1191,35 @@ class MonitoringSettingsFragment : androidx.preference.PreferenceFragmentCompat(
             } else {
                 "Not exempt — tap to disable battery optimization for reliable alerts"
             }
+        }
+    }
+
+    companion object {
+        // Keys whose value must be an Int (SeekBarPreference). A previous bug in
+        // the sync/backup subsystem wrote them as String — remove the corrupt entry
+        // so the SeekBar can safely fall back to its XML defaultValue.
+        private val SEEK_BAR_KEYS = listOf(
+            "monitoring_default_cpu_threshold",
+            "monitoring_default_memory_threshold",
+            "monitoring_default_disk_threshold"
+        )
+
+        fun sanitizeSeekBarPrefs(context: android.content.Context) {
+            val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+            val edit = prefs.edit()
+            var dirty = false
+            for (key in SEEK_BAR_KEYS) {
+                try {
+                    prefs.getInt(key, 0)
+                } catch (_: ClassCastException) {
+                    val strVal = try { prefs.getString(key, "0") ?: "0" } catch (_: Exception) { "0" }
+                    val intVal = strVal.toIntOrNull() ?: 0
+                    edit.remove(key)
+                    if (intVal > 0) edit.putInt(key, intVal)
+                    dirty = true
+                }
+            }
+            if (dirty) edit.commit()
         }
     }
 }

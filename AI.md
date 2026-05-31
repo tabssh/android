@@ -751,7 +751,7 @@ GCM authentication tag is appended by the cipher (128 bits, embedded by Java's A
 | `snippets` | ✅ last-write-wins | Wave 5.4 |
 | `identities` | ✅ last-write-wins | Wave 5.4 |
 | `connection_groups` | ✅ last-write-wins | Wave 5.4 |
-| `cloud_accounts` | ❌ NOT synced | per-device hardware-keystore-bound token in `SecurePasswordManager` would be missing on the destination — sync the row alone is broken |
+| `cloud_accounts` | ✅ last-write-wins | Row synced via `collectCloudAccounts()`; token transferred in secrets map as `cloud_token_{id}` inside the AES-GCM envelope |
 | `tab_sessions` | ❌ NOT synced | per-device runtime state |
 | `audit_log` | ❌ NOT synced | per-device security trail |
 | `trusted_certificates` | ✅ last-write-wins | Wave 7.1 |
@@ -760,7 +760,7 @@ GCM authentication tag is appended by the cipher (128 bits, embedded by Java's A
 | `macros` | ✅ last-write-wins | Wave 11 — base64 byte sequences |
 | `monitor_slots` | ✅ last-write-wins | Wave 11 — full table, no `modifiedAt` delta |
 | `vnc_hosts`          | ✅ last-write-wins | Wave 13 (2026-05-17) — UUID PK, no cross-device collision risk |
-| `vnc_identities`     | ✅ last-write-wins | Wave 13 (2026-05-17) — metadata only; password is Keystore-bound and NOT synced |
+| `vnc_identities`     | ✅ last-write-wins | Wave 13 (2026-05-17) — metadata only; password transferred in secrets map as `vnc_identity_{id}` |
 | `sync_state` | ❌ NOT synced | per-device sync bookkeeping; meaningless on another device |
 
 ### 9.5 Scheduling
@@ -820,7 +820,7 @@ It also constructs `SyncMetadata` (with `BuildConfig.VERSION_NAME`, `Build.MODEL
 - `notifications` — notifications_enabled, show_connection_notifications, show_error_notifications, show_file_transfer_notifications, notification_vibrate
 - `monitoring` — monitoring_enabled, monitoring_run_in_battery_saver, monitoring_notify_down, monitoring_notify_recovery, monitoring_alert_cooldown_minutes, monitoring_default_cpu/memory/disk_threshold
 
-**Secrets policy:** connection passwords included only when `includePasswords=true`; all Keystore-bound values (SSH private keys, Identity.password, CloudAccount tokens, HypervisorProfile.password, OCI PEM key) never exported.
+**Secrets policy:** all credentials are always exported in `secrets.json` (`conn_pw_{id}` connection passwords via PreferenceManager; SSH private key bytes, Identity passwords, CloudAccount tokens, Hypervisor passwords, OCI PEM keys via SecurePasswordManager). The user controls whether to encrypt the backup file with a password; that is their security tradeoff.
 
 **Tables excluded:** `tab_sessions` (runtime), `sync_state` (per-device), `audit_log` (large; export separately).
 
@@ -1000,7 +1000,7 @@ Package `cloud/` (separate from `hypervisor/`). Manages SSH-accessible cloud VM 
 | Linode | `LinodeClient` | Linode instance list |
 | Vultr | `VultrClient` | VPS list |
 
-**Secret storage pattern.** Cloud API tokens are stored in `SecurePasswordManager` under the key `cloud_token_${accountId}`. The `CloudAccount` DB entity stores only metadata (`provider`, `enabled`, `lastRefreshAt`, `lastCount`); the token is **never** written to the `cloud_accounts` table (see §9.4 sync matrix — cloud accounts are not synced for this reason).
+**Secret storage pattern.** Cloud API tokens are stored in `SecurePasswordManager` under the key `cloud_token_${accountId}`. The `CloudAccount` DB entity stores only metadata (`provider`, `enabled`, `lastRefreshAt`, `lastCount`); the token is **never** written to the `cloud_accounts` table. Both the row and the token are synced: the row via `collectCloudAccounts()` and the token via the `cloud_token_{id}` entry in the AES-GCM secrets map (see §9.4).
 
 ---
 

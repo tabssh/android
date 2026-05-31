@@ -274,6 +274,12 @@ class SyncDataApplier {
                         ks.importKeyFromBackup(keyId, bytes)
                         keyCount++
                     }
+                } else if (alias.startsWith("conn_pw_")) {
+                    // Connection passwords live in PreferenceManager SharedPreferences,
+                    // not SecurePasswordManager — route them to the correct store.
+                    val connId = alias.removePrefix("conn_pw_")
+                    preferenceManager.setConnectionPassword(connId, value)
+                    passwordCount++
                 } else {
                     if (pm != null) {
                         pm.storePassword(alias, value,
@@ -757,10 +763,20 @@ class SyncDataApplier {
                     "monitoring_run_in_battery_saver",
                     "monitoring_notify_down",
                     "monitoring_notify_recovery" -> editor.putBoolean(key, value as Boolean)
-                    "monitoring_alert_cooldown_minutes",
+                    // ListPreference value — stored and restored as String.
+                    "monitoring_alert_cooldown_minutes" -> editor.putString(key, value as String)
+                    // SeekBarPreference values — must be stored as Int to avoid
+                    // ClassCastException when the Preference UI inflates.
                     "monitoring_default_cpu_threshold",
                     "monitoring_default_memory_threshold",
-                    "monitoring_default_disk_threshold" -> editor.putString(key, value as String)
+                    "monitoring_default_disk_threshold" -> {
+                        val intVal = when (value) {
+                            is Number -> value.toInt()
+                            is String -> value.toIntOrNull() ?: 0
+                            else -> 0
+                        }
+                        editor.putInt(key, intVal)
+                    }
                 }
                 count++
             } catch (e: Exception) {

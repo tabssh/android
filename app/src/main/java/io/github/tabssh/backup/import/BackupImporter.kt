@@ -375,9 +375,9 @@ class BackupImporter(
             val items = json.decodeFromJsonElement(
                 ListSerializer(Identity.serializer()), root["items"] as JsonArray
             )
-            // Note: Identity.password is null on import — the exporter strips
-            // it because it is Keystore-encrypted-at-rest and unusable cross-
-            // device. User re-enters password after restore.
+            // Identity.password is null in this row — the exporter strips it because the
+            // Keystore-encrypted-at-rest blob is not portable. The plaintext password is
+            // restored from the secrets file (identity_{id}) when present in the backup.
             for (id in items) {
                 val existing = database.identityDao().getIdentityById(id.id)
                 if (existing != null && !overwriteExisting) continue
@@ -427,8 +427,9 @@ class BackupImporter(
         }
 
     private suspend fun restoreHypervisors(data: String, overwriteExisting: Boolean): Int =
-        // password column is blank on import (Keystore-bound — user re-enters
-        // in the host edit screen after restore). All other config lands.
+        // password column is blank in the backup row (Keystore-bound; not portable).
+        // Restored from the secrets file (hypervisor_{id} or hypervisor_account_{id})
+        // when present in the backup. All other config lands immediately.
         restoreV2List(data, ListSerializer(HypervisorProfile.serializer())) { h ->
             val existing = database.hypervisorDao().getById(h.id)
             if (existing != null && !overwriteExisting) return@restoreV2List false
@@ -450,9 +451,8 @@ class BackupImporter(
         }
 
     private suspend fun restoreCloudAccounts(data: String, overwriteExisting: Boolean): Int =
-        // Cloud API token lives in SecurePasswordManager and is NOT in the
-        // backup; the restored CloudAccount row has no usable token until the
-        // user re-enters it.
+        // Cloud API token is NOT in this entity row — it lives in SecurePasswordManager
+        // under cloud_token_{id} and is restored from the secrets file when present.
         restoreV2List(data, ListSerializer(CloudAccount.serializer())) { c ->
             val existing = database.cloudAccountDao().getById(c.id)
             if (existing != null && !overwriteExisting) return@restoreV2List false
@@ -481,8 +481,8 @@ class BackupImporter(
         }
 
     private suspend fun restoreVncIdentities(data: String, overwriteExisting: Boolean): Int =
-        // Password is NOT in this entity (it lives in Keystore); restore the metadata
-        // row as-is. User re-enters the VNC password on first connect after restore.
+        // Password is NOT in this entity (it lives in SecurePasswordManager under
+        // vnc_identity_{id}); restored from the secrets file when present in the backup.
         restoreV2List(data, ListSerializer(VncIdentity.serializer())) { vi ->
             val existing = database.vncIdentityDao().getById(vi.id)
             if (existing != null && !overwriteExisting) return@restoreV2List false
@@ -531,22 +531,28 @@ class BackupImporter(
         try {
             val root = json.parseToJsonElement(data).jsonObject
 
-            // Passwords / tokens / OCI keys
-            if (pm != null) {
-                (root["passwords"] as? JsonObject)?.forEach { (alias, element) ->
-                    val value = element.jsonPrimitive.content
-                    if (value.isNotEmpty()) {
-                        try {
-                            pm.storePassword(alias, value,
-                                SecurePasswordManager.StorageLevel.ENCRYPTED)
-                            Logger.d(TAG, "Restored secret alias: $alias")
-                        } catch (e: Exception) {
-                            Logger.w(TAG, "Failed to restore secret $alias: ${e.message}")
-                        }
+            // Passwords / tokens / OCI keys / connection passwords
+            (root["passwords"] as? JsonObject)?.forEach { (alias, element) ->
+                val value = element.jsonPrimitive.content
+                if (value.isEmpty()) return@forEach
+                try {
+                    if (alias.startsWith("conn_pw_")) {
+                        // Connection passwords live in PreferenceManager SharedPreferences,
+                        // not SecurePasswordManager — route them to the correct store.
+                        val connId = alias.removePrefix("conn_pw_")
+                        preferenceManager.setConnectionPassword(connId, value)
+                        Logger.d(TAG, "Restored connection password: $connId")
+                    } else if (pm != null) {
+                        pm.storePassword(alias, value,
+                            SecurePasswordManager.StorageLevel.ENCRYPTED)
+                        Logger.d(TAG, "Restored secret alias: $alias")
                     }
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Failed to restore secret $alias: ${e.message}")
                 }
-            } else {
-                Logger.w(TAG, "SecurePasswordManager unavailable — passwords not restored")
+            }
+            if (pm == null) {
+                Logger.w(TAG, "SecurePasswordManager unavailable — Keystore-backed passwords not restored")
             }
 
             // SSH private key JSch bytes
@@ -631,11 +637,13 @@ class BackupImporter(
                 putBoolean("monitoring_run_in_battery_saver", m.optBoolean("monitoring_run_in_battery_saver", false))
                 putBoolean("monitoring_notify_down",           m.optBoolean("monitoring_notify_down", true))
                 putBoolean("monitoring_notify_recovery",       m.optBoolean("monitoring_notify_recovery", true))
-                // ListPreference stores its value as String
+                // ListPreference stores its value as String.
                 putString("monitoring_alert_cooldown_minutes", m.optString("monitoring_alert_cooldown_minutes", "60"))
-                putString("monitoring_default_cpu_threshold",  m.optString("monitoring_default_cpu_threshold", ""))
-                putString("monitoring_default_memory_threshold",m.optString("monitoring_default_memory_threshold", ""))
-                putString("monitoring_default_disk_threshold", m.optString("monitoring_default_disk_threshold", ""))
+                // SeekBarPreference stores its value as Int — must restore as Int to avoid
+                // ClassCastException when the Preference UI inflates.
+                putInt("monitoring_default_cpu_threshold",     m.optInt("monitoring_default_cpu_threshold", 0))
+                putInt("monitoring_default_memory_threshold",  m.optInt("monitoring_default_memory_threshold", 0))
+                putInt("monitoring_default_disk_threshold",    m.optInt("monitoring_default_disk_threshold", 0))
             }.apply()
         }
     }
