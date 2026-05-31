@@ -626,7 +626,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     }
                 }
                 onContextMenuRequested = { x, y ->
-                    showTextContextMenu(x, y)
+                    beginSelection(x, y)
                 }
 
                 // Wired once at view setup so the floating Copy ActionMode
@@ -1102,27 +1102,43 @@ private fun showSnippetsPickerForActiveTab() {
 
         val callback = object : android.view.ActionMode.Callback {
             override fun onCreateActionMode(mode: android.view.ActionMode, menu: Menu): Boolean {
-                mode.title = "Select"
+                mode.title = null
                 menu.add(0, 1, 0, "Copy")
                     .setIcon(android.R.drawable.ic_menu_set_as)
                     .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                menu.add(0, 2, 1, "Select All")
+                    .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                menu.add(0, 3, 2, "Paste")
+                    .setIcon(android.R.drawable.ic_input_add)
+                    .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
                 return true
             }
             override fun onPrepareActionMode(mode: android.view.ActionMode, menu: Menu) = false
             override fun onActionItemClicked(mode: android.view.ActionMode, item: MenuItem): Boolean {
-                if (item.itemId == 1) {
-                    val text = view.getSelectedText()
-                    if (text.isNullOrEmpty()) {
-                        Toast.makeText(this@TabTerminalActivity, "Nothing selected", Toast.LENGTH_SHORT).show()
-                    } else {
-                        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                        clipboard.setPrimaryClip(
-                            android.content.ClipData.newPlainText("Terminal selection", text)
-                        )
-                        Toast.makeText(this@TabTerminalActivity, "Copied ${text.length} chars", Toast.LENGTH_SHORT).show()
+                when (item.itemId) {
+                    1 -> {
+                        val text = view.getSelectedText()
+                        if (text.isNullOrEmpty()) {
+                            Toast.makeText(this@TabTerminalActivity, "Nothing selected", Toast.LENGTH_SHORT).show()
+                        } else {
+                            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            clipboard.setPrimaryClip(
+                                android.content.ClipData.newPlainText("Terminal selection", text)
+                            )
+                            Toast.makeText(this@TabTerminalActivity, "Copied", Toast.LENGTH_SHORT).show()
+                        }
+                        mode.finish()
+                        return true
                     }
-                    mode.finish()
-                    return true
+                    2 -> {
+                        view.selectAll()
+                        return true
+                    }
+                    3 -> {
+                        mode.finish()
+                        pasteFromClipboard()
+                        return true
+                    }
                 }
                 return false
             }
@@ -1917,7 +1933,7 @@ private fun showSnippetsPickerForActiveTab() {
                 multiplexerType,
                 customPrefix,
                 commandCallback,
-                onContextMenuRequested = { x, y -> showTextContextMenu(x, y) },
+                onContextMenuRequested = { x, y -> beginSelection(x, y) },
                 onSelectionStarted = { tv -> startTerminalSelectionActionMode(tv) }
             )
             viewPager?.adapter = pagerAdapter
@@ -1949,7 +1965,7 @@ private fun showSnippetsPickerForActiveTab() {
                 multiplexerType,
                 customPrefix,
                 commandCallback,
-                onContextMenuRequested = { x, y -> showTextContextMenu(x, y) },
+                onContextMenuRequested = { x, y -> beginSelection(x, y) },
                 onSelectionStarted = { tv -> startTerminalSelectionActionMode(tv) }
             )
             viewPager?.adapter = pagerAdapter
@@ -2886,6 +2902,9 @@ private fun showSnippetsPickerForActiveTab() {
             if (customKeyboardVisible) hideCustomKeyboardBar() else showCustomKeyboardBar()
         }
         items += io.github.tabssh.ui.views.PaletteDialog.Item("Paste from clipboard", null) { pasteFromClipboard() }
+        items += io.github.tabssh.ui.views.PaletteDialog.Item("Copy screen", "Copy visible terminal output to clipboard") { copyTerminalScreen() }
+        items += io.github.tabssh.ui.views.PaletteDialog.Item("Cluster: send to all sessions…", "Broadcast a command to every open tab") { showClusterBroadcastDialog() }
+        items += io.github.tabssh.ui.views.PaletteDialog.Item("Share connection info", "Share host / user details") { shareSession() }
         io.github.tabssh.ui.views.PaletteDialog.show(this, "Command Palette", items)
     }
 

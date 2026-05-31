@@ -1751,6 +1751,22 @@ class TerminalView @JvmOverloads constructor(
     }
 
     /**
+     * Select the entire visible terminal screen. Sets anchor to (0,0) and
+     * focus to the last cell on the last visible row, then fires
+     * onSelectionStarted so the host activity raises the ActionMode bar.
+     */
+    fun selectAll() {
+        selectionAnchorRow = 0
+        selectionAnchorCol = 0
+        selectionFocusRow = (terminalRows - 1).coerceAtLeast(0)
+        selectionFocusCol = (terminalCols - 1).coerceAtLeast(0)
+        selectionActive = true
+        selectionDragHandle = -1
+        requestFocus()
+        invalidate()
+    }
+
+    /**
      * Read the currently-selected text from the Termux buffer. Returns
      * null if no buffer or selection is empty. The range is normalised
      * (anchor and focus may be in any order) and converted to the
@@ -1973,8 +1989,21 @@ class TerminalView @JvmOverloads constructor(
         val word = text.substring(wordStart, wordEnd + 1).trim()
 
         if (word.isNotBlank()) {
-            // `terminal_copy_on_select` (default true) gates auto-copy on
-            // double-tap. Off → just visually select, leave clipboard alone.
+            // Visually highlight the word so the user sees handles and the
+            // ActionMode bar. The host activity's onSelectionStarted callback
+            // raises the floating Copy/Select All/Paste bar.
+            selectionAnchorRow = result.first
+            selectionAnchorCol = wordStart
+            selectionFocusRow = result.first
+            selectionFocusCol = wordEnd
+            selectionActive = true
+            selectionDragHandle = -1
+            requestFocus()
+            invalidate()
+            onSelectionStarted?.invoke()
+
+            // `terminal_copy_on_select` (default true) auto-copies on double-tap.
+            // Off → visual selection only; user must tap Copy in the ActionMode bar.
             val prefs = androidx.preference.PreferenceManager
                 .getDefaultSharedPreferences(context)
             val copyOnSelect = prefs.getBoolean("terminal_copy_on_select", true)
@@ -1982,7 +2011,6 @@ class TerminalView @JvmOverloads constructor(
                 io.github.tabssh.utils.ClipboardHelper.copy(
                     context, label = "Selected Text", text = word, sensitive = true
                 )
-                android.widget.Toast.makeText(context, "Copied: $word", android.widget.Toast.LENGTH_SHORT).show()
             }
             Logger.d("TerminalView", "Double-tap selected word: $word (copied=$copyOnSelect)")
         }
