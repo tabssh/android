@@ -180,13 +180,11 @@ class OciManagerActivity : AppCompatActivity() {
 
                 app.database.hypervisorDao().updateLastConnected(profile.id, System.currentTimeMillis())
 
-                val capturedPin = client.getCapturedCertSha256()
-                if (capturedPin != null) {
-                    withContext(Dispatchers.IO) {
-                        app.database.hypervisorDao().updatePinnedCertSha256(profile.id, capturedPin)
-                    }
-                    currentProfile = profile.copy(pinnedCertSha256 = capturedPin)
-                }
+                // Persist the identity-endpoint TLS pin captured during validateCredentials().
+                // The iaas-endpoint pin is persisted separately in loadInstances() after the
+                // first listInstances() call completes — OCI uses two distinct hostnames and
+                // two separate TLS leaf certs.
+                persistCapturedPins(client)
 
                 currentClient = client
                 refreshInstances()
@@ -236,9 +234,28 @@ class OciManagerActivity : AppCompatActivity() {
                 statusText.visibility = View.VISIBLE
                 statusText.text = "No instances found"
             }
+            // Persist the iaas-endpoint TLS pin that was captured during listInstances().
+            // OCI uses a separate leaf cert for iaas.* vs identity.*; without this call
+            // the user would see a TOFU prompt every time the instance list loads.
+            persistCapturedPins(client)
         } catch (e: Exception) {
             Logger.e(TAG, "loadInstances failed", e)
             showError("Could not load instances: ${e.message}")
+        }
+    }
+
+    /**
+     * Persist any TLS cert SHAs captured since the client was built.
+     * getCapturedCertSha256() returns the full semicolon-delimited set of
+     * pinned SHAs (existing + newly captured) so incremental calls are safe
+     * and idempotent — only writes to DB when the value has actually changed.
+     */
+    private suspend fun persistCapturedPins(client: OciApiClient) {
+        val profile = currentProfile ?: return
+        val combined = client.getCapturedCertSha256() ?: return
+        HypervisorPasswordStore.persistCapturedPinIfAny(this, profile, combined)
+        if (!combined.equals(profile.pinnedCertSha256, ignoreCase = true)) {
+            currentProfile = profile.copy(pinnedCertSha256 = combined)
         }
     }
 

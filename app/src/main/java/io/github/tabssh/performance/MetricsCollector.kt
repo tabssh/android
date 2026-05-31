@@ -323,7 +323,7 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
             Logger.d("MetricsCollector", "Detected platform: ${platformInfo.getDisplayName()} (${platformInfo.architecture})")
             platformInfo
         } catch (e: Exception) {
-            Logger.e("MetricsCollector", "Failed to collect platform info", e)
+            Logger.d("MetricsCollector", "Platform info unavailable: ${e.message}")
             PlatformInfo.empty()
         }
     }

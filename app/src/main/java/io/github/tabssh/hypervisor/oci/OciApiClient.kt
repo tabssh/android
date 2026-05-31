@@ -42,15 +42,53 @@ class OciApiClient(
     private val identityBaseUrl = "https://$identityHost/20160918"
     private val iaasBaseUrl = "https://$iaasHost/20160918"
 
-    private val capturedPin = io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.CapturedPin()
-    fun getCapturedCertSha256(): String? = capturedPin.sha256
+    // OCI uses two distinct hostnames (identity.* and iaas.*) that carry
+    // separate TLS leaf certs.  We need one captured-pin holder per host so
+    // TOFU prompts for each cert are shown once and both pins are persisted.
+    // The stored pinnedCertSha256 column may hold "sha_id;sha_iaas" (semicolon
+    // delimited).  Legacy single-sha rows are treated as the identity pin only.
+    private val pinnedParts: List<String> = pinnedCertSha256
+        ?.split(";")
+        ?.map { it.trim() }
+        ?.filter { it.isNotBlank() }
+        ?: emptyList()
+    private val identityPinnedSha: String? = pinnedParts.getOrNull(0)
+    private val iaasPinnedSha: String? = pinnedParts.getOrNull(1)
+
+    private val identityCapturedPin = io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.CapturedPin()
+    private val iaasCapturedPin    = io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.CapturedPin()
+
+    /**
+     * Returns the full semicolon-delimited pin string to persist after connect.
+     * Combines any newly-captured SHAs with the already-stored SHAs so that
+     * incremental persistence (identity captured first, iaas captured later)
+     * never loses a previously-stored pin.
+     */
+    fun getCapturedCertSha256(): String? {
+        val idSha   = identityCapturedPin.sha256?.takeIf { it.isNotBlank() } ?: identityPinnedSha
+        val iaasSha = iaasCapturedPin.sha256?.takeIf    { it.isNotBlank() } ?: iaasPinnedSha
+        return listOfNotNull(idSha, iaasSha)
+            .filter { it.isNotBlank() }
+            .joinToString(";")
+            .takeIf { it.isNotBlank() }
+    }
 
     private val signer = OciSigner(tenancyOcid, userOcid, fingerprint, keyMaterial)
 
-    private val client: OkHttpClient = OkHttpClient.Builder()
+    // Separate HTTP clients so each endpoint's TLS session has its own pin.
+    private val identityClient: OkHttpClient = OkHttpClient.Builder()
         .also { b ->
             io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.installTrust(
-                b, verifySsl, pinnedCertSha256, capturedPin, identityHost, 443
+                b, verifySsl, identityPinnedSha, identityCapturedPin, identityHost, 443
+            )
+        }
+        .addInterceptor(signer.asInterceptor())
+        .build()
+
+    private val iaasClient: OkHttpClient = OkHttpClient.Builder()
+        .also { b ->
+            io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.installTrust(
+                b, verifySsl, iaasPinnedSha, iaasCapturedPin, iaasHost, 443
             )
         }
         .addInterceptor(signer.asInterceptor())
@@ -68,7 +106,7 @@ class OciApiClient(
                 .url("$identityBaseUrl/users/$userOcid".toHttpUrl())
                 .get()
                 .build()
-            client.newCall(request).execute().use { resp ->
+            identityClient.newCall(request).execute().use { resp ->
                 val ok = resp.isSuccessful
                 if (!ok) {
                     Logger.w("OciAPI", "validateCredentials HTTP ${resp.code}: " +
@@ -95,7 +133,7 @@ class OciApiClient(
                 .addQueryParameter("limit", "100")
                 .build()
             val request = Request.Builder().url(url).get().build()
-            client.newCall(request).execute().use { resp ->
+            iaasClient.newCall(request).execute().use { resp ->
                 if (!resp.isSuccessful) {
                     Logger.e("OciAPI", "listInstances HTTP ${resp.code}: " +
                         (resp.body?.string()?.take(300) ?: "<no body>"))
@@ -111,7 +149,7 @@ class OciApiClient(
             val request = Request.Builder()
                 .url("$iaasBaseUrl/instances/$instanceOcid".toHttpUrl())
                 .get().build()
-            client.newCall(request).execute().use { resp ->
+            iaasClient.newCall(request).execute().use { resp ->
                 if (!resp.isSuccessful) {
                     Logger.w("OciAPI", "getInstance HTTP ${resp.code}")
                     return@withContext null
@@ -136,7 +174,7 @@ class OciApiClient(
         // Empty JSON body — OCI requires Content-Length even for actionless POSTs.
         val body = "{}".toRequestBody("application/json".toMediaTypeOrNull())
         val request = Request.Builder().url(url).post(body).build()
-        client.newCall(request).execute().use { resp ->
+        iaasClient.newCall(request).execute().use { resp ->
             if (!resp.isSuccessful) {
                 Logger.e("OciAPI", "instanceAction(${action.wireValue}) HTTP ${resp.code}: " +
                     (resp.body?.string()?.take(200) ?: "<no body>"))
@@ -163,7 +201,7 @@ class OciApiClient(
                 .addQueryParameter("compartmentId", compartmentOcid)
                 .addQueryParameter("instanceId", instanceOcid)
                 .build()
-            val attachments = client.newCall(Request.Builder().url(vaUrl).get().build())
+            val attachments = iaasClient.newCall(Request.Builder().url(vaUrl).get().build())
                 .execute().use { r ->
                     if (!r.isSuccessful) return@withContext null to null
                     JSONArray(r.body?.string().orEmpty())
@@ -174,7 +212,7 @@ class OciApiClient(
                 val att = attachments.optJSONObject(i) ?: continue
                 val vnicId = att.optString("vnicId").takeIf { it.isNotEmpty() } ?: continue
                 val vnicUrl = "$iaasBaseUrl/vnics/$vnicId".toHttpUrl()
-                val vnic = client.newCall(Request.Builder().url(vnicUrl).get().build())
+                val vnic = iaasClient.newCall(Request.Builder().url(vnicUrl).get().build())
                     .execute().use { r ->
                         if (!r.isSuccessful) null else JSONObject(r.body?.string().orEmpty())
                     } ?: continue
