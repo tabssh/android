@@ -249,8 +249,13 @@ class XCPngManagerActivity : AppCompatActivity() {
 
             if (currentXoClient?.authenticate() == true) {
                 Logger.i("XCPngManager", "Xen Orchestra REST API authentication successful")
+                val capturedSha = currentXoClient?.getCapturedCertSha256()
                 io.github.tabssh.crypto.storage.HypervisorPasswordStore
-                    .persistCapturedPinIfAny(this@XCPngManagerActivity, profile, currentXoClient?.getCapturedCertSha256())
+                    .persistCapturedPinIfAny(this@XCPngManagerActivity, profile, capturedSha)
+                if (!capturedSha.isNullOrBlank()) {
+                    val idx = hypervisors.indexOfFirst { it.id == profile.id }
+                    if (idx >= 0) hypervisors[idx] = hypervisors[idx].copy(pinnedCertSha256 = capturedSha)
+                }
                 true
             } else {
                 false
@@ -280,8 +285,13 @@ class XCPngManagerActivity : AppCompatActivity() {
 
             if (currentClient?.authenticate() == true) {
                 Logger.i("XCPngManager", "XCP-ng XML-RPC API authentication successful")
+                val capturedSha = currentClient?.getCapturedCertSha256()
                 io.github.tabssh.crypto.storage.HypervisorPasswordStore
-                    .persistCapturedPinIfAny(this@XCPngManagerActivity, profile, currentClient?.getCapturedCertSha256())
+                    .persistCapturedPinIfAny(this@XCPngManagerActivity, profile, capturedSha)
+                if (!capturedSha.isNullOrBlank()) {
+                    val idx = hypervisors.indexOfFirst { it.id == profile.id }
+                    if (idx >= 0) hypervisors[idx] = hypervisors[idx].copy(pinnedCertSha256 = capturedSha)
+                }
                 true
             } else {
                 false

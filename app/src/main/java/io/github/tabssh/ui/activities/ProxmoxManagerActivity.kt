@@ -119,9 +119,11 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                     showError("Authentication failed — check credentials")
                     return@launch
                 }
+                val capturedSha = client.getCapturedCertSha256()
                 HypervisorPasswordStore.persistCapturedPinIfAny(
-                    this@ProxmoxManagerActivity, profile, client.getCapturedCertSha256()
+                    this@ProxmoxManagerActivity, profile, capturedSha
                 )
+                if (!capturedSha.isNullOrBlank()) currentProfile = profile.copy(pinnedCertSha256 = capturedSha)
                 app.database.hypervisorDao().updateLastConnected(profile.id, System.currentTimeMillis())
                 currentClient = client
                 loadVMs(client)

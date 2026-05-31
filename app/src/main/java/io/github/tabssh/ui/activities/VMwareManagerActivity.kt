@@ -119,9 +119,11 @@ class VMwareManagerActivity : AppCompatActivity() {
                     showError("Authentication failed — check credentials")
                     return@launch
                 }
+                val capturedSha = client.getCapturedCertSha256()
                 HypervisorPasswordStore.persistCapturedPinIfAny(
-                    this@VMwareManagerActivity, profile, client.getCapturedCertSha256()
+                    this@VMwareManagerActivity, profile, capturedSha
                 )
+                if (!capturedSha.isNullOrBlank()) currentProfile = profile.copy(pinnedCertSha256 = capturedSha)
                 val serverType = if (client.isVCenter()) "vCenter" else "ESXi"
                 Logger.i(TAG, "Connected to ${profile.name} ($serverType)")
                 app.database.hypervisorDao().updateLastConnected(profile.id, System.currentTimeMillis())

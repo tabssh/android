@@ -182,7 +182,6 @@ class PerformanceFragment : Fragment() {
                     onConnectionSelected()
                 } else {
                     selectedConnection = null
-                    saveLastSelectedConnectionId(null)
                     stopMonitoring()
                 }
             }
