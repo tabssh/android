@@ -1,6 +1,6 @@
 # TabSSH TODO
 
-**Last Updated:** 2026-05-30
+**Last Updated:** 2026-05-31
 **Version:** 0.9.1 (pinned via `release.txt` — DO NOT MODIFY without coordinated bump in `app/build.gradle` + F-Droid metadata)
 
 > **Usage rules for AI agents:**
@@ -15,6 +15,7 @@
 
 ## ✅ Recently Shipped
 
+- **`4201ed1dae87`** 🐛 OCI cert pin persistence + MetricsCollector log noise — `OciApiClient` split into `identityClient` + `iaasClient` with separate `CapturedPin` holders; `pinnedCertSha256` stored as semicolon-delimited `"identity_sha;iaas_sha"` pair (backward-compatible); `getCapturedCertSha256()` returns merged set; `OciManagerActivity` persists pins after both `validateCredentials()` and `loadInstances()`; `collectPlatformInfo()` exception downgraded from `Logger.e` → `Logger.d`.
 - **`375dad6465de`** ✨ Connection count tracking + cloud instance SSH credentials — `SSHConnectionService.onConnectionEstablished` increments `connection_count` + `last_connected` via atomic SQL (feeds "Frequently Used" sort); long-press on cloud instance row opens SSH credentials dialog (username/password/port/identity); creds stored in `SecurePasswordManager.ENCRYPTED` scoped to cloud account, never written to Room; `handleConnect()` builds transient in-memory `ConnectionProfile` from stored creds.
 - **`27155abf89ba`** 🐛 Search on Connections tab fixed — `filterConnections()` now swaps adapter back to flat `adapter` before submitting results; prevents search submitting to detached `groupedAdapter`.
 - **`64182c5fcd73`** 🐛 OCI credential persistence + import UX — `editor.apply()` → `editor.commit()` in `SecurePasswordManager`; `saveOrUpdateOciAccount` now checks `storePassword()` return and rolls back DB on Keystore failure; `ociConfigFilePicker`/`ociKeyFilePicker` re-show dialog on cancel/error instead of silently returning; `item_cloud_instance.xml` split into 2 rows of 2 buttons (row 3a: power+connect; row 3b: restart+force restart).

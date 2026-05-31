@@ -8,6 +8,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
@@ -15,7 +16,12 @@ import io.github.tabssh.hypervisor.xcpng.XCPngApiClient
 import io.github.tabssh.hypervisor.xcpng.XenOrchestraApiClient
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.HypervisorType
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import io.github.tabssh.ssh.auth.AuthType
+import io.github.tabssh.storage.database.SystemGroupHelper
+import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.utils.showError
 
 class XCPngManagerActivity : AppCompatActivity() {
@@ -344,6 +350,11 @@ class XCPngManagerActivity : AppCompatActivity() {
                         progressBar.visibility = View.GONE
                         return@launch
                     }
+                    "ssh" -> {
+                        openSshToVm(vm)
+                        progressBar.visibility = View.GONE
+                        return@launch
+                    }
                 }
                 
                 val success = if (isXenOrchestra) {
@@ -426,6 +437,57 @@ class XCPngManagerActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Opens an SSH terminal to a running XCP-ng / XO VM using its stored IP address.
+     * Creates a ConnectionProfile in the "VM Hosts" group if one does not yet exist.
+     */
+    private fun openSshToVm(vm: XCPngApiClient.XenVM) {
+        val ip = vm.ipAddress
+        if (ip.isNullOrBlank()) {
+            Toast.makeText(this, "No IP address available for ${vm.name}", Toast.LENGTH_SHORT).show()
+            return
+        }
+        lifecycleScope.launch {
+            try {
+                val connectionName = "XCP-ng: ${vm.name}"
+                var connection = withContext(Dispatchers.IO) {
+                    app.database.connectionDao().getByName(connectionName)
+                }
+                if (connection == null) {
+                    val groupId = withContext(Dispatchers.IO) {
+                        SystemGroupHelper.getOrCreateSystemGroupId(
+                            app.database, "vm_hosts", "VM Hosts", "vm"
+                        )
+                    }
+                    connection = ConnectionProfile(
+                        name = connectionName,
+                        host = ip,
+                        port = 22,
+                        username = "root",
+                        authType = AuthType.PASSWORD.name,
+                        groupId = groupId,
+                        createdAt = System.currentTimeMillis(),
+                        modifiedAt = System.currentTimeMillis()
+                    )
+                    withContext(Dispatchers.IO) {
+                        app.database.connectionDao().insertConnection(connection)
+                    }
+                } else {
+                    connection = connection.copy(host = ip, modifiedAt = System.currentTimeMillis())
+                    withContext(Dispatchers.IO) {
+                        app.database.connectionDao().updateConnection(connection)
+                    }
+                }
+                val intent = TabTerminalActivity.createIntent(this@XCPngManagerActivity, connection, autoConnect = false)
+                startActivity(intent)
+                Logger.i("XCPngManager", "Launching SSH to $ip for ${vm.name}")
+            } catch (e: Exception) {
+                Logger.e("XCPngManager", "Failed to open SSH for ${vm.name}", e)
+                Toast.makeText(this@XCPngManagerActivity, "Failed to open SSH: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     private fun showAddServerDialog() {
         val dialogView = layoutInflater.inflate(R.layout.dialog_add_hypervisor, null)
         val nameInput = dialogView.findViewById<EditText>(R.id.name_input)
@@ -491,8 +553,8 @@ class XCPngManagerActivity : AppCompatActivity() {
         return true
     }
 
-    // VM Adapter (reusing item_proxmox_vm layout)
-    
+    // VM Adapter (using shared item_hypervisor_vm layout)
+
     private inner class VMAdapter(
         private val vms: List<XCPngApiClient.XenVM>,
         private val onAction: (XCPngApiClient.XenVM, String) -> Unit
@@ -500,19 +562,20 @@ class XCPngManagerActivity : AppCompatActivity() {
 
         inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
             val name: TextView = view.findViewById(R.id.vm_name)
-            val status: TextView = view.findViewById(R.id.vm_status)
+            val state: TextView = view.findViewById(R.id.vm_state)
             val info: TextView = view.findViewById(R.id.vm_info)
-            val consoleButton: Button = view.findViewById(R.id.console_button)
-            val startButton: Button = view.findViewById(R.id.start_button)
-            val stopButton: Button = view.findViewById(R.id.stop_button)
-            val rebootButton: Button = view.findViewById(R.id.reboot_button)
-            val resetButton: Button = view.findViewById(R.id.reset_button)
-            val snapshotsButton: Button = view.findViewById(R.id.snapshots_button)
+            val ip: TextView = view.findViewById(R.id.vm_ip)
+            val btnVnc: com.google.android.material.button.MaterialButton = view.findViewById(R.id.btn_console)
+            val btnSsh: com.google.android.material.button.MaterialButton = view.findViewById(R.id.btn_ssh)
+            val btnStart: com.google.android.material.button.MaterialButton = view.findViewById(R.id.btn_start)
+            val btnStop: com.google.android.material.button.MaterialButton = view.findViewById(R.id.btn_stop)
+            val btnReboot: com.google.android.material.button.MaterialButton = view.findViewById(R.id.btn_reboot)
+            val btnReset: com.google.android.material.button.MaterialButton = view.findViewById(R.id.btn_reset)
         }
 
         override fun onCreateViewHolder(parent: android.view.ViewGroup, viewType: Int): ViewHolder {
             val view = android.view.LayoutInflater.from(parent.context)
-                .inflate(R.layout.item_proxmox_vm, parent, false)
+                .inflate(R.layout.item_hypervisor_vm, parent, false)
             return ViewHolder(view)
         }
 
@@ -520,63 +583,70 @@ class XCPngManagerActivity : AppCompatActivity() {
             val vm = vms[position]
 
             holder.name.text = vm.name
-            holder.status.text = vm.powerState.uppercase()
-            holder.info.text = "CPUs: ${vm.vcpus} | RAM: ${vm.memory / 1024 / 1024}MB"
+            holder.state.text = stateLabel(vm.powerState)
+            holder.info.text = "CPUs: ${vm.vcpus}  ·  RAM: ${vm.memory / 1024 / 1024}MB"
+            holder.ip.visibility = View.GONE
 
-            holder.status.setTextColor(
-                when (vm.powerState.lowercase()) {
-                    "running" -> 0xFF4CAF50.toInt()
-                    "halted" -> 0xFFF44336.toInt()
-                    else -> 0xFFFF9800.toInt()
-                }
-            )
+            holder.state.setTextColor(stateColor(vm.powerState))
 
-            // Show/hide buttons based on VM status (better UX than disabled)
+            // Show/hide buttons based on VM status
             when (vm.powerState.lowercase()) {
                 "running" -> {
-                    // VM is running - show power controls, hide start
-                    holder.consoleButton.visibility = View.VISIBLE
-                    holder.startButton.visibility = View.GONE
-                    holder.stopButton.visibility = View.VISIBLE
-                    holder.rebootButton.visibility = View.VISIBLE
-                    holder.resetButton.visibility = View.VISIBLE
+                    // XCP-ng supports both VNC console and SSH — show both
+                    holder.btnVnc.visibility = View.VISIBLE
+                    holder.btnSsh.visibility = View.VISIBLE
+                    holder.btnStart.visibility = View.GONE
+                    holder.btnStop.visibility = View.VISIBLE
+                    holder.btnReboot.visibility = View.VISIBLE
+                    holder.btnReset.visibility = View.VISIBLE
                 }
                 "halted", "stopped" -> {
-                    // VM is stopped - only show start
-                    holder.consoleButton.visibility = View.GONE
-                    holder.startButton.visibility = View.VISIBLE
-                    holder.stopButton.visibility = View.GONE
-                    holder.rebootButton.visibility = View.GONE
-                    holder.resetButton.visibility = View.GONE
+                    holder.btnVnc.visibility = View.GONE
+                    holder.btnSsh.visibility = View.GONE
+                    holder.btnStart.visibility = View.VISIBLE
+                    holder.btnStop.visibility = View.GONE
+                    holder.btnReboot.visibility = View.GONE
+                    holder.btnReset.visibility = View.GONE
                 }
                 else -> {
-                    // Paused, suspended, etc - show start/stop only
-                    holder.consoleButton.visibility = View.GONE
-                    holder.startButton.visibility = View.VISIBLE
-                    holder.stopButton.visibility = View.VISIBLE
-                    holder.rebootButton.visibility = View.GONE
-                    holder.resetButton.visibility = View.GONE
+                    // Paused, suspended, transitional — show start/stop only
+                    holder.btnVnc.visibility = View.GONE
+                    holder.btnSsh.visibility = View.GONE
+                    holder.btnStart.visibility = View.VISIBLE
+                    holder.btnStop.visibility = View.VISIBLE
+                    holder.btnReboot.visibility = View.GONE
+                    holder.btnReset.visibility = View.GONE
                 }
             }
 
-            // Show snapshots button only for XO connections
-            if (isXenOrchestra) {
-                holder.snapshotsButton.visibility = View.VISIBLE
-                holder.snapshotsButton.setOnClickListener {
-                    showSnapshotDialog(vm)
-                }
-            } else {
-                holder.snapshotsButton.visibility = View.GONE
+            // Long-press opens snapshot dialog for Xen Orchestra connections
+            holder.itemView.setOnLongClickListener {
+                if (isXenOrchestra) { showSnapshotDialog(vm); true } else false
             }
 
-            holder.consoleButton.setOnClickListener { onAction(vm, "console") }
-            holder.startButton.setOnClickListener { onAction(vm, "start") }
-            holder.stopButton.setOnClickListener { onAction(vm, "stop") }
-            holder.rebootButton.setOnClickListener { onAction(vm, "reboot") }
-            holder.resetButton.setOnClickListener { onAction(vm, "reset") }
+            holder.btnVnc.setOnClickListener { onAction(vm, "console") }
+            holder.btnSsh.setOnClickListener { onAction(vm, "ssh") }
+            holder.btnStart.setOnClickListener { onAction(vm, "start") }
+            holder.btnStop.setOnClickListener { onAction(vm, "stop") }
+            holder.btnReboot.setOnClickListener { onAction(vm, "reboot") }
+            holder.btnReset.setOnClickListener { onAction(vm, "reset") }
         }
 
         override fun getItemCount() = vms.size
+
+        private fun stateColor(state: String): Int = when (state.lowercase()) {
+            "running" -> 0xFF4CAF50.toInt()
+            "halted", "stopped" -> 0xFFF44336.toInt()
+            else -> 0xFFFF9800.toInt()
+        }
+
+        private fun stateLabel(state: String): String = when (state.lowercase()) {
+            "running" -> "Running"
+            "halted", "stopped" -> "Stopped"
+            "paused" -> "Paused"
+            "suspended" -> "Suspended"
+            else -> state.replaceFirstChar { it.uppercase() }
+        }
     }
     
     // ======================== Snapshot Management Dialog ========================

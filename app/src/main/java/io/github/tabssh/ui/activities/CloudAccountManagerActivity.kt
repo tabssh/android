@@ -15,6 +15,7 @@ import com.google.android.material.textfield.TextInputLayout
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.cloud.CloudInstanceState
 import io.github.tabssh.cloud.CloudProviderType
+import io.github.tabssh.cloud.OciCloudClient
 import io.github.tabssh.cloud.newClient
 import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.databinding.ActivityCloudManagerBinding
@@ -127,9 +128,10 @@ class CloudAccountManagerActivity : AppCompatActivity() {
                 return@launch
             }
 
+            val client = providerType.newClient()
             val instances = try {
                 withContext(Dispatchers.IO) {
-                    providerType.newClient().fetchLiveInstances(token)
+                    client.fetchLiveInstances(token)
                 }
             } catch (e: Exception) {
                 Logger.e(TAG, "fetchLiveInstances failed for ${acct.name}", e)
@@ -139,6 +141,7 @@ class CloudAccountManagerActivity : AppCompatActivity() {
                 return@launch
             }
 
+            persistOciCloudPin(acct, token, client)
             cachedInstances = instances
             binding.progressLoading.visibility = View.GONE
             if (instances.isEmpty()) {
@@ -187,6 +190,7 @@ class CloudAccountManagerActivity : AppCompatActivity() {
                 false
             }
 
+            persistOciCloudPin(acct, token, client)
             val verb = if (isRunning) "stop" else "start"
             if (success) {
                 Toast.makeText(this@CloudAccountManagerActivity,
@@ -232,6 +236,7 @@ class CloudAccountManagerActivity : AppCompatActivity() {
                 Logger.e(TAG, "Restart failed for ${inst.name}", e)
                 false
             }
+            persistOciCloudPin(acct, token, client)
             val verb = if (force) "force restart" else "restart"
             if (success) {
                 Toast.makeText(this@CloudAccountManagerActivity,
@@ -289,6 +294,37 @@ class CloudAccountManagerActivity : AppCompatActivity() {
             startActivity(
                 TabTerminalActivity.createIntent(this@CloudAccountManagerActivity, tempProfile, autoConnect = true)
             )
+        }
+    }
+
+    /**
+     * Reads the TLS cert pin captured by [OciCloudClient] during the most recent
+     * API call and writes it back to the Keystore token JSON if it differs from
+     * the value already stored there.  No-ops silently for non-OCI providers.
+     */
+    private suspend fun persistOciCloudPin(
+        acct: CloudAccount,
+        currentToken: String,
+        client: io.github.tabssh.cloud.CloudProvider
+    ) {
+        val ociClient = client as? OciCloudClient ?: return
+        val captured = ociClient.getCapturedCertSha256() ?: return
+        val existing = try {
+            JSONObject(currentToken).optString("tls_pin").takeIf { it.isNotBlank() }
+        } catch (_: Exception) { null }
+        if (captured == existing) return
+        try {
+            val updatedJson = JSONObject(currentToken).put("tls_pin", captured).toString()
+            withContext(Dispatchers.IO) {
+                app.securePasswordManager.storePassword(
+                    "cloud_token_${acct.id}",
+                    updatedJson,
+                    SecurePasswordManager.StorageLevel.ENCRYPTED
+                )
+            }
+            Logger.i(TAG, "OCI cloud account '${acct.name}' TLS pin updated: $captured")
+        } catch (e: Exception) {
+            Logger.w(TAG, "Failed to persist OCI cloud pin for ${acct.name}", e)
         }
     }
 
