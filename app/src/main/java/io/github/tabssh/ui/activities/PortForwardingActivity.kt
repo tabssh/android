@@ -148,20 +148,30 @@ class PortForwardingActivity : AppCompatActivity() {
         profile: io.github.tabssh.storage.database.entities.ConnectionProfile,
         message: String,
     ) {
-        // Three-button error: keep retry/close, add Copy so the message
-        // is grabbable for bug reports.
+        // Three-button error: Open Terminal (accept host key), Pick another host, Close.
+        // "Open Terminal" is the primary escape hatch for the TOFU dead-end — the
+        // user can trust the host key in a terminal tab and then come back here.
         MaterialAlertDialogBuilder(this)
             .setTitle("Couldn't attach")
             .setMessage(message)
-            .setPositiveButton("Pick another host") { _, _ -> promptStandaloneConnection() }
+            .setPositiveButton("Open Terminal") { _, _ -> openTerminalForProfile(profile) }
+            .setNeutralButton("Pick another host") { _, _ -> promptStandaloneConnection() }
             .setNegativeButton("Close") { _, _ -> finish() }
-            .setNeutralButton("Copy") { _, _ ->
-                val clipboard = getSystemService(android.content.ClipboardManager::class.java)
-                clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("TabSSH error", message))
-                android.widget.Toast.makeText(this, "Error message copied", android.widget.Toast.LENGTH_SHORT).show()
-            }
             .setCancelable(false)
             .show()
+    }
+
+    private fun openTerminalForProfile(
+        profile: io.github.tabssh.storage.database.entities.ConnectionProfile,
+    ) {
+        val intent = android.content.Intent(this, TabTerminalActivity::class.java).apply {
+            putExtra("connection_id", profile.id)
+            putExtra("auto_connect", true)
+            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                    android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        startActivity(intent)
+        finish()
     }
 
     private fun setupRecyclerView() {

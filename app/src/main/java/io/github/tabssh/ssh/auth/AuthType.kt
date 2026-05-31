@@ -30,10 +30,14 @@ enum class AuthType(val displayName: String, val description: String) {
         }
         
         /**
-         * Get all available auth types for UI display
+         * Get auth types shown in the connection-edit picker.
+         * GSSAPI and FIDO2_SECURITY_KEY are intentionally excluded:
+         * GSSAPI has no JSch wiring (would silently fall through to password),
+         * FIDO2 throws NotImplementedError at connect time (CTAP2 not shipped).
+         * Both enum values are kept for backup/restore compatibility.
          */
         fun getAvailableTypes(): List<AuthType> {
-            return values().toList()
+            return values().filter { it != GSSAPI && it != FIDO2_SECURITY_KEY }
         }
         
         /**
