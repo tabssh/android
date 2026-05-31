@@ -111,6 +111,9 @@ open class ConnectionWidgetProvider : AppWidgetProvider() {
                     views.setTextViewText(R.id.widget_info, "${connection.username}@${connection.host}")
                     views.setOnClickPendingIntent(R.id.widget_connect, getConnectIntent(context, widgetId, connection))
                 }
+                R.layout.widget_4x2, R.layout.widget_4x4 -> {
+                    views.setOnClickPendingIntent(R.id.widget_open_app, getConnectIntent(context, widgetId, connection))
+                }
             }
             
             appWidgetManager.updateAppWidget(widgetId, views)
@@ -134,6 +137,9 @@ open class ConnectionWidgetProvider : AppWidgetProvider() {
                     views.setTextViewText(R.id.widget_name, "TabSSH")
                     views.setTextViewText(R.id.widget_info, "Tap to configure")
                     views.setOnClickPendingIntent(R.id.widget_connect, getMainIntent(context))
+                }
+                R.layout.widget_4x2, R.layout.widget_4x4 -> {
+                    views.setOnClickPendingIntent(R.id.widget_open_app, getMainIntent(context))
                 }
             }
             
@@ -176,9 +182,9 @@ open class ConnectionWidgetProvider : AppWidgetProvider() {
             ids.forEach { updateWidget(context, mgr, it) }
         }
     }
-}
 
     // Separate widget providers for different sizes (required by Android)
     class Widget2x1 : ConnectionWidgetProvider()
     class Widget4x2 : ConnectionWidgetProvider()
     class Widget4x4 : ConnectionWidgetProvider()
+}
