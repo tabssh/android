@@ -1,7 +1,7 @@
 # TabSSH TODO
 
 **Last Updated:** 2026-05-30
-**Version:** 0.0.9 (pinned via `release.txt` — DO NOT MODIFY without coordinated bump in `app/build.gradle` + F-Droid metadata)
+**Version:** 0.9.1 (pinned via `release.txt` — DO NOT MODIFY without coordinated bump in `app/build.gradle` + F-Droid metadata)
 
 > **Usage rules for AI agents:**
 > 1. Open this file at the start of every session that touches 2 or more tasks.

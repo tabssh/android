@@ -593,7 +593,7 @@ class ConnectionSettingsFragment : PreferenceFragmentCompat() {
         }
 
         // Connection timeout change listener
-        findPreference<Preference>("connection_timeout")?.setOnPreferenceChangeListener { _, newValue ->
+        findPreference<Preference>("connect_timeout")?.setOnPreferenceChangeListener { _, newValue ->
             val timeout = newValue as String
             val seconds = timeout.toInt()
             android.widget.Toast.makeText(requireContext(), "Connection timeout: ${seconds}s", android.widget.Toast.LENGTH_SHORT).show()
