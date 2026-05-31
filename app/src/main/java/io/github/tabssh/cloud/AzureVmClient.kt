@@ -69,20 +69,18 @@ class AzureVmClient : CloudProvider {
 
         val accessToken = exchangeForAccessToken(tenant, clientId, clientSecret)
 
-        // Fetch VMs (single page is fine for typical accounts; v1 punts on
-        // pagination — `nextLink` is in the response if needed later).
-        val vms = jsonGet(
+        // Paginate across all VM pages via nextLink until exhausted.
+        val vms = jsonGetAll(
             "https://management.azure.com/subscriptions/$subscriptionId/providers/Microsoft.Compute/virtualMachines?api-version=2023-03-01",
             accessToken
-        ).optJSONArray("value") ?: org.json.JSONArray()
+        )
 
         // Fetch public IPs in one shot — Resource Graph would be cleanest, but
         // the simple list endpoint is enough for v1.
         val publicIps = fetchPublicIpsByNicId(subscriptionId, accessToken)
 
         val out = mutableListOf<ImportCandidate>()
-        for (i in 0 until vms.length()) {
-            val vm = vms.optJSONObject(i) ?: continue
+        for (vm in vms) {
             val name = vm.optString("name", "azure-vm")
             val location = vm.optString("location", "")
             val props = vm.optJSONObject("properties") ?: continue
@@ -126,16 +124,16 @@ class AzureVmClient : CloudProvider {
             val accessToken = exchangeForAccessToken(tenant, clientId, clientSecret)
 
             // Request instanceView expansion so power state is included in one call.
-            val vms = jsonGet(
+            // Paginate via nextLink in case there are many VMs.
+            val vms = jsonGetAll(
                 "https://management.azure.com/subscriptions/$subscriptionId/providers/Microsoft.Compute/virtualMachines?\$expand=instanceView&api-version=2023-03-01",
                 accessToken
-            ).optJSONArray("value") ?: return@withContext emptyList<CloudInstanceState>()
+            )
 
             val publicIps = fetchPublicIpsByNicId(subscriptionId, accessToken)
 
             val out = mutableListOf<CloudInstanceState>()
-            for (i in 0 until vms.length()) {
-                val vm = vms.optJSONObject(i) ?: continue
+            for (vm in vms) {
                 val name = vm.optString("name", "azure-vm")
                 val location = vm.optString("location", "")
 
@@ -258,15 +256,14 @@ class AzureVmClient : CloudProvider {
 
     /** NIC.id → publicIp string. Walks all NICs in the sub, follows their
      *  `publicIPAddress.id` reference, fetches each public IP once. Two
-     *  list calls, then map. */
+     *  paginated list calls, then map. */
     private fun fetchPublicIpsByNicId(subscriptionId: String, token: String): Map<String, String> {
         val nicById = mutableMapOf<String, String>() // nicId -> publicIpId
-        val nics = jsonGet(
+        val nics = jsonGetAll(
             "https://management.azure.com/subscriptions/$subscriptionId/providers/Microsoft.Network/networkInterfaces?api-version=2023-09-01",
             token
-        ).optJSONArray("value") ?: return emptyMap()
-        for (i in 0 until nics.length()) {
-            val nic = nics.optJSONObject(i) ?: continue
+        )
+        for (nic in nics) {
             val nicId = nic.optString("id")
             val ipConfigs = nic.optJSONObject("properties")?.optJSONArray("ipConfigurations") ?: continue
             for (j in 0 until ipConfigs.length()) {
@@ -279,12 +276,11 @@ class AzureVmClient : CloudProvider {
         }
 
         val ipById = mutableMapOf<String, String>() // publicIpId -> ipAddress
-        val pips = jsonGet(
+        val pips = jsonGetAll(
             "https://management.azure.com/subscriptions/$subscriptionId/providers/Microsoft.Network/publicIPAddresses?api-version=2023-09-01",
             token
-        ).optJSONArray("value") ?: return emptyMap()
-        for (i in 0 until pips.length()) {
-            val pip = pips.optJSONObject(i) ?: continue
+        )
+        for (pip in pips) {
             val id = pip.optString("id")
             val addr = pip.optJSONObject("properties")?.optString("ipAddress") ?: ""
             if (id.isNotBlank() && addr.isNotBlank()) ipById[id] = addr
@@ -292,6 +288,26 @@ class AzureVmClient : CloudProvider {
 
         return nicById.mapValues { (_, pubId) -> ipById[pubId] ?: "" }
             .filter { it.value.isNotBlank() }
+    }
+
+    /**
+     * Paginate an Azure list endpoint that returns `{ "value": [...], "nextLink": "..." }`.
+     * Follows nextLink until exhausted and returns all items across all pages.
+     */
+    private fun jsonGetAll(url: String, token: String): List<JSONObject> {
+        val items = mutableListOf<JSONObject>()
+        var nextUrl: String? = url
+        while (nextUrl != null) {
+            val page = jsonGet(nextUrl, token)
+            val arr = page.optJSONArray("value")
+            if (arr != null) {
+                for (i in 0 until arr.length()) {
+                    arr.optJSONObject(i)?.let { items += it }
+                }
+            }
+            nextUrl = page.optString("nextLink").takeIf { it.isNotBlank() }
+        }
+        return items
     }
 
     private fun jsonGet(url: String, token: String): JSONObject {

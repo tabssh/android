@@ -67,67 +67,24 @@ class AwsEc2Client : CloudProvider {
         val (accessKey, secretKey, region) = parts
         if (region.isBlank()) throw IllegalStateException("AWS region is required")
 
-        val host = "ec2.$region.amazonaws.com"
-        val service = "ec2"
-        val now = Date()
-        val amzDate = AMZ_DATE_FMT.get()!!.format(now)
-        val dateStamp = DATE_FMT.get()!!.format(now)
-
-        // Action + Version go into the query string for GET.
-        val query = "Action=DescribeInstances&Version=2016-11-15"
-        val canonicalQuery = canonicalQueryString(query)
-        val canonicalUri = "/"
-        val payloadHash = sha256Hex("")
-
-        val canonicalHeaders = "host:$host\nx-amz-content-sha256:$payloadHash\nx-amz-date:$amzDate\n"
-        val signedHeaders = "host;x-amz-content-sha256;x-amz-date"
-
-        val canonicalRequest = listOf(
-            "GET",
-            canonicalUri,
-            canonicalQuery,
-            canonicalHeaders,
-            signedHeaders,
-            payloadHash
-        ).joinToString("\n")
-
-        val credentialScope = "$dateStamp/$region/$service/aws4_request"
-        val stringToSign = listOf(
-            "AWS4-HMAC-SHA256",
-            amzDate,
-            credentialScope,
-            sha256Hex(canonicalRequest)
-        ).joinToString("\n")
-
-        val signingKey = deriveSigningKey(secretKey, dateStamp, region, service)
-        val signature = hexHmacSha256(signingKey, stringToSign)
-
-        val auth = "AWS4-HMAC-SHA256 " +
-            "Credential=$accessKey/$credentialScope, " +
-            "SignedHeaders=$signedHeaders, " +
-            "Signature=$signature"
-
-        val req = Request.Builder()
-            .url("https://$host$canonicalUri?$canonicalQuery")
-            .header("Host", host)
-            .header("X-Amz-Date", amzDate)
-            .header("X-Amz-Content-Sha256", payloadHash)
-            .header("Authorization", auth)
-            .header("Accept", "application/xml")
-            .get()
-            .build()
-
-        val xml = http.newCall(req).execute().use { resp ->
-            val body = resp.body?.string().orEmpty()
-            if (!resp.isSuccessful) {
-                throw IllegalStateException("AWS EC2 HTTP ${resp.code}: ${extractAwsError(body) ?: resp.message}")
+        val out = mutableListOf<ImportCandidate>()
+        // Loop through all pages using NextToken until AWS returns no more results.
+        var nextToken: String? = null
+        do {
+            val query = buildString {
+                append("Action=DescribeInstances&Version=2016-11-15")
+                if (nextToken != null) {
+                    append("&NextToken=")
+                    append(java.net.URLEncoder.encode(nextToken, "UTF-8"))
+                }
             }
-            body
-        }
+            val xml = awsGetXml(accessKey, secretKey, region, query)
+            out += parseInstances(xml, region, accountName)
+            nextToken = tagValue(xml, "nextToken")
+        } while (nextToken != null)
 
-        parseInstances(xml, region, accountName).also {
-            Logger.i("AwsEc2Client", "Fetched ${it.size} EC2 instances for account=$accountName region=$region")
-        }
+        Logger.i("AwsEc2Client", "Fetched ${out.size} EC2 instances for account=$accountName region=$region")
+        out
     }
 
     override suspend fun fetchLiveInstances(bearerToken: String): List<CloudInstanceState> =
@@ -136,41 +93,20 @@ class AwsEc2Client : CloudProvider {
             if (parts.size != 3) throw IllegalStateException("AWS token must be 'AKID:SECRET:REGION'")
             val (accessKey, secretKey, region) = parts
 
-            val xml = awsGetXml(
-                accessKey, secretKey, region,
-                "Action=DescribeInstances&Version=2016-11-15"
-            )
-
-            val instanceBlocks = Regex(
-                """<instancesSet>([\s\S]*?)</instancesSet>"""
-            ).findAll(xml).flatMap { container ->
-                Regex("""<item>([\s\S]*?)</item>""").findAll(container.groupValues[1])
-            }.map { it.groupValues[1] }.toList()
-
             val out = mutableListOf<CloudInstanceState>()
-            for (block in instanceBlocks) {
-                val instanceId = tagValue(block, "instanceId").orEmpty()
-                val rawState = tagValue(block, "name").orEmpty()
-                val normStatus = when (rawState) {
-                    "running" -> "running"
-                    "stopped", "terminated" -> "stopped"
-                    "pending" -> "starting"
-                    "stopping", "shutting-down" -> "stopping"
-                    else -> "unknown"
+            var nextToken: String? = null
+            do {
+                val query = buildString {
+                    append("Action=DescribeInstances&Version=2016-11-15")
+                    if (nextToken != null) {
+                        append("&NextToken=")
+                        append(java.net.URLEncoder.encode(nextToken, "UTF-8"))
+                    }
                 }
-                val publicIp = tagValue(block, "ipAddress")
-                val privateIp = tagValue(block, "privateIpAddress")
-                val nameTag = extractNameTag(block).orEmpty()
-                out += CloudInstanceState(
-                    id = instanceId,
-                    name = nameTag.ifBlank { instanceId },
-                    ip = publicIp,
-                    privateIp = privateIp,
-                    status = normStatus,
-                    rawStatus = rawState,
-                    region = region
-                )
-            }
+                val xml = awsGetXml(accessKey, secretKey, region, query)
+                out += parseLiveInstancesPage(xml, region)
+                nextToken = tagValue(xml, "nextToken")
+            } while (nextToken != null)
             out
         }
 
@@ -265,6 +201,41 @@ class AwsEc2Client : CloudProvider {
             }
             body
         }
+    }
+
+    /** Parse live-instance state from one page of DescribeInstances XML. */
+    private fun parseLiveInstancesPage(xml: String, region: String): List<CloudInstanceState> {
+        val instanceBlocks = Regex(
+            """<instancesSet>([\s\S]*?)</instancesSet>"""
+        ).findAll(xml).flatMap { container ->
+            Regex("""<item>([\s\S]*?)</item>""").findAll(container.groupValues[1])
+        }.map { it.groupValues[1] }.toList()
+
+        val out = mutableListOf<CloudInstanceState>()
+        for (block in instanceBlocks) {
+            val instanceId = tagValue(block, "instanceId").orEmpty()
+            val rawState = tagValue(block, "name").orEmpty()
+            val normStatus = when (rawState) {
+                "running" -> "running"
+                "stopped", "terminated" -> "stopped"
+                "pending" -> "starting"
+                "stopping", "shutting-down" -> "stopping"
+                else -> "unknown"
+            }
+            val publicIp = tagValue(block, "ipAddress")
+            val privateIp = tagValue(block, "privateIpAddress")
+            val nameTag = extractNameTag(block).orEmpty()
+            out += CloudInstanceState(
+                id = instanceId,
+                name = nameTag.ifBlank { instanceId },
+                ip = publicIp,
+                privateIp = privateIp,
+                status = normStatus,
+                rawStatus = rawState,
+                region = region
+            )
+        }
+        return out
     }
 
     /** Lightweight tag-extract — Android SAX/DOM both work, but we only need
