@@ -15,6 +15,8 @@
 
 ## ✅ Recently Shipped
 
+- **`21c762874ac2`** 🐛 Selection drag + vim nav keys + 4 crash-on-bad-input paths — `beginWordSelectionAtTouch` expands to word boundary and pre-grabs `selectionDragHandle=1` so post-long-press MOVE extends selection instead of scrolling; `ss3ArrowSeq` + `isApplicationCursorKeysMode` emit SS3 form (`\033OA/B/C/D`) when DECCKM active, fixing arrow/Home/End/PgUp/PgDn in vim from both hardware keys and on-screen row; `BackupImporter` 6× `as JsonArray` → safe-casts with `return 0`; `SSHConnection` two `as TabSSHApplication` force-casts → safe-casts; FIDO2 stub `throw NotImplementedError` → `throw UnsupportedOperationException` so outer `catch (e: Exception)` catches it; `OciKeyMaterial` constructor holds typed `RSAPrivateKey`/`RSAPublicKey` fields directly, eliminating all hard-casts.
+
 - **`714bc68578ee`** 🐛 New-tab reattach + multi-session chooser + DECTCEM cursor loss — `connectToProfile` gains `forceNew` param (connection selector, workspace restore, reconnect, retry all pass `forceNew=true`); multiple live tabs for same profile shows chooser dialog via `suspendCancellableCoroutine`; DECTCEM `?25l` no longer sets `cursorBlinkPhase=false` or gates `onDraw` cursor rendering; `sendText` resets blink phase on any user input.
 
 - **`724a322435c9`** 🐛 Long-press copy fixed + ActionMode Cancel + word-wrap URL detection — `beginSelection` no longer calls `startTerminalSelectionActionMode` directly (double-call destroyed the ActionMode via `onDestroyActionMode`→`exitSelectionMode` before user saw it); Cancel (id=4) added to ActionMode bar; `getRowText(row)` helper added to `TerminalView`; `detectUrlAtPosition` now joins current+next row text to detect URLs that span a terminal word-wrap boundary.
