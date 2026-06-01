@@ -81,7 +81,9 @@ object ConnectionLauncher {
                 context.startActivity(intent)
             }
             .setNegativeButton("New connection") { _, _ ->
-                context.startActivity(TabTerminalActivity.createIntent(context, profile, autoConnect))
+                // forceNew=true bypasses the reattach short-circuit in connectToProfile
+                // so the user always gets a fresh tab, not a bounce back to the existing one.
+                context.startActivity(TabTerminalActivity.createIntent(context, profile, autoConnect, forceNew = true))
             }
             .setNeutralButton("Cancel", null)
             .show()

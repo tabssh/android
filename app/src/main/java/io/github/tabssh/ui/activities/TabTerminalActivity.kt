@@ -57,16 +57,26 @@ class TabTerminalActivity : AppCompatActivity() {
         // activity reads this in handleIntent(), looks up the tab in the
         // shared TabManager, and switches to its index.
         const val EXTRA_TAB_ID = "tab_id"
+        // When true, bypass the reattach short-circuit in connectToProfile and always
+        // open a brand-new tab. Set by ConnectionLauncher when the user explicitly
+        // chooses "New connection" from the reattach dialog.
+        const val EXTRA_FORCE_NEW = "force_new"
         // Preference key that persists whether the custom function-key bar is visible.
         const val PREF_KEY_BAR_VISIBLE = "key_bar_visible"
 
-        fun createIntent(context: Context, profile: ConnectionProfile, autoConnect: Boolean = true): Intent {
+        fun createIntent(
+            context: Context,
+            profile: ConnectionProfile,
+            autoConnect: Boolean = true,
+            forceNew: Boolean = false
+        ): Intent {
             return Intent(context, TabTerminalActivity::class.java).apply {
                 putExtra(EXTRA_CONNECTION_PROFILE_ID, profile.id)
                 // Also embed the full profile as JSON so unsaved (quick-connect) profiles work
                 putExtra(EXTRA_CONNECTION_PROFILE,
                     com.google.gson.Gson().toJson(profile))
                 putExtra(EXTRA_AUTO_CONNECT, autoConnect)
+                if (forceNew) putExtra(EXTRA_FORCE_NEW, true)
             }
         }
     }
@@ -1453,8 +1463,9 @@ private fun showSnippetsPickerForActiveTab() {
         val connectionProfileId = intent.getStringExtra(EXTRA_CONNECTION_PROFILE_ID)
         val connectionProfileJson = intent.getStringExtra(EXTRA_CONNECTION_PROFILE)
         val autoConnect = intent.getBooleanExtra(EXTRA_AUTO_CONNECT, true)
+        val forceNew = intent.getBooleanExtra(EXTRA_FORCE_NEW, false)
 
-        Logger.d("TabTerminalActivity", "Intent extras: profileId=$connectionProfileId, autoConnect=$autoConnect")
+        Logger.d("TabTerminalActivity", "Intent extras: profileId=$connectionProfileId, autoConnect=$autoConnect, forceNew=$forceNew")
 
         if (connectionProfileId != null) {
             lifecycleScope.launch {
@@ -1477,7 +1488,7 @@ private fun showSnippetsPickerForActiveTab() {
                 if (profile != null) {
                     Logger.d("TabTerminalActivity", "Found profile: ${profile.name}, identityId: ${profile.identityId}")
                     if (autoConnect) {
-                        connectToProfile(profile)
+                        connectToProfile(profile, forceNew = forceNew)
                     } else {
                         // autoConnect=false means "surface the existing session" (e.g. notification tap).
                         // connectToProfile already handles the reattach short-circuit, but we must
@@ -2995,7 +3006,9 @@ private fun showSnippetsPickerForActiveTab() {
                             profile.getDisplayName(),
                             "Connect · ${profile.username}@${profile.host}:${profile.port}"
                         ) {
-                            lifecycleScope.launch { connectToProfile(profile) }
+                            // forceNew=true: quick-switcher connections always open a new tab
+                            // (the existing-tab section above handles switching to open tabs).
+                            lifecycleScope.launch { connectToProfile(profile, forceNew = true) }
                         }
                     }
                     io.github.tabssh.ui.views.PaletteDialog.show(this@TabTerminalActivity, "Quick Switcher", items)
