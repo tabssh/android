@@ -28,11 +28,11 @@ import java.security.KeyFactory
  * be exercised from a unit test if we ever add one.
  */
 class OciKeyMaterial private constructor(
-    val keyPair: KeyPair,
+    val privateKey: RSAPrivateKey,
+    val publicKey: RSAPublicKey,
     val fingerprint: String
 ) {
-    val privateKey: RSAPrivateKey get() = keyPair.private as RSAPrivateKey
-    val publicKey: RSAPublicKey get() = keyPair.public as RSAPublicKey
+    val keyPair: KeyPair get() = KeyPair(publicKey, privateKey)
 
     companion object {
         init {
@@ -99,12 +99,16 @@ class OciKeyMaterial private constructor(
                 )
             }
 
-            require(keyPair.private is RSAPrivateKey && keyPair.public is RSAPublicKey) {
-                "OCI requires an RSA keypair, got ${keyPair.private::class.java.simpleName}"
-            }
-
-            val fingerprint = computeFingerprint(keyPair.public as RSAPublicKey)
-            return OciKeyMaterial(keyPair, fingerprint)
+            val rsaPrivate = keyPair.private as? RSAPrivateKey
+                ?: throw IllegalArgumentException(
+                    "OCI requires an RSA private key, got ${keyPair.private::class.java.simpleName}"
+                )
+            val rsaPublic = keyPair.public as? RSAPublicKey
+                ?: throw IllegalArgumentException(
+                    "OCI requires an RSA public key, got ${keyPair.public::class.java.simpleName}"
+                )
+            val fingerprint = computeFingerprint(rsaPublic)
+            return OciKeyMaterial(rsaPrivate, rsaPublic, fingerprint)
         }
 
         private fun privateKeyInfoToKeyPair(
@@ -123,7 +127,8 @@ class OciKeyMaterial private constructor(
             val pubExp = (priv as? java.security.interfaces.RSAPrivateCrtKey)?.publicExponent
                 ?: java.math.BigInteger.valueOf(65537L)
             val publicSpec = RSAPublicKeySpec(priv.modulus, pubExp)
-            val pub = KeyFactory.getInstance("RSA").generatePublic(publicSpec) as RSAPublicKey
+            val pub = KeyFactory.getInstance("RSA").generatePublic(publicSpec) as? RSAPublicKey
+                ?: throw IllegalArgumentException("RSA KeyFactory did not return RSAPublicKey")
             return KeyPair(pub, priv)
         }
 

@@ -801,7 +801,10 @@ class SSHConnection(
      */
     private suspend fun executePortKnockIfEnabled() {
         // Check global default setting
-        val app = context.applicationContext as io.github.tabssh.TabSSHApplication
+        val app = context.applicationContext as? io.github.tabssh.TabSSHApplication ?: run {
+            Logger.w("SSHConnection", "executePortKnockIfEnabled: applicationContext is not TabSSHApplication, skipping")
+            return
+        }
         val globalDefault = app.preferencesManager.getBoolean("port_knock_enabled_default", false)
         
         // Check per-connection override (null = use global default)
@@ -876,7 +879,8 @@ class SSHConnection(
                         // getJSchBytesWithFallback() returns the correct format for
                         // JSch's byte-array addIdentity(); retrievePrivateKey().encoded
                         // returns PKCS#8 DER which JSch rejects as "invalid private key".
-                        val app = (context.applicationContext as io.github.tabssh.TabSSHApplication)
+                        val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
+                            ?: throw SSHException("applicationContext is not TabSSHApplication")
                         val jschBytes = app.keyStorage.getJSchBytesWithFallback(profile.proxyKeyId)
                         if (jschBytes != null) {
                             jsch.addIdentity(
@@ -997,7 +1001,7 @@ class SSHConnection(
                 "Switch this connection to Public Key or Password for now."
             _errorMessage.value = msg
             Logger.w("SSHConnection", "FIDO2 auth requested but not implemented")
-            throw NotImplementedError(msg)
+            throw UnsupportedOperationException(msg)
         }
 
         // Wave 1.5 runtime wiring — when agent forwarding is enabled we

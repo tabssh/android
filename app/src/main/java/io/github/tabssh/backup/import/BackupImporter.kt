@@ -142,8 +142,12 @@ class BackupImporter(
         val v = root["v"]?.jsonPrimitive?.intOrNull ?: 1
         var count = 0
         if (v >= 2) {
+            val itemsArr = root["items"] as? JsonArray ?: run {
+                Logger.w(TAG, "v2 backup missing 'items' in connections section")
+                return 0
+            }
             val items = json.decodeFromJsonElement(
-                ListSerializer(ConnectionProfile.serializer()), root["items"] as JsonArray
+                ListSerializer(ConnectionProfile.serializer()), itemsArr
             )
             val passwords: Map<String, String> = (root["passwords"] as? JsonObject)?.let { obj ->
                 obj.mapValues { it.value.jsonPrimitive.content }
@@ -201,8 +205,12 @@ class BackupImporter(
         val v = root["v"]?.jsonPrimitive?.intOrNull ?: 1
         var count = 0
         if (v >= 2) {
+            val itemsArr = root["items"] as? JsonArray ?: run {
+                Logger.w(TAG, "v2 backup missing 'items' in keys section")
+                return 0
+            }
             val items = json.decodeFromJsonElement(
-                ListSerializer(StoredKey.serializer()), root["items"] as JsonArray
+                ListSerializer(StoredKey.serializer()), itemsArr
             )
             for (k in items) {
                 val existing = database.keyDao().getKey(k.keyId)
@@ -241,8 +249,12 @@ class BackupImporter(
         val v = root["v"]?.jsonPrimitive?.intOrNull ?: 1
         var count = 0
         if (v >= 2) {
+            val itemsArr = root["items"] as? JsonArray ?: run {
+                Logger.w(TAG, "v2 backup missing 'items' in themes section")
+                return 0
+            }
             val items = json.decodeFromJsonElement(
-                ListSerializer(ThemeDefinition.serializer()), root["items"] as JsonArray
+                ListSerializer(ThemeDefinition.serializer()), itemsArr
             )
             for (t in items) {
                 val existing = database.themeDao().getTheme(t.themeId)
@@ -286,8 +298,12 @@ class BackupImporter(
         val v = root["v"]?.jsonPrimitive?.intOrNull ?: 1
         var count = 0
         if (v >= 2) {
+            val itemsArr = root["items"] as? JsonArray ?: run {
+                Logger.w(TAG, "v2 backup missing 'items' in certificates section")
+                return 0
+            }
             val items = json.decodeFromJsonElement(
-                ListSerializer(TrustedCertificate.serializer()), root["items"] as JsonArray
+                ListSerializer(TrustedCertificate.serializer()), itemsArr
             )
             for (c in items) {
                 val existing = database.certificateDao().getCertificateByHostAndPort(c.hostname, c.port)
@@ -332,8 +348,12 @@ class BackupImporter(
         val v = root["v"]?.jsonPrimitive?.intOrNull ?: 1
         var count = 0
         if (v >= 2) {
+            val itemsArr = root["items"] as? JsonArray ?: run {
+                Logger.w(TAG, "v2 backup missing 'items' in host keys section")
+                return 0
+            }
             val items = json.decodeFromJsonElement(
-                ListSerializer(HostKeyEntry.serializer()), root["items"] as JsonArray
+                ListSerializer(HostKeyEntry.serializer()), itemsArr
             )
             for (h in items) {
                 val existing = database.hostKeyDao().getHostKey(h.hostname, h.port)
@@ -372,8 +392,12 @@ class BackupImporter(
         val v = root["v"]?.jsonPrimitive?.intOrNull ?: 1
         var count = 0
         if (v >= 2) {
+            val itemsArr = root["items"] as? JsonArray ?: run {
+                Logger.w(TAG, "v2 backup missing 'items' in identities section")
+                return 0
+            }
             val items = json.decodeFromJsonElement(
-                ListSerializer(Identity.serializer()), root["items"] as JsonArray
+                ListSerializer(Identity.serializer()), itemsArr
             )
             // Identity.password is null in this row — the exporter strips it because the
             // Keystore-encrypted-at-rest blob is not portable. The plaintext password is

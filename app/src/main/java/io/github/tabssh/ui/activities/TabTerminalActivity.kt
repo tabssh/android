@@ -1091,11 +1091,15 @@ private fun showSnippetsPickerForActiveTab() {
             Toast.makeText(this, "No active session", Toast.LENGTH_SHORT).show()
             return
         }
-        // enterSelectionMode fires onSelectionStarted → startTerminalSelectionActionMode.
-        // Do NOT call startTerminalSelectionActionMode here — a second call would
-        // finish() the ActionMode just created by the callback, causing selectionActive
-        // to be reset to false and leaving the bar with no selection.
-        view.enterSelectionMode(x, y)
+        // beginWordSelectionAtTouch: expands to the word under the finger,
+        // pre-grabs the focus handle so the user can drag immediately (the
+        // long-press gesture leaves an active touch stream — without pre-grab
+        // the first MOVE event would fall through to GestureDetector and scroll
+        // instead of extending the selection). Also fires onSelectionStarted →
+        // startTerminalSelectionActionMode. Do NOT call startTerminalSelectionActionMode
+        // directly here — a second call finishes the ActionMode just created by
+        // the callback, resetting selectionActive and leaving the bar broken.
+        view.beginWordSelectionAtTouch(x, y)
     }
 
     private fun startTerminalSelectionActionMode(view: TerminalView) {
@@ -3658,11 +3662,26 @@ private fun showSnippetsPickerForActiveTab() {
             }
             else -> {
                 if (key.keySequence.isNotEmpty()) {
+                    // ARROW keys from the keyboard bar must respect DECCKM. When the
+                    // remote (e.g. vim) has set application cursor key mode (\033[?1h),
+                    // arrows must use SS3 (\033OA) not CSI (\033[A). TerminalView
+                    // exposes isApplicationCursorKeysMode() for exactly this query.
+                    val seq: String = if (key.category == io.github.tabssh.ui.keyboard.KeyboardKey.KeyCategory.ARROW &&
+                        terminal?.isApplicationCursorKeysMode() == true) {
+                        when (key.id) {
+                            "UP"    -> "OA"
+                            "DOWN"  -> "OB"
+                            "RIGHT" -> "OC"
+                            "LEFT"  -> "OD"
+                            else    -> key.keySequence
+                        }
+                    } else {
+                        key.keySequence
+                    }
                     // If the bar has CTL/ALT latched and the key is a single
                     // ASCII character (typical for symbol/letter keys), apply
                     // the modifier here so chords like CTL+/ also work from
                     // the bar even without the IME path.
-                    val seq = key.keySequence
                     val applied = if (seq.length == 1 &&
                         terminal != null &&
                         terminal.sendCharWithPendingModifier(seq[0])

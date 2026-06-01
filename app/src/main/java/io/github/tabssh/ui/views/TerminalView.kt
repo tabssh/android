@@ -1429,10 +1429,30 @@ class TerminalView @JvmOverloads constructor(
             // \e[1;3A. Combinations are 1 + (1=Shift, 2=Alt, 4=Ctrl).
             // tmux, vim, less and most modern TUIs read these to switch
             // panes / jump words / extend selection.
-            KeyEvent.KEYCODE_DPAD_UP -> { sendKeySequence(arrowSeq('A', isShift, isAlt, isCtrl)); return true }
-            KeyEvent.KEYCODE_DPAD_DOWN -> { sendKeySequence(arrowSeq('B', isShift, isAlt, isCtrl)); return true }
-            KeyEvent.KEYCODE_DPAD_RIGHT -> { sendKeySequence(arrowSeq('C', isShift, isAlt, isCtrl)); return true }
-            KeyEvent.KEYCODE_DPAD_LEFT -> { sendKeySequence(arrowSeq('D', isShift, isAlt, isCtrl)); return true }
+            //
+            // When the remote sets DECCKM (\033[?1h — application cursor mode,
+            // e.g. vim normal mode), plain arrows must use SS3 (\033OA) not CSI
+            // (\033[A). Modifier-qualified chords always use parameterised CSI.
+            KeyEvent.KEYCODE_DPAD_UP -> {
+                val appMode = isApplicationCursorKeysMode()
+                sendKeySequence(if (appMode) ss3ArrowSeq('A', isShift, isAlt, isCtrl) else arrowSeq('A', isShift, isAlt, isCtrl))
+                return true
+            }
+            KeyEvent.KEYCODE_DPAD_DOWN -> {
+                val appMode = isApplicationCursorKeysMode()
+                sendKeySequence(if (appMode) ss3ArrowSeq('B', isShift, isAlt, isCtrl) else arrowSeq('B', isShift, isAlt, isCtrl))
+                return true
+            }
+            KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                val appMode = isApplicationCursorKeysMode()
+                sendKeySequence(if (appMode) ss3ArrowSeq('C', isShift, isAlt, isCtrl) else arrowSeq('C', isShift, isAlt, isCtrl))
+                return true
+            }
+            KeyEvent.KEYCODE_DPAD_LEFT -> {
+                val appMode = isApplicationCursorKeysMode()
+                sendKeySequence(if (appMode) ss3ArrowSeq('D', isShift, isAlt, isCtrl) else arrowSeq('D', isShift, isAlt, isCtrl))
+                return true
+            }
 
             // Navigation keys — same modifier wrapping for HOME/END;
             // PAGE_UP/PAGE_DOWN/INS use the `\e[N~` family which has its
@@ -1526,6 +1546,25 @@ class TerminalView @JvmOverloads constructor(
         val mod = modifierCode(shift, alt, ctrl)
         return if (mod == 1) "\u001b[$letter" else "\u001b[1;$mod$letter"
     }
+
+    /**
+     * SS3 form of an arrow key for application cursor key mode (DECCKM active).
+     * When vim or another TUI sets \033[?1h, arrow keys must use SS3 (\033OA)
+     * instead of CSI (\033[A). With any modifier pressed the parameterised CSI
+     * form is still used since SS3 has no modifier extension in xterm protocol.
+     */
+    private fun ss3ArrowSeq(letter: Char, shift: Boolean, alt: Boolean, ctrl: Boolean): String {
+        val mod = modifierCode(shift, alt, ctrl)
+        return if (mod == 1) "\u001bO$letter" else "\u001b[1;$mod$letter"
+    }
+
+    /**
+     * Returns true when the Termux emulator reports application cursor key mode
+     * (DECCKM, \033[?1h) is active — i.e. the remote app has asked the terminal
+     * to send SS3 sequences for arrow keys. False when no bridge or no emulator.
+     */
+    fun isApplicationCursorKeysMode(): Boolean =
+        termuxBridge?.getEmulator()?.isCursorKeysApplicationMode() == true
 
     private fun tildeSeq(num: Int, shift: Boolean, alt: Boolean, ctrl: Boolean): String {
         val mod = modifierCode(shift, alt, ctrl)
@@ -1780,6 +1819,55 @@ class TerminalView @JvmOverloads constructor(
         // Reclaim focus so IME input keeps coming to the terminal. The SEL
         // key button steals focus when tapped; without this the keyboard is
         // visible but keystrokes go nowhere.
+        requestFocus()
+        invalidate()
+        onSelectionStarted?.invoke()
+    }
+
+    /**
+     * Long-press entry point: select the word under the touch and pre-grab the
+     * focus handle so the user can immediately drag to extend the selection
+     * without a second touch. Called by the host activity from
+     * `onContextMenuRequested` (fired by `onLongPress`).
+     *
+     * The long-press gesture leaves the touch stream active. Pre-setting
+     * `selectionDragHandle = 1` means subsequent ACTION_MOVE events in
+     * `handleSelectionTouch` are attributed to the focus handle, not
+     * incorrectly forwarded to the GestureDetector where they would scroll.
+     *
+     * If no word is found at the position (whitespace/empty), falls back to a
+     * single-cell anchor so the user can still drag to select.
+     */
+    fun beginWordSelectionAtTouch(x: Float, y: Float) {
+        val result = getTextAtPosition(x, y)
+        if (result != null) {
+            val (row, text) = result
+            val col = ((x - paddingLeft) / cellWidth).toInt()
+                .coerceIn(0, (terminalCols - 1).coerceAtLeast(0))
+            if (text.isNotEmpty() && col < text.length && !text[col].isWhitespace()) {
+                var wordStart = col
+                var wordEnd = col
+                while (wordStart > 0 && !text[wordStart - 1].isWhitespace()) wordStart--
+                while (wordEnd < text.length - 1 && !text[wordEnd + 1].isWhitespace()) wordEnd++
+                selectionAnchorRow = row
+                selectionAnchorCol = wordStart
+                selectionFocusRow = row
+                selectionFocusCol = wordEnd
+                selectionActive = true
+                selectionDragHandle = 1
+                requestFocus()
+                invalidate()
+                onSelectionStarted?.invoke()
+                return
+            }
+        }
+        val (col, row) = pixelToCell(x, y)
+        selectionAnchorCol = col
+        selectionAnchorRow = row
+        selectionFocusCol = col
+        selectionFocusRow = row
+        selectionActive = true
+        selectionDragHandle = 1
         requestFocus()
         invalidate()
         onSelectionStarted?.invoke()
