@@ -64,6 +64,13 @@ class TerminalView @JvmOverloads constructor(
         }
     }
 
+    // Resize debounce — keyboard animation fires two onSizeChanged events
+    // ~30 ms apart (intermediate size then final size). Sending both to the
+    // SSH server causes a double SIGWINCH and confuses some TUIs. We hold
+    // the resize 80 ms; only the last event in a burst is forwarded.
+    private val resizeHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var pendingResize: Runnable? = null
+
     // Touch and input handling
     private val gestureDetector: GestureDetector
     private val scaleGestureDetector: ScaleGestureDetector
@@ -927,21 +934,26 @@ class TerminalView @JvmOverloads constructor(
         val availableWidth = w - paddingLeft - paddingRight
         val availableHeight = h - paddingTop - paddingBottom
 
-        if (cellWidth > 0 && cellHeight > 0) {
-            val newCols = (availableWidth / cellWidth).toInt()
-            val newRows = (availableHeight / cellHeight).toInt()
+        if (cellWidth <= 0 || cellHeight <= 0) return
 
-            if (newCols != terminalCols || newRows != terminalRows) {
-                terminalCols = newCols.coerceAtLeast(40)
-                terminalRows = newRows.coerceAtLeast(10)
+        val newCols = (availableWidth / cellWidth).toInt().coerceAtLeast(40)
+        val newRows = (availableHeight / cellHeight).toInt().coerceAtLeast(10)
 
-                // Resize the appropriate emulator
-                termuxBridge?.resize(terminalCols, terminalRows)
-                terminalBuffer?.resize(terminalRows, terminalCols)
+        if (newCols == terminalCols && newRows == terminalRows) return
 
-                Logger.d("TerminalView", "Terminal resized: ${terminalRows}x${terminalCols}")
-            }
+        // Cancel any resize that hasn't fired yet; the final settled size wins.
+        pendingResize?.let { resizeHandler.removeCallbacks(it) }
+
+        val r = Runnable {
+            pendingResize = null
+            terminalCols = newCols
+            terminalRows = newRows
+            termuxBridge?.resize(terminalCols, terminalRows)
+            terminalBuffer?.resize(terminalRows, terminalCols)
+            Logger.d("TerminalView", "Terminal resized: ${terminalRows}x${terminalCols}")
         }
+        pendingResize = r
+        resizeHandler.postDelayed(r, RESIZE_DEBOUNCE_MS)
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -2188,6 +2200,8 @@ class TerminalView @JvmOverloads constructor(
         }
         currentBridgeListener = null
         stopCursorBlink()
+        pendingResize?.let { resizeHandler.removeCallbacks(it) }
+        pendingResize = null
     }
 
     // ── Cursor blink helpers ─────────────────────────────────────────────────
@@ -2205,6 +2219,10 @@ class TerminalView @JvmOverloads constructor(
 
     companion object {
         private const val CURSOR_BLINK_INTERVAL_MS = 500L
+        // Keyboard open/close animation fires two onSizeChanged events ~30 ms
+        // apart. Debounce longer than the animation gap so only the settled
+        // final size is forwarded to the SSH server via SIGWINCH.
+        private const val RESIZE_DEBOUNCE_MS = 80L
     }
 }
 
