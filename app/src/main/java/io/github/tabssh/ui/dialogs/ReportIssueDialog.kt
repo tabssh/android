@@ -56,7 +56,16 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
         fun create(logContent: String, logType: String = "app"): ReportIssueDialog =
             ReportIssueDialog().apply {
                 arguments = Bundle().apply {
-                    putString(ARG_LOG_CONTENT, logContent)
+                    // Fragment arguments are persisted through onSaveInstanceState via
+                    // Android IPC, which has a hard ~1 MB transaction limit. Cap here so
+                    // a large log never causes TransactionTooLargeException during swipe
+                    // or any other state-save event. The upload path caps at the same
+                    // limit in preparedContent(), so nothing is lost on the send side.
+                    val bytes = logContent.toByteArray(Charsets.UTF_8)
+                    val safe = if (bytes.size > MAX_CONTENT_BYTES)
+                        String(bytes, 0, MAX_CONTENT_BYTES, Charsets.UTF_8)
+                    else logContent
+                    putString(ARG_LOG_CONTENT, safe)
                     putString(ARG_LOG_TYPE, logType)
                 }
             }
