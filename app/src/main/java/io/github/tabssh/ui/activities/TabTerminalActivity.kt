@@ -2014,15 +2014,17 @@ private fun showSnippetsPickerForActiveTab() {
                 onSelectionStarted = { tv -> startTerminalSelectionActionMode(tv) }
             )
             // Suppress onPageSelected / onTabSelected while the adapter is
-            // being installed. Setting viewPager.adapter resets the pager to
-            // page 0 and fires onPageSelected(0) through the not-yet-registered
-            // callback — it's safe here, but guard anyway for consistency.
+            // being installed. viewPager.adapter resets the pager to page 0,
+            // then setCurrentItem scrolls to the target — both fire
+            // onPageSelected asynchronously via the Choreographer layout pass,
+            // AFTER this synchronous code returns. Registering the callback
+            // here (while the flag is still true) and deferring the flag clear
+            // via viewPager.post ensures those async events are still suppressed
+            // when the layout frame fires.
             isUpdatingAdapter = true
             viewPager?.adapter = pagerAdapter
 
             // Jump to the tab that was active before this activity was created.
-            // The callback is not yet registered, so setCurrentItem() here does
-            // NOT fire onPageSelected — the flag is belt-and-suspenders only.
             val activeIdx = tabManager.getActiveTabIndex().coerceIn(0, (allTabs.size - 1).coerceAtLeast(0))
             viewPager?.setCurrentItem(activeIdx, false)
 
@@ -2033,9 +2035,10 @@ private fun showSnippetsPickerForActiveTab() {
                 tab.tag = allTabs.getOrNull(position)?.tabId
             }
             tabLayoutMediator?.attach()
-            isUpdatingAdapter = false
 
-            // Register page change callback
+            // Register page change callback while flag is still true so any
+            // adapter-reset onPageSelected events (fired in the next layout
+            // frame) are suppressed before the flag is cleared.
             viewPager?.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
                 override fun onPageSelected(position: Int) {
                     // Suppress during adapter swap — see isUpdatingAdapter.
@@ -2044,13 +2047,18 @@ private fun showSnippetsPickerForActiveTab() {
                     Logger.d("TabTerminalActivity", "Swiped to tab $position")
                 }
             })
+
+            // Defer the flag clear to after the Choreographer layout pass so
+            // the async onPageSelected(0) from the adapter reset is still
+            // caught by the guard above.
+            viewPager?.post { isUpdatingAdapter = false }
         } else {
-            // Recreate adapter with new tabs list — guard onPageSelected /
-            // onTabSelected for the entire operation. Without this, assigning
-            // viewPager.adapter resets to position 0 and fires onPageSelected(0),
-            // queueing onActiveTabChanged(0). Then setCurrentItem(target) fires
-            // onPageSelected(target), queueing onActiveTabChanged(target). The two
-            // queued handlers bounce the pager indefinitely (the freeze loop).
+            // Recreate adapter with new tabs list. The existing onPageChangeCallback
+            // is already registered; isUpdatingAdapter suppresses it during the
+            // swap. Both viewPager.adapter (resets to page 0) and setCurrentItem
+            // fire onPageSelected asynchronously via the Choreographer layout pass —
+            // defer the flag clear via viewPager.post so those async events are still
+            // suppressed when the layout frame fires.
             isUpdatingAdapter = true
             pagerAdapter = TerminalPagerAdapter(
                 allTabs,
@@ -2078,7 +2086,10 @@ private fun showSnippetsPickerForActiveTab() {
                 tab.tag = allTabs.getOrNull(position)?.tabId
             }
             tabLayoutMediator?.attach()
-            isUpdatingAdapter = false
+
+            // Defer the flag clear to after the layout pass — same reasoning as
+            // the first-time setup path above.
+            viewPager?.post { isUpdatingAdapter = false }
         }
 
         // Push the current theme into the freshly-created adapter so pages
