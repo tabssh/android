@@ -32,12 +32,13 @@
             android:id="@+id/text_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:maxWidth="200dp"
+            android:maxWidth="120dp"
+            android:minWidth="48dp"
             android:singleLine="true"
             android:ellipsize="end"
-            android:textSize="13sp"
+            android:textSize="12sp"
             android:textColor="?attr/colorOnSurface"
-            tools:text="user@host:~" />
+            tools:text="server20" />
 
     </LinearLayout>
 

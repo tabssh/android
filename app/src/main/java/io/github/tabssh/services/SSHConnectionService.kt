@@ -422,8 +422,12 @@ class SSHConnectionService : Service() {
     }
 
     private fun updateConnectionCount() {
-        val stats = app.sshSessionManager.getConnectionStatistics()
-        activeConnections = stats.connectedConnections
+        // Count active tabs rather than raw SSH sessions so that mosh tabs
+        // (whose underlying SSH session may be closed after handoff) are
+        // still counted as live connections. A tab is "live" as long as its
+        // connectionState is CONNECTED — that covers both pure SSH and mosh.
+        activeConnections = app.tabManager.getAllTabs()
+            .count { it.connectionState.value == io.github.tabssh.ssh.connection.ConnectionState.CONNECTED }
 
         if (activeConnections == 0) {
             // Last session disconnected. Don't tear the service down

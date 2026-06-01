@@ -353,7 +353,15 @@ class TabTerminalActivity : AppCompatActivity() {
 
             override fun onActiveTabChanged(index: Int) {
                 Handler(Looper.getMainLooper()).post {
-                    switchToTab(index)
+                    // Guard against the swipe feedback loop: when the user swiped
+                    // to this page, onPageSelected already fired and ViewPager is
+                    // settled on the target. Calling setCurrentItem here would
+                    // re-fire onPageSelected → tabManager.switchToTab → this
+                    // callback → setCurrentItem indefinitely. Skip if the pager
+                    // is already on the requested page.
+                    if (viewPager?.currentItem != index) {
+                        switchToTab(index)
+                    }
                 }
             }
 

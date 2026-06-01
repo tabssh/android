@@ -303,30 +303,18 @@ class ConnectionsFragment : Fragment() {
         ensureActiveSessionsInflated()
         activeSessionsContainer?.visibility = View.VISIBLE
 
-        // Build display strings as {user}@{host}:{title}. The title source
-        // priority is: terminal-set OSC title → tab's default → cwd-style
-        // suffix. SSHTab.title can carry a transient state prefix (⏳, ⏸,
-        // 🔐, ❌); strip those for the strip — the colour dot already
-        // conveys state, so duplicating it as a glyph is noisy.
+        // Build chip labels for the active sessions strip.
+        // Use the connection profile name as the primary label — it is always
+        // short and human-readable (e.g. "server20", "Production DB").
+        // Fall back to user@host when the profile has no custom name.
+        // Never use the OSC terminal title here: it is set by the remote shell
+        // and can be arbitrarily long (e.g. "root@ip:root@hostname:~/deep/path").
         val rawDisplays = tabs.map { tab ->
+            val profileName = tab.profile.name.trim()
             val user = tab.profile.username
             val host = tab.profile.host
-            val cleanTitle = tab.title.value
-                .removePrefix("⏳ ")
-                .removePrefix("⏸ ")
-                .removePrefix("🔐 ")
-                .removePrefix("❌ ")
-                .trim()
             val userHost = if (user.isNotBlank() && host.isNotBlank()) "$user@$host" else host
-            // If the shell already set a title that starts with "user@host",
-            // don't repeat the prefix — show the OSC title verbatim.
-            val display = when {
-                cleanTitle.isBlank() -> userHost
-                cleanTitle == userHost -> userHost
-                cleanTitle.startsWith("$userHost:") -> cleanTitle
-                cleanTitle.startsWith(userHost) -> cleanTitle
-                else -> "$userHost:$cleanTitle"
-            }
+            val display = if (profileName.isNotBlank() && profileName != userHost) profileName else userHost
             tab to display
         }
 
