@@ -15,6 +15,8 @@
 
 ## ✅ Recently Shipped
 
+- **`95bd7c4d07ec`** 🐛 Swipe-to-switch freeze — `ReportIssueDialog.create()` stored full log string (up to 2+ MB) in fragment arguments Bundle; Android IPC's ~1 MB transaction limit caused `TransactionTooLargeException` on any state-save event including swipe; fix: truncate to `MAX_CONTENT_BYTES` (100 KB) before `putString`, consistent with the existing upload cap in `preparedContent()`.
+
 - **`8f89c2206e21`** 🐛 Proxy SSH key spinner race in ConnectionEditActivity — `setupProxyTypeSpinner()` coroutine built proxy key adapter from empty `availableKeys` before `setupKeySpinner()` finished; `populateFields()` proxy key restore had no fallback; fix: add `pendingRestoreProxyKeyId`; `setupKeySpinner()` now rebuilds proxy adapter and drains pending proxy key after `availableKeys` loads; `setupProxyTypeSpinner()` inner coroutine removed.
 
 - **`78c36ea47c63`** 🐛 Group field shows "No Group" when editing a grouped host — race: `setupGroupSpinner()` coroutine checked `existingProfile?.groupId` but the group DB query almost always finished before `loadConnection()` set `existingProfile`, so the restore block was skipped; `populateFields()` then hardcoded `selectedGroupName = "No Group"` and wrote it to the subtitle regardless; VNC path set `selectedGroupId` but never resolved the name; fix: both paths now call `getGroupById()` directly after loading, update `selectedGroupName`, spinner text, and action bar subtitle.
