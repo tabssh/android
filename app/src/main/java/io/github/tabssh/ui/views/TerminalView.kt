@@ -436,11 +436,18 @@ class TerminalView @JvmOverloads constructor(
                 post {
                     val prefs = androidx.preference.PreferenceManager
                         .getDefaultSharedPreferences(context)
-                    if (visible && prefs.getBoolean("terminal_cursor_blink", true)) {
-                        startCursorBlink()
+                    val blink = prefs.getBoolean("terminal_cursor_blink", true)
+                    // Control the blink timer based on DECTCEM state, but never let a
+                    // DECTCEM hide (\033[?25l) set cursorBlinkPhase to false. On mobile
+                    // the cursor disappearing at the prompt (e.g. Claude Code sends
+                    // ?25l during tool execution and doesn't restore it after a tab
+                    // switch) is a hard UX failure. stopCursorBlink() already leaves
+                    // cursorBlinkPhase=true, so just don't override it with visible=false.
+                    if (visible) {
+                        if (blink) startCursorBlink() else stopCursorBlink()
                     } else {
-                        stopCursorBlink()
-                        cursorBlinkPhase = visible
+                        if (blink) stopCursorBlink()
+                        // cursorBlinkPhase intentionally left as-is (stays true).
                     }
                     invalidate()
                 }
@@ -607,6 +614,14 @@ class TerminalView @JvmOverloads constructor(
      * Send text input to remote terminal
      */
     fun sendText(text: String) {
+        // Any user input resets cursor blink to the visible phase. This ensures
+        // the cursor is never stuck invisible (e.g. after a DECTCEM ?25l that
+        // was never followed by ?25h due to a tab switch or network lag).
+        if (!cursorBlinkPhase) {
+            cursorBlinkPhase = true
+            invalidate()
+        }
+
         // Try Termux bridge first (preferred for SSH connections)
         termuxBridge?.let { bridge ->
             bridge.sendText(text)
@@ -1091,10 +1106,12 @@ class TerminalView @JvmOverloads constructor(
         drawSearchHighlights(canvas, scrollRows)
 
         // Draw cursor based on style (0=block, 1=underline, 2=bar/I-beam).
-        // Hide it when scrolled into scrollback — the cursor belongs to the live screen.
-        // cursorBlinkPhase toggles every 500 ms when blink is on; when blink is off it
-        // stays true so the cursor is always visible.
-        if (cursorVisible && cursorBlinkPhase && scrollRows == 0 && cursorRow in 0 until rows && cursorCol in 0 until cols) {
+        // Hide only when scrolled into scrollback (cursor belongs to the live screen)
+        // or out of bounds. DECTCEM (\033[?25l) is intentionally ignored here — on
+        // mobile, losing the cursor at the prompt (e.g. Claude Code hide/show race
+        // after a tab switch) is a hard UX failure. The blink timer is still paused
+        // on DECTCEM hide to avoid visual noise during batch ncurses redraws.
+        if (cursorBlinkPhase && scrollRows == 0 && cursorRow in 0 until rows && cursorCol in 0 until cols) {
             val cursorX = startX + cursorCol * cellWidth
             val cursorY = startY + cursorRow * cellHeight
             cursorPaint.color = currentTheme?.cursor ?: Color.WHITE

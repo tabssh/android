@@ -869,7 +869,8 @@ class TabTerminalActivity : AppCompatActivity() {
             ?.setOnClickListener {
                 dialog.dismiss()
                 lifecycleScope.launch {
-                    connectToProfile(profile)
+                    // forceNew=true: the failed tab is gone; always open a fresh session.
+                    connectToProfile(profile, forceNew = true)
                 }
             }
         
@@ -1491,43 +1492,70 @@ private fun showSnippetsPickerForActiveTab() {
         }
     }
     
-    private suspend fun connectToProfile(profile: ConnectionProfile) {
+    private suspend fun connectToProfile(profile: ConnectionProfile, forceNew: Boolean = false) {
         try {
-            // Reattach short-circuit: if the shared TabManager already
-            // has a live tab for this profile, surface it instead of
-            // dialing a new SSH session + opening a fresh shell channel.
-            // The existing SSHTab still owns its TermuxBridge (read loop
-            // running, emulator buffer intact), so just switching the
-            // pager to that index and re-binding its bridge to a new
-            // TerminalView restores the user's scrollback.
+            // Reattach short-circuit: if the TabManager already has one or more live tabs
+            // for this profile, surface one instead of dialing a new session.
             //
-            // Match on profile.id + still-connected. A disconnected stale
-            // tab falls through to the normal connect path so a fresh
-            // session is opened — that's the "exited the shell, tap to
-            // reconnect" path which should NOT reuse the dead bridge.
-            val existing = tabManager.getAllTabs().firstOrNull {
-                it.profile.id == profile.id && it.isConnected()
-            }
-            if (existing != null) {
-                Logger.i(
-                    "TabTerminalActivity",
-                    "Reattaching to existing live tab for ${profile.getDisplayName()}"
-                )
-                val idx = tabManager.getAllTabs().indexOf(existing)
-                runOnUiThread {
-                    if (idx >= 0) {
-                        tabManager.setActiveTab(idx)
-                        switchToTab(idx)
-                    }
-                    if (!isRecreated) {
-                        android.widget.Toast.makeText(
-                            this,
-                            "Reattached to ${profile.name}",
-                            android.widget.Toast.LENGTH_SHORT
-                        ).show()
-                    }
+            // Skipped when forceNew=true — callers that explicitly open a NEW tab (the
+            // connection selector, workspace restore, reconnect-after-close) set this so
+            // the user always gets a fresh session rather than being bounced to an existing one.
+            //
+            // Disconnected stale tabs always fall through to the normal connect path.
+            if (!forceNew) {
+                val liveTabs = tabManager.getAllTabs().filter {
+                    it.profile.id == profile.id && it.isConnected()
                 }
-                return
+                if (liveTabs.isNotEmpty()) {
+                    Logger.i(
+                        "TabTerminalActivity",
+                        "Reattaching: ${liveTabs.size} live tab(s) for ${profile.getDisplayName()}"
+                    )
+                    if (liveTabs.size == 1) {
+                        // Single live tab — surface it directly.
+                        val idx = tabManager.getAllTabs().indexOf(liveTabs[0])
+                        runOnUiThread {
+                            if (idx >= 0) {
+                                tabManager.setActiveTab(idx)
+                                switchToTab(idx)
+                            }
+                            if (!isRecreated) {
+                                android.widget.Toast.makeText(
+                                    this,
+                                    "Reattached to ${profile.name}",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                        return
+                    }
+                    // Multiple live tabs for the same profile — ask the user which one to surface.
+                    // "Open new" dismisses the dialog and falls through to create another session.
+                    val chosen = kotlinx.coroutines.suspendCancellableCoroutine<SSHTab?> { cont ->
+                        runOnUiThread {
+                            val labels = liveTabs.mapIndexed { i, tab ->
+                                "Session ${i + 1}: ${tab.getShortTitle()}"
+                            }.toTypedArray()
+                            androidx.appcompat.app.AlertDialog.Builder(this)
+                                .setTitle("Multiple sessions open for ${profile.name}")
+                                .setItems(labels) { _, which -> cont.resumeWith(Result.success(liveTabs[which])) }
+                                .setNegativeButton("Open new") { _, _ -> cont.resumeWith(Result.success(null)) }
+                                .setOnCancelListener { cont.resumeWith(Result.success(null)) }
+                                .show()
+                        }
+                    }
+                    if (chosen != null) {
+                        val idx = tabManager.getAllTabs().indexOf(chosen)
+                        runOnUiThread {
+                            if (idx >= 0) {
+                                tabManager.setActiveTab(idx)
+                                switchToTab(idx)
+                            }
+                        }
+                        return
+                    }
+                    // User chose "Open new" — fall through to normal connect path below.
+                }
             }
 
             Logger.i("TabTerminalActivity", "🚀 Starting connection to ${profile.getDisplayName()}")
@@ -2135,7 +2163,8 @@ private fun showSnippetsPickerForActiveTab() {
                 if (idx >= 0) tabManager.closeTab(idx)
                 lifecycleScope.launch {
                     try {
-                        connectToProfile(profile)
+                        // forceNew=true: old tab was just closed; always open a fresh session.
+                        connectToProfile(profile, forceNew = true)
                     } finally {
                         isReconnecting = false
                         // If the reconnect failed (no new tab landed) and
@@ -2407,7 +2436,8 @@ private fun showSnippetsPickerForActiveTab() {
             for (id in ids) {
                 val profile = try { app.database.connectionDao().getConnectionById(id) } catch (_: Exception) { null }
                 if (profile == null) { skipped++; continue }
-                connectToProfile(profile)
+                // forceNew=true: workspace restore always opens a fresh tab per entry.
+                connectToProfile(profile, forceNew = true)
                 opened++
                 kotlinx.coroutines.delay(400) // gentle stagger
             }
@@ -3067,7 +3097,9 @@ private fun showSnippetsPickerForActiveTab() {
                             startActivity(Intent(this@TabTerminalActivity, ConnectionEditActivity::class.java))
                         } else {
                             val profile = connections[which - 1]
-                            lifecycleScope.launch { connectToProfile(profile) }
+                            // forceNew=true: the user explicitly chose "Open new tab".
+                            // Never reattach to an existing session from this path.
+                            lifecycleScope.launch { connectToProfile(profile, forceNew = true) }
                         }
                     }
                     .setNegativeButton("Cancel", null)
