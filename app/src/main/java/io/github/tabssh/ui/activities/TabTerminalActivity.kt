@@ -587,9 +587,17 @@ class TabTerminalActivity : AppCompatActivity() {
             override fun onTabSelected(tab: TabLayout.Tab) {
                 val position = tab.position
                 tabManager.setActiveTab(position)
-                switchToTab(position)
+                // Guard: TabLayoutMediator fires onTabSelected in response to a
+                // ViewPager swipe — the pager is already on this page. Calling
+                // setCurrentItem here would restart the scroll animation and
+                // re-fire onPageSelected, creating a feedback loop.
+                // Only scroll programmatically when the pager isn't already there
+                // (i.e. the user tapped the tab bar directly).
+                if (viewPager?.currentItem != position) {
+                    switchToTab(position)
+                }
             }
-            
+
             override fun onTabUnselected(tab: TabLayout.Tab) {}
             override fun onTabReselected(tab: TabLayout.Tab) {}
         })
@@ -2057,8 +2065,11 @@ private fun showSnippetsPickerForActiveTab() {
 
     private fun switchToTab(index: Int) {
         if (swipeEnabled) {
-            // Swipe mode: update ViewPager2 position
-            viewPager?.setCurrentItem(index, true)
+            // Use smooth=false so programmatic jumps (tab-bar tap, keyboard shortcut,
+            // onActiveTabChanged) never trigger an animation that can re-fire
+            // onPageSelected. User swipes already have their own smooth animation
+            // handled by ViewPager2 internally — no need for us to add one.
+            viewPager?.setCurrentItem(index, false)
         } else {
             // Classic mode: attach terminal to single view
             val tab = tabManager.getTab(index)

@@ -324,9 +324,21 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
         val now = System.currentTimeMillis()
         val liveIds = mutableSetOf<String>()
 
+        val connDao = database.connectionDao()
         tabs.forEachIndexed { index, tab ->
-            val tabStats = tab.getConnectionStats()
             liveIds.add(tab.tabId)
+
+            // Guard: the TabSession FK requires the connection profile to exist
+            // in the `connections` table. Ephemeral / quick-connect profiles are
+            // created in-memory and never persisted, so inserting a session for
+            // them would throw SQLITE_CONSTRAINT_FOREIGNKEY. Skip those tabs.
+            val profileInDb = connDao.getConnectionById(tab.profile.id)
+            if (profileInDb == null) {
+                Logger.d("TabManager", "Skipping session save for ephemeral profile: ${tab.getDisplayTitle()}")
+                return@forEachIndexed
+            }
+
+            val tabStats = tab.getConnectionStats()
             val tabSession = io.github.tabssh.storage.database.entities.TabSession(
                 sessionId = tab.tabId,
                 tabId = tab.tabId,
