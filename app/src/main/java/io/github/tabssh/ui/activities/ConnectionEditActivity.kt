@@ -77,6 +77,7 @@ class ConnectionEditActivity : AppCompatActivity() {
     private var availableKeys: List<StoredKey> = emptyList()
     private var selectedKeyIndex: Int = -1
     private var pendingRestoreKeyId: String? = null
+    private var pendingRestoreProxyKeyId: String? = null
 
     private var selectedGroupId: String? = null
     private var selectedGroupName: String = "No Group"
@@ -456,6 +457,23 @@ class ConnectionEditActivity : AppCompatActivity() {
                         binding.spinnerSshKey.setText(keyNames[selectedKeyIndex], false)
                     }
                 }
+
+                // Rebuild proxy SSH key spinner now that availableKeys is populated,
+                // and restore any pending proxy key selection set by populateFields()
+                // before this coroutine completed.
+                val proxyKeyAdapter = ArrayAdapter(
+                    this@ConnectionEditActivity,
+                    android.R.layout.simple_dropdown_item_1line,
+                    keyNames
+                )
+                binding.spinnerProxySshKey.setAdapter(proxyKeyAdapter)
+                pendingRestoreProxyKeyId?.let { proxyKeyId ->
+                    pendingRestoreProxyKeyId = null
+                    val proxyKeyIndex = availableKeys.indexOfFirst { it.keyId == proxyKeyId }
+                    if (proxyKeyIndex >= 0) {
+                        binding.spinnerProxySshKey.setText(keyNames[proxyKeyIndex + 1], false)
+                    }
+                }
             } catch (e: Exception) {
                 Logger.e("ConnectionEditActivity", "Failed to load SSH keys", e)
                 showError("Failed to load SSH keys", "Error")
@@ -486,14 +504,13 @@ class ConnectionEditActivity : AppCompatActivity() {
             updateProxyAuthTypeUI(authTypes[position])
         }
 
-        lifecycleScope.launch {
-            val keyNames = listOf("Select SSH Key...") + availableKeys.map { it.getDisplayName() }
-            val keyAdapter = ArrayAdapter(
-                this@ConnectionEditActivity, android.R.layout.simple_dropdown_item_1line, keyNames
-            )
-            binding.spinnerProxySshKey.setAdapter(keyAdapter)
-            binding.spinnerProxySshKey.setOnItemClickListener { _, _, position, _ ->
-                binding.spinnerProxySshKey.setText(keyNames[position], false)
+        // Proxy SSH key spinner adapter is built inside setupKeySpinner() once
+        // availableKeys is loaded, to avoid a race where this coroutine would
+        // see an empty list. Wire the click listener here with a stable reference.
+        binding.spinnerProxySshKey.setOnItemClickListener { _, _, position, _ ->
+            val names = listOf("Select SSH Key...") + availableKeys.map { it.getDisplayName() }
+            if (position < names.size) {
+                binding.spinnerProxySshKey.setText(names[position], false)
             }
         }
     }
@@ -788,6 +805,9 @@ class ConnectionEditActivity : AppCompatActivity() {
                             if (keyIndex + 1 < keyNames.size) {
                                 binding.spinnerProxySshKey.setText(keyNames[keyIndex + 1], false)
                             }
+                        } else {
+                            // availableKeys not yet loaded — defer to setupKeySpinner() completion
+                            pendingRestoreProxyKeyId = profile.proxyKeyId
                         }
                     }
                 }
