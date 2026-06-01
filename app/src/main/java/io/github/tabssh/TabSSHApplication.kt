@@ -58,7 +58,7 @@ class TabSSHApplication : Application() {
     val themeManager by lazy { ThemeManager(this) }
     val performanceManager by lazy { PerformanceManager(this) }
     val auditLogManager by lazy { io.github.tabssh.audit.AuditLogManager(this, database, preferencesManager) }
-    val tabManager by lazy { io.github.tabssh.ui.tabs.TabManager() }
+    val tabManager by lazy { io.github.tabssh.ui.tabs.TabManager(database) }
     /** App-wide network state observer. Single instance so every connection
      *  type (SSH, VNC, Telnet) shares one [ConnectivityManager] callback. */
     val networkDetector by lazy { io.github.tabssh.network.detection.NetworkDetector(this) }

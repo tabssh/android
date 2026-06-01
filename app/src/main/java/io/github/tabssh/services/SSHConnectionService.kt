@@ -491,6 +491,9 @@ class SSHConnectionService : Service() {
                 // Wait before next check
                 delay(30_000L)
 
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Normal coroutine cancellation — propagate so the loop exits cleanly.
+                throw e
             } catch (e: Exception) {
                 Logger.e("SSHConnectionService", "Error in connection monitoring", e)
                 delay(60_000L)

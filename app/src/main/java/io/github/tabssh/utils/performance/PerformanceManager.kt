@@ -112,9 +112,12 @@ class PerformanceManager(private val context: Context) {
                     
                     delay(monitoringInterval)
                     
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    // Normal coroutine cancellation — propagate so the loop exits cleanly.
+                    throw e
                 } catch (e: Exception) {
                     Logger.e("PerformanceManager", "Error in performance monitoring", e)
-                    delay(30000) // Wait longer on error
+                    delay(30000)
                 }
             }
         }

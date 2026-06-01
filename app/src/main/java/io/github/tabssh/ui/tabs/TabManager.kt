@@ -1,6 +1,7 @@
 package io.github.tabssh.ui.tabs
 
 import android.view.KeyEvent
+import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.terminal.TermuxBridge
 import io.github.tabssh.ui.views.TerminalView
@@ -20,7 +21,7 @@ import kotlinx.coroutines.launch
  * Browser-style tab management for SSH sessions
  * Core innovation of TabSSH
  */
-class TabManager(private val maxTabs: Int = 10) {
+class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int = 10) {
 
     private val tabs = mutableListOf<SSHTab>()
     private var activeTabIndex = 0
@@ -312,18 +313,22 @@ class TabManager(private val maxTabs: Int = 10) {
     }
 
     /**
-     * Save tab state to database for session persistence
+     * Persist the current tab list to the database so it can be restored
+     * after a process death. Called from onPause() on Dispatchers.IO.
+     * Upserts each live tab and removes any stale sessions for tabs that
+     * are no longer open.
      */
-    fun saveTabState() {
+    suspend fun saveTabState() {
         Logger.d("TabManager", "Saving tab states to database")
+        val dao = database.tabSessionDao()
+        val now = System.currentTimeMillis()
+        val liveIds = mutableSetOf<String>()
 
-        // Save each tab's state to the database
         tabs.forEachIndexed { index, tab ->
             val tabStats = tab.getConnectionStats()
-
-            // Create TabSession entity
+            liveIds.add(tab.tabId)
             val tabSession = io.github.tabssh.storage.database.entities.TabSession(
-                sessionId = tab.tabId, // Use tabId as sessionId
+                sessionId = tab.tabId,
                 tabId = tab.tabId,
                 connectionId = tab.profile.id,
                 tabOrder = index,
@@ -331,21 +336,30 @@ class TabManager(private val maxTabs: Int = 10) {
                 terminalRows = tabStats.terminalRows,
                 terminalCols = tabStats.terminalCols,
                 terminalContent = tab.getTerminalContent(),
-                cursorRow = tabStats.terminalRows / 2, // Approximation
+                cursorRow = tabStats.terminalRows / 2,
                 cursorCol = 0,
                 title = tab.getDisplayTitle(),
                 lastActivity = tabStats.lastActivity,
-                createdAt = System.currentTimeMillis(),
-                environmentVars = "", // Could be expanded to save env vars
-                workingDirectory = "" // Could be expanded to save working dir
+                createdAt = now,
+                environmentVars = "",
+                workingDirectory = ""
             )
-
-            // Note: This would need access to database, which should be injected
-            // For now, just log what would be saved
-            Logger.d("TabManager", "Would save tab: ${tab.getDisplayTitle()} (order=$index)")
+            val existing = dao.getSessionByTabId(tab.tabId)
+            if (existing != null) {
+                dao.updateSession(tabSession)
+            } else {
+                dao.insertSession(tabSession)
+            }
+            Logger.d("TabManager", "Saved tab: ${tab.getDisplayTitle()} (order=$index)")
         }
 
-        Logger.i("TabManager", "Tab state persistence: ${tabs.size} tabs would be saved")
+        // Remove sessions for tabs that are no longer open.
+        val allSaved = dao.getAllTabs()
+        allSaved.filter { it.tabId !in liveIds }.forEach { stale ->
+            dao.deleteSession(stale)
+        }
+
+        Logger.i("TabManager", "Tab state persistence: ${tabs.size} tab(s) saved")
     }
 
     /**
