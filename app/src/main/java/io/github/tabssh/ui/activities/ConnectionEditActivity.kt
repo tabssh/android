@@ -719,9 +719,18 @@ class ConnectionEditActivity : AppCompatActivity() {
         profile.multiplexerSessionName?.let { binding.editMultiplexerSessionName.setText(it) }
 
         selectedGroupId = profile.groupId
-        selectedGroupName = "No Group"
-        if (selectedGroupId != null) {
-            supportActionBar?.subtitle = selectedGroupName
+        val resolvedGroup = selectedGroupId?.let { gid ->
+            withContext(Dispatchers.IO) { app.database.connectionGroupDao().getGroupById(gid) }
+        }
+        if (resolvedGroup != null) {
+            selectedGroupName = resolvedGroup.name
+            binding.spinnerGroup.setText(resolvedGroup.name, false)
+            supportActionBar?.subtitle = resolvedGroup.name
+        } else {
+            selectedGroupId = null
+            selectedGroupName = "No Group"
+            binding.spinnerGroup.setText("No Group", false)
+            supportActionBar?.subtitle = null
         }
 
         val themeEntries = resources.getStringArray(R.array.terminal_theme_entries)
@@ -828,6 +837,21 @@ class ConnectionEditActivity : AppCompatActivity() {
         selectedVncIdentityId = vncHost.identityId
         restoreVncIdentitySpinner()
         selectedGroupId = vncHost.groupId
+        lifecycleScope.launch {
+            val resolvedGroup = selectedGroupId?.let { gid ->
+                withContext(Dispatchers.IO) { app.database.connectionGroupDao().getGroupById(gid) }
+            }
+            if (resolvedGroup != null) {
+                selectedGroupName = resolvedGroup.name
+                binding.spinnerGroup.setText(resolvedGroup.name, false)
+                supportActionBar?.subtitle = resolvedGroup.name
+            } else {
+                selectedGroupId = null
+                selectedGroupName = "No Group"
+                binding.spinnerGroup.setText("No Group", false)
+                supportActionBar?.subtitle = null
+            }
+        }
         currentColorTag = vncHost.colorTag
         renderColorTagPreview()
         // Pre-populate per-host password when no identity is linked
