@@ -15,6 +15,8 @@
 
 ## ✅ Recently Shipped
 
+- **`714bc68578ee`** 🐛 New-tab reattach + multi-session chooser + DECTCEM cursor loss — `connectToProfile` gains `forceNew` param (connection selector, workspace restore, reconnect, retry all pass `forceNew=true`); multiple live tabs for same profile shows chooser dialog via `suspendCancellableCoroutine`; DECTCEM `?25l` no longer sets `cursorBlinkPhase=false` or gates `onDraw` cursor rendering; `sendText` resets blink phase on any user input.
+
 - **`724a322435c9`** 🐛 Long-press copy fixed + ActionMode Cancel + word-wrap URL detection — `beginSelection` no longer calls `startTerminalSelectionActionMode` directly (double-call destroyed the ActionMode via `onDestroyActionMode`→`exitSelectionMode` before user saw it); Cancel (id=4) added to ActionMode bar; `getRowText(row)` helper added to `TerminalView`; `detectUrlAtPosition` now joins current+next row text to detect URLs that span a terminal word-wrap boundary.
 
 - **`b78b38484bcd`** 🐛 Sync/backup credential completeness + SeekBarPreference crash — `SyncDataCollector.collectSecrets()` now collects connection passwords under `conn_pw_{id}`; `SyncDataApplier.applySecrets()` routes them to `PreferenceManager` instead of `SecurePasswordManager`; `BackupManager` always sets `includeSecrets=true` (user controls encryption, not us); `BackupExporter.exportSecrets()` exports connection passwords; `BackupImporter.restoreSecrets()` restores them via `setConnectionPassword()`; `monitoring_default_*_threshold` SeekBarPreference crash fixed (read/write as Int not String); `MonitoringSettingsFragment.sanitizeSeekBarPrefs()` heals existing devices; AI.md §9.4 corrected (cloud_accounts IS synced).
