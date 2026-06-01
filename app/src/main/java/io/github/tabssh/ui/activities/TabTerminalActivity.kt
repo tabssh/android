@@ -1090,8 +1090,11 @@ private fun showSnippetsPickerForActiveTab() {
             Toast.makeText(this, "No active session", Toast.LENGTH_SHORT).show()
             return
         }
+        // enterSelectionMode fires onSelectionStarted → startTerminalSelectionActionMode.
+        // Do NOT call startTerminalSelectionActionMode here — a second call would
+        // finish() the ActionMode just created by the callback, causing selectionActive
+        // to be reset to false and leaving the bar with no selection.
         view.enterSelectionMode(x, y)
-        startTerminalSelectionActionMode(view)
     }
 
     private fun startTerminalSelectionActionMode(view: TerminalView) {
@@ -1110,6 +1113,8 @@ private fun showSnippetsPickerForActiveTab() {
                     .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
                 menu.add(0, 3, 2, "Paste")
                     .setIcon(android.R.drawable.ic_input_add)
+                    .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+                menu.add(0, 4, 3, "Cancel")
                     .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
                 return true
             }
@@ -1137,6 +1142,10 @@ private fun showSnippetsPickerForActiveTab() {
                     3 -> {
                         mode.finish()
                         pasteFromClipboard()
+                        return true
+                    }
+                    4 -> {
+                        mode.finish()
                         return true
                     }
                 }

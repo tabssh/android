@@ -1211,29 +1211,62 @@ class TerminalView @JvmOverloads constructor(
     }
 
     /**
-     * Detect URL at the given position
-     * @param x Touch X coordinate
-     * @param y Touch Y coordinate
-     * @return Detected URL or null
+     * Return the text content of a row by index, without requiring a touch coordinate.
+     * Used by detectUrlAtPosition to read adjacent rows for word-wrap URL joining.
+     */
+    private fun getRowText(row: Int): String {
+        if (row < 0 || row >= terminalRows) return ""
+        termuxBuffer?.let { buffer ->
+            return try {
+                buffer.getSelectedText(0, row, terminalCols, row) ?: ""
+            } catch (e: Exception) {
+                ""
+            }
+        }
+        terminalBuffer?.let { buffer ->
+            val lineChars = buffer.getLine(row)
+            return lineChars?.map { it.char }?.joinToString("") ?: ""
+        }
+        return ""
+    }
+
+    /**
+     * Detect URL at the given position.
+     * Also checks the following row to catch URLs that span a terminal word-wrap boundary.
      */
     private fun detectUrlAtPosition(x: Float, y: Float): String? {
         val (row, lineText) = getTextAtPosition(x, y) ?: return null
-
-        // Find all URLs in the line
-        val matches = urlPattern.findAll(lineText)
-
-        // Calculate the column position
         val col = ((x - paddingLeft) / cellWidth).toInt()
 
-        // Check if the touch position is within any URL
-        for (match in matches) {
-            if (col >= match.range.first && col <= match.range.last) {
-                var url = match.value
-                // Add http:// prefix if it starts with www.
-                if (url.startsWith("www.", ignoreCase = true) && !url.startsWith("http", ignoreCase = true)) {
-                    url = "http://$url"
+        // Check if the touch point is within any URL on the current row.
+        val matchInRow = urlPattern.findAll(lineText).firstOrNull { col in it.range }
+        if (matchInRow != null) {
+            var url = matchInRow.value
+            if (url.startsWith("www.", ignoreCase = true) && !url.startsWith("http", ignoreCase = true)) {
+                url = "http://$url"
+            }
+            return url
+        }
+
+        // The URL may be split across a word-wrap boundary: the tail of the current row
+        // continues at the start of the next row with no whitespace between them. Try
+        // joining the two rows and matching the combined text.
+        val nextRowText = getRowText(row + 1)
+        if (nextRowText.isNotEmpty()) {
+            // Trim trailing whitespace from current row before joining — the terminal
+            // buffer pads short lines with spaces up to terminalCols.
+            val combined = lineText.trimEnd() + nextRowText
+            val combinedMatches = urlPattern.findAll(combined)
+            // The touch column falls somewhere in the current row's portion, so the
+            // match must start at or before col to be the URL the user tapped on.
+            for (match in combinedMatches) {
+                if (match.range.first <= col) {
+                    var url = match.value
+                    if (url.startsWith("www.", ignoreCase = true) && !url.startsWith("http", ignoreCase = true)) {
+                        url = "http://$url"
+                    }
+                    return url
                 }
-                return url
             }
         }
 
