@@ -1,11 +1,9 @@
 package io.github.tabssh.ui.fragments
 
-import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -13,8 +11,6 @@ import androidx.recyclerview.widget.RecyclerView
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.ConnectionProfile
-import io.github.tabssh.ui.activities.ConnectionEditActivity
-import io.github.tabssh.ui.activities.TabTerminalActivity
 import io.github.tabssh.ui.adapters.ConnectionAdapter
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
@@ -66,18 +62,12 @@ class FrequentConnectionsFragment : Fragment() {
     }
 
     private fun setupRecyclerView() {
+        // Frequent connects is a quick-launch surface; no long-press menu.
         adapter = ConnectionAdapter(
             onConnectionClick = { connection: ConnectionProfile ->
                 openConnection(connection)
             }
         )
-        
-        // Long click for context menu
-        adapter.setOnItemLongClickListener { connection ->
-            showConnectionMenu(connection)
-            true
-        }
-        
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
         recyclerView.adapter = adapter
     }
@@ -89,66 +79,6 @@ class FrequentConnectionsFragment : Fragment() {
         io.github.tabssh.ui.utils.ConnectionLauncher.launch(requireContext(), connection)
     }
     
-    private fun showConnectionMenu(connection: ConnectionProfile) {
-        val items = arrayOf("Open", "Edit", "Duplicate", "Delete")
-        
-        AlertDialog.Builder(requireContext())
-            .setTitle(connection.name)
-            .setItems(items) { _, which ->
-                when (which) {
-                    0 -> openConnection(connection)
-                    1 -> editConnection(connection)
-                    2 -> duplicateConnection(connection)
-                    3 -> deleteConnection(connection)
-                }
-            }
-            .show()
-    }
-    
-    private fun editConnection(connection: ConnectionProfile) {
-        val intent = Intent(requireContext(), ConnectionEditActivity::class.java).apply {
-            putExtra(ConnectionEditActivity.EXTRA_CONNECTION_ID, connection.id)
-        }
-        startActivity(intent)
-    }
-    
-    private fun duplicateConnection(connection: ConnectionProfile) {
-        lifecycleScope.launch {
-            try {
-                val duplicate = connection.copy(
-                    id = java.util.UUID.randomUUID().toString(),
-                    name = "${connection.name} (Copy)",
-                    connectionCount = 0,
-                    lastConnected = 0
-                )
-                app.database.connectionDao().insertConnection(duplicate)
-                Logger.d("FrequentConnectionsFragment", "Connection duplicated: ${duplicate.name}")
-            } catch (e: Exception) {
-                Logger.e("FrequentConnectionsFragment", "Failed to duplicate connection", e)
-            }
-        }
-    }
-    
-    private fun deleteConnection(connection: ConnectionProfile) {
-        AlertDialog.Builder(requireContext())
-            .setTitle("Delete Connection")
-            .setMessage("Are you sure you want to delete '${connection.name}'?")
-            .setPositiveButton("Delete") { _, _ ->
-                lifecycleScope.launch {
-                    try {
-                        withContext(Dispatchers.IO) {
-                            app.database.connectionDao().deleteConnection(connection)
-                        }
-                        Logger.d("FrequentConnectionsFragment", "Connection deleted: ${connection.name}")
-                    } catch (e: Exception) {
-                        Logger.e("FrequentConnectionsFragment", "Failed to delete connection", e)
-                    }
-                }
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
     private fun loadFrequentConnections() {
         lifecycleScope.launch {
             try {

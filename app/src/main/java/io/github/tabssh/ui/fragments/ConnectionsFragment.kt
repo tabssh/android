@@ -292,7 +292,12 @@ class ConnectionsFragment : Fragment() {
     }
 
     private fun renderActiveSessionRows() {
-        val tabs = app.tabManager.getAllTabs()
+        // Only show tabs that are actively connecting or connected.
+        // DISCONNECTED tabs are dead slots — showing them after a notification
+        // disconnect misleads the user into thinking there is still a live session.
+        val tabs = app.tabManager.getAllTabs().filter {
+            it.connectionState.value != io.github.tabssh.ssh.connection.ConnectionState.DISCONNECTED
+        }
         if (tabs.isEmpty()) {
             // Don't inflate the stub if we never had to. If it was already
             // inflated (tabs existed earlier), just hide the container.

@@ -122,6 +122,13 @@ class TabTerminalActivity : AppCompatActivity() {
     private var pagerAdapter: TerminalPagerAdapter? = null
     private var tabLayoutMediator: TabLayoutMediator? = null
     private var swipeEnabled: Boolean = true
+    // Set to true while updateViewPagerAdapter() is swapping the adapter.
+    // ViewPager2 fires onPageSelected(0) when a new adapter is assigned
+    // (it resets to page 0), and setCurrentItem() fires onPageSelected for
+    // the target page. Both callbacks queue onActiveTabChanged handlers that
+    // fight each other and produce a bounce loop. Suppressing both during
+    // the swap and re-syncing TabManager once manually breaks the cycle.
+    private var isUpdatingAdapter = false
     
     // Performance overlay
     private var performanceOverlay: io.github.tabssh.ui.views.PerformanceOverlayView? = null
@@ -595,6 +602,8 @@ class TabTerminalActivity : AppCompatActivity() {
     private fun setupTabLayout() {
         binding.tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
             override fun onTabSelected(tab: TabLayout.Tab) {
+                // Suppress during adapter swap — see isUpdatingAdapter.
+                if (isUpdatingAdapter) return
                 val position = tab.position
                 tabManager.setActiveTab(position)
                 // Guard: TabLayoutMediator fires onTabSelected in response to a
@@ -2004,7 +2013,18 @@ private fun showSnippetsPickerForActiveTab() {
                 onContextMenuRequested = { x, y -> beginSelection(x, y) },
                 onSelectionStarted = { tv -> startTerminalSelectionActionMode(tv) }
             )
+            // Suppress onPageSelected / onTabSelected while the adapter is
+            // being installed. Setting viewPager.adapter resets the pager to
+            // page 0 and fires onPageSelected(0) through the not-yet-registered
+            // callback — it's safe here, but guard anyway for consistency.
+            isUpdatingAdapter = true
             viewPager?.adapter = pagerAdapter
+
+            // Jump to the tab that was active before this activity was created.
+            // The callback is not yet registered, so setCurrentItem() here does
+            // NOT fire onPageSelected — the flag is belt-and-suspenders only.
+            val activeIdx = tabManager.getActiveTabIndex().coerceIn(0, (allTabs.size - 1).coerceAtLeast(0))
+            viewPager?.setCurrentItem(activeIdx, false)
 
             // Setup TabLayoutMediator to sync TabLayout with ViewPager2
             tabLayoutMediator?.detach()
@@ -2013,17 +2033,25 @@ private fun showSnippetsPickerForActiveTab() {
                 tab.tag = allTabs.getOrNull(position)?.tabId
             }
             tabLayoutMediator?.attach()
+            isUpdatingAdapter = false
 
             // Register page change callback
             viewPager?.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
                 override fun onPageSelected(position: Int) {
+                    // Suppress during adapter swap — see isUpdatingAdapter.
+                    if (isUpdatingAdapter) return
                     tabManager.switchToTab(position)
                     Logger.d("TabTerminalActivity", "Swiped to tab $position")
                 }
             })
         } else {
-            // Recreate adapter with new tabs list
-            val currentPosition = viewPager?.currentItem ?: 0
+            // Recreate adapter with new tabs list — guard onPageSelected /
+            // onTabSelected for the entire operation. Without this, assigning
+            // viewPager.adapter resets to position 0 and fires onPageSelected(0),
+            // queueing onActiveTabChanged(0). Then setCurrentItem(target) fires
+            // onPageSelected(target), queueing onActiveTabChanged(target). The two
+            // queued handlers bounce the pager indefinitely (the freeze loop).
+            isUpdatingAdapter = true
             pagerAdapter = TerminalPagerAdapter(
                 allTabs,
                 fontSize,
@@ -2038,9 +2066,10 @@ private fun showSnippetsPickerForActiveTab() {
             )
             viewPager?.adapter = pagerAdapter
 
-            // Restore position (or select last tab if adding)
-            val newPosition = if (currentPosition >= allTabs.size) allTabs.size - 1 else currentPosition
-            viewPager?.setCurrentItem(newPosition, false)
+            // Navigate to wherever TabManager says is active (covers both the
+            // "new tab added" and "tab removed" cases correctly).
+            val targetPosition = tabManager.getActiveTabIndex().coerceIn(0, (allTabs.size - 1).coerceAtLeast(0))
+            viewPager?.setCurrentItem(targetPosition, false)
 
             // Re-attach mediator
             tabLayoutMediator?.detach()
@@ -2049,6 +2078,7 @@ private fun showSnippetsPickerForActiveTab() {
                 tab.tag = allTabs.getOrNull(position)?.tabId
             }
             tabLayoutMediator?.attach()
+            isUpdatingAdapter = false
         }
 
         // Push the current theme into the freshly-created adapter so pages
