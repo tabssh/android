@@ -15,6 +15,8 @@
 
 ## ✅ Recently Shipped
 
+- **`724a322435c9`** 🐛 Long-press copy fixed + ActionMode Cancel + word-wrap URL detection — `beginSelection` no longer calls `startTerminalSelectionActionMode` directly (double-call destroyed the ActionMode via `onDestroyActionMode`→`exitSelectionMode` before user saw it); Cancel (id=4) added to ActionMode bar; `getRowText(row)` helper added to `TerminalView`; `detectUrlAtPosition` now joins current+next row text to detect URLs that span a terminal word-wrap boundary.
+
 - **`b78b38484bcd`** 🐛 Sync/backup credential completeness + SeekBarPreference crash — `SyncDataCollector.collectSecrets()` now collects connection passwords under `conn_pw_{id}`; `SyncDataApplier.applySecrets()` routes them to `PreferenceManager` instead of `SecurePasswordManager`; `BackupManager` always sets `includeSecrets=true` (user controls encryption, not us); `BackupExporter.exportSecrets()` exports connection passwords; `BackupImporter.restoreSecrets()` restores them via `setConnectionPassword()`; `monitoring_default_*_threshold` SeekBarPreference crash fixed (read/write as Int not String); `MonitoringSettingsFragment.sanitizeSeekBarPrefs()` heals existing devices; AI.md §9.4 corrected (cloud_accounts IS synced).
 
 - **`388f57f69a1e`** 🐛 Fix TOFU cert pin not persisting across sessions + PerformanceFragment host pref wipe — `ProxmoxManagerActivity`, `VMwareManagerActivity`, `XCPngManagerActivity` all now update their in-memory profile/hypervisors list with the captured SHA after persisting to DB, so VMConsoleActivity never receives a stale null pin; `PerformanceFragment.onItemSelected` no longer saves null to `perf_last_connection_id` when spinner resets to position 0.
