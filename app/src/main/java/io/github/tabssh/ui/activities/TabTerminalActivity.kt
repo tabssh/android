@@ -1588,7 +1588,10 @@ private fun showSnippetsPickerForActiveTab() {
 
                         // Observe non-fatal warnings (e.g. X11 server not found).
                         // Shown as a one-time Snackbar so as not to block the terminal.
-                        lifecycleScope.launch {
+                        // Cancel any prior collector before launching a new one — prevents
+                        // N parallel collectors accumulating after N successful connects.
+                        warningsJob?.cancel()
+                        warningsJob = lifecycleScope.launch {
                             sshConnection.warnings.collect { message ->
                                 runOnUiThread {
                                     val root = window.decorView.rootView
@@ -2373,6 +2376,14 @@ private fun showSnippetsPickerForActiveTab() {
     private var splitTab: SSHTab? = null
     private var bottomTerminalView: TerminalView? = null
     private var bottomPaneFocused: Boolean = false
+
+    /**
+     * Tracks the coroutine that collects SSH non-fatal warnings for the most
+     * recently connected tab. Cancelled and replaced on every new connect so
+     * only one collector is alive at a time — prevents N parallel collectors
+     * accumulating after N successful connects within a single Activity instance.
+     */
+    private var warningsJob: Job? = null
 
     private fun showSplitConnectionPicker() {
         if (splitTab != null) {
@@ -3391,6 +3402,21 @@ private fun showSnippetsPickerForActiveTab() {
         // back-ref to `this` is broken (memory leak fix).
         tabManagerListener?.let { tabManager.removeListener(it) }
         tabManagerListener = null
+
+        // Cancel the warnings collector so it doesn't outlive the Activity.
+        warningsJob?.cancel()
+        warningsJob = null
+
+        // Disconnect the split-pane tab if the user never tapped "Close split".
+        // The split tab is Activity-scoped (not in the Application TabManager)
+        // so it would leak an open SSH channel if we don't clean it up here.
+        try {
+            splitTab?.disconnect()
+        } catch (e: Exception) {
+            Logger.w("TabTerminalActivity", "Split tab cleanup in onDestroy: ${e.message}")
+        }
+        splitTab = null
+        bottomTerminalView = null
 
         Logger.d("TabTerminalActivity", "Terminal activity destroyed")
 
