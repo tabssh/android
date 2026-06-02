@@ -11,8 +11,22 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface TabSessionDao {
 
+    /**
+     * Returns ALL active sessions as a live Flow with no row cap. Re-emits
+     * the entire table on every [updateSessionContent] call — [terminal_content]
+     * can be 100 KB+. Prefer [getActiveSessionsFlow] for UI observation.
+     * Only use this if you genuinely need every session row with live updates.
+     */
     @Query("SELECT * FROM tab_sessions WHERE is_active = 1 ORDER BY last_activity DESC")
     fun getAllActiveSessions(): Flow<List<TabSession>>
+
+    /**
+     * Live Flow limited to the [limit] most recently active sessions.
+     * Safe for UI observation — re-emits at most [limit] rows per
+     * [updateSessionContent] call.
+     */
+    @Query("SELECT * FROM tab_sessions WHERE is_active = 1 ORDER BY last_activity DESC LIMIT :limit")
+    fun getActiveSessionsFlow(limit: Int = 50): Flow<List<TabSession>>
 
     @Query("SELECT * FROM tab_sessions WHERE tab_id = :tabId LIMIT 1")
     suspend fun getSessionByTabId(tabId: String): TabSession?

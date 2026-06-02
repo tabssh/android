@@ -46,4 +46,13 @@ interface HypervisorDao {
      *  connect to this host is enforced. */
     @Query("UPDATE hypervisors SET pinned_cert_sha256 = :sha WHERE id = :id")
     suspend fun updatePinnedCertSha256(id: Long, sha: String?)
+
+    /**
+     * Orphan-safe connection delete — nullify linked_connection_id for all
+     * hypervisors that reference the deleted ConnectionProfile. Call alongside
+     * connectionDao.deleteConnection() so no hypervisor row is left with a
+     * dangling linked_connection_id.
+     */
+    @Query("UPDATE hypervisors SET linked_connection_id = NULL WHERE linked_connection_id = :connectionId")
+    suspend fun clearLinkedConnectionId(connectionId: String)
 }

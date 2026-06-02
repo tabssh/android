@@ -119,6 +119,9 @@ class ConnectionListViewModel(application: android.app.Application) : androidx.l
         viewModelScope.launch {
             try {
                 connectionDao.deleteConnection(connection)
+                // Clean up orphan soft-FK references left by this connection.
+                database.monitorSlotDao().deleteByConnectionId(connection.id)
+                database.hypervisorDao().clearLinkedConnectionId(connection.id)
                 io.github.tabssh.utils.logging.Logger.i("ConnectionListViewModel", "Deleted connection: ${connection.name}")
             } catch (e: Exception) {
                 io.github.tabssh.utils.logging.Logger.e("ConnectionListViewModel", "Failed to delete connection", e)

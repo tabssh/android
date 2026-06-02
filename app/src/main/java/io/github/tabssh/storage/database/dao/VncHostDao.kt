@@ -36,4 +36,13 @@ interface VncHostDao {
 
     @Query("SELECT COUNT(*) FROM vnc_hosts")
     suspend fun getCount(): Int
+
+    /**
+     * Orphan-safe group delete — nullify group_id for all VNC hosts that
+     * belong to the given group. Call this inside the same transaction that
+     * deletes the ConnectionGroup row so no host is left with a dangling
+     * group_id foreign key.
+     */
+    @Query("UPDATE vnc_hosts SET group_id = NULL WHERE group_id = :groupId")
+    suspend fun nullifyGroupId(groupId: String)
 }

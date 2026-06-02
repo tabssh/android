@@ -445,6 +445,9 @@ class ConnectionsFragment : Fragment() {
                     try {
                         withContext(Dispatchers.IO) {
                             app.database.connectionDao().deleteConnection(connection)
+                            // Clean up orphan soft-FK references left by this connection.
+                            app.database.monitorSlotDao().deleteByConnectionId(connection.id)
+                            app.database.hypervisorDao().clearLinkedConnectionId(connection.id)
                             // clearPassword is suspend + IO-dispatched (KeyStore HAL round-trip).
                             try { app.securePasswordManager.clearPassword(connection.id) } catch (_: Exception) {}
                         }
@@ -523,6 +526,8 @@ class ConnectionsFragment : Fragment() {
                             connections.filter { it.groupId == group.id }.forEach { conn ->
                                 app.database.connectionDao().updateConnection(conn.copy(groupId = null))
                             }
+                            // Nullify group_id on any VNC hosts assigned to this group
+                            app.database.vncHostDao().nullifyGroupId(group.id)
                             // Delete the group row
                             app.database.connectionGroupDao().deleteGroup(group)
                         }
@@ -646,6 +651,9 @@ class ConnectionsFragment : Fragment() {
                         try {
                             withContext(Dispatchers.IO) {
                                 app.database.connectionDao().deleteConnection(c)
+                                // Clean up orphan soft-FK references left by this connection.
+                                app.database.monitorSlotDao().deleteByConnectionId(c.id)
+                                app.database.hypervisorDao().clearLinkedConnectionId(c.id)
                                 // clearPassword is suspend + IO-dispatched (KeyStore HAL round-trip).
                                 // Without IO dispatch, N deletions in a loop = N KeyStore round-trips on Main → ANR.
                                 try { app.securePasswordManager.clearPassword(c.id) } catch (_: Exception) {}

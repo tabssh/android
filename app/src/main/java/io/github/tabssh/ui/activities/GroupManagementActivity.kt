@@ -294,6 +294,9 @@ class GroupManagementActivity : AppCompatActivity() {
                         dao.updateConnection(connection.copy(groupId = null))
                     }
 
+                    // Nullify group_id on any VNC hosts assigned to this group
+                    app.database.vncHostDao().nullifyGroupId(group.id)
+
                     // Delete the group
                     app.database.connectionGroupDao().deleteGroup(group)
                 }

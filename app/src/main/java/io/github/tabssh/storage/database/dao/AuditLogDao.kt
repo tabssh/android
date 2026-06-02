@@ -47,8 +47,22 @@ interface AuditLogDao {
     """)
     suspend fun getRecentSummary(limit: Int = 100): List<AuditLogSummary>
 
+    /**
+     * Returns ALL audit entries as a live Flow with no row cap. Re-emits the
+     * entire table on every insert — with audit logging active this can be
+     * MBs of data per command. Prefer [getRecentAsFlow] for any UI observer.
+     * Only use this for export / backup paths that genuinely need every row.
+     */
     @Query("SELECT * FROM audit_log ORDER BY timestamp DESC")
     fun getAllFlow(): Flow<List<AuditLogEntry>>
+
+    /**
+     * Live Flow limited to the [limit] most recent entries. Safe for UI
+     * observation — re-emits at most [limit] rows per change instead of
+     * the entire table.
+     */
+    @Query("SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT :limit")
+    fun getRecentAsFlow(limit: Int = 100): Flow<List<AuditLogEntry>>
     
     @Query("SELECT * FROM audit_log WHERE timestamp >= :startTime AND timestamp <= :endTime ORDER BY timestamp DESC")
     suspend fun getByTimeRange(startTime: Long, endTime: Long): List<AuditLogEntry>

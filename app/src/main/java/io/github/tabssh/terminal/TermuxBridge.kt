@@ -897,6 +897,13 @@ class TermuxBridge(
         inputStream = null
         outputStream = null
 
+        // If a prior mosh PTY session is still running (e.g. reconnect after
+        // a mosh handoff failure), tear it down before creating a new one.
+        // Without this the old TerminalSession holds an open PTY fd and the
+        // mosh-client child process is never sent SIGHUP.
+        try { moshSession?.finishIfRunning() } catch (_: Exception) {}
+        moshSession = null
+
         val envList = arrayOf(
             "MOSH_KEY=$moshKeyBase64",
             "TERM=xterm-256color",

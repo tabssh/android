@@ -351,6 +351,9 @@ class SyncDataApplier {
         result.deleted.forEach { connectionId ->
             try {
                 database.connectionDao().deleteConnectionById(connectionId)
+                // Clean up orphan soft-FK references left by this connection.
+                database.monitorSlotDao().deleteByConnectionId(connectionId)
+                database.hypervisorDao().clearLinkedConnectionId(connectionId)
                 count++
                 Logger.d(TAG, "Deleted connection: $connectionId")
             } catch (e: Exception) {
