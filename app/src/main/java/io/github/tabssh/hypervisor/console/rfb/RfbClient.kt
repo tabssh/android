@@ -154,6 +154,15 @@ class RfbClient(
      */
     @Volatile private var pendingResizeRejection = false
 
+    /**
+     * Minor version of the RFB protocol agreed with this server during [handshake].
+     * 3 = RFB 3.3 (U32 security type, no SecurityResult for None)
+     * 7 = RFB 3.7 (type list, no SecurityResult for None)
+     * 8 = RFB 3.8 (type list, SecurityResult always present)
+     * Defaults to 8; overwritten during [handshake] from the server's greeting.
+     */
+    private var negotiatedMinor = 8
+
     private var din = DataInputStream(inputStream.buffered(65536))
     private var dout = DataOutputStream(outputStream)
     private val outLock = Any()        // guards all writes to dout
@@ -255,18 +264,37 @@ class RfbClient(
         // Server sends "RFB XXX.YYY\n"
         val serverVersion = ByteArray(12)
         din.readFully(serverVersion)
-        val verStr = String(serverVersion, Charsets.US_ASCII)
-        Logger.i(TAG, "Server RFB version: ${verStr.trim()}")
-        // We respond with 3.8 regardless of what the server offered
+        val verStr = String(serverVersion, Charsets.US_ASCII).trim()
+        Logger.i(TAG, "Server RFB version: $verStr")
+
+        // Parse the server's minor version to handle protocol differences:
+        //   3.3 — server sends U32 security type (no client choice)
+        //   3.7 — client chooses; no SecurityResult after None auth
+        //   3.8 — client chooses; SecurityResult after all auth types
+        // Negotiate the minimum of server's version and 3.8 so legacy servers
+        // see a familiar response while modern servers get full 3.8 features.
+        val serverMinorRaw = verStr.substringAfterLast(".").trimStart('0').toIntOrNull() ?: 8
+        negotiatedMinor = serverMinorRaw.coerceIn(3, 8)
+
+        val response = "RFB 003.%03d\n".format(negotiatedMinor)
         synchronized(outLock) {
-            dout.write(RFB_VERSION.toByteArray(Charsets.US_ASCII))
+            dout.write(response.toByteArray(Charsets.US_ASCII))
             dout.flush()
         }
+        Logger.d(TAG, "Negotiated RFB 3.$negotiatedMinor")
     }
 
     // ── Security ─────────────────────────────────────────────────────────
 
     private fun authenticate() {
+        // RFB 3.3: server selects the security type and sends it as a U32;
+        // the client has no choice. Delegate to authenticateRfb33().
+        if (negotiatedMinor <= 3) {
+            authenticateRfb33()
+            return
+        }
+
+        // RFB 3.7+ : server sends U8 count + list of available types.
         val numTypes = din.readUnsignedByte()
         if (numTypes == 0) {
             val reasonLen = din.readInt()
@@ -279,6 +307,7 @@ class RfbClient(
         Logger.d(TAG, "Security types offered: ${types.map { it.toInt() and 0xFF }}")
 
         // Prefer VeNCrypt (when rawSocket is available), then None, then VNC Auth.
+        // VeNCrypt requires RFB 3.7+, which is already satisfied here.
         val chosen = when {
             types.contains(RfbConstants.SECURITY_VENCRYPT.toByte()) && rawSocket != null ->
                 RfbConstants.SECURITY_VENCRYPT
@@ -295,7 +324,7 @@ class RfbClient(
         synchronized(outLock) { dout.writeByte(chosen); dout.flush() }
 
         when (chosen) {
-            RfbConstants.SECURITY_NONE -> Unit // SecurityResult follows immediately
+            RfbConstants.SECURITY_NONE -> Unit // SecurityResult follows (see below)
 
             RfbConstants.SECURITY_VNC_AUTH -> {
                 // Read 16-byte DES challenge, encrypt with bit-reversed password key.
@@ -311,18 +340,73 @@ class RfbClient(
                 val result = din.readUnsignedByte()
                 if (result != 0) throw Exception("VeNCrypt authentication failed")
                 Logger.d(TAG, "VeNCrypt authentication OK")
-                return // skip the 4-byte SecurityResult block below
+                return // VeNCrypt has its own result; skip the block below
             }
         }
 
-        // SecurityResult (u32): 0 = OK, anything else = failure with reason string
-        val result = din.readInt()
-        if (result != 0) {
-            val reasonLen = din.readInt()
-            val reason = ByteArray(reasonLen); din.readFully(reason)
-            throw Exception("Authentication failed: ${String(reason)}")
+        // SecurityResult (U32): 0 = OK, anything else = failure with reason string.
+        // RFB 3.8: always present (including after None auth).
+        // RFB 3.7: only present for auth types other than None.
+        val expectSecurityResult = negotiatedMinor >= 8 || chosen != RfbConstants.SECURITY_NONE
+        if (expectSecurityResult) {
+            val result = din.readInt()
+            if (result != 0) {
+                val reasonLen = din.readInt()
+                val reason = ByteArray(reasonLen); din.readFully(reason)
+                throw Exception("Authentication failed: ${String(reason)}")
+            }
+            Logger.d(TAG, "Authentication OK")
+        } else {
+            Logger.d(TAG, "Authentication OK (RFB 3.7 None — no SecurityResult)")
         }
-        Logger.d(TAG, "Authentication OK")
+    }
+
+    /**
+     * RFB 3.3 security handshake.
+     *
+     * In protocol version 3.3 the server (not the client) selects the security
+     * type and sends it as a single U32.  The client has no choice; it simply
+     * performs the indicated auth.
+     *
+     * Types defined in RFB 3.3:
+     *   0 — Connection failed; server sends U32 reason-length + reason bytes.
+     *   1 — None; no auth, no SecurityResult.
+     *   2 — VncAuth; 16-byte DES challenge + SecurityResult (U32, 0=OK).
+     */
+    private fun authenticateRfb33() {
+        val secType = din.readInt()
+        Logger.d(TAG, "RFB 3.3 security type: $secType")
+        when (secType) {
+            0 -> {
+                // Connection failed — server reason follows
+                val reasonLen = din.readInt()
+                val reason = if (reasonLen > 0 && reasonLen < 65536) {
+                    ByteArray(reasonLen).also { din.readFully(it) }
+                } else ByteArray(0)
+                throw Exception("Server rejected connection (RFB 3.3): ${String(reason)}")
+            }
+            RfbConstants.SECURITY_NONE -> {
+                // No auth; RFB 3.3 None carries no SecurityResult.
+                Logger.d(TAG, "RFB 3.3 authentication OK (None)")
+            }
+            RfbConstants.SECURITY_VNC_AUTH -> {
+                val challenge = ByteArray(16); din.readFully(challenge)
+                val response = vncDesEncrypt(
+                    vncPassword ?: throw Exception(
+                        "VNC password required for RFB 3.3 VncAuth but none was provided"
+                    ),
+                    challenge
+                )
+                synchronized(outLock) { dout.write(response); dout.flush() }
+                // RFB 3.3 VncAuth does send a U32 SecurityResult.
+                val result = din.readInt()
+                if (result != 0) throw Exception("VNC authentication failed (RFB 3.3)")
+                Logger.d(TAG, "RFB 3.3 VncAuth OK")
+            }
+            else -> throw Exception(
+                "Unsupported RFB 3.3 security type $secType — only None (1) and VncAuth (2) are defined"
+            )
+        }
     }
 
     /**
@@ -918,7 +1002,8 @@ class RfbClient(
                 // Extended clipboard (rfbproto §7.6.4 extension): abs(len) bytes of structured data.
                 // Format: U32 flags + optional sub-fields per flag.
                 // We consume the entire payload and log the flags; no clipboard action taken.
-                val extLen = -len  // always positive; safe since Int.MIN_VALUE is not a valid length
+                // Use Long arithmetic to avoid Int overflow when len == Int.MIN_VALUE.
+                val extLen = (-len.toLong()).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
                 if (extLen >= 4) {
                     val flags = din.readInt()
                     Logger.d(TAG, "ExtendedClipboard flags=0x${flags.toString(16).uppercase()} extLen=$extLen")

@@ -1067,66 +1067,47 @@ class SSHConnection(
 
             val jschBytes = getJSchBytes(effectiveKeyId)
             if (jschBytes != null) {
-                // Track passphrase ByteArray + temp file so we can scrub them
-                // on every exit path (success, exception, or fallback).
+                // Track passphrase ByteArray so we can scrub it on every exit path.
                 var passphraseBytes: ByteArray? = null
-                var tempKeyFile: java.io.File? = null
                 try {
                     Logger.d("SSHConnection", "Auth: JSch bytes retrieved, size=${jschBytes.size} bytes")
                     passphraseBytes = cachedPassphrase?.toByteArray()
 
                     // Wave 2.2 — if an OpenSSH user certificate is attached to this
-                    // key, use the byte-array variant of addIdentity so we can pass
-                    // the cert as the public-key portion. Server validates against
-                    // the CA-signed cert instead of the bare key.
+                    // key, pass the cert PEM as the public-key portion so the server
+                    // validates against the CA-signed cert instead of the bare key.
                     val storedKeyForCert = app?.database?.keyDao()?.getKeyById(effectiveKeyId)
                     val cert = storedKeyForCert?.certificate?.takeIf { it.isNotBlank() }
+                    val pubKeyBytes: ByteArray? = cert?.toByteArray(Charsets.US_ASCII)
+
+                    // Use the byte-array addIdentity variant for both the cert and no-cert
+                    // paths. This eliminates the cacheDir temp file that was previously
+                    // written for the no-cert case. The cert path has exercised this
+                    // variant in production since Wave 2.2, confirming JSch 2.27.7
+                    // handles it correctly on all supported Android versions.
+                    jsch.addIdentity(
+                        "tabssh-$effectiveKeyId",
+                        jschBytes,
+                        pubKeyBytes,
+                        passphraseBytes
+                    )
                     if (cert != null) {
-                        jsch.addIdentity(
-                            "tabssh-$effectiveKeyId",
-                            jschBytes,
-                            cert.toByteArray(Charsets.US_ASCII),
-                            passphraseBytes
-                        )
                         Logger.i("SSHConnection", "Auth: SSH key + certificate added to JSch (keyId=$effectiveKeyId, cert=${cert.length} bytes)")
-                        return@withContext
+                    } else {
+                        Logger.i("SSHConnection", "Auth: SSH key added to JSch (keyId=$effectiveKeyId)")
                     }
-
-                    // No cert — preserve existing temp-file path (byte-array variant has Linux quirks).
-                    tempKeyFile = java.io.File(context.cacheDir, "temp_key_$effectiveKeyId")
-                    tempKeyFile.writeBytes(jschBytes)
-                    Logger.d("SSHConnection", "Auth: Wrote key to temp file: ${tempKeyFile.absolutePath}")
-
-                    jsch.addIdentity(tempKeyFile.absolutePath, passphraseBytes)
-                    Logger.i("SSHConnection", "Auth: SSH key added to JSch from file (keyId=$effectiveKeyId)")
                     return@withContext
                 } catch (e: Exception) {
                     Logger.e("SSHConnection", "Auth: Failed to add SSH key to JSch", e)
                     // Fall through to password auth
                 } finally {
-                    // Zero the plaintext jschBytes — JSch has already parsed
-                    // and copied what it needs (or the addIdentity call failed
-                    // and we're not using it anyway). Leaving the array in the
-                    // heap extends the window an attacker has to scrape SSH
-                    // private-key material from a memory dump.
+                    // Zero the plaintext jschBytes and passphrase — JSch has already
+                    // parsed and copied what it needs (or the addIdentity call failed
+                    // and we're not using them). Leaving plaintext key material on the
+                    // heap extends the window an attacker has to scrape it from a
+                    // memory dump.
                     jschBytes.fill(0)
                     passphraseBytes?.fill(0)
-                    // Best-effort secure delete: overwrite then delete. The
-                    // delete() alone only unlinks the inode; the key bytes
-                    // remain in any block reused by the next caller until
-                    // overwritten. Overwriting in place is a cheap mitigation
-                    // and avoids the gap with flash-translation-layer wear-
-                    // levelling (which we can't fully defeat anyway).
-                    tempKeyFile?.let { f ->
-                        try {
-                            if (f.exists()) {
-                                val len = f.length().toInt().coerceAtLeast(0)
-                                if (len > 0) f.writeBytes(ByteArray(len))
-                            }
-                        } catch (_: Exception) {}
-                        try { f.delete() } catch (_: Exception) {}
-                        Logger.d("SSHConnection", "Auth: Temp key file overwritten and deleted")
-                    }
                 }
             } else {
                 // Key ID is set on the profile/identity but doesn't resolve to

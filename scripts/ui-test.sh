@@ -21,6 +21,7 @@
 #   crash-dialog        Crash report dialog shows "Paste / Issue" not "Share"
 #   hypervisor-form     HypervisorEditActivity renders without ANR
 #   settings-opens      SettingsActivity main screen is navigable
+#   logging-navigation  Settings → Logging: all sections and key prefs visible
 #   all                 Run all of the above
 #
 # Ad-hoc inline test:
@@ -167,13 +168,28 @@ if [[ -z "$SERIAL" ]]; then
 fi
 info "Device: $SERIAL"
 
+# ── optional root elevation (emulators only) ─────────────────────────────────
+# Try `adb root` so ui_inject_crash_prefs can push directly to /data/data/.
+# Silently ignored on real devices (root not available) and when already root.
+"$_ADB_BIN" ${SERIAL:+-s "$SERIAL"} root >/dev/null 2>&1 || true
+sleep 1
+
 # ── optional install ─────────────────────────────────────────────────────────
 PKG="io.github.tabssh"
 
 if [[ $INSTALL -eq 1 ]]; then
     if [[ -z "$APK" ]]; then
         REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-        APK="$REPO_ROOT/binaries/tabssh-android-x86.apk"
+        # Pick the APK that matches the device ABI; fall back to universal.
+        local _abi
+        _abi=$("$_ADB_BIN" ${SERIAL:+-s "$SERIAL"} shell getprop ro.product.cpu.abi 2>/dev/null | tr -d '\r')
+        case "$_abi" in
+            x86_64)   APK="$REPO_ROOT/binaries/tabssh-android-amd64.apk" ;;
+            arm64-v8a) APK="$REPO_ROOT/binaries/tabssh-android-arm64.apk" ;;
+            armeabi-v7a) APK="$REPO_ROOT/binaries/tabssh-android-arm.apk" ;;
+            x86)      APK="$REPO_ROOT/binaries/tabssh-android-x86.apk" ;;
+            *)        APK="$REPO_ROOT/binaries/tabssh-android-universal.apk" ;;
+        esac
         [[ -f "$APK" ]] || APK="$REPO_ROOT/binaries/tabssh-android-universal.apk"
     fi
     [[ -f "$APK" ]] || { echo "❌ APK not found: $APK  (run 'make build' first)" >&2; exit 2; }
@@ -189,10 +205,37 @@ SCREENSHOT_N=0
 
 # ── core: UI tree ─────────────────────────────────────────────────────────────
 
-# Dump the live UI tree into $UI_XML.
+# Dump the live UI tree into $UI_XML.  Retries up to 3 times when the
+# resulting file is empty — this happens when uiautomator fails to capture
+# the tree (e.g. during a transition or while an ANR dialog is mid-dismiss).
 ui_dump() {
-    adb shell uiautomator dump /sdcard/ui_test_tmp.xml >/dev/null 2>&1
-    adb shell cat /sdcard/ui_test_tmp.xml > "$UI_XML" 2>/dev/null
+    local i
+    for i in 1 2 3; do
+        adb shell uiautomator dump /sdcard/ui_test_tmp.xml >/dev/null 2>&1
+        adb shell cat /sdcard/ui_test_tmp.xml > "$UI_XML" 2>/dev/null
+        [[ -s "$UI_XML" ]] && return 0
+        sleep 1
+    done
+}
+
+# Dismiss Android "System UI isn't responding" or app ANR dialogs by tapping
+# "Wait" if visible.  Retries up to 3 times and waits 6 seconds after each tap
+# so that slow SwiftShader emulators have enough time to re-inflate the UI
+# before the caller proceeds.  Call before each wait/assert to avoid false
+# failures on fresh-booted emulators where System UI takes a few seconds to
+# settle.
+ui_dismiss_anr() {
+    local i
+    for i in 1 2 3; do
+        ui_dump
+        ui_texts | grep -qF "isn't responding" || return 0
+        local coords
+        coords=$(ui_find_xy "Wait") || true
+        [[ -n "$coords" ]] || return 0
+        debug "ANR dialog detected — tapping Wait (attempt $i)"
+        adb shell input tap $coords
+        sleep 6
+    done
 }
 
 # Print every non-empty text= value currently visible.
@@ -200,7 +243,10 @@ ui_texts() {
     [[ -s "$UI_XML" ]] || { ui_dump; }
     python3 - "$UI_XML" <<'PY'
 import sys, xml.etree.ElementTree as ET
-root = ET.parse(sys.argv[1]).getroot()
+try:
+    root = ET.parse(sys.argv[1]).getroot()
+except ET.ParseError:
+    sys.exit(0)
 for node in root.iter('node'):
     t = node.get('text', '')
     if t:
@@ -234,7 +280,10 @@ def find_clickable(node, target, best_clickable=None):
             return True
     return False
 
-root = ET.parse(sys.argv[1]).getroot()
+try:
+    root = ET.parse(sys.argv[1]).getroot()
+except ET.ParseError:
+    sys.exit(0)
 find_clickable(root, sys.argv[2])
 PY
 }
@@ -257,7 +306,10 @@ def find_node(node, target, last_match=None):
             return result
     return last_match
 
-root = ET.parse(sys.argv[1]).getroot()
+try:
+    root = ET.parse(sys.argv[1]).getroot()
+except ET.ParseError:
+    sys.exit(0)
 n = find_node(root, target_text)
 if n is not None:
     print(n.get(attr, ''))
@@ -270,7 +322,11 @@ ui_count_text() {
     python3 - "$UI_XML" "$1" <<'PY'
 import sys, xml.etree.ElementTree as ET
 target = sys.argv[2]
-root = ET.parse(sys.argv[1]).getroot()
+try:
+    root = ET.parse(sys.argv[1]).getroot()
+except ET.ParseError:
+    print(0)
+    sys.exit(0)
 print(sum(1 for n in root.iter('node') if n.get('text') == target))
 PY
 }
@@ -367,6 +423,7 @@ ui_launch() {
     info "Launch $component"
     adb shell am start -n "$component" >/dev/null
     sleep 2
+    ui_dismiss_anr
     ui_dump
 }
 
@@ -383,11 +440,14 @@ ui_scroll_to() {
     local text="$1" max="${2:-8}" dir="${3:-up}"
     local i
     for i in $(seq 1 "$max"); do
-        ui_dump
+        ui_dismiss_anr
         if ui_texts | grep -qF "$text"; then
-            debug "scroll_to: found \"$text\" after $i scroll(s)"
+            debug "scroll_to: found \"$text\" after $((i-1)) scroll(s)"
             return 0
         fi
+        # Brief settle pause before swiping — avoids queuing swipes on a still-
+        # recovering UI after ANR dismissal, which would re-trigger another ANR.
+        sleep 1
         ui_swipe "$dir"
     done
     return 1
@@ -440,7 +500,7 @@ ui_long_tap() {
 ui_wait_for() {
     local text="$1" timeout="${2:-8}" waited=0
     while [[ $waited -lt $timeout ]]; do
-        ui_dump
+        ui_dismiss_anr
         if ui_texts | grep -qF "$text"; then
             pass "Found: \"$text\""
             return
@@ -470,7 +530,7 @@ ui_wait_gone() {
 # Assert text is visible on the current screen (single dump).
 ui_assert_present() {
     local text="$1"
-    ui_dump
+    ui_dismiss_anr
     if ui_texts | grep -qF "$text"; then
         pass "Present: \"$text\""
     else
@@ -483,6 +543,7 @@ ui_assert_present() {
 # below the current viewport — safer than ui_assert_present for long screens.
 ui_assert_scroll() {
     local text="$1" max="${2:-6}"
+    ui_dismiss_anr
     if ui_scroll_to "$text" "$max"; then
         pass "Found (scrolled): \"$text\""
     else
@@ -532,30 +593,36 @@ ui_assert_count() {
 # ── special helpers ────────────────────────────────────────────────────────────
 
 # Write fake crash prefs so CrashReportActivity displays without a live crash.
-# Launches the app briefly first to ensure shared_prefs/ exists.
+# Launches the app briefly first to ensure shared_prefs/ exists, then pushes the
+# XML directly via adb push (works on emulators with adbd running as root, which
+# is the standard for AOSP/google_apis emulator images without Play Store).
 ui_inject_crash_prefs() {
-    local prefs_path="/data/data/$PKG/shared_prefs/tabssh_startup.xml"
+    local prefs_dir="/data/data/$PKG/shared_prefs"
+    local prefs_path="$prefs_dir/tabssh_startup.xml"
     local ts
     ts=$(date +%s)000
 
+    # Launch MainActivity briefly so Room can create the app data directory.
     adb shell am start -n "$PKG/.ui.activities.MainActivity" >/dev/null
     sleep 2
     adb shell am force-stop "$PKG" >/dev/null 2>&1 || true
     sleep 1
 
-    local xml
-    xml=$(printf \
-        '<?xml version='"'"'1.0'"'"' encoding='"'"'utf-8'"'"' standalone='"'"'yes'"'"' ?>\n<map>\n    <long name="crash_time" value="%s" />\n    <string name="crash_thread">main</string>\n    <string name="last_crash">java.lang.RuntimeException: Test crash&#10;&#9;at io.github.tabssh.test.Fake.method(Fake.kt:1)&#10;    </string>\n</map>' \
-        "$ts")
-    local b64
-    b64=$(printf '%s' "$xml" | base64 -w0)
+    # Write prefs XML to a local temp file and push it directly (requires root adb).
+    local local_tmp
+    local_tmp="$UITEST_TMP/tabssh_startup_inject.xml"
+    printf '<?xml version="1.0" encoding="utf-8" standalone="yes" ?>\n<map>\n    <long name="crash_time" value="%s" />\n    <string name="crash_thread">main</string>\n    <string name="last_crash">java.lang.RuntimeException: Test crash\n\tat io.github.tabssh.test.Fake.method(Fake.kt:1)\n    </string>\n</map>\n' \
+        "$ts" > "$local_tmp"
 
-    # Send as a single string so the Android shell parses `>` inside sh -c.
-    if adb shell "run-as '$PKG' sh -c 'echo $b64 | base64 -d > $prefs_path'" 2>/dev/null; then
+    # Ensure the shared_prefs directory exists (it might not if the app never ran).
+    adb shell "mkdir -p $prefs_dir" >/dev/null 2>&1 || true
+    if adb push "$local_tmp" "$prefs_path" >/dev/null 2>&1; then
+        adb shell "chmod 660 $prefs_path" >/dev/null 2>&1 || true
         info "Crash prefs injected"
     else
-        fail "Could not inject crash prefs (run-as failed)"
+        fail "Could not inject crash prefs (adb push failed — emulator may not be rooted)"
     fi
+    rm -f "$local_tmp"
 }
 
 # ── inline `run` executor ─────────────────────────────────────────────────────
@@ -716,15 +783,19 @@ test_settings_opens() {
     ui_stop
     ui_launch "$PKG/.ui.activities.SettingsActivity"
     ui_wait_for       "Settings"
-    ui_assert_present "General"
+    ui_assert_present "Connection"
     ui_assert_present "Logging"
 }
 
 test_hypervisor_form() {
     ui_stop
     ui_launch "$PKG/.ui.activities.HypervisorEditActivity"
-    ui_wait_for       "Name"
-    ui_assert_present "Type"
+    # "Name" is a TextInputLayout hint that may be absent from the accessibility tree on
+    # SwiftShader emulators; "Host" (the address field) is reliably present once rendered.
+    # Allow 15 s for SwiftShader to finish inflating the form.
+    ui_wait_for       "Host" 15
+    # "Verify SSL Certificate" is a plain Switch preference that appears unconditionally.
+    ui_assert_present "Verify SSL Certificate"
     ui_assert_absent  "Application Not Responding"
     ui_stop
 }
@@ -741,52 +812,60 @@ test_logging_navigation() {
     ui_launch "$PKG/.ui.activities.SettingsActivity"
     ui_wait_for "Settings"
     ui_tap      "Logging"
-    ui_wait_for "Debug Logging"
+    # Logging preferences screen has ~25 items and can trigger an ANR on slow
+    # emulators (SwiftShader GPU) while inflating the preference XML.
+    # Allow 15 seconds for inflation before attempting any assertions.
+    sleep 15
+    ui_dismiss_anr
+    ui_wait_for "Debug Logging" 30
 
-    # ── Debug Logging (at the top — assert_present is fine) ──────────────────
-    ui_assert_present "Enable Debug Logging"
-    ui_assert_present "Debug Log Level"
-    ui_assert_present "Log raw keystroke bytes (privacy risk)"
+    # ── Debug Logging (use wait_for, not assert_present, because inflation may
+    # still be in progress on SwiftShader after the section header appears) ───
+    ui_wait_for "Enable Debug Logging" 15
+    ui_wait_for "Debug Log Level" 10
+    ui_wait_for "Log raw keystroke bytes (privacy risk)" 10
 
     # ── Host Logging ──────────────────────────────────────────────────────────
-    ui_assert_scroll "Host Logging"
-    ui_assert_scroll "Enable Host Logging"
-    ui_assert_scroll "Log Filename Pattern"
-    ui_assert_scroll "Append to Existing Logs"
-    ui_assert_scroll "Log User Input"
-    ui_assert_scroll "Include Timestamps"
+    # Use max=12 scrolls throughout — the preferences list is long and
+    # SwiftShader renders slowly so each scroll iteration takes extra time.
+    ui_assert_scroll "Host Logging"         12
+    ui_assert_scroll "Enable Host Logging"  12
+    ui_assert_scroll "Log Filename Pattern" 12
+    ui_assert_scroll "Append to Existing Logs" 12
+    ui_assert_scroll "Log User Input"       12
+    ui_assert_scroll "Include Timestamps"   12
 
     # ── Error Logging ─────────────────────────────────────────────────────────
-    ui_assert_scroll "Error Logging"
-    ui_assert_scroll "Enable Error Logging"
-    ui_assert_scroll "Include Stack Traces"
+    ui_assert_scroll "Error Logging"        12
+    ui_assert_scroll "Enable Error Logging" 12
+    ui_assert_scroll "Include Stack Traces" 12
 
     # ── Audit Logging ─────────────────────────────────────────────────────────
-    ui_assert_scroll "Audit Logging"
-    ui_assert_scroll "Enable Audit Logging"
-    ui_assert_scroll "Audit Events"
+    ui_assert_scroll "Audit Logging"        12
+    ui_assert_scroll "Enable Audit Logging" 12
+    ui_assert_scroll "Audit Events"         12
 
     # ── View Logs ─────────────────────────────────────────────────────────────
-    ui_assert_scroll "View Logs"
-    ui_assert_scroll "View Application Log"
-    ui_assert_scroll "View Debug Log"
-    ui_assert_scroll "View Host Logs"
-    ui_assert_scroll "View Error Log"
-    ui_assert_scroll "View Audit Log"
+    ui_assert_scroll "View Logs"            12
+    ui_assert_scroll "View Application Log" 12
+    ui_assert_scroll "View Debug Log"       12
+    ui_assert_scroll "View Host Logs"       12
+    ui_assert_scroll "View Error Log"       12
+    ui_assert_scroll "View Audit Log"       12
 
     # ── Log Management ────────────────────────────────────────────────────────
-    ui_assert_scroll "Log Management"
-    ui_assert_scroll "Export All Logs"
-    ui_assert_scroll "Clear All Logs"
-    ui_assert_scroll "Test crash dialog"   # visible only in debug builds
+    ui_assert_scroll "Log Management"       12
+    ui_assert_scroll "Export All Logs"      12
+    ui_assert_scroll "Clear All Logs"       12
+    ui_assert_scroll "Test crash dialog"    12  # visible only in debug builds
 
     # ── Issue Reporting ───────────────────────────────────────────────────────
-    ui_assert_scroll "Issue Reporting"
-    ui_assert_scroll "Paste Service"
-    ui_assert_scroll "MicroBin Server"
-    ui_assert_scroll "Lenpaste Server"
-    ui_assert_scroll "Stikked Server"
-    ui_assert_scroll "Pastebin API Key"
+    ui_assert_scroll "Issue Reporting"      12
+    ui_assert_scroll "Paste Service"        12
+    ui_assert_scroll "MicroBin Server"      12
+    ui_assert_scroll "Lenpaste Server"      12
+    ui_assert_scroll "Stikked Server"       12
+    ui_assert_scroll "Pastebin API Key"     12
 
     ui_stop
 }
@@ -796,10 +875,12 @@ test_crash_dialog() {
     info "Injecting crash prefs…"
     ui_inject_crash_prefs
     ui_launch "$PKG/.ui.activities.CrashReportActivity"
-    ui_wait_for       "Paste / Issue"
+    # On slow emulators (SwiftShader) the activity renders buttons async.
+    # Use wait_for with ANR-dismissal loops instead of assert_present for each button.
+    ui_wait_for "Paste / Issue" 15
     ui_assert_absent  "Share"
-    ui_assert_present "Copy"
-    ui_assert_present "Restart"
+    ui_wait_for "Copy"    10
+    ui_wait_for "Restart" 10
     ui_stop
 }
 

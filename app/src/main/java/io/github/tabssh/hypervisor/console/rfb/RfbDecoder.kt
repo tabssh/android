@@ -277,12 +277,17 @@ class RfbDecoder(private val fmt: PixelFormat) {
         try {
             while (totalOut < expectedSize) {
                 val n = zlibInflater.inflate(plain, totalOut, expectedSize - totalOut)
-                if (n == 0) break
+                // Break only when no output was produced AND all input is consumed.
+                // Java's zlib returns inflate()=0 with needsInput()=false on a
+                // Z_BUF_ERROR when it can't make progress — same as ZRLE/Tight.
+                // Looping gives zlib another chance to emit pending output.
+                if (n == 0 && zlibInflater.needsInput()) break
                 totalOut += n
             }
         } catch (e: DataFormatException) {
-            Logger.w(TAG, "ZLIB inflate error — resetting: ${e.message}")
-            zlibInflater.reset()
+            // Continuous ZLIB stream is permanently broken — propagate so the
+            // session terminates cleanly rather than rendering garbage pixels.
+            throw java.io.IOException("ZLIB decompression error: ${e.message}", e)
         }
 
         for (row in 0 until h) {
@@ -310,7 +315,14 @@ class RfbDecoder(private val fmt: PixelFormat) {
         din.readFully(compBuf)
 
         zrleInflater.setInput(compBuf, 0, compLen)
-        val plain = inflateAll(zrleInflater)
+        val plain = try {
+            inflateAll(zrleInflater)
+        } catch (e: java.util.zip.DataFormatException) {
+            // The continuous ZRLE zlib stream is permanently corrupted.
+            // Wrap with a clear message so the UI shows "ZRLE decompression
+            // error" instead of an opaque DataFormatException detail string.
+            throw java.io.IOException("ZRLE decompression error: ${e.message}", e)
+        }
         val src = java.io.ByteArrayInputStream(plain)
 
         val cp = fmt.cpixelBytes
@@ -329,7 +341,7 @@ class RfbDecoder(private val fmt: PixelFormat) {
                     sub == 0 -> {
                         // Raw tile: CPixel per pixel
                         val rawBuf = ByteArray(tileW * tileH * cp)
-                        src.read(rawBuf)
+                        readFullyFrom(src, rawBuf)
                         var idx = 0
                         for (row in 0 until tileH) {
                             val base = (ty + row) * fbW + tx
@@ -341,7 +353,7 @@ class RfbDecoder(private val fmt: PixelFormat) {
                     }
                     sub == 1 -> {
                         // Solid tile: single CPixel
-                        src.read(cpBuf)
+                        readFullyFrom(src, cpBuf)
                         fillRect(fb, fbW, tx, ty, tileW, tileH, fmt.cpixelToArgb(cpBuf))
                     }
                     sub in 2..16 -> {
@@ -349,7 +361,7 @@ class RfbDecoder(private val fmt: PixelFormat) {
                         val paletteSize = sub
                         val palette = IntArray(paletteSize)
                         val pb = ByteArray(cp)
-                        for (i in 0 until paletteSize) { src.read(pb); palette[i] = fmt.cpixelToArgb(pb) }
+                        for (i in 0 until paletteSize) { readFullyFrom(src, pb); palette[i] = fmt.cpixelToArgb(pb) }
                         val bitsPerIdx = when {
                             paletteSize <= 2 -> 1
                             paletteSize <= 4 -> 2
@@ -361,9 +373,12 @@ class RfbDecoder(private val fmt: PixelFormat) {
                             var col = 0
                             while (col < tileW) {
                                 val b = src.read()
+                                if (b < 0) throw java.io.EOFException("ZRLE packed-palette row byte exhausted")
                                 var shift = 8 - bitsPerIdx
                                 while (shift >= 0 && col < tileW) {
-                                    fb[base + col] = palette[(b ushr shift) and mask]
+                                    // Guard against out-of-range indices (undefined per spec).
+                                    val pidx = (b ushr shift) and mask
+                                    if (pidx < paletteSize) fb[base + col] = palette[pidx]
                                     col++
                                     shift -= bitsPerIdx
                                 }
@@ -374,11 +389,15 @@ class RfbDecoder(private val fmt: PixelFormat) {
                         // Plain RLE
                         var pixelsLeft = tileW * tileH
                         while (pixelsLeft > 0) {
-                            src.read(cpBuf)
+                            readFullyFrom(src, cpBuf)
                             val argb = fmt.cpixelToArgb(cpBuf)
                             var runLen = 1
-                            var b: Int
-                            do { b = src.read(); runLen += b } while (b == 255)
+                            var rlb: Int
+                            do {
+                                rlb = src.read()
+                                if (rlb < 0) throw java.io.EOFException("ZRLE plain-RLE run-length exhausted")
+                                runLen += rlb
+                            } while (rlb == 255)
                             val pixels = minOf(runLen, pixelsLeft)
                             writeRunToFb(fb, fbW, tx, ty, tileW, tileH,
                                 tileW * tileH - pixelsLeft, argb, pixels)
@@ -390,14 +409,23 @@ class RfbDecoder(private val fmt: PixelFormat) {
                         val paletteSize = sub - 128
                         val palette = IntArray(paletteSize)
                         val pb = ByteArray(cp)
-                        for (i in 0 until paletteSize) { src.read(pb); palette[i] = fmt.cpixelToArgb(pb) }
+                        for (i in 0 until paletteSize) { readFullyFrom(src, pb); palette[i] = fmt.cpixelToArgb(pb) }
                         var pixelsLeft = tileW * tileH
                         while (pixelsLeft > 0) {
                             val idxByte = src.read()
-                            val argb = palette[idxByte and 0x7F]
+                            if (idxByte < 0) throw java.io.EOFException("ZRLE palette-RLE index byte exhausted")
+                            val paletteIdx = idxByte and 0x7F
+                            if (paletteIdx >= paletteSize) throw java.io.IOException(
+                                "ZRLE palette-RLE index $paletteIdx out of range (palette size $paletteSize)"
+                            )
+                            val argb = palette[paletteIdx]
                             val runLen = if (idxByte and 0x80 != 0) {
-                                var r = 1; var b: Int
-                                do { b = src.read(); r += b } while (b == 255)
+                                var r = 1; var rlb: Int
+                                do {
+                                    rlb = src.read()
+                                    if (rlb < 0) throw java.io.EOFException("ZRLE palette-RLE run-length exhausted")
+                                    r += rlb
+                                } while (rlb == 255)
                                 r
                             } else 1
                             val pixels = minOf(runLen, pixelsLeft)
@@ -688,6 +716,24 @@ class RfbDecoder(private val fmt: PixelFormat) {
     }
 
     /**
+     * Read exactly [buf].size bytes from [src] into [buf].
+     * Unlike [java.io.InputStream.read], this is guaranteed to fill the buffer
+     * or throw [java.io.EOFException] if the stream is exhausted first.
+     * Used for ZRLE decompressed-data reads where a short read means
+     * the server sent a malformed compressed payload.
+     */
+    private fun readFullyFrom(src: java.io.InputStream, buf: ByteArray) {
+        var off = 0
+        while (off < buf.size) {
+            val n = src.read(buf, off, buf.size - off)
+            if (n < 0) throw java.io.EOFException(
+                "ZRLE stream exhausted: need ${buf.size} bytes, got $off"
+            )
+            off += n
+        }
+    }
+
+    /**
      * Compact-length integer used by the Tight encoding.
      * Reads 1–3 bytes; MSB of each byte signals "more bytes follow".
      */
@@ -722,27 +768,37 @@ class RfbDecoder(private val fmt: PixelFormat) {
         )
         val compData = ByteArray(compLen)
         din.readFully(compData)
-        return inflateTight(streamIdx, compData, dataSize)
+        return try {
+            inflateTight(streamIdx, compData, dataSize)
+        } catch (e: java.util.zip.DataFormatException) {
+            // Tight zlib stream is permanently corrupted — propagate so the
+            // session terminates cleanly with a clear error message.
+            throw java.io.IOException(
+                "Tight stream $streamIdx decompression error: ${e.message}", e
+            )
+        }
     }
 
     /**
      * Inflate [compData] using Tight stream [streamIdx] into a buffer of exactly
      * [expectedSize] bytes. The stream is persistent (not reset here).
+     *
+     * Throws [java.util.zip.DataFormatException] on corrupt data. The caller
+     * ([readTightData]) wraps this as [java.io.IOException] with a clear message.
+     * Tight streams are indexed by stream 0–3; a corrupt stream permanently
+     * invalidates the session — do NOT reset and continue silently.
      */
+    @Throws(java.util.zip.DataFormatException::class)
     private fun inflateTight(streamIdx: Int, compData: ByteArray, expectedSize: Int): ByteArray {
         val inflater = tightInflaters[streamIdx]
         inflater.setInput(compData)
         val out = ByteArray(expectedSize)
         var totalOut = 0
-        try {
-            while (totalOut < expectedSize) {
-                val n = inflater.inflate(out, totalOut, expectedSize - totalOut)
-                if (n == 0) break
-                totalOut += n
-            }
-        } catch (e: DataFormatException) {
-            Logger.w(TAG, "Tight inflate error (stream $streamIdx) — resetting: ${e.message}")
-            inflater.reset()
+        while (totalOut < expectedSize) {
+            val n = inflater.inflate(out, totalOut, expectedSize - totalOut)
+            // Same Z_BUF_ERROR guard as inflateAll / decodeZlib.
+            if (n == 0 && inflater.needsInput()) break
+            totalOut += n
         }
         return out
     }
@@ -750,22 +806,32 @@ class RfbDecoder(private val fmt: PixelFormat) {
     /**
      * Inflate all pending input from [inflater] into a fresh byte array.
      * Doubles the output buffer as needed.
+     *
+     * DataFormatException is intentionally NOT caught here.  ZRLE and ZLIB
+     * both use a continuous zlib stream across the connection lifetime; once
+     * that stream is corrupted the inflater state is permanently invalid and
+     * there is no safe recovery.  Catching the exception, resetting the
+     * inflater, and returning partial output only causes a confusing
+     * downstream "ZRLE stream exhausted" error one call later.  Letting the
+     * exception propagate causes runProtocol() to terminate the session
+     * immediately with a clear error message and a clean state.
      */
+    @Throws(java.util.zip.DataFormatException::class)
     private fun inflateAll(inflater: Inflater): ByteArray {
         var outBuf = ByteArray(maxOf(zrleBuf.size, 4096))
         var totalOut = 0
-        try {
-            while (true) {
-                if (totalOut >= outBuf.size) outBuf = outBuf.copyOf(outBuf.size * 2)
-                val n = inflater.inflate(outBuf, totalOut, outBuf.size - totalOut)
-                totalOut += n
-                // inflate() returns 0 only when needsInput() or finished() —
-                // the output buffer has space (expanded above), so 0 means done.
-                if (n == 0) break
-            }
-        } catch (e: DataFormatException) {
-            Logger.w(TAG, "ZRLE inflate error — resetting stream: ${e.message}")
-            inflater.reset()
+        while (true) {
+            if (totalOut >= outBuf.size) outBuf = outBuf.copyOf(outBuf.size * 2)
+            val n = inflater.inflate(outBuf, totalOut, outBuf.size - totalOut)
+            totalOut += n
+            // Break only when no output was produced AND all input is consumed.
+            // Java's zlib can return inflate()=0 with needsInput()=false on a
+            // Z_BUF_ERROR signal (no progress despite available space), which
+            // happens mid-stream when the compressor hasn't flushed a complete
+            // block yet.  Looping gives zlib another chance to emit the pending
+            // output rather than returning a short buffer that causes "ZRLE
+            // stream exhausted" on the tile parser.
+            if (n == 0 && inflater.needsInput()) break
         }
         return outBuf.copyOf(totalOut)
     }
