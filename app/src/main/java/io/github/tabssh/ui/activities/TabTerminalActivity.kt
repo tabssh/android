@@ -18,6 +18,7 @@ import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flowOn
 import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.ui.adapters.TerminalPagerAdapter
@@ -110,12 +111,6 @@ class TabTerminalActivity : AppCompatActivity() {
     // setupTabManager() for the construction site and the leak rationale.
     private var tabManagerListener: TabManagerListener? = null
 
-    // OnGlobalLayoutListener for IME-visibility tracking. Held as a field
-    // (not anonymous-inline) so onDestroy can remove it. Without removal
-    // the listener fires for every layout pass after the activity dies
-    // AND its lambda captures `this@TabTerminalActivity`, preventing GC.
-    private var keyboardLayoutListener: android.view.ViewTreeObserver.OnGlobalLayoutListener? = null
-
     // UI components
     private var terminalView: TerminalView? = null
     private var viewPager: ViewPager2? = null
@@ -184,21 +179,12 @@ class TabTerminalActivity : AppCompatActivity() {
         handleIntent(intent)
     }
 
-    // Track if keyboard is visible for back button handling
-    private var isKeyboardVisible = false
-
     private fun setupBackPressHandler() {
-        // Listen for keyboard visibility changes
-        val rootView = window.decorView.rootView
-        keyboardLayoutListener = android.view.ViewTreeObserver.OnGlobalLayoutListener {
-            val rect = android.graphics.Rect()
-            rootView.getWindowVisibleDisplayFrame(rect)
-            val screenHeight = rootView.height
-            val keypadHeight = screenHeight - rect.bottom
-            isKeyboardVisible = keypadHeight > screenHeight * 0.15
-        }
-        rootView.viewTreeObserver.addOnGlobalLayoutListener(keyboardLayoutListener)
-
+        // BACK handler reads IME visibility via WindowInsetsCompat at
+        // press-time (see handleBackToMainActivity). An earlier
+        // OnGlobalLayoutListener that mirrored IME state into a field
+        // was removed — the field was never read, and the listener fired
+        // on every layout pass while the activity was alive.
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 Logger.i("TabTerminalActivity", "BACK pressed — handler invoked")
@@ -256,46 +242,6 @@ class TabTerminalActivity : AppCompatActivity() {
         finish()
     }
 
-    private fun hideKeyboard() {
-        val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
-        currentFocus?.let { view ->
-            imm.hideSoftInputFromWindow(view.windowToken, 0)
-        }
-    }
-
-    /**
-     * Show dialog when back button is pressed with active connections
-     * Options: Stay, Go Home (keep connections), Close All
-     */
-    private fun showBackOptionsDialog() {
-        val activeCount = tabManager.getTabCount()
-        val connectedCount = tabManager.getAllTabs().count { it.isConnected() }
-
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Active Sessions: $activeCount ($connectedCount connected)")
-            .setItems(arrayOf(
-                "📱 Go to Home (keep connections running)",
-                "❌ Close all connections and exit",
-                "↩️ Stay in terminal"
-            )) { _, which ->
-                when (which) {
-                    0 -> {
-                        // Go to home without closing connections
-                        Logger.i("TabTerminalActivity", "User chose to go home, keeping $activeCount connections")
-                        moveTaskToBack(true)
-                    }
-                    1 -> {
-                        // Close all and exit
-                        Logger.i("TabTerminalActivity", "User chose to close all $activeCount connections")
-                        disconnectAllTabs()
-                        finish()
-                    }
-                    // 2 = Stay, just dismiss dialog (do nothing)
-                }
-            }
-            .show()
-    }
-    
     private fun setupToolbar() {
         setSupportActionBar(binding.toolbar)
         supportActionBar?.apply {
@@ -496,9 +442,16 @@ class TabTerminalActivity : AppCompatActivity() {
         // (the primary menu entry is the ☰ key there). Edge tap on the
         // top-left reveals the FAB for 3 seconds; tapping the FAB opens
         // the same bottom-sheet menu the keyboard key opens.
+        //
+        // Use View.postDelayed so the queued runnable is dropped automatically
+        // when the view is detached (activity destroyed) — a Handler on the
+        // main Looper would keep firing into a dead activity and leak the
+        // binding reference for the full 3-second window.
         binding.fabMenu.visibility = View.VISIBLE
-        Handler(Looper.getMainLooper()).postDelayed({
-            binding.fabMenu.visibility = View.GONE
+        binding.fabMenu.postDelayed({
+            if (!isFinishing && !isDestroyed) {
+                binding.fabMenu.visibility = View.GONE
+            }
         }, 3000)
     }
     
@@ -512,10 +465,11 @@ class TabTerminalActivity : AppCompatActivity() {
     
     private fun showBottomActionBar() {
         binding.bottomActionBar.visibility = View.VISIBLE
-        
-        // Auto-hide after 5 seconds
-        Handler(Looper.getMainLooper()).postDelayed({
-            hideBottomActionBar()
+
+        // Auto-hide after 5 seconds. View.postDelayed (not Handler) so the
+        // runnable is dropped when the view detaches on activity destroy.
+        binding.bottomActionBar.postDelayed({
+            if (!isFinishing && !isDestroyed) hideBottomActionBar()
         }, 5000)
     }
     
@@ -920,76 +874,6 @@ class TabTerminalActivity : AppCompatActivity() {
     }
     
     /**
-     * Show text context menu when user long-presses on non-URL text
-     */
-    /**
-     * JuiceSSH-style long-press context menu for the terminal area.
-     * Items roughly mirror what JuiceSSH/Termius offer: copy the visible
-     * screen, paste, send arbitrary text, font size adjustment, share
-     * connection info, close the current tab.
-     */
-    private fun showTextContextMenu(x: Float, y: Float) {
-        // Terminal-focused long-press menu — fast contextual actions only.
-        // Font size and Close tab live in the Command Palette (☰).
-        // Clipboard operations live on the 📋 key in the function bar.
-        // "Cluster…" broadcasts to every open session after a confirm step.
-        // Toggle labels are computed at show-time so they reflect actual state.
-        Logger.d("TabTerminalActivity", "showTextContextMenu — building dialog")
-        // Defer show() to the next main-thread tick so the in-flight long-press
-        // touch sequence finishes dispatching before the dialog window appears.
-        // Otherwise the ACTION_UP from the user's finger-lift can hit the
-        // freshly-shown dialog at a coord outside its bounds and instantly
-        // dismiss it via tap-outside-cancel.
-        // setCanceledOnTouchOutside(false) is belt-and-suspenders.
-        binding.root.post {
-            if (isFinishing || isDestroyed) {
-                Logger.w("TabTerminalActivity", "Activity gone — skipping context menu")
-                return@post
-            }
-            try {
-                // Read IME visibility here (inside post, after layout pass) so
-                // the label is accurate at the moment the dialog appears.
-                val imeVisible = androidx.core.view.ViewCompat
-                    .getRootWindowInsets(binding.root)
-                    ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
-                val sysKeyLabel = if (imeVisible) "Hide system keyboard" else "Show system keyboard"
-                val barLabel    = if (customKeyboardVisible) "Hide key bar" else "Show key bar"
-
-                val items = arrayOf(
-                    "Copy screen",
-                    "Find in scrollback…",
-                    "Cluster: send to all sessions…",
-                    "Snippets…",
-                    sysKeyLabel,
-                    barLabel,
-                    "Share connection info"
-                )
-                val dlg = androidx.appcompat.app.AlertDialog.Builder(this)
-                    .setTitle("Terminal")
-                    .setItems(items) { _, which ->
-                        when (which) {
-                            0 -> copyTerminalScreen()
-                            1 -> showSearchOverlay()
-                            2 -> showClusterBroadcastDialog()
-                            3 -> showSnippetsPickerForActiveTab()
-                            4 -> toggleKeyboard()
-                            5 -> if (customKeyboardVisible) hideCustomKeyboardBar()
-                                 else showCustomKeyboardBar()
-                            6 -> shareSession()
-                        }
-                    }
-                    .setNegativeButton("Cancel", null)
-                    .create()
-                dlg.setCanceledOnTouchOutside(false)
-                dlg.show()
-                Logger.d("TabTerminalActivity", "Context menu dialog shown")
-            } catch (e: Exception) {
-                Logger.e("TabTerminalActivity", "Failed to show context menu", e)
-            }
-        }
-    }
-
-    /**
      * Cluster broadcast — prompts for a command, then sends it (with a
      * trailing newline so it actually executes) to every open SSH tab
      * after a confirm step. Distinct from ClusterCommandActivity, which
@@ -1204,57 +1088,6 @@ private fun showSnippetsPickerForActiveTab() {
     }
 
     /**
-     * Send arbitrary text to the active terminal — useful for inserting
-     * passwords/snippets that don't fit the snippets manager.
-     */
-    private fun showSendTextDialog() {
-        val input = android.widget.EditText(this).apply {
-            hint = "Text to send"
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or
-                android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
-            setSingleLine(false)
-            minLines = 2
-        }
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Send text")
-            .setView(input)
-            .setPositiveButton("Send") { _, _ ->
-                val text = input.text?.toString().orEmpty()
-                if (text.isNotEmpty()) {
-                    getActiveTerminalView()?.sendText(text)
-                }
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    /**
-     * Inline +/- font-size adjuster reused from the volume-key path.
-     */
-    private fun showFontSizeDialog() {
-        val current = getActiveTerminalView()?.getFontSize() ?: 14
-        val items = arrayOf("Smaller (-2 sp)", "Larger (+2 sp)", "Reset to 14 sp")
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Font size — current: ${current} sp")
-            .setItems(items) { _, which ->
-                when (which) {
-                    0 -> adjustFontSize(-2)
-                    1 -> adjustFontSize(2)
-                    2 -> {
-                        getActiveTerminalView()?.setFontSize(14)
-                        app.preferencesManager.setInt("terminal_font_size", 14)
-                    }
-                }
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    /**
-     * Close the currently-visible tab (with a confirm step so a stray
-     * long-press doesn't lose work).
-     */
-    /**
      * Apply terminal-screen UI prefs that aren't covered by the global
      * Application-level lifecycle (which handles FLAG_SECURE and
      * keep-screen-on). Called once after the views are bound; cheap to
@@ -1345,27 +1178,6 @@ private fun showSnippetsPickerForActiveTab() {
         }
     }
 
-    private fun closeActiveTabConfirmed() {
-        val tab = tabManager.getActiveTab() ?: return
-        // `ui_confirm_tab_close` (default on) gates the confirmation step.
-        // Power users who want a fast close can disable in Settings.
-        val confirm = app.preferencesManager
-            .getBoolean("ui_confirm_tab_close", true)
-        val doClose = {
-            val idx = tabManager.getAllTabs().indexOfFirst { it.tabId == tab.tabId }
-            if (idx >= 0) tabManager.closeTab(idx)
-        }
-        if (!confirm) {
-            doClose(); return
-        }
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Close tab")
-            .setMessage("Close ${tab.profile.getDisplayName()}?")
-            .setPositiveButton("Close") { _, _ -> doClose() }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-    
     /**
      * Share current session info
      */
@@ -3437,25 +3249,33 @@ private fun showSnippetsPickerForActiveTab() {
      * Search and show matching snippets
      */
     private fun searchAndShowSnippets(query: String) {
+        // searchSnippets returns a Room Flow that re-emits on every DB change.
+        // Take the first emission (`.first()`) and bail — we want a single
+        // snapshot for the dialog, not a live subscription that re-opens the
+        // dialog every time the user touches another snippet table.
         lifecycleScope.launch {
-            app.database.snippetDao().searchSnippets(query).flowOn(Dispatchers.IO).collect { results ->
-                if (results.isEmpty()) {
-                    showToast("No matching snippets")
-                    return@collect
-                }
-
-                val snippetNames = results.map { "${it.name} - ${it.category}" }.toTypedArray()
-
-                runOnUiThread {
-                    androidx.appcompat.app.AlertDialog.Builder(this@TabTerminalActivity)
-                        .setTitle("Search Results")
-                        .setItems(snippetNames) { _, which ->
-                            insertSnippet(results[which])
-                        }
-                        .setNegativeButton("Close", null)
-                        .show()
-                }
+            val results = try {
+                app.database.snippetDao()
+                    .searchSnippets(query)
+                    .flowOn(Dispatchers.IO)
+                    .firstOrNull() ?: emptyList()
+            } catch (e: Exception) {
+                Logger.e("TabTerminalActivity", "Snippet search failed", e)
+                emptyList()
             }
+            if (results.isEmpty()) {
+                showToast("No matching snippets")
+                return@launch
+            }
+            if (isFinishing || isDestroyed) return@launch
+            val snippetNames = results.map { "${it.name} - ${it.category}" }.toTypedArray()
+            androidx.appcompat.app.AlertDialog.Builder(this@TabTerminalActivity)
+                .setTitle("Search Results")
+                .setItems(snippetNames) { _, which ->
+                    insertSnippet(results[which])
+                }
+                .setNegativeButton("Close", null)
+                .show()
         }
     }
 
@@ -3572,17 +3392,6 @@ private fun showSnippetsPickerForActiveTab() {
         tabManagerListener?.let { tabManager.removeListener(it) }
         tabManagerListener = null
 
-        // Same shape: the IME-visibility tracker captures `this` and would
-        // keep firing layout callbacks against a dead activity until GC.
-        keyboardLayoutListener?.let {
-            try {
-                window.decorView.rootView.viewTreeObserver.removeOnGlobalLayoutListener(it)
-            } catch (_: Throwable) {
-                // Window already torn down — listener is implicitly dropped.
-            }
-        }
-        keyboardLayoutListener = null
-
         Logger.d("TabTerminalActivity", "Terminal activity destroyed")
 
         // Intentionally do NOT call tabManager.cleanup() here — the
@@ -3600,23 +3409,6 @@ private fun showSnippetsPickerForActiveTab() {
         // Now each host has its own notification (see
         // SSHConnectionService), so staleness isn't an issue, and the
         // connections survive a back-out exactly as the user expects.
-    }
-    
-    /**
-     * Confirm dialog for menu-based "close all" action
-     */
-    private fun showConfirmCloseDialog() {
-        val activeCount = tabManager.getTabCount()
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Close All Connections")
-            .setMessage("This will close all $activeCount SSH connections. Continue?")
-            .setPositiveButton("Close All") { _, _ ->
-                Logger.i("TabTerminalActivity", "Closing all $activeCount connections")
-                disconnectAllTabs()
-                finish()
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
     }
     
     private fun setupCustomKeyboard() {
