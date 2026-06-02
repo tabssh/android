@@ -200,31 +200,29 @@ class XenOrchestraApiClient(
                 .addHeader("Authorization", "Basic $encodedCredentials")
                 .build()
 
-            val response = client.newCall(request).execute()
-
-            if (response.isSuccessful) {
-                val responseBody = response.body?.string()
-                if (responseBody != null) {
-                    // Response should contain the token
-                    val responseJson = JSONObject(responseBody)
-                    val token = responseJson.optString("token")
-
-                    if (token.isNotEmpty()) {
-                        authToken = token
-                        detectedApiVersion = version
-                        Logger.i(TAG, "Authentication successful with $version, token: ${token.take(20)}...")
-                        true
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val responseBody = response.body?.string()
+                    if (responseBody != null) {
+                        val responseJson = JSONObject(responseBody)
+                        val token = responseJson.optString("token")
+                        if (token.isNotEmpty()) {
+                            authToken = token
+                            detectedApiVersion = version
+                            Logger.i(TAG, "Authentication successful with $version, token: ${token.take(20)}...")
+                            true
+                        } else {
+                            Logger.d(TAG, "No token in response: $responseBody")
+                            false
+                        }
                     } else {
-                        Logger.d(TAG, "No token in response: $responseBody")
+                        Logger.d(TAG, "Empty response body")
                         false
                     }
                 } else {
-                    Logger.d(TAG, "Empty response body")
+                    Logger.d(TAG, "Authentication with $version failed: HTTP ${response.code}")
                     false
                 }
-            } else {
-                Logger.d(TAG, "Authentication with $version failed: HTTP ${response.code}")
-                false
             }
 
         } catch (e: IOException) {
@@ -276,13 +274,13 @@ class XenOrchestraApiClient(
     private suspend fun executeRequest(request: Request): Response = withContext(Dispatchers.IO) {
         try {
             val response = client.newCall(request).execute()
-            
+
             // Check for token expiry (401 Unauthorized)
             if (response.code == 401 && authToken != null) {
                 Logger.w(TAG, "Token expired, attempting re-authentication")
-                // Token expired, try to re-authenticate
+                // Close the 401 response before retrying — leaving it open leaks the connection
+                response.close()
                 if (authenticate()) {
-                    // Retry request with new token
                     val newRequest = buildAuthenticatedRequest(
                         request.url.toString(),
                         request.method,
@@ -291,7 +289,7 @@ class XenOrchestraApiClient(
                     return@withContext client.newCall(newRequest).execute()
                 }
             }
-            
+
             response
         } catch (e: IOException) {
             Logger.e(TAG, "Network error: ${e.message}", e)

@@ -248,15 +248,15 @@ class XCPngApiClient(
             .build()
 
         try {
-            val response = client.newCall(request).execute()
-            val responseBody = response.body?.string()
-
-            if (response.isSuccessful && responseBody != null) {
-                return responseBody
-            } else {
-                val errorMsg = "XML-RPC call failed: ${response.code} ${response.message}"
-                Logger.e("XCPngAPI", "$errorMsg - Body: ${responseBody?.take(200)}")
-                throw IOException(errorMsg)
+            return client.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string()
+                if (response.isSuccessful && responseBody != null) {
+                    responseBody
+                } else {
+                    val errorMsg = "XML-RPC call failed: ${response.code} ${response.message}"
+                    Logger.e("XCPngAPI", "$errorMsg - Body: ${responseBody?.take(200)}")
+                    throw IOException(errorMsg)
+                }
             }
         } catch (e: IOException) {
             Logger.e("XCPngAPI", "Network error during XML-RPC call: ${e.message}")

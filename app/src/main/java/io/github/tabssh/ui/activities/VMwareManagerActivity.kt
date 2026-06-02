@@ -171,6 +171,15 @@ class VMwareManagerActivity : AppCompatActivity() {
 
     // ── VM actions ────────────────────────────────────────────────────────────
 
+    private fun confirmStop(vm: VMwareApiClient.VMwareVM, client: VMwareApiClient) {
+        AlertDialog.Builder(this)
+            .setTitle("Power Off ${vm.name}?")
+            .setMessage("This will forcibly power off the VM. Any unsaved data will be lost.")
+            .setPositiveButton("Power Off") { _, _ -> vmAction(vm, client, "stop") }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     private fun confirmHardReset(vm: VMwareApiClient.VMwareVM, client: VMwareApiClient) {
         AlertDialog.Builder(this)
             .setTitle("Hard Reset ${vm.name}?")
@@ -362,7 +371,7 @@ class VMwareManagerActivity : AppCompatActivity() {
 
             holder.btnSsh.setOnClickListener { openSshConsole(vm) }
             holder.btnStart.setOnClickListener { vmAction(vm, client, "start") }
-            holder.btnStop.setOnClickListener { vmAction(vm, client, "stop") }
+            holder.btnStop.setOnClickListener { confirmStop(vm, client) }
             holder.btnReboot.setOnClickListener { vmAction(vm, client, "reboot") }
             holder.btnReset.setOnClickListener { confirmHardReset(vm, client) }
         }

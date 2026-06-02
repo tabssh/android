@@ -350,6 +350,25 @@ class XCPngManagerActivity : AppCompatActivity() {
     }
 
     private fun handleVMAction(vm: XCPngApiClient.XenVM, action: String) {
+        // Confirm before destructive hard-power operations
+        if (action == "stop" || action == "reset") {
+            val label = if (action == "stop") "Force Stop" else "Hard Reset"
+            val msg = if (action == "stop")
+                "Force-stopping ${vm.name} is equivalent to cutting power. Unsaved data will be lost."
+            else
+                "Hard-resetting ${vm.name} is equivalent to cutting then restoring power. Unsaved data will be lost."
+            MaterialAlertDialogBuilder(this)
+                .setTitle("$label ${vm.name}?")
+                .setMessage(msg)
+                .setPositiveButton(label) { _, _ -> doVMAction(vm, action) }
+                .setNegativeButton("Cancel", null)
+                .show()
+            return
+        }
+        doVMAction(vm, action)
+    }
+
+    private fun doVMAction(vm: XCPngApiClient.XenVM, action: String) {
         lifecycleScope.launch {
             try {
                 progressBar.visibility = View.VISIBLE
@@ -395,11 +414,13 @@ class XCPngManagerActivity : AppCompatActivity() {
                     refreshVMs()
                 } else {
                     progressBar.visibility = View.GONE
+                    Toast.makeText(this@XCPngManagerActivity, "$action failed for ${vm.name}", Toast.LENGTH_SHORT).show()
                 }
-                
+
             } catch (e: Exception) {
                 Logger.e("XCPngManager", "VM action failed", e)
                 progressBar.visibility = View.GONE
+                Toast.makeText(this@XCPngManagerActivity, "$action failed: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }

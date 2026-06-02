@@ -85,21 +85,22 @@ class ProxmoxApiClient(
                 .post(formBody)
                 .build()
 
-            val response = client.newCall(request).execute()
-            val responseBody = response.body?.string()
+            client.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string()
 
-            if (response.isSuccessful && responseBody != null) {
-                val json = JSONObject(responseBody)
-                val data = json.getJSONObject("data")
-                
-                authTicket = data.getString("ticket")
-                csrfToken = data.getString("CSRFPreventionToken")
-                
-                Logger.i("ProxmoxAPI", "Authentication successful")
-                true
-            } else {
-                Logger.e("ProxmoxAPI", "Authentication failed: ${response.code}")
-                false
+                if (response.isSuccessful && responseBody != null) {
+                    val json = JSONObject(responseBody)
+                    val data = json.getJSONObject("data")
+
+                    authTicket = data.getString("ticket")
+                    csrfToken = data.getString("CSRFPreventionToken")
+
+                    Logger.i("ProxmoxAPI", "Authentication successful")
+                    true
+                } else {
+                    Logger.e("ProxmoxAPI", "Authentication failed: ${response.code}")
+                    false
+                }
             }
         } catch (e: Exception) {
             Logger.e("ProxmoxAPI", "Authentication error", e)
@@ -427,13 +428,13 @@ class ProxmoxApiClient(
             .get()
             .build()
 
-        val response = client.newCall(request).execute()
-        val responseBody = response.body?.string()
-
-        if (response.isSuccessful && responseBody != null) {
-            return JSONObject(responseBody)
-        } else {
-            throw IOException("API request failed: ${response.code}")
+        return client.newCall(request).execute().use { response ->
+            val responseBody = response.body?.string()
+            if (response.isSuccessful && responseBody != null) {
+                JSONObject(responseBody)
+            } else {
+                throw IOException("API request failed: ${response.code}")
+            }
         }
     }
 
@@ -450,28 +451,28 @@ class ProxmoxApiClient(
             .post(formBody)
             .build()
 
-        val response = client.newCall(request).execute()
-        val responseBody = response.body?.string()
-
-        if (response.isSuccessful && responseBody != null) {
-            return JSONObject(responseBody)
-        } else {
-            val errorDetail = try {
-                val body = JSONObject(responseBody ?: "{}")
-                // errors may be a flat string or a JSONObject keyed by endpoint
-                // (e.g. {"vmid":"serial interface not defined"}). Extract the
-                // actual text so callers can do simple string matching.
-                body.optString("errors", "").takeIf { it.isNotBlank() }
-                    ?: body.optJSONObject("errors")?.let { errObj ->
-                        val key = errObj.keys().takeIf { it.hasNext() }?.next()
-                        key?.let { errObj.optString(it, "").takeIf { v -> v.isNotBlank() } }
-                            ?: errObj.toString().takeIf { it.isNotBlank() }
-                    }
-                    ?: responseBody?.take(200) ?: ""
-            } catch (_: Exception) {
-                responseBody?.take(200) ?: ""
+        return client.newCall(request).execute().use { response ->
+            val responseBody = response.body?.string()
+            if (response.isSuccessful && responseBody != null) {
+                JSONObject(responseBody)
+            } else {
+                val errorDetail = try {
+                    val body = JSONObject(responseBody ?: "{}")
+                    // errors may be a flat string or a JSONObject keyed by endpoint
+                    // (e.g. {"vmid":"serial interface not defined"}). Extract the
+                    // actual text so callers can do simple string matching.
+                    body.optString("errors", "").takeIf { it.isNotBlank() }
+                        ?: body.optJSONObject("errors")?.let { errObj ->
+                            val key = errObj.keys().takeIf { it.hasNext() }?.next()
+                            key?.let { errObj.optString(it, "").takeIf { v -> v.isNotBlank() } }
+                                ?: errObj.toString().takeIf { it.isNotBlank() }
+                        }
+                        ?: responseBody?.take(200) ?: ""
+                } catch (_: Exception) {
+                    responseBody?.take(200) ?: ""
+                }
+                throw IOException(if (errorDetail.isBlank()) "API request failed: ${response.code}" else errorDetail)
             }
-            throw IOException(if (errorDetail.isBlank()) "API request failed: ${response.code}" else errorDetail)
         }
     }
 }

@@ -70,16 +70,16 @@ class VMwareApiClient(
                 .addHeader("Authorization", "Basic $encodedCredentials")
                 .build()
 
-            val response = client.newCall(request).execute()
-            val responseBody = response.body?.string()
-
-            if (response.isSuccessful && responseBody != null) {
-                sessionId = responseBody.replace("\"", "")
-                Logger.i("VMwareAPI", "Authentication successful")
-                true
-            } else {
-                Logger.e("VMwareAPI", "Authentication failed: ${response.code}")
-                false
+            client.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string()
+                if (response.isSuccessful && responseBody != null) {
+                    sessionId = responseBody.replace("\"", "")
+                    Logger.i("VMwareAPI", "Authentication successful")
+                    true
+                } else {
+                    Logger.e("VMwareAPI", "Authentication failed: ${response.code}")
+                    false
+                }
             }
         } catch (e: Exception) {
             Logger.e("VMwareAPI", "Authentication error", e)
@@ -158,13 +158,13 @@ class VMwareApiClient(
             .get()
             .build()
 
-        val response = client.newCall(request).execute()
-        val responseBody = response.body?.string()
-
-        if (response.isSuccessful && responseBody != null) {
-            return JSONObject(responseBody)
-        } else {
-            throw IOException("API request failed: ${response.code}")
+        return client.newCall(request).execute().use { response ->
+            val responseBody = response.body?.string()
+            if (response.isSuccessful && responseBody != null) {
+                JSONObject(responseBody)
+            } else {
+                throw IOException("API request failed: ${response.code}")
+            }
         }
     }
 
@@ -177,17 +177,14 @@ class VMwareApiClient(
             .post(requestBody)
             .build()
 
-        val response = client.newCall(request).execute()
-        val responseBody = response.body?.string()
-
-        if (response.isSuccessful) {
-            return if (responseBody != null && responseBody.isNotEmpty()) {
-                JSONObject(responseBody)
+        return client.newCall(request).execute().use { response ->
+            val responseBody = response.body?.string()
+            if (response.isSuccessful) {
+                if (responseBody != null && responseBody.isNotEmpty()) JSONObject(responseBody)
+                else JSONObject()
             } else {
-                JSONObject()
+                throw IOException("API request failed: ${response.code}")
             }
-        } else {
-            throw IOException("API request failed: ${response.code}")
         }
     }
 
