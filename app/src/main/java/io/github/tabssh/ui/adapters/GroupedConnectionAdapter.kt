@@ -204,8 +204,12 @@ class GroupedConnectionAdapter(
      * Collapse all groups (simplified - just notify data changed, groups handle their own state)
      */
     fun collapseAll() {
-        // Groups track their own expanded state - just notify UI to refresh
-        notifyDataSetChanged()
+        // Skip-DiffUtil rationale: the backing items list is rebuilt by the
+        // fragment (which calls submitItems / equivalent) when expansion state
+        // changes — this call exists only as a forced redraw of the current
+        // rows, not a data change. notifyItemRangeChanged covers that without
+        // the full-invalidate cost of notifyDataSetChanged.
+        notifyItemRangeChanged(0, items.size)
         Logger.d("GroupedConnectionAdapter", "Refreshed group display")
     }
 }

@@ -4,7 +4,7 @@
 >
 > **Generated:** 2026-04-25; updated 2026-05-12 from a parallel survey of ~201 Kotlin sources, all Gradle/Docker/CI configs, and every preference/layout/menu XML.
 >
-> **Last verified against:** `versionCode 9` / `versionName 0.0.9`, database `v33` (full chain: v17→v18 env_vars+agent_forwarding → v19 stored_keys.certificate → v20 connections.protocol → v21 workspaces → v22 connections.color_tag → v23 cloud_accounts → v24 connections.remote_command → v25 connections.ip_mode → v26 macros → v27 hypervisor_accounts+account_id → v28 hypervisors.pinned_cert_sha256 → v29 OCI auth_type+5 OCI columns → v30 hypervisors.display_host/port → v31 connections.oci_instance_id → v32 monitor_slots → v33 OCI credentials promoted to hypervisor_accounts), JSch `mwiede:2.27.7`, Termux `terminal-emulator:0.118.1`, AGP 8.7.3, Kotlin 2.0.21, Gradle 8.11.1.
+> **Last verified against:** `versionCode 9` / `versionName 0.0.9`, database `v37` (full chain: v17→v18 env_vars+agent_forwarding → v19 stored_keys.certificate → v20 connections.protocol → v21 workspaces → v22 connections.color_tag → v23 cloud_accounts → v24 connections.remote_command → v25 connections.ip_mode → v26 macros → v27 hypervisor_accounts+account_id → v28 hypervisors.pinned_cert_sha256 → v29 OCI auth_type+5 OCI columns → v30 hypervisors.display_host/port → v31 connections.oci_instance_id → v32 monitor_slots → v33 OCI credentials promoted to hypervisor_accounts), JSch `mwiede:2.27.7`, Termux `terminal-emulator:0.118.1`, AGP 8.7.3, Kotlin 2.0.21, Gradle 8.11.1.
 >
 > **Format conventions:**
 > - File paths are repo-relative unless prefixed with `/`.
@@ -564,7 +564,7 @@ If the Keystore is unavailable (e.g. broken ROM), the manager auto-degrades to `
 
 ### 8.1 Room database
 
-`storage/database/TabSSHDatabase.kt` — **version 33**, schema exported to `app/schemas/`.
+`storage/database/TabSSHDatabase.kt` — **version 37**, schema exported to `app/schemas/`.
 
 ### 8.2 Entities (17)
 
@@ -596,7 +596,7 @@ Fifteen DAOs in `storage/database/dao/`. Notable queries:
 - `AuditLogDao`: range queries by date, by connection, by session; cleanup queries.
 - All write APIs use `OnConflictStrategy.REPLACE`.
 
-### 8.4 Migrations (`v1 → v33`)
+### 8.4 Migrations (`v1 → v37`)
 
 | Step | Change |
 |---|---|
@@ -632,6 +632,10 @@ Fifteen DAOs in `storage/database/dao/`. Notable queries:
 | 30→31 | Add `oci_instance_id` to `connections` (OCI SSH persistent config linking) |
 | 31→32 | Create `monitor_slots` table (background host monitoring: availability + metric thresholds) |
 | 32→33 | Promote OCI credentials from `hypervisors` to `hypervisor_accounts`: add `auth_type` + 5 OCI columns to `hypervisor_accounts`; for each existing OCI hypervisor row create a linked account row and set `account_id`; deprecated OCI columns on `hypervisors` left in place (SQLite < 3.35 no DROP COLUMN); Keystore entries migrate lazily on first access |
+| 33→34 | Create `vnc_identities` and `vnc_hosts` tables (VNC support) |
+| 34→35 | Add `ssh_identity_id` to `hypervisors` (libvirt SSH key auth) |
+| 35→36 | Add `group_type` to `connection_groups` (distinguishes system auto-groups from user groups) |
+| 36→37 | Add 23 performance indexes on FK and query columns across all major tables (connections, stored_keys, identities, host_keys, monitor_slots, hypervisors, vnc_hosts, connection_groups) |
 
 ### 8.5 Preferences
 

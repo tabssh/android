@@ -31,6 +31,7 @@ import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.StoredKey
 import io.github.tabssh.utils.logging.Logger
+import io.github.tabssh.utils.replaceAllWithDiff
 import io.github.tabssh.utils.showError
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -233,9 +234,11 @@ class OciManagerActivity : AppCompatActivity() {
                     inst.copy(publicIp = pub, privateIp = priv)
                 } else inst
             }
-            instances.clear()
-            instances.addAll(withIps)
-            adapter.notifyDataSetChanged()
+            adapter.replaceAllWithDiff(
+                items = instances,
+                newItems = withIps,
+                areItemsTheSame = { a, b -> a.id == b.id }
+            )
             hideProgress()
             if (instances.isEmpty()) {
                 statusText.visibility = View.VISIBLE

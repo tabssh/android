@@ -4,14 +4,18 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import io.github.tabssh.R
-import io.github.tabssh.storage.database.entities.AuditLogEntry
+import io.github.tabssh.storage.database.entities.AuditLogSummary
 
 /**
- * Adapter for displaying audit log entries
+ * Adapter for displaying audit log summary rows. The [output] column is
+ * intentionally excluded here — it is never shown in the list and can be
+ * very large. Fetch the full [AuditLogEntry] via [AuditLogDao.getById]
+ * when the user needs copy or export output.
  */
-class AuditLogAdapter(private var logs: List<AuditLogEntry>) : 
+class AuditLogAdapter(private var logs: List<AuditLogSummary>) :
     RecyclerView.Adapter<AuditLogAdapter.ViewHolder>() {
     
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -60,8 +64,17 @@ class AuditLogAdapter(private var logs: List<AuditLogEntry>) :
     
     override fun getItemCount() = logs.size
     
-    fun updateLogs(newLogs: List<AuditLogEntry>) {
+    fun updateLogs(newLogs: List<AuditLogSummary>) {
+        val old = logs
+        val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+            override fun getOldListSize(): Int = old.size
+            override fun getNewListSize(): Int = newLogs.size
+            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
+                old[oldItemPosition].id == newLogs[newItemPosition].id
+            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
+                old[oldItemPosition] == newLogs[newItemPosition]
+        })
         logs = newLogs
-        notifyDataSetChanged()
+        diff.dispatchUpdatesTo(this)
     }
 }

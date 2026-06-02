@@ -21,6 +21,7 @@ import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.Snippet
 import io.github.tabssh.utils.logging.Logger
+import io.github.tabssh.utils.replaceAllWithDiff
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
@@ -130,13 +131,16 @@ class SnippetManagerActivity : AppCompatActivity() {
     }
 
     private fun filterByCategory(category: String?) {
-        snippets.clear()
-        if (category == null) {
-            snippets.addAll(allSnippets)
+        val newList = if (category == null) {
+            allSnippets.toList()
         } else {
-            snippets.addAll(allSnippets.filter { it.category == category })
+            allSnippets.filter { it.category == category }
         }
-        adapter.notifyDataSetChanged()
+        adapter.replaceAllWithDiff(
+            items = snippets,
+            newItems = newList,
+            areItemsTheSame = { a, b -> a.id == b.id }
+        )
         updateEmptyState()
     }
 

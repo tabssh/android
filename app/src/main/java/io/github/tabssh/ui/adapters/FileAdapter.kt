@@ -2,6 +2,7 @@ package io.github.tabssh.ui.adapters
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import io.github.tabssh.R
 import io.github.tabssh.databinding.ItemFileBinding
@@ -49,9 +50,13 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
      * Clear all selections
      */
     fun clearSelection() {
+        // Selection state lives outside the data list. The visible row count does
+        // not change — only the per-row "selected" rendering does — so a full
+        // rebind is the simplest correct refresh. Item count is small (one
+        // directory's worth) so the cost is negligible.
         selectedLocalFiles.clear()
         selectedRemoteFiles.clear()
-        notifyDataSetChanged()
+        notifyItemRangeChanged(0, itemCount)
     }
     
     /**
@@ -63,7 +68,8 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
         } else {
             selectedLocalFiles.add(file)
         }
-        notifyDataSetChanged()
+        val idx = localFiles.indexOf(file)
+        if (idx >= 0) notifyItemChanged(idx)
     }
     
     /**
@@ -75,7 +81,8 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
         } else {
             selectedRemoteFiles.add(file)
         }
-        notifyDataSetChanged()
+        val idx = remoteFiles.indexOf(file)
+        if (idx >= 0) notifyItemChanged(idx)
     }
 
     /**
@@ -86,11 +93,33 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
         onFileClick: ((File) -> Unit)? = null,
         onFileLongClick: ((File) -> Unit)? = null
     ) {
+        val wasRemote = this.isRemote
+        val old = if (wasRemote) emptyList() else this.localFiles
         this.localFiles = files
         this.isRemote = false
         this.onFileClick = onFileClick
         this.onFileLongClick = onFileLongClick
-        notifyDataSetChanged()
+        if (wasRemote) {
+            // Switching between local and remote modes changes the row type
+            // entirely — a full rebind is correct here, DiffUtil would compare
+            // unrelated objects.
+            notifyDataSetChanged()
+        } else {
+            val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+                override fun getOldListSize(): Int = old.size
+                override fun getNewListSize(): Int = files.size
+                override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
+                    old[oldItemPosition].absolutePath == files[newItemPosition].absolutePath
+                override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                    val a = old[oldItemPosition]
+                    val b = files[newItemPosition]
+                    return a.absolutePath == b.absolutePath &&
+                        a.length() == b.length() &&
+                        a.lastModified() == b.lastModified()
+                }
+            })
+            diff.dispatchUpdatesTo(this)
+        }
     }
 
     /**
@@ -101,11 +130,27 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
         onRemoteFileClick: ((RemoteFileInfo) -> Unit)? = null,
         onRemoteFileLongClick: ((RemoteFileInfo) -> Unit)? = null
     ) {
+        val wasRemote = this.isRemote
+        val old = if (!wasRemote) emptyList() else this.remoteFiles
         this.remoteFiles = files
         this.isRemote = true
         this.onRemoteFileClick = onRemoteFileClick
         this.onRemoteFileLongClick = onRemoteFileLongClick
-        notifyDataSetChanged()
+        if (!wasRemote) {
+            // Switching from local→remote changes the row payload type; a full
+            // rebind is correct.
+            notifyDataSetChanged()
+        } else {
+            val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+                override fun getOldListSize(): Int = old.size
+                override fun getNewListSize(): Int = files.size
+                override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
+                    old[oldItemPosition].name == files[newItemPosition].name
+                override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
+                    old[oldItemPosition] == files[newItemPosition]
+            })
+            diff.dispatchUpdatesTo(this)
+        }
     }
     
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): FileViewHolder {

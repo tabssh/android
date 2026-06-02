@@ -31,6 +31,7 @@ import io.github.tabssh.storage.database.SystemGroupHelper
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.utils.logging.Logger
+import io.github.tabssh.utils.replaceAllWithDiff
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -191,9 +192,11 @@ class LibvirtManagerActivity : AppCompatActivity() {
         showProgress("Loading domains…")
         try {
             val domains = withContext(Dispatchers.IO) { client.listDomains() }
-            vms.clear()
-            vms.addAll(domains)
-            adapter.notifyDataSetChanged()
+            adapter.replaceAllWithDiff(
+                items = vms,
+                newItems = domains,
+                areItemsTheSame = { a, b -> a.name == b.name }
+            )
             hideProgress()
             if (domains.isEmpty()) {
                 statusText.visibility = View.VISIBLE

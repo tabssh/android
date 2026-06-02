@@ -419,20 +419,38 @@ class ClusterCommandActivity : AppCompatActivity() {
         override fun getItemCount() = connections.size
 
         fun updateConnections(newConnections: List<ConnectionProfile>, newGroupNames: Map<String, String> = groupNames) {
+            val old = connections
+            val diff = androidx.recyclerview.widget.DiffUtil.calculateDiff(
+                object : androidx.recyclerview.widget.DiffUtil.Callback() {
+                    override fun getOldListSize(): Int = old.size
+                    override fun getNewListSize(): Int = newConnections.size
+                    override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
+                        old[oldItemPosition].id == newConnections[newItemPosition].id
+                    override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
+                        old[oldItemPosition] == newConnections[newItemPosition] &&
+                            groupNames == newGroupNames
+                }
+            )
             connections = newConnections
             groupNames = newGroupNames
-            notifyDataSetChanged()
+            diff.dispatchUpdatesTo(this)
         }
 
         fun selectAll() {
+            // Skip-DiffUtil rationale: list content unchanged — only the
+            // external `selectedSet` membership that each row reads at bind
+            // time. Range-change forces a rebind without invalidating
+            // off-screen view holders.
             selectedSet.clear()
             selectedSet.addAll(connections)
-            notifyDataSetChanged()
+            notifyItemRangeChanged(0, itemCount)
         }
 
         fun selectNone() {
+            // Skip-DiffUtil rationale: same as selectAll — selection state
+            // lives outside the data list.
             selectedSet.clear()
-            notifyDataSetChanged()
+            notifyItemRangeChanged(0, itemCount)
         }
     }
 

@@ -20,6 +20,7 @@ import io.github.tabssh.sftp.TransferListener
 import io.github.tabssh.ui.adapters.FileAdapter
 import io.github.tabssh.ui.adapters.TransferAdapter
 import io.github.tabssh.utils.logging.Logger
+import io.github.tabssh.utils.replaceAllWithDiff
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -357,11 +358,14 @@ class SFTPActivity : AppCompatActivity() {
                         directory.listFiles()?.toList() ?: emptyList()
                     }
 
-                    localFiles.clear()
-                    localFiles.addAll(files.sortedWith(compareBy<File> { !it.isDirectory }.thenBy { it.name }))
+                    val sorted = files.sortedWith(compareBy<File> { !it.isDirectory }.thenBy { it.name })
 
                     runOnUiThread {
-                        localFileAdapter.notifyDataSetChanged()
+                        localFileAdapter.replaceAllWithDiff(
+                            items = localFiles,
+                            newItems = sorted,
+                            areItemsTheSame = { a, b -> a.absolutePath == b.absolutePath }
+                        )
                         binding.textLocalPath.text = path
                         currentLocalPath = path
                         binding.emptyLocal.visibility =
@@ -386,11 +390,12 @@ class SFTPActivity : AppCompatActivity() {
             try {
                 val files = withContext(Dispatchers.IO) { sftpManager.listRemoteFiles(path) }
 
-                remoteFiles.clear()
-                remoteFiles.addAll(files)
-
                 runOnUiThread {
-                    remoteFileAdapter.notifyDataSetChanged()
+                    remoteFileAdapter.replaceAllWithDiff(
+                        items = remoteFiles,
+                        newItems = files,
+                        areItemsTheSame = { a, b -> a.name == b.name }
+                    )
                     binding.textRemotePath.text = path
                     currentRemotePath = path
                     binding.loadingRemote.visibility = View.GONE
@@ -633,9 +638,11 @@ class SFTPActivity : AppCompatActivity() {
         
         // Refresh transfers
         if (::sftpManager.isInitialized) {
-            activeTransfers.clear()
-            activeTransfers.addAll(sftpManager.getActiveTransfers())
-            transferAdapter.notifyDataSetChanged()
+            transferAdapter.replaceAllWithDiff(
+                items = activeTransfers,
+                newItems = sftpManager.getActiveTransfers(),
+                areItemsTheSame = { a, b -> a === b }
+            )
         }
     }
     
@@ -1165,11 +1172,16 @@ class SFTPActivity : AppCompatActivity() {
             it.isCompleted() || it.hasError() || it.isCancelled()
         }
         
-        activeTransfers.removeAll { 
+        // Build the filtered list explicitly so DiffUtil can compute the
+        // exact removals instead of a wholesale invalidate.
+        val remaining = activeTransfers.filterNot {
             it.isCompleted() || it.hasError() || it.isCancelled()
         }
-        
-        transferAdapter.notifyDataSetChanged()
+        transferAdapter.replaceAllWithDiff(
+            items = activeTransfers,
+            newItems = remaining,
+            areItemsTheSame = { a, b -> a === b }
+        )
         showToast("Cleared $completedCount completed transfers")
     }
     

@@ -14,6 +14,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlin.math.sqrt
@@ -448,7 +449,19 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
 
         private var keys = listOf<KeyboardKey>()
 
-        fun setKeys(list: List<KeyboardKey>) { keys = list; notifyDataSetChanged() }
+        fun setKeys(list: List<KeyboardKey>) {
+            val old = keys
+            val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+                override fun getOldListSize(): Int = old.size
+                override fun getNewListSize(): Int = list.size
+                override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
+                    old[oldItemPosition].label == list[newItemPosition].label
+                override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
+                    old[oldItemPosition] == list[newItemPosition]
+            })
+            keys = list
+            diff.dispatchUpdatesTo(this)
+        }
 
         inner class VH(val tv: TextView) : RecyclerView.ViewHolder(tv)
 

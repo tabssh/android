@@ -22,6 +22,7 @@ import io.github.tabssh.storage.database.SystemGroupHelper
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.utils.logging.Logger
+import io.github.tabssh.utils.replaceAllWithDiff
 import io.github.tabssh.utils.showError
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -155,9 +156,11 @@ class VMwareManagerActivity : AppCompatActivity() {
         showProgress("Loading VMs…")
         try {
             val vmList = client.getAllVMs() ?: emptyList()
-            vms.clear()
-            vms.addAll(vmList)
-            adapter.notifyDataSetChanged()
+            adapter.replaceAllWithDiff(
+                items = vms,
+                newItems = vmList,
+                areItemsTheSame = { a, b -> a.vm == b.vm }
+            )
             hideProgress()
             if (vms.isEmpty()) {
                 statusText.visibility = View.VISIBLE

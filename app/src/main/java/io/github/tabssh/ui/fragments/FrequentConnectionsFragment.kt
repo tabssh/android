@@ -54,7 +54,12 @@ class FrequentConnectionsFragment : Fragment() {
         // never flipped to green or back to grey.
         viewLifecycleOwner.lifecycleScope.launch {
             app.sshSessionManager.connectionStates.collect {
-                adapter.notifyDataSetChanged()
+                // Skip-DiffUtil rationale: the backing list of connections has
+                // not changed — only the external `isConnectionActive(id)`
+                // signal that each row reads at bind time. A range-change is
+                // the minimal correct way to ask the RecyclerView to rebind
+                // visible rows.
+                adapter.notifyItemRangeChanged(0, adapter.itemCount)
             }
         }
 

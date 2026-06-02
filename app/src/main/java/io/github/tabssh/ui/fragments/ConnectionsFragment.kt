@@ -35,6 +35,7 @@ import io.github.tabssh.ui.adapters.ConnectionAdapter
 import io.github.tabssh.ui.adapters.GroupedConnectionAdapter
 import io.github.tabssh.ui.models.ConnectionListItem
 import io.github.tabssh.utils.logging.Logger
+import io.github.tabssh.utils.replaceAllWithDiff
 import androidx.room.withTransaction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
@@ -366,8 +367,11 @@ class ConnectionsFragment : Fragment() {
         // time, and without this the active dot never updates.
         viewLifecycleOwner.lifecycleScope.launch {
             app.sshSessionManager.connectionStates.collect {
-                adapter.notifyDataSetChanged()
-                groupedAdapter?.notifyDataSetChanged()
+                // Skip-DiffUtil rationale: list contents are unchanged — this
+                // is a forced rebind so rows can re-read the external
+                // `isConnectionActive(id)` flag they show as a status dot.
+                adapter.notifyItemRangeChanged(0, adapter.itemCount)
+                groupedAdapter?.let { it.notifyItemRangeChanged(0, it.itemCount) }
             }
         }
     }
@@ -1162,9 +1166,23 @@ class ConnectionsFragment : Fragment() {
             recyclerView.adapter = groupedAdapter
         } else {
             // Update existing adapter
-            groupedAdapter!!.items.clear()
-            groupedAdapter!!.items.addAll(items)
-            groupedAdapter!!.notifyDataSetChanged()
+            groupedAdapter!!.replaceAllWithDiff(
+                items = groupedAdapter!!.items,
+                newItems = items,
+                areItemsTheSame = { a, b ->
+                    when {
+                        a is io.github.tabssh.ui.models.ConnectionListItem.GroupHeader &&
+                            b is io.github.tabssh.ui.models.ConnectionListItem.GroupHeader ->
+                            a.group.id == b.group.id
+                        a is io.github.tabssh.ui.models.ConnectionListItem.Connection &&
+                            b is io.github.tabssh.ui.models.ConnectionListItem.Connection ->
+                            a.profile.id == b.profile.id
+                        a is io.github.tabssh.ui.models.ConnectionListItem.UngroupedHeader &&
+                            b is io.github.tabssh.ui.models.ConnectionListItem.UngroupedHeader -> true
+                        else -> false
+                    }
+                }
+            )
         }
         
         // Update empty state

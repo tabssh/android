@@ -151,39 +151,62 @@ class VMwareApiClient(
         }
     }
 
-    private fun apiGet(endpoint: String): JSONObject {
+    /**
+     * GET an API endpoint. Transparently handles session expiry: vSphere
+     * session tokens time out after the server's idle timeout (default
+     * 30 min), after which every call returns 401 until we re-authenticate.
+     * On 401 we call [authenticate] once and retry the request; if the
+     * retry still fails or we have no session at all, the error propagates.
+     */
+    private suspend fun apiGet(endpoint: String, isRetry: Boolean = false): JSONObject {
         val request = Request.Builder()
             .url("$baseUrl$endpoint")
             .addHeader("vmware-api-session-id", sessionId ?: "")
             .get()
             .build()
 
-        return client.newCall(request).execute().use { response ->
-            val responseBody = response.body?.string()
-            if (response.isSuccessful && responseBody != null) {
+        val response = client.newCall(request).execute()
+        if (response.code == 401 && !isRetry && sessionId != null) {
+            response.close()
+            Logger.d("VMwareAPI", "Session expired on GET $endpoint — re-authenticating")
+            if (authenticate()) return apiGet(endpoint, isRetry = true)
+        }
+        return response.use { r ->
+            val responseBody = r.body?.string()
+            if (r.isSuccessful && responseBody != null) {
                 JSONObject(responseBody)
             } else {
-                throw IOException("API request failed: ${response.code}")
+                throw IOException("API request failed: ${r.code}")
             }
         }
     }
 
-    private fun apiPost(endpoint: String, body: String = ""): JSONObject {
+    /**
+     * POST to an API endpoint. Same re-auth-once-on-401 semantics as
+     * [apiGet] — see that function's doc for the rationale.
+     */
+    private suspend fun apiPost(endpoint: String, body: String = "", isRetry: Boolean = false): JSONObject {
         val requestBody = body.toRequestBody("application/json".toMediaType())
-        
+
         val request = Request.Builder()
             .url("$baseUrl$endpoint")
             .addHeader("vmware-api-session-id", sessionId ?: "")
             .post(requestBody)
             .build()
 
-        return client.newCall(request).execute().use { response ->
-            val responseBody = response.body?.string()
-            if (response.isSuccessful) {
+        val response = client.newCall(request).execute()
+        if (response.code == 401 && !isRetry && sessionId != null) {
+            response.close()
+            Logger.d("VMwareAPI", "Session expired on POST $endpoint — re-authenticating")
+            if (authenticate()) return apiPost(endpoint, body, isRetry = true)
+        }
+        return response.use { r ->
+            val responseBody = r.body?.string()
+            if (r.isSuccessful) {
                 if (responseBody != null && responseBody.isNotEmpty()) JSONObject(responseBody)
                 else JSONObject()
             } else {
-                throw IOException("API request failed: ${response.code}")
+                throw IOException("API request failed: ${r.code}")
             }
         }
     }

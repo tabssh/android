@@ -11,6 +11,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import io.github.tabssh.R
 import io.github.tabssh.utils.logging.Logger
+import io.github.tabssh.utils.replaceAllWithDiff
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -125,28 +126,38 @@ class LogViewerActivity : AppCompatActivity() {
     private fun loadLogs() {
         lifecycleScope.launch {
             try {
-                logEntries.clear()
-                
+                val collected = mutableListOf<LogEntry>()
+
                 // Read from log file if it exists
                 val logFile = File(filesDir, "tabssh.log")
                 if (logFile.exists()) {
                     logFile.readLines().forEach { line ->
-                        parseLogLine(line)?.let { logEntries.add(it) }
+                        parseLogLine(line)?.let { collected.add(it) }
                     }
                 }
-                
+
                 // Also get recent in-memory logs from Logger
                 Logger.getRecentLogs().forEach { log ->
-                    logEntries.add(log)
+                    collected.add(log)
                 }
-                
+
+                adapter.replaceAllWithDiff(
+                    items = logEntries,
+                    newItems = collected,
+                    areItemsTheSame = { a, b ->
+                        // No DB id — compose a stable identity from the parsed
+                        // fields. Two log lines with identical timestamp+tag+
+                        // message are effectively the same row.
+                        a.timestamp == b.timestamp && a.tag == b.tag && a.message == b.message
+                    }
+                )
+
                 if (logEntries.isEmpty()) {
                     recyclerView.visibility = View.GONE
                     emptyView.visibility = View.VISIBLE
                 } else {
                     recyclerView.visibility = View.VISIBLE
                     emptyView.visibility = View.GONE
-                    adapter.notifyDataSetChanged()
                 }
                 
             } catch (e: Exception) {
@@ -214,9 +225,13 @@ class LogViewerActivity : AppCompatActivity() {
             else -> Pair(Logger.getRecentLogs(), "All")
         }
 
-        logEntries.clear()
-        logEntries.addAll(filtered)
-        adapter.notifyDataSetChanged()
+        adapter.replaceAllWithDiff(
+            items = logEntries,
+            newItems = filtered,
+            areItemsTheSame = { a, b ->
+                a.timestamp == b.timestamp && a.tag == b.tag && a.message == b.message
+            }
+        )
 
         // Update title to show current filter
         supportActionBar?.title = if (filterIndex == 0) {

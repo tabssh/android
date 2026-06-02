@@ -18,6 +18,7 @@ import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.ConnectionGroup
 import io.github.tabssh.utils.logging.Logger
+import io.github.tabssh.utils.replaceAllWithDiff
 import androidx.room.withTransaction
 import kotlinx.coroutines.launch
 import io.github.tabssh.utils.showError
@@ -114,11 +115,12 @@ class GroupManagementActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 app.database.connectionGroupDao().getAllGroups().collect { groupList ->
-                    groups.clear()
-                    groups.addAll(groupList)
-                    
                     runOnUiThread {
-                        adapter.notifyDataSetChanged()
+                        adapter.replaceAllWithDiff(
+                            items = groups,
+                            newItems = groupList,
+                            areItemsTheSame = { a, b -> a.id == b.id }
+                        )
                         updateEmptyState()
                     }
                     

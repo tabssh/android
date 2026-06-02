@@ -21,6 +21,7 @@ import io.github.tabssh.crypto.storage.HypervisorPasswordStore
 import io.github.tabssh.hypervisor.proxmox.ProxmoxApiClient
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.utils.logging.Logger
+import io.github.tabssh.utils.replaceAllWithDiff
 import io.github.tabssh.utils.showError
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -170,9 +171,11 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                     }
                 }.awaitAll()
             }
-            vms.clear()
-            vms.addAll(vmsWithIPs)
-            adapter.notifyDataSetChanged()
+            adapter.replaceAllWithDiff(
+                items = vms,
+                newItems = vmsWithIPs,
+                areItemsTheSame = { a, b -> a.vmid == b.vmid && a.node == b.node }
+            )
             hideProgress()
             if (vms.isEmpty()) {
                 statusText.visibility = View.VISIBLE

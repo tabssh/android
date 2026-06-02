@@ -11,7 +11,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
-import io.github.tabssh.storage.database.entities.AuditLogEntry
 import io.github.tabssh.ui.adapters.AuditLogAdapter
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.launch
@@ -137,8 +136,8 @@ class AuditLogViewerActivity : AppCompatActivity() {
     private fun loadAuditLogs() {
         lifecycleScope.launch {
             try {
-                val logs = app.database.auditLogDao().getRecent(1000)
-                
+                val logs = app.database.auditLogDao().getRecentSummary(1000)
+
                 if (logs.isEmpty()) {
                     recyclerView.visibility = View.GONE
                     emptyView.visibility = View.VISIBLE
@@ -187,14 +186,15 @@ class AuditLogViewerActivity : AppCompatActivity() {
     private fun applyFilter(filterIndex: Int) {
         lifecycleScope.launch {
             try {
+                val dao = app.database.auditLogDao()
                 val (logs, filterName) = when (filterIndex) {
-                    0 -> Pair(app.database.auditLogDao().getRecent(1000), "All")
-                    1 -> Pair(app.database.auditLogDao().getByEventType("AUTH%"), "Authentication")
-                    2 -> Pair(app.database.auditLogDao().getByEventType("CONNECT%"), "Connections")
-                    3 -> Pair(app.database.auditLogDao().getByEventType("SFTP%"), "File Transfers")
-                    4 -> Pair(app.database.auditLogDao().getByEventType("CONFIG%"), "Config Changes")
-                    5 -> Pair(app.database.auditLogDao().getByEventType("ERROR%"), "Errors")
-                    else -> Pair(app.database.auditLogDao().getRecent(1000), "All")
+                    0 -> Pair(dao.getRecentSummary(1000), "All")
+                    1 -> Pair(dao.getByEventTypeSummary("AUTH%"), "Authentication")
+                    2 -> Pair(dao.getByEventTypeSummary("CONNECT%"), "Connections")
+                    3 -> Pair(dao.getByEventTypeSummary("SFTP%"), "File Transfers")
+                    4 -> Pair(dao.getByEventTypeSummary("CONFIG%"), "Config Changes")
+                    5 -> Pair(dao.getByEventTypeSummary("ERROR%"), "Errors")
+                    else -> Pair(dao.getRecentSummary(1000), "All")
                 }
 
                 adapter.updateLogs(logs)

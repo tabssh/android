@@ -19,7 +19,7 @@ interface HostKeyDao {
     @Query("SELECT * FROM host_keys WHERE hostname = :hostname AND port = :port")
     suspend fun getHostKey(hostname: String, port: Int): HostKeyEntry?
     
-    @Query("SELECT * FROM host_keys WHERE hostname LIKE :hostname")
+    @Query("SELECT * FROM host_keys WHERE hostname = :hostname")
     suspend fun getHostKeysByHostname(hostname: String): List<HostKeyEntry>
     
     @Query("SELECT * FROM host_keys WHERE fingerprint = :fingerprint")
