@@ -253,18 +253,20 @@ class SFTPManager(private val sshConnection: SSHConnection) {
             task.setBytesTransferred(startOffset)
 
             // Perform upload with progress monitoring
+            // Both streams wrapped in .use{} so that an exception in transferWithProgress
+            // (or in inputStream creation) does not leak the SFTP put stream.
             val outputStream = if (startOffset > 0) {
                 channel.put(task.remotePath, ChannelSftp.RESUME)
             } else {
                 channel.put(task.remotePath)
             }
-            
-            localFile.inputStream().use { inputStream ->
-                if (startOffset > 0) {
-                    inputStream.skip(startOffset)
+            outputStream.use { out ->
+                localFile.inputStream().use { inputStream ->
+                    if (startOffset > 0) {
+                        inputStream.skip(startOffset)
+                    }
+                    transferWithProgress(inputStream, out, task)
                 }
-                
-                transferWithProgress(inputStream, outputStream, task)
             }
             
             // Set file permissions if requested
@@ -321,24 +323,25 @@ class SFTPManager(private val sshConnection: SSHConnection) {
             task.setBytesTransferred(startOffset)
 
             // Perform download with progress monitoring
-            val inputStream = channel.get(task.remotePath)
-
-            // Skip bytes if resuming
-            if (startOffset > 0) {
-                inputStream.skip(startOffset)
-            }
-
-            val outputStream = if (startOffset > 0) {
-                localFile.outputStream().apply {
-                    close() // Close and reopen in append mode
+            // inputStream wrapped in .use{} so it is closed if outputStream
+            // construction or transferWithProgress throws.
+            channel.get(task.remotePath).use { inputStream ->
+                // Skip bytes if resuming
+                if (startOffset > 0) {
+                    inputStream.skip(startOffset)
                 }
-                localFile.appendOutputStream()
-            } else {
-                localFile.outputStream()
-            }
 
-            outputStream.use { output ->
-                transferWithProgress(inputStream, output, task)
+                val outputStream = if (startOffset > 0) {
+                    // Ensure file exists before opening for append
+                    localFile.outputStream().close()
+                    localFile.appendOutputStream()
+                } else {
+                    localFile.outputStream()
+                }
+
+                outputStream.use { output ->
+                    transferWithProgress(inputStream, output, task)
+                }
             }
             
             // Set file permissions if requested

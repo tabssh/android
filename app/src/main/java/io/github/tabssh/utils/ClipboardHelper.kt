@@ -28,8 +28,14 @@ object ClipboardHelper {
     private var pendingClear: Runnable? = null
 
     fun copy(context: Context, label: String, text: String, sensitive: Boolean = true) {
+        // Use applicationContext for the system service AND the delayed clear
+        // runnable so we never retain an Activity context past the timeout
+        // window (configurable up to minutes). Activities passed in here are
+        // often callers from terminal views and would otherwise leak via the
+        // Handler queue.
+        val appCtx = context.applicationContext
         try {
-            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val cm = appCtx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             val clip = ClipData.newPlainText(label, text)
             if (sensitive && Build.VERSION.SDK_INT >= 33) {
                 clip.description.extras = android.os.PersistableBundle().apply {
@@ -37,7 +43,7 @@ object ClipboardHelper {
                 }
             }
             cm.setPrimaryClip(clip)
-            scheduleClearIfRequested(context, text)
+            scheduleClearIfRequested(appCtx, text)
         } catch (e: Exception) {
             Logger.w("ClipboardHelper", "copy failed: ${e.message}")
         }

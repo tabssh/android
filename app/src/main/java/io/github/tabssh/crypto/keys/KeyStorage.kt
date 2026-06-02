@@ -150,11 +150,16 @@ class KeyStorage(private val context: Context) {
             if (keyId != null) {
                 // Store JSch-native bytes so connect-time paths (LibvirtApiClient,
                 // SSHConnection) have the right format without needing to reconstruct.
+                var jschBytes: ByteArray? = null
                 try {
-                    val jschBytes = toJSchKeyBytes(keyPair.private, keyPair.public, keyType)
+                    jschBytes = toJSchKeyBytes(keyPair.private, keyPair.public, keyType)
                     storeJSchBytes(keyId, jschBytes)
                 } catch (e: Exception) {
                     Logger.w("KeyStorage", "Could not store JSch bytes for generated key $keyId (non-fatal)", e)
+                } finally {
+                    // Zero plaintext SSH key material from heap — storeJSchBytes
+                    // has already encrypted what it needs.
+                    jschBytes?.fill(0)
                 }
                 Logger.i("KeyStorage", "Generated $keyType key: $keyName")
                 GenerateResult.Success(keyId, keyPair, fingerprint)
@@ -264,9 +269,10 @@ class KeyStorage(private val context: Context) {
 
                     if (keyId != null) {
                         // Store JSch-native bytes so connect-time has the right format
+                        var jschBytes: ByteArray? = null
                         try {
                             // For OpenSSH format, use original bytes instead of reconstructing
-                            val jschBytes = if (format == KeyFormat.OPENSSH_PRIVATE && passphrase == null) {
+                            jschBytes = if (format == KeyFormat.OPENSSH_PRIVATE && passphrase == null) {
                                 // Unencrypted OpenSSH - use original bytes directly
                                 Logger.d("KeyStorage", "Using original OpenSSH key bytes for $keyId")
                                 keyContent.toByteArray(Charsets.UTF_8)
@@ -278,6 +284,10 @@ class KeyStorage(private val context: Context) {
                             storeJSchBytes(keyId, jschBytes)
                         } catch (e: Exception) {
                             Logger.w("KeyStorage", "Could not store JSch bytes for $keyId (non-fatal)", e)
+                        } finally {
+                            // Wipe the plaintext key material now that it is
+                            // encrypted-and-stored.
+                            jschBytes?.fill(0)
                         }
                         Logger.i("KeyStorage", "Imported $keyType key: $keyName")
                         ImportResult.Success(keyId, parseResult.keyPair, fingerprint)
@@ -320,6 +330,10 @@ class KeyStorage(private val context: Context) {
             val privateKeyBytes = privateKey.encoded
             val iv = cipher.iv
             val encryptedKeyData = cipher.doFinal(privateKeyBytes)
+            // Zero the plaintext PKCS#8 DER copy now that it has been
+            // encrypted. JCE returns a fresh array from privateKey.encoded
+            // so this does not mutate the live key object's internal state.
+            privateKeyBytes.fill(0)
             
             // Store encrypted key data
             val editor = sharedPrefs.edit()
@@ -399,15 +413,22 @@ class KeyStorage(private val context: Context) {
             cipher.init(Cipher.DECRYPT_MODE, encryptionKey, gcmSpec)
             
             val decryptedKeyBytes = cipher.doFinal(encryptedBytes)
-            
+
             // Get key metadata to determine algorithm
             val storedKey = database.keyDao().getKeyById(keyId)
-                ?: return@withContext null
-            
+                ?: run {
+                    decryptedKeyBytes.fill(0)
+                    return@withContext null
+                }
+
             val keyType = KeyType.valueOf(storedKey.keyType)
-            
+
             // Reconstruct private key
             val privateKey = reconstructPrivateKey(decryptedKeyBytes, keyType)
+            // KeyFactory has copied the DER into the PrivateKey object —
+            // wipe our plaintext buffer so the SSH private key isn't
+            // sitting in heap until the next GC sweep.
+            decryptedKeyBytes.fill(0)
             
             // Update last used timestamp
             database.keyDao().updateLastUsed(keyId)

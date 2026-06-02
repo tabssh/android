@@ -82,7 +82,11 @@ class PortForwardingManager(private val sshConnection: SSHConnection) {
             type = TunnelType.REMOTE_FORWARD,
             localHost = localHost,
             localPort = localPort,
-            remoteHost = "0.0.0.0", // Listen on all interfaces
+            // Server-side bind address — descriptive only. Actual bind is
+            // controlled by the remote sshd's GatewayPorts policy; we pass
+            // null in startTunnel() so the server's "localhost" default
+            // applies unless GatewayPorts=yes on the server.
+            remoteHost = "(server bind: see GatewayPorts)",
             remotePort = remotePort,
             autoStart = autoStart,
             manager = this@PortForwardingManager
@@ -153,7 +157,14 @@ class PortForwardingManager(private val sshConnection: SSHConnection) {
             
             val result = when (tunnel.type) {
                 TunnelType.LOCAL_FORWARD -> {
+                    // Explicitly bind to 127.0.0.1 — JSch's bind_address default
+                    // varies by configuration ("localhost" can resolve to the
+                    // wildcard address on some Android networking stacks),
+                    // which would expose the forwarded port to anyone on the
+                    // same LAN. We never want a phone to silently relay LAN
+                    // traffic to internal services on the SSH-target side.
                     val assignedPort = session.setPortForwardingL(
+                        "127.0.0.1",
                         tunnel.localPort,
                         tunnel.remoteHost,
                         tunnel.remotePort
@@ -162,7 +173,13 @@ class PortForwardingManager(private val sshConnection: SSHConnection) {
                     assignedPort > 0
                 }
                 TunnelType.REMOTE_FORWARD -> {
+                    // bind_address on the remote side defaults to "localhost"
+                    // unless the server's sshd_config GatewayPorts is enabled
+                    // — that policy decision belongs to the server admin, not
+                    // to this client. Pass null to use JSch's bind default
+                    // (which is "localhost" → server binds 127.0.0.1).
                     session.setPortForwardingR(
+                        null,
                         tunnel.remotePort,
                         tunnel.localHost,
                         tunnel.localPort
@@ -170,7 +187,10 @@ class PortForwardingManager(private val sshConnection: SSHConnection) {
                     true
                 }
                 TunnelType.DYNAMIC_FORWARD -> {
-                    session.setPortForwardingL(tunnel.localPort.toString())
+                    // SOCKS proxy — bind to 127.0.0.1, never wildcard.
+                    // setPortForwardingL(String) treats the arg as
+                    // "[bind_address:]port" so prefix with the address.
+                    session.setPortForwardingL("127.0.0.1:${tunnel.localPort}")
                     tunnel.actualLocalPort = tunnel.localPort
                     true
                 }

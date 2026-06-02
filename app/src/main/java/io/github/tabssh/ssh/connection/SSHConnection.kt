@@ -561,12 +561,16 @@ class SSHConnection(
 
         applyForwardArray(json, "localForwards") { spec ->
             val (lp, rh, rp) = parseForwardSpec(spec) ?: return@applyForwardArray
-            val assigned = session.setPortForwardingL(lp, rh, rp)
-            Logger.i("SSHConnection", "advancedSettings: LocalForward $lp -> $rh:$rp (assigned=$assigned)")
+            // Force bind to 127.0.0.1 — never expose forwarded ports on the
+            // device's LAN interfaces. See PortForwardingManager for rationale.
+            val assigned = session.setPortForwardingL("127.0.0.1", lp, rh, rp)
+            Logger.i("SSHConnection", "advancedSettings: LocalForward 127.0.0.1:$lp -> $rh:$rp (assigned=$assigned)")
         }
         applyForwardArray(json, "remoteForwards") { spec ->
             val (rp, lh, lp) = parseForwardSpec(spec) ?: return@applyForwardArray
-            session.setPortForwardingR(rp, lh, lp)
+            // Server-side bind defaults to "localhost"; honour the remote
+            // sshd's GatewayPorts policy rather than forcing wildcard.
+            session.setPortForwardingR(null, rp, lh, lp)
             Logger.i("SSHConnection", "advancedSettings: RemoteForward $rp -> $lh:$lp")
         }
         applyForwardArray(json, "dynamicForwards") { spec ->
@@ -575,8 +579,9 @@ class SSHConnection(
                 Logger.w("SSHConnection", "advancedSettings: bad DynamicForward spec '$spec'")
                 return@applyForwardArray
             }
-            session.setPortForwardingL(port.toString())
-            Logger.i("SSHConnection", "advancedSettings: DynamicForward (SOCKS) on $port")
+            // SOCKS proxy — bind to loopback only.
+            session.setPortForwardingL("127.0.0.1:$port")
+            Logger.i("SSHConnection", "advancedSettings: DynamicForward (SOCKS) on 127.0.0.1:$port")
         }
     }
 
@@ -883,12 +888,17 @@ class SSHConnection(
                             ?: throw SSHException("applicationContext is not TabSSHApplication")
                         val jschBytes = app.keyStorage.getJSchBytesWithFallback(profile.proxyKeyId)
                         if (jschBytes != null) {
-                            jsch.addIdentity(
-                                profile.proxyKeyId,
-                                jschBytes,
-                                null, // public key (JSch can derive it)
-                                null  // passphrase — keys stored unencrypted in Keystore
-                            )
+                            try {
+                                jsch.addIdentity(
+                                    profile.proxyKeyId,
+                                    jschBytes,
+                                    null, // public key (JSch can derive it)
+                                    null  // passphrase — keys stored unencrypted in Keystore
+                                )
+                            } finally {
+                                // Zero plaintext key bytes once JSch has parsed them.
+                                jschBytes.fill(0)
+                            }
                         } else {
                             throw SSHException("Jump host key not found: ${profile.proxyKeyId}")
                         }
@@ -918,8 +928,13 @@ class SSHConnection(
             Logger.i("SSHConnection", "Jump host connected successfully")
 
             // Setup port forwarding through jump host
-            // Forward a random local port to the target host's SSH port
+            // Forward a random local port to the target host's SSH port.
+            // Bind explicitly to 127.0.0.1 — the tunnel is only consumed by
+            // the next JSch session on this device; exposing it on the LAN
+            // would let nearby devices use this host as an SSH relay to the
+            // target through the jump host without authenticating to us.
             val localPort = jumpSession.setPortForwardingL(
+                "127.0.0.1",
                 0, // 0 = random available port
                 profile.host,
                 profile.port
@@ -1052,8 +1067,13 @@ class SSHConnection(
 
             val jschBytes = getJSchBytes(effectiveKeyId)
             if (jschBytes != null) {
+                // Track passphrase ByteArray + temp file so we can scrub them
+                // on every exit path (success, exception, or fallback).
+                var passphraseBytes: ByteArray? = null
+                var tempKeyFile: java.io.File? = null
                 try {
                     Logger.d("SSHConnection", "Auth: JSch bytes retrieved, size=${jschBytes.size} bytes")
+                    passphraseBytes = cachedPassphrase?.toByteArray()
 
                     // Wave 2.2 — if an OpenSSH user certificate is attached to this
                     // key, use the byte-array variant of addIdentity so we can pass
@@ -1066,28 +1086,47 @@ class SSHConnection(
                             "tabssh-$effectiveKeyId",
                             jschBytes,
                             cert.toByteArray(Charsets.US_ASCII),
-                            cachedPassphrase?.toByteArray()
+                            passphraseBytes
                         )
                         Logger.i("SSHConnection", "Auth: SSH key + certificate added to JSch (keyId=$effectiveKeyId, cert=${cert.length} bytes)")
                         return@withContext
                     }
 
                     // No cert — preserve existing temp-file path (byte-array variant has Linux quirks).
-                    val tempKeyFile = java.io.File(context.cacheDir, "temp_key_$effectiveKeyId")
-                    try {
-                        tempKeyFile.writeBytes(jschBytes)
-                        Logger.d("SSHConnection", "Auth: Wrote key to temp file: ${tempKeyFile.absolutePath}")
+                    tempKeyFile = java.io.File(context.cacheDir, "temp_key_$effectiveKeyId")
+                    tempKeyFile.writeBytes(jschBytes)
+                    Logger.d("SSHConnection", "Auth: Wrote key to temp file: ${tempKeyFile.absolutePath}")
 
-                        jsch.addIdentity(tempKeyFile.absolutePath, cachedPassphrase?.toByteArray())
-                        Logger.i("SSHConnection", "Auth: SSH key added to JSch from file (keyId=$effectiveKeyId)")
-                        return@withContext
-                    } finally {
-                        tempKeyFile.delete()
-                        Logger.d("SSHConnection", "Auth: Temp key file deleted")
-                    }
+                    jsch.addIdentity(tempKeyFile.absolutePath, passphraseBytes)
+                    Logger.i("SSHConnection", "Auth: SSH key added to JSch from file (keyId=$effectiveKeyId)")
+                    return@withContext
                 } catch (e: Exception) {
                     Logger.e("SSHConnection", "Auth: Failed to add SSH key to JSch", e)
                     // Fall through to password auth
+                } finally {
+                    // Zero the plaintext jschBytes — JSch has already parsed
+                    // and copied what it needs (or the addIdentity call failed
+                    // and we're not using it anyway). Leaving the array in the
+                    // heap extends the window an attacker has to scrape SSH
+                    // private-key material from a memory dump.
+                    jschBytes.fill(0)
+                    passphraseBytes?.fill(0)
+                    // Best-effort secure delete: overwrite then delete. The
+                    // delete() alone only unlinks the inode; the key bytes
+                    // remain in any block reused by the next caller until
+                    // overwritten. Overwriting in place is a cheap mitigation
+                    // and avoids the gap with flash-translation-layer wear-
+                    // levelling (which we can't fully defeat anyway).
+                    tempKeyFile?.let { f ->
+                        try {
+                            if (f.exists()) {
+                                val len = f.length().toInt().coerceAtLeast(0)
+                                if (len > 0) f.writeBytes(ByteArray(len))
+                            }
+                        } catch (_: Exception) {}
+                        try { f.delete() } catch (_: Exception) {}
+                        Logger.d("SSHConnection", "Auth: Temp key file overwritten and deleted")
+                    }
                 }
             } else {
                 // Key ID is set on the profile/identity but doesn't resolve to
@@ -1213,15 +1252,22 @@ class SSHConnection(
         }
         var added = 0
         for (key in keys) {
+            var bytes: ByteArray? = null
+            var passphrase: ByteArray? = null
             try {
-                val bytes = getJSchBytes(key.keyId) ?: continue
-                val passphrase = app.securePasswordManager
+                bytes = getJSchBytes(key.keyId) ?: continue
+                passphrase = app.securePasswordManager
                     .retrievePassword("key_passphrase_${key.keyId}")
                     ?.toByteArray()
                 jsch.addIdentity("tabssh-agent-${key.keyId}", bytes, null, passphrase)
                 added++
             } catch (e: Exception) {
                 Logger.d("SSHConnection", "Agent forwarding: skipping key ${key.keyId}: ${e.message}")
+            } finally {
+                // Scrub plaintext key + passphrase from the heap; JSch has copied
+                // what it needs into its own identity store.
+                bytes?.fill(0)
+                passphrase?.fill(0)
             }
         }
         Logger.i("SSHConnection", "Agent forwarding: loaded $added/${keys.size} stored keys into JSch identity repository")
@@ -1397,19 +1443,25 @@ class SSHConnection(
         }
         
         val currentSession = session ?: throw IllegalStateException("Session is null")
-        
+
+        // Channel leak fix: previously `channel.disconnect()` was only on the
+        // happy path inside the try{}. Any exception during connect()/read()
+        // left the JSch channel open on the Session until the session itself
+        // tore down — under sustained errors (timeouts, etc.) the per-session
+        // channel limit was reachable.
+        var channel: ChannelExec? = null
         try {
-            val channel = currentSession.openChannel("exec") as ChannelExec
+            channel = currentSession.openChannel("exec") as ChannelExec
             channel.setCommand(command)
-            
+
             val inputStream = channel.inputStream
             val errorStream = channel.errStream
-            
+
             channel.connect(timeoutMs.toInt())
-            
+
             val output = StringBuilder()
             val buffer = ByteArray(1024)
-            
+
             // Read stdout
             while (true) {
                 val available = inputStream.available()
@@ -1419,7 +1471,7 @@ class SSHConnection(
                         output.append(String(buffer, 0, bytesRead, Charsets.UTF_8))
                     }
                 }
-                
+
                 // Check if channel is closed
                 if (channel.isClosed) {
                     // Read any remaining data
@@ -1431,10 +1483,10 @@ class SSHConnection(
                     }
                     break
                 }
-                
+
                 kotlinx.coroutines.delay(100)
             }
-            
+
             // Read stderr if there's an error
             val errorOutput = StringBuilder()
             while (errorStream.available() > 0) {
@@ -1443,19 +1495,20 @@ class SSHConnection(
                     errorOutput.append(String(buffer, 0, bytesRead, Charsets.UTF_8))
                 }
             }
-            
+
             val exitStatus = channel.exitStatus
-            channel.disconnect()
-            
+
             if (exitStatus != 0 && errorOutput.isNotEmpty()) {
                 Logger.w("SSHConnection", "Command exit status: $exitStatus, stderr: $errorOutput")
             }
-            
+
             output.toString()
-            
+
         } catch (e: Exception) {
             Logger.e("SSHConnection", "Failed to execute command: $command", e)
             throw e
+        } finally {
+            try { channel?.disconnect() } catch (_: Exception) {}
         }
     }
     
