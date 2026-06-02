@@ -41,10 +41,19 @@ class VMwareApiClient(
 
     init {
         val builder = OkHttpClient.Builder()
+            .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .callTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
         io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.installTrust(
             builder, verifySsl, pinnedCertSha256, capturedPin, host, 443
         )
         client = builder.build()
+    }
+
+    /** Cancel any in-flight HTTP calls. Safe to call from Activity.onDestroy(). */
+    fun cancelAll() {
+        try { client.dispatcher.cancelAll() } catch (e: Exception) { Logger.w("VMwareAPI", "cancelAll: ${e.message}") }
     }
 
     suspend fun authenticate(): Boolean = withContext(Dispatchers.IO) {

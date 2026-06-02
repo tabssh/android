@@ -2,6 +2,7 @@ package io.github.tabssh.storage.database.entities
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import java.util.UUID
 import kotlinx.serialization.Serializable
@@ -28,7 +29,13 @@ import kotlinx.serialization.Serializable
  * DB: added in v32 (migration from v31).
  */
 @Serializable
-@Entity(tableName = "monitor_slots")
+@Entity(
+    tableName = "monitor_slots",
+    indices = [
+        Index("connection_id"),
+        Index("enabled")
+    ]
+)
 data class MonitorSlot(
 
     @PrimaryKey

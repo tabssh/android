@@ -90,6 +90,13 @@ class VMwareManagerActivity : AppCompatActivity() {
         return super.onOptionsItemSelected(item)
     }
 
+    override fun onDestroy() {
+        // Cancel any in-flight HTTP calls so OkHttp does not retain Activity
+        // references through callbacks past onDestroy.
+        try { currentClient?.cancelAll() } catch (e: Exception) { Logger.w(TAG, "cancelAll: ${e.message}") }
+        super.onDestroy()
+    }
+
     // ── Connection ────────────────────────────────────────────────────────────
 
     private fun connectAndRefresh(hypervisorId: Long) {

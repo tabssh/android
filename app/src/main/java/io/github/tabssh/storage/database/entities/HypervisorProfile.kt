@@ -2,6 +2,7 @@ package io.github.tabssh.storage.database.entities
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import kotlinx.serialization.Serializable
 
@@ -11,7 +12,13 @@ import kotlinx.serialization.Serializable
  * and Oracle Cloud Infrastructure (OCI). The dialect is gated by `type` and,
  * for non-password auth, by `authType` (see below).
  */
-@Entity(tableName = "hypervisors")
+@Entity(
+    tableName = "hypervisors",
+    indices = [
+        Index("account_id"),
+        Index("linked_connection_id")
+    ]
+)
 @Serializable
 data class HypervisorProfile(
     @PrimaryKey(autoGenerate = true)

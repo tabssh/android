@@ -2,16 +2,34 @@ package io.github.tabssh.storage.database.entities
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import io.github.tabssh.ssh.auth.AuthType
 import kotlinx.serialization.Serializable
 import java.util.UUID
 
 /**
- * Database entity representing an SSH connection profile
+ * Database entity representing an SSH connection profile.
+ *
+ * Indexes are created by `MIGRATION_36_37` on existing installs and by Room's
+ * CREATE TABLE on fresh installs. They cover FK-like columns the DAOs query
+ * against (identity_id, key_id, proxy_key_id, oci_instance_id, group_id) plus
+ * the columns used in ORDER BY / WHERE clauses by `ConnectionDao`. Never drop
+ * one without checking `ConnectionDao` first.
  */
 @Serializable
-@Entity(tableName = "connections")
+@Entity(
+    tableName = "connections",
+    indices = [
+        Index("identity_id"),
+        Index("key_id"),
+        Index("proxy_key_id"),
+        Index("oci_instance_id"),
+        Index("group_id"),
+        Index("last_connected"),
+        Index("modified_at")
+    ]
+)
 data class ConnectionProfile(
     @PrimaryKey
     val id: String = UUID.randomUUID().toString(),

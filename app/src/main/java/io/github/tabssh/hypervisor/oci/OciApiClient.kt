@@ -76,7 +76,12 @@ class OciApiClient(
     private val signer = OciSigner(tenancyOcid, userOcid, fingerprint, keyMaterial)
 
     // Separate HTTP clients so each endpoint's TLS session has its own pin.
+    // Bounded timeouts so a stalled OCI endpoint cannot hang the UI forever.
     private val identityClient: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .callTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
         .also { b ->
             io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.installTrust(
                 b, verifySsl, identityPinnedSha, identityCapturedPin, identityHost, 443
@@ -86,6 +91,10 @@ class OciApiClient(
         .build()
 
     private val iaasClient: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .callTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
         .also { b ->
             io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.installTrust(
                 b, verifySsl, iaasPinnedSha, iaasCapturedPin, iaasHost, 443
@@ -93,6 +102,12 @@ class OciApiClient(
         }
         .addInterceptor(signer.asInterceptor())
         .build()
+
+    /** Cancel any in-flight calls on both clients. Safe from Activity.onDestroy(). */
+    fun cancelAll() {
+        try { identityClient.dispatcher.cancelAll() } catch (_: Exception) {}
+        try { iaasClient.dispatcher.cancelAll() } catch (_: Exception) {}
+    }
 
     /**
      * Live credential check — pulls the IAM user record. Returns true on

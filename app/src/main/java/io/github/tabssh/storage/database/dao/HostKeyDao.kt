@@ -62,8 +62,11 @@ interface HostKeyDao {
     suspend fun getAllHostnames(): List<String>
     
     /**
-     * Check if a host key exists and matches
+     * Check if a host key exists and matches.
+     * Wrapped in a Room @Transaction so the read + last-verified update are atomic;
+     * prevents a concurrent CHANGED_KEY write from racing with this check.
      */
+    @Transaction
     suspend fun verifyHostKey(hostname: String, port: Int, publicKey: String, fingerprint: String): HostKeyVerificationResult {
         val existingKey = getHostKey(hostname, port)
         

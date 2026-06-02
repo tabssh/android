@@ -2,14 +2,28 @@ package io.github.tabssh.storage.database.entities
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import kotlinx.serialization.Serializable
 
 /**
- * Database entity representing a known host key entry
+ * Database entity representing a known host key entry.
+ *
+ * Indexes match the lookup patterns in `HostKeyDao`:
+ *   (hostname, port) — `getHostKey` (the SSH handshake hot path)
+ *   fingerprint       — `getHostKeysByFingerprint`
+ *   hostname          — wildcard / multi-port lookups
  */
 @Serializable
-@Entity(tableName = "host_keys")
+@Entity(
+    tableName = "host_keys",
+    indices = [
+        Index(value = ["hostname", "port"]),
+        Index("fingerprint"),
+        Index("hostname"),
+        Index("modified_at")
+    ]
+)
 data class HostKeyEntry(
     @PrimaryKey
     val id: String, // host:port format

@@ -2,6 +2,7 @@ package io.github.tabssh.storage.database.entities
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import io.github.tabssh.ssh.auth.AuthType
 import kotlinx.serialization.Serializable
@@ -14,7 +15,13 @@ import kotlinx.serialization.Serializable
  * Example: "work-admin" identity with username "admin" and specific SSH key
  * can be used for 20 different servers
  */
-@Entity(tableName = "identities")
+@Entity(
+    tableName = "identities",
+    indices = [
+        Index("key_id"),
+        Index("name")
+    ]
+)
 @Serializable
 data class Identity(
     @PrimaryKey

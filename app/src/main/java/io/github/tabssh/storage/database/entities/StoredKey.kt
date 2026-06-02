@@ -2,6 +2,7 @@ package io.github.tabssh.storage.database.entities
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import kotlinx.serialization.Serializable
 import java.util.UUID
@@ -10,7 +11,13 @@ import java.util.UUID
  * Database entity representing a stored SSH private key
  */
 @Serializable
-@Entity(tableName = "stored_keys")
+@Entity(
+    tableName = "stored_keys",
+    indices = [
+        Index("fingerprint"),
+        Index("modified_at")
+    ]
+)
 data class StoredKey(
     @PrimaryKey
     val keyId: String = UUID.randomUUID().toString(),

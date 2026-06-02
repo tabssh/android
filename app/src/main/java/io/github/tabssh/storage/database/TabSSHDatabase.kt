@@ -35,7 +35,7 @@ import io.github.tabssh.utils.logging.Logger
         VncHost::class,
         VncIdentity::class
     ],
-    version = 36,
+    version = 37,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -324,7 +324,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     MIGRATION_32_33,
                     MIGRATION_33_34,
                     MIGRATION_34_35,
-                    MIGRATION_35_36
+                    MIGRATION_35_36,
+                    MIGRATION_36_37
                 )
                 .build()
                 INSTANCE = instance
@@ -917,3 +918,78 @@ data class DatabaseStats(
                 Logger.i("Database", "Migration 35->36: Added group_type to connection_groups")
             }
         }
+
+        /**
+         * v36 → v37 — DB audit pass 1: declared performance indexes.
+         *
+         * Purely additive. Every statement below is a `CREATE INDEX IF NOT
+         * EXISTS` on a column the DAO layer already queries against — most
+         * previously incurred a full table scan. No schema-shape changes, no
+         * data migration, no column drops. Safe on every existing install.
+         *
+         * Index names follow Room's autogen convention (`index_<table>_<col…>`)
+         * so the runtime `TableInfo` validator matches what `@Index(...)` on
+         * the entities emits on fresh installs.
+         *
+         * Targets (column → DAO query that scans without it):
+         *   connections.identity_id          → ConnectionDao.getConnectionsByIdentity / applyIdentityToConnections / removeIdentityFromAllConnections
+         *   connections.key_id               → ConnectionDao.clearKeyFromConnections
+         *   connections.proxy_key_id         → ConnectionDao.clearProxyKeyFromConnections
+         *   connections.oci_instance_id      → ConnectionDao.getByOciInstanceId
+         *   connections.group_id             → ConnectionDao.getConnectionsByGroup / getUngroupedConnections
+         *   connections.last_connected       → ConnectionDao.getRecentConnections (ORDER BY)
+         *   connections.modified_at          → sync-modified-since query
+         *   stored_keys.fingerprint          → fingerprint lookup
+         *   stored_keys.modified_at          → sync-modified-since query
+         *   identities.key_id                → IdentityDao.clearKeyFromIdentities
+         *   identities.name                  → ORDER BY on every list query + getIdentityByName
+         *   host_keys.(hostname, port)       → HostKeyDao.getHostKey (handshake hot path)
+         *   host_keys.fingerprint            → HostKeyDao.getHostKeysByFingerprint
+         *   host_keys.hostname               → HostKeyDao.getHostKeysByHostname / delete
+         *   host_keys.modified_at            → sync-modified-since query
+         *   monitor_slots.connection_id      → MonitorSlotDao.getByConnectionId / deleteByConnectionId
+         *   monitor_slots.enabled            → MonitorSlotDao.getEnabledSlots (worker hot path)
+         *   hypervisors.account_id           → HypervisorPasswordStore credential resolution
+         *   hypervisors.linked_connection_id → import-existing-host lookup
+         *   vnc_hosts.identity_id            → VncHostDao identity resolution
+         *   vnc_hosts.group_id               → folder filter
+         *   connection_groups.parent_id      → tree traversal
+         *   connection_groups.sort_order     → ORDER BY on group list
+         *
+         * Earlier raw-SQL indexes (idx_connections_group, idx_groups_parent,
+         * idx_snippets_*, etc.) created in v2→v3 / v3→v4 / v7→v8 already exist
+         * on legacy DBs; this migration uses Room's `index_<table>_<col>` naming
+         * so the validator binds to them rather than to the legacy names.
+         */
+        val MIGRATION_36_37 = object : Migration(36, 37) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                val stmts = listOf(
+                    "CREATE INDEX IF NOT EXISTS index_connections_identity_id ON connections(identity_id)",
+                    "CREATE INDEX IF NOT EXISTS index_connections_key_id ON connections(key_id)",
+                    "CREATE INDEX IF NOT EXISTS index_connections_proxy_key_id ON connections(proxy_key_id)",
+                    "CREATE INDEX IF NOT EXISTS index_connections_oci_instance_id ON connections(oci_instance_id)",
+                    "CREATE INDEX IF NOT EXISTS index_connections_group_id ON connections(group_id)",
+                    "CREATE INDEX IF NOT EXISTS index_connections_last_connected ON connections(last_connected)",
+                    "CREATE INDEX IF NOT EXISTS index_connections_modified_at ON connections(modified_at)",
+                    "CREATE INDEX IF NOT EXISTS index_stored_keys_fingerprint ON stored_keys(fingerprint)",
+                    "CREATE INDEX IF NOT EXISTS index_stored_keys_modified_at ON stored_keys(modified_at)",
+                    "CREATE INDEX IF NOT EXISTS index_identities_key_id ON identities(key_id)",
+                    "CREATE INDEX IF NOT EXISTS index_identities_name ON identities(name)",
+                    "CREATE INDEX IF NOT EXISTS index_host_keys_hostname_port ON host_keys(hostname, port)",
+                    "CREATE INDEX IF NOT EXISTS index_host_keys_fingerprint ON host_keys(fingerprint)",
+                    "CREATE INDEX IF NOT EXISTS index_host_keys_hostname ON host_keys(hostname)",
+                    "CREATE INDEX IF NOT EXISTS index_host_keys_modified_at ON host_keys(modified_at)",
+                    "CREATE INDEX IF NOT EXISTS index_monitor_slots_connection_id ON monitor_slots(connection_id)",
+                    "CREATE INDEX IF NOT EXISTS index_monitor_slots_enabled ON monitor_slots(enabled)",
+                    "CREATE INDEX IF NOT EXISTS index_hypervisors_account_id ON hypervisors(account_id)",
+                    "CREATE INDEX IF NOT EXISTS index_hypervisors_linked_connection_id ON hypervisors(linked_connection_id)",
+                    "CREATE INDEX IF NOT EXISTS index_vnc_hosts_identity_id ON vnc_hosts(identity_id)",
+                    "CREATE INDEX IF NOT EXISTS index_vnc_hosts_group_id ON vnc_hosts(group_id)",
+                    "CREATE INDEX IF NOT EXISTS index_connection_groups_parent_id ON connection_groups(parent_id)",
+                    "CREATE INDEX IF NOT EXISTS index_connection_groups_sort_order ON connection_groups(sort_order)"
+                )
+                for (sql in stmts) database.execSQL(sql)
+                Logger.i("Database", "Migration 36->37: Added ${stmts.size} performance indexes")
+            }
+        }
+

@@ -2,6 +2,7 @@ package io.github.tabssh.storage.database.entities
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import kotlinx.serialization.Serializable
 
@@ -12,7 +13,13 @@ import kotlinx.serialization.Serializable
  * when no identity is linked.
  */
 @Serializable
-@Entity(tableName = "vnc_hosts")
+@Entity(
+    tableName = "vnc_hosts",
+    indices = [
+        Index("identity_id"),
+        Index("group_id")
+    ]
+)
 data class VncHost(
     @PrimaryKey
     @ColumnInfo(name = "id")
