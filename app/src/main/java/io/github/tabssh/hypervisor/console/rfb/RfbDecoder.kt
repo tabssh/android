@@ -311,6 +311,7 @@ class RfbDecoder(private val fmt: PixelFormat) {
         x: Int, y: Int, w: Int, h: Int
     ) {
         val compLen = din.readInt() and 0x7FFFFFFF
+        Logger.d(TAG, "ZRLE rect ${w}×${h} at ($x,$y) compLen=$compLen")
         if (compLen <= 0) return
 
         val compBuf = ByteArray(compLen)
@@ -325,6 +326,7 @@ class RfbDecoder(private val fmt: PixelFormat) {
             // error" instead of an opaque DataFormatException detail string.
             throw java.io.IOException("ZRLE decompression error: ${e.message}", e)
         }
+        Logger.d(TAG, "ZRLE inflated compLen=$compLen → plainLen=${plain.size} (need ~${w * h * fmt.cpixelBytes})")
         val src = java.io.ByteArrayInputStream(plain)
 
         val cp = fmt.cpixelBytes

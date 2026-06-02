@@ -940,7 +940,15 @@ class RfbClient(
                         decoder.decodeRect(din, framebuffer, fbWidth, rx, ry, rw, rh, encoding)
                         listener?.onFramebufferUpdate(rx, ry, rw, rh, framebuffer)
                     } else if (encoding in RfbDecoder.PIXEL_ENCODINGS) {
-                        // Known pixel encoding but zero-dimension rect — no payload.
+                        // Zero-dimension rectangle. Most pixel encodings carry no payload.
+                        // ZRLE and ZLIB always prefix their data with a 4-byte DataLen that
+                        // must be consumed even for empty rectangles or subsequent reads desync.
+                        when (encoding) {
+                            RfbConstants.ENC_ZRLE, RfbConstants.ENC_ZLIB -> {
+                                val dataLen = din.readInt() and 0x7FFFFFFF
+                                if (dataLen > 0) din.skipBytes(dataLen)
+                            }
+                        }
                         Logger.d(TAG, "Zero-dim rect enc=0x$hexEnc at ($rx,$ry) ${rw}×$rh — skipping")
                     } else {
                         // Unknown vendor / pseudo-encoding — assume zero payload.
@@ -1056,7 +1064,12 @@ class RfbClient(
                         )
                         if (len > 0) din.skipBytes(len)
                     }
-                    else -> Logger.w(TAG, "Unknown QEMU audio op $op")
+                    else -> {
+                        // Unknown audio op — payload size is unknowable, stream is desynced.
+                        Logger.w(TAG, "Unknown QEMU audio op $op — closing to avoid stream desync")
+                        running.set(false)
+                        throw java.io.IOException("Unknown QEMU audio op $op")
+                    }
                 }
             }
             else -> {
