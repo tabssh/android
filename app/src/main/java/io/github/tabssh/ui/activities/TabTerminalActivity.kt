@@ -3354,29 +3354,15 @@ private fun showSnippetsPickerForActiveTab() {
      * Show dialog to create a new snippet
      */
     private fun showCreateSnippetDialog() {
-        val layout = android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(50, 20, 50, 20)
-        }
-
-        val inputName = android.widget.EditText(this).apply {
-            hint = "Snippet name"
-        }
-        val inputCommand = android.widget.EditText(this).apply {
-            hint = "Command (use {variable} for placeholders)"
-        }
-        val inputCategory = android.widget.EditText(this).apply {
-            hint = "Category (optional)"
-            setText("General")
-        }
-
-        layout.addView(inputName)
-        layout.addView(inputCommand)
-        layout.addView(inputCategory)
+        val dialogView = layoutInflater.inflate(R.layout.dialog_edit_snippet, null)
+        val inputName = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.edit_snippet_name)
+        val inputCommand = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.edit_snippet_command)
+        val inputDescription = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.edit_snippet_description)
+        val inputCategory = dialogView.findViewById<android.widget.AutoCompleteTextView>(R.id.edit_snippet_category)
 
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Create Snippet")
-            .setView(layout)
+            .setView(dialogView)
             .setPositiveButton("Create") { _, _ ->
                 val name = inputName.text.toString().trim()
                 val command = inputCommand.text.toString().trim()
@@ -3387,6 +3373,7 @@ private fun showSnippetsPickerForActiveTab() {
                         val snippet = io.github.tabssh.storage.database.entities.Snippet(
                             name = name,
                             command = command,
+                            description = inputDescription.text.toString().trim(),
                             category = category
                         )
                         withContext(Dispatchers.IO) { app.database.snippetDao().insertSnippet(snippet) }

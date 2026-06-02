@@ -575,6 +575,10 @@ class XCPngManagerActivity : AppCompatActivity() {
             val state: TextView = view.findViewById(R.id.vm_state)
             val info: TextView = view.findViewById(R.id.vm_info)
             val ip: TextView = view.findViewById(R.id.vm_ip)
+            val statusDot: View = view.findViewById(R.id.view_status_dot)
+            val rowConnect: android.widget.LinearLayout = view.findViewById(R.id.row_connect)
+            val rowMain: android.widget.LinearLayout = view.findViewById(R.id.row_main)
+            val rowSecondary: android.widget.LinearLayout = view.findViewById(R.id.row_secondary)
             val btnVnc: com.google.android.material.button.MaterialButton = view.findViewById(R.id.btn_console)
             val btnSsh: com.google.android.material.button.MaterialButton = view.findViewById(R.id.btn_ssh)
             val btnStart: com.google.android.material.button.MaterialButton = view.findViewById(R.id.btn_start)
@@ -598,6 +602,7 @@ class XCPngManagerActivity : AppCompatActivity() {
             holder.ip.visibility = View.GONE
 
             holder.state.setTextColor(stateColor(vm.powerState))
+            holder.statusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(stateColor(vm.powerState))
 
             // Show/hide buttons based on VM status
             when (vm.powerState.lowercase()) {
@@ -628,6 +633,10 @@ class XCPngManagerActivity : AppCompatActivity() {
                     holder.btnReset.visibility = View.GONE
                 }
             }
+
+            holder.rowConnect.visibility = if (holder.btnVnc.visibility == View.VISIBLE || holder.btnSsh.visibility == View.VISIBLE) View.VISIBLE else View.GONE
+            holder.rowMain.visibility = if (holder.btnStart.visibility == View.VISIBLE || holder.btnStop.visibility == View.VISIBLE) View.VISIBLE else View.GONE
+            holder.rowSecondary.visibility = if (holder.btnReboot.visibility == View.VISIBLE || holder.btnReset.visibility == View.VISIBLE) View.VISIBLE else View.GONE
 
             // Long-press opens snapshot dialog for Xen Orchestra connections
             holder.itemView.setOnLongClickListener {

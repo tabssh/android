@@ -46,8 +46,8 @@
                     app:tabSelectedTextColor="@color/white"
                     app:tabIndicatorColor="@color/accent_500"
                     app:tabIndicatorHeight="3dp"
-                    app:tabMode="auto"
-                    app:tabGravity="fill" />
+                    app:tabMode="scrollable"
+                    app:tabGravity="start" />
 
             </LinearLayout>
 

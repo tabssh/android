@@ -492,6 +492,10 @@ class LibvirtManagerActivity : AppCompatActivity() {
             val state: TextView = view.findViewById(R.id.vm_state)
             val info: TextView = view.findViewById(R.id.vm_info)
             val ip: TextView = view.findViewById(R.id.vm_ip)
+            val statusDot: View = view.findViewById(R.id.view_status_dot)
+            val rowConnect: android.widget.LinearLayout = view.findViewById(R.id.row_connect)
+            val rowMain: android.widget.LinearLayout = view.findViewById(R.id.row_main)
+            val rowSecondary: android.widget.LinearLayout = view.findViewById(R.id.row_secondary)
             val btnConsole: MaterialButton = view.findViewById(R.id.btn_console)
             val btnSsh: MaterialButton = view.findViewById(R.id.btn_ssh)
             val btnStart: MaterialButton = view.findViewById(R.id.btn_start)
@@ -514,6 +518,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
             holder.name.text = vm.name
             holder.state.text = stateLabel(vm.state)
             holder.state.setTextColor(stateColor(vm.state))
+            holder.statusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(stateColor(vm.state))
             holder.info.text = if (vm.id >= 0) "ID: ${vm.id}" else "ID: —"
             holder.ip.visibility = View.GONE
 
@@ -554,6 +559,10 @@ class LibvirtManagerActivity : AppCompatActivity() {
                     holder.btnReset.visibility = View.GONE
                 }
             }
+
+            holder.rowConnect.visibility = if (holder.btnConsole.visibility == View.VISIBLE || holder.btnSsh.visibility == View.VISIBLE) View.VISIBLE else View.GONE
+            holder.rowMain.visibility = if (holder.btnStart.visibility == View.VISIBLE || holder.btnStop.visibility == View.VISIBLE) View.VISIBLE else View.GONE
+            holder.rowSecondary.visibility = if (holder.btnReboot.visibility == View.VISIBLE || holder.btnReset.visibility == View.VISIBLE) View.VISIBLE else View.GONE
 
             holder.btnConsole.setOnClickListener { openConsole(vm, client) }
             holder.btnSsh.setOnClickListener { directSshToVm(vm, client) }

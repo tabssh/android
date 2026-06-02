@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Shared VM / instance card used by all four hypervisor manager screens.
-     Inline compact action buttons replace the tap-for-dialog pattern. -->
+<!-- Shared VM / instance card used by all hypervisor manager screens. -->
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -16,11 +15,19 @@
         android:orientation="vertical"
         android:padding="12dp">
 
+        <!-- Header: status dot + name + state badge -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical">
+
+            <View
+                android:id="@+id/view_status_dot"
+                android:layout_width="10dp"
+                android:layout_height="10dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_status_dot" />
 
             <TextView
                 android:id="@+id/vm_name"
@@ -35,19 +42,21 @@
                 android:id="@+id/vm_state"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="13sp"
+                android:textSize="12sp"
                 android:textStyle="bold" />
 
         </LinearLayout>
 
+        <!-- CPU / RAM / metadata info line -->
         <TextView
             android:id="@+id/vm_info"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
+            android:layout_marginTop="4dp"
             android:textSize="12sp"
             android:textColor="?attr/colorOnSurfaceVariant" />
 
+        <!-- IP address line, shown only when available -->
         <TextView
             android:id="@+id/vm_ip"
             android:layout_width="match_parent"
@@ -57,45 +66,47 @@
             android:textColor="?attr/colorOnSurfaceVariant"
             android:visibility="gone" />
 
+        <!-- Connect row: VNC console + SSH — shown for running VMs with console/ssh support -->
         <LinearLayout
+            android:id="@+id/row_connect"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="8dp">
+            android:layout_marginTop="10dp"
+            android:visibility="gone">
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_console"
-                style="@style/Widget.Material3.Button.TonalButton"
+                style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginEnd="4dp"
-                android:text="VNC"
-                android:textSize="11sp"
-                android:minHeight="32dp"
+                android:minHeight="@dimen/min_touch_target"
                 android:minWidth="0dp"
-                android:paddingTop="4dp"
-                android:paddingBottom="4dp"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:visibility="gone" />
+                android:text="VNC" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_ssh"
-                style="@style/Widget.Material3.Button.TonalButton"
+                style="@style/Widget.Material3.Button"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginEnd="4dp"
-                android:text="SSH"
-                android:textSize="11sp"
-                android:minHeight="32dp"
+                android:layout_marginStart="4dp"
+                android:minHeight="@dimen/min_touch_target"
                 android:minWidth="0dp"
-                android:paddingTop="4dp"
-                android:paddingBottom="4dp"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:visibility="gone" />
+                android:text="SSH" />
+
+        </LinearLayout>
+
+        <!-- Main power row: Start / Stop -->
+        <LinearLayout
+            android:id="@+id/row_main"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="8dp"
+            android:visibility="gone">
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_start"
@@ -104,15 +115,9 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginEnd="4dp"
-                android:text="Start"
-                android:textSize="11sp"
-                android:minHeight="32dp"
+                android:minHeight="@dimen/min_touch_target"
                 android:minWidth="0dp"
-                android:paddingTop="4dp"
-                android:paddingBottom="4dp"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:visibility="gone" />
+                android:text="Start" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_stop"
@@ -120,16 +125,21 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginEnd="4dp"
-                android:text="Stop"
-                android:textSize="11sp"
-                android:minHeight="32dp"
+                android:layout_marginStart="4dp"
+                android:minHeight="@dimen/min_touch_target"
                 android:minWidth="0dp"
-                android:paddingTop="4dp"
-                android:paddingBottom="4dp"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:visibility="gone" />
+                android:text="Stop" />
+
+        </LinearLayout>
+
+        <!-- Secondary actions row: Reboot / Reset -->
+        <LinearLayout
+            android:id="@+id/row_secondary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="8dp"
+            android:visibility="gone">
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_reboot"
@@ -138,15 +148,9 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginEnd="4dp"
-                android:text="Reboot"
-                android:textSize="11sp"
-                android:minHeight="32dp"
+                android:minHeight="@dimen/min_touch_target"
                 android:minWidth="0dp"
-                android:paddingTop="4dp"
-                android:paddingBottom="4dp"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:visibility="gone" />
+                android:text="Reboot" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_reset"
@@ -154,15 +158,10 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Reset"
-                android:textSize="11sp"
-                android:minHeight="32dp"
+                android:layout_marginStart="4dp"
+                android:minHeight="@dimen/min_touch_target"
                 android:minWidth="0dp"
-                android:paddingTop="4dp"
-                android:paddingBottom="4dp"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:visibility="gone" />
+                android:text="Reset" />
 
         </LinearLayout>
 
