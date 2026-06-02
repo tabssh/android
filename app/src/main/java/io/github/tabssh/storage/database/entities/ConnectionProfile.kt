@@ -90,9 +90,18 @@ data class ConnectionProfile(
     @ColumnInfo(name = "port_knock_enabled")
     val portKnockEnabled: Boolean? = null, // null = use global default, true/false = override
     
+    /**
+     * JSON-serialized knock sequence: `[{"port":7000,"protocol":"TCP"},...]`.
+     * Parsed and written by `PortKnocker.parseKnockSequence` /
+     * `PortKnocker.serializeKnockSequence`. Stored as TEXT rather than a
+     * Room TypeConverter because `PortKnocker.KnockConfig` is a nested class
+     * and the serialized form is already the canonical wire format shared with
+     * backup/restore and QR pairing. Adding a TypeConverter here would couple
+     * the DB layer to the knock engine's internal type without a real benefit.
+     */
     @ColumnInfo(name = "port_knock_sequence")
-    val portKnockSequence: String? = null, // JSON: [{"port":7000,"protocol":"TCP"},{"port":8000,"protocol":"UDP"}]
-    
+    val portKnockSequence: String? = null,
+
     @ColumnInfo(name = "port_knock_delay_ms")
     val portKnockDelayMs: Int = 100, // Delay between knocks in milliseconds
     
@@ -192,8 +201,17 @@ data class ConnectionProfile(
     @ColumnInfo(name = "connection_count")
     val connectionCount: Int = 0,
 
+    /**
+     * Untyped JSON extension bag. Keys currently in use:
+     *   "identityFileStr" — inline PEM key text (SSHConfigExporter / importer)
+     *   "cloudSource"     — cloud account source tag (CloudAccountsFragment)
+     *
+     * Stored as raw TEXT intentionally: the key set grows per feature and
+     * a typed data class would need frequent migrations. All callers use
+     * `JSONObject(advancedSettings)` / `optString(key)` directly.
+     */
     @ColumnInfo(name = "advanced_settings")
-    val advancedSettings: String? = null, // JSON string
+    val advancedSettings: String? = null,
 
     /**
      * Per-host notification alert prefs. NotificationAlertMode values:

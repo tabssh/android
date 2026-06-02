@@ -40,8 +40,17 @@ data class Identity(
     @ColumnInfo(name = "key_id")
     val keyId: String? = null,
 
+    /**
+     * Legacy encrypted-password slot. New code writes passwords exclusively
+     * to `SecurePasswordManager` under the key `identity_{id}` (AES-GCM,
+     * Android Keystore). This column is kept as a read fallback in
+     * `SSHConnection` so backups and migrations from pre-Keystore installs
+     * still work. Dropping the column requires `ALTER TABLE … DROP COLUMN`
+     * (SQLite ≥ 3.35 → Android 12+ only) which would bump minSdk from 21.
+     * Until minSdk is raised, never write new passwords here.
+     */
     @ColumnInfo(name = "password")
-    val password: String? = null, // Encrypted password for PASSWORD auth type
+    val password: String? = null,
 
     @ColumnInfo(name = "description")
     val description: String? = null,

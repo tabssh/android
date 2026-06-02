@@ -136,27 +136,42 @@ class OciApiClient(
     }
 
     /**
-     * List Compute instances in a compartment. Returns the first page
-     * only (no pagination — matches the spec's "out of scope" call). If
-     * the response carries an `opc-next-page` header, more rows exist
-     * and are silently dropped.
+     * List all Compute instances in a compartment, following `opc-next-page`
+     * pagination until the header is absent. Each page requests up to 100
+     * items (OCI's documented maximum per page for this endpoint). Pages are
+     * accumulated in memory; most tenancies have < 1 000 instances per
+     * compartment so memory pressure is negligible.
+     *
+     * Returns an empty list (not an exception) on HTTP errors so the caller
+     * can show an empty state rather than crash the fragment.
      */
     suspend fun listInstances(compartmentOcid: String): List<OciInstance> =
         withContext(Dispatchers.IO) {
-            val url = "$iaasBaseUrl/instances".toHttpUrl().newBuilder()
-                .addQueryParameter("compartmentId", compartmentOcid)
-                .addQueryParameter("limit", "100")
-                .build()
-            val request = Request.Builder().url(url).get().build()
-            iaasClient.newCall(request).execute().use { resp ->
-                if (!resp.isSuccessful) {
-                    Logger.e("OciAPI", "listInstances HTTP ${resp.code}: " +
-                        (resp.body?.string()?.take(300) ?: "<no body>"))
-                    return@withContext emptyList<OciInstance>()
+            val accumulated = mutableListOf<OciInstance>()
+            var pageToken: String? = null
+
+            do {
+                val urlBuilder = "$iaasBaseUrl/instances".toHttpUrl().newBuilder()
+                    .addQueryParameter("compartmentId", compartmentOcid)
+                    .addQueryParameter("limit", "100")
+                if (pageToken != null) {
+                    urlBuilder.addQueryParameter("page", pageToken)
                 }
-                val raw = resp.body?.string().orEmpty()
-                parseInstances(JSONArray(raw))
-            }
+                val request = Request.Builder().url(urlBuilder.build()).get().build()
+                val nextPage: String? = iaasClient.newCall(request).execute().use { resp ->
+                    if (!resp.isSuccessful) {
+                        Logger.e("OciAPI", "listInstances HTTP ${resp.code}: " +
+                            (resp.body?.string()?.take(300) ?: "<no body>"))
+                        return@withContext accumulated
+                    }
+                    val raw = resp.body?.string().orEmpty()
+                    accumulated.addAll(parseInstances(JSONArray(raw)))
+                    resp.header("opc-next-page")
+                }
+                pageToken = nextPage
+            } while (pageToken != null)
+
+            accumulated
         }
 
     suspend fun getInstance(instanceOcid: String): OciInstance? =

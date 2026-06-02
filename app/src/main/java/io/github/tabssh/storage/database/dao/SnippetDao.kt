@@ -35,7 +35,15 @@ interface SnippetDao {
     suspend fun getFrequentlyUsedSnippets(limit: Int = 10): List<Snippet>
 
     /**
-     * Search snippets by name, command, or tags
+     * Search snippets by name, command, or tags.
+     *
+     * LIKE '%term%' requires a full table scan (no B-tree index can prefix a
+     * leading wildcard). The LIMIT caps the scan work per keystroke and keeps
+     * UI latency acceptable for large snippet libraries. Callers should
+     * debounce the query string to further reduce scan frequency.
+     *
+     * FTS5 is the correct long-term replacement; see AUDIT.AI.md for the
+     * migration plan (schema v38+).
      */
     @Query("""
         SELECT * FROM snippets
@@ -43,8 +51,9 @@ interface SnippetDao {
            OR command LIKE '%' || :query || '%'
            OR tags LIKE '%' || :query || '%'
         ORDER BY usage_count DESC, name ASC
+        LIMIT :limit
     """)
-    fun searchSnippets(query: String): Flow<List<Snippet>>
+    fun searchSnippets(query: String, limit: Int = 200): Flow<List<Snippet>>
 
     /**
      * Get a specific snippet by ID

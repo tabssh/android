@@ -46,6 +46,20 @@ data class HypervisorProfile(
     @ColumnInfo(name = "realm")
     val realm: String? = null, // Proxmox: pam/pve, XCP-ng: not used
     
+    /**
+     * `false` is the correct default for Proxmox / XCP-ng / VMware / XO.
+     *
+     * Virtually every home-lab install uses a self-signed certificate; setting
+     * `true` by default would break first-connection for nearly all users.
+     * The threat model (IDEA.md) is addressed by `HypervisorTrustManagerFactory`
+     * TOFU: on first connect with an unrecognised cert, the user is shown the
+     * fingerprint and asked to confirm. The confirmed SHA-256 is saved in
+     * `pinned_cert_sha256` and enforced on every subsequent connect — so MITM
+     * after the initial trust decision is still detected. This is equivalent
+     * to OpenSSH's `StrictHostKeyChecking=accept-new` default.
+     *
+     * OCI `OciApiClient` deliberately defaults to `true` (public CA certs).
+     */
     @ColumnInfo(name = "verify_ssl")
     val verifySsl: Boolean = false,
 
