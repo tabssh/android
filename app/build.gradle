@@ -224,6 +224,10 @@ android {
             outputFileName = "tabssh-android-${archTag}.apk"
         }
     }
+
+    sourceSets {
+        androidTest.assets.srcDirs += files("$projectDir/schemas".toString())
+    }
 }
 
 // Room schema export under KSP. Same path that Kapt was writing to
@@ -334,6 +338,7 @@ dependencies {
     androidTestImplementation 'androidx.test:rules:1.5.0'
     androidTestImplementation 'androidx.test.espresso:espresso-contrib:3.5.1'
     androidTestImplementation 'androidx.test.espresso:espresso-accessibility:3.5.1'
+    androidTestImplementation 'androidx.room:room-testing:2.6.1'
 }
 
 // Custom tasks for CI/CD pipeline
