@@ -212,6 +212,15 @@ class ConsoleWebSocketClient(
             headers.forEach { (key, value) ->
                 requestBuilder.addHeader(key, value)
             }
+            // Proxmox vncwebsocket explicitly validates "Sec-WebSocket-Protocol: binary"
+            // in its upgrade handler (pveproxy AnyEvent::HTTP::WebSocket) and closes the
+            // connection with an error if it is absent.  Other hypervisors that use binary
+            // WebSocket frames (XCP-ng XenAPI console, Xen Orchestra, VMware) also expect
+            // binary-mode framing, so we advertise the subprotocol for all non-text paths.
+            // PROXMOX_TERM uses text frames ("0:LEN:MSG" envelope) and must NOT send this.
+            if (protocol != ConsoleProtocol.PROXMOX_TERM) {
+                requestBuilder.addHeader("Sec-WebSocket-Protocol", "binary")
+            }
             val request = requestBuilder.build()
 
             Logger.i(TAG, "Connecting to console: $url")

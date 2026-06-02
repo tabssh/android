@@ -277,11 +277,13 @@ class RfbDecoder(private val fmt: PixelFormat) {
         try {
             while (totalOut < expectedSize) {
                 val n = zlibInflater.inflate(plain, totalOut, expectedSize - totalOut)
-                // Break only when no output was produced AND all input is consumed.
-                // Java's zlib returns inflate()=0 with needsInput()=false on a
-                // Z_BUF_ERROR when it can't make progress — same as ZRLE/Tight.
-                // Looping gives zlib another chance to emit pending output.
-                if (n == 0 && zlibInflater.needsInput()) break
+                // Break only when no output was produced AND all input is consumed or
+                // the stream ended.  Java's zlib returns inflate()=0 with
+                // needsInput()=false on Z_BUF_ERROR (can't make progress) — looping
+                // gives it another chance.  When the server sends Z_STREAM_END,
+                // finished()=true and needsInput()=false; without the finished() guard
+                // the loop never terminates.
+                if (n == 0 && (zlibInflater.needsInput() || zlibInflater.finished())) break
                 totalOut += n
             }
         } catch (e: DataFormatException) {
@@ -796,8 +798,10 @@ class RfbDecoder(private val fmt: PixelFormat) {
         var totalOut = 0
         while (totalOut < expectedSize) {
             val n = inflater.inflate(out, totalOut, expectedSize - totalOut)
-            // Same Z_BUF_ERROR guard as inflateAll / decodeZlib.
-            if (n == 0 && inflater.needsInput()) break
+            // Same Z_BUF_ERROR + Z_STREAM_END guard as inflateAll / decodeZlib.
+            // finished()=true when the server emits a zlib stream-end marker;
+            // without this guard the loop hangs (n=0, finished=true, needsInput=false).
+            if (n == 0 && (inflater.needsInput() || inflater.finished())) break
             totalOut += n
         }
         return out
@@ -824,14 +828,13 @@ class RfbDecoder(private val fmt: PixelFormat) {
             if (totalOut >= outBuf.size) outBuf = outBuf.copyOf(outBuf.size * 2)
             val n = inflater.inflate(outBuf, totalOut, outBuf.size - totalOut)
             totalOut += n
-            // Break only when no output was produced AND all input is consumed.
-            // Java's zlib can return inflate()=0 with needsInput()=false on a
-            // Z_BUF_ERROR signal (no progress despite available space), which
-            // happens mid-stream when the compressor hasn't flushed a complete
-            // block yet.  Looping gives zlib another chance to emit the pending
-            // output rather than returning a short buffer that causes "ZRLE
-            // stream exhausted" on the tile parser.
-            if (n == 0 && inflater.needsInput()) break
+            // Break only when no output was produced AND all input is consumed or
+            // the stream has ended.  Java's zlib returns inflate()=0 with
+            // needsInput()=false on Z_BUF_ERROR (no progress, incomplete block);
+            // looping gives it another chance to flush pending output.
+            // When the server sends Z_STREAM_END, finished()=true and
+            // needsInput()=false; without the finished() guard the loop hangs.
+            if (n == 0 && (inflater.needsInput() || inflater.finished())) break
         }
         return outBuf.copyOf(totalOut)
     }
