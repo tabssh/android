@@ -1265,9 +1265,12 @@ class XCPngManagerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
-
+        // Cancel any in-flight HTTP calls before tearing down the WebSocket so
+        // OkHttp does not retain Activity references through callbacks past onDestroy.
+        try { currentXoClient?.cancelAll() } catch (e: Exception) { Logger.w("XCPngManager", "xo cancelAll: ${e.message}") }
+        try { currentClient?.cancelAll() } catch (e: Exception) { Logger.w("XCPngManager", "xcp cancelAll: ${e.message}") }
         // Disconnect WebSocket when activity is destroyed
         currentXoClient?.disconnectWebSocket()
+        super.onDestroy()
     }
 }
