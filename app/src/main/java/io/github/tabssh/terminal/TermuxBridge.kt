@@ -20,6 +20,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.InputStream
 import java.io.OutputStream
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * Bridge between SSH streams and Termux terminal emulator.
@@ -60,24 +61,38 @@ class TermuxBridge(
         var logKeystrokeBytes: Boolean = false
     }
 
-    // Termux emulator instance
+    // Termux emulator instance.
+    // @Volatile — assigned on the calling (typically main) thread in
+    // initialize()/connectSession() and read from the IO-dispatcher read
+    // loop and from arbitrary threads via getEmulator()/getBuffer().
+    @Volatile
     private var emulator: TerminalEmulator? = null
 
     // Wave 9.2 B-12 — when non-null, mosh-client is running inside a
     // PTY-backed TerminalSession. Writes are routed through the session
     // instead of outputStream; resize calls updateSize() on the PTY.
+    // @Volatile — set on main, read by writeScope (IO) inside write()/resize().
+    @Volatile
     private var moshSession: TerminalSession? = null
 
     /** Exit code of the most recently finished mosh PTY session.
      *  -1 = not yet finished / no mosh session ran.
      *  0  = clean exit (user typed exit/logout).
      *  >0 = abnormal termination.
-     *  Read by TabTerminalActivity to decide reconnect-dialog vs auto-close. */
+     *  Read by TabTerminalActivity to decide reconnect-dialog vs auto-close.
+     *  @Volatile — written from sessionClient.onSessionFinished (Termux
+     *  worker thread), read from main. */
+    @Volatile
     var moshLastExitCode: Int = -1
         private set
 
-    // I/O streams from SSH
+    // I/O streams from SSH.
+    // @Volatile — assigned by connect()/disconnect() on the caller's
+    // thread (often main) and read by the read loop on Dispatchers.IO
+    // and by writeScope coroutines on Dispatchers.IO.
+    @Volatile
     private var inputStream: InputStream? = null
+    @Volatile
     private var outputStream: OutputStream? = null
 
     /** Wave 2.7 — public read of the SSH outputStream so a sibling bridge can
@@ -89,7 +104,10 @@ class TermuxBridge(
     @Volatile
     var broadcastTargets: List<OutputStream> = emptyList()
 
-    // Read loop job
+    // Read loop job.
+    // @Volatile — disconnect() reads/cancels from any thread while
+    // startReadLoop() assigns from connect() (typically main).
+    @Volatile
     private var readJob: Job? = null
 
     // Coroutine scope for write operations (IO thread)
@@ -139,14 +157,25 @@ class TermuxBridge(
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
 
-    // Listeners
-    private val listeners = mutableListOf<TermuxBridgeListener>()
+    // Listeners.
+    // CopyOnWriteArrayList — addListener/removeListener may be invoked
+    // off the main thread (Activity onDestroy can run on a binder
+    // thread; SSHTab.teardown is called from an IO coroutine), while
+    // the read loop and runOnMain callbacks iterate concurrently. Plain
+    // mutableListOf is not thread-safe and would throw
+    // ConcurrentModificationException under load.
+    private val listeners = CopyOnWriteArrayList<TermuxBridgeListener>()
 
     // Main thread handler for callbacks
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    // Terminal dimensions (can be updated)
+    // Terminal dimensions (can be updated).
+    // @Volatile — resize() may be called from the main thread (keyboard
+    // open) while the read loop and writeScope coroutines read these
+    // values to log cursor positions and forward to the PTY/SSH side.
+    @Volatile
     private var currentColumns = columns
+    @Volatile
     private var currentRows = rows
 
     /**
@@ -185,9 +214,19 @@ class TermuxBridge(
                         }
                         // Wave 2.7 — broadcast input. After our own SSH write
                         // succeeds, fan the same bytes out to every registered
-                        // target (other tabs). Still inside the lock so the
-                        // own-stream write and the broadcast writes can't
-                        // interleave on JSch's session lock.
+                        // target (other tabs). Note: each target belongs to a
+                        // *different* JSch session with its own writeLock on
+                        // its owning bridge — our lock only serializes the
+                        // fan-out order from THIS bridge's perspective, it
+                        // does NOT prevent the peer bridge's own keystroke
+                        // writer from racing on the peer's GCM state. The
+                        // peer's TermuxBridge.terminalOutput.write() path
+                        // takes the peer's writeLock, which is the correct
+                        // place for that serialization; we deliberately
+                        // bypass it here because the broadcast bytes are
+                        // already serialized at the source and the peer
+                        // bridge's writeLock would deadlock on a circular
+                        // broadcast topology.
                         val targets = broadcastTargets
                         if (targets.isNotEmpty()) {
                             for (t in targets) {
@@ -398,25 +437,40 @@ class TermuxBridge(
                     val bytesRead = stream.read(buffer)
 
                     if (bytesRead < 0) {
+                        // EOF: stream is permanently closed. Break out
+                        // and let finally{} drive the disconnect — never
+                        // spin or retry on EOF (busy-loop hazard).
                         Logger.i(TAG, "SSH stream closed (EOF)")
                         break
                     }
 
-                    if (bytesRead > 0) {
-                        // Feed data to Termux emulator
-                        val em = emulator
-                        if (em != null) {
-                            em.append(buffer, bytesRead)
-                            Logger.i(TAG, "Fed $bytesRead bytes to emulator, cursor at (${em.cursorRow},${em.cursorCol})")
-                        } else {
-                            Logger.e(TAG, "EMULATOR IS NULL - cannot process $bytesRead bytes!")
-                        }
+                    if (bytesRead == 0) {
+                        // JSch's ChannelInputStream returns 0 only when a
+                        // non-blocking peek finds nothing. Yield to other
+                        // coroutines so we don't burn a core if the
+                        // underlying stream ever becomes non-blocking.
+                        kotlinx.coroutines.yield()
+                        continue
+                    }
 
-                        // Notify screen changed (emulator may not call client for every change)
-                        runOnMain {
-                            Logger.d(TAG, "Notifying ${listeners.size} listeners of screen change")
-                            listeners.forEach { it.onScreenChanged() }
-                        }
+                    // Feed data to Termux emulator. The append() call is
+                    // internally synchronized on the screen object so
+                    // injectLocally() from other threads cannot interleave.
+                    val em = emulator
+                    if (em != null) {
+                        em.append(buffer, bytesRead)
+                    } else {
+                        Logger.e(TAG, "EMULATOR IS NULL - cannot process $bytesRead bytes!")
+                    }
+
+                    // Notify screen changed (emulator may not call client
+                    // for every change). One post per read chunk — NEVER
+                    // per byte — so the UI thread sees at most ~one
+                    // invalidate per blocking read return regardless of
+                    // chunk size, even on a flood like `yes` or `cat
+                    // largefile`.
+                    runOnMain {
+                        listeners.forEach { it.onScreenChanged() }
                     }
                 }
             } catch (e: Exception) {
@@ -543,18 +597,25 @@ class TermuxBridge(
      */
     fun getScreenContent(): String {
         val screen = emulator?.screen ?: return ""
-        val sb = StringBuilder()
         val rows = currentRows
         val cols = currentColumns
-
-        for (row in 0 until rows) {
-            for (col in 0 until cols) {
-                val char = screen.getSelectedText(col, row, col + 1, row)
-                sb.append(char ?: " ")
+        // Extract one row at a time, not one cell — the old per-cell
+        // loop allocated `rows * cols` Strings (1920 for 80x24) every
+        // call and the result was identical. getSelectedText is
+        // O(width) per call so per-row is O(rows*cols), per-cell was
+        // O(rows*cols^2).
+        val sb = StringBuilder(rows * (cols + 1))
+        return try {
+            for (row in 0 until rows) {
+                val line = screen.getSelectedText(0, row, cols, row) ?: ""
+                sb.append(line)
+                if (row < rows - 1) sb.append('\n')
             }
-            if (row < rows - 1) sb.append('\n')
+            sb.toString()
+        } catch (e: Exception) {
+            Logger.w(TAG, "Error getting screen content", e)
+            ""
         }
-        return sb.toString()
     }
 
     /**
@@ -650,7 +711,9 @@ class TermuxBridge(
     /**
      * Resize the terminal
      */
-    // Resize callback for VM console to forward to WebSocket
+    // Resize callback for VM console to forward to WebSocket.
+    // @Volatile — set on main, invoked from writeScope (IO).
+    @Volatile
     var onResizeCallback: ((cols: Int, rows: Int) -> Unit)? = null
 
     fun resize(newColumns: Int, newRows: Int) {
@@ -761,6 +824,16 @@ class TermuxBridge(
         disconnect()
         emulator = null
         listeners.clear()
+        // The bridge is being permanently destroyed — cancel writeScope
+        // so any queued writeLock.withLock { ... } blocks unwind instead
+        // of holding the JSch session reference past the bridge's life.
+        // disconnect() intentionally does NOT do this (it must be safe
+        // for reconnect), but cleanup() is terminal.
+        try {
+            writeScope.coroutineContext[Job]?.cancel()
+        } catch (e: Exception) {
+            Logger.w(TAG, "Error cancelling writeScope", e)
+        }
     }
 
     /**
