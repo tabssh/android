@@ -79,12 +79,22 @@
             android:fontFamily="monospace"
             android:layout_marginTop="@dimen/space_xs" />
 
-        <!-- Row 3a: primary actions — always visible -->
+        <!-- Row 3a: primary actions — always visible. SSH/connect first, power toggle second. -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:layout_marginTop="@dimen/space_sm">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_connect"
+                style="@style/Widget.Material3.Button"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="@dimen/space_xs"
+                android:text="SSH"
+                android:minHeight="@dimen/min_touch_target" />
 
             <!-- Single toggle button: "Start" when stopped, "Stop" when running -->
             <com.google.android.material.button.MaterialButton
@@ -93,17 +103,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginEnd="@dimen/space_xs"
                 android:text="Start"
-                android:minHeight="@dimen/min_touch_target" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_connect"
-                style="@style/Widget.Material3.Button"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="SSH"
                 android:minHeight="@dimen/min_touch_target" />
 
         </LinearLayout>

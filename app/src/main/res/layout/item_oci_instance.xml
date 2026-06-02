@@ -58,11 +58,33 @@
             android:text="IP: …"
             android:visibility="gone" />
 
+        <!-- Connect row: SSH — shown for running instances with a reachable IP. -->
         <LinearLayout
+            android:id="@+id/row_connect"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="8dp">
+            android:layout_marginTop="8dp"
+            android:visibility="gone">
+
+            <Button
+                android:id="@+id/ssh_connect_button"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="SSH"
+                style="@style/Widget.Material3.Button" />
+
+        </LinearLayout>
+
+        <!-- Power row: Start / Stop / Soft Stop -->
+        <LinearLayout
+            android:id="@+id/row_power"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="8dp"
+            android:visibility="gone">
 
             <Button
                 android:id="@+id/start_button"
@@ -88,8 +110,18 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="Soft Stop"
-                android:layout_marginEnd="4dp"
                 style="@style/Widget.Material3.Button.TonalButton" />
+
+        </LinearLayout>
+
+        <!-- Secondary row: Reset / Reboot -->
+        <LinearLayout
+            android:id="@+id/row_secondary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="4dp"
+            android:visibility="gone">
 
             <Button
                 android:id="@+id/reset_button"
@@ -109,16 +141,6 @@
                 style="@style/Widget.Material3.Button.TonalButton" />
 
         </LinearLayout>
-
-        <!-- SSH Connect — shown only for RUNNING instances with a public IP. -->
-        <Button
-            android:id="@+id/ssh_connect_button"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="SSH Connect"
-            android:visibility="gone"
-            style="@style/Widget.Material3.Button" />
 
     </LinearLayout>
 
