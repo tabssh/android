@@ -281,6 +281,9 @@ class TabTerminalActivity : AppCompatActivity() {
 
             override fun onTabClosed(tab: SSHTab, index: Int) {
                 Handler(Looper.getMainLooper()).post {
+                    // Drop any cached remote history for this tab so the map
+                    // does not grow without bound across many open/close cycles.
+                    historyCache.remove(tab.tabId)
                     removeTabFromUI(index)
 
                     // Release the SSH session in SSHSessionManager once
@@ -2432,15 +2435,24 @@ private fun showSnippetsPickerForActiveTab() {
                 val telnet = io.github.tabssh.ssh.connection.TelnetConnection(profile.host, profile.port.takeIf { it > 0 } ?: 23)
                 val newTab = SSHTab(profile, io.github.tabssh.terminal.TermuxBridge())
                 term.attachTerminalEmulator(newTab.termuxBridge)
-                kotlinx.coroutines.delay(150)
-                if (newTab.connect(telnet)) {
-                    splitTab = newTab
-                    runOnUiThread { Toast.makeText(this@TabTerminalActivity, "Split (telnet) ready", Toast.LENGTH_SHORT).show() }
-                } else {
-                    runOnUiThread {
-                        pane.visibility = View.GONE
-                        Toast.makeText(this@TabTerminalActivity, "Split failed: telnet ${profile.host}:${profile.port.takeIf { it > 0 } ?: 23}", Toast.LENGTH_LONG).show()
+                try {
+                    kotlinx.coroutines.delay(150)
+                    if (newTab.connect(telnet)) {
+                        splitTab = newTab
+                        runOnUiThread { Toast.makeText(this@TabTerminalActivity, "Split (telnet) ready", Toast.LENGTH_SHORT).show() }
+                    } else {
+                        runOnUiThread {
+                            pane.visibility = View.GONE
+                            Toast.makeText(this@TabTerminalActivity, "Split failed: telnet ${profile.host}:${profile.port.takeIf { it > 0 } ?: 23}", Toast.LENGTH_LONG).show()
+                        }
                     }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    // Coroutine cancelled mid-attach (activity destroyed while waiting):
+                    // disconnect the partial tab so the TelnetConnection socket is closed
+                    // and the pane is not left visible with a stale bridge.
+                    try { newTab.disconnect() } catch (_: Exception) {}
+                    runOnUiThread { pane.visibility = View.GONE }
+                    throw e
                 }
                 return@launch
             }
@@ -2453,17 +2465,28 @@ private fun showSnippetsPickerForActiveTab() {
             }
             val newTab = SSHTab(profile, io.github.tabssh.terminal.TermuxBridge())
             term.attachTerminalEmulator(newTab.termuxBridge)
-            kotlinx.coroutines.delay(150)
-            if (newTab.connect(ssh)) {
-                splitTab = newTab
-                runOnUiThread {
-                    Toast.makeText(this@TabTerminalActivity, "Split: ${profile.getDisplayName()}", Toast.LENGTH_SHORT).show()
+            try {
+                kotlinx.coroutines.delay(150)
+                if (newTab.connect(ssh)) {
+                    splitTab = newTab
+                    runOnUiThread {
+                        Toast.makeText(this@TabTerminalActivity, "Split: ${profile.getDisplayName()}", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    runOnUiThread {
+                        pane.visibility = View.GONE
+                        Toast.makeText(this@TabTerminalActivity, "Split failed: ssh ${profile.username}@${profile.host}:${profile.port}", Toast.LENGTH_LONG).show()
+                    }
                 }
-            } else {
-                runOnUiThread {
-                    pane.visibility = View.GONE
-                    Toast.makeText(this@TabTerminalActivity, "Split failed: ssh ${profile.username}@${profile.host}:${profile.port}", Toast.LENGTH_LONG).show()
-                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Coroutine cancelled mid-attach (activity destroyed while waiting):
+                // disconnect the SSH channel and release the session from
+                // sshSessionManager so the foreground-service session count stays
+                // accurate and the pane is not left visible with a stale bridge.
+                try { newTab.disconnect() } catch (_: Exception) {}
+                try { app.sshSessionManager.closeConnection(profile.id) } catch (_: Exception) {}
+                runOnUiThread { pane.visibility = View.GONE }
+                throw e
             }
         }
     }
