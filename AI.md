@@ -1189,6 +1189,8 @@ The security step greps `password.*=.*"[^"]{6,}"` across `app/src/main/java/` an
 | `grep -v "Logger.kt"` | Sanitization regex in the logger |
 | `grep -v "Regex("` | Regex pattern definitions |
 | `grep -v "JsonObject\|JsonArray\|jsonObject\|jsonArray\|Map<String"` | `BackupImporter.kt`: `val passwords: Map<String, String> = (root["passwords"] as? JsonObject)` — JSON key name, not a credential |
+| `grep -v "encryptedLabel"` | Variable name containing "encrypted", not a plaintext credential |
+| `grep -v '\.error = "'` | UI error label assignments (e.g. `passwordLayout?.error = "Wrong password…"`) — not credential literals |
 
 If a new file triggers a false positive, add a targeted `grep -v` to the chain and document it here with the reason.
 
