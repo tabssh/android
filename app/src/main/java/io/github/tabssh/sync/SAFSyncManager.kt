@@ -333,6 +333,24 @@ class SAFSyncManager(private val context: Context) {
     }
 
     /**
+     * Verify that a password can decrypt the given URI without storing the password.
+     * Returns true if the file is empty (nothing to verify yet) or if decryption succeeds.
+     * Returns false if decryption fails (wrong password or corrupted data).
+     */
+    suspend fun verifyPassword(uri: Uri, password: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                ?: return@withContext false
+            if (bytes.isEmpty()) return@withContext true
+            encryptor.decrypt(bytes, password)
+            true
+        } catch (e: Exception) {
+            Logger.w(TAG, "Password verification failed", e)
+            false
+        }
+    }
+
+    /**
      * Check if sync file exists and is readable
      */
     suspend fun checkSyncFile(): SyncFileStatus = withContext(Dispatchers.IO) {

@@ -2,6 +2,7 @@ package io.github.tabssh.ui.activities
 
 import android.app.Activity
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.LinearLayout
@@ -106,8 +107,7 @@ class SyncSettingsActivity : AppCompatActivity() {
             if (result.resultCode == Activity.RESULT_OK) {
                 result.data?.data?.let { uri ->
                     syncManager.saveSyncUri(uri)
-                    refresh()
-                    toast("Sync location set")
+                    showVerifyPasswordForExistingFile(uri)
                 }
             }
         }
@@ -144,7 +144,7 @@ class SyncSettingsActivity : AppCompatActivity() {
             Triple(findViewById(R.id.row_sync_themes),      PREF_THEMES,      "Custom terminal themes")
         )
         val titles = listOf("Connections", "Identities", "SSH Keys", "Snippets", "Themes")
-        val defaults = listOf(true, true, false, true, true)
+        val defaults = listOf(true, true, true, true, true)
         syncItems.forEachIndexed { i, (row, prefKey, subtitle) ->
             row.findViewById<TextView>(R.id.text_sync_item_title).text  = titles[i]
             row.findViewById<TextView>(R.id.text_sync_item_subtitle).text = subtitle
@@ -331,8 +331,8 @@ class SyncSettingsActivity : AppCompatActivity() {
 
     private fun showPasswordDialog() {
         val view = layoutInflater.inflate(R.layout.dialog_sync_password, null)
-        val passwordInput = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.input_password)
-        val confirmInput  = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.input_confirm)
+        val passwordInput  = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.input_password)
+        val confirmInput   = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.input_confirm)
         val passwordLayout = view.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.layout_password)
         val confirmLayout  = view.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.layout_confirm)
 
@@ -353,14 +353,78 @@ class SyncSettingsActivity : AppCompatActivity() {
             val errTooShort = getString(R.string.sync_password_too_short)
             val errMismatch = getString(R.string.sync_password_mismatch)
             when {
-                pw.length < 8    -> passwordLayout?.error = errTooShort
-                pw != cfm        -> confirmLayout?.error  = errMismatch
+                pw.length < 8 -> passwordLayout?.error = errTooShort
+                pw != cfm     -> confirmLayout?.error  = errMismatch
                 else -> {
                     lifecycleScope.launch {
                         withContext(Dispatchers.IO) { syncManager.setSyncPassword(pw) }
                         refresh()
                         toast("Password set")
                         dialog.dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * After the user picks an EXISTING sync file, prompt for the password
+     * and verify it can decrypt the file before accepting it.
+     * If the file is empty (not yet written) the password is accepted without verification.
+     */
+    /**
+     * After the user picks an EXISTING sync file, prompt for the password
+     * and verify it can decrypt the file before accepting it.
+     * If the file is empty (not yet written) the password is accepted without verification.
+     */
+    private fun showVerifyPasswordForExistingFile(uri: Uri) {
+        val view = layoutInflater.inflate(R.layout.dialog_sync_password, null)
+        val passwordInput  = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.input_password)
+        val passwordLayout = view.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.layout_password)
+        val confirmLayout  = view.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.layout_confirm)
+
+        // Hide the confirm field — not needed when opening an existing file
+        confirmLayout?.visibility = View.GONE
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Enter Sync File Password")
+            .setMessage("Enter the encryption password used when this file was created.")
+            .setView(view)
+            .setPositiveButton("Verify & Use", null)
+            .setNegativeButton("Cancel") { _, _ ->
+                lifecycleScope.launch {
+                    withContext(Dispatchers.IO) { syncManager.clearConfiguration() }
+                    refresh()
+                }
+            }
+            .setCancelable(false)
+            .create()
+
+        dialog.show()
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val pw = passwordInput?.text?.toString() ?: ""
+            passwordLayout?.error = null
+            if (pw.length < 8) {
+                passwordLayout?.error = getString(R.string.sync_password_too_short)
+                return@setOnClickListener
+            }
+            val btn = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            btn.isEnabled = false
+            btn.text = "Verifying…"
+            lifecycleScope.launch {
+                val ok = withContext(Dispatchers.IO) { syncManager.verifyPassword(uri, pw) }
+                if (ok) {
+                    withContext(Dispatchers.IO) { syncManager.setSyncPassword(pw) }
+                    withContext(Dispatchers.Main) {
+                        refresh()
+                        toast("Sync location set and verified")
+                        dialog.dismiss()
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        btn.isEnabled = true
+                        btn.text = "Verify & Use"
+                        passwordLayout?.error = "Wrong password — decryption failed"
                     }
                 }
             }
