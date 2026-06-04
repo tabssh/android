@@ -77,14 +77,24 @@ class SyncDataCollector {
     suspend fun collectAllSyncData(): SyncDataPackage = withContext(Dispatchers.IO) {
         Logger.d(TAG, "Collecting all sync data")
 
-        val connections = collectConnections()
-        val keys = collectKeys()
-        val themes = collectThemes()
-        val preferences = collectPreferences()
+        // Each collection is gated on the corresponding user toggle so that
+        // turning off a category in Sync Settings actually stops it from being
+        // included in the sync payload.
+        val syncConns      = preferenceManager.isSyncConnectionsEnabled()
+        val syncKeys       = preferenceManager.isSyncKeysEnabled()
+        val syncThemes     = preferenceManager.isSyncThemesEnabled()
+        val syncIdentities = preferenceManager.isSyncIdentitiesEnabled()
+        val syncSnippets   = preferenceManager.isSyncSnippetsEnabled()
+        val syncSettings   = preferenceManager.isSyncSettingsEnabled()
+
+        val connections = if (syncConns)      collectConnections()   else emptyList()
+        val keys        = if (syncKeys)       collectKeys()          else emptyList()
+        val themes      = if (syncThemes)     collectThemes()        else emptyList()
+        val preferences = if (syncSettings)   collectPreferences()   else emptyMap()
         val hostKeys = collectHostKeys()
         val workspaces = collectWorkspaces() // Wave 5.3
-        val snippets = collectSnippets()      // Wave 5.4
-        val identities = collectIdentities()  // Wave 5.4
+        val snippets    = if (syncSnippets)   collectSnippets()      else emptyList()
+        val identities  = if (syncIdentities) collectIdentities()    else emptyList()
         val groups = collectGroups()          // Wave 5.4
         val hypervisors = collectHypervisors()  // Wave 7.1
         val certificates = collectCertificates() // Wave 7.1
@@ -591,14 +601,15 @@ class SyncDataCollector {
 
     private fun collectSyncPreferences(): Map<String, Any> {
         return mapOf(
-            "enabled" to preferenceManager.isSyncEnabled(),
             "frequency" to preferenceManager.getSyncFrequency(),
             "wifiOnly" to preferenceManager.isSyncWifiOnly(),
+            "onChangeEnabled" to preferenceManager.isSyncOnChangeEnabled(),
             "syncConnections" to preferenceManager.isSyncConnectionsEnabled(),
             "syncKeys" to preferenceManager.isSyncKeysEnabled(),
+            "syncIdentities" to preferenceManager.isSyncIdentitiesEnabled(),
+            "syncSnippets" to preferenceManager.isSyncSnippetsEnabled(),
             "syncSettings" to preferenceManager.isSyncSettingsEnabled(),
-            "syncThemes" to preferenceManager.isSyncThemesEnabled(),
-            "lastSyncTime" to preferenceManager.getLastSyncTime()
+            "syncThemes" to preferenceManager.isSyncThemesEnabled()
         )
     }
 

@@ -527,10 +527,41 @@ class SyncDataApplier {
             monitoring?.let {
                 count += applyMonitoringPreferences(it)
             }
+
+            // Apply sync configuration (frequency, wifi-only, what-to-sync toggles).
+            // Device-specific state (enabled flag, file URI, password) is intentionally
+            // excluded — each device manages its own sync location independently.
+            val sync = (preferences["sync"] as? JsonObject)?.toAnyMap()
+            sync?.let {
+                count += applySyncPreferences(it)
+            }
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to apply preferences", e)
         }
 
+        return count
+    }
+
+    private fun applySyncPreferences(prefs: Map<String, Any>): Int {
+        var count = 0
+        prefs.forEach { (key, value) ->
+            try {
+                when (key) {
+                    "frequency"        -> preferenceManager.setSyncFrequency(value as String)
+                    "wifiOnly"         -> preferenceManager.setSyncWifiOnly(value as Boolean)
+                    "onChangeEnabled"  -> preferenceManager.setSyncOnChangeEnabled(value as Boolean)
+                    "syncConnections"  -> preferenceManager.setSyncConnectionsEnabled(value as Boolean)
+                    "syncKeys"         -> preferenceManager.setSyncKeysEnabled(value as Boolean)
+                    "syncIdentities"   -> preferenceManager.setSyncIdentitiesEnabled(value as Boolean)
+                    "syncSnippets"     -> preferenceManager.setSyncSnippetsEnabled(value as Boolean)
+                    "syncSettings"     -> preferenceManager.setSyncSettingsEnabled(value as Boolean)
+                    "syncThemes"       -> preferenceManager.setSyncThemesEnabled(value as Boolean)
+                }
+                count++
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to apply sync preference: $key", e)
+            }
+        }
         return count
     }
 

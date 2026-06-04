@@ -534,8 +534,14 @@ class PreferenceManager(private val context: Context) {
     fun isSyncConnectionsEnabled(): Boolean = getBoolean("sync_connections", true)
     fun setSyncConnectionsEnabled(enabled: Boolean) = setBoolean("sync_connections", enabled)
 
-    fun isSyncKeysEnabled(): Boolean = getBoolean("sync_keys", true)
+    fun isSyncKeysEnabled(): Boolean = getBoolean("sync_keys", false)
     fun setSyncKeysEnabled(enabled: Boolean) = setBoolean("sync_keys", enabled)
+
+    fun isSyncIdentitiesEnabled(): Boolean = getBoolean("sync_identities", true)
+    fun setSyncIdentitiesEnabled(enabled: Boolean) = setBoolean("sync_identities", enabled)
+
+    fun isSyncSnippetsEnabled(): Boolean = getBoolean("sync_snippets", true)
+    fun setSyncSnippetsEnabled(enabled: Boolean) = setBoolean("sync_snippets", enabled)
 
     fun isSyncSettingsEnabled(): Boolean = getBoolean("sync_settings", true)
     fun setSyncSettingsEnabled(enabled: Boolean) = setBoolean("sync_settings", enabled)
