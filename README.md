@@ -109,7 +109,8 @@ Pixel-perfect graphical console access to VMs — no separate VNC viewer require
 - RFB protocol client with Tight, ZRLE, CopyRect, Hextile, CoRRE, RRE encoding support
 - ServerFence / ClientFence handshake (required for Proxmox vncproxy)
 - ExtendedDesktopSize (SetDesktopSize) resize negotiation
-- VNC password authentication
+- VNC password authentication with correct DES challenge-response (RFC 6143 §7.2.2)
+- Proxmox WebSocket VNC via `vncproxy` API (`websocket=1`) — binary WebSocket frames, no separate port mapping required
 - X11 keysym translation from Android `KeyEvent` — all modifier keys (Ctrl, Alt, Shift, Super), F1–F12, arrow cluster, Home/End/PgUp/PgDn
 - Custom SSH keyboard bar and system keyboard both work inside VNC sessions
 - Tunnelled over SSH for QEMU/libvirt — no VNC port needs to be exposed to the network

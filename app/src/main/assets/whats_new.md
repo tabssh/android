@@ -40,6 +40,14 @@
 - **Proxmox serial console**: "unable to find serial interface" no
   longer appears as terminal garbage. A clear error dialog now explains
   exactly how to add a serial port in Proxmox Hardware settings.
+- **Proxmox VNC console stability** — three protocol bugs fixed that
+  caused connections to fail immediately or corrupt the image stream:
+  the vncproxy API call now includes `websocket=1` so Proxmox sets up
+  WebSocket transport (without it the internal port only accepts raw
+  TCP); VNC sessions now open in shared mode (ClientInit shared=1)
+  instead of exclusive mode which could cause Proxmox to reject the
+  session; corrupt or misaligned compressed rectangle data now triggers
+  a clean disconnect instead of crashing with OutOfMemoryError.
 
 ## Wave 10 — Oracle Cloud Infrastructure (OCI) hypervisor support
 - Fourth hypervisor target alongside Proxmox / XCP-ng / VMware. Path A
