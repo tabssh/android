@@ -414,8 +414,7 @@ class BackupImporter(
                 val o = arr.getJSONObject(i)
                 val existing = database.identityDao().getIdentityById(o.getString("id"))
                 if (existing != null && !overwriteExisting) continue
-                val authType = try { AuthType.valueOf(o.getString("authType")) }
-                catch (_: IllegalArgumentException) { AuthType.PASSWORD }
+                val authType = AuthType.fromString(o.optString("authType"))
                 database.identityDao().insert(
                     Identity(
                         id = o.getString("id"),

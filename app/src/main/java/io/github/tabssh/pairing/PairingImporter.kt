@@ -108,7 +108,7 @@ object PairingImporter {
                         port = exported.port,
                         username = exported.username,
                         protocol = exported.protocol,
-                        authType = exported.authType,
+                        authType = AuthType.fromString(exported.authType).name,
                         keyId = null,                        // user re-associates after import
                         savePassword = false,
                         terminalType = exported.terminalType,

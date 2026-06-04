@@ -1,5 +1,6 @@
 package io.github.tabssh.backup.export
 
+import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.database.entities.CloudAccount
 import io.github.tabssh.storage.database.entities.ConnectionGroup
@@ -156,7 +157,7 @@ class BackupExporter(
         // Most connections need no sidecar; only when includePasswords AND the
         // host actually has a saved password do we attach a parallel passwords map.
         val passwordSidecar: Map<String, String>? = if (includePasswords) {
-            list.filter { it.authType.equals("password", ignoreCase = true) }
+            list.filter { it.getAuthTypeEnum() == AuthType.PASSWORD }
                 .mapNotNull { p ->
                     val pw = preferenceManager.getConnectionPassword(p.id) ?: return@mapNotNull null
                     p.id to android.util.Base64.encodeToString(
@@ -329,7 +330,7 @@ class BackupExporter(
         // Connection passwords — stored in PreferenceManager SharedPreferences under
         // "password_{connectionId}" (not SecurePasswordManager). Alias: conn_pw_{id}.
         database.connectionDao().getAllConnections().first()
-            .filter { it.authType.equals("password", ignoreCase = true) }
+            .filter { it.getAuthTypeEnum() == AuthType.PASSWORD }
             .forEach { c ->
                 preferenceManager.getConnectionPassword(c.id)
                     ?.takeIf { it.isNotEmpty() }

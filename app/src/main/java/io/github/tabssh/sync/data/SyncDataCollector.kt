@@ -416,7 +416,7 @@ class SyncDataCollector {
             // Connection passwords — stored in PreferenceManager SharedPreferences under
             // "password_{connectionId}" (not SecurePasswordManager). Alias: conn_pw_{id}.
             database.connectionDao().getAllConnections().first()
-                .filter { c -> c.authType.equals("password", ignoreCase = true) }
+                .filter { c -> c.getAuthTypeEnum() == io.github.tabssh.ssh.auth.AuthType.PASSWORD }
                 .forEach { c ->
                     preferenceManager.getConnectionPassword(c.id)
                         ?.takeIf { it.isNotEmpty() }
