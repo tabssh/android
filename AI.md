@@ -1149,13 +1149,13 @@ The Docker run wrapper bind-mounts the repo to `/workspace`, sets `ANDROID_HOME=
 
 | Workflow | Trigger | Job |
 |---|---|---|
-| `android-ci.yml` | push to `main`/`develop`, PR to `main` | structure + metadata + security + feature + docs validation |
-| `development-builds.yml` | push to `main`/`master`/`devel`/`develop` | `assembleDebug`, rename APKs to `tabssh-*-dev.apk`, generate SHA-256 + release notes, publish prerelease tagged `development` |
+| `ci.yml` | push to `main`/`develop`, PR to `main` | structure + metadata + security + feature + docs validation |
+| `dev-builds.yml` | push to `main`/`master`/`devel`/`develop` | `assembleDebug`, rename APKs to `tabssh-*-dev.apk`, generate SHA-256 + release notes, publish prerelease tagged `development` |
 | `release.yml` | tag `v*` | tests + `dependencyCheckAnalyze` + JaCoCo, then `assembleRelease` and `assembleFdroidRelease`, rename to versioned APKs, generate notes + checksums + mapping, create GitHub Release with 10 APKs (5 release + 5 fdroid), prepare F-Droid submission directory, run `scripts/notify-release.sh` (Matrix / Mastodon) |
 
 Keystore is decoded from the `KEYSTORE_BASE64` secret. Gradle cache key is `${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}`.
 
-**`android-ci.yml` security validation — grep exclusion list (do not remove these):**
+**`ci.yml` security validation — grep exclusion list (do not remove these):**
 
 The security step greps `password.*=.*"[^"]{6,}"` across `app/src/main/java/` and pipes through a chain of exclusions to suppress false positives. The following exclusions are intentional and must be preserved:
 
@@ -1286,7 +1286,73 @@ These exist in source but are **not** wired into a working user-facing flow. Tre
 
 ## 17. Editing guidelines for AI agents
 
-When modifying this codebase, prefer the following (derived from `CLAUDE.md` policies and the actual code):
+### 17.0 Navigating this spec
+
+| You need to know about… | Read section |
+|---|---|
+| App identity, design pillars, SDK versions | §1 |
+| High-level architecture diagram, threading model, state propagation | §2 |
+| Build types, APK variants, ABI→arch mapping, all dependencies | §3 |
+| Activities, fragments, services, canonical user flows | §4 |
+| SSH connection lifecycle, jump hosts, auth, keepalive, per-tab channels | §5.1 |
+| Host key verification (TOFU dialog, trust levels) | §5.2 |
+| Port forwarding and proxies | §5.3 |
+| `~/.ssh/config` import | §5.4 |
+| Bulk import (CSV / JSON / PuTTY .reg / Terraform) | §5.4.1 |
+| SFTP, remote file editor, chmod, SCP fallback | §5.5 |
+| Terminal emulator (`TermuxBridge`, `TerminalView`) | §6.1–6.2 |
+| Tab management (`TabManager`, `SSHTab`), keyboard shortcuts | §6.3 |
+| On-screen keyboard, gesture bindings, find-in-scrollback | §6.4 |
+| Session recording and replay | §6.5 |
+| SSH key types, parsing, generation, fingerprints | §7.1–7.2 |
+| Key storage (Android Keystore, AES-GCM) | §7.3 |
+| Password storage levels, biometric unlock, TTL | §7.4 |
+| Screenshot protection, clipboard auto-clear, password lifecycle | §7.5 |
+| Room database version, full migration chain | §8.1–8.4 |
+| All 17 entities and their notable fields | §8.2 |
+| Preference keys and defaults by category | §8.6 |
+| SAF sync wire format, encryption, 3-way merge, conflict resolution | §9 |
+| Sync coverage matrix (what syncs, what doesn't, and why) | §9.4 |
+| Backup/restore ZIP format | §10 |
+| Proxmox / XCP-ng / Xen Orchestra / VMware / OCI / libvirt-QEMU APIs | §11 |
+| Hypervisor console WebSocket framing | §11.6 |
+| Settings XML files and hosting fragments | §12.1 |
+| Themes (23 built-ins, `Theme.kt` fields, contrast validation) | §12.2 |
+| Accessibility (TalkBack, high-contrast, keyboard nav, motor) | §12.3 |
+| Notification channels | §13.1 |
+| Build targets (`make` commands), Docker setup | §14.1–14.2 |
+| CI workflows (ci, dev-builds, release) | §14.3 |
+| ProGuard / R8 keep rules | §14.6 |
+| Full package map (`io.github.tabssh.*`) | §15 |
+| Known stubs and unimplemented features | §16 |
+| Rules for AI agents editing this codebase | §17 |
+| QR pairing wire format, encryption, mobile implementation status | §18 |
+
+### 17.1 Build commands
+
+| Goal | Command |
+|---|---|
+| Compile-only check | `make check` (~2 min cached) |
+| Debug APKs → `./binaries/` | `make build` (~5 min cached) |
+| Install on device | `make install` |
+| Tail logcat | `make logs` |
+| Run UI tests | `make test` |
+| Clean artifacts | `make clean` |
+
+Production releases are produced by the `release.yml` GitHub Actions workflow on tag push (`v*`) — there is no local `make release` target.
+
+### 17.2 Artifact locations
+
+| Artifact | Path |
+|---|---|
+| Debug APKs | `./binaries/` |
+| Release APKs | `./releases/` |
+| All temp files | `/tmp/tabssh-android/` |
+| Room schemas | `app/schemas/` |
+
+### 17.3 Code editing rules
+
+When modifying this codebase, prefer the following (derived from `SPEC.md` policies and the actual code):
 
 1. **Don't reimplement what's there.** Termux owns the terminal emulator; JSch owns the SSH protocol; Room owns persistence; SAF owns cloud transport. New features should compose these — not replace them.
 2. **Database changes must ship a migration.** Bump `TabSSHDatabase` version, add a `Migration` object, never destructive migrate. The exported schema in `app/schemas/` must be updated and committed.
@@ -1297,7 +1363,7 @@ When modifying this codebase, prefer the following (derived from `CLAUDE.md` pol
 7. **Keep `minSdk = 21` working.** Termux's library targets a higher SDK and is allowed via `tools:overrideLibrary`; new dependencies must respect minSdk 21 or be guarded by `Build.VERSION.SDK_INT` checks.
 8. **F-Droid build must remain reproducible.** Don't introduce non-deterministic generated code, don't pull in proprietary services, don't add network-fetching Gradle plugins.
 9. **Prefer `Flow` and `StateFlow`.** That's the existing reactive style; don't introduce LiveData, RxJava, or callback chains for new code.
-10. **CLAUDE.md is the runbook, AI.md is the architecture.** When you change architecture, update AI.md. When you add a target/script/policy, update CLAUDE.md.
+10. **SPEC.md is the rule-override file, AI.md is the architecture, CLAUDE.md is a short loader.** When you change architecture, update AI.md. When you add a project-specific rule or policy override, update SPEC.md. Never add spec content to CLAUDE.md.
 11. **Never add `Co-Authored-By` (or any attribution footer) to commit messages.** The maintainer runs Claude Code as themselves and authors every commit personally — there is no separate co-author. Adding the footer falsely implies a second contributor and pollutes git attribution. End commit bodies at the last description line, no trailer.
 12. **Save commit messages to `{project_root}/.git/COMMIT_MESS`.** Project convention so the maintainer can `git commit -F .git/COMMIT_MESS`. Overwrite the file each time. Do not save to `/tmp/tabssh-android/`. Do not also paste inline (the file is the source of truth).
 13. **Downscale screenshots before reading them.** Android screenshots are typically 1080×2400 (or larger on tablets/foldables) and exceed the 2000px image context limit — `Read` will fail with "image context too large". Before reading any screenshot, downscale to ≤1080px on the long edge, then `Read` the `-small.png`. ImageMagick may not be installed; the canonical helper is `/tmp/tabssh-android/resize.py` (PIL-based, persists across sessions): `python3 /tmp/tabssh-android/resize.py <src>.png /tmp/tabssh-android/screenshots/<name>-small.png`. Keep the original around if you need full resolution for visual verification later. This applies to `adb exec-out screencap`, uiautomator dumps with screenshots, and any image pulled off the emulator/device.

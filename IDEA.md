@@ -43,26 +43,26 @@ repository: https://github.com/tabssh/android
 - URL detection on long-press
 
 ### Security requirements
-- All passwords and private key passphrases stored via Android Keystore (AES-GCM); never in the database
-- Hardware-backed credential storage with tiered levels: never / session-only / encrypted / biometric
+- All passwords and private key passphrases must never be stored in plaintext or in the database
+- Credential storage with tiered access levels: never / session-only / encrypted / biometric
 - Biometric unlock for stored passwords with configurable TTL
-- App-lock PIN with SHA-256 hash storage, 5-attempt limit
-- `FLAG_SECURE` on all windows when screenshot prevention is enabled; always on PIN screen
-- SSH host key verification with TOFU dialog; SHA-256 fingerprint + visual "emoji fingerprint"
+- App-lock PIN with a failed-attempt lockout
+- Screenshot capture prevention (configurable); always enforced on PIN and auth screens
+- SSH host key verification on first connect (TOFU) with fingerprint display
 - Clipboard auto-clear for sensitive pastes
 - Audit log of SSH commands and session events
 
 ### Sync and backup
 - Cross-device sync via SAF — user supplies any DocumentsProvider (Google Drive, Dropbox, OneDrive, Nextcloud, local); app embeds no cloud SDKs
-- 3-way merge with per-entity conflict resolution
-- Encrypted wire format (AES-GCM, key derived from user passphrase)
-- Backup and restore as an encrypted ZIP
+- Cross-device merge with per-entity conflict resolution
+- End-to-end encrypted sync — passphrase required, no server-side keys
+- Backup and restore as a portable encrypted archive
 
 ### Hypervisor management
 - Proxmox, XCP-ng (and Xen Orchestra), VMware, OCI — list VMs/instances, start, stop, shutdown, reboot, snapshot, serial console
 - Reusable hypervisor credential accounts (username/password or OCI API key) shared across hypervisor profiles
 - TLS certificate pinning (TOFU) for hypervisor REST APIs
-- OCI API key authentication: tenancy, user, region, fingerprint, compartment, PEM private key in Keystore
+- OCI API key authentication (tenancy, user, region, fingerprint, compartment, private key)
 
 ### Accessibility and UI
 - TalkBack support with content descriptions on all interactive elements

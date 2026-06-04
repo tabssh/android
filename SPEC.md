@@ -9,7 +9,7 @@
 `git commit` and `git push` are denied on this project. Use:
 
 ```
-gitcommit --dir /root/Projects/github/tabssh/android all
+gitcommit --dir {project_dir} all
 ```
 
 Pre-commit sequence:
