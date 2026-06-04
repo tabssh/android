@@ -534,7 +534,7 @@ class PreferenceManager(private val context: Context) {
     fun isSyncConnectionsEnabled(): Boolean = getBoolean("sync_connections", true)
     fun setSyncConnectionsEnabled(enabled: Boolean) = setBoolean("sync_connections", enabled)
 
-    fun isSyncKeysEnabled(): Boolean = getBoolean("sync_keys", false)
+    fun isSyncKeysEnabled(): Boolean = getBoolean("sync_keys", true)
     fun setSyncKeysEnabled(enabled: Boolean) = setBoolean("sync_keys", enabled)
 
     fun isSyncIdentitiesEnabled(): Boolean = getBoolean("sync_identities", true)

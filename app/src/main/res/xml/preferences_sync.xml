@@ -93,7 +93,7 @@
             android:key="sync_keys"
             android:title="SSH keys"
             android:summary="Key metadata (private keys stay local)"
-            android:defaultValue="false" />
+            android:defaultValue="true" />
 
         <SwitchPreferenceCompat
             android:key="sync_snippets"
