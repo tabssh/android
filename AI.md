@@ -130,10 +130,10 @@ Defined in `app/build.gradle`:
 |---|---|---|
 | SSH | `com.github.mwiede:jsch` | 2.27.7 |
 | Terminal | `com.termux.termux-app:terminal-emulator` (excludes `terminal-view`) | 0.118.1 |
-| Crypto | `org.bouncycastle:bcpkix-jdk18on` | 1.77 |
-| Crypto | `org.bouncycastle:bcprov-jdk18on` | 1.77 |
+| Crypto | `org.bouncycastle:bcpkix-jdk18on` | 1.79 |
+| Crypto | `org.bouncycastle:bcprov-jdk18on` | 1.79 |
 | HTTP/WS | `com.squareup.okhttp3:okhttp` | 4.12.0 |
-| DB | `androidx.room:room-runtime`, `room-ktx`, `room-compiler` (kapt) | 2.6.1 |
+| DB | `androidx.room:room-runtime`, `room-ktx`, `room-compiler` (KSP) | 2.6.1 |
 | Background | `androidx.work:work-runtime` | 2.9.0 |
 | Security | `androidx.security:security-crypto` | 1.1.0-alpha06 |
 | Biometric | `androidx.biometric:biometric` | 1.1.0 |
@@ -199,9 +199,9 @@ Top-level config: `android:name=".TabSSHApplication"`, `android:allowBackup="fal
 
 **Permissions:** `INTERNET`, `ACCESS_NETWORK_STATE`, `USE_BIOMETRIC`, `USE_FINGERPRINT`, `READ_EXTERNAL_STORAGE` and `WRITE_EXTERNAL_STORAGE` (API ≤28), `WAKE_LOCK`, `VIBRATE`, `POST_NOTIFICATIONS` (API 33+), `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_DATA_SYNC`. Uses `tools:overrideLibrary` to allow Termux's library to coexist with `minSdk 21`.
 
-**Exported components:** `MainActivity` (LAUNCHER), `TaskerIntentService` (Tasker plug-in), `QuickConnectWidgetProvider`. Everything else is `exported="false"`.
+**Exported components:** `MainActivity` (LAUNCHER), `TaskerActionReceiver` (Tasker plug-in broadcast receiver), `ConnectionWidgetProvider` and its size-variant inner-class receivers (`Widget2x1`/`Widget4x2`/`Widget4x4`). Everything else is `exported="false"`.
 
-### 4.3 Activities (32)
+### 4.3 Activities (37)
 
 | Activity | Purpose | Notable extras |
 |---|---|---|
@@ -211,8 +211,6 @@ Top-level config: `android:name=".TabSSHApplication"`, `android:allowBackup="fal
 | `GroupManagementActivity` | CRUD `ConnectionGroup` (folders, nested) | — |
 | `SnippetManagerActivity` | CRUD `Snippet` library | — |
 | `ClusterCommandActivity` | Send command to multiple connections | — |
-| `KeyManagementActivity` | List/import/paste/generate/delete `StoredKey` | — |
-| `IdentityManagementActivity` | CRUD `Identity` | — |
 | `SFTPActivity` | Dual-pane SFTP browser | `EXTRA_CONNECTION_ID` |
 | `PortForwardingActivity` | Local/remote/dynamic forward management | — |
 | `SettingsActivity` | Hosts settings PreferenceFragments | — |
@@ -220,15 +218,18 @@ Top-level config: `android:name=".TabSSHApplication"`, `android:allowBackup="fal
 | `LogViewerActivity`, `AuditLogViewerActivity` | View app/audit logs | — |
 | `KeyboardCustomizationActivity` | Build custom on-screen keyboard layout | — |
 | `HypervisorEditActivity` | CRUD `HypervisorProfile` | — |
-| `ProxmoxManagerActivity`, `XCPngManagerActivity`, `VMwareManagerActivity`, `OciManagerActivity` | Per-hypervisor VM/instance list & actions | hypervisor id |
-| `OciOnboardingActivity` | Path A OCI importer (config + .pem via SAF) | — |
-| `VMConsoleActivity` | Hypervisor serial console (no SSH) | hypervisor + VM ids |
-| `WidgetConfigurationActivity` | Configure quick-connect widgets | widget id |
+| `ProxmoxManagerActivity`, `XCPngManagerActivity`, `VMwareManagerActivity`, `OciManagerActivity`, `LibvirtManagerActivity` | Per-hypervisor VM/instance list & actions | hypervisor id |
+| `VMConsoleActivity` | Hypervisor serial / graphical console (no SSH) | hypervisor + VM ids |
+| `WidgetConfigActivity` (package `widget/`) | Configure quick-connect widgets | widget id |
+| `VncHostsActivity`, `VncHostEditActivity` | CRUD VNC hosts (DB v34) and direct-VNC entry | — |
+| `CloudAccountManagerActivity` | Per-cloud-account VM list and connect actions | account id |
+| `ConfirmDisconnectActivity` | Transparent confirm dialog launched from notification "Disconnect" action | profile id |
+| `HostDetailActivity` | Single-host live metrics + monitoring config | host id |
+| `ImportExportActivity` | Master Import/Export hub (backups, SSH config import, bulk import) | — |
 | `TranscriptViewerActivity` | Replay recorded sessions | transcript id |
 | `CrashReportActivity` | Debug crash dump UI (debug builds) | — |
 | `CloudAccountsActivity` | CRUD `CloudAccount` entities; select cloud provider (AWS / Azure / GCP / DigitalOcean / Hetzner / Linode / Vultr); tokens live in `SecurePasswordManager`, never in DB | Wave 5.1 |
 | `ConnectionHistoryActivity` | Lists connections where `lastConnected > 0`, sorted most-recent-first; tap to reconnect | Wave 3.5 |
-| `HypervisorAccountsActivity` | CRUD reusable hypervisor credentials (`HypervisorAccount`); mirrors `IdentityManagementActivity` pattern; secrets via `HypervisorPasswordStore` | — |
 | `ImportFromQrActivity` | QR pairing inbound — camera scan, 6-digit code entry, Argon2id+AES-GCM decrypt, confirm + import; 3-attempt limit; state machine §18.7 | Wave QR |
 | `MultiHostDashboardActivity` | Multi-host real-time performance dashboard; uses `MetricsCollector` per active `SSHConnection`; 5 s polling | — |
 | `PinLockActivity` | App-lock PIN entry; `EXTRA_MODE` = `"set"` / `"verify"`; `MAX_ATTEMPTS = 5`; stores SHA-256 hash in `app_lock_pin_hash` pref; unconditional `FLAG_SECURE` | Wave 3.2 |
@@ -238,19 +239,19 @@ Top-level config: `android:name=".TabSSHApplication"`, `android:allowBackup="fal
 
 `MainActivity` and `TabTerminalActivity` are `singleTop`. All have `parentActivityName` set for back navigation. `VMConsoleActivity` runs fullscreen (no action bar).
 
-### 4.4 Fragments (7)
+### 4.4 Fragments (8)
 
-`FrequentConnectionsFragment`, `ConnectionsFragment`, `IdentitiesFragment`, `PerformanceFragment`, `HypervisorsFragment`, `ConnectionListFragment`, `SyncSettingsFragment`. Plus `PreferenceFragmentCompat` subclasses inside `SettingsActivity`: `SettingsMainFragment`, `GeneralSettingsFragment`, `TerminalSettingsFragment`, `SecuritySettingsFragment`, `ConnectionSettingsFragment`, `LoggingSettingsFragment`, `TaskerSettingsFragment`.
+`FrequentConnectionsFragment`, `ConnectionsFragment`, `IdentitiesFragment`, `PerformanceFragment`, `HypervisorsFragment`, `ConnectionListFragment`, `CloudAccountsFragment`, `InfraFragment`. Plus `PreferenceFragmentCompat` subclasses inside `SettingsActivity`: `SettingsMainFragment`, `GeneralSettingsFragment`, `TerminalSettingsFragment`, `SecuritySettingsFragment`, `ConnectionSettingsFragment`, `LoggingSettingsFragment`, `TaskerSettingsFragment`. `SyncSettingsActivity` hosts a `PreferenceFragmentCompat` for SAF sync settings (defined inline in that activity).
 
 ### 4.5 Services and receivers
 
 | Component | Type | Purpose |
 |---|---|---|
-| `SSHConnectionService` | foreground (`dataSync`) | Holds SSH sessions while app is backgrounded; `START_STICKY`; auto-stops 30 s after last connection closes |
-| `TaskerIntentService` | exported intent service | Tasker plug-in actions: `CONNECT`, `DISCONNECT`, `SEND_COMMAND`, `SEND_KEYS` |
-| `HostAvailabilityWorker` | `CoroutineWorker` (WorkManager) | Battery-aware background TCP probes for monitored hosts; 15 min periodic; constraints: network + not-low-battery |
-| `QuickConnectWidgetProvider` | `AppWidgetProvider` | 1×1 launcher widget |
-| `ConnectionWidgetProvider` (+ `Widget2x1`, `Widget4x2`, `Widget4x4`) | `AppWidgetProvider` | Multi-size connection widgets |
+| `SSHConnectionService` | foreground (`dataSync`) | Holds SSH sessions while app is backgrounded; `START_NOT_STICKY`; auto-stops 30 s after last connection closes |
+| `TaskerActionReceiver` (`automation/TaskerActionReceiver.kt`) + `TaskerWorker` | exported `BroadcastReceiver` + `CoroutineWorker` | Tasker plug-in actions: `CONNECT`, `DISCONNECT`, `SEND_COMMAND`, `SEND_KEYS`. The receiver enqueues a `TaskerWorker` for execution. |
+| `HostAvailabilityWorker` (`background/`) | `CoroutineWorker` (WorkManager) | Battery-aware background TCP probes for monitored hosts; 15 min periodic; constraints: network + not-low-battery |
+| `MonitoringBootReceiver` (`background/`) | `BroadcastReceiver` | Re-schedules `HostAvailabilityWorker` on `BOOT_COMPLETED`. |
+| `ConnectionWidgetProvider` (+ inner-class size variants `Widget2x1`, `Widget4x2`, `Widget4x4`) | `AppWidgetProvider` | Multi-size connection widgets — single class with inner classes per size; the 1×1 widget is the base class itself. There is no separate `QuickConnectWidgetProvider`. |
 | `FileProvider` | content provider | Shares logs / transcripts via `app/src/main/res/xml/file_paths.xml` |
 
 ### 4.6 Canonical user flows
@@ -504,7 +505,7 @@ Defined in `crypto/keys/KeyType.kt`:
 - OpenSSH public-key lines (`ssh-rsa …`, `ecdsa-sha2-nistp256 …`, `ssh-ed25519 …`).
 - PuTTY `.ppk` v2 and v3.
 
-Encrypted keys are decrypted with the user's passphrase; OpenSSH v1 uses bcrypt KDF. BouncyCastle 1.77 is the underlying crypto provider.
+Encrypted keys are decrypted with the user's passphrase; OpenSSH v1 uses bcrypt KDF. BouncyCastle 1.79 is the underlying crypto provider.
 
 `crypto/SSHKeyGenerator.kt` generates:
 - RSA via `KeyPairGenerator("RSA")`.
@@ -566,7 +567,7 @@ If the Keystore is unavailable (e.g. broken ROM), the manager auto-degrades to `
 
 `storage/database/TabSSHDatabase.kt` — **version 37**, schema exported to `app/schemas/`.
 
-### 8.2 Entities (17)
+### 8.2 Entities (19)
 
 | Entity | Table | Notable fields | File |
 |---|---|---|---|
@@ -587,6 +588,8 @@ If the Keystore is unavailable (e.g. broken ROM), the manager auto-degrades to `
 | `CloudAccount` | `cloud_accounts` | `provider`, `enabled`, `lastRefreshAt`, `lastCount` (token in Keystore, **not** in DB) | `entities/CloudAccount.kt` |
 | `Macro` | `macros` | recordable raw byte sequence (`sequence_b64`), `usageCount` | `entities/Macro.kt` |
 | `MonitorSlot` | `monitor_slots` | per-host background monitoring config + state: `enabled`, `alertOnDown/Recovery`, `cpuThreshold`, `memoryThreshold`, `diskThreshold`, `loadThreshold`, `enablePerformanceChecks`, `checkIntervalMinutes`, `alertCooldownMinutes`, `isCurrentlyDown`, `consecutiveFailures`, `lastCheckedAt`, `lastSeenUp`, `lastNotifiedDownAt` | `entities/MonitorSlot.kt` |
+| `VncHost` | `vnc_hosts` | UUID `id`, `name`, `host`, `port`, `identityId`, color tag, sync metadata (added v33→34) | `entities/VncHost.kt` |
+| `VncIdentity` | `vnc_identities` | UUID `id`, `name`; password stored in `SecurePasswordManager` under `vnc_identity_${id}` — never in DB (added v33→34) | `entities/VncIdentity.kt` |
 
 ### 8.3 DAOs
 
@@ -889,12 +892,13 @@ Realm format `user@pam` / `user@pve`. Optional SSL bypass.
 - **Auth model:** API-key only. No session tokens — `~/.oci/config`
   profiles carrying `security_token_file=` are rejected during import
   (1-hour CLI-renewable, no upload renewal path).
-- **Onboarding:** Path A only (`OciOnboardingActivity`). User picks
-  the config file via SAF, picks the `.pem` private key via SAF,
-  enters the passphrase if encrypted; the imported key's MD5
-  fingerprint of `SubjectPublicKeyInfo DER` (formatted as colon-hex
-  pairs) is round-tripped against the config's `fingerprint=` line
-  before save.
+- **Onboarding:** Path A only — implemented inline inside
+  `HypervisorEditActivity` (there is **no** standalone
+  `OciOnboardingActivity`). User picks the config file via SAF, picks
+  the `.pem` private key via SAF, enters the passphrase if encrypted;
+  the imported key's MD5 fingerprint of `SubjectPublicKeyInfo DER`
+  (formatted as colon-hex pairs) is round-tripped against the config's
+  `fingerprint=` line before save.
 - **Endpoints:** Identity at `https://identity.<region>.oci.oraclecloud.com`,
   Compute / Networking at `https://iaas.<region>.oraclecloud.com`. Region
   is selected from a `MaterialAutoCompleteTextView` seeded with the 34
@@ -922,12 +926,13 @@ Realm format `user@pam` / `user@pve`. Optional SSL bypass.
   - `OciConfigParser.kt` — zero-dep INI parser for `~/.oci/config`,
     handles `[DEFAULT]` + named sections, rejects session-token
     profiles up front.
-- **UI:** `OciOnboardingActivity` (Path A wizard) and
-  `OciManagerActivity` (instance list with start/stop/softstop/
-  reset/softreset; no console — deferred). When the user picks "OCI"
-  in `HypervisorEditActivity`'s type spinner the host/port/account/
-  username/password/realm/api-type/ssl rows hide and a "Configure
-  OCI credentials…" button launches the onboarding wizard.
+- **UI:** OCI onboarding is hosted **inline in `HypervisorEditActivity`**;
+  `OciManagerActivity` shows the instance list with start/stop/softstop/
+  reset/softreset (no console — deferred). When the user picks "OCI"
+  in the type spinner the host/port/account/username/password/realm/
+  api-type/ssl rows hide and a "Configure OCI credentials…" button
+  expands the inline Path A picker (SAF config + SAF .pem + optional
+  passphrase).
 - **Secrets:** PEM private key + optional passphrase live in
   `SecurePasswordManager` under `oci_private_key_${id}` /
   `oci_passphrase_${id}`. Cleared on row delete via
@@ -985,7 +990,7 @@ Realm format `user@pam` / `user@pve`. Optional SSL bypass.
 ### 11.8 UI
 
 - `HypervisorsFragment` (RecyclerView, FAB → `HypervisorEditActivity`, long-press for edit/delete, click → manager activity).
-- `HypervisorEditActivity` + `dialog_add_hypervisor.xml` — dynamic field visibility (Proxmox shows realm, XCP-ng/VMware show API-type dropdown, OCI hides every connection field and shows a "Configure OCI credentials…" button that launches `OciOnboardingActivity`), default ports (Proxmox 8006, XCP-ng/VMware 443), "Import from SSH connection" pre-fill, `testConnection()` validation. For OCI rows, save updates only `name` + `notes` and refuses brand-new rows (the wizard is the only entry point).
+- `HypervisorEditActivity` + `dialog_add_hypervisor.xml` — dynamic field visibility (Proxmox shows realm, XCP-ng/VMware show API-type dropdown, OCI hides every connection field and shows a "Configure OCI credentials…" button that expands the inline OCI onboarding picker), default ports (Proxmox 8006, XCP-ng/VMware 443), "Import from SSH connection" pre-fill, `testConnection()` validation. For OCI rows, save updates only `name` + `notes` and refuses brand-new rows (the wizard is the only entry point).
 - Type-specific manager activities: `ProxmoxManagerActivity`, `XCPngManagerActivity`, `VMwareManagerActivity`, `OciManagerActivity`, `LibvirtManagerActivity`. They show VM/instance lists with power/snapshot/backup actions and route to `VMConsoleActivity` for serial console (OCI has no console — deferred). All four `HypervisorEditActivity`/manager UIs are normalized: `EXTRA_HYPERVISOR_ID`, shared `item_hypervisor_vm.xml` card, inline action buttons (state shown as colored text — Running/Stopped/Paused/Restarting; Hard Reset confirms via dialog).
 
 ### 11.9 Cloud account integration
@@ -1010,7 +1015,7 @@ Package `cloud/` (separate from `hypervisor/`). Manages SSH-accessible cloud VM 
 
 ## 12. UI, theming, accessibility, i18n
 
-### 12.1 Settings (9 preference XMLs)
+### 12.1 Settings (10 preference XMLs)
 
 `app/src/main/res/xml/`:
 
@@ -1025,6 +1030,7 @@ Package `cloud/` (separate from `hypervisor/`). Manages SSH-accessible cloud VM 
 | `preferences_audit.xml` | embedded | command auditing |
 | `preferences_logging.xml` | `LoggingSettingsFragment` | debug / host / error / audit logging |
 | `preferences_tasker.xml` | `TaskerSettingsFragment` | Tasker plug-in config |
+| `preferences_monitoring.xml` | embedded | background host availability + metric-threshold monitoring |
 
 ### 12.2 Themes
 
@@ -1077,7 +1083,7 @@ Package `cloud/` (separate from `hypervisor/`). Manages SSH-accessible cloud VM 
 
 ### 13.1 Notification channels
 
-`utils/NotificationHelper.kt` manages all 8 channels. **All channels are created there** — `SSHConnectionService` no longer creates its own private channel.
+`utils/NotificationHelper.kt` manages all 7 channels. **All channels are created there** — `SSHConnectionService` no longer creates its own private channel.
 
 | Channel ID | Importance | Use |
 |---|---|---|
@@ -1136,11 +1142,16 @@ Compose files: `docker/docker-compose.yml` (services: `tabssh-builder`, `tabssh-
 | Target | Effect | Output |
 |---|---|---|
 | `help` | print targets | stdout |
-| `build` | clean + Docker `assembleDebug` | `./binaries/tabssh-android-{arch}.apk` |
-| `check` | compile-only check, error-filtered | stdout |
+| `build` | Docker `assembleDebug` (depends on `fetch-mosh`, `fetch-fonts`) | `./binaries/tabssh-android-{arch}.apk` |
+| `fetch-mosh` | Download `mosh-client` binaries from the latest GH release of the `mosh-binaries` workflow | `app/src/main/jniLibs/<abi>/libmosh-client.so` |
+| `fetch-fonts` | Download Nerd Fonts (skip-if-present; `--force` to refresh) | `app/src/main/assets/fonts/` |
+| `check` | compile-only check (KSP + compile, mirrors GH build), error-filtered | stdout |
 | `clean` | remove `.gradle/`, `app/build`, `binaries` | — |
 | `install` | `adb install -r` universal APK | device |
-| `logs` | `adb logcat | grep TabSSH` | stream |
+| `adb-reconnect` | Reconnect to phone over WireGuard (use after phone reboot) | adb |
+| `logs` | `adb logcat \| grep TabSSH` | stream |
+| `test` | Run UI tests on connected device/emulator (`TEST=name` or all) | test report |
+| `test-install` | Build + install + run UI tests | — |
 | `image` | build the Docker build image locally | `ghcr.io/tabssh/android:build` |
 
 The Docker run wrapper bind-mounts the repo to `/workspace`, sets `ANDROID_HOME=/opt/android-sdk` and `GRADLE_USER_HOME=/workspace/.gradle`, and uses `--network=host`.
@@ -1154,6 +1165,7 @@ The Docker run wrapper bind-mounts the repo to `/workspace`, sets `ANDROID_HOME=
 | `ci.yml` | push to `main`/`develop`, PR to `main` | structure + metadata + security + feature + docs validation |
 | `dev-builds.yml` | push to `main`/`master`/`devel`/`develop` | `assembleDebug`, rename APKs to `tabssh-*-dev.apk`, generate SHA-256 + release notes, publish prerelease tagged `development` |
 | `release.yml` | tag `v*` | tests + `dependencyCheckAnalyze` + JaCoCo, then `assembleRelease` and `assembleFdroidRelease`, rename to versioned APKs, generate notes + checksums + mapping, create GitHub Release with 10 APKs (5 release + 5 fdroid), prepare F-Droid submission directory, run `scripts/notify-release.sh` (Matrix / Mastodon) |
+| `mosh-binaries.yml` | manual / scheduled | Cross-compiles `mosh-client` binaries for `arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86`, packages and publishes them as a separate release the Android build consumes via `make fetch-mosh`. |
 
 Keystore is decoded from the `KEYSTORE_BASE64` secret. Gradle cache key is `${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}`.
 
@@ -1232,15 +1244,14 @@ If a new file triggers a false positive, add a targeted `grep -v` to the chain a
 | `hypervisor.libvirt` | `LibvirtApiClient` (SSH-tunneled VNC + virsh), `LibvirtVm` |
 | `hypervisor.oci` | `OciApiClient`, `OciSigner`, `OciKeyMaterial`, `OciConfigParser`, `OciInstance` |
 | `hypervisor.vnc` | `VncDirectConnector`, `VncStreamHolder` (direct-VNC entry points + framebuffer holder) |
-| `notifications` | `NotificationHelper` (utility lives in `utils/`) |
 | `performance` | `PerformanceManager`, `MetricsCollector`, charts feeder |
 | `protocols.mosh` | Mosh native client glue (`MoshHandoff`, `MoshNativeClient`, `TermuxMoshLauncher`) — fully wired |
 | `services` | `SSHConnectionService`, `TaskerIntentService` |
 | `sftp` | `SFTPManager`, `TransferTask` |
 | `ssh.config` | `SSHConfigParser` |
-| `ssh.connection` | `SSHConnection`, `HostKeyVerifier`, `TelnetConnection` (RFC 854; fully implemented — not a stub) |
+| `ssh.connection` | `SSHConnection`, `HostKeyVerifier`, `SSHSessionManager` and listeners, `TelnetConnection` (RFC 854; fully implemented — not a stub) |
 | `ssh.forwarding` | `PortForwardingManager`, `X11Proxy`, `HttpPortProbe` |
-| `ssh.session` | `SSHSessionManager`, listeners |
+| `ssh.auth` | Auth helpers (FIDO2 auth-type spinner glue, etc.) |
 | `storage.database` | `TabSSHDatabase` |
 | `storage.database.dao` | DAOs |
 | `storage.database.entities` | Room entities |
@@ -1258,14 +1269,23 @@ If a new file triggers a false positive, add a targeted `grep -v` to the chain a
 | `terminal.emulator` | `ANSIParser`, `TerminalBuffer`, `TerminalRenderer` (legacy/secondary path) |
 | `themes` | `Theme`, `ThemeManager`, `ThemeParser`, `ThemeValidator`, `BuiltInThemes` |
 | `cloud` | `CloudAccountsActivity`, cloud provider clients (Aws/Azure/Gcp/DigitalOcean/Hetzner/Linode/Vultr) |
-| `ui.activities` | 32 activities |
-| `ui.adapters` | RecyclerView adapters (13) |
-| `ui.fragments` | 7 fragments |
+| `ui.activities` | 36 activities (one additional, `WidgetConfigActivity`, lives in the root `widget/` package) |
+| `ui.adapters` | RecyclerView adapters |
+| `ui.dialogs` | Reusable dialog builders / fragments |
+| `ui.fragments` | Fragments (8) |
+| `ui.keyboard` | Custom on-screen keyboard widgets |
+| `ui.models` | UI-only view-model state classes |
 | `ui.tabs` | `TabManager`, `SSHTab` |
+| `ui.utils` | UI-scoped helpers |
 | `ui.views` | `TerminalView`, `PerformanceOverlayView` |
-| `ui.widgets` | quick-connect / connection widgets |
+| `ui.widget` | UI widget helpers (note: app-widget receivers live in the root `widget/` package) |
 | `utils` | `Logger`, `NotificationHelper`, `DialogUtils`, `ClipboardHelper`, `ActivityExtensions`, `FontManager`, `AnrWatchdog`, `ValidationHelper`, helpers |
-| `widget` | `WidgetConfigurationActivity` |
+| `widget` | `ConnectionWidgetProvider` (+ inner-class size variants) and `WidgetConfigActivity` |
+| `background` | `HostAvailabilityWorker`, `MonitoringBootReceiver`, `BatteryOptimizationHelper`, `SessionPersistenceManager` |
+| `cluster` | Cluster-command session fan-out (`ClusterCommandActivity` backend) |
+| `network` | Low-level networking helpers used by hypervisor/SSH layers |
+| `pairing` | QR pairing inbound (camera, decode, decrypt, import) |
+| `platform` | Android platform-version shims |
 
 ---
 
@@ -1311,7 +1331,7 @@ These exist in source but are **not** wired into a working user-facing flow. Tre
 | Password storage levels, biometric unlock, TTL | §7.4 |
 | Screenshot protection, clipboard auto-clear, password lifecycle | §7.5 |
 | Room database version, full migration chain | §8.1–8.4 |
-| All 17 entities and their notable fields | §8.2 |
+| All 19 entities and their notable fields | §8.2 |
 | Preference keys and defaults by category | §8.6 |
 | SAF sync wire format, encryption, 3-way merge, conflict resolution | §9 |
 | Sync coverage matrix (what syncs, what doesn't, and why) | §9.4 |
