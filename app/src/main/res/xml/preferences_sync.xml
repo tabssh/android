@@ -62,7 +62,7 @@
             android:key="sync_wifi_only"
             android:title="WiFi only"
             android:summary="Only sync when connected to WiFi"
-            android:defaultValue="true" />
+            android:defaultValue="false" />
 
         <SwitchPreferenceCompat
             android:key="sync_on_change"

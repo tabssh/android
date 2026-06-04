@@ -528,7 +528,7 @@ class PreferenceManager(private val context: Context) {
     fun getLastSyncTime(): Long = preferences.getLong("sync_last_time", 0)
     fun setLastSyncTime(timestamp: Long) = preferences.edit().putLong("sync_last_time", timestamp).apply()
 
-    fun isSyncWifiOnly(): Boolean = getBoolean("sync_wifi_only", true)
+    fun isSyncWifiOnly(): Boolean = getBoolean("sync_wifi_only", false)
     fun setSyncWifiOnly(wifiOnly: Boolean) = setBoolean("sync_wifi_only", wifiOnly)
 
     fun isSyncConnectionsEnabled(): Boolean = getBoolean("sync_connections", true)

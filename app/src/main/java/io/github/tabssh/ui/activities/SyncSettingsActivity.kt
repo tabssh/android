@@ -195,7 +195,7 @@ class SyncSettingsActivity : AppCompatActivity() {
         findViewById<View>(R.id.row_frequency).setOnClickListener { showFrequencyPicker() }
 
         // Options switches
-        switchWifiOnly.isChecked = prefs.getBoolean(PREF_WIFI_ONLY, true)
+        switchWifiOnly.isChecked = prefs.getBoolean(PREF_WIFI_ONLY, false)
         switchWifiOnly.setOnCheckedChangeListener { _, checked ->
             prefs.edit().putBoolean(PREF_WIFI_ONLY, checked).apply()
             if (switchEnabled.isChecked) workScheduler.schedulePeriodicSync()
