@@ -176,7 +176,7 @@ class BackupImporter(
                     host = o.getString("host"),
                     port = o.getInt("port"),
                     username = o.getString("username"),
-                    authType = o.getString("authType"),
+                    authType = AuthType.fromString(o.optString("authType")).name,
                     keyId = o.optString("keyId").takeIf { it.isNotEmpty() },
                     groupId = o.optString("groupId").takeIf { it.isNotEmpty() },
                     theme = o.optString("theme", "dracula"),

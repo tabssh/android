@@ -19,13 +19,19 @@ enum class AuthType(val displayName: String, val description: String) {
     
     companion object {
         /**
-         * Get AuthType from string name, with fallback to PASSWORD
+         * Get AuthType from a string that may be an enum name ("PUBLIC_KEY") or
+         * an OpenSSH config / import alias ("publickey", "keyboard-interactive").
+         * Falls back to PASSWORD on any unrecognised value.
          */
         fun fromString(name: String?): AuthType {
-            return try {
-                valueOf(name ?: "PASSWORD")
-            } catch (e: IllegalArgumentException) {
-                PASSWORD
+            if (name == null) return PASSWORD
+            return when (name.lowercase().trim()) {
+                "public_key", "publickey", "public-key" -> PUBLIC_KEY
+                "password" -> PASSWORD
+                "keyboard_interactive", "keyboard-interactive", "keyboard" -> KEYBOARD_INTERACTIVE
+                "gssapi", "gssapi-with-mic" -> GSSAPI
+                "fido2_security_key", "fido2", "sk-ssh-ed25519", "sk-ecdsa-sha2-nistp256" -> FIDO2_SECURITY_KEY
+                else -> try { valueOf(name) } catch (_: IllegalArgumentException) { PASSWORD }
             }
         }
         

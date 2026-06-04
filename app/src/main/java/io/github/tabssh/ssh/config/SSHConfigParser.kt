@@ -1,5 +1,6 @@
 package io.github.tabssh.ssh.config
 
+import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.utils.logging.Logger
 import java.io.BufferedReader
@@ -233,11 +234,11 @@ class SSHConfigParser {
         val hostname = host.hostname ?: host.hostPattern
         val username = host.user ?: System.getProperty("user.name") ?: DEFAULT_USERNAME
 
-        // Determine auth type based on configuration
+        // Determine auth type based on configuration; store as AuthType enum name.
         val authType = when {
-            host.identityFileStr != null && host.pubkeyAuthentication -> "publickey"
-            host.passwordAuthentication -> "password"
-            else -> "keyboard-interactive"
+            host.identityFileStr != null && host.pubkeyAuthentication -> AuthType.PUBLIC_KEY.name
+            host.passwordAuthentication -> AuthType.PASSWORD.name
+            else -> AuthType.KEYBOARD_INTERACTIVE.name
         }
 
         // Build advanced settings JSON

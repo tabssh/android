@@ -1,5 +1,6 @@
 package io.github.tabssh.ssh.config
 
+import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.utils.logging.Logger
 import org.json.JSONArray
@@ -45,7 +46,9 @@ object BulkImportParser {
     ) {
         fun toConnectionProfile(): ConnectionProfile {
             val finalUser = username?.takeIf { it.isNotBlank() } ?: "root"
-            val finalAuth = authType?.takeIf { it.isNotBlank() } ?: "password"
+            // Normalize raw import strings ("publickey", "keyboard-interactive", etc.)
+            // to AuthType enum names so the DB column stays consistent.
+            val finalAuth = AuthType.fromString(authType?.takeIf { it.isNotBlank() }).name
             return ConnectionProfile(
                 id = UUID.randomUUID().toString(),
                 name = name.ifBlank { "$finalUser@$host" },

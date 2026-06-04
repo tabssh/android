@@ -254,13 +254,7 @@ data class ConnectionProfile(
     @ColumnInfo(name = "oci_instance_id")
     val ociInstanceId: String? = null
 ) {
-    fun getAuthTypeEnum(): AuthType {
-        return try {
-            AuthType.valueOf(authType)
-        } catch (e: IllegalArgumentException) {
-            AuthType.PASSWORD
-        }
-    }
+    fun getAuthTypeEnum(): AuthType = AuthType.fromString(authType)
     
     fun getDisplayName(): String {
         return if (name.isNotBlank()) name else "$username@$host:$port"
