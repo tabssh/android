@@ -1,12 +1,12 @@
 # 📱 TabSSH — Modern SSH Client for Android
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Platform-Android-green.svg" alt="Platform">
-  <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License">
-  <img src="https://img.shields.io/github/v/release/tabssh/android?label=Version" alt="Version">
-  <img src="https://img.shields.io/badge/Min%20SDK-21-brightgreen.svg" alt="Min SDK">
-  <img src="https://github.com/tabssh/android/actions/workflows/android-ci.yml/badge.svg" alt="Build Status">
-  <img src="https://img.shields.io/github/downloads/tabssh/android/total?label=Downloads" alt="Downloads">
+  <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Platform-Android-green.svg" alt="Platform"></a>
+  <a href="https://github.com/tabssh/android/blob/main/LICENSE.md"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License"></a>
+  <a href="https://github.com/tabssh/android/releases/latest"><img src="https://img.shields.io/github/v/release/tabssh/android?label=Version" alt="Version"></a>
+  <a href="https://developer.android.com/tools/releases/platforms"><img src="https://img.shields.io/badge/Min%20SDK-21-brightgreen.svg" alt="Min SDK"></a>
+  <a href="https://github.com/tabssh/android/actions/workflows/ci.yml"><img src="https://github.com/tabssh/android/actions/workflows/ci.yml/badge.svg" alt="Build Status"></a>
+  <a href="https://github.com/tabssh/android/releases"><img src="https://img.shields.io/github/downloads/tabssh/android/total?label=Downloads" alt="Downloads"></a>
 </p>
 
 <p align="center">

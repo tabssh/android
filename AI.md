@@ -1129,6 +1129,8 @@ Per-channel toggles: `notifications_enabled`, `show_connection_notifications`, `
 
 Compose files: `docker/docker-compose.yml` (services: `tabssh-builder`, `tabssh-test`, `tabssh-build`, shared `gradle-cache` volume) and `docker/docker-compose.dev.yml` (interactive `tabssh-dev` shell, optional emulator).
 
+**Bind-mount rules:** source tree → `/workspace`; Gradle cache and AVD state → named compose volumes. **Never** volume-mount `/opt/android-sdk` — it overlays the baked SDK. `ANDROID_HOME=/opt/android-sdk`, `GRADLE_USER_HOME=/workspace/.gradle`, `--network=host`.
+
 ### 14.2 Makefile
 
 | Target | Effect | Output |
@@ -1352,21 +1354,37 @@ Production releases are produced by the `release.yml` GitHub Actions workflow on
 
 ### 17.3 Code editing rules
 
-When modifying this codebase, prefer the following (derived from `SPEC.md` policies and the actual code):
+When modifying this codebase follow these rules:
 
 1. **Don't reimplement what's there.** Termux owns the terminal emulator; JSch owns the SSH protocol; Room owns persistence; SAF owns cloud transport. New features should compose these — not replace them.
-2. **Database changes must ship a migration.** Bump `TabSSHDatabase` version, add a `Migration` object, never destructive migrate. The exported schema in `app/schemas/` must be updated and committed.
-3. **Sync surface is opinionated.** Anything user-visible and persisted that is *not* in `SyncDataCollector` won't sync. If you add a new entity, decide whether to sync it and update `SyncDataCollector`/`SyncDataApplier`/the wire-format docs in §9.
-4. **Crypto stays at the boundary.** Don't add ad-hoc password storage — use `SecurePasswordManager`. Don't add ad-hoc key parsing — use `SSHKeyParser`. Don't add custom AES code — use `SyncEncryptor`.
-5. **Activity composition over inheritance.** New screens should be activities or fragments hosted by `SettingsActivity`-style containers, not subclasses of existing activities.
-6. **Use the existing notification channels.** Don't create new channels for one-off events.
-7. **Keep `minSdk = 21` working.** Termux's library targets a higher SDK and is allowed via `tools:overrideLibrary`; new dependencies must respect minSdk 21 or be guarded by `Build.VERSION.SDK_INT` checks.
-8. **F-Droid build must remain reproducible.** Don't introduce non-deterministic generated code, don't pull in proprietary services, don't add network-fetching Gradle plugins.
-9. **Prefer `Flow` and `StateFlow`.** That's the existing reactive style; don't introduce LiveData, RxJava, or callback chains for new code.
-10. **SPEC.md is the rule-override file, AI.md is the architecture, CLAUDE.md is a short loader.** When you change architecture, update AI.md. When you add a project-specific rule or policy override, update SPEC.md. Never add spec content to CLAUDE.md.
-11. **Never add `Co-Authored-By` (or any attribution footer) to commit messages.** The maintainer runs Claude Code as themselves and authors every commit personally — there is no separate co-author. Adding the footer falsely implies a second contributor and pollutes git attribution. End commit bodies at the last description line, no trailer.
-12. **Save commit messages to `{project_root}/.git/COMMIT_MESS`.** Project convention so the maintainer can `git commit -F .git/COMMIT_MESS`. Overwrite the file each time. Do not save to `/tmp/tabssh-android/`. Do not also paste inline (the file is the source of truth).
-13. **Downscale screenshots before reading them.** Android screenshots are typically 1080×2400 (or larger on tablets/foldables) and exceed the 2000px image context limit — `Read` will fail with "image context too large". Before reading any screenshot, downscale to ≤1080px on the long edge, then `Read` the `-small.png`. ImageMagick may not be installed; the canonical helper is `/tmp/tabssh-android/resize.py` (PIL-based, persists across sessions): `python3 /tmp/tabssh-android/resize.py <src>.png /tmp/tabssh-android/screenshots/<name>-small.png`. Keep the original around if you need full resolution for visual verification later. This applies to `adb exec-out screencap`, uiautomator dumps with screenshots, and any image pulled off the emulator/device.
+2. **Database changes must ship a migration.** Steps in order: (1) bump `TabSSHDatabase` `version` constant; (2) add a `Migration` object for the new version step; (3) register it in the `databaseBuilder` migration chain; (4) run `make check` to trigger schema export; (5) commit the updated `app/schemas/` JSON. Never destructive-migrate — SQLite < 3.35 does not support `DROP COLUMN`; rename by adding a column, migrating data, and leaving the old column.
+3. **Sync surface is opinionated.** Anything user-visible and persisted that is *not* in `SyncDataCollector` won't sync. If you add a new entity, decide whether to sync it and update `SyncDataCollector`, `SyncDataApplier`, and the sync coverage matrix in §9.4.
+4. **Crypto stays at the boundary.** Don't add ad-hoc password storage — use `SecurePasswordManager`. Don't add ad-hoc key parsing — use `SSHKeyParser`. Don't add custom AES code — use `SyncEncryptor`. The canonical credential storage locations are:
+
+   | Credential type | Storage |
+   |---|---|
+   | SSH session passwords | `SecurePasswordManager` (Keystore AES-GCM) |
+   | SSH key passphrases | `SecurePasswordManager` |
+   | Hypervisor inline passwords | `HypervisorPasswordStore` |
+   | Hypervisor account passwords | `HypervisorPasswordStore.storeAccountPassword()` |
+   | OCI PEM private key | `HypervisorPasswordStore.storeOciAccountKey()` — alias `oci_private_key_${accountId}` |
+   | OCI key passphrase | `HypervisorPasswordStore.storeOciAccountPassphrase()` — alias `oci_passphrase_${accountId}` |
+   | Cloud provider tokens | `SecurePasswordManager`, key `cloud_token_${accountId}` |
+
+   **Never** write any of the above to the Room database — DB password columns must always be empty strings.
+
+5. **Threading discipline.** `lifecycleScope.launch {}` defaults to `Dispatchers.Main` — never call Keystore, database, or filesystem ops inside a bare launch. `Room` suspend DAOs switch dispatchers automatically; `SecurePasswordManager.retrievePassword()` does **not** — always wrap it in `withContext(Dispatchers.IO)`. All `HypervisorPasswordStore` store/retrieve methods do switch internally. SAF launcher callbacks fire on Main; capture `context` before launching IO and guard `withContext(Dispatchers.Main)` blocks with `if (!isAdded) return@withContext`.
+6. **Activity composition over inheritance.** New screens should be activities or fragments hosted by `SettingsActivity`-style containers, not subclasses of existing activities.
+7. **Use the existing notification channels.** Don't create new channels for one-off events.
+8. **Keep `minSdk = 21` working.** Termux's library targets a higher SDK and is allowed via `tools:overrideLibrary`; new dependencies must respect minSdk 21 or be guarded by `Build.VERSION.SDK_INT` checks.
+9. **F-Droid build must remain reproducible.** Don't introduce non-deterministic generated code, don't pull in proprietary services, don't add network-fetching Gradle plugins.
+10. **Prefer `Flow` and `StateFlow`.** That's the existing reactive style; don't introduce LiveData, RxJava, or callback chains for new code.
+11. **AI.md is the architecture, CLAUDE.md is a short loader.** When you change architecture, update AI.md. When you add a dev rule, add it here in §17. Never add spec content to CLAUDE.md.
+12. **Docker build quirk.** Do not volume-mount `/opt/android-sdk` — that overlays the baked SDK in the build container. The correct bind-mounts are: source tree → `/workspace`, Gradle cache and AVD state → named compose volumes. The device is on a remote server; ADB and logcat are unavailable. All debugging is static analysis only.
+13. **Paste service quirk (MicroBin).** `mb.pste.us` and any self-hosted MicroBin instance return HTTP 404 on raw-paste URLs but still deliver the paste body. Never use `curl -f` for MicroBin URLs — it discards the body on 404. Always: `curl -qLs "https://mb.pste.us/raw/<id>"`.
+14. **Never add `Co-Authored-By` (or any attribution footer) to commit messages.** End commit bodies at the last description line, no trailer.
+15. **Save commit messages to `{project_root}/.git/COMMIT_MESS`.** Overwrite the file each time. Do not save to `/tmp/tabssh-android/`.
+16. **Downscale screenshots before reading them.** Android screenshots are 1080×2400+. Downscale first: `python3 /tmp/tabssh-android/resize.py <src>.png /tmp/tabssh-android/screenshots/<name>-small.png`.
 
 ---
 

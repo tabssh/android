@@ -59,10 +59,16 @@ repository: https://github.com/tabssh/android
 - Backup and restore as a portable encrypted archive
 
 ### Hypervisor management
-- Proxmox, XCP-ng (and Xen Orchestra), VMware, OCI — list VMs/instances, start, stop, shutdown, reboot, snapshot, serial console
+- Proxmox, XCP-ng (and Xen Orchestra), VMware, QEMU/libvirt (KVM) — list VMs/instances, start, stop, shutdown, reboot, snapshot, serial console
 - Reusable hypervisor credential accounts (username/password or OCI API key) shared across hypervisor profiles
 - TLS certificate pinning (TOFU) for hypervisor REST APIs
 - OCI API key authentication (tenancy, user, region, fingerprint, compartment, private key)
+
+### Cloud provider management
+- Manage SSH-accessible instances across DigitalOcean, Hetzner, Linode, Vultr, AWS EC2, Google Cloud Compute, Azure VMs, and Oracle Cloud (OCI)
+- Live instance state (running / stopped / transitioning) with start/stop control
+- Cloud account credentials stored in Keystore, never in the database
+- No vendor SDKs embedded — all providers accessed via their REST APIs
 
 ### Accessibility and UI
 - TalkBack support with content descriptions on all interactive elements
