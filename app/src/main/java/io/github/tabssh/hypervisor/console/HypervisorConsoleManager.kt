@@ -260,9 +260,12 @@ class HypervisorConsoleManager {
                 // The caller wires an RfbListener and calls rfbClient.start().
                 // ticket.termproxyTicket is the vncproxy ticket — Proxmox requires
                 // it as the VNC Auth password during the RFB handshake (security type 2).
+                // consoleMode=false → ClientInit shared=1 (shared access).
+                // Exclusive mode (shared=0) causes some servers to kick other viewers,
+                // which is inappropriate for a graphical VNC console.
                 val rfbClient = RfbClient(inputStream, outputStream,
                     vncPassword = ticket.termproxyTicket,
-                    consoleMode = true)
+                    consoleMode = false)
                 activeRfbClient = rfbClient
                 ConsoleConnection.Graphical(
                     vmName = vmName,
@@ -533,10 +536,10 @@ class HypervisorConsoleManager {
                 }
                 // vnc.termproxyTicket is the vncproxy ticket — used as the
                 // VNC Auth password in the RFB handshake (security type 2).
-                // consoleMode=true: exclusive access, console encodings, resize support.
+                // consoleMode=false: shared access (ClientInit shared=1) for graphical VNC.
                 val rfbClient = RfbClient(input, output,
                     vncPassword = vnc.termproxyTicket,
-                    consoleMode = true)
+                    consoleMode = false)
                 activeRfbClient = rfbClient
                 val graphical = ConsoleConnection.Graphical(
                     vmName = vmName,
@@ -645,7 +648,7 @@ class HypervisorConsoleManager {
                     inputStream  = input,
                     outputStream = output,
                     vncPassword  = vnc.termproxyTicket,
-                    consoleMode  = true
+                    consoleMode  = false
                 )
                 // Server rejected resize on the previous connection — suppress
                 // SetDesktopSize entirely so this reconnect stays stable.

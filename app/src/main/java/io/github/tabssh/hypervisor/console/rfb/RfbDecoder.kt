@@ -265,8 +265,11 @@ class RfbDecoder(private val fmt: PixelFormat) {
         din: DataInputStream, fb: IntArray, fbW: Int,
         x: Int, y: Int, w: Int, h: Int
     ) {
-        val compLen = din.readInt()
+        val compLen = din.readInt() and 0x7FFFFFFF
         if (compLen <= 0) return
+        if (compLen > MAX_RECT_BYTES) throw java.io.IOException(
+            "ZLIB compLen $compLen exceeds ${MAX_RECT_BYTES}-byte safety limit — stream likely misaligned"
+        )
         val compData = ByteArray(compLen)
         din.readFully(compData)
 
@@ -313,6 +316,11 @@ class RfbDecoder(private val fmt: PixelFormat) {
         val compLen = din.readInt() and 0x7FFFFFFF
         Logger.d(TAG, "ZRLE rect ${w}×${h} at ($x,$y) compLen=$compLen")
         if (compLen <= 0) return
+        // Guard against a corrupt or misaligned stream producing a huge compLen that
+        // would cause an OutOfMemoryError before we even attempt decompression.
+        if (compLen > MAX_RECT_BYTES) throw java.io.IOException(
+            "ZRLE compLen $compLen exceeds ${MAX_RECT_BYTES}-byte safety limit — stream likely misaligned"
+        )
 
         val compBuf = ByteArray(compLen)
         din.readFully(compBuf)

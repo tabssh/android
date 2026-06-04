@@ -385,7 +385,9 @@ class ProxmoxApiClient(
                 "/nodes/$node/qemu/$vmid/vncproxy"
             }
 
-            val json = apiPost(endpoint)
+            // websocket=1 tells Proxmox to configure its internal VNC proxy for
+            // WebSocket transport; without it the port is opened for raw TCP only.
+            val json = apiPost(endpoint, mapOf("websocket" to "1"))
             val data = json.optJSONObject("data")
 
             if (data != null) {
