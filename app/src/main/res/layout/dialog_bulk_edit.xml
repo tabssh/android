@@ -114,7 +114,7 @@
                     app:startIconDrawable="@drawable/ic_folder"
                     android:hint="Assign to group">
 
-                    <AutoCompleteTextView
+                    <com.google.android.material.textfield.MaterialAutoCompleteTextView
                         android:id="@+id/dropdown_group"
                         style="@style/BulkEdit.InputEdit"
                         android:inputType="none" />
@@ -126,7 +126,7 @@
                     app:startIconDrawable="@drawable/ic_security"
                     android:hint="Use identity">
 
-                    <AutoCompleteTextView
+                    <com.google.android.material.textfield.MaterialAutoCompleteTextView
                         android:id="@+id/dropdown_identity"
                         style="@style/BulkEdit.InputEdit"
                         android:inputType="none" />
@@ -195,7 +195,7 @@
                     app:startIconDrawable="@drawable/ic_terminal"
                     android:hint="Terminal type">
 
-                    <AutoCompleteTextView
+                    <com.google.android.material.textfield.MaterialAutoCompleteTextView
                         android:id="@+id/dropdown_terminal_type"
                         style="@style/BulkEdit.InputEdit"
                         android:inputType="none" />
@@ -207,7 +207,7 @@
                     app:startIconDrawable="@drawable/ic_star_outline"
                     android:hint="Color tag">
 
-                    <AutoCompleteTextView
+                    <com.google.android.material.textfield.MaterialAutoCompleteTextView
                         android:id="@+id/dropdown_color_tag"
                         style="@style/BulkEdit.InputEdit"
                         android:inputType="none" />

@@ -203,7 +203,7 @@
                         android:hint="Group"
                         style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
-                        <AutoCompleteTextView
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
                             android:id="@+id/spinner_group"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -257,7 +257,7 @@
                         android:layout_marginTop="@dimen/space_sm"
                         style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
-                        <AutoCompleteTextView
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
                             android:id="@+id/spinner_identity"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -321,7 +321,7 @@
                         android:hint="Authentication Type"
                         style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
-                        <AutoCompleteTextView
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
                             android:id="@+id/spinner_auth_type"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -388,7 +388,7 @@
                             android:hint="SSH Key"
                             style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
-                            <AutoCompleteTextView
+                            <com.google.android.material.textfield.MaterialAutoCompleteTextView
                                 android:id="@+id/spinner_ssh_key"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
@@ -440,7 +440,7 @@
                         android:hint="Terminal Type"
                         style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
-                        <AutoCompleteTextView
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
                             android:id="@+id/spinner_terminal_type"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -561,7 +561,7 @@
                         android:hint="Sound"
                         style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
-                        <AutoCompleteTextView
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
                             android:id="@+id/spinner_notif_sound"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -577,7 +577,7 @@
                         android:hint="Vibrate"
                         style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
-                        <AutoCompleteTextView
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
                             android:id="@+id/spinner_notif_vibrate"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -628,7 +628,7 @@
                         android:hint="Multiplexer Mode"
                         style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
-                        <AutoCompleteTextView
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
                             android:id="@+id/spinner_multiplexer_mode"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -688,7 +688,7 @@
                         android:hint="Terminal Theme (Override)"
                         style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
-                        <AutoCompleteTextView
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
                             android:id="@+id/spinner_connection_theme"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -846,7 +846,7 @@
                         android:hint="Proxy Type"
                         style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
-                        <AutoCompleteTextView
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
                             android:id="@+id/spinner_proxy_type"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -923,7 +923,7 @@
                                 android:layout_marginTop="@dimen/space_sm"
                                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
-                                <AutoCompleteTextView
+                                <com.google.android.material.textfield.MaterialAutoCompleteTextView
                                     android:id="@+id/spinner_proxy_auth_type"
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
@@ -941,7 +941,7 @@
                                 android:visibility="gone"
                                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
-                                <AutoCompleteTextView
+                                <com.google.android.material.textfield.MaterialAutoCompleteTextView
                                     android:id="@+id/spinner_proxy_ssh_key"
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"

@@ -40,7 +40,7 @@
         android:layout_marginTop="8dp"
         android:hint="Authentication Type"
         style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
-        <AutoCompleteTextView
+        <com.google.android.material.textfield.MaterialAutoCompleteTextView
             android:id="@+id/spinner_auth_type"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -72,7 +72,7 @@
         android:visibility="gone"
         android:hint="SSH Key"
         style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
-        <AutoCompleteTextView
+        <com.google.android.material.textfield.MaterialAutoCompleteTextView
             android:id="@+id/spinner_ssh_key"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

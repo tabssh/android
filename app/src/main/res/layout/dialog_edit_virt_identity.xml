@@ -164,7 +164,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:hint="Region">
-                <AutoCompleteTextView
+                <com.google.android.material.textfield.MaterialAutoCompleteTextView
                     android:id="@+id/dropdown_oci_region"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

@@ -108,7 +108,7 @@
             android:visibility="gone"
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
-            <AutoCompleteTextView
+            <com.google.android.material.textfield.MaterialAutoCompleteTextView
                 android:id="@+id/api_type_dropdown"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

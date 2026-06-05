@@ -35,7 +35,7 @@
         android:hint="Cloud provider"
         android:layout_marginBottom="@dimen/space_sm">
 
-        <AutoCompleteTextView
+        <com.google.android.material.textfield.MaterialAutoCompleteTextView
             android:id="@+id/spinner_provider"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
