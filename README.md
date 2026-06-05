@@ -47,7 +47,7 @@
 ### UI/UX
 
 - 🎨 **Material Design 3** — Google's latest design system throughout
-- 🌈 **23 Built-in Themes** — Dracula, Solarized (Light/Dark), Nord, Monokai, One Dark, Tokyo Night, Gruvbox, and 16 more
+- 🌈 **22 Built-in Themes** — Dracula, Solarized (Light/Dark), Nord, Monokai, One Dark, Tokyo Night, Gruvbox, and 15 more
 - 🎨 **Custom Theme Editor** — Full GUI in Settings → Appearance; import/export JSON with WCAG 2.1 contrast validation
 - ⌨️ **Custom SSH Keyboard** — 1–5 row on-screen bar optimized for vim/tmux/coding; drag-to-reorder keys within rows
 - ⌨️ **Hardware Keyboard** — AltGr distinct from Alt; xterm modifier-encoded arrows (Ctrl-Right = `ESC[1;5C`), HOME/END/PG family
@@ -197,7 +197,7 @@ android/
 │   ├── ssh/            # SSHConnection, SSHSessionManager, port forwarding, X11
 │   ├── sftp/           # SFTP browser and file transfer
 │   ├── terminal/       # TermuxBridge, TerminalView, VNC RFB client
-│   ├── storage/        # Room DB (v36, 35 migrations), DAOs, entities
+│   ├── storage/        # Room DB (v37, 36 migrations), DAOs, entities
 │   ├── sync/           # SAF-based 3-way merge sync
 │   ├── backup/         # Encrypted ZIP backup/restore
 │   └── ui/             # Activities, Fragments, Adapters, ViewModels
@@ -208,7 +208,7 @@ android/
 ├── scripts/            # Build and automation scripts
 ├── fdroid-submission/  # F-Droid metadata
 ├── Makefile
-└── release.txt         # Version pin (0.0.9)
+└── release.txt         # Version pin (0.9.1)
 ```
 
 ---
@@ -228,7 +228,7 @@ android/
 
 ## 🎨 Themes
 
-23 built-in themes: **Dracula**, **Solarized Light/Dark**, **Nord**, **Monokai**, **One Dark**, **Tokyo Night**, **Gruvbox**, **High Contrast**, and 14 more.
+22 built-in themes: **Dracula**, **Solarized Light/Dark**, **Nord**, **Monokai**, **One Dark**, **Tokyo Night**, **Gruvbox**, **Tomorrow Night**, **Catppuccin Mocha**, and 13 more.
 
 **Custom themes:** Settings → General → Appearance → Theme Editor. Import/export JSON:
 
@@ -249,17 +249,17 @@ android/
 
 | Metric | Value |
 |---|---|
-| Kotlin files | 258 |
-| Lines of code | ~65,000 |
-| Activities | 31 |
+| Kotlin files | 257 |
+| Lines of code | ~86,000 |
+| Activities | 37 |
 | Fragments | 7 |
 | Services | 1 (`SSHConnectionService`) |
-| Built-in themes | 23 |
+| Built-in themes | 22 |
 | Translations | 4 (EN/ES/FR/DE) |
 | APK variants | 5 (universal + 4 arch-specific) |
 | Hypervisor backends | 4 (Proxmox, XCP-ng, VMware, QEMU/libvirt) |
 | Cloud providers | 8 (DO, Hetzner, Linode, Vultr, AWS, GCP, Azure, OCI) |
-| Room DB version | 36 (35 forward migrations from v1) |
+| Room DB version | 37 (36 forward migrations from v1) |
 | Trackers | 0 |
 
 ---
