@@ -1267,6 +1267,12 @@ class ConnectionEditActivity : AppCompatActivity() {
             binding.btnTest.isEnabled = false
             binding.btnTest.text = "Testing..."
             var tempProfileId: String? = null
+            // Hoisted so the finally block can always tear down a half-
+            // established session — connection.connect() can throw before
+            // returning (network error, host-key callback rejection,
+            // auth failure) and the previous version skipped disconnect()
+            // on the exception path, leaking the JSch Session.
+            var connection: io.github.tabssh.ssh.connection.SSHConnection? = null
 
             try {
                 val profile = createConnectionProfile()
@@ -1282,14 +1288,13 @@ class ConnectionEditActivity : AppCompatActivity() {
                         tempProfileId = profile.id
                     }
                 }
-                val connection = io.github.tabssh.ssh.connection.SSHConnection(
+                connection = io.github.tabssh.ssh.connection.SSHConnection(
                     profile, lifecycleScope, this@ConnectionEditActivity
                 )
                 connection.newHostKeyCallback = app.sshSessionManager.newHostKeyCallback
                 connection.hostKeyChangedCallback = app.sshSessionManager.hostKeyChangedCallback
 
                 val success = connection.connect()
-                connection.disconnect()
 
                 if (success) {
                     showToast("✅ Connection test successful!")
@@ -1301,6 +1306,9 @@ class ConnectionEditActivity : AppCompatActivity() {
                 Logger.e("ConnectionEditActivity", "Connection test failed", e)
                 showError(e.message ?: "Unknown error", "Test Failed")
             } finally {
+                try { connection?.disconnect() } catch (e: Exception) {
+                    Logger.w("ConnectionEditActivity", "Test-connect disconnect failed", e)
+                }
                 tempProfileId?.let { app.securePasswordManager.clearPassword(it) }
                 binding.btnTest.isEnabled = true
                 binding.btnTest.text = "Test"

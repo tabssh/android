@@ -121,7 +121,10 @@ class HypervisorsFragment : Fragment() {
     private fun loadHypervisors() {
         progressBar.visibility = View.VISIBLE
 
-        lifecycleScope.launch {
+        // viewLifecycleOwner: collect touches recyclerView/emptyState/progressBar
+        // (view fields). Using lifecycleScope kept the Flow live after
+        // onDestroyView, NPE-ing the next emission.
+        viewLifecycleOwner.lifecycleScope.launch {
             try {
                 app.database.hypervisorDao().getAllHypervisors().collect { list ->
                     // Check if fragment is still attached before updating UI

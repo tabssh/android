@@ -146,7 +146,11 @@ class SSHConnection(
     // null until the first successful connect (same guard as hadSuccessfulConnect).
     private var reconnector: NetworkAwareReconnector? = null
 
-    private val listeners = mutableListOf<ConnectionListener>()
+    // CopyOnWriteArrayList: addConnectionListener may be called from UI
+    // while notifyListeners iterates from the SSH connect/disconnect
+    // coroutines (Dispatchers.IO). A plain ArrayList would risk
+    // ConcurrentModificationException and lost updates.
+    private val listeners = java.util.concurrent.CopyOnWriteArrayList<ConnectionListener>()
 
     // Host key verification
     private val hostKeyVerifier = HostKeyVerifier(context)

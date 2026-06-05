@@ -247,17 +247,25 @@ class LibvirtApiClient(
 
             val sess = session ?: throw LibvirtException("SSH session not established; call connect() first")
             val ch = sess.openChannel("direct-tcpip") as ChannelDirectTCPIP
-            ch.setHost("127.0.0.1")
-            ch.setPort(vncPort)
-            ch.setOrgIPAddress("127.0.0.1")
-            ch.setOrgPort(0)
-            // JSch requires getInputStream/getOutputStream to be called BEFORE
-            // connect() — calling them after triggers a "getInputStream() should
-            // be called before connect()" warning and may return stale references.
-            val ins = ch.inputStream
-            val out = ch.outputStream
-            ch.connect(CONNECT_TIMEOUT_MS)
-            Pair(ins, out)
+            try {
+                ch.setHost("127.0.0.1")
+                ch.setPort(vncPort)
+                ch.setOrgIPAddress("127.0.0.1")
+                ch.setOrgPort(0)
+                // JSch requires getInputStream/getOutputStream to be called BEFORE
+                // connect() — calling them after triggers a "getInputStream() should
+                // be called before connect()" warning and may return stale references.
+                val ins = ch.inputStream
+                val out = ch.outputStream
+                ch.connect(CONNECT_TIMEOUT_MS)
+                Pair(ins, out)
+            } catch (e: Throwable) {
+                // connect() can throw on timeout / network failure; the channel
+                // is still attached to the Session and must be explicitly
+                // disconnected or it leaks until the Session itself closes.
+                try { ch.disconnect() } catch (_: Exception) {}
+                throw e
+            }
         }
 
     // ── Lifecycle ────────────────────────────────────────────────────────────

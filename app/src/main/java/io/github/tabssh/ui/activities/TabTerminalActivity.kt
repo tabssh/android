@@ -218,15 +218,17 @@ class TabTerminalActivity : AppCompatActivity() {
         val terminalView = getActiveTerminalView()
         val imm = getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
             as android.view.inputmethod.InputMethodManager
-        val imeShown = terminalView?.let {
+        // Snapshot the mutable terminalView ref so a concurrent assignment
+        // (tab swap on a different thread) cannot null it between the IME
+        // visibility check and hideSoftInputFromWindow().
+        val tv = terminalView
+        val imeShown = tv?.let {
             androidx.core.view.ViewCompat.getRootWindowInsets(it)
                 ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
         } ?: false
 
-        if (imeShown) {
-            // imeShown is only true when terminalView was non-null in the
-            // elvis expression above, so the smart cast is sound here.
-            imm.hideSoftInputFromWindow(terminalView!!.windowToken, 0)
+        if (imeShown && tv != null) {
+            imm.hideSoftInputFromWindow(tv.windowToken, 0)
             Logger.d("TabTerminalActivity", "BACK: hid IME, staying in terminal")
             return
         }

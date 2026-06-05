@@ -221,7 +221,10 @@ class PerformanceFragment : Fragment() {
     }
 
     private fun loadConnections() {
-        lifecycleScope.launch {
+        // viewLifecycleOwner: updateConnectionSpinner touches spinnerConnection
+        // (a view field). lifecycleScope would survive onDestroyView and NPE
+        // the post-destroy emission of the Room Flow.
+        viewLifecycleOwner.lifecycleScope.launch {
             try {
                 app.database.connectionDao().getAllConnections().collect { connections ->
                     allConnections = connections
@@ -300,7 +303,9 @@ class PerformanceFragment : Fragment() {
         }
 
         // Connect to new server
-        lifecycleScope.launch {
+        // viewLifecycleOwner: progressLoading/layoutEmptyState are view fields;
+        // cancel on view-destroy to avoid post-destroy view writes.
+        viewLifecycleOwner.lifecycleScope.launch {
             try {
                 progressLoading.visibility = View.VISIBLE
 
@@ -339,7 +344,7 @@ class PerformanceFragment : Fragment() {
                 // Observe connection state: stop monitoring when the connection drops
                 // and restart automatically once it reconnects (exponential backoff in
                 // SSHConnection means reconnection will eventually succeed).
-                connectionStateObserverJob = lifecycleScope.launch {
+                connectionStateObserverJob = viewLifecycleOwner.lifecycleScope.launch {
                     newConnection.connectionState.collect { state ->
                         when (state) {
                             io.github.tabssh.ssh.connection.ConnectionState.CONNECTED -> {
@@ -411,11 +416,12 @@ class PerformanceFragment : Fragment() {
 
     private fun collectAndUpdateMetrics() {
         val collector = metricsCollector ?: return
-        
-        lifecycleScope.launch {
+
+        // updateUI/updateChart touch view fields; bind to view lifecycle.
+        viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val result = collector.collectMetrics()
-                
+
                 result.onSuccess { metrics ->
                     updateUI(metrics)
                     updateChart(metrics)

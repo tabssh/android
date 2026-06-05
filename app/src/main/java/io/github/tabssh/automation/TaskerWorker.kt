@@ -8,9 +8,6 @@ import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.utils.logging.Logger
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
@@ -61,7 +58,6 @@ class TaskerWorker(
         const val DEFAULT_TIMEOUT_MS = 30_000L
     }
 
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val app: TabSSHApplication by lazy { applicationContext as TabSSHApplication }
 
     override suspend fun doWork(): Result {
@@ -120,10 +116,13 @@ class TaskerWorker(
     }
 
     private suspend fun resolveProfile(): ConnectionProfile? {
-        val connectionId = inputData.getLong(KEY_CONNECTION_ID, -1)
+        // ConnectionProfile.id is a String UUID — the underlying SQLite
+        // column is TEXT. The receiver normalises both Long and String
+        // wire forms into a String here.
+        val connectionId = inputData.getString(KEY_CONNECTION_ID)
         val connectionName = inputData.getString(KEY_CONNECTION_NAME)
         val profile = when {
-            connectionId > 0 -> app.database.connectionDao().getById(connectionId)
+            !connectionId.isNullOrEmpty() -> app.database.connectionDao().getConnection(connectionId)
             !connectionName.isNullOrEmpty() -> app.database.connectionDao().getByName(connectionName)
             else -> {
                 broadcastError("No connection ID or name provided")
@@ -144,9 +143,27 @@ class TaskerWorker(
 
     private suspend fun handleConnect() {
         val profile = resolveProfile() ?: return
+        // Re-use an existing tab if one already exists for this profile.
+        val existing = app.tabManager.getAllTabs().find { it.profile.id == profile.id }
+        if (existing != null) {
+            broadcastConnected(profile)
+            logTaskerEvent("connect", "${profile.id}/${profile.name} (reused tab)")
+            return
+        }
         try {
-            val connection = SSHConnection(profile, scope, applicationContext)
+            // Use the long-lived application scope: the worker scope is
+            // cancelled in doWork()'s finally block, which would tear down
+            // the SSH read loop the instant the broadcast returns.
+            val connection = SSHConnection(profile, app.applicationScope, applicationContext)
             connection.connect()
+            val cursorStyle = app.preferencesManager.getCursorStyleInt()
+            val tab = app.tabManager.createTab(profile, cursorStyle)
+            if (tab == null) {
+                connection.disconnect()
+                broadcastError("Tab limit reached — close an existing session first")
+                return
+            }
+            tab.connect(connection)
             broadcastConnected(profile)
             logTaskerEvent("connect", "${profile.id}/${profile.name}")
             Logger.i(TAG, "Connected to ${profile.name}")
@@ -180,7 +197,8 @@ class TaskerWorker(
 
         var tab = app.tabManager.getAllTabs().find { it.profile.id == profile.id }
         if (tab == null) {
-            val connection = SSHConnection(profile, scope, applicationContext)
+            // Use the long-lived application scope (see handleConnect comment).
+            val connection = SSHConnection(profile, app.applicationScope, applicationContext)
             connection.connect()
             val cursorStyle = app.preferencesManager.getCursorStyleInt()
             tab = app.tabManager.createTab(profile, cursorStyle)
@@ -264,9 +282,8 @@ class TaskerWorker(
         })
     }
 
-    // Note: CoroutineWorker.onStopped() is final in androidx.work 2.9 — we
-    // can't hook it to cancel `scope`. The scope is anchored to a
-    // SupervisorJob and lives only as long as the work item; it gets GC'd
-    // with the worker once doWork() returns and any SSH I/O readers
-    // launched on it have nothing to keep alive.
+    // SSH read-loop coroutines are launched on app.applicationScope (which
+    // lives for the process lifetime), so the worker can return immediately
+    // without orphaning IO. Each tab is owned by TabManager from the moment
+    // tab.connect() returns.
 }

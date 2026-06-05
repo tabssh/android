@@ -525,6 +525,19 @@ class RfbClient(
         if (tlsHost != null) {
             val params = sslSocket.sslParameters
             params.serverNames = listOf(javax.net.ssl.SNIHostName(tlsHost))
+            // RFC 6125 / endpoint identification. Without this, the JSSE
+            // SSLSocket only verifies the cert chain — the hostname in the
+            // certificate's subjectAltName is NOT checked, leaving a MITM
+            // hole when tlsVerify is on. Only enable when the caller
+            // opted into verification (when tlsVerify is false the trust
+            // manager already accepts everything anyway).
+            if (tlsVerify) {
+                params.endpointIdentificationAlgorithm = "HTTPS"
+            }
+            sslSocket.sslParameters = params
+        } else if (tlsVerify) {
+            val params = sslSocket.sslParameters
+            params.endpointIdentificationAlgorithm = "HTTPS"
             sslSocket.sslParameters = params
         }
         sslSocket.startHandshake()

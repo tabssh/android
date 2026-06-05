@@ -41,6 +41,8 @@ class GcpComputeClient : CloudProvider {
     private val http: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .callTimeout(60, TimeUnit.SECONDS)
         .build()
 
     /** Cached instances from the last fetchLiveInstances call; used to resolve zone for power actions. */

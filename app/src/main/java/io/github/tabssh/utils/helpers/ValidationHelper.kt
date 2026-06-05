@@ -52,6 +52,13 @@ object ValidationHelper {
      * Validate IPv6 address
      */
     fun isValidIPv6(ip: String): Boolean {
+        // Reject anything that isn't a literal address shape: a colon plus
+        // hex digits / dots / brackets. This prevents InetAddress.getByName
+        // from falling through to a blocking DNS lookup on the caller's
+        // thread (NetworkOnMainThreadException when invoked from UI code
+        // like ConnectionEditActivity field validation).
+        if (!ip.contains(':')) return false
+        if (!ip.all { it.isDigit() || it in 'a'..'f' || it in 'A'..'F' || it == ':' || it == '.' || it == '[' || it == ']' || it == '%' }) return false
         return try {
             InetAddress.getByName(ip) is java.net.Inet6Address
         } catch (e: UnknownHostException) {

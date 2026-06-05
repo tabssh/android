@@ -26,7 +26,9 @@ class SSHSessionManager(private val context: Context) {
     private val _connectionStates = MutableStateFlow<Map<String, ConnectionState>>(emptyMap())
     val connectionStates: StateFlow<Map<String, ConnectionState>> = _connectionStates.asStateFlow()
     
-    private val listeners = mutableListOf<SessionManagerListener>()
+    // CopyOnWriteArrayList: listener registration is on UI; notifyListeners
+    // fires from connect/disconnect coroutines on Dispatchers.IO.
+    private val listeners = java.util.concurrent.CopyOnWriteArrayList<SessionManagerListener>()
 
     private var isInitialized = false
 

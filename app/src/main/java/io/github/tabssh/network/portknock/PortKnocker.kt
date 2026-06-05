@@ -1,7 +1,9 @@
 package io.github.tabssh.network.portknock
 
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
@@ -34,15 +36,18 @@ class PortKnocker {
         host: String,
         sequence: List<KnockConfig>,
         delayBetweenKnocks: Int = 100
-    ): Boolean {
+    ): Boolean = withContext(Dispatchers.IO) {
         if (sequence.isEmpty()) {
             Logger.w("PortKnocker", "Empty knock sequence")
-            return true
+            return@withContext true
         }
-        
+
         Logger.i("PortKnocker", "Starting knock sequence on $host: ${sequence.size} knocks")
-        
+
         try {
+            // InetAddress.getByName() does a blocking DNS lookup — must
+            // never run on the main thread. The withContext above pins
+            // the whole sequence to Dispatchers.IO regardless of caller.
             val address = InetAddress.getByName(host)
             
             sequence.forEachIndexed { index, knock ->
@@ -50,25 +55,24 @@ class PortKnocker {
                     Protocol.TCP -> knockTCP(address, knock.port)
                     Protocol.UDP -> knockUDP(address, knock.port)
                 }
-                
+
                 if (success) {
                     Logger.d("PortKnocker", "Knock ${index + 1}: ${knock.protocol} port ${knock.port} - OK")
                 } else {
                     Logger.w("PortKnocker", "Knock ${index + 1}: ${knock.protocol} port ${knock.port} - FAILED")
-                    return false
+                    return@withContext false
                 }
-                
+
                 if (index < sequence.size - 1) {
                     delay(delayBetweenKnocks.toLong())
                 }
             }
-            
+
             Logger.i("PortKnocker", "Knock sequence completed on $host")
-            return true
-            
+            true
         } catch (e: Exception) {
             Logger.e("PortKnocker", "Failed to execute knock sequence", e)
-            return false
+            false
         }
     }
     

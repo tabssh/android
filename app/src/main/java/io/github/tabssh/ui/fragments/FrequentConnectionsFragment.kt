@@ -85,7 +85,10 @@ class FrequentConnectionsFragment : Fragment() {
     }
     
     private fun loadFrequentConnections() {
-        lifecycleScope.launch {
+        // Bound to view lifecycle: touches recyclerView/adapter after IO,
+        // which would NPE/leak if the view was destroyed while the fragment
+        // instance survives (viewpager off-screen, nav back-stack).
+        viewLifecycleOwner.lifecycleScope.launch {
             try {
                 // Get top 10 connections by hybrid score
                 val connections = withContext(Dispatchers.IO) {

@@ -29,6 +29,8 @@ class HetznerClient : CloudProvider {
     private val http: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
+        .writeTimeout(20, TimeUnit.SECONDS)
+        .callTimeout(45, TimeUnit.SECONDS)
         .build()
 
     override suspend fun fetchInventory(

@@ -23,7 +23,9 @@ class PortForwardingManager(private val sshConnection: SSHConnection) {
     private val _tunnelStates = MutableStateFlow<Map<String, TunnelState>>(emptyMap())
     val tunnelStates: StateFlow<Map<String, TunnelState>> = _tunnelStates.asStateFlow()
     
-    private val listeners = mutableListOf<PortForwardingListener>()
+    // CopyOnWriteArrayList: UI thread registers/unregisters; tunnel state
+    // notifications fire from IO coroutines (forward setup/teardown).
+    private val listeners = java.util.concurrent.CopyOnWriteArrayList<PortForwardingListener>()
     
     init {
         Logger.d("PortForwardingManager", "Created port forwarding manager for connection ${sshConnection.id}")

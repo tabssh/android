@@ -307,10 +307,19 @@ class SyncDataApplier {
         try {
             var appliedCount = 0
 
-            appliedCount += applyConnections(connectionResult)
-            appliedCount += applyKeys(keyResult)
-            appliedCount += applyThemes(themeResult)
-            appliedCount += applyHostKeys(hostKeyResult)
+            // Wrap entity writes in a single Room transaction. Without this,
+            // a partial failure (DB I/O error, cancellation) midway through
+            // applyConnections / applyKeys / applyThemes / applyHostKeys
+            // would commit some rows and abort others, leaving the local
+            // DB inconsistent with the remote sync state. Preferences live
+            // in SharedPreferences (not the Room DB) so the call to
+            // applyPreferences is intentionally outside the transaction.
+            database.withTransaction {
+                appliedCount += applyConnections(connectionResult)
+                appliedCount += applyKeys(keyResult)
+                appliedCount += applyThemes(themeResult)
+                appliedCount += applyHostKeys(hostKeyResult)
+            }
             appliedCount += applyPreferences(preferences)
 
             Logger.d(TAG, "Applied $appliedCount sync changes successfully")

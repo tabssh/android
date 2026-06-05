@@ -86,8 +86,11 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
                     // Ask user what to do with this new host
                     Logger.i("HostKeyVerifier", "Invoking new host key callback... (callback is ${if (newHostKeyCallback != null) "SET" else "NULL"})")
 
-                    val action = if (newHostKeyCallback != null) {
-                        newHostKeyCallback!!.invoke(info)
+                    // Snapshot the mutable callback ref so a concurrent
+                    // setter cannot null it between the check and invoke.
+                    val cb = newHostKeyCallback
+                    val action = if (cb != null) {
+                        cb.invoke(info)
                     } else {
                         // No callback available - show blocking dialog directly
                         Logger.w("HostKeyVerifier", "No callback available - showing blocking dialog")
@@ -154,8 +157,11 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
                         // ALWAYS ask user what to do - never fail silently
                         Logger.i("HostKeyVerifier", "Invoking host key changed callback... (callback is ${if (hostKeyChangedCallback != null) "SET" else "NULL"})")
 
-                        val action = if (hostKeyChangedCallback != null) {
-                            hostKeyChangedCallback!!.invoke(info)
+                        // Snapshot the mutable callback ref so a concurrent
+                        // setter cannot null it between the check and invoke.
+                        val cb = hostKeyChangedCallback
+                        val action = if (cb != null) {
+                            cb.invoke(info)
                         } else {
                             // No callback available - show blocking dialog directly
                             Logger.w("HostKeyVerifier", "No callback available - showing blocking dialog for changed key")

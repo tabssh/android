@@ -39,8 +39,9 @@ class TerminalEmulator(private val buffer: TerminalBuffer) {
     private val _isActive = MutableStateFlow(false)
     val isActive: StateFlow<Boolean> = _isActive.asStateFlow()
 
-    // Listeners
-    private val listeners = mutableListOf<TerminalListener>()
+    // Listeners — CopyOnWriteArrayList because notifyListeners fires from the
+    // read coroutine on Dispatchers.IO while add/remove happen on UI.
+    private val listeners = java.util.concurrent.CopyOnWriteArrayList<TerminalListener>()
 
     // I/O streams
     private var inputStream: InputStream? = null
