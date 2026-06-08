@@ -6,9 +6,11 @@ import android.view.MenuItem
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.snackbar.Snackbar
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.backup.BackupManager
+import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -356,9 +358,30 @@ class ImportExportActivity : AppCompatActivity() {
 
     /**
      * Show a confirmation dialog listing detected hosts and groups before inserting.
+     * Also warns when any host uses an IdentityFile that can't be resolved to a stored
+     * key — the user must import the key manually after import.
      */
     private fun showSSHConfigImportDialog(profiles: List<io.github.tabssh.storage.database.entities.ConnectionProfile>) {
         val groups = profiles.mapNotNull { it.groupId }.filter { it.isNotBlank() }.toSet()
+
+        // Detect profiles where IdentityFile was parsed but no key is stored yet.
+        // These will have authType=PUBLIC_KEY and keyId=null; at connect time key
+        // auth is silently skipped and falls back to keyboard-interactive, which
+        // fails on key-only servers with a confusing error message.
+        val unresolvedKeyProfiles = profiles.filter { p ->
+            p.keyId == null &&
+            p.authType == AuthType.PUBLIC_KEY.name &&
+            p.advancedSettings?.let { raw ->
+                try { org.json.JSONObject(raw).optString("identityFileStr").isNotBlank() }
+                catch (_: Exception) { false }
+            } == true
+        }
+        val unresolvedKeyPaths: Set<String> = unresolvedKeyProfiles.mapNotNull { p ->
+            p.advancedSettings?.let { raw ->
+                try { org.json.JSONObject(raw).optString("identityFileStr").takeIf { it.isNotBlank() } }
+                catch (_: Exception) { null }
+            }
+        }.toSet()
 
         val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Import SSH Config")
@@ -398,9 +421,18 @@ class ImportExportActivity : AppCompatActivity() {
                         append("\n... and more hosts\n")
                     }
                 }
+
+                // Identity file warning — must be last so it stands out
+                if (unresolvedKeyProfiles.isNotEmpty()) {
+                    append("\n⚠ ${unresolvedKeyProfiles.size} host(s) use SSH key auth but the key")
+                    append(" can't be resolved on this device:\n")
+                    unresolvedKeyPaths.forEach { path -> append("  $path\n") }
+                    append("\nAfter import: go to the Identities tab, import your")
+                    append(" private key, then edit each connection and select it.")
+                }
             })
             .setPositiveButton("Import") { _, _ ->
-                importSSHConfigProfiles(profiles)
+                importSSHConfigProfiles(profiles, unresolvedKeyProfiles.isNotEmpty())
             }
             .setNegativeButton("Cancel", null)
             .create()
@@ -411,8 +443,15 @@ class ImportExportActivity : AppCompatActivity() {
     /**
      * Insert parsed connection profiles into the database, creating groups as needed.
      * Deduplicates on (host, port, username) to avoid re-importing the same hosts.
+     *
+     * [hasUnresolvedKeys] — true when at least one profile's IdentityFile couldn't
+     * be resolved to a stored key. A persistent Snackbar prompts the user to navigate
+     * to the Identities tab after the import completes.
      */
-    private fun importSSHConfigProfiles(profiles: List<io.github.tabssh.storage.database.entities.ConnectionProfile>) {
+    private fun importSSHConfigProfiles(
+        profiles: List<io.github.tabssh.storage.database.entities.ConnectionProfile>,
+        hasUnresolvedKeys: Boolean = false
+    ) {
         lifecycleScope.launch {
             try {
                 val groupDao = app.database.connectionGroupDao()
@@ -476,6 +515,25 @@ class ImportExportActivity : AppCompatActivity() {
                     message,
                     Toast.LENGTH_LONG
                 ).show()
+
+                // When IdentityFile entries were present but unresolvable, prompt
+                // the user to go import their key now. Snackbar is indefinite so
+                // they can act on it rather than race a timer.
+                if (hasUnresolvedKeys) {
+                    val rootView = window.decorView.findViewById<android.view.View>(android.R.id.content)
+                    Snackbar.make(
+                        rootView,
+                        "Some connections need an SSH key — go import it now",
+                        Snackbar.LENGTH_INDEFINITE
+                    ).setAction("Identities") {
+                        // Navigate to MainActivity and open the Identities tab (index 2).
+                        val intent = Intent(this@ImportExportActivity, MainActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                            putExtra("start_tab", 2)
+                        }
+                        startActivity(intent)
+                    }.show()
+                }
 
             } catch (e: Exception) {
                 Logger.e("ImportExportActivity", "Failed to save imported connections", e)
