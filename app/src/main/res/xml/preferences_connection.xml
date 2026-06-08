@@ -75,14 +75,45 @@
     </PreferenceCategory>
 
     <PreferenceCategory
-        android:title="Mosh Configuration"
-        android:key="category_mosh">
+        android:title="Multiplexer Prefixes"
+        android:key="category_multiplexer_prefixes">
 
         <EditTextPreference
+            android:key="multiplexer_custom_prefix_tmux"
+            android:title="tmux prefix"
+            android:summary="Prefix key sent by the PRE keyboard button when tmux is active"
+            android:defaultValue="C-b"
+            app:useSimpleSummaryProvider="true" />
+
+        <EditTextPreference
+            android:key="multiplexer_custom_prefix_screen"
+            android:title="screen prefix"
+            android:summary="Prefix key sent by the PRE keyboard button when screen is active"
+            android:defaultValue="C-a"
+            app:useSimpleSummaryProvider="true" />
+
+        <EditTextPreference
+            android:key="multiplexer_custom_prefix_zellij"
+            android:title="zellij prefix"
+            android:summary="Prefix key sent by the PRE keyboard button when zellij is active"
+            android:defaultValue="C-g"
+            app:useSimpleSummaryProvider="true" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="Mosh"
+        android:key="category_mosh">
+
+        <!-- The mosh server command is now configured per-connection via a
+             dropdown in the connection editor. This global preference is kept
+             for users who entered a custom command before per-connection support
+             was added; it is no longer read by the app. -->
+        <EditTextPreference
             android:key="mosh_server_command"
-            android:title="Mosh Server Command"
-            android:summary="Custom command for mosh-server"
-            android:defaultValue="mosh-server new -s -l LANG=en_US.UTF-8"
+            android:title="Global Mosh Server Command (legacy)"
+            android:summary="Superseded by the per-connection command picker. No longer used."
+            android:defaultValue="mosh-server new -l LANG=en_US.UTF-8"
             app:useSimpleSummaryProvider="true" />
 
     </PreferenceCategory>

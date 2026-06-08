@@ -285,6 +285,22 @@ class MultiRowKeyboardView @JvmOverloads constructor(
     }
 
     /**
+     * Set the visual state of a specific key across all rows.
+     * Delegates to [KeyboardRowView.setKeyState] for each row that contains
+     * the key. Used to make the PREFIX key green when a multiplexer is active
+     * and dimmed/disabled when none is detected.
+     *
+     * @param keyId  The key's ID (e.g. "PREFIX")
+     * @param active true  → accent green, full alpha (multiplexer attached)
+     *               false → default or dimmed depending on [enabled]
+     * @param enabled true  → key is clickable (default appearance or green)
+     *                false → key is dimmed and non-interactive (no multiplexer)
+     */
+    fun setKeyState(keyId: String, active: Boolean, enabled: Boolean = true) {
+        keyboardRows.forEach { it.setKeyState(keyId, active, enabled) }
+    }
+
+    /**
      * Replace current rows with an F1-F12 + Back layout.
      */
     private fun enterFnMode() {
@@ -447,7 +463,11 @@ class MultiRowKeyboardView @JvmOverloads constructor(
             val end   = KeyboardKey("END",   "END",  "[F")
             val pgup  = KeyboardKey("PGUP",  "PGUP", "[5~")
             val pgdn  = KeyboardKey("PGDN",  "PGDN", "[6~")
-            val clip  = KeyboardKey("CLIPBOARD", "📋", "", KeyboardKey.KeyCategory.ACTION)
+            val clip   = KeyboardKey("CLIPBOARD", "📋", "", KeyboardKey.KeyCategory.ACTION)
+            // PREFIX(2×): sends the current multiplexer prefix (C-b / C-a / C-g).
+            // Placed at the start of row3 so it sits directly under ENT on row2,
+            // matching the user's "pinned left under ENT" spec.
+            val prefix = KeyboardKey("PREFIX", "PRE", "", KeyboardKey.KeyCategory.ACTION, 2f)
 
             // Row 1 (all layouts): CTL(2×) TAB(2×) ALT : / ↑ ↓ ← →
             val row1 = listOf(ctl, tab, alt, colon, slash, up, down, left, right)
@@ -455,8 +475,11 @@ class MultiRowKeyboardView @JvmOverloads constructor(
             // Row 2 (layouts ≥ 2): ENT(2×) ESC(2×) HOME END PGUP PGDN FN
             val row2 = listOf(ent, esc, home, end, pgup, pgdn, fn)
 
-            // Row 3 (layouts ≥ 3): shell/vim symbols + clipboard menu button
+            // Row 3 (layouts ≥ 3): PREFIX(2×) then shell/vim symbols + clipboard.
+            // PREFIX is 2× wide to match ENT directly above it; the remaining
+            // symbols fill the rest of the row at standard width.
             val row3 = listOf(
+                prefix,
                 KeyboardKey("PIPE",       "|",  "|",  KeyboardKey.KeyCategory.SYMBOL),
                 KeyboardKey("BACKSLASH",  "\\", "\\", KeyboardKey.KeyCategory.SYMBOL),
                 KeyboardKey("MINUS",      "-",  "-",  KeyboardKey.KeyCategory.SYMBOL),

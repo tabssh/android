@@ -7,6 +7,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **PRE keyboard key** — new PREFIX action key in the default keyboard bar (row 3, directly under ENT); 2× wide, sends the correct multiplexer prefix byte (C-b for tmux, C-a for screen, C-g for zellij); turns green when a multiplexer is detected, dims when none is active
+- **Multiplexer auto-detection** — after connect, probes `$TMUX`, `$STY`, `$ZELLIJ_SESSION_NAME` via a background exec channel; re-probes every 30 s so the PRE key reacts to the user attaching or detaching a multiplexer without reconnecting
+- **Multiplexer picker dialog** — tapping PRE with no multiplexer detected shows a type picker (tmux/screen/zellij) instead of sending a stray control byte into a non-multiplexer session
+- **Per-multiplexer prefix settings** — Settings → Connection now has a "Multiplexer Prefixes" section to configure each type's prefix independently (tmux C-b, screen C-a, zellij C-g) — previously hidden behind a single global field
+- **SSH key alias system** — keys are assigned an SSH-convention alias (`id_ed25519`, `id_rsa_001`, etc.) at import time; used to automatically resolve `IdentityFile` paths during `~/.ssh/config` import without manual key assignment
+- **Smart SSH key naming** — key comment field now extracted from the OpenSSH v1 binary format (was always empty before); import dialog shows both Name (default = comment) and Alias (default = SSH convention) fields
+- **Mosh command preset dropdown** — per-connection picker in the connection editor with common presets (Default, port range, IPv4/IPv6-only, full locale, custom path) plus a Custom option; replaces the global preference string that was never read by the app
+- **Global SSH directive defaults** — Settings → Connection now exposes `Keepalive Interval` (seconds), `X11 Forwarding` default, and `Agent Forwarding` default; these feed new per-host `serverAliveInterval` (nullable, null = use global), `x11_forwarding_default`, and `agent_forwarding_default` fields
+- DB migration v37 → v38: `stored_keys.alias` (TEXT, nullable), `connections.server_alive_interval` (INTEGER, nullable)
+
+### Changed
+
+- **Connection notifications** — title now shows the user-facing connection name ("prod server") instead of the raw IP; body shows protocol/terminal title separately; makes the notification drawer readable when you have multiple servers
+- **`~/.ssh/config` import** — after parsing, resolve each `IdentityFile` basename against stored key aliases and fall back to key name; connections with a matching imported key have `keyId` set immediately (no manual assignment step)
+- **`ServerAliveInterval`** from `~/.ssh/config` is now stored per-connection and applied at connect time; previously hardcoded to 60 s globally regardless of the config file value
+- **Mosh bootstrap** — reads per-connection `advancedSettings["moshServerCommand"]` if set; fixes the hardcoded wrong default (`-s` flag was included, which causes `mosh-server` to block waiting on stdin)
+
+### Fixed
+
+- **Terminal long-press menu silent no-op** — pager adapter now calls `beginWordSelectionAtTouch` directly on each TerminalView instead of routing through `getActiveTerminalView()`, which could return null during RecyclerView relayouts or the wrong view during fast tab switches
+- **Drag-to-select text jumps / selection vanishes** — added a 2× snap-radius proximity guard in `handleSelectionTouch`; tapping near a handle circle (which is drawn below the selection highlight) no longer fires `exitSelectionMode()` before the drag can begin
+- **Identity and all ExposedDropdownMenu dropdowns empty** — replaced `AutoCompleteTextView` with `MaterialAutoCompleteTextView` across all 9 affected layout files; base class filters against current text so restored values hid all items
+- **Tasker `ACTION_CONNECT` orphan sessions** — `TaskerWorker.handleConnect` now routes through `TabManager.createTab() + tab.connect()` so Tasker-initiated sessions appear in the tab bar and can be disconnected by the user
+- **CI security grep false positive** — `passwordLayout?.error = "…"` matched the password-literal pattern; exclusion added with documentation in AI.md §14.3
+
 ## [0.9.1] - 2026-06-04
 
 ### Added

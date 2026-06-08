@@ -105,7 +105,15 @@ data class KeyboardKey(
             // their handlers remain in TabTerminalActivity for
             // backwards-compat with any saved custom layouts.
             KeyboardKey("CLIPBOARD", "📋", "", KeyCategory.ACTION),
-            KeyboardKey("TOGGLE", "⌨", "", KeyCategory.ACTION)
+            KeyboardKey("TOGGLE", "⌨", "", KeyCategory.ACTION),
+
+            // PREFIX sends the current multiplexer prefix byte (C-b for
+            // tmux, C-a for screen, C-g for zellij). The active multiplexer
+            // is auto-detected after connect or falls back to the global
+            // `gesture_multiplexer_type` preference. Placed in the default
+            // layout under ENT so it's always reachable in a tmux/screen
+            // session without memorising a key chord.
+            KeyboardKey("PREFIX", "PRE", "", KeyCategory.ACTION, 2f)
         )
     }
 }

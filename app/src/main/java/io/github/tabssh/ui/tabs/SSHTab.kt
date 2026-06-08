@@ -95,6 +95,34 @@ class SSHTab(
     // Session recording
     var sessionRecorder: io.github.tabssh.terminal.recording.SessionRecorder? = null
 
+    /**
+     * Active multiplexer type for this tab ("tmux", "screen", "zellij", or null
+     * when none is detected). Exposed as a [StateFlow] so the keyboard bar can
+     * react in real time when the user attaches or detaches a multiplexer.
+     *
+     * Updated by:
+     *  - [runPostConnectCommands] when the app auto-launches one (immediate)
+     *  - [detectMultiplexerViaExec] which probes $TMUX/$STY/$ZELLIJ_SESSION_NAME
+     *    via a lightweight exec channel: once at connect + every 30 s thereafter
+     *    so attach/detach events are caught without requiring a reconnect
+     *
+     * Also writable by the host activity when the user explicitly selects a
+     * multiplexer type via the PREFIX-key picker dialog.
+     */
+    private val _activeMultiplexerType = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+    val activeMultiplexerTypeFlow: kotlinx.coroutines.flow.StateFlow<String?> =
+        _activeMultiplexerType.asStateFlow()
+
+    /** Convenience getter for cases that don't need the flow. */
+    val activeMultiplexerType: String? get() = _activeMultiplexerType.value
+
+    /** Allow the host activity to set the type from the picker dialog. */
+    fun setActiveMultiplexerType(type: String?) {
+        _activeMultiplexerType.value = type
+    }
+
+    private var multiplexerDetectionJob: Job? = null
+
     // Screen change listener for UI updates
     private var onScreenChangedListener: (() -> Unit)? = null
 
@@ -457,6 +485,8 @@ class SSHTab(
 
         stateCollectorJob?.cancel()
         stateCollectorJob = null
+        stopMultiplexerDetection()
+        _activeMultiplexerType.value = null
         termuxBridge.disconnect()
         // Issue #163 — close just this tab's channel before dropping the
         // wrapper reference. The underlying Session belongs to whatever
@@ -661,8 +691,17 @@ class SSHTab(
             if (cmd != null) {
                 Logger.i("SSHTab", "Multiplexer auto-launch: $cmd")
                 lines.add(cmd)
+                // Record the active type so the PREFIX keyboard key sends the
+                // right prefix byte without needing a global preference lookup.
+                _activeMultiplexerType.value = type
             }
         }
+
+        // Schedule an env-var probe on a separate exec channel. Fires 2 s
+        // after connect so the login shell (and any auto-started multiplexer)
+        // has time to set up environment. Only sets activeMultiplexerType if
+        // it wasn't already determined by the auto-launch branch above.
+        detectMultiplexerViaExec()
 
         profile.postConnectScript?.lines()
             ?.map { it.trim() }
@@ -683,6 +722,61 @@ class SSHTab(
         } catch (e: Exception) {
             Logger.w("SSHTab", "Failed to write post-connect commands: ${e.message}")
         }
+    }
+
+    /**
+     * Start a repeating multiplexer detection loop that probes environment
+     * variables via a lightweight exec channel.
+     *
+     * Schedule:
+     *  - First probe: 2 s after connect (gives the login shell + any dotfile
+     *    multiplexer auto-start time to set $TMUX/$STY/$ZELLIJ_SESSION_NAME)
+     *  - Subsequent probes: every 30 s while the tab is connected
+     *
+     * This lets the PREFIX key react dynamically:
+     *  - User types `tmux` → detected at the next 30 s tick → key goes green
+     *  - User exits multiplexer → next tick clears the state → key dims
+     *
+     * Cancels any previous detection job first so tab reconnects don't
+     * accumulate parallel detection loops.
+     */
+    private fun detectMultiplexerViaExec() {
+        multiplexerDetectionJob?.cancel()
+        multiplexerDetectionJob = connectionScope.launch {
+            delay(2000)
+            while (true) {
+                val conn = connection
+                if (conn == null || !conn.isConnected()) break
+                try {
+                    val output = conn.executeCommand(
+                        // POSIX sh one-liner: no bashisms. Prints one word or nothing.
+                        "sh -c '" +
+                            "if [ -n \"\$TMUX\" ]; then echo tmux; " +
+                            "elif [ -n \"\$STY\" ]; then echo screen; " +
+                            "elif [ -n \"\$ZELLIJ_SESSION_NAME\" ]; then echo zellij; " +
+                            "fi'",
+                        timeoutMs = 5000
+                    ).trim()
+                    val detected = if (output in listOf("tmux", "screen", "zellij")) output else null
+                    if (detected != _activeMultiplexerType.value) {
+                        _activeMultiplexerType.value = detected
+                        if (detected != null)
+                            Logger.i("SSHTab", "Multiplexer attached: $detected")
+                        else
+                            Logger.i("SSHTab", "Multiplexer detached (none found in env)")
+                    }
+                } catch (_: Exception) {
+                    // Detection failure is non-fatal — PREFIX key shows "unknown" state.
+                }
+                delay(30_000)
+            }
+        }
+    }
+
+    /** Cancel the detection loop on disconnect so it doesn't probe a dead session. */
+    fun stopMultiplexerDetection() {
+        multiplexerDetectionJob?.cancel()
+        multiplexerDetectionJob = null
     }
 
     private fun buildMultiplexerCommand(type: String, mode: String, name: String): String? {

@@ -498,6 +498,55 @@
                         android:checked="false"
                         android:tooltipText="On connect, run mosh-server on the remote and attach the bundled native mosh-client. Real UDP transport + roaming. Requires mosh-server installed on the remote." />
 
+                    <!-- Mosh server command picker — only visible when Mosh is enabled -->
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/layout_mosh_command"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_sm"
+                        android:hint="Mosh server command"
+                        android:visibility="gone">
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                            android:id="@+id/spinner_mosh_command"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="none" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <!-- Custom command text field — visible only when "Custom…" is selected -->
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/layout_mosh_custom_command"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_xs"
+                        android:hint="mosh-server command"
+                        android:visibility="gone">
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/edit_mosh_custom_command"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="text|textNoSuggestions"
+                            android:fontFamily="monospace" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <!-- Custom description — optional; if blank the command text is used as label -->
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/layout_mosh_custom_desc"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_xs"
+                        android:hint="Description (optional)"
+                        android:visibility="gone">
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/edit_mosh_custom_desc"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="text" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
                     <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/switch_port_knock"
                         android:layout_width="match_parent"

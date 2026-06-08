@@ -40,12 +40,33 @@ import java.util.UUID
  */
 class ConnectionEditActivity : AppCompatActivity() {
 
+    /**
+     * A preset entry in the mosh server command dropdown.
+     * `command` is the actual string passed to mosh-server; `description` is
+     * the human-readable label shown in the dropdown. For the "Custom…" sentinel
+     * both fields are empty — the UI shows extra text inputs instead.
+     */
+    data class MoshPreset(val description: String, val command: String) {
+        val isCustom: Boolean get() = description == "Custom…"
+    }
+
     companion object {
         const val EXTRA_CONNECTION_ID = "connection_id"
         const val EXTRA_IS_EDIT_MODE = "is_edit_mode"
         /** When present, load + save as [VncHost] regardless of protocol spinner. */
         const val EXTRA_VNC_HOST_ID = "vnc_host_id"
         private const val REQUEST_CODE_IMPORT_KEY = 1001
+
+        val MOSH_PRESETS = listOf(
+            MoshPreset("Default", "mosh-server new -l LANG=en_US.UTF-8"),
+            MoshPreset("Port range 60001–60050", "mosh-server new -l LANG=en_US.UTF-8 -p 60001:60050"),
+            MoshPreset("Single port 61000", "mosh-server new -l LANG=en_US.UTF-8 -p 61000"),
+            MoshPreset("IPv4 only", "mosh-server new -l LANG=en_US.UTF-8 -4"),
+            MoshPreset("IPv6 only", "mosh-server new -l LANG=en_US.UTF-8 -6"),
+            MoshPreset("Full locale", "mosh-server new -l LANG=en_US.UTF-8 -l LC_ALL=en_US.UTF-8"),
+            MoshPreset("Custom path (/usr/local/bin)", "/usr/local/bin/mosh-server new -l LANG=en_US.UTF-8"),
+            MoshPreset("Custom…", ""),
+        )
 
         /** Launch to create/edit an SSH or Telnet [ConnectionProfile]. */
         fun createIntent(context: Context, connectionId: String? = null): Intent {
@@ -129,6 +150,7 @@ class ConnectionEditActivity : AppCompatActivity() {
         setupValidation()
         setupButtons()
         setupPortKnockUI()
+        setupMoshCommandDropdown()
         // Protocol spinner wired last — it calls updateProtocolUI() which
         // triggers identity list loading and card visibility.
         setupProtocolSpinner()
@@ -707,6 +729,7 @@ class ConnectionEditActivity : AppCompatActivity() {
         binding.switchCompression.isChecked = profile.compression
         binding.switchX11Forwarding.isChecked = profile.x11Forwarding
         binding.switchUseMosh.isChecked = profile.useMosh
+        restoreMoshCommandDropdown(profile)
 
         val notifAlertEntries = resources.getStringArray(R.array.notif_alert_mode_entries)
         binding.spinnerNotifSound.setAdapter(
@@ -1041,6 +1064,7 @@ class ConnectionEditActivity : AppCompatActivity() {
         val keepAlive = true
         val x11Forwarding = binding.switchX11Forwarding.isChecked
         val useMosh = binding.switchUseMosh.isChecked
+        val moshCommandOverride = readMoshCommandFromUi()
 
         val modeEntries = resources.getStringArray(R.array.multiplexer_mode_entries)
         val modeValues = resources.getStringArray(R.array.multiplexer_mode_values)
@@ -1099,6 +1123,13 @@ class ConnectionEditActivity : AppCompatActivity() {
         val knockEnabled = binding.switchPortKnock.isChecked
         val knockSequence = if (knockEnabled) pendingKnockSequence else null
 
+        // Merge moshServerCommand (and optional desc) into the advancedSettings
+        // JSON blob so it survives copy() without needing a new DB column.
+        val mergedAdvancedSettings = mergeAdvancedSettings(
+            existing = existingProfile?.advancedSettings,
+            moshCommand = moshCommandOverride
+        )
+
         return existingProfile?.copy(
             name = name, host = host, port = port, username = username,
             protocol = protocol, authType = authType.name, keyId = keyId,
@@ -1113,7 +1144,8 @@ class ConnectionEditActivity : AppCompatActivity() {
             proxyType = proxyType, proxyHost = proxyHost, proxyPort = proxyPort,
             proxyUsername = proxyUsername, proxyAuthType = proxyAuthType, proxyKeyId = proxyKeyId,
             colorTag = colorTag, notifSoundMode = notifSoundMode, notifVibrateMode = notifVibrateMode,
-            portKnockEnabled = knockEnabled, portKnockSequence = knockSequence
+            portKnockEnabled = knockEnabled, portKnockSequence = knockSequence,
+            advancedSettings = mergedAdvancedSettings
         ) ?: ConnectionProfile(
             name = name, host = host, port = port, username = username,
             protocol = protocol, authType = authType.name, keyId = keyId,
@@ -1128,8 +1160,29 @@ class ConnectionEditActivity : AppCompatActivity() {
             proxyType = proxyType, proxyHost = proxyHost, proxyPort = proxyPort,
             proxyUsername = proxyUsername, proxyAuthType = proxyAuthType, proxyKeyId = proxyKeyId,
             notifSoundMode = notifSoundMode, notifVibrateMode = notifVibrateMode,
-            portKnockEnabled = knockEnabled, portKnockSequence = knockSequence
+            portKnockEnabled = knockEnabled, portKnockSequence = knockSequence,
+            advancedSettings = mergedAdvancedSettings
         )
+    }
+
+    /**
+     * Merge [moshCommand] into [existing] advancedSettings JSON.
+     * Preserves all other keys already in the blob (IdentityFile, cloudSource, etc.).
+     * Removes the key if [moshCommand] is null (user chose Default — no override needed).
+     */
+    private fun mergeAdvancedSettings(existing: String?, moshCommand: String?): String? {
+        val json = try {
+            existing?.takeIf { it.isNotBlank() }?.let { org.json.JSONObject(it) } ?: org.json.JSONObject()
+        } catch (_: Exception) { org.json.JSONObject() }
+
+        if (moshCommand.isNullOrBlank()) {
+            json.remove("moshServerCommand")
+        } else {
+            json.put("moshServerCommand", moshCommand)
+        }
+
+        val result = json.toString()
+        return if (result == "{}") null else result
     }
 
     // -------------------------------------------------------------------------
@@ -1766,6 +1819,94 @@ class ConnectionEditActivity : AppCompatActivity() {
         val adapter = android.widget.ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, entries)
         binding.spinnerConnectionTheme.setAdapter(adapter)
         binding.spinnerConnectionTheme.setText(entries[0], false)
+    }
+
+    // -------------------------------------------------------------------------
+    // Mosh command dropdown
+    // -------------------------------------------------------------------------
+
+    /**
+     * Populate the mosh command spinner with [MOSH_PRESETS] and wire visibility
+     * to the "Use Mosh" toggle. When "Custom…" is chosen, show the plain command
+     * and optional description fields.
+     */
+    private fun setupMoshCommandDropdown() {
+        val labels = MOSH_PRESETS.map { it.description }
+        val adapter = android.widget.ArrayAdapter(
+            this, android.R.layout.simple_dropdown_item_1line, labels
+        )
+        binding.spinnerMoshCommand.setAdapter(adapter)
+
+        // Show / hide the whole dropdown panel with the mosh toggle.
+        binding.switchUseMosh.setOnCheckedChangeListener { _, isChecked ->
+            binding.layoutMoshCommand.visibility = if (isChecked) View.VISIBLE else View.GONE
+            if (!isChecked) {
+                binding.layoutMoshCustomCommand.visibility = View.GONE
+                binding.layoutMoshCustomDesc.visibility = View.GONE
+            }
+        }
+
+        // Show custom inputs when "Custom…" is selected.
+        binding.spinnerMoshCommand.setOnItemClickListener { _, _, position, _ ->
+            val isCustom = MOSH_PRESETS.getOrNull(position)?.isCustom == true
+            binding.layoutMoshCustomCommand.visibility = if (isCustom) View.VISIBLE else View.GONE
+            binding.layoutMoshCustomDesc.visibility   = if (isCustom) View.VISIBLE else View.GONE
+        }
+
+        // Default selection: first preset (Default).
+        binding.spinnerMoshCommand.setText(labels.first(), false)
+    }
+
+    /**
+     * Populate the mosh dropdown from the saved [advancedSettings] JSON.
+     * Matches against [MOSH_PRESETS] by command string; falls back to the
+     * Custom option if no match is found.
+     */
+    private fun restoreMoshCommandDropdown(profile: ConnectionProfile) {
+        binding.layoutMoshCommand.visibility =
+            if (profile.useMosh) View.VISIBLE else View.GONE
+
+        val savedCmd = try {
+            profile.advancedSettings?.let { org.json.JSONObject(it).optString("moshServerCommand") }
+                .takeIf { !it.isNullOrBlank() }
+        } catch (_: Exception) { null }
+
+        if (savedCmd == null) {
+            binding.spinnerMoshCommand.setText(MOSH_PRESETS.first().description, false)
+            binding.layoutMoshCustomCommand.visibility = View.GONE
+            binding.layoutMoshCustomDesc.visibility = View.GONE
+            return
+        }
+
+        val match = MOSH_PRESETS.firstOrNull { !it.isCustom && it.command == savedCmd }
+        if (match != null) {
+            binding.spinnerMoshCommand.setText(match.description, false)
+            binding.layoutMoshCustomCommand.visibility = View.GONE
+            binding.layoutMoshCustomDesc.visibility = View.GONE
+        } else {
+            // Custom command not in the preset list.
+            binding.spinnerMoshCommand.setText("Custom…", false)
+            binding.layoutMoshCustomCommand.visibility = View.VISIBLE
+            binding.layoutMoshCustomDesc.visibility = View.VISIBLE
+            binding.editMoshCustomCommand.setText(savedCmd)
+        }
+    }
+
+    /**
+     * Read the effective mosh command from the UI.
+     * Returns null if the Default preset is selected (no override stored).
+     */
+    private fun readMoshCommandFromUi(): String? {
+        if (!binding.switchUseMosh.isChecked) return null
+        val selectedLabel = binding.spinnerMoshCommand.text.toString()
+        val preset = MOSH_PRESETS.firstOrNull { it.description == selectedLabel }
+        return when {
+            preset == null || preset.isCustom -> {
+                binding.editMoshCustomCommand.text.toString().trim().takeIf { it.isNotBlank() }
+            }
+            preset.command == MOSH_PRESETS.first().command -> null // Default — no override
+            else -> preset.command
+        }
     }
 
     private fun setupPortKnockUI() {

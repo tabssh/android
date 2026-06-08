@@ -131,6 +131,8 @@ class TabTerminalActivity : AppCompatActivity() {
     
     // Custom keyboard
     private var customKeyboardVisible: Boolean = true
+    /** Coroutine that mirrors the active tab's multiplexer StateFlow to the PREFIX key visual state. */
+    private var multiplexerObserverJob: kotlinx.coroutines.Job? = null
 
     // Find-in-scrollback
     private var searchController: ScrollbackSearchController? = null
@@ -1559,8 +1561,16 @@ private fun showSnippetsPickerForActiveTab() {
                             showToast("Connected to ${profile.getDisplayName()}")
                             runOnUiThread { showMoshHandoff() }
                         } else if (profile.useMosh) {
+                            // Read the per-connection mosh server command if one was
+                            // saved via the dropdown in ConnectionEditActivity.
+                            val moshCmd = profile.advancedSettings?.let { raw ->
+                                try { org.json.JSONObject(raw).optString("moshServerCommand")
+                                    .takeIf { it.isNotBlank() } }
+                                catch (_: Exception) { null }
+                            }
                             val handoff = io.github.tabssh.protocols.mosh.MoshHandoff.bootstrap(
-                                sshConnection, profile.username, profile.host
+                                sshConnection, profile.username, profile.host,
+                                commandOverride = moshCmd
                             )
                             if (handoff is io.github.tabssh.protocols.mosh.MoshHandoff.Result.Success) {
                                 tab.disconnect()
@@ -1935,6 +1945,57 @@ private fun showSnippetsPickerForActiveTab() {
         }
     }
 
+    /**
+     * Observe [tab]'s multiplexer StateFlow and update the PREFIX key visual
+     * state in real time. Cancels any previous observer so only one tab's state
+     * drives the keyboard bar at a time.
+     *
+     * - Green + full alpha: multiplexer attached → prefix sends correctly
+     * - Dim + still clickable: no multiplexer → click shows type picker
+     */
+    private fun observeMultiplexerState(tab: io.github.tabssh.ui.tabs.SSHTab?) {
+        multiplexerObserverJob?.cancel()
+        if (tab == null) {
+            updatePrefixKeyVisual(null)
+            return
+        }
+        multiplexerObserverJob = lifecycleScope.launch {
+            tab.activeMultiplexerTypeFlow.collect { type ->
+                updatePrefixKeyVisual(type)
+            }
+        }
+    }
+
+    private fun updatePrefixKeyVisual(multiplexerType: String?) {
+        val active = multiplexerType != null
+        // Always leave the key clickable — when inactive the click handler
+        // shows the type picker instead of sending a prefix.
+        binding.multiRowKeyboard.setKeyState("PREFIX", active = active, enabled = true)
+    }
+
+    /**
+     * Show a dialog for the user to manually select the multiplexer type when
+     * none has been auto-detected. Sets the type on the active tab so subsequent
+     * PREFIX presses send the correct prefix immediately.
+     */
+    private fun showMultiplexerPickerDialog() {
+        val types = arrayOf("tmux (Ctrl+B)", "screen (Ctrl+A)", "zellij (Ctrl+G)")
+        val keys  = arrayOf("tmux", "screen", "zellij")
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle("Select multiplexer")
+            .setMessage(
+                "No multiplexer was detected. Select the one running in this session " +
+                "to enable the PRE key, or cancel to type the prefix manually."
+            )
+            .setItems(types) { _, which ->
+                val tab = tabManager.getActiveTab() ?: return@setItems
+                tab.setActiveMultiplexerType(keys[which])
+                Logger.i("TabTerminalActivity", "Multiplexer manually set to ${keys[which]}")
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     private fun switchToTab(index: Int) {
         if (swipeEnabled) {
             // Use smooth=false so programmatic jumps (tab-bar tap, keyboard shortcut,
@@ -1962,6 +2023,8 @@ private fun showSnippetsPickerForActiveTab() {
                 Logger.d("TabTerminalActivity", "Switched to tab: ${tab.profile.getDisplayName()}")
             }
         }
+        // Mirror the new tab's multiplexer detection state to the PREFIX key.
+        observeMultiplexerState(tabManager.getTab(index))
     }
     
     private fun updateTabIcon(tab: SSHTab, state: ConnectionState) {
@@ -3562,6 +3625,35 @@ private fun showSnippetsPickerForActiveTab() {
             "TOGGLE" -> {
                 Logger.d("TabTerminalActivity", "Toggle keyboard action")
                 toggleCustomKeyboard()
+            }
+            "PREFIX" -> {
+                val tab = tabManager.getActiveTab()
+                val type = tab?.activeMultiplexerType
+                if (type == null) {
+                    // No multiplexer detected — show the type picker so the user
+                    // can tell us which one is running. Sending a blind prefix to
+                    // a non-multiplexer session would inject a stray control byte.
+                    showMultiplexerPickerDialog()
+                } else {
+                    val prefixStr = when (type) {
+                        "tmux"   -> app.preferencesManager.getString(
+                            "multiplexer_custom_prefix_tmux",   "C-b")
+                        "screen" -> app.preferencesManager.getString(
+                            "multiplexer_custom_prefix_screen", "C-a")
+                        "zellij" -> app.preferencesManager.getString(
+                            "multiplexer_custom_prefix_zellij", "C-g")
+                        else     -> app.preferencesManager.getString(
+                            "multiplexer_custom_prefix_tmux",   "C-b")
+                    }
+                    val bytes = io.github.tabssh.terminal.gestures.PrefixParser.parse(prefixStr)
+                    if (bytes != null) {
+                        // Send raw bytes via ISO-8859-1 so control bytes (0x01–0x1f)
+                        // are preserved exactly. sendText → TermuxBridge.sendText writes
+                        // the byte values through to the SSH stream unchanged.
+                        terminal?.sendText(String(bytes, Charsets.ISO_8859_1))
+                        Logger.d("TabTerminalActivity", "PREFIX key: sent $prefixStr for $type")
+                    }
+                }
             }
             else -> {
                 if (key.keySequence.isNotEmpty()) {

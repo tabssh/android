@@ -1,5 +1,52 @@
 # What's New
 
+## Wave 12 — Multiplexer PREFIX key, SSH config import, text selection
+
+### PRE key for tmux / screen / zellij
+The custom keyboard bar now has a dedicated **PRE** key (row 3, under ENT).
+It sends the right prefix byte automatically:
+- **Green** = multiplexer detected → tap to send C-b / C-a / C-g
+- **Dim** = no multiplexer detected → tap to pick which one is running
+
+The app detects your multiplexer by probing `$TMUX`, `$STY`, and
+`$ZELLIJ_SESSION_NAME` on a background channel 2 seconds after you connect,
+then re-checks every 30 seconds. Attach or detach tmux in your session and
+the key updates automatically — no reconnect needed.
+
+Per-type prefixes are now configurable in **Settings → Connection →
+Multiplexer Prefixes** (defaults: tmux C-b, screen C-a, zellij C-g).
+
+### SSH config import improvements
+- **Keys resolve automatically** — import your `~/.ssh/config` after adding
+  your SSH key to the Identities tab. TabSSH matches the `IdentityFile`
+  filename against your stored key alias (e.g. `id_ed25519`) and links them
+  without any manual editing.
+- The import dialog warns clearly when a key couldn't be resolved and offers
+  a direct "Identities" shortcut to import it.
+- **Smart key naming** — when you import an SSH private key the Name field
+  defaults to the comment embedded in the key file (e.g. `user@host`), and the
+  Alias field defaults to the SSH naming convention (`id_ed25519`, `id_rsa_001`,
+  etc.). Both are editable before import.
+- `ServerAliveInterval` in your config is now per-connection and honoured at
+  connect time instead of being ignored.
+
+### Text selection & copy fixed
+- Long-press context menu now reliably shows the Copy / Select All / Paste bar
+  in all multi-tab configurations.
+- Drag-to-select no longer jumps or clears when your finger touches the handle
+  area below the highlighted text — the grab radius is now forgiving.
+
+### Connection notifications
+Notifications now show your connection **name** ("prod server") instead of the
+raw IP address, making the notification tray useful when you have many servers.
+
+### Mosh command presets
+The connection editor now has a **Mosh server command** dropdown with common
+presets (port range, IPv4/IPv6-only, custom path) plus a Custom option. The old
+global setting that was silently ignored has been replaced.
+
+---
+
 ## Wave 11 — Multi-host Dashboard redesign + bug fixes
 
 ### Multi-host Dashboard v2

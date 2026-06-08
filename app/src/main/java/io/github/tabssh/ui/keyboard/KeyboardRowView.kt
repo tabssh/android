@@ -41,6 +41,9 @@ class KeyboardRowView @JvmOverloads constructor(
     /** Buttons keyed by modifier id (CTL/ALT/FN) so the parent can highlight. */
     private val modifierButtons = mutableMapOf<String, KeyButton>()
 
+    /** All key buttons by key id — used by [setKeyState] for targeted styling. */
+    private val keyButtonMap = mutableMapOf<String, KeyButton>()
+
     init {
         isHorizontalScrollBarEnabled = false
         isFillViewport = true
@@ -93,6 +96,24 @@ class KeyboardRowView @JvmOverloads constructor(
     }
 
     /**
+     * Set the visual state of a key by ID:
+     *  - [active] = true → accent colour (green), full alpha — multiplexer attached
+     *  - [active] = false + [enabled] = false → heavily dimmed — no multiplexer
+     *  - [active] = false + [enabled] = true → default styling
+     * Used by the PREFIX key to reflect live multiplexer detection state.
+     */
+    fun setKeyState(keyId: String, active: Boolean, enabled: Boolean) {
+        val btn = keyButtonMap[keyId] ?: return
+        btn.isEnabled = enabled
+        btn.setHighlight(if (active) 0xFF4CAF50.toInt() else 0)   // Material Green 500
+        btn.alpha = when {
+            active  -> 1.0f
+            enabled -> 0.7f
+            else    -> 0.25f   // Very dim: "nothing to send"
+        }
+    }
+
+    /**
      * Rebuild key buttons synchronously.
      *
      * [KeyButton] extends [View] via the single-argument View(Context) constructor,
@@ -108,9 +129,11 @@ class KeyboardRowView @JvmOverloads constructor(
     private fun rebuildKeys() {
         keyContainer.removeAllViews()
         modifierButtons.clear()
+        keyButtonMap.clear()
         keys.forEachIndexed { index, key ->
             val btn = createKeyButton(key, index < pinnedCount)
             keyContainer.addView(btn)
+            keyButtonMap[key.id] = btn
             if (key.category == KeyboardKey.KeyCategory.MODIFIER) {
                 modifierButtons[key.id] = btn
             }
@@ -185,13 +208,17 @@ class KeyboardRowView @JvmOverloads constructor(
         private val density = context.resources.displayMetrics.density
         private val scaledDensity = context.resources.displayMetrics.scaledDensity
 
+        // Default stroke/text colors — overridden when a highlight is set.
+        private val defaultStrokeColor = 0xFF666666.toInt()
+        private val defaultTextColor   = 0xFFEEEEEE.toInt()
+
         private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
-            color = 0xFF666666.toInt()
+            color = defaultStrokeColor
             strokeWidth = density
         }
         private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xFFEEEEEE.toInt()
+            color = defaultTextColor
             textAlign = Paint.Align.CENTER
             textSize = 12f * scaledDensity
         }
@@ -205,7 +232,17 @@ class KeyboardRowView @JvmOverloads constructor(
         init {
             isClickable = true
             isFocusable = true
-            // Give touch feedback via state-change invalidate below.
+        }
+
+        /**
+         * Apply an accent colour (e.g. 0xFF4CAF50 for green) to both the border
+         * and text of this key. Pass 0 to reset to the default grey/white palette.
+         * Called by [KeyboardRowView.setKeyState] when multiplexer state changes.
+         */
+        fun setHighlight(color: Int) {
+            strokePaint.color = if (color != 0) color else defaultStrokeColor
+            textPaint.color   = if (color != 0) color else defaultTextColor
+            invalidate()
         }
 
         override fun onDraw(canvas: Canvas) {
