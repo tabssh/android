@@ -130,15 +130,25 @@ class TerminalPagerAdapter(
                 terminalView.onUrlDetected = onUrlDetected
             }
 
-            // Long-press context menu callback (paste / copy screen /
-            // send-text / Ctrl+C / etc.). Without this, long-press
-            // silently no-ops in swipe mode.
-            if (onContextMenuRequested != null) {
-                terminalView.onContextMenuRequested = onContextMenuRequested
+            // Long-press: always call beginWordSelectionAtTouch on THIS
+            // specific view, not on whatever getActiveTerminalView() returns
+            // at call time. getActiveTerminalView() uses
+            // findViewHolderForAdapterPosition which can return null during
+            // RecyclerView relayouts, causing silent no-ops or calling the
+            // method on the wrong view with wrong coordinates.
+            terminalView.onContextMenuRequested = { x, y ->
+                terminalView.beginWordSelectionAtTouch(x, y)
+                // Notify the activity so it can start the floating ActionMode.
+                // onSelectionStarted fires from beginWordSelectionAtTouch itself,
+                // so we don't need to call it here — this is just for any
+                // activity-level side effects (e.g. analytics) that the original
+                // callback carried.
+                onContextMenuRequested?.invoke(x, y)
             }
 
-            // Selection-mode entered (from SEL key + drag) → activity
-            // starts the floating Copy ActionMode against this view.
+            // Selection-mode entered (from SEL key + drag, or the direct
+            // beginWordSelectionAtTouch call above) → activity starts the
+            // floating Copy ActionMode against THIS specific view.
             onSelectionStarted?.let { cb ->
                 terminalView.onSelectionStarted = { cb(terminalView) }
             }

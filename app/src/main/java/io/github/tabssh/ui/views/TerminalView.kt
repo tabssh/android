@@ -2060,6 +2060,33 @@ class TerminalView @JvmOverloads constructor(
                     selectionDragHandle = handle
                     return true
                 }
+
+                // Handle hit-test missed, but the user may be tapping near a
+                // handle. The handles are drawn below the selection highlight
+                // (at the bottom of the last selected row), so pixelToCell
+                // maps that region to a row OUTSIDE sr..er. Without this
+                // guard, any tap on a visible handle circle immediately calls
+                // exitSelectionMode() — the selection vanishes and the user
+                // must long-press again. Chrome-style: only exit on a tap
+                // that is clearly away from both handles.
+                val anchorPx = cellCenterPx(selectionAnchorCol, selectionAnchorRow + 1)
+                val focusPx  = cellCenterPx(selectionFocusCol,  selectionFocusRow  + 1)
+                // Generous proximity threshold: 2× the visual radius so the
+                // whole handle area is forgiving.
+                val snapRadius2 = (handleHitRadiusPx * 2f).let { it * it }
+                val dxA = event.x - anchorPx.first;  val dyA = event.y - anchorPx.second
+                val dxF = event.x - focusPx.first;   val dyF = event.y - focusPx.second
+                val nearAnchor = dxA * dxA + dyA * dyA <= snapRadius2
+                val nearFocus  = dxF * dxF + dyF * dyF <= snapRadius2
+                if (nearFocus || nearAnchor) {
+                    // Snap to the closest handle so the subsequent drag
+                    // works even though the precise hit-test missed.
+                    val da = dxA * dxA + dyA * dyA
+                    val df = dxF * dxF + dyF * dyF
+                    selectionDragHandle = if (nearAnchor && da <= df) 0 else 1
+                    return true
+                }
+
                 // Touch on a non-handle cell: did the user tap inside
                 // the existing highlight (do nothing — let the action
                 // mode stay) or outside (exit selection mode)?

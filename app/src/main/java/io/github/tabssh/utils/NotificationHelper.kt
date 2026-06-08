@@ -270,23 +270,23 @@ object NotificationHelper {
             else -> "ssh"
         }
         val title = terminalTitle?.takeIf { it.isNotBlank() }
+        // Use the user-facing connection name so the notification reads
+        // "Connected to prod server" instead of "Connected to 1.2.3.4:22".
+        // getDisplayName() returns `name` if set, otherwise username@host:port.
+        val displayName = profile.getDisplayName()
         val (contentTitle, contentText) = when (state) {
             io.github.tabssh.ssh.connection.ConnectionState.CONNECTED ->
-                // Always show port so the user can distinguish two connections to
-                // the same host on different ports. Format: host:port-title or
-                // host:port-{ssh|mosh|telnet} when the shell hasn't set a title.
-                "TabSSH" to "Connected to ${profile.host}:${profile.port}-${title ?: protocol}"
+                // Show the shell title (OSC 0/2) when available so the user
+                // sees e.g. "prod server — bash" after a title-setting shell.
+                displayName to (if (title != null) "$title ($protocol)" else protocol)
             io.github.tabssh.ssh.connection.ConnectionState.CONNECTING ->
-                "TabSSH" to "Connecting to ${profile.host}:${profile.port}…"
+                displayName to "Connecting…"
             io.github.tabssh.ssh.connection.ConnectionState.ERROR ->
-                "TabSSH" to "Connection error: ${profile.host}:${profile.port}"
+                displayName to "Connection error"
             io.github.tabssh.ssh.connection.ConnectionState.DISCONNECTED ->
-                "TabSSH" to (
-                    if (cleanExit) "Disconnected from ${profile.host}"
-                    else            "Disconnected from ${profile.host} (error)"
-                )
+                displayName to (if (cleanExit) "Disconnected" else "Disconnected (error)")
             else ->
-                "TabSSH" to "${profile.host}:${profile.port}"
+                displayName to protocol
         }
 
         val tapTarget = Intent(context, io.github.tabssh.ui.activities.TabTerminalActivity::class.java)
