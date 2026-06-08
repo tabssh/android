@@ -34,7 +34,8 @@ class TerminalPagerAdapter(
      * TerminalView so the host activity can start the floating
      * Copy ActionMode against the right view.
      */
-    private val onSelectionStarted: ((TerminalView) -> Unit)? = null
+    private val onSelectionStarted: ((TerminalView) -> Unit)? = null,
+    private val reverseScrollDirection: Boolean = false
 ) : RecyclerView.Adapter<TerminalPagerAdapter.TerminalViewHolder>() {
 
     // Track bound view holders for theme updates
@@ -63,6 +64,7 @@ class TerminalPagerAdapter(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         )
+        terminalView.reverseScrollDirection = reverseScrollDirection
         return TerminalViewHolder(
             terminalView,
             fontSize,

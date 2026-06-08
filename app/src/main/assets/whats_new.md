@@ -1,5 +1,43 @@
 # What's New
 
+## Wave 14 — PRE key multiplexer picker fixed
+
+Tapping the **PRE** key when no multiplexer was detected would open a "Select
+multiplexer" dialog but show nothing to tap — a dialog-builder conflict caused
+the option list to be hidden behind the description text. The three choices
+(tmux, screen, zellij) now render correctly, so you can set your multiplexer
+type with a single tap and the PRE key will send the right prefix immediately.
+
+---
+
+## Wave 13 — Smoother scrolling, key polish, notification fixes
+
+### Natural scroll direction
+Scrolling is now standard: **swipe UP to see older terminal output** — the same
+convention as JuiceSSH, Termux, and every other terminal on Android. If you
+preferred the old direction (swipe down to see older), flip the toggle in
+**Settings → Terminal → Reverse scroll direction**.
+
+### Smooth terminal scrolling
+Scrollback now glides continuously instead of snapping one full row at a time.
+The underlying scroll position is tracked at sub-pixel precision and the canvas
+is offset fractionally, so slow drags and flings both feel natural.
+
+### Keyboard key polish
+- **CTL and ALT** keys now show a solid green fill with dark text when latched —
+  the old dim-alpha change was easy to miss; the green fill is unmistakable
+- **CTL / TAB / ENT / ESC** reduced from 2× to 1.5× wide, and text is slightly
+  larger, so the label fills the key without floating in empty space
+
+### Notification disconnect fixed
+Two bugs squashed:
+- Tapping **"Disconnect"** in the notification now actually disconnects, even
+  if the session dropped and reconnected since the notification appeared
+- The notification now disappears (or shows "Disconnected" then auto-clears in
+  30 s) reliably when a session ends — previously it could stick forever
+
+---
+
 ## Wave 12 — Multiplexer PREFIX key, SSH config import, text selection
 
 ### PRE key for tmux / screen / zellij

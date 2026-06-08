@@ -87,11 +87,15 @@ class KeyboardRowView @JvmOverloads constructor(
     fun getKeys(): List<KeyboardKey> = keys.toList()
 
     /**
-     * Highlight the active modifier (called by parent). Pass null to clear.
+     * Update modifier key visual state. Active modifier gets a solid green
+     * fill with dark text so the active state is unmistakable at a glance —
+     * a subtle alpha change is easy to miss on a bright screen.
      */
     fun highlightModifier(activeId: String?) {
         modifierButtons.forEach { (id, btn) ->
-            btn.alpha = if (id == activeId) 1.0f else 0.7f
+            val active = id == activeId
+            btn.setActive(active)
+            btn.alpha = if (active) 1.0f else 0.7f
         }
     }
 
@@ -105,7 +109,9 @@ class KeyboardRowView @JvmOverloads constructor(
     fun setKeyState(keyId: String, active: Boolean, enabled: Boolean) {
         val btn = keyButtonMap[keyId] ?: return
         btn.isEnabled = enabled
-        btn.setHighlight(if (active) 0xFF4CAF50.toInt() else 0)   // Material Green 500
+        // Use the same green-fill active style as modifier keys for consistency.
+        btn.setActive(active)
+        if (!active) btn.setHighlight(0)   // reset any stale accent
         btn.alpha = when {
             active  -> 1.0f
             enabled -> 0.7f
@@ -208,19 +214,26 @@ class KeyboardRowView @JvmOverloads constructor(
         private val density = context.resources.displayMetrics.density
         private val scaledDensity = context.resources.displayMetrics.scaledDensity
 
-        // Default stroke/text colors — overridden when a highlight is set.
+        // Default stroke/text colors — overridden when a highlight or active state is set.
         private val defaultStrokeColor = 0xFF666666.toInt()
         private val defaultTextColor   = 0xFFEEEEEE.toInt()
+        // Active (latched) fill colours: Material Green 500 fill, dark green text.
+        private val activeFillColor    = 0xFF4CAF50.toInt()
+        private val activeTextColor    = 0xFF1B5E20.toInt()   // dark green — readable on green fill
 
         private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             color = defaultStrokeColor
             strokeWidth = density
         }
+        private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.FILL
+            color = activeFillColor
+        }
         private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = defaultTextColor
             textAlign = Paint.Align.CENTER
-            textSize = 12f * scaledDensity
+            textSize = 13f * scaledDensity
         }
         private val pressPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
@@ -228,6 +241,7 @@ class KeyboardRowView @JvmOverloads constructor(
         }
         private val rectF = RectF()
         private val cornerR = 4f * density
+        private var isActive = false   // true = latched modifier / active PREFIX
 
         init {
             isClickable = true
@@ -235,11 +249,29 @@ class KeyboardRowView @JvmOverloads constructor(
         }
 
         /**
-         * Apply an accent colour (e.g. 0xFF4CAF50 for green) to both the border
-         * and text of this key. Pass 0 to reset to the default grey/white palette.
-         * Called by [KeyboardRowView.setKeyState] when multiplexer state changes.
+         * Set the "latched" state for modifier keys (CTL, ALT, etc.) and the
+         * PREFIX key when a multiplexer is active.
+         *
+         * Active = solid green fill + dark green text.  The contrast satisfies
+         * WCAG AA (green on dark-green is ~4.7:1).
+         * Inactive = default outline style.
+         */
+        fun setActive(active: Boolean) {
+            isActive = active
+            strokePaint.color = if (active) activeFillColor else defaultStrokeColor
+            textPaint.color   = if (active) activeTextColor else defaultTextColor
+            invalidate()
+        }
+
+        /**
+         * Apply an accent colour to border and text without filling the background.
+         * Used by [KeyboardRowView.setKeyState] for the PREFIX "multiplexer active"
+         * visual state when a distinct fill isn't desired (the green outline + text
+         * is already distinctive).
+         * Pass 0 to reset to the default grey/white palette.
          */
         fun setHighlight(color: Int) {
+            if (isActive) return   // active fill state wins
             strokePaint.color = if (color != 0) color else defaultStrokeColor
             textPaint.color   = if (color != 0) color else defaultTextColor
             invalidate()
@@ -249,6 +281,11 @@ class KeyboardRowView @JvmOverloads constructor(
             val inset = strokePaint.strokeWidth / 2f
             rectF.set(inset, inset, width - inset, height - inset)
 
+            // Solid fill for latched modifier / active multiplexer state.
+            if (isActive) {
+                fillPaint.color = activeFillColor
+                canvas.drawRoundRect(rectF, cornerR, cornerR, fillPaint)
+            }
             if (isPressed) canvas.drawRoundRect(rectF, cornerR, cornerR, pressPaint)
             canvas.drawRoundRect(rectF, cornerR, cornerR, strokePaint)
 

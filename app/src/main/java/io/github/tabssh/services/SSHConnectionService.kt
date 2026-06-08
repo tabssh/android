@@ -396,8 +396,17 @@ class SSHConnectionService : Service() {
                             renderHostNotification(profileId, disconnectingState = false)
                         }
                         ConnectionState.DISCONNECTED -> {
-                            // Handled by onConnectionClosed (which de-dups
-                            // via disconnectedProfiles).
+                            // onConnectionClosed is only fired by explicit
+                            // SSHSessionManager.closeConnection() calls, NOT by
+                            // natural remote disconnects (EOF, network drop, etc.).
+                            // Both paths land here via onConnectionStateChanged, so
+                            // we must update the notification here too. de-dup via
+                            // disconnectedProfiles so we don't double-render if
+                            // both onConnectionClosed AND this branch fire.
+                            if (disconnectedProfiles.add(profileId)) {
+                                renderHostNotification(profileId, disconnectingState = true)
+                                updateConnectionCount()
+                            }
                         }
                         else -> {}
                     }

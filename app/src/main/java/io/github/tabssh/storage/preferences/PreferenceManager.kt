@@ -71,6 +71,7 @@ class PreferenceManager(private val context: Context) {
         private const val KEY_CURSOR_STYLE = "terminal_cursor_style"
         private const val KEY_CURSOR_BLINK = "terminal_cursor_blink"
         private const val KEY_SCROLLBACK_LINES = "terminal_scrollback"
+        private const val KEY_REVERSE_SCROLL = "terminal_reverse_scroll"
         private const val KEY_WORD_WRAP = "terminal_word_wrap"
         private const val KEY_COPY_ON_SELECT = "terminal_copy_on_select"
         private const val KEY_BELL_NOTIFICATION = "terminal_bell"
@@ -226,6 +227,17 @@ class PreferenceManager(private val context: Context) {
     
     fun getScrollbackLines(): Int = getStringAsInt(KEY_SCROLLBACK_LINES, 1000)
     fun setScrollbackLines(lines: Int) = setString(KEY_SCROLLBACK_LINES, lines.toString())
+
+    /**
+     * Scroll direction for the terminal scrollback gesture.
+     *
+     * false (default) = standard: swipe UP → see older content. Matches
+     *   JuiceSSH, Termux, ConnectBot, and Android web scrolling convention.
+     * true = reversed: swipe DOWN → see older content.
+     *   TabSSH's original behaviour before this preference was added.
+     */
+    fun isReverseScrollDirection(): Boolean = getBoolean(KEY_REVERSE_SCROLL, false)
+    fun setReverseScrollDirection(reversed: Boolean) = setBoolean(KEY_REVERSE_SCROLL, reversed)
     
     fun isBellNotificationEnabled(): Boolean = getBoolean(KEY_BELL_NOTIFICATION, true)
     fun setBellNotificationEnabled(enabled: Boolean) = setBoolean(KEY_BELL_NOTIFICATION, enabled)

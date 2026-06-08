@@ -73,6 +73,12 @@
             app:useSimpleSummaryProvider="true" />
 
         <SwitchPreferenceCompat
+            android:key="terminal_reverse_scroll"
+            android:title="Reverse scroll direction"
+            android:summary="OFF: swipe up to see older output (standard, like JuiceSSH/Termux) · ON: swipe down to see older output (old TabSSH behaviour)"
+            android:defaultValue="false" />
+
+        <SwitchPreferenceCompat
             android:key="terminal_bell"
             android:title="Terminal Bell"
             android:summary="Audible bell on BEL character"

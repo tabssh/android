@@ -75,7 +75,26 @@ class TerminalView @JvmOverloads constructor(
     private val gestureDetector: GestureDetector
     private val scaleGestureDetector: ScaleGestureDetector
     private val scroller: OverScroller
-    private var scrollY = 0
+    // Float scroll position for sub-row precision. Using a float here lets
+    // the canvas translate by the fractional row offset so rows glide smoothly
+    // instead of snapping one full row at a time.
+    private var scrollYf = 0f
+    // Integer scroll position used by callers that need whole-pixel values
+    // (row coordinate conversions, Termux renderer, search highlights).
+    // Named scrollYInt to avoid shadowing View.getScrollY().
+    private val scrollYInt: Int get() = scrollYf.toInt()
+
+    /**
+     * Scroll direction convention.
+     *
+     * false (default) = standard mobile convention: swipe UP → see older
+     *   scrollback. Matches JuiceSSH, Termux, ConnectBot.
+     * true = reversed: swipe DOWN → see older scrollback. The old behaviour
+     *   before this preference was added.
+     *
+     * Set by the host activity from the `terminal_reverse_scroll` preference.
+     */
+    var reverseScrollDirection: Boolean = false
     /** Accumulated scroll pixels for mouse-wheel forwarding (sub-cell precision). */
     private var mouseScrollAccum = 0f
 
@@ -245,7 +264,7 @@ class TerminalView @JvmOverloads constructor(
         val rows = termuxBridge?.getRows() ?: return
         // Place the match at the vertical centre of the visible area.
         val targetScrollRows = (rows / 2 - extRow).coerceAtLeast(0)
-        scrollY = (targetScrollRows * cellHeight).toInt().coerceIn(0, maxScrollYPx())
+        scrollYf = (targetScrollRows * cellHeight).toFloat().coerceIn(0f, maxScrollYPx().toFloat())
         invalidate()
     }
 
@@ -976,9 +995,9 @@ class TerminalView @JvmOverloads constructor(
         // Fall back to old emulator rendering
         terminalRenderer?.let { renderer ->
             terminalBuffer?.let { buffer ->
-                Logger.d("TerminalView", "Rendering terminal: ${buffer.getRows()}x${buffer.getCols()}, scroll=$scrollY")
+                Logger.d("TerminalView", "Rendering terminal: ${buffer.getRows()}x${buffer.getCols()}, scroll=$scrollYInt")
                 renderer.render(canvas, buffer, paddingLeft.toFloat(), paddingTop.toFloat(),
-                    cellWidth, cellHeight, scrollY)
+                    cellWidth, cellHeight, scrollYInt)
             } ?: run {
                 Logger.w("TerminalView", "Terminal buffer is null in onDraw")
             }
@@ -1010,10 +1029,22 @@ class TerminalView @JvmOverloads constructor(
         val startY = paddingTop.toFloat()
 
         // Convert pixel scroll offset to row offset (negative = into scrollback).
-        val scrollRows = if (cellHeight > 0f) (scrollY / cellHeight).toInt() else 0
+        val scrollRows = if (cellHeight > 0f) (scrollYInt / cellHeight).toInt() else 0
 
-        // Draw all rows using direct TerminalRow access
-        for (row in 0 until rows) {
+        // Sub-row smooth scrolling: apply fractional pixel offset as a canvas
+        // translate so rows glide continuously rather than snapping one full row
+        // at a time. The translate shifts content UP by the sub-row fraction;
+        // one extra row (row `rows`) is drawn at the bottom to fill the resulting
+        // gap. The canvas is saved/restored so overlays drawn after the loop are
+        // not affected by the translate.
+        val fracOffset = scrollYf - scrollY
+        if (fracOffset > 0f) canvas.save()
+        if (fracOffset > 0f) canvas.translate(0f, -fracOffset)
+
+        // Draw all rows (plus one extra at the bottom when scrolling is fractional
+        // so the translate gap is filled).
+        val extraRow = if (fracOffset > 0f) 1 else 0
+        for (row in 0 until rows + extraRow) {
             val rowTop = startY + row * cellHeight
             val rowBottom = startY + (row + 1) * cellHeight
             val y = rowBottom - textPaint.descent()
@@ -1108,6 +1139,11 @@ class TerminalView @JvmOverloads constructor(
                 charIndex += charsConsumed
             }
         }
+
+        // Restore canvas after the translated row drawing so that selection
+        // handles, search highlights, and the cursor are drawn at true screen
+        // coordinates (not offset by the sub-row fraction).
+        if (fracOffset > 0f) canvas.restore()
 
         // Selection overlay sits between glyphs and cursor — text below
         // remains readable through the translucent fill, and the cursor
@@ -1212,7 +1248,7 @@ class TerminalView @JvmOverloads constructor(
      * @return Line of text at the coordinates, or null if out of bounds
      */
     private fun getTextAtPosition(x: Float, y: Float): Pair<Int, String>? {
-        val row = ((y - paddingTop + scrollY) / cellHeight).toInt()
+        val row = ((y - paddingTop + scrollYInt) / cellHeight).toInt()
         val col = ((x - paddingLeft) / cellWidth).toInt()
 
         if (row < 0 || col < 0 || row >= terminalRows || col >= terminalCols) {
@@ -1685,10 +1721,13 @@ class TerminalView @JvmOverloads constructor(
                 return true
             }
             // No remote mouse mode — scroll the local scrollback buffer.
-            // distanceY > 0 when the finger moved UP. Mobile convention is
-            // swipe-DOWN to reach older scrollback, so we negate distanceY:
-            // finger down → distanceY < 0 → -distanceY > 0 → scrollY grows.
-            scrollY = (scrollY - distanceY).coerceIn(0f, maxScrollYPx().toFloat()).toInt()
+            // distanceY > 0 when the finger moved UP (Android GestureDetector
+            // convention: prevY - currY). Standard mobile convention matches
+            // JuiceSSH/Termux: swipe UP → see older content (distanceY > 0
+            // → scrollYf increases). reverseScrollDirection = true inverts this
+            // to match the old TabSSH behaviour where swipe DOWN showed older content.
+            val scrollDelta = if (reverseScrollDirection) -distanceY else distanceY
+            scrollYf = (scrollYf + scrollDelta).coerceIn(0f, maxScrollYPx().toFloat())
             mouseScrollAccum = 0f
             // postInvalidateOnAnimation schedules one redraw per vsync frame,
             // preventing multiple expensive re-renders within a single frame
@@ -1723,9 +1762,12 @@ class TerminalView @JvmOverloads constructor(
                 mouseScrollAccum = 0f
                 return true
             }
-            // velocityY > 0 = finger was moving DOWN. With swipe-down-for-older
-            // convention that should increase scrollY, so pass +velocityY.
-            scroller.fling(0, scrollY, 0, velocityY.toInt(), 0, 0, 0, maxScrollYPx())
+            // velocityY < 0 = finger was moving UP. Standard convention: swipe UP →
+            // older content → scrollYf increases. So pass -velocityY (negate so an
+            // upward fling produces positive scroll movement toward the past).
+            // reverseScrollDirection: leave as +velocityY (old behaviour).
+            val flingVelocity = if (reverseScrollDirection) velocityY.toInt() else -velocityY.toInt()
+            scroller.fling(0, scrollYInt, 0, flingVelocity, 0, 0, 0, maxScrollYPx())
             postInvalidateOnAnimation()
             return true
         }
@@ -2195,8 +2237,8 @@ class TerminalView @JvmOverloads constructor(
 
     override fun computeScroll() {
         if (scroller.computeScrollOffset()) {
-            scrollY = scroller.currY
-            invalidate()
+            scrollYf = scroller.currY.toFloat()
+            postInvalidateOnAnimation()
         }
     }
 

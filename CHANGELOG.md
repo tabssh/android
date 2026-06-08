@@ -9,9 +9,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Scroll direction preference** — `terminal_reverse_scroll` in Settings → Terminal; OFF (default) = swipe UP to see older output, matching JuiceSSH/Termux/ConnectBot; ON = old TabSSH inverted behaviour for users accustomed to it
+- **Changelog hygiene rule** — CLAUDE.md now mandates that every user-visible commit updates both `CHANGELOG.md` and `app/src/main/assets/whats_new.md` in the same commit
+
+### Changed
+
+- **CTL / ALT active state** — latched modifier keys now render with a solid green fill and dark green text (WCAG AA contrast) instead of a mere alpha change; the same green-fill treatment applies to the PRE key when a multiplexer is active
+- **Keyboard key widths** — CTL, TAB, ENT, ESC reduced from 2× to 1.5× so the label fills the box rather than floating in empty space; text size bumped 12 → 13 sp
+- **Smooth scrolling** — `scrollYf: Float` replaces the integer `scrollY`, with a canvas pre-translate by the sub-row fractional offset; rows now glide continuously instead of snapping a full row at a time, eliminating the jagged/jumpy feel
+- **Scroll direction default** — standard mobile convention (swipe UP = older content) is now the default; old inverted direction is available as a preference
+
+### Fixed
+
+- **Notification "Disconnect" button silent** — `ConfirmDisconnectActivity` now disconnects via `TabManager.getAllTabs().find(profileId)?.disconnect()` so it works whether or not the connection is still in `SSHSessionManager.activeConnections` (which it may not be if the session already dropped)
+- **Notification doesn't disappear on disconnect** — `SSHConnectionService.onConnectionStateChanged(DISCONNECTED)` was silently delegating to `onConnectionClosed` which is only called by explicit `closeConnection()`, not by natural remote-side disconnects; now updates the notification directly via the same `renderHostNotification(disconnectingState=true)` path
+
 - **PRE keyboard key** — new PREFIX action key in the default keyboard bar (row 3, directly under ENT); 2× wide, sends the correct multiplexer prefix byte (C-b for tmux, C-a for screen, C-g for zellij); turns green when a multiplexer is detected, dims when none is active
 - **Multiplexer auto-detection** — after connect, probes `$TMUX`, `$STY`, `$ZELLIJ_SESSION_NAME` via a background exec channel; re-probes every 30 s so the PRE key reacts to the user attaching or detaching a multiplexer without reconnecting
 - **Multiplexer picker dialog** — tapping PRE with no multiplexer detected shows a type picker (tmux/screen/zellij) instead of sending a stray control byte into a non-multiplexer session
+- **PRE key picker rendered blank** — `setMessage` and `setItems` both occupy the dialog body in `MaterialAlertDialogBuilder`; the message silently hid the item list so nothing was selectable; moved the hint into the title so the three options now render correctly
 - **Per-multiplexer prefix settings** — Settings → Connection now has a "Multiplexer Prefixes" section to configure each type's prefix independently (tmux C-b, screen C-a, zellij C-g) — previously hidden behind a single global field
 - **SSH key alias system** — keys are assigned an SSH-convention alias (`id_ed25519`, `id_rsa_001`, etc.) at import time; used to automatically resolve `IdentityFile` paths during `~/.ssh/config` import without manual key assignment
 - **Smart SSH key naming** — key comment field now extracted from the OpenSSH v1 binary format (was always empty before); import dialog shows both Name (default = comment) and Alias (default = SSH convention) fields

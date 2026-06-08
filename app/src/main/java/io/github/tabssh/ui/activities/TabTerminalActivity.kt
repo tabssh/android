@@ -611,6 +611,8 @@ class TabTerminalActivity : AppCompatActivity() {
                 val fontSize = app.preferencesManager.getInt("terminal_font_size", 14)
                 setFontSize(fontSize)
 
+                reverseScrollDirection = app.preferencesManager.isReverseScrollDirection()
+
                 // URL detection is opt-in via preference; the long-press
                 // context menu is ALWAYS available so users have a discoverable
                 // way to copy/paste/select/send-text/change-font-size, matching
@@ -1841,7 +1843,8 @@ private fun showSnippetsPickerForActiveTab() {
                 customPrefix,
                 commandCallback,
                 onContextMenuRequested = { x, y -> beginSelection(x, y) },
-                onSelectionStarted = { tv -> startTerminalSelectionActionMode(tv) }
+                onSelectionStarted = { tv -> startTerminalSelectionActionMode(tv) },
+                reverseScrollDirection = app.preferencesManager.isReverseScrollDirection()
             )
             // Suppress onPageSelected / onTabSelected while the adapter is
             // being installed. viewPager.adapter resets the pager to page 0,
@@ -1900,7 +1903,8 @@ private fun showSnippetsPickerForActiveTab() {
                 customPrefix,
                 commandCallback,
                 onContextMenuRequested = { x, y -> beginSelection(x, y) },
-                onSelectionStarted = { tv -> startTerminalSelectionActionMode(tv) }
+                onSelectionStarted = { tv -> startTerminalSelectionActionMode(tv) },
+                reverseScrollDirection = app.preferencesManager.isReverseScrollDirection()
             )
             viewPager?.adapter = pagerAdapter
 
@@ -1981,12 +1985,10 @@ private fun showSnippetsPickerForActiveTab() {
     private fun showMultiplexerPickerDialog() {
         val types = arrayOf("tmux (Ctrl+B)", "screen (Ctrl+A)", "zellij (Ctrl+G)")
         val keys  = arrayOf("tmux", "screen", "zellij")
+        // setMessage and setItems both occupy the dialog body — using both silently
+        // hides the item list. Move the hint into the title so the list renders.
         com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-            .setTitle("Select multiplexer")
-            .setMessage(
-                "No multiplexer was detected. Select the one running in this session " +
-                "to enable the PRE key, or cancel to type the prefix manually."
-            )
+            .setTitle("Select multiplexer (none detected)")
             .setItems(types) { _, which ->
                 val tab = tabManager.getActiveTab() ?: return@setItems
                 tab.setActiveMultiplexerType(keys[which])

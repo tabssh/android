@@ -438,19 +438,18 @@ class MultiRowKeyboardView @JvmOverloads constructor(
          *          row 4: F1-F6
          *          row 5: F7-F12
          *
-         * CTL, TAB, ENT, ESC carry widthMultiplier = 2f so they render at
-         * twice the standard key width for a larger, more reliable touch target.
+         * CTL, TAB, ENT, ESC carry widthMultiplier = 1.5f — wider than a standard
+         * symbol key for reliable tapping, without excess blank space around the label.
          */
         fun getDefaultRowLayouts(rowCount: Int): List<List<KeyboardKey>> {
             // Shared building blocks reused across all row counts.
             //
-            // CTL, TAB, ENT, ESC are 2× wide (widthMultiplier = 2f) — these
-            // four keys are hit most often in SSH/vim/tmux sessions, so the
-            // extra touch area meaningfully reduces mis-taps.
-            val ctl   = KeyboardKey("CTL",   "CTL",  "", KeyboardKey.KeyCategory.MODIFIER, 2f)
-            val tab   = KeyboardKey("TAB",   "TAB",  "\t", widthMultiplier = 2f)
-            val ent   = KeyboardKey("ENTER", "ENT",  "\r", widthMultiplier = 2f)
-            val esc   = KeyboardKey("ESC",   "ESC",  "", widthMultiplier = 2f)
+            // CTL, TAB, ENT, ESC at 1.5×: larger touch target than a symbol key,
+            // tighter than 2× was so the label fills the box without wasted padding.
+            val ctl   = KeyboardKey("CTL",   "CTL",  "", KeyboardKey.KeyCategory.MODIFIER, 1.5f)
+            val tab   = KeyboardKey("TAB",   "TAB",  "\t", widthMultiplier = 1.5f)
+            val ent   = KeyboardKey("ENTER", "ENT",  "\r", widthMultiplier = 1.5f)
+            val esc   = KeyboardKey("ESC",   "ESC",  "", widthMultiplier = 1.5f)
             val alt   = KeyboardKey("ALT",   "ALT",  "", KeyboardKey.KeyCategory.MODIFIER)
             val fn    = KeyboardKey("FN",    "FN",   "", KeyboardKey.KeyCategory.MODIFIER)
             val up    = KeyboardKey("UP",    "↑",    "[A", KeyboardKey.KeyCategory.ARROW)

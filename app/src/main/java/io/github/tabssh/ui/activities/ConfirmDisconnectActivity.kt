@@ -50,11 +50,29 @@ class ConfirmDisconnectActivity : AppCompatActivity() {
             .setPositiveButton("Disconnect") { _, _ ->
                 Logger.i(TAG, "User confirmed disconnect for profile $profileId")
                 try {
-                    // Mark as intentional so TabTerminalActivity closes the tab
-                    // cleanly without prompting the user to reconnect.
-                    app.sshSessionManager.closeConnectionIntentionally(profileId)
+                    // Primary path: disconnect via TabManager so the SSHTab
+                    // state is updated and the notification clears. The old
+                    // sshSessionManager.closeConnectionIntentionally path only
+                    // works if the connection is still in activeConnections,
+                    // which it won't be after a natural disconnect or reconnect.
+                    val tab = app.tabManager.getAllTabs()
+                        .find { it.profile.id == profileId }
+                    if (tab != null) {
+                        tab.disconnect()
+                        // Also mark intentional in session manager so
+                        // TabTerminalActivity doesn't auto-reconnect.
+                        try { app.sshSessionManager.closeConnectionIntentionally(profileId) }
+                        catch (_: Exception) { }
+                    } else {
+                        // No active tab — connection may have already dropped.
+                        // Force-clear the notification so it doesn't linger.
+                        app.sshSessionManager.closeConnectionIntentionally(profileId)
+                        io.github.tabssh.utils.NotificationHelper.cancelHostNotification(
+                            this, profileId
+                        )
+                    }
                 } catch (e: Exception) {
-                    Logger.e(TAG, "closeConnectionIntentionally failed for $profileId", e)
+                    Logger.e(TAG, "Disconnect failed for $profileId", e)
                     Toast.makeText(this, "Failed to disconnect: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
                 finish()
