@@ -14,6 +14,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **Settings reorganised** — multiplexer settings (gesture toggle, gesture type, per-type prefix keys) moved from Settings → Terminal → Behavior to Settings → Connection → Multiplexer; Terminal settings now contains only terminal-display and input options
+- **PRE key label** — the PRE key now shows the configured prefix shorthand (e.g. `^B`, `^A`, `^G`, `M-b`) while a multiplexer is active instead of always showing `PRE`; reverts to `PRE` when no multiplexer is detected
+- **Prefix examples in settings** — each multiplexer prefix field (tmux, screen, zellij) now shows an inline example dialog explaining all supported notations: `C-b`, `^b`, `C-Space`, `M-b`, `Alt-b`, `0x02`, literal characters
 - **CTL / ALT active state** — latched modifier keys now render with a solid green fill and dark green text (WCAG AA contrast) instead of a mere alpha change; the same green-fill treatment applies to the PRE key when a multiplexer is active
 - **Keyboard key widths** — CTL, TAB, ENT, ESC reduced from 2× to 1.5× so the label fills the box rather than floating in empty space; text size bumped 12 → 13 sp
 - **Smooth scrolling** — `scrollYf: Float` replaces the integer `scrollY`, with a canvas pre-translate by the sub-row fractional offset; rows now glide continuously instead of snapping a full row at a time, eliminating the jagged/jumpy feel

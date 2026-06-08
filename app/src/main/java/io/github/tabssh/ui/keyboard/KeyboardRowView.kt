@@ -87,6 +87,14 @@ class KeyboardRowView @JvmOverloads constructor(
     fun getKeys(): List<KeyboardKey> = keys.toList()
 
     /**
+     * Update the visible label of a key by ID without rebuilding the row.
+     * Used by the PREFIX key to show the active prefix notation (e.g. "^B").
+     */
+    fun setKeyLabel(keyId: String, label: String) {
+        keyButtonMap[keyId]?.label = label
+    }
+
+    /**
      * Update modifier key visual state. Active modifier gets a solid green
      * fill with dark text so the active state is unmistakable at a glance —
      * a subtle alpha change is easy to miss on a bright screen.

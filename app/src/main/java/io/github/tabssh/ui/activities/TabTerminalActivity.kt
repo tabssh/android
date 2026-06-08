@@ -660,9 +660,9 @@ class TabTerminalActivity : AppCompatActivity() {
                         else -> io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.TMUX
                     }
                     
-                    val customPrefix = app.preferencesManager.getString("multiplexer_custom_prefix", "")
+                    val customPrefix = app.preferencesManager.getMultiplexerPrefix(multiplexerTypeStr)
                     enableGestureSupport(multiplexerType, customPrefix)
-                    
+
                     // Set up command callback
                     onCommandSent = { command ->
                         // Send command to active terminal
@@ -1813,8 +1813,8 @@ private fun showSnippetsPickerForActiveTab() {
             "zellij" -> io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.ZELLIJ
             else -> io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.TMUX
         }
-        val customPrefix = app.preferencesManager.getString("multiplexer_custom_prefix", "")
-        
+        val customPrefix = app.preferencesManager.getMultiplexerPrefix(multiplexerTypeStr)
+
         // Create command send callback for gestures
         val commandCallback: ((ByteArray) -> Unit)? = if (gesturesEnabled) {
             { command ->
@@ -1975,6 +1975,34 @@ private fun showSnippetsPickerForActiveTab() {
         // Always leave the key clickable — when inactive the click handler
         // shows the type picker instead of sending a prefix.
         binding.multiRowKeyboard.setKeyState("PREFIX", active = active, enabled = true)
+        // Update label to show the configured prefix notation so the user can
+        // see at a glance what byte the key will send (e.g. "^B" for C-b).
+        // Falls back to "PRE" when no multiplexer is active.
+        val label = if (multiplexerType != null) {
+            val notation = app.preferencesManager.getMultiplexerPrefix(multiplexerType)
+            prefixToShortLabel(notation)
+        } else {
+            "PRE"
+        }
+        binding.multiRowKeyboard.setKeyLabel("PREFIX", label)
+    }
+
+    /**
+     * Convert a prefix notation string to a compact key label.
+     * "C-b" → "^B", "C-Space" → "^Sp", "M-b" → "M-b", literals pass through.
+     */
+    private fun prefixToShortLabel(notation: String): String {
+        val t = notation.trim()
+        return when {
+            t.matches(Regex("^(C-|\\^|Ctrl-)([a-zA-Z])$", RegexOption.IGNORE_CASE)) ->
+                "^${t.last().uppercaseChar()}"
+            t.matches(Regex("^(C-|\\^|Ctrl-)Space$", RegexOption.IGNORE_CASE)) ->
+                "^Sp"
+            t.matches(Regex("^(M-|Alt-)([a-zA-Z])$", RegexOption.IGNORE_CASE)) ->
+                "M-${t.last()}"
+            t.length <= 4 -> t
+            else -> t.take(4)
+        }
     }
 
     /**

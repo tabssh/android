@@ -1,5 +1,27 @@
 # What's New
 
+## Wave 15 — PRE key shows your prefix, settings tidied
+
+### PRE key label
+The **PRE** key in the keyboard bar now displays the prefix shorthand you've
+configured rather than always showing `PRE`. If you use tmux with the default
+`C-b` prefix the key reads **^B**; change it to `C-Space` and you'll see
+**^Sp**; set a custom `M-b` and it shows **M-b**. Reverts to `PRE` when no
+multiplexer is active.
+
+### Prefix field examples
+Each multiplexer prefix setting (tmux, screen, zellij) in **Settings →
+Connection → Multiplexer** now shows an example dialog when you tap to edit,
+explaining every supported notation: `C-b`, `^b`, `C-Space`, `M-b`, `Alt-b`,
+`0x02`, and bare literal characters.
+
+### Settings reorganised
+Multiplexer settings have moved from **Settings → Terminal** to **Settings →
+Connection → Multiplexer** where they belong. Terminal settings now only
+contains terminal display and input options.
+
+---
+
 ## Wave 14 — PRE key multiplexer picker fixed
 
 Tapping the **PRE** key when no multiplexer was detected would open a "Select

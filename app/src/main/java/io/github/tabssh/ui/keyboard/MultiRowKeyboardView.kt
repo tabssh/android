@@ -301,6 +301,15 @@ class MultiRowKeyboardView @JvmOverloads constructor(
     }
 
     /**
+     * Update the visible label of a key by ID across all rows.
+     * Used by the PREFIX key to show the active prefix notation (e.g. "^B")
+     * when a multiplexer is detected, and "PRE" when none is active.
+     */
+    fun setKeyLabel(keyId: String, label: String) {
+        keyboardRows.forEach { it.setKeyLabel(keyId, label) }
+    }
+
+    /**
      * Replace current rows with an F1-F12 + Back layout.
      */
     private fun enterFnMode() {

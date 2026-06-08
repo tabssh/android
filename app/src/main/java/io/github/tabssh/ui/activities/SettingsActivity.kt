@@ -422,35 +422,6 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
             }
         }
 
-        // Multiplexer type change listener - update prefix to saved value for type
-        val app = requireActivity().application as io.github.tabssh.TabSSHApplication
-        val customPrefixPref = findPreference<androidx.preference.EditTextPreference>("multiplexer_custom_prefix")
-
-        findPreference<androidx.preference.ListPreference>("gesture_multiplexer_type")?.setOnPreferenceChangeListener { _, newValue ->
-            val type = newValue as String
-            // Load saved prefix for this type
-            val savedPrefix = app.preferencesManager.getMultiplexerPrefix(type)
-            customPrefixPref?.text = savedPrefix
-            customPrefixPref?.summary = "Current: $savedPrefix (leave empty for default)"
-            Logger.i("Settings", "Multiplexer type changed to: $type (prefix: $savedPrefix)")
-            true
-        }
-
-        // Custom prefix change listener - save to current multiplexer type
-        customPrefixPref?.setOnPreferenceChangeListener { _, newValue ->
-            val prefix = newValue as String
-            val currentType = findPreference<androidx.preference.ListPreference>("gesture_multiplexer_type")?.value ?: "tmux"
-            app.preferencesManager.setMultiplexerPrefix(currentType, prefix)
-            Logger.i("Settings", "Multiplexer prefix for $currentType changed to: $prefix")
-            true
-        }
-
-        // Initialize prefix summary with current value
-        val currentType = findPreference<androidx.preference.ListPreference>("gesture_multiplexer_type")?.value ?: "tmux"
-        val currentPrefix = app.preferencesManager.getMultiplexerPrefix(currentType)
-        customPrefixPref?.text = currentPrefix
-        customPrefixPref?.summary = "Current: $currentPrefix (leave empty for default)"
-
         // Import custom theme click listener
         findPreference<Preference>("import_custom_theme")?.setOnPreferenceClickListener {
             themeImportLauncher.launch("application/json")

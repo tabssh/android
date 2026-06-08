@@ -75,28 +75,50 @@
     </PreferenceCategory>
 
     <PreferenceCategory
-        android:title="Multiplexer Prefixes"
+        android:title="Multiplexer"
         android:key="category_multiplexer_prefixes">
+
+        <SwitchPreferenceCompat
+            android:key="enable_custom_gestures"
+            android:title="Custom Gestures"
+            android:summary="Enable multi-touch gestures for multiplexer shortcuts (tmux/screen/zellij)"
+            android:defaultValue="false" />
+
+        <ListPreference
+            android:key="gesture_multiplexer_type"
+            android:title="Gesture Multiplexer Type"
+            android:summary="Which multiplexer to target with swipe gestures"
+            android:entries="@array/multiplexer_type_entries"
+            android:entryValues="@array/multiplexer_type_values"
+            android:defaultValue="tmux"
+            android:dependency="enable_custom_gestures"
+            app:useSimpleSummaryProvider="true" />
 
         <EditTextPreference
             android:key="multiplexer_custom_prefix_tmux"
             android:title="tmux prefix"
-            android:summary="Prefix key sent by the PRE keyboard button when tmux is active"
+            android:summary="Sent by the PRE key and gestures when tmux is active (default: C-b)"
+            android:dialogMessage="Enter the prefix key for tmux.\n\nExamples:\n• C-b or ^b → Ctrl+B (tmux default)\n• C-a or ^a → Ctrl+A\n• C-Space or ^Space → Ctrl+Space\n• M-b or Alt-b → Alt+B\n• 0x02 → Hex byte value\n• ` → Backtick literal\n\nLeave empty to restore the default (C-b)."
             android:defaultValue="C-b"
+            android:inputType="text"
             app:useSimpleSummaryProvider="true" />
 
         <EditTextPreference
             android:key="multiplexer_custom_prefix_screen"
             android:title="screen prefix"
-            android:summary="Prefix key sent by the PRE keyboard button when screen is active"
+            android:summary="Sent by the PRE key and gestures when screen is active (default: C-a)"
+            android:dialogMessage="Enter the prefix key for GNU screen.\n\nExamples:\n• C-a or ^a → Ctrl+A (screen default)\n• C-b or ^b → Ctrl+B\n• C-Space or ^Space → Ctrl+Space\n• M-b or Alt-b → Alt+B\n• 0x01 → Hex byte value\n• ` → Backtick literal\n\nLeave empty to restore the default (C-a)."
             android:defaultValue="C-a"
+            android:inputType="text"
             app:useSimpleSummaryProvider="true" />
 
         <EditTextPreference
             android:key="multiplexer_custom_prefix_zellij"
             android:title="zellij prefix"
-            android:summary="Prefix key sent by the PRE keyboard button when zellij is active"
+            android:summary="Sent by the PRE key and gestures when zellij is active (default: C-g)"
+            android:dialogMessage="Enter the prefix key for zellij.\n\nExamples:\n• C-g or ^g → Ctrl+G (zellij default)\n• C-b or ^b → Ctrl+B\n• C-Space or ^Space → Ctrl+Space\n• M-b or Alt-b → Alt+B\n• 0x07 → Hex byte value\n• ` → Backtick literal\n\nLeave empty to restore the default (C-g)."
             android:defaultValue="C-g"
+            android:inputType="text"
             app:useSimpleSummaryProvider="true" />
 
     </PreferenceCategory>
