@@ -530,18 +530,20 @@ class SSHConnection(
         
         session.setConfig(config)
 
-        // Mobile-client policy — always set keepalive. Carrier NAT
-        // timeouts, cellular handoffs and Wi-Fi sleep all silently kill
-        // idle TCP sockets within minutes; ~32 bytes/min of NOOP traffic
-        // is a vastly better trade than the user finding their session
-        // dead the next time they unlock the phone. The legacy
-        // `profile.keepAlive` toggle is left in the entity for
-        // round-tripping with imported configs but no longer gates the
-        // setServerAliveInterval call.
-        session.serverAliveInterval = 60_000   // ms
+        // Keepalive — always on; interval uses per-host override when set,
+        // otherwise falls back to the global preference (default 60 s).
+        // Carrier NAT timeouts, cellular handoffs and Wi-Fi sleep all silently
+        // kill idle TCP sockets; a tiny NOOP every N seconds is mandatory.
+        val prefs = (context.applicationContext as? io.github.tabssh.TabSSHApplication)
+            ?.preferencesManager
+        val aliveIntervalMs = profile.serverAliveInterval
+            ?.let { it.coerceAtLeast(5) * 1_000L }
+            ?: prefs?.getServerAliveIntervalMs()
+            ?: 60_000L
+        session.serverAliveInterval = aliveIntervalMs.toInt()
         session.serverAliveCountMax = 3
 
-        Logger.d("SSHConnection", "Session configured with compression=${profile.compression}, keepalive=on (mobile default)")
+        Logger.d("SSHConnection", "Session configured: compression=${profile.compression}, keepalive=${aliveIntervalMs / 1000}s")
     }
 
     /**
@@ -654,7 +656,17 @@ class SSHConnection(
      * dispatch on the concrete subclass here too.
      */
     private fun applyForwardingFlags(session: Session, channel: Channel) {
-        if (profile.agentForwarding) {
+        val prefs = (context.applicationContext as? io.github.tabssh.TabSSHApplication)
+            ?.preferencesManager
+        // Per-host boolean fields default to false. When false, fall back to the
+        // global preference so the user's default applies to all connections that
+        // haven't been explicitly overridden in the per-host editor.
+        val effectiveAgentForwarding = profile.agentForwarding
+            || (prefs?.isAgentForwardingDefault() == true)
+        val effectiveX11Forwarding = profile.x11Forwarding
+            || (prefs?.isX11ForwardingDefault() == true)
+
+        if (effectiveAgentForwarding) {
             try {
                 when (channel) {
                     is ChannelShell -> channel.setAgentForwarding(true)
@@ -666,7 +678,7 @@ class SSHConnection(
                 notifyListeners { onError(id, Exception("SSH agent forwarding setup failed: ${e.message}", e)) }
             }
         }
-        if (profile.x11Forwarding) {
+        if (effectiveX11Forwarding) {
             try {
                 // Start a local proxy that accepts JSch's X11 connections and
                 // relays them to Termux:X11 (Unix socket) or XServer XSDL (TCP).
@@ -1030,8 +1042,11 @@ class SSHConnection(
         // so addIdentity() is the whole runtime hookup. Done before the
         // per-connection key path so the connection's own key gets added
         // on top (and a second addIdentity for the same name is a no-op).
-        if (profile.agentForwarding && app != null) {
-            populateAgentIdentities(jsch, app)
+        val appForAgent = context.applicationContext as? io.github.tabssh.TabSSHApplication
+        val effectiveAgentForwardingForAuth = profile.agentForwarding
+            || (appForAgent?.preferencesManager?.isAgentForwardingDefault() == true)
+        if (effectiveAgentForwardingForAuth && appForAgent != null) {
+            populateAgentIdentities(jsch, appForAgent)
         }
 
         // Use already-resolved identity from connect()

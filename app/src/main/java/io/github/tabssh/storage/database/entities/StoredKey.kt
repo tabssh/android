@@ -30,7 +30,24 @@ data class StoredKey(
     
     @ColumnInfo(name = "comment")
     val comment: String? = null,
-    
+
+    /**
+     * SSH convention alias (e.g. `id_ed25519`, `id_rsa_001`).
+     *
+     * Mirrors the default filenames OpenSSH uses for private keys. Serves two
+     * purposes:
+     *   1. Shown as a secondary label in the key list so users can match keys
+     *      to what they have on disk.
+     *   2. Used by `SSHConfigParser` / `ImportExportActivity` to resolve
+     *      `IdentityFile ~/.ssh/id_ed25519` to the correct stored key UUID
+     *      without requiring the user to manually assign a key after import.
+     *
+     * Unique per key (enforced at UI layer); null on rows imported from
+     * backup before v38 (treated as unaliased).
+     */
+    @ColumnInfo(name = "alias")
+    val alias: String? = null,
+
     @ColumnInfo(name = "fingerprint")
     val fingerprint: String,
     

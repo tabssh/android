@@ -43,13 +43,33 @@
         <SwitchPreferenceCompat
             android:key="compression_enabled"
             android:title="Compression"
-            android:summary="Enable SSH compression"
+            android:summary="Enable SSH compression (default for new connections)"
             android:defaultValue="true" />
 
         <SwitchPreferenceCompat
             android:key="auto_reconnect"
             android:title="Auto Reconnect"
             android:summary="Automatically reconnect on connection loss"
+            android:defaultValue="false" />
+
+        <EditTextPreference
+            android:key="server_alive_interval"
+            android:title="Keepalive Interval"
+            android:summary="Seconds between server-alive pings (default 60)"
+            android:defaultValue="60"
+            android:inputType="number"
+            app:useSimpleSummaryProvider="true" />
+
+        <SwitchPreferenceCompat
+            android:key="x11_forwarding_default"
+            android:title="X11 Forwarding"
+            android:summary="Forward X11 display by default for new connections"
+            android:defaultValue="false" />
+
+        <SwitchPreferenceCompat
+            android:key="agent_forwarding_default"
+            android:title="SSH Agent Forwarding"
+            android:summary="Forward SSH agent by default for new connections"
             android:defaultValue="false" />
 
     </PreferenceCategory>

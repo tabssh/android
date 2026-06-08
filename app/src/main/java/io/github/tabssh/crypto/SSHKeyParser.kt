@@ -145,13 +145,26 @@ object SSHKeyParser {
         // Re-read key type from private section
         val privateKeyTypeNameBytes = readString(privateBuffer)
 
-        return when {
+        val parsed = when {
             keyTypeName.startsWith("ssh-rsa") -> parseOpenSSHRSAKey(publicKeyBuffer, privateBuffer)
             keyTypeName.startsWith("ecdsa-") -> parseOpenSSHECDSAKey(keyTypeName, publicKeyBuffer, privateBuffer)
             keyTypeName.startsWith("ssh-ed25519") -> parseOpenSSHEd25519Key(publicKeyBuffer, privateBuffer)
             keyTypeName.startsWith("ssh-dss") -> parseOpenSSHDSAKey(publicKeyBuffer, privateBuffer)
             else -> throw IllegalArgumentException("Unsupported key type: $keyTypeName")
         }
+
+        // OpenSSH v1 binary format: after each key's material in the private
+        // section comes the comment field (4-byte length-prefixed string).
+        // The key-specific helpers above advance privateBuffer past the key
+        // material; the next readable string is the comment.
+        val comment = try {
+            if (privateBuffer.hasRemaining()) {
+                val bytes = readString(privateBuffer)
+                String(bytes, StandardCharsets.UTF_8).trim()
+            } else ""
+        } catch (_: Exception) { "" }
+
+        return if (comment.isNotBlank()) parsed.copy(comment = comment) else parsed
     }
 
     /**

@@ -115,8 +115,9 @@ class PreferenceManager(private val context: Context) {
         private const val KEY_CONNECT_TIMEOUT = "connect_timeout"
         private const val KEY_AUTO_RECONNECT = "auto_reconnect"
         private const val KEY_COMPRESSION = "compression_enabled"
-        // KEY_KEEP_ALIVE_INTERVAL removed — keepalive is unconditionally on
-        // at the SSH layer (10s ServerAliveInterval, see SSHConnection.kt).
+        private const val KEY_SERVER_ALIVE_INTERVAL = "server_alive_interval"
+        private const val KEY_X11_FORWARDING_DEFAULT = "x11_forwarding_default"
+        private const val KEY_AGENT_FORWARDING_DEFAULT = "agent_forwarding_default"
 
 
         // Accessibility preferences
@@ -374,6 +375,20 @@ class PreferenceManager(private val context: Context) {
     
     fun isCompressionEnabled(): Boolean = getBoolean(KEY_COMPRESSION, true)
     fun setCompressionEnabled(enabled: Boolean) = setBoolean(KEY_COMPRESSION, enabled)
+
+    /**
+     * Global server-alive interval in milliseconds.
+     * Per-host `ConnectionProfile.serverAliveInterval` takes precedence when non-null.
+     * Default 60 s — matches the value previously hardcoded in SSHConnection.
+     */
+    fun getServerAliveIntervalMs(): Long =
+        (getStringAsInt(KEY_SERVER_ALIVE_INTERVAL, 60).coerceAtLeast(5)) * 1_000L
+
+    fun isX11ForwardingDefault(): Boolean = getBoolean(KEY_X11_FORWARDING_DEFAULT, false)
+    fun setX11ForwardingDefault(enabled: Boolean) = setBoolean(KEY_X11_FORWARDING_DEFAULT, enabled)
+
+    fun isAgentForwardingDefault(): Boolean = getBoolean(KEY_AGENT_FORWARDING_DEFAULT, false)
+    fun setAgentForwardingDefault(enabled: Boolean) = setBoolean(KEY_AGENT_FORWARDING_DEFAULT, enabled)
     
     // Multiplexer prefix preferences (per-type)
     fun getMultiplexerPrefix(type: String): String {

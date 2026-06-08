@@ -1309,7 +1309,18 @@ class IdentitiesFragment : Fragment() {
             .setPositiveButton("Next") { _, _ ->
                 val content = edit.text.toString()
                 if (content.isNotBlank()) {
-                    promptForKeyName("Pasted Key") { name -> importKeyContent(content, name) }
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        val preview = app.keyStorage.previewKey(content)
+                        val defaultName = preview.comment.takeIf { it.isNotBlank() } ?: "Pasted Key"
+                        val defaultAlias = if (preview.keyType != null) {
+                            app.keyStorage.generateDefaultAlias(preview.keyType)
+                        } else "pasted_key"
+                        withContext(Dispatchers.Main) {
+                            promptForKeyNameAndAlias(defaultName, defaultAlias) { name, alias ->
+                                importKeyContent(content, name, alias)
+                            }
+                        }
+                    }
                 }
             }
             .setNegativeButton("Cancel", null)
@@ -1354,9 +1365,27 @@ class IdentitiesFragment : Fragment() {
                     .openInputStream(uri)?.bufferedReader()?.use { it.readText() }
                     ?: return@launch
                 val display = resolveDisplayName(uri) ?: uri.lastPathSegment ?: "Imported Key"
-                val suggestion = extractKeyNameFromFilename(display)
+                val filenameBase = extractKeyNameFromFilename(display)
+
+                // Quick parse to get comment + key type for smart dialog defaults.
+                val preview = app.keyStorage.previewKey(content)
+
+                // Name default: key comment if non-empty, else filename-derived.
+                val defaultName = preview.comment.takeIf { it.isNotBlank() } ?: filenameBase
+
+                // Alias default: SSH convention name (id_ed25519, etc.) with
+                // collision suffix if needed. Fall back to filename stem if type
+                // not determinable.
+                val defaultAlias = if (preview.keyType != null) {
+                    app.keyStorage.generateDefaultAlias(preview.keyType)
+                } else {
+                    filenameBase
+                }
+
                 withContext(Dispatchers.Main) {
-                    promptForKeyName(suggestion) { name -> importKeyContent(content, name) }
+                    promptForKeyNameAndAlias(defaultName, defaultAlias) { name, alias ->
+                        importKeyContent(content, name, alias)
+                    }
                 }
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to read key file", e)
@@ -1368,35 +1397,63 @@ class IdentitiesFragment : Fragment() {
     }
 
     /**
-     * Show a name-this-key dialog pre-filled with [suggestion]. On confirm,
-     * [onConfirm] receives the final non-blank name (falls back to suggestion
-     * if the user clears the field).
+     * Show a two-field import dialog: display name (shown in the key list) and
+     * SSH alias (used for IdentityFile resolution, defaults to SSH convention).
+     * Both fields are pre-filled and user-editable.
      */
-    private fun promptForKeyName(suggestion: String, onConfirm: (String) -> Unit) {
-        val edit = android.widget.EditText(requireContext()).apply {
-            setText(suggestion)
-            setSelection(text.length)
-            hint = "Key name"
+    private fun promptForKeyNameAndAlias(
+        defaultName: String,
+        defaultAlias: String,
+        onConfirm: (name: String, alias: String) -> Unit
+    ) {
+        val ctx = requireContext()
+        val layout = android.widget.LinearLayout(ctx).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            val pad = (16 * resources.displayMetrics.density).toInt()
+            setPadding(pad, pad / 2, pad, 0)
         }
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Name This Key")
-            .setMessage("This label will appear in the SSH Keys list.")
-            .setView(edit)
+
+        val nameEdit = android.widget.EditText(ctx).apply {
+            setText(defaultName)
+            setSelection(text.length)
+            hint = "Display name"
+        }
+        val nameLabel = android.widget.TextView(ctx).apply { text = "Name (shown in key list)" }
+
+        val aliasEdit = android.widget.EditText(ctx).apply {
+            setText(defaultAlias)
+            setSelection(text.length)
+            hint = "SSH alias (e.g. id_ed25519)"
+        }
+        val aliasLabel = android.widget.TextView(ctx).apply {
+            text = "Alias (matches IdentityFile in ~/.ssh/config)"
+        }
+
+        layout.addView(nameLabel)
+        layout.addView(nameEdit)
+        layout.addView(aliasLabel)
+        layout.addView(aliasEdit)
+
+        MaterialAlertDialogBuilder(ctx)
+            .setTitle("Import SSH Key")
+            .setView(layout)
             .setPositiveButton("Import") { _, _ ->
-                val name = edit.text.toString().trim().ifBlank { suggestion }
-                onConfirm(name)
+                val name = nameEdit.text.toString().trim().ifBlank { defaultName }
+                val alias = aliasEdit.text.toString().trim().ifBlank { defaultAlias }
+                onConfirm(name, alias)
             }
             .setNegativeButton("Cancel", null)
             .show()
     }
 
-    private fun importKeyContent(keyContent: String, filename: String) {
+    private fun importKeyContent(keyContent: String, filename: String, keyAlias: String? = null) {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val result = app.keyStorage.importKeyFromText(
                     keyContent = keyContent,
                     passphrase = null,
-                    keyName = extractKeyNameFromFilename(filename)
+                    keyName = extractKeyNameFromFilename(filename),
+                    keyAlias = keyAlias
                 )
                 withContext(Dispatchers.Main) {
                     when (result) {
@@ -1408,7 +1465,7 @@ class IdentitiesFragment : Fragment() {
                             if (result.message.contains("encrypted") &&
                                 result.message.contains("passphrase")
                             ) {
-                                showPassphraseDialog(keyContent, filename)
+                                showPassphraseDialog(keyContent, filename, keyAlias)
                             } else {
                                 showError("Key import failed:\n\n${result.message}", "Import Failed")
                             }
@@ -1424,7 +1481,7 @@ class IdentitiesFragment : Fragment() {
         }
     }
 
-    private fun showPassphraseDialog(keyContent: String, filename: String) {
+    private fun showPassphraseDialog(keyContent: String, filename: String, keyAlias: String? = null) {
         val edit = android.widget.EditText(requireContext()).apply {
             hint = "Enter passphrase"
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
@@ -1435,19 +1492,25 @@ class IdentitiesFragment : Fragment() {
             .setView(edit)
             .setPositiveButton("Import") { _, _ ->
                 val passphrase = edit.text.toString()
-                importKeyWithPassphrase(keyContent, filename, passphrase)
+                importKeyWithPassphrase(keyContent, filename, passphrase, keyAlias)
             }
             .setNegativeButton("Cancel", null)
             .show()
     }
 
-    private fun importKeyWithPassphrase(keyContent: String, filename: String, passphrase: String) {
+    private fun importKeyWithPassphrase(
+        keyContent: String,
+        filename: String,
+        passphrase: String,
+        keyAlias: String? = null
+    ) {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val result = app.keyStorage.importKeyFromText(
                     keyContent = keyContent,
                     passphrase = passphrase,
-                    keyName = extractKeyNameFromFilename(filename)
+                    keyName = extractKeyNameFromFilename(filename),
+                    keyAlias = keyAlias
                 )
                 withContext(Dispatchers.Main) {
                     when (result) {

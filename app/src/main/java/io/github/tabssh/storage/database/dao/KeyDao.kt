@@ -67,4 +67,19 @@ interface KeyDao {
     
     @Query("SELECT * FROM stored_keys WHERE name LIKE :query OR comment LIKE :query ORDER BY name")
     suspend fun searchKeys(query: String): List<StoredKey>
+
+    /**
+     * Look up a key by its SSH-convention alias (e.g. `id_ed25519`, `id_rsa_001`).
+     * Used by `ImportExportActivity` to resolve `IdentityFile` paths during
+     * `~/.ssh/config` import without requiring manual key assignment.
+     */
+    @Query("SELECT * FROM stored_keys WHERE alias = :alias LIMIT 1")
+    suspend fun getKeyByAlias(alias: String): StoredKey?
+
+    /**
+     * Return the aliases of all stored keys (nulls excluded).
+     * Used to compute collision-free default aliases on import/generate.
+     */
+    @Query("SELECT alias FROM stored_keys WHERE alias IS NOT NULL")
+    suspend fun getAllAliases(): List<String>
 }

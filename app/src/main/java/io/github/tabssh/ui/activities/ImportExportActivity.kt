@@ -340,7 +340,42 @@ class ImportExportActivity : AppCompatActivity() {
                     val inputStream = contentResolver.openInputStream(uri)
                         ?: throw Exception("Could not open file")
                     val configContent = inputStream.bufferedReader().use { it.readText() }
-                    io.github.tabssh.ssh.config.SSHConfigParser().parseConfig(configContent)
+                    val raw = io.github.tabssh.ssh.config.SSHConfigParser().parseConfig(configContent)
+
+                    // Attempt to resolve each profile's IdentityFile path to a
+                    // stored key by matching the path's basename against the
+                    // key's alias (e.g. `~/.ssh/id_ed25519` → alias `id_ed25519`).
+                    // Falls back to matching by display name. If a match is found
+                    // the keyId is populated and auth works immediately after import.
+                    raw.map { profile ->
+                        if (profile.keyId != null) return@map profile
+                        if (profile.authType != AuthType.PUBLIC_KEY.name) return@map profile
+                        val identityPath = profile.advancedSettings?.let { raw ->
+                            try {
+                                org.json.JSONObject(raw).optString("identityFileStr")
+                                    .takeIf { it.isNotBlank() }
+                            } catch (_: Exception) { null }
+                        } ?: return@map profile
+
+                        // Strip directory and ~ expansion; match on bare filename.
+                        val basename = identityPath
+                            .substringAfterLast('/')
+                            .substringAfterLast('\\')
+                            .removeSuffix(".pub")
+
+                        val resolvedKey = app.database.keyDao().getKeyByAlias(basename)
+                            ?: app.database.keyDao().getKeyByName(basename)
+
+                        if (resolvedKey != null) {
+                            Logger.i(
+                                "ImportExportActivity",
+                                "Resolved IdentityFile '$basename' → key ${resolvedKey.keyId}"
+                            )
+                            profile.copy(keyId = resolvedKey.keyId)
+                        } else {
+                            profile
+                        }
+                    }
                 }
 
                 showSSHConfigImportDialog(profiles)

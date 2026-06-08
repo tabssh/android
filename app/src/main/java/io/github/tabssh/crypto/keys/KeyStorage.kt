@@ -136,13 +136,15 @@ class KeyStorage(private val context: Context) {
             // Use provided name
             val keyName = name
             
-            // Store the private key securely
+            // Store the private key securely; alias defaults to SSH convention.
+            val alias = generateDefaultAlias(keyType)
             val keyId = storePrivateKey(
                 privateKey = keyPair.private,
                 publicKey = keyPair.public,
                 keyType = keyType,
                 name = keyName,
                 comment = comment,
+                alias = alias,
                 fingerprint = fingerprint,
                 passphrase = passphrase
             )
@@ -212,6 +214,61 @@ class KeyStorage(private val context: Context) {
     /**
      * Import private key from various sources
      */
+    /**
+     * Quickly parse [keyContent] to extract the embedded comment and key type
+     * without storing anything. Used to populate import dialog defaults.
+     *
+     * Encrypted keys return [KeyPreviewInfo.isEncrypted] = true and an empty
+     * comment (comment is inside the encrypted section and requires the passphrase).
+     */
+    suspend fun previewKey(keyContent: String): KeyPreviewInfo = withContext(Dispatchers.IO) {
+        if (keyContent.isBlank()) return@withContext KeyPreviewInfo("", null)
+        try {
+            val format = KeyFormat.detectFormat(keyContent)
+                ?: return@withContext KeyPreviewInfo("", null)
+            val parseResult = when (format) {
+                KeyFormat.OPENSSH_PRIVATE -> parseOpenSSHKey(keyContent, null)
+                KeyFormat.PUTTY_PRIVATE -> parsePuttyKey(keyContent, null)
+                else -> parseTraditionalKey(keyContent, null, "RSA")
+            }
+            when (parseResult) {
+                is ParseResult.Success -> {
+                    val type = detectKeyType(parseResult.keyPair.private)
+                    KeyPreviewInfo(parseResult.comment, type)
+                }
+                is ParseResult.Error -> {
+                    val encrypted = parseResult.message.contains("passphrase", ignoreCase = true) ||
+                        parseResult.message.contains("encrypted", ignoreCase = true)
+                    KeyPreviewInfo("", null, isEncrypted = encrypted)
+                }
+            }
+        } catch (e: Exception) {
+            val encrypted = e.message?.contains("passphrase", ignoreCase = true) == true ||
+                e.message?.contains("encrypted", ignoreCase = true) == true
+            KeyPreviewInfo("", null, isEncrypted = encrypted)
+        }
+    }
+
+    /**
+     * Compute a unique SSH-convention alias for [keyType] that doesn't collide
+     * with any alias already in the database.
+     *
+     * Returns `id_ed25519` if unused; `id_ed25519_001`, `id_ed25519_002`, … otherwise.
+     */
+    suspend fun generateDefaultAlias(keyType: KeyType): String = withContext(Dispatchers.IO) {
+        val base = keyType.sshConventionAlias()
+        val usedAliases = database.keyDao().getAllAliases().toSet()
+        if (base !in usedAliases) return@withContext base
+        var n = 1
+        while (true) {
+            val candidate = "${base}_%03d".format(n)
+            if (candidate !in usedAliases) return@withContext candidate
+            n++
+        }
+        @Suppress("UNREACHABLE_CODE")
+        base
+    }
+
     suspend fun importKeyFromFile(fileUri: Uri, passphrase: String? = null): ImportResult = withContext(Dispatchers.IO) {
         try {
             val inputStream = context.contentResolver.openInputStream(fileUri)
@@ -227,9 +284,10 @@ class KeyStorage(private val context: Context) {
     }
     
     suspend fun importKeyFromText(
-        keyContent: String, 
-        passphrase: String? = null, 
-        keyName: String = "Imported Key"
+        keyContent: String,
+        passphrase: String? = null,
+        keyName: String = "Imported Key",
+        keyAlias: String? = null
     ): ImportResult = withContext(Dispatchers.IO) {
         
         if (keyContent.isBlank()) {
@@ -257,12 +315,17 @@ class KeyStorage(private val context: Context) {
                     val fingerprint = calculateFingerprint(parseResult.keyPair.public)
                     val keyType = detectKeyType(parseResult.keyPair.private)
 
+                    // If caller didn't supply an alias, generate the SSH-convention
+                    // default (id_ed25519, id_rsa_001, etc.) automatically.
+                    val resolvedAlias = keyAlias ?: generateDefaultAlias(keyType)
+
                     val keyId = storePrivateKey(
                         privateKey = parseResult.keyPair.private,
                         publicKey = parseResult.keyPair.public,
                         keyType = keyType,
                         name = keyName,
                         comment = parseResult.comment,
+                        alias = resolvedAlias,
                         fingerprint = fingerprint,
                         passphrase = passphrase
                     )
@@ -313,6 +376,7 @@ class KeyStorage(private val context: Context) {
         keyType: KeyType,
         name: String,
         comment: String? = null,
+        alias: String? = null,
         fingerprint: String,
         passphrase: String? = null
     ): String? = withContext(Dispatchers.IO) {
@@ -349,6 +413,7 @@ class KeyStorage(private val context: Context) {
                 name = name,
                 keyType = keyType.name,
                 comment = comment,
+                alias = alias,
                 fingerprint = fingerprint,
                 requiresPassphrase = passphrase != null,
                 keySize = getKeySize(privateKey)
@@ -1132,3 +1197,13 @@ sealed class ParseResult {
     data class Success(val keyPair: KeyPair, val comment: String) : ParseResult()
     data class Error(val message: String) : ParseResult()
 }
+
+/**
+ * Lightweight key preview returned by [KeyStorage.previewKey].
+ * Does not store anything — used to populate import dialog defaults.
+ */
+data class KeyPreviewInfo(
+    val comment: String,
+    val keyType: KeyType?,
+    val isEncrypted: Boolean = false
+)

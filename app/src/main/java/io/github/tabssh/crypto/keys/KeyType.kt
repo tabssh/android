@@ -80,6 +80,18 @@ enum class KeyType(
     }
     
     /**
+     * Conventional SSH private key filename for this type.
+     * Mirrors the default filenames OpenSSH ssh-keygen generates.
+     * Used as the default alias when importing or generating a key.
+     */
+    fun sshConventionAlias(): String = when (this) {
+        RSA -> "id_rsa"
+        DSA -> "id_dsa"
+        ECDSA -> "id_ecdsa"
+        ED25519 -> "id_ed25519"
+    }
+
+    /**
      * Get OpenSSH key type identifier
      */
     fun getOpenSSHIdentifier(): String {

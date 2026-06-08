@@ -270,6 +270,10 @@ class SSHConfigParser {
         // (SSHConnection / SSHConfigExporter) reads from columns.
         val parsedJump = host.proxyJump?.let { parseProxyJump(it) }
 
+        // ServerAliveInterval from ~/.ssh/config: store as nullable per-host
+        // override so SSHConnection falls back to the global preference when null.
+        val serverAliveIntervalOverride = host.serverAliveInterval.takeIf { it > 0 }
+
         return ConnectionProfile(
             id = id,
             name = name,
@@ -278,8 +282,9 @@ class SSHConfigParser {
             username = username,
             authType = authType,
             // keyId: IdentityFile path cannot be resolved to a StoredKey UUID
-            // at parse time. The import preview dialog warns the user when
-            // identityFileStr is set so they know to import the key manually.
+            // at parse time. ImportExportActivity.importSSHConfigFromUri tries
+            // to resolve by alias after parsing; if that fails the import dialog
+            // warns the user to import the key and link it manually.
             keyId = null,
             // groupId TRANSITIONAL: carries the raw group NAME here, not a UUID.
             // This MUST only be consumed by importSSHConfigProfiles(), which
@@ -297,6 +302,7 @@ class SSHConfigParser {
             x11Forwarding = host.forwardX11,
             compression = host.compression,
             connectTimeout = host.connectTimeout,
+            serverAliveInterval = serverAliveIntervalOverride,
             proxyType = parsedJump?.let { "SSH" },
             proxyHost = parsedJump?.host,
             proxyPort = parsedJump?.port,

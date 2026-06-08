@@ -110,7 +110,19 @@ data class ConnectionProfile(
     
     @ColumnInfo(name = "read_timeout")
     val readTimeout: Int = 30,
-    
+
+    /**
+     * Per-host server-alive interval in seconds.
+     *
+     * Null = use the global `server_alive_interval` preference (default 60s).
+     * Set to an explicit value by `SSHConfigParser` when a `ServerAliveInterval`
+     * directive is present in `~/.ssh/config`, or by the per-host editor when
+     * the user overrides the global. The connection layer multiplies by 1 000 to
+     * get milliseconds for JSch `session.serverAliveInterval`.
+     */
+    @ColumnInfo(name = "server_alive_interval")
+    val serverAliveInterval: Int? = null,
+
     @ColumnInfo(name = "proxy_host")
     val proxyHost: String? = null,
 

@@ -35,7 +35,7 @@ import io.github.tabssh.utils.logging.Logger
         VncHost::class,
         VncIdentity::class
     ],
-    version = 37,
+    version = 38,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -325,7 +325,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     MIGRATION_33_34,
                     MIGRATION_34_35,
                     MIGRATION_35_36,
-                    MIGRATION_36_37
+                    MIGRATION_36_37,
+                    MIGRATION_37_38
                 )
                 .build()
                 INSTANCE = instance
@@ -961,6 +962,27 @@ data class DatabaseStats(
          * on legacy DBs; this migration uses Room's `index_<table>_<col>` naming
          * so the validator binds to them rather than to the legacy names.
          */
+        /**
+         * Migration 37 → 38
+         *
+         * stored_keys: add `alias` column — SSH-convention key name (e.g.
+         * `id_ed25519`, `id_rsa_001`). Used to resolve `IdentityFile` in
+         * imported `~/.ssh/config` files and shown in the key list as a
+         * secondary label. NULL on pre-v38 rows.
+         *
+         * connections: add `server_alive_interval` column — nullable override
+         * for the per-connection keepalive interval (seconds). NULL = use the
+         * global `server_alive_interval` preference (default 60 s). Set by
+         * `SSHConfigParser` when a `ServerAliveInterval` directive is found.
+         */
+        val MIGRATION_37_38 = object : Migration(37, 38) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE stored_keys ADD COLUMN alias TEXT")
+                database.execSQL("ALTER TABLE connections ADD COLUMN server_alive_interval INTEGER")
+                Logger.i("Database", "Migration 37→38: key alias + per-host serverAliveInterval")
+            }
+        }
+
         val MIGRATION_36_37 = object : Migration(36, 37) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 val stmts = listOf(
