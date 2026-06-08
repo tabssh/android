@@ -1,5 +1,23 @@
 # What's New
 
+## Wave 16 — Terminal menu, settings cleanup
+
+### Terminal long-press menu
+The long-press menu now has everything you need without opening the command
+palette. New items:
+- **Toggle System Keyboard** — show or hide the on-screen keyboard
+- **Toggle Key Bar** — show or hide the custom function-key bar (label
+  updates to reflect current state)
+- **Find in Scrollback…** — search the current tab's history
+- **Paste** — paste clipboard contents into the terminal
+
+### Settings cleanup
+- Mosh command is now configured per-connection only (in the connection editor);
+  the leftover "Global Mosh Server Command (legacy)" field in Settings →
+  Connection is removed
+
+---
+
 ## Wave 15 — PRE key shows your prefix, settings tidied
 
 ### PRE key label

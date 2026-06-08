@@ -59,7 +59,7 @@
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="New Tab"
+            android:text="New Tab…"
             app:icon="@drawable/ic_add"
             app:iconGravity="start" />
 
@@ -87,7 +87,43 @@
             android:layout_marginTop="8dp"
             android:layout_marginBottom="8dp" />
 
-        <!-- Text Selection -->
+        <!-- Terminal Actions -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Terminal"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:textColor="?android:attr/textColorSecondary"
+            android:paddingBottom="8dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_toggle_system_keyboard"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Toggle System Keyboard"
+            app:icon="@drawable/ic_keyboard"
+            app:iconGravity="start" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_toggle_key_bar"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Toggle Key Bar"
+            app:icon="@drawable/ic_keyboard"
+            app:iconGravity="start" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_find_in_scrollback"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Find in Scrollback…"
+            app:icon="@drawable/ic_search"
+            app:iconGravity="start" />
+
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_select_text"
             style="@style/Widget.Material3.Button.TextButton"
@@ -95,6 +131,15 @@
             android:layout_height="wrap_content"
             android:text="Select Text…"
             app:icon="@drawable/ic_copy"
+            app:iconGravity="start" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_paste"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Paste"
+            app:icon="@drawable/ic_paste"
             app:iconGravity="start" />
 
         <com.google.android.material.divider.MaterialDivider

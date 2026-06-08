@@ -540,10 +540,32 @@ class TabTerminalActivity : AppCompatActivity() {
             disconnectAllTabs()
         }
 
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_toggle_system_keyboard)?.setOnClickListener {
+            bottomSheet.dismiss()
+            toggleKeyboard()
+        }
+
+        val keyBarBtn = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_toggle_key_bar)
+        keyBarBtn?.text = if (customKeyboardVisible) "Hide Key Bar" else "Show Key Bar"
+        keyBarBtn?.setOnClickListener {
+            bottomSheet.dismiss()
+            if (customKeyboardVisible) hideCustomKeyboardBar() else showCustomKeyboardBar()
+        }
+
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_find_in_scrollback)?.setOnClickListener {
+            bottomSheet.dismiss()
+            showSearchOverlay()
+        }
+
         view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_select_text)?.setOnClickListener {
             bottomSheet.dismiss()
             getActiveTerminalView()?.armSelectionForNextDrag()
             Toast.makeText(this, "Drag on the terminal to select text, then tap Copy.", Toast.LENGTH_LONG).show()
+        }
+
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_paste)?.setOnClickListener {
+            bottomSheet.dismiss()
+            pasteFromClipboard()
         }
 
         view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_port_forwarding)?.setOnClickListener {

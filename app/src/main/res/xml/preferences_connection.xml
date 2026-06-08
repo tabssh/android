@@ -123,21 +123,5 @@
 
     </PreferenceCategory>
 
-    <PreferenceCategory
-        android:title="Mosh"
-        android:key="category_mosh">
-
-        <!-- The mosh server command is now configured per-connection via a
-             dropdown in the connection editor. This global preference is kept
-             for users who entered a custom command before per-connection support
-             was added; it is no longer read by the app. -->
-        <EditTextPreference
-            android:key="mosh_server_command"
-            android:title="Global Mosh Server Command (legacy)"
-            android:summary="Superseded by the per-connection command picker. No longer used."
-            android:defaultValue="mosh-server new -l LANG=en_US.UTF-8"
-            app:useSimpleSummaryProvider="true" />
-
-    </PreferenceCategory>
 
 </PreferenceScreen>
