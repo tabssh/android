@@ -422,6 +422,8 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
             }
         }
 
+        val app = requireActivity().application as TabSSHApplication
+
         // Import custom theme click listener
         findPreference<Preference>("import_custom_theme")?.setOnPreferenceClickListener {
             themeImportLauncher.launch("application/json")
