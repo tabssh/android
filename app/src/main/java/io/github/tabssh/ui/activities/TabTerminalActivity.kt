@@ -1170,8 +1170,12 @@ private fun showSnippetsPickerForActiveTab() {
     }
 
     private fun showSearchOverlay() {
+        // Lazily initialise the controller the first time it is needed — at
+        // onCreate() time there is no active TerminalView yet (tabs haven't been
+        // created), so setupSearchOverlay() called from onCreate() always produces
+        // a null controller. Re-attempt here against the live active view.
+        if (searchController == null) setupSearchOverlay()
         val controller = searchController ?: run {
-            // Activity may not have an active terminal yet (no open tab).
             Toast.makeText(this, "No active session", Toast.LENGTH_SHORT).show()
             return
         }
@@ -1725,10 +1729,11 @@ private fun showSnippetsPickerForActiveTab() {
                         tab.sessionRecorder?.startRecording()
                     }
 
-                    // CRITICAL: Wait for UI to be set up before connecting
-                    // The onTabCreated listener posts addTabToUI() to main thread,
-                    // we need to wait for that to complete so TerminalView is attached
-                    kotlinx.coroutines.delay(200) // Give time for UI to attach terminal view
+                    // Yield to the main dispatcher so the Handler.post { addTabToUI() }
+                    // queued by onTabCreated() runs before we call tab.connect(). Both
+                    // are posted to the same main looper — onTabCreated's post was
+                    // enqueued first, so it executes before our withContext(Main) body.
+                    withContext(kotlinx.coroutines.Dispatchers.Main) {}
 
                     // Connect the tab's terminal to SSH streams
                     Logger.i("TabTerminalActivity", "🔌 Connecting terminal to SSH streams...")
@@ -1841,6 +1846,9 @@ private fun showSnippetsPickerForActiveTab() {
                 } else {
                     Logger.e("TabTerminalActivity", "Failed to create tab for ${profile.getDisplayName()}")
                     showError("Failed to create terminal tab", "Error")
+                    // No tab was created — no terminal to show; close the activity so
+                    // the user isn't left on a blank screen with no way to recover.
+                    finish()
                 }
             } else {
                 // Connection failed - try to get detailed error from last connection attempt
@@ -1936,7 +1944,7 @@ private fun showSnippetsPickerForActiveTab() {
             finish()
             return
         }
-        kotlinx.coroutines.delay(200) // wait for UI attach
+        withContext(kotlinx.coroutines.Dispatchers.Main) {}
 
         val ok = tab.connect(telnet)
         if (ok) {
@@ -2303,8 +2311,10 @@ private fun showSnippetsPickerForActiveTab() {
                                 val idx = tabManager.getAllTabs()
                                     .indexOfFirst { it.tabId == tab.tabId }
                                 if (idx >= 0) {
+                                    // closeTab fires onTabClosed which calls finish()
+                                    // when tab count reaches 0 — don't call finish()
+                                    // here too or we get a double-finish race.
                                     tabManager.closeTab(idx)
-                                    if (tabManager.getTabCount() == 0) finish()
                                 }
                             } else {
                                 showReconnectDialog(tab)
@@ -3640,9 +3650,16 @@ private fun showSnippetsPickerForActiveTab() {
                 setPadding(padding, 0, padding, 0)
                 addView(editText)
             }
+            // setMessage and setView both own the dialog's content area — using both
+            // silently drops the message on most ROMs. Show the message as a TextView
+            // inside the same container so both the prompt and the EditText are visible.
+            val promptLabel = android.widget.TextView(this).apply {
+                text = message
+                setPadding(0, 0, 0, (8 * resources.displayMetrics.density).toInt())
+            }
+            container.addView(promptLabel, 0)
             val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
                 .setTitle("Authentication Required")
-                .setMessage(message)
                 .setView(container)
                 .setPositiveButton("Connect") { _, _ ->
                     if (cont.isActive) cont.resume(editText.text.toString()) {}

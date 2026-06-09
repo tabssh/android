@@ -1,5 +1,29 @@
 # What's New
 
+## Wave 19 — Bug batch: auth dialog, search, connect, ANR
+
+Nine correctness bugs fixed in one batch:
+
+- **Password prompt** now shows the "Password required for user@host" message
+  above the input field — it was silently dropped by a dialog-builder conflict
+- **Find in Scrollback** no longer shows "No active session" when invoked from
+  the terminal menu — the controller now initialises lazily on first use
+- **Clean-exit tab close** no longer triggers a double-`finish()` race that
+  could cause duplicate navigation or toast spam
+- **Connect timing** replaced a fragile 200 ms sleep with a proper main-looper
+  yield; first bytes from the server are no longer dropped on loaded devices
+- **Blank screen after connect failure** — the activity now closes itself when
+  tab creation fails instead of leaving a useless empty screen
+- **Disconnect no longer risks ANR** — JSch socket teardown moved off the main
+  thread to a background IO coroutine
+- **Long-press while scrolled** now detects URLs and shows the context menu for
+  the correct line (scroll offset was computed differently from the render path)
+- **Multiplexer probe** skipped when the profile has multiplexers disabled
+- **tmux sessions named `foo:bar`** now parse correctly (separator changed from
+  `:` to `|` in the tmux format string)
+
+---
+
 ## Wave 18 — Scrollback fixed
 
 Scrolling into terminal history no longer blanks the screen. A one-line arithmetic

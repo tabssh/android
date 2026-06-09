@@ -29,6 +29,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Password dialog shows no prompt text** — `setMessage` and `setView` both own the dialog's content area; the message was silently dropped; message now rendered as a `TextView` inside the same `FrameLayout` container as the `EditText`
+- **Search overlay always "No active session"** — `setupSearchOverlay()` called from `onCreate()` before any tab exists always produced a null controller; `showSearchOverlay()` now lazily calls `setupSearchOverlay()` against the live active view on first use
+- **Double `finish()` on clean tab exit** — `updateTabIcon` called `tabManager.closeTab()` then `finish()` when count hit 0; `closeTab` already fires `onTabClosed` which calls `finish()`; removed the duplicate call
+- **`delay(200)` connect race** — replaced the fixed 200 ms sleep with `withContext(Dispatchers.Main) {}` which enqueues after the `Handler.post { addTabToUI() }` already queued by `onTabCreated`; applies to both SSH and Telnet connect paths
+- **Blank terminal on tab-create failure** — `connectToProfile` showed an error toast but did not call `finish()` when `tab == null`; user was left on a blank unusable screen
+- **`conn.disconnect()` on main thread** — `onDisconnected()` fires on the main looper via `TermuxBridge.runOnMain`; calling `conn.disconnect()` there blocks on JSch's socket teardown; moved to `connectionScope.launch { }` (Dispatchers.IO)
+- **Long-press URL / context-menu on wrong row when scrolled** — `getTextAtPosition` computed row as `(y + scrollYInt) / cellHeight` (single division, truncation mismatch); now uses two-step `screenRow + scrollRows` matching `renderTermuxBuffer` exactly
+- **Multiplexer detection loop runs when mode is OFF** — `detectMultiplexerViaExec()` probed every 30 s regardless of profile setting; now guarded by `if (profile.multiplexerMode != "OFF")`
+- **tmux session names containing `:` corrupt parse** — format string used `:` as separator; changed to `|` which tmux session names cannot contain
 - **Scrollback broken when scrolled** — `fracOffset` was computed as `scrollYf - View.getScrollY()` but `View.getScrollY()` is always 0 because we never call `View.scrollTo()`; this made `fracOffset` equal the full pixel scroll offset, shifting all terminal content off-screen the moment the user scrolled into scrollback; fixed to `scrollYf % cellHeight` (the true sub-row fractional remainder)
 - **Mosh legacy field removed** — the "Global Mosh Server Command (legacy)" preference in Settings → Connection is gone; mosh command is configured per-connection in the connection editor
 - **Notification "Disconnect" button silent** — `ConfirmDisconnectActivity` now disconnects via `TabManager.getAllTabs().find(profileId)?.disconnect()` so it works whether or not the connection is still in `SSHSessionManager.activeConnections` (which it may not be if the session already dropped)

@@ -110,10 +110,11 @@ class MultiplexerManager {
     private suspend fun listTmuxSessions(connection: SSHConnection): List<SessionInfo> {
         val sessions = mutableListOf<SessionInfo>()
         try {
-            val output = connection.executeCommand("tmux list-sessions -F '#{session_id}:#{session_name}:#{session_attached}:#{session_created}' 2>/dev/null")
+            // Use | as field separator so session names containing : are safe.
+            val output = connection.executeCommand("tmux list-sessions -F '#{session_id}|#{session_name}|#{session_attached}|#{session_created}' 2>/dev/null")
             if (output.isNotBlank() && !output.contains("no server running")) {
                 output.lines().filter { it.isNotBlank() }.forEach { line ->
-                    val parts = line.split(":")
+                    val parts = line.split("|")
                     if (parts.size >= 3) {
                         sessions.add(SessionInfo(
                             type = MultiplexerType.TMUX,

@@ -1252,7 +1252,13 @@ class TerminalView @JvmOverloads constructor(
      * @return Line of text at the coordinates, or null if out of bounds
      */
     private fun getTextAtPosition(x: Float, y: Float): Pair<Int, String>? {
-        val row = ((y - paddingTop + scrollYInt) / cellHeight).toInt()
+        // Compute row the same way renderTermuxBuffer does: screen row + scrollback
+        // rows. The old formula ((y - paddingTop + scrollYInt) / cellHeight) mixes
+        // pixels and integer-divides once, which gives different results from the
+        // two-step version due to truncation and does not match the render path.
+        val scrollRows = if (cellHeight > 0f) (scrollYInt / cellHeight).toInt() else 0
+        val screenRow  = if (cellHeight > 0f) ((y - paddingTop) / cellHeight).toInt() else 0
+        val row = screenRow + scrollRows
         val col = ((x - paddingLeft) / cellWidth).toInt()
 
         if (row < 0 || col < 0 || row >= terminalRows || col >= terminalCols) {

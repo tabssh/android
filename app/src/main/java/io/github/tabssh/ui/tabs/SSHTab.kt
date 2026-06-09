@@ -206,7 +206,11 @@ class SSHTab(
                     // shell process under this channel exited, leave the
                     // session up for siblings.
                     if (!conn.isSessionAlive()) {
-                        conn.disconnect()
+                        // disconnect() sends an SSH disconnect packet and joins the
+                        // reader thread — blocking I/O. Must not run on the main thread
+                        // (onDisconnected fires via TermuxBridge.runOnMain). Launch on
+                        // connectionScope (Dispatchers.IO) to avoid ANR.
+                        connectionScope.launch { conn.disconnect() }
                     }
                 } else {
                     // No SSH connection (Telnet/Mosh/standalone).
@@ -701,7 +705,10 @@ class SSHTab(
         // after connect so the login shell (and any auto-started multiplexer)
         // has time to set up environment. Only sets activeMultiplexerType if
         // it wasn't already determined by the auto-launch branch above.
-        detectMultiplexerViaExec()
+        // Skip when the user explicitly opted out of all multiplexer features.
+        if (profile.multiplexerMode != "OFF") {
+            detectMultiplexerViaExec()
+        }
 
         profile.postConnectScript?.lines()
             ?.map { it.trim() }
