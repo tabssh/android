@@ -39,6 +39,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **Long press = terminal menu** — long press on the terminal always opens the action menu now; copy/paste lives on the dedicated clipboard key in the keyboard bar; URL detection moved to single-tap so tapping a detected URL still opens the "Open / Copy" dialog
+- **Terminal scroll rendering: run-batched drawText** — render loop previously called `canvas.drawText` once per character (~2 000 JNI calls/frame on an 80×25 terminal); now batches consecutive characters that share the same foreground colour and text effects into a single `drawText` call per run, reducing JNI draw calls by ~20×; double-width glyphs still draw solo; scroll invalidation changed from `postInvalidateOnAnimation` to `invalidate` for immediate 1:1 finger tracking
+
 - **Terminal long-press menu redesigned** — full MD3 bottom sheet with drag handle, prominent "New Tab…" outlined button, tab list with per-row connection-state icon (green/amber/red/grey) and bold label for the active tab, plus two new sections ("Terminal" and "Session") covering all actions; removed paste (lives on the key bar); added Copy Screen, Snippets, Broadcast to All Tabs, and Share Session
 - **Changelog hygiene rule** — CLAUDE.md now mandates that every user-visible commit updates both `CHANGELOG.md` and `app/src/main/assets/whats_new.md` in the same commit
 

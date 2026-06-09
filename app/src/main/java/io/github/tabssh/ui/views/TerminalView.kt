@@ -1097,74 +1097,110 @@ class TerminalView @JvmOverloads constructor(
             val lineChars = terminalRow.mText
             val charsUsed = terminalRow.spaceUsed
 
-            // Draw each cell in the row
+            // ── Pass 1: non-default cell backgrounds ────────────────────────
+            // Backgrounds are per-cell; text is batched below. Separating the
+            // two passes avoids switching paint state between rect and text ops.
+            var bgCharIdx = 0
+            var bgCol = 0
+            while (bgCol < cols && bgCharIdx < charsUsed) {
+                val style = try { terminalRow.getStyle(bgCol) } catch (_: Exception) { 0L }
+                val bg = com.termux.terminal.TextStyle.decodeBackColor(style)
+                if (bg != com.termux.terminal.TextStyle.COLOR_INDEX_BACKGROUND) {
+                    val bx = startX + bgCol * cellWidth
+                    backgroundPaint.color = termuxColorToAndroid(bg)
+                    canvas.drawRect(bx, rowTop, bx + cellWidth, rowBottom, backgroundPaint)
+                }
+                val ch = if (bgCharIdx < lineChars.size) lineChars[bgCharIdx] else ' '
+                val cp = if (Character.isHighSurrogate(ch) && bgCharIdx + 1 < lineChars.size)
+                    Character.toCodePoint(ch, lineChars[bgCharIdx + 1]) else ch.code
+                val cw = com.termux.terminal.WcWidth.width(cp)
+                bgCol += if (cw > 0) cw else 1
+                bgCharIdx += if (cp > 0xFFFF) 2 else 1
+            }
+            backgroundPaint.color = currentTheme?.background ?: Color.BLACK
+
+            // ── Pass 2: text in style runs ──────────────────────────────────
+            // Batching runs reduces canvas.drawText calls from ~cols (1 per char)
+            // to ~runs (1 per style change). For typical ASCII output this is
+            // a 10–30× reduction in JNI draw calls, eliminating the scroll jank.
+            //
+            // Run invariants:
+            //   - All chars share the same fg colour + effects (bold/italic/underline)
+            //   - All chars are single-cell-width (double-width chars flush & draw solo)
+            // Spaces and NUL cells break the run but are not drawn themselves.
+            val runBuf = StringBuilder(cols)
+            var runStartCol = 0
+            var runStyle   = 0L
+
+            fun flushRun() {
+                if (runBuf.isEmpty()) return
+                val fg  = com.termux.terminal.TextStyle.decodeForeColor(runStyle)
+                val eff = com.termux.terminal.TextStyle.decodeEffect(runStyle)
+                textPaint.color          = termuxColorToAndroid(fg)
+                textPaint.isFakeBoldText = (eff and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_BOLD) != 0
+                textPaint.textSkewX      = if ((eff and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0) -0.25f else 0f
+                textPaint.isUnderlineText= (eff and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE) != 0
+                canvas.drawText(runBuf.toString(), startX + runStartCol * cellWidth, y, textPaint)
+                textPaint.isFakeBoldText = false
+                textPaint.textSkewX      = 0f
+                textPaint.isUnderlineText= false
+                runBuf.clear()
+            }
+
             var charIndex = 0
             var col = 0
             while (col < cols && charIndex < charsUsed) {
-                val x = startX + col * cellWidth
-
-                // Get character at this position
                 val char = if (charIndex < lineChars.size) lineChars[charIndex] else ' '
-
-                // Handle surrogate pairs for Unicode characters
                 val codePoint: Int
                 val charsConsumed: Int
                 if (Character.isHighSurrogate(char) && charIndex + 1 < lineChars.size) {
-                    codePoint = Character.toCodePoint(char, lineChars[charIndex + 1])
+                    codePoint   = Character.toCodePoint(char, lineChars[charIndex + 1])
                     charsConsumed = 2
                 } else {
-                    codePoint = char.code
+                    codePoint   = char.code
                     charsConsumed = 1
                 }
 
-                // Get style for this column
-                val style = try {
-                    terminalRow.getStyle(col)
-                } catch (e: Exception) {
-                    0L
-                }
-
-                // Extract colors and effects from style
-                val fg = com.termux.terminal.TextStyle.decodeForeColor(style)
-                val bg = com.termux.terminal.TextStyle.decodeBackColor(style)
-                val effect = com.termux.terminal.TextStyle.decodeEffect(style)
-
-                // Draw background if not default. After painting the
-                // per-cell colour, restore backgroundPaint to the theme's
-                // default background so the next row's `drawRect` (line ~913)
-                // paints with the right colour. Previously hardcoded to
-                // Color.BLACK which forced every theme back to a black row
-                // background.
-                if (bg != com.termux.terminal.TextStyle.COLOR_INDEX_BACKGROUND) {
-                    backgroundPaint.color = termuxColorToAndroid(bg)
-                    canvas.drawRect(x, rowTop, x + cellWidth, rowBottom, backgroundPaint)
-                    backgroundPaint.color = currentTheme?.background ?: Color.BLACK
-                }
-
-                // Draw character if visible
-                if (codePoint != 0 && codePoint != ' '.code) {
-                    textPaint.color = termuxColorToAndroid(fg)
-
-                    // Apply text effects
-                    textPaint.isFakeBoldText = (effect and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_BOLD) != 0
-                    textPaint.textSkewX = if ((effect and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0) -0.25f else 0f
-                    textPaint.isUnderlineText = (effect and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE) != 0
-
-                    // Reuse charBuf to avoid a String allocation per glyph.
-                    val charCount = Character.toChars(codePoint, charBuf, 0)
-                    canvas.drawText(charBuf, 0, charCount, x, y, textPaint)
-
-                    // Reset effects
-                    textPaint.isFakeBoldText = false
-                    textPaint.textSkewX = 0f
-                    textPaint.isUnderlineText = false
-                }
-
-                // Calculate character width (some chars are double-width)
+                val style     = try { terminalRow.getStyle(col) } catch (_: Exception) { 0L }
                 val charWidth = com.termux.terminal.WcWidth.width(codePoint)
-                col += if (charWidth > 0) charWidth else 1
+                val isVisible = codePoint != 0 && codePoint != ' '.code
+
+                if (isVisible) {
+                    // Style differs or double-width char → flush current run first.
+                    val sameStyle = runBuf.isNotEmpty() &&
+                        com.termux.terminal.TextStyle.decodeForeColor(style) == com.termux.terminal.TextStyle.decodeForeColor(runStyle) &&
+                        com.termux.terminal.TextStyle.decodeEffect(style)    == com.termux.terminal.TextStyle.decodeEffect(runStyle)
+                    val isWide = charWidth > 1
+                    if (!sameStyle || isWide) flushRun()
+
+                    if (isWide) {
+                        // Double-width glyph: draw solo, then advance two cells.
+                        val fg  = com.termux.terminal.TextStyle.decodeForeColor(style)
+                        val eff = com.termux.terminal.TextStyle.decodeEffect(style)
+                        textPaint.color          = termuxColorToAndroid(fg)
+                        textPaint.isFakeBoldText = (eff and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_BOLD) != 0
+                        textPaint.textSkewX      = if ((eff and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0) -0.25f else 0f
+                        textPaint.isUnderlineText= (eff and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE) != 0
+                        val wideCount = Character.toChars(codePoint, charBuf, 0)
+                        canvas.drawText(charBuf, 0, wideCount, startX + col * cellWidth, y, textPaint)
+                        textPaint.isFakeBoldText = false
+                        textPaint.textSkewX      = 0f
+                        textPaint.isUnderlineText= false
+                    } else {
+                        // Normal single-cell char: append to run.
+                        if (runBuf.isEmpty()) { runStartCol = col; runStyle = style }
+                        val count = Character.toChars(codePoint, charBuf, 0)
+                        runBuf.append(charBuf, 0, count)
+                    }
+                } else {
+                    // Space / NUL breaks any active run.
+                    flushRun()
+                }
+
+                col      += if (charWidth > 0) charWidth else 1
                 charIndex += charsConsumed
             }
+            flushRun()
         }
 
         // Restore canvas after the translated row drawing so that selection
@@ -1771,10 +1807,12 @@ class TerminalView @JvmOverloads constructor(
             val scrollDelta = if (reverseScrollDirection) -distanceY else distanceY
             scrollYf = (scrollYf + scrollDelta).coerceIn(0f, maxScrollYPx().toFloat())
             mouseScrollAccum = 0f
-            // postInvalidateOnAnimation schedules one redraw per vsync frame,
-            // preventing multiple expensive re-renders within a single frame
-            // when onScroll fires faster than the display can refresh.
-            postInvalidateOnAnimation()
+            // invalidate() requests the redraw immediately rather than waiting
+            // for the next vsync post — this is what gives 1:1 finger tracking.
+            // The framework still coalesces invalidations within the same frame
+            // so we don't pay for multiple redraws if onScroll fires twice before
+            // the next Choreographer beat.
+            invalidate()
             return true
         }
 
@@ -1815,9 +1853,17 @@ class TerminalView @JvmOverloads constructor(
         }
 
         override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-            // Single tap = toggle keyboard (mobile-first UX)
-            toggleKeyboard()
-            Logger.d("TerminalView", "Single tap - toggling keyboard")
+            // URL detection on tap (when enabled). Falls through to keyboard
+            // toggle so users who don't have a URL under their finger still
+            // get the expected "tap = show/hide keyboard" behaviour.
+            val url = detectUrlAtPosition(e.x, e.y)
+            if (url != null) {
+                onUrlDetected?.invoke(url)
+                Logger.d("TerminalView", "Tap on URL: $url")
+            } else {
+                toggleKeyboard()
+                Logger.d("TerminalView", "Single tap — toggling keyboard")
+            }
             return true
         }
 
@@ -1828,17 +1874,12 @@ class TerminalView @JvmOverloads constructor(
         }
 
         override fun onLongPress(e: MotionEvent) {
-            // Long press detection: URL or text context menu
-            val url = detectUrlAtPosition(e.x, e.y)
-            if (url != null) {
-                // URL detected - show URL menu
-                onUrlDetected?.invoke(url)
-                Logger.d("TerminalView", "URL detected: $url")
-            } else {
-                // No URL - show text context menu
-                showCustomContextMenu(e.x, e.y)
-                Logger.d("TerminalView", "Long press - showing context menu")
-            }
+            // Long press = terminal action menu. Copy/paste lives on the
+            // dedicated clipboard key in the keyboard bar — long press is
+            // reserved exclusively for the menu.
+            performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+            onContextMenuRequested?.invoke(e.x, e.y)
+            Logger.d("TerminalView", "Long press — showing terminal menu")
         }
     }
 

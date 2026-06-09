@@ -1,5 +1,28 @@
 # What's New
 
+## Wave 26 — Long press = menu, smooth scrolling
+
+### Long press
+Long pressing the terminal now **always opens the action menu**. Copy and
+paste live on the dedicated clipboard key (📋) in the keyboard bar — there
+was no reason for long press to also do text selection.
+
+Tapping a URL (when URL detection is on) still shows the Open / Copy dialog
+— the detection just moved from long press to single tap.
+
+### Smooth scrolling (issue #8)
+Terminal scrolling is significantly faster and smoother:
+
+- The render loop previously called `drawText` **once per character** — up
+  to ~2 000 GPU draw calls per frame on a standard terminal. Characters with
+  the same colour and style are now batched into a single draw call per run,
+  reducing GPU calls by up to 20×.
+- Scroll invalidation changed from `postInvalidateOnAnimation` (next vsync)
+  to `invalidate` (immediate), giving true 1:1 finger-to-content tracking
+  instead of a one-frame lag.
+
+---
+
 ## Wave 25 — Volume buttons can now scroll the terminal
 
 A new **Volume Key Action** option in Settings → Terminal lets you choose what
