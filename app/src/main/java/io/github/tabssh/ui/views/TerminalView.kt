@@ -276,6 +276,9 @@ class TerminalView @JvmOverloads constructor(
      * SEL tap doesn't leave the view stuck in a non-scroll state.
      */
     private var selectionArmed = false
+    // Pending runnable that defers entering selection mode until we confirm
+    // the touch is single-finger (not the first finger of a pinch gesture).
+    private var selectionArmRunnable: Runnable? = null
 
     /** Called by the host activity when the SEL key fires. */
     fun armSelectionForNextDrag() {
@@ -1349,17 +1352,26 @@ class TerminalView @JvmOverloads constructor(
     }
 
     override fun onTouch(v: View, event: MotionEvent): Boolean {
-        // SEL key armed → consume the next single-finger ACTION_DOWN as the
-        // start of a selection drag. On multi-touch just disarm silently so
-        // the flag never persists through a pinch gesture.
+        // SEL key armed → defer entering selection mode by one frame so we can
+        // cancel if a second finger arrives (i.e. the user is pinching, not
+        // dragging a selection). ACTION_DOWN always has pointerCount==1 even for
+        // pinch gestures — the second finger fires ACTION_POINTER_DOWN afterward.
         if (selectionArmed && event.actionMasked == MotionEvent.ACTION_DOWN) {
             selectionArmed = false
-            if (event.pointerCount == 1) {
-                enterSelectionMode(event.x, event.y)
+            val ex = event.x; val ey = event.y
+            val r = Runnable {
+                selectionArmRunnable = null
+                enterSelectionMode(ex, ey)
                 selectionDragHandle = 1  // pre-grab focus handle
-                return true
             }
-            // Multi-touch DOWN: fall through to normal handling.
+            selectionArmRunnable = r
+            postDelayed(r, android.view.ViewConfiguration.getDoubleTapTimeout().toLong() / 4)
+            return true
+        }
+        // Second finger arrived — cancel the pending selection entry so the
+        // pinch-to-zoom handler gets a clean slate.
+        if (event.actionMasked == MotionEvent.ACTION_POINTER_DOWN) {
+            selectionArmRunnable?.let { removeCallbacks(it); selectionArmRunnable = null }
         }
 
         // Handle pinch-to-zoom first (multi-touch)
@@ -2247,7 +2259,10 @@ class TerminalView @JvmOverloads constructor(
 
     override fun computeScroll() {
         if (scroller.computeScrollOffset()) {
-            scrollYf = scroller.currY.toFloat()
+            // Clamp to current maxScrollYPx() — the scrollback buffer can shrink
+            // mid-fling (e.g. the user types `clear`) leaving scroller.currY above
+            // the new maximum, which produces a blank strip at the bottom of the view.
+            scrollYf = scroller.currY.toFloat().coerceIn(0f, maxScrollYPx().toFloat())
             postInvalidateOnAnimation()
         }
     }

@@ -1103,9 +1103,11 @@ class TabTerminalActivity : AppCompatActivity() {
                 android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             setSingleLine(true)
         }
+        // setMessage and setView both occupy the dialog body — using both silently
+        // drops the message. Count is in the title; hint on the EditText adds context.
+        input.hint = "Command → ${tabs.size} session(s)"
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Cluster broadcast")
-            .setMessage("Send the same command to all ${tabs.size} open session(s).")
+            .setTitle("Cluster broadcast (${tabs.size} sessions)")
             .setView(input)
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Next") { _, _ ->
@@ -2806,6 +2808,7 @@ private fun showSnippetsPickerForActiveTab() {
             return
         }
         try { tab.disconnect() } catch (e: Exception) { Logger.w("TabTerminalActivity", "Split tab disconnect: ${e.message}") }
+        try { app.sshSessionManager.closeConnection(tab.profile.id) } catch (_: Exception) {}
         splitTab = null
         bottomTerminalView = null
         bottomPaneFocused = false
@@ -3748,10 +3751,12 @@ private fun showSnippetsPickerForActiveTab() {
         // Disconnect the split-pane tab if the user never tapped "Close split".
         // The split tab is Activity-scoped (not in the Application TabManager)
         // so it would leak an open SSH channel if we don't clean it up here.
-        try {
-            splitTab?.disconnect()
-        } catch (e: Exception) {
-            Logger.w("TabTerminalActivity", "Split tab cleanup in onDestroy: ${e.message}")
+        val stab = splitTab
+        if (stab != null) {
+            try { stab.disconnect() } catch (e: Exception) {
+                Logger.w("TabTerminalActivity", "Split tab cleanup in onDestroy: ${e.message}")
+            }
+            try { app.sshSessionManager.closeConnection(stab.profile.id) } catch (_: Exception) {}
         }
         splitTab = null
         bottomTerminalView = null

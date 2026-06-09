@@ -885,8 +885,13 @@ class SyncDataApplier {
                     "monitoring_run_in_battery_saver",
                     "monitoring_notify_down",
                     "monitoring_notify_recovery" -> editor.putBoolean(key, value as Boolean)
-                    // ListPreference value — stored and restored as String.
-                    "monitoring_alert_cooldown_minutes" -> editor.putString(key, value as String)
+                    // ListPreference value — stored as String, but toAnyMap() may have
+                    // parsed a numeric string like "60" as Int. Coerce back to String.
+                    "monitoring_alert_cooldown_minutes" -> editor.putString(key, when (value) {
+                        is String -> value
+                        is Number -> value.toInt().toString()
+                        else      -> "60"
+                    })
                     // SeekBarPreference values — must be stored as Int to avoid
                     // ClassCastException when the Preference UI inflates.
                     "monitoring_default_cpu_threshold",

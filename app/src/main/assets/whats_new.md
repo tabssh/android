@@ -1,5 +1,22 @@
 # What's New
 
+## Wave 22 — Nine more bugs fixed
+
+- **Cluster broadcast** dialog now shows which sessions you're broadcasting to
+  (the session count was hidden by a dialog-builder conflict)
+- **Pinch-to-zoom** no longer accidentally starts a text selection when the
+  Select key was armed
+- **Screen session list** now shows the correct attached/detached status and
+  preserves session names that contain dots (e.g. `dev.backend.api`)
+- **Split-pane** SSH session is fully released when the split is closed or the
+  activity is destroyed — previously the SSH slot leaked and the notification
+  persisted
+- **Scroll fling** after `clear` no longer leaves a blank strip at the bottom
+- **Sync monitoring cooldown** now applies correctly on the receiving device
+- Two internal preference alias inconsistencies unified
+
+---
+
 ## Wave 21 — Terminal menu tab switch fixed
 
 Tapping a tab in the long-press menu after another tab had closed would

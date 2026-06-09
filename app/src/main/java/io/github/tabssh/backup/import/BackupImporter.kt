@@ -605,7 +605,7 @@ class BackupImporter(
     private fun restorePreferences(data: String) {
         val root = JSONObject(data)
         root.optJSONObject("general")?.let { g ->
-            preferenceManager.setAutoBackup(g.optBoolean("autoBackup", true))
+            preferenceManager.setAutoBackupEnabled(g.optBoolean("autoBackup", true))
             preferenceManager.setBackupFrequency(g.optString("backupFrequency", "weekly"))
             preferenceManager.setStartupBehavior(g.optString("startupBehavior", "last_session"))
             preferenceManager.setLanguage(g.optString("language", "system"))
@@ -623,7 +623,7 @@ class BackupImporter(
             preferenceManager.setFontSize(t.optDouble("fontSize", 14.0).toFloat())
             preferenceManager.setFontFamily(t.optString("fontFamily", "Roboto Mono"))
             preferenceManager.setCursorStyle(t.optString("cursorStyle", "bar"))
-            preferenceManager.setCursorBlink(t.optBoolean("cursorBlink", true))
+            preferenceManager.setCursorBlinkEnabled(t.optBoolean("cursorBlink", true))
             preferenceManager.setScrollbackLines(t.optInt("scrollbackLines", 1000))
             preferenceManager.setBellNotificationEnabled(t.optBoolean("terminalBell", false))
         }

@@ -13,6 +13,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Monitoring cooldown never synced** — `monitoring_alert_cooldown_minutes` is stored as a string `"60"` but `toAnyMap()` converts numeric strings to `Int`; the apply side then `value as String` threw `ClassCastException` silently every sync; now coerces via `when (value) { is Number → toString(); is String → value }`
+- **Cluster broadcast dialog empty** — `setMessage` + `setView` conflict silently dropped the "Send to N sessions" message; count now in the title, hint on the `EditText`
+- **Split-pane SSH session leak** — `closeSplitPane()` and `onDestroy()` called `tab.disconnect()` but never `sshSessionManager.closeConnection()`; JSch session stayed open, notification persisted, slot never freed
+- **`computeScroll` blank strip after `clear`** — `scrollYf` was not clamped in `computeScroll`; scrollback buffer shrink mid-fling left `scroller.currY` above the new max, rendering a blank strip; now `coerceIn(0f, maxScrollYPx())`
+- **Pinch-to-zoom triggers spurious selection** — `ACTION_DOWN` with `pointerCount == 1` entered selection mode before the second finger arrived; now defers via `postDelayed` and cancels on `ACTION_POINTER_DOWN`
+- **`screen` session attached status always false** — `awk '{print $1}'` stripped the `(Attached)`/`(Detached)` suffix before the `contains` check; removed awk, kept full line, split on `\t`
+- **`screen` session names truncated at first dot** — `split(".")` took only segment 1; `dev.backend.api` showed as `backend`; now `split(".", limit = 2)`
+- **`setAutoBackup` vs `setAutoBackupEnabled` alias mismatch** — `BackupImporter` was calling the legacy alias; unified to `setAutoBackupEnabled`
+- **`setCursorBlink` vs `setCursorBlinkEnabled` alias mismatch** — same; unified to `setCursorBlinkEnabled`
 - **`getItemCounts()` undercounting** — only counted 5 of 16 entity types; now counts all: connections, keys, themes, host keys, workspaces, snippets, identities, groups, hypervisors, certificates, macros, monitor slots, hypervisor accounts, VNC hosts, VNC identities, cloud accounts
 - **`applySecrets()` silent failure** — missing `SecurePasswordManager` or `KeyStorage` (e.g. during test runs) now logs a warning instead of silently dropping all credentials
 - **Terminal menu tab list wrong tab on stale index** — tapping a tab in the long-press menu after another tab closed activated the wrong tab; row click now resolves the live index by `tabId` instead of using the open-time snapshot position

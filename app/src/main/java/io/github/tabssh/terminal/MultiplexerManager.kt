@@ -138,17 +138,23 @@ class MultiplexerManager {
     private suspend fun listScreenSessions(connection: SSHConnection): List<SessionInfo> {
         val sessions = mutableListOf<SessionInfo>()
         try {
-            val output = connection.executeCommand("screen -ls 2>/dev/null | grep -E '\\s+[0-9]+\\.' | awk '{print \$1}'")
+            // Keep the full line (no awk) so the (Attached)/(Detached) suffix
+            // is available for the attached check. Limit the dot-split to 2 so
+            // session names that themselves contain dots (e.g. "dev.backend.api")
+            // are preserved in full rather than truncated to just the first segment.
+            val output = connection.executeCommand("screen -ls 2>/dev/null | grep -E '\\s+[0-9]+\\.'")
             if (output.isNotBlank()) {
                 output.lines().filter { it.isNotBlank() }.forEach { line ->
-                    // Format: pid.name (Attached/Detached)
-                    val parts = line.trim().split(".")
+                    val trimmed = line.trim()
+                    // Format: "12345.session-name\t(Attached)" or "(Detached)"
+                    val pidAndName = trimmed.substringBefore("\t").trim()
+                    val parts = pidAndName.split(".", limit = 2)
                     if (parts.size >= 2) {
-                        val attached = line.contains("(Attached)")
+                        val attached = trimmed.contains("(Attached)")
                         sessions.add(SessionInfo(
                             type = MultiplexerType.SCREEN,
                             sessionId = parts[0],
-                            sessionName = parts.getOrNull(1)?.substringBefore("\t") ?: parts[0],
+                            sessionName = parts[1],
                             attached = attached
                         ))
                     }
