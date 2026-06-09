@@ -580,7 +580,14 @@ class SSHConnection(
             Logger.i("SSHConnection", "advancedSettings: RemoteForward $rp -> $lh:$lp")
         }
         applyForwardArray(json, "dynamicForwards") { spec ->
-            val port = spec.trim().substringAfter(':', spec).toIntOrNull()
+            // Accept both bare "1080" and OpenSSH-style "bindAddress:port".
+            // substringAfter on a bare port returns the full spec — toIntOrNull
+            // handles that correctly. For "127.0.0.1:1080" substringAfter(':')
+            // returns "1080". For any other host-qualified form we take the last
+            // colon-delimited segment so IPv6 addresses do not break the parse.
+            val trimmed = spec.trim()
+            val portStr = if (':' in trimmed) trimmed.substringAfterLast(':') else trimmed
+            val port = portStr.toIntOrNull()
             if (port == null) {
                 Logger.w("SSHConnection", "advancedSettings: bad DynamicForward spec '$spec'")
                 return@applyForwardArray

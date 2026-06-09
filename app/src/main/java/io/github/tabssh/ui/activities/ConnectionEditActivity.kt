@@ -1025,6 +1025,10 @@ class ConnectionEditActivity : AppCompatActivity() {
                             io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.ENCRYPTED
                         }
                         app.securePasswordManager.storePassword(profile.id, password, storageLevel)
+                    } else if (!savePassword) {
+                        // User explicitly unchecked "Save Password" — revoke any previously
+                        // stored credential so it is not silently reused on the next connect.
+                        try { app.securePasswordManager.clearPassword(profile.id) } catch (_: Exception) {}
                     }
                 }
 

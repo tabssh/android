@@ -13,6 +13,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Import/Export crash on fast tap** — `backupManager` was initialised in a background coroutine; tapping any card before it finished threw `UninitializedPropertyAccessException`; converted to nullable with a "not ready" message guard at each call site
+- **Saved password not cleared when "Save Password" unchecked** — editing a connection and unchecking "Save Password" left the old Keystore credential in place; it was silently reused on the next connect; now calls `clearPassword(profile.id)` on uncheck
+- **`finish()` indentation trap in connection-failure path** — the `finish()` call in the null-errorInfo branch was indented at the outer scope level, making it look like it ran for both errorInfo paths; re-indented to match its actual inner-`else` scope
+- **`DynamicForward` host-qualified spec silently dropped** — `"127.0.0.1:1080"` form failed `toIntOrNull()` and was dropped without error; now uses `substringAfterLast(':')` to handle both bare port and `[host:]port` forms including IPv6
 - **Monitoring cooldown never synced** — `monitoring_alert_cooldown_minutes` is stored as a string `"60"` but `toAnyMap()` converts numeric strings to `Int`; the apply side then `value as String` threw `ClassCastException` silently every sync; now coerces via `when (value) { is Number → toString(); is String → value }`
 - **Cluster broadcast dialog empty** — `setMessage` + `setView` conflict silently dropped the "Send to N sessions" message; count now in the title, hint on the `EditText`
 - **Split-pane SSH session leak** — `closeSplitPane()` and `onDestroy()` called `tab.disconnect()` but never `sshSessionManager.closeConnection()`; JSch session stayed open, notification persisted, slot never freed

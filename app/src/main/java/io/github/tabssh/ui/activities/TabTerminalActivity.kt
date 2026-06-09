@@ -1889,9 +1889,10 @@ private fun showSnippetsPickerForActiveTab() {
                         "Connection failed: ssh ${profile.username}@${profile.host}:${profile.port}"
                     )
 
-                // Close activity after connection failure
-                Logger.i("TabTerminalActivity", "Closing activity due to connection failure")
-                finish()
+                    // No tab, no session — close the activity so the user is not
+                    // left on a blank screen.
+                    Logger.i("TabTerminalActivity", "Closing activity due to connection failure")
+                    finish()
                 }
             }
             

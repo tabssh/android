@@ -25,7 +25,10 @@ import kotlinx.coroutines.withContext
 class ImportExportActivity : AppCompatActivity() {
 
     private lateinit var app: TabSSHApplication
-    private lateinit var backupManager: BackupManager
+    // Nullable so click handlers can detect "not yet ready" without crashing.
+    // Initialized on Dispatchers.IO in onCreate because BackupManager's constructor
+    // seeds BouncyCastle's DRBG which can block briefly on cold start.
+    private var backupManager: BackupManager? = null
 
     // SAF launcher — restore from a ZIP backup
     private val importConnectionsLauncher = registerForActivityResult(
@@ -125,7 +128,11 @@ class ImportExportActivity : AppCompatActivity() {
     private fun importBackupFromUri(uri: android.net.Uri) {
         lifecycleScope.launch {
             try {
-                val result = backupManager.restoreBackup(uri, password = null, overwriteExisting = false)
+                val bm = backupManager ?: run {
+                    showError("Backup system is still initialising — please wait a moment and try again.", "Not Ready")
+                    return@launch
+                }
+                val result = bm.restoreBackup(uri, password = null, overwriteExisting = false)
 
                 if (result.success) {
                     showImportSuccessDialog(result)
@@ -187,7 +194,11 @@ class ImportExportActivity : AppCompatActivity() {
     private fun importBackupWithPassword(uri: android.net.Uri, password: String) {
         lifecycleScope.launch {
             try {
-                val result = backupManager.restoreBackup(uri, password, overwriteExisting = false)
+                val bm = backupManager ?: run {
+                    showError("Backup system is still initialising — please try again.", "Not Ready")
+                    return@launch
+                }
+                val result = bm.restoreBackup(uri, password, overwriteExisting = false)
 
                 if (result.success) {
                     showImportSuccessDialog(result)
@@ -705,7 +716,11 @@ class ImportExportActivity : AppCompatActivity() {
     private fun performExport(uri: android.net.Uri, includePasswords: Boolean, password: String?) {
         lifecycleScope.launch {
             try {
-                val result = backupManager.createBackup(
+                val bm = backupManager ?: run {
+                    showError("Backup system is still initialising — please wait a moment and try again.", "Not Ready")
+                    return@launch
+                }
+                val result = bm.createBackup(
                     outputUri = uri,
                     includePasswords = includePasswords,
                     encryptBackup = password != null,

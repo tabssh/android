@@ -1,5 +1,17 @@
 # What's New
 
+## Wave 23 — Import/Export crash and password revoke fixed
+
+- **Import/Export** no longer crashes if you tap a card in the first
+  fraction of a second after opening the screen; a friendly "not ready"
+  message is shown instead
+- **Unsaving a password now actually removes it** — unchecking "Save
+  Password" on an existing connection now clears the stored credential from
+  the Keystore; previously the old password was silently reused even after
+  you unchecked the option
+
+---
+
 ## Wave 22 — Nine more bugs fixed
 
 - **Cluster broadcast** dialog now shows which sessions you're broadcasting to
