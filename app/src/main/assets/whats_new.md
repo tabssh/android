@@ -1,5 +1,17 @@
 # What's New
 
+## Wave 25 — Volume buttons can now scroll the terminal
+
+A new **Volume Key Action** option in Settings → Terminal lets you choose what
+the volume buttons do while a terminal session is focused:
+
+- **Font size** (default — same as before)
+- **Scroll** — Volume Up pages toward older history, Volume Down returns to
+  the latest output
+- **System volume** (off — pass the keys to Android)
+
+---
+
 ## Wave 24 — Public key export fixed, scroll and spacing settings work
 
 ### Public key export (issue #7)

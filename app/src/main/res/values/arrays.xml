@@ -292,6 +292,18 @@
         <item>Only on error</item>
     </string-array>
 
+    <!-- Volume key action options (Settings → Terminal) -->
+    <string-array name="volume_keys_action_entries">
+        <item>Font size (+ / −)</item>
+        <item>Scroll (page up / down)</item>
+        <item>System volume (off)</item>
+    </string-array>
+    <string-array name="volume_keys_action_values">
+        <item>font_size</item>
+        <item>scroll</item>
+        <item>off</item>
+    </string-array>
+
     <!-- Multiplexer mode options (per-connection) -->
     <string-array name="multiplexer_mode_entries">
         <item>Disabled</item>

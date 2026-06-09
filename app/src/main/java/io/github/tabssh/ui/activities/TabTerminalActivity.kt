@@ -3064,19 +3064,31 @@ private fun showSnippetsPickerForActiveTab() {
     }
     
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        // Handle volume keys for font size control (if enabled)
-        val volumeKeysEnabled = app.preferencesManager.getBoolean("volume_keys_font_size", true)
-        if (volumeKeysEnabled) {
-            when (keyCode) {
-                KeyEvent.KEYCODE_VOLUME_UP -> {
-                    adjustFontSize(+2)
-                    return true
-                }
-                KeyEvent.KEYCODE_VOLUME_DOWN -> {
-                    adjustFontSize(-2)
-                    return true
-                }
+        // Volume key action: font_size (default) / scroll / off.
+        // Migrate legacy boolean key → new string key on first read.
+        val volumeAction = run {
+            val prefs = app.preferencesManager
+            val legacy = prefs.getString("volume_keys_font_size", null)
+            if (legacy != null) {
+                val migrated = if (legacy == "true") "font_size" else "off"
+                prefs.setString("volume_keys_action", migrated)
+                prefs.remove("volume_keys_font_size")
+                migrated
+            } else {
+                prefs.getString("volume_keys_action", "font_size")
             }
+        }
+        when (volumeAction) {
+            "font_size" -> when (keyCode) {
+                KeyEvent.KEYCODE_VOLUME_UP   -> { adjustFontSize(+2); return true }
+                KeyEvent.KEYCODE_VOLUME_DOWN -> { adjustFontSize(-2); return true }
+            }
+            "scroll" -> when (keyCode) {
+                // Volume Up = page toward older content; Down = page toward newest.
+                KeyEvent.KEYCODE_VOLUME_UP   -> { getActiveTerminalView()?.scrollByPage(+1); return true }
+                KeyEvent.KEYCODE_VOLUME_DOWN -> { getActiveTerminalView()?.scrollByPage(-1); return true }
+            }
+            // "off" → fall through; system handles the volume event.
         }
 
         // App-level shortcuts. Bare Ctrl+letter is reserved for the

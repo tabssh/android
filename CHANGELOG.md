@@ -9,6 +9,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Volume key action setting** — Settings → Terminal → Volume Key Action; three options: "Font size (+ / −)" (default, preserves existing behaviour), "Scroll (page up / down)" (Volume Up = older content, Volume Down = newest), "System volume (off)"; existing `volume_keys_font_size` boolean preference is migrated automatically on first launch
+
 - **Full preference sync and backup** — connection defaults, sync toggles, multiplexer key bindings, accessibility flags, and proxy configuration are now included in both SAF sync and backup/restore; previously these five categories were silently absent from both systems
 
 ### Fixed

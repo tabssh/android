@@ -131,11 +131,14 @@
             android:summary="Display the custom F1-F12 / arrow row in terminals"
             android:defaultValue="true" />
 
-        <SwitchPreferenceCompat
-            android:key="volume_keys_font_size"
-            android:title="Volume Keys Control Font"
-            android:summary="Use volume up/down to increase/decrease font size"
-            android:defaultValue="true" />
+        <ListPreference
+            android:key="volume_keys_action"
+            android:title="Volume Key Action"
+            android:summary="What the volume buttons do inside a terminal session"
+            android:entries="@array/volume_keys_action_entries"
+            android:entryValues="@array/volume_keys_action_values"
+            android:defaultValue="font_size"
+            app:useSimpleSummaryProvider="true" />
 
         <SwitchPreferenceCompat
             android:key="detect_urls"

@@ -254,6 +254,26 @@ class TerminalView @JvmOverloads constructor(
     }
 
     /**
+     * Scroll the terminal scrollback by one page in the given direction.
+     *
+     * @param direction  +1 = scroll toward older content (page up),
+     *                   -1 = scroll toward newest content (page down).
+     *
+     * One page = the number of rows that fit in the current view height,
+     * matching the convention of ConnectBot / Termux volume-key paging.
+     * The scroll is animated via the OverScroller so the user gets the same
+     * deceleration feel as a finger fling.
+     */
+    fun scrollByPage(direction: Int) {
+        if (cellHeight <= 0f || terminalRows <= 0) return
+        val pagePx = (terminalRows * cellHeight).toInt()
+        val from   = scrollYInt
+        val to     = (from + direction * pagePx).coerceIn(0, maxScrollYPx())
+        scroller.startScroll(0, from, 0, to - from, 200)
+        postInvalidateOnAnimation()
+    }
+
+    /**
      * Scroll the view so that the match at [index] is vertically centred,
      * then update the current-match pointer and repaint.
      */
