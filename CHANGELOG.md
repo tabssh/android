@@ -29,6 +29,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Scrollback broken when scrolled** — `fracOffset` was computed as `scrollYf - View.getScrollY()` but `View.getScrollY()` is always 0 because we never call `View.scrollTo()`; this made `fracOffset` equal the full pixel scroll offset, shifting all terminal content off-screen the moment the user scrolled into scrollback; fixed to `scrollYf % cellHeight` (the true sub-row fractional remainder)
 - **Mosh legacy field removed** — the "Global Mosh Server Command (legacy)" preference in Settings → Connection is gone; mosh command is configured per-connection in the connection editor
 - **Notification "Disconnect" button silent** — `ConfirmDisconnectActivity` now disconnects via `TabManager.getAllTabs().find(profileId)?.disconnect()` so it works whether or not the connection is still in `SSHSessionManager.activeConnections` (which it may not be if the session already dropped)
 - **Notification doesn't disappear on disconnect** — `SSHConnectionService.onConnectionStateChanged(DISCONNECTED)` was silently delegating to `onConnectionClosed` which is only called by explicit `closeConnection()`, not by natural remote-side disconnects; now updates the notification directly via the same `renderHostNotification(disconnectingState=true)` path

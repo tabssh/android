@@ -1,5 +1,14 @@
 # What's New
 
+## Wave 18 — Scrollback fixed
+
+Scrolling into terminal history no longer blanks the screen. A one-line arithmetic
+error caused the canvas to be shifted by the full scroll offset instead of just
+the sub-row fractional pixel remainder, making all content disappear the instant
+you scrolled. Fixed.
+
+---
+
 ## Wave 17 — Redesigned terminal menu
 
 The long-press bottom sheet has been fully redesigned with Material Design 3

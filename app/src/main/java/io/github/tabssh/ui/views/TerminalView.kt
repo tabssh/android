@@ -1037,7 +1037,11 @@ class TerminalView @JvmOverloads constructor(
         // one extra row (row `rows`) is drawn at the bottom to fill the resulting
         // gap. The canvas is saved/restored so overlays drawn after the loop are
         // not affected by the translate.
-        val fracOffset = scrollYf - scrollY
+        // NOTE: must use (scrollYf % cellHeight), NOT (scrollYf - scrollY).
+        // View.getScrollY() is always 0 because we never call View.scrollTo();
+        // using it made fracOffset equal the full scrollYf, shifting all content
+        // off-screen the moment the user scrolled.
+        val fracOffset = if (cellHeight > 0f) scrollYf % cellHeight else 0f
         if (fracOffset > 0f) canvas.save()
         if (fracOffset > 0f) canvas.translate(0f, -fracOffset)
 
