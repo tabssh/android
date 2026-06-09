@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Drag-handle pill for bottom sheets.
+    #33 = 20% alpha (0x33 / 0xFF ≈ 0.20) applied to a mid-grey that reads on
+    both dark and light MD3 surfaces without needing a theme attribute at the
+    drawable level (theme attrs are resolved at view inflation time, but solid
+    color drawables are parsed earlier).  The result is a 32×4dp rounded pill
+    matching Material Design 3 drag-handle guidance.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#33808080" />
+    <corners android:radius="2dp" />
+</shape>

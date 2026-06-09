@@ -1,5 +1,27 @@
 # What's New
 
+## Wave 17 — Redesigned terminal menu
+
+The long-press bottom sheet has been fully redesigned with Material Design 3
+polish:
+
+- **Drag handle** at the top — swipe down anywhere to close
+- **"New Tab…"** is now a prominent outlined button — one tap opens a new
+  connection without hunting through the menu
+- **Tab list** shows every open session with a colour-coded connection dot
+  (green = connected, amber = connecting, red = error, grey = disconnected);
+  the active tab is shown in bold with a green check on the right; tapping any
+  row switches to it immediately
+- **Terminal section** — Toggle System Keyboard, Toggle Key Bar (label shows
+  current state), Find in Scrollback, Select Text, Copy Screen, Snippets
+- **Session section** — Broadcast to All Tabs, Port Forwarding, Share Session,
+  Close Current Tab, Disconnect All
+- **Settings** at the bottom, always one tap away
+- Paste removed from this menu — it lives on the key bar where it's faster
+  to reach
+
+---
+
 ## Wave 16 — Terminal menu, settings cleanup
 
 ### Terminal long-press menu

@@ -3,83 +3,36 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:fillViewport="true">
+    android:layout_height="wrap_content">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:paddingTop="8dp"
+        android:paddingBottom="16dp">
 
-        <!-- Header -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Terminal Menu"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:textColor="?android:attr/textColorPrimary"
-            android:paddingBottom="16dp" />
+        <!-- Drag handle -->
+        <View
+            android:layout_width="32dp"
+            android:layout_height="4dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="12dp"
+            android:background="@drawable/bg_bottom_sheet_handle" />
 
-        <!-- Tabs Section -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Active Tabs"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:textColor="?android:attr/textColorSecondary"
-            android:paddingBottom="8dp" />
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/tabs_recycler_view"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:maxHeight="200dp"
-            android:paddingBottom="8dp" />
-
-        <com.google.android.material.divider.MaterialDivider
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp" />
-
-        <!-- Tab Actions -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Tab Actions"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:textColor="?android:attr/textColorSecondary"
-            android:paddingBottom="8dp" />
-
+        <!-- Primary action: New Tab -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_new_tab"
-            style="@style/Widget.Material3.Button.TextButton"
+            style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="48dp"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:layout_marginBottom="12dp"
             android:text="New Tab…"
             app:icon="@drawable/ic_add"
-            app:iconGravity="start" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_close_tab"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Close Current Tab"
-            app:icon="@drawable/ic_close"
-            app:iconGravity="start" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_disconnect_all"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Disconnect All"
-            app:icon="@drawable/ic_disconnect"
-            app:iconGravity="start" />
+            app:iconGravity="start"
+            app:iconPadding="8dp" />
 
         <com.google.android.material.divider.MaterialDivider
             android:layout_width="match_parent"
@@ -87,60 +40,127 @@
             android:layout_marginTop="8dp"
             android:layout_marginBottom="8dp" />
 
-        <!-- Terminal Actions -->
+        <!-- Open Tabs section header -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Terminal"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:textColor="?android:attr/textColorSecondary"
-            android:paddingBottom="8dp" />
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="4dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="OPEN TABS"
+            android:textSize="11sp"
+            android:letterSpacing="0.08"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/tabs_recycler_view"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:nestedScrollingEnabled="false" />
+
+        <com.google.android.material.divider.MaterialDivider
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Terminal section header -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="4dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="TERMINAL"
+            android:textSize="11sp"
+            android:letterSpacing="0.08"
+            android:textColor="?attr/colorOnSurfaceVariant" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_toggle_system_keyboard"
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:paddingStart="16dp"
+            android:gravity="start|center_vertical"
             android:text="Toggle System Keyboard"
             app:icon="@drawable/ic_keyboard"
-            app:iconGravity="start" />
+            app:iconGravity="start"
+            app:iconPadding="12dp"
+            app:iconSize="20dp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_toggle_key_bar"
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Toggle Key Bar"
+            android:minHeight="48dp"
+            android:paddingStart="16dp"
+            android:gravity="start|center_vertical"
+            android:text="Hide Key Bar"
             app:icon="@drawable/ic_keyboard"
-            app:iconGravity="start" />
+            app:iconGravity="start"
+            app:iconPadding="12dp"
+            app:iconSize="20dp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_find_in_scrollback"
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:paddingStart="16dp"
+            android:gravity="start|center_vertical"
             android:text="Find in Scrollback…"
             app:icon="@drawable/ic_search"
-            app:iconGravity="start" />
+            app:iconGravity="start"
+            app:iconPadding="12dp"
+            app:iconSize="20dp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_select_text"
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:paddingStart="16dp"
+            android:gravity="start|center_vertical"
             android:text="Select Text…"
-            app:icon="@drawable/ic_copy"
-            app:iconGravity="start" />
+            app:icon="@drawable/ic_select_all"
+            app:iconGravity="start"
+            app:iconPadding="12dp"
+            app:iconSize="20dp" />
 
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_paste"
+            android:id="@+id/btn_copy_screen"
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Paste"
-            app:icon="@drawable/ic_paste"
-            app:iconGravity="start" />
+            android:minHeight="48dp"
+            android:paddingStart="16dp"
+            android:gravity="start|center_vertical"
+            android:text="Copy Screen"
+            app:icon="@drawable/ic_copy"
+            app:iconGravity="start"
+            app:iconPadding="12dp"
+            app:iconSize="20dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_snippets"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:paddingStart="16dp"
+            android:gravity="start|center_vertical"
+            android:text="Snippets…"
+            app:icon="@drawable/ic_bookmark"
+            app:iconGravity="start"
+            app:iconPadding="12dp"
+            app:iconSize="20dp" />
 
         <com.google.android.material.divider.MaterialDivider
             android:layout_width="match_parent"
@@ -148,33 +168,109 @@
             android:layout_marginTop="8dp"
             android:layout_marginBottom="8dp" />
 
-        <!-- More Options -->
+        <!-- Session section header -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="More"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:textColor="?android:attr/textColorSecondary"
-            android:paddingBottom="8dp" />
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="4dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="SESSION"
+            android:textSize="11sp"
+            android:letterSpacing="0.08"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_cluster_broadcast"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:paddingStart="16dp"
+            android:gravity="start|center_vertical"
+            android:text="Broadcast to All Tabs…"
+            app:icon="@drawable/ic_flash"
+            app:iconGravity="start"
+            app:iconPadding="12dp"
+            app:iconSize="20dp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_port_forwarding"
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:paddingStart="16dp"
+            android:gravity="start|center_vertical"
             android:text="Port Forwarding"
             app:icon="@drawable/ic_interface"
-            app:iconGravity="start" />
+            app:iconGravity="start"
+            app:iconPadding="12dp"
+            app:iconSize="20dp" />
 
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_share_session"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:paddingStart="16dp"
+            android:gravity="start|center_vertical"
+            android:text="Share Session"
+            app:icon="@drawable/ic_share"
+            app:iconGravity="start"
+            app:iconPadding="12dp"
+            app:iconSize="20dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_close_tab"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:paddingStart="16dp"
+            android:gravity="start|center_vertical"
+            android:text="Close Current Tab"
+            app:icon="@drawable/ic_close"
+            app:iconGravity="start"
+            app:iconPadding="12dp"
+            app:iconSize="20dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_disconnect_all"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:paddingStart="16dp"
+            android:gravity="start|center_vertical"
+            android:text="Disconnect All"
+            app:icon="@drawable/ic_disconnect"
+            app:iconGravity="start"
+            app:iconPadding="12dp"
+            app:iconSize="20dp" />
+
+        <com.google.android.material.divider.MaterialDivider
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Settings -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_settings"
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:paddingStart="16dp"
+            android:gravity="start|center_vertical"
             android:text="Settings"
             app:icon="@drawable/ic_settings_general"
-            app:iconGravity="start" />
+            app:iconGravity="start"
+            app:iconPadding="12dp"
+            app:iconSize="20dp" />
 
     </LinearLayout>
 

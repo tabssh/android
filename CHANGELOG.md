@@ -10,6 +10,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 
 - **Scroll direction preference** — `terminal_reverse_scroll` in Settings → Terminal; OFF (default) = swipe UP to see older output, matching JuiceSSH/Termux/ConnectBot; ON = old TabSSH inverted behaviour for users accustomed to it
+
+### Changed
+
+- **Terminal long-press menu redesigned** — full MD3 bottom sheet with drag handle, prominent "New Tab…" outlined button, tab list with per-row connection-state icon (green/amber/red/grey) and bold label for the active tab, plus two new sections ("Terminal" and "Session") covering all actions; removed paste (lives on the key bar); added Copy Screen, Snippets, Broadcast to All Tabs, and Share Session
 - **Changelog hygiene rule** — CLAUDE.md now mandates that every user-visible commit updates both `CHANGELOG.md` and `app/src/main/assets/whats_new.md` in the same commit
 
 ### Changed

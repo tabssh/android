@@ -487,63 +487,200 @@ class TabTerminalActivity : AppCompatActivity() {
     private fun showTerminalMenu() {
         val bottomSheet = com.google.android.material.bottomsheet.BottomSheetDialog(this)
         val view = layoutInflater.inflate(R.layout.bottom_sheet_terminal_menu, null)
-        
-        // Tab list
+
+        // Snapshot tab state at open time so the list is stable while the sheet is open.
+        val tabs = tabManager.getAllTabs()
+        val activeIndex = tabManager.getActiveTabIndex()
+
+        // Build the tab rows programmatically inside the RecyclerView.
         val tabsRecyclerView = view.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.tabs_recycler_view)
         tabsRecyclerView.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
-        
-        val tabs = tabManager.getAllTabs()
+        tabsRecyclerView.isNestedScrollingEnabled = false
+
         val tabAdapter = object : androidx.recyclerview.widget.RecyclerView.Adapter<androidx.recyclerview.widget.RecyclerView.ViewHolder>() {
-            inner class TabViewHolder(val button: com.google.android.material.button.MaterialButton) : 
-                androidx.recyclerview.widget.RecyclerView.ViewHolder(button)
-            
-            override fun onCreateViewHolder(parent: android.view.ViewGroup, viewType: Int): androidx.recyclerview.widget.RecyclerView.ViewHolder {
-                val button = com.google.android.material.button.MaterialButton(parent.context).apply {
+
+            inner class TabRowHolder(val row: android.widget.LinearLayout) :
+                androidx.recyclerview.widget.RecyclerView.ViewHolder(row)
+
+            override fun onCreateViewHolder(
+                parent: android.view.ViewGroup,
+                viewType: Int
+            ): androidx.recyclerview.widget.RecyclerView.ViewHolder {
+                val ctx = parent.context
+                val dp = ctx.resources.displayMetrics.density
+
+                // Outer row: horizontal LinearLayout, 48dp min height, 16dp horizontal padding.
+                val row = android.widget.LinearLayout(ctx).apply {
+                    orientation = android.widget.LinearLayout.HORIZONTAL
+                    minimumHeight = (48 * dp).toInt()
+                    setPadding((16 * dp).toInt(), 0, (16 * dp).toInt(), 0)
+                    gravity = android.view.Gravity.CENTER_VERTICAL
+                    isClickable = true
+                    isFocusable = true
+                    val rippleAttrs = intArrayOf(android.R.attr.selectableItemBackground)
+                    val typedArray = ctx.obtainStyledAttributes(rippleAttrs)
+                    background = typedArray.getDrawable(0)
+                    typedArray.recycle()
                     layoutParams = android.view.ViewGroup.LayoutParams(
                         android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                         android.view.ViewGroup.LayoutParams.WRAP_CONTENT
                     )
-                    setTextAlignment(android.view.View.TEXT_ALIGNMENT_VIEW_START)
                 }
-                return TabViewHolder(button)
+
+                // State dot icon: 20×20dp.
+                val stateIcon = android.widget.ImageView(ctx).apply {
+                    id = android.view.View.generateViewId()
+                    layoutParams = android.widget.LinearLayout.LayoutParams(
+                        (20 * dp).toInt(),
+                        (20 * dp).toInt()
+                    ).also { it.marginEnd = (12 * dp).toInt() }
+                    scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                    importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                }
+
+                // Tab name label: takes all remaining horizontal space.
+                val nameLabel = android.widget.TextView(ctx).apply {
+                    id = android.view.View.generateViewId()
+                    layoutParams = android.widget.LinearLayout.LayoutParams(
+                        0,
+                        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                        1f
+                    )
+                    textSize = 16f
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                    val textColorAttrs = intArrayOf(android.R.attr.textColorPrimary)
+                    val ta = ctx.obtainStyledAttributes(textColorAttrs)
+                    setTextColor(ta.getColorStateList(0))
+                    ta.recycle()
+                }
+
+                // Right-side status icon: 16×16dp, visible only to distinguish active vs navigable.
+                val rightIcon = android.widget.ImageView(ctx).apply {
+                    id = android.view.View.generateViewId()
+                    layoutParams = android.widget.LinearLayout.LayoutParams(
+                        (16 * dp).toInt(),
+                        (16 * dp).toInt()
+                    ).also { it.marginStart = (8 * dp).toInt() }
+                    scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                }
+
+                row.addView(stateIcon)
+                row.addView(nameLabel)
+                row.addView(rightIcon)
+
+                // Tag the child views by position index so onBindViewHolder can find them.
+                row.tag = Triple(stateIcon, nameLabel, rightIcon)
+                return TabRowHolder(row)
             }
-            
-            override fun onBindViewHolder(holder: androidx.recyclerview.widget.RecyclerView.ViewHolder, position: Int) {
+
+            override fun onBindViewHolder(
+                holder: androidx.recyclerview.widget.RecyclerView.ViewHolder,
+                position: Int
+            ) {
                 val tab = tabs[position]
-                val viewHolder = holder as TabViewHolder
-                viewHolder.button.text = tab.profile.getDisplayName()
-                viewHolder.button.setOnClickListener {
+                val rowHolder = holder as TabRowHolder
+                val ctx = rowHolder.row.context
+                val (stateIcon, nameLabel, rightIcon) = rowHolder.row.tag as Triple<*, *, *>
+                val stateView = stateIcon as android.widget.ImageView
+                val nameView = nameLabel as android.widget.TextView
+                val rightView = rightIcon as android.widget.ImageView
+                val isActive = position == activeIndex
+
+                // Connection-state dot with semantic tint.
+                val connectionState = tab.connectionState.value
+                when (connectionState) {
+                    ConnectionState.CONNECTED -> {
+                        stateView.setImageResource(R.drawable.ic_connected)
+                        stateView.imageTintList = android.content.res.ColorStateList.valueOf(
+                            androidx.core.content.ContextCompat.getColor(ctx, R.color.connected)
+                        )
+                        stateView.contentDescription = "Connected"
+                    }
+                    ConnectionState.CONNECTING -> {
+                        stateView.setImageResource(R.drawable.ic_connecting)
+                        stateView.imageTintList = android.content.res.ColorStateList.valueOf(
+                            androidx.core.content.ContextCompat.getColor(ctx, R.color.connecting)
+                        )
+                        stateView.contentDescription = "Connecting"
+                    }
+                    ConnectionState.AUTHENTICATING -> {
+                        stateView.setImageResource(R.drawable.ic_connecting)
+                        stateView.imageTintList = android.content.res.ColorStateList.valueOf(
+                            androidx.core.content.ContextCompat.getColor(ctx, R.color.connecting)
+                        )
+                        stateView.contentDescription = "Authenticating"
+                    }
+                    ConnectionState.ERROR -> {
+                        stateView.setImageResource(R.drawable.ic_error)
+                        stateView.imageTintList = android.content.res.ColorStateList.valueOf(
+                            androidx.core.content.ContextCompat.getColor(ctx, R.color.connection_error)
+                        )
+                        stateView.contentDescription = "Connection error"
+                    }
+                    ConnectionState.DISCONNECTED -> {
+                        stateView.setImageResource(R.drawable.ic_disconnect)
+                        val onSurfaceVariantAttrs = intArrayOf(com.google.android.material.R.attr.colorOnSurfaceVariant)
+                        val ta = ctx.obtainStyledAttributes(onSurfaceVariantAttrs)
+                        stateView.imageTintList = ta.getColorStateList(0)
+                        ta.recycle()
+                        stateView.contentDescription = "Disconnected"
+                    }
+                }
+
+                // Tab name: bold when active.
+                nameView.text = tab.profile.getDisplayName()
+                nameView.setTypeface(
+                    nameView.typeface,
+                    if (isActive) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL
+                )
+                // Content description for the whole row assists TalkBack.
+                val stateDesc = stateView.contentDescription
+                rowHolder.row.contentDescription =
+                    "${tab.profile.getDisplayName()}, $stateDesc${if (isActive) ", active tab" else ""}"
+
+                // Right icon: filled checkmark for active row, chevron for others.
+                if (isActive) {
+                    rightView.setImageResource(R.drawable.ic_connected)
+                    rightView.imageTintList = android.content.res.ColorStateList.valueOf(
+                        androidx.core.content.ContextCompat.getColor(ctx, R.color.connected)
+                    )
+                    rightView.visibility = android.view.View.VISIBLE
+                    rightView.contentDescription = "Active"
+                } else {
+                    rightView.setImageResource(R.drawable.ic_forward)
+                    val onSurfaceVariantAttrs = intArrayOf(com.google.android.material.R.attr.colorOnSurfaceVariant)
+                    val ta = ctx.obtainStyledAttributes(onSurfaceVariantAttrs)
+                    rightView.imageTintList = ta.getColorStateList(0)
+                    ta.recycle()
+                    rightView.visibility = android.view.View.VISIBLE
+                    rightView.contentDescription = null
+                }
+
+                rowHolder.row.setOnClickListener {
                     tabManager.setActiveTab(position)
                     switchToTab(position)
                     bottomSheet.dismiss()
                 }
             }
-            
+
             override fun getItemCount() = tabs.size
         }
         tabsRecyclerView.adapter = tabAdapter
-        
-        // Menu buttons
-        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_new_tab)?.setOnClickListener {
-            // Quick connect
-            bottomSheet.dismiss()
-            showConnectionSelector()
-        }
-        
-        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_close_tab)?.setOnClickListener {
-            bottomSheet.dismiss()
-            closeCurrentTab()
-        }
 
-        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_disconnect_all)?.setOnClickListener {
-            bottomSheet.dismiss()
-            disconnectAllTabs()
-        }
+        // Primary action — new tab.
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_new_tab)
+            ?.setOnClickListener {
+                bottomSheet.dismiss()
+                showConnectionSelector()
+            }
 
-        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_toggle_system_keyboard)?.setOnClickListener {
-            bottomSheet.dismiss()
-            toggleKeyboard()
-        }
+        // Terminal section.
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_toggle_system_keyboard)
+            ?.setOnClickListener {
+                bottomSheet.dismiss()
+                toggleKeyboard()
+            }
 
         val keyBarBtn = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_toggle_key_bar)
         keyBarBtn?.text = if (customKeyboardVisible) "Hide Key Bar" else "Show Key Bar"
@@ -552,31 +689,68 @@ class TabTerminalActivity : AppCompatActivity() {
             if (customKeyboardVisible) hideCustomKeyboardBar() else showCustomKeyboardBar()
         }
 
-        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_find_in_scrollback)?.setOnClickListener {
-            bottomSheet.dismiss()
-            showSearchOverlay()
-        }
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_find_in_scrollback)
+            ?.setOnClickListener {
+                bottomSheet.dismiss()
+                showSearchOverlay()
+            }
 
-        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_select_text)?.setOnClickListener {
-            bottomSheet.dismiss()
-            getActiveTerminalView()?.armSelectionForNextDrag()
-            Toast.makeText(this, "Drag on the terminal to select text, then tap Copy.", Toast.LENGTH_LONG).show()
-        }
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_select_text)
+            ?.setOnClickListener {
+                bottomSheet.dismiss()
+                getActiveTerminalView()?.armSelectionForNextDrag()
+                Toast.makeText(this, "Drag to select, then tap Copy.", Toast.LENGTH_LONG).show()
+            }
 
-        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_paste)?.setOnClickListener {
-            bottomSheet.dismiss()
-            pasteFromClipboard()
-        }
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_copy_screen)
+            ?.setOnClickListener {
+                bottomSheet.dismiss()
+                copyTerminalScreen()
+            }
 
-        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_port_forwarding)?.setOnClickListener {
-            bottomSheet.dismiss()
-            openPortForwarding()
-        }
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_snippets)
+            ?.setOnClickListener {
+                bottomSheet.dismiss()
+                showSnippetsDialog()
+            }
 
-        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_settings)?.setOnClickListener {
-            bottomSheet.dismiss()
-            startActivity(Intent(this, SettingsActivity::class.java))
-        }
+        // Session section.
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_cluster_broadcast)
+            ?.setOnClickListener {
+                bottomSheet.dismiss()
+                showClusterBroadcastDialog()
+            }
+
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_port_forwarding)
+            ?.setOnClickListener {
+                bottomSheet.dismiss()
+                openPortForwarding()
+            }
+
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_share_session)
+            ?.setOnClickListener {
+                bottomSheet.dismiss()
+                shareSession()
+            }
+
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_close_tab)
+            ?.setOnClickListener {
+                bottomSheet.dismiss()
+                closeCurrentTab()
+            }
+
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_disconnect_all)
+            ?.setOnClickListener {
+                bottomSheet.dismiss()
+                disconnectAllTabs()
+            }
+
+        // Settings.
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_settings)
+            ?.setOnClickListener {
+                bottomSheet.dismiss()
+                startActivity(Intent(this, SettingsActivity::class.java))
+            }
 
         bottomSheet.setContentView(view)
         bottomSheet.show()
