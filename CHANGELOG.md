@@ -13,6 +13,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Ed25519 / RSA / DSA / ECDSA public-key export wrong format** — `KeyStorage.encode*PublicKey()` all called `key.encoded` which returns the X.509 SPKI/DER blob; sshd silently rejects SPKI-encoded `authorized_keys` lines; all four helpers now build the correct OpenSSH SSH wire format (length-prefixed type string + key-type-specific payload per RFC 4253 §6.6)
+- **Vertical spacing setting has no effect** — `TerminalPagerAdapter` had no `lineSpacingPercent` parameter so every new terminal view used the default 1.2×; `applyTerminalUiPrefs()` only updated the active view; `lineSpacingPercent` now passed to the adapter at construction and applied in `onCreateViewHolder`; adapter exposes `setLineSpacingPercent()` called from `applyTerminalUiPrefs()` to update all bound views
+- **Reverse-scroll direction setting has no effect after returning from Settings** — `applyTerminalUiPrefs()` never updated `reverseScrollDirection` on live views; now calls adapter `setReverseScrollDirection()` which updates all bound terminal views in place
 - **Import/Export crash on fast tap** — `backupManager` was initialised in a background coroutine; tapping any card before it finished threw `UninitializedPropertyAccessException`; converted to nullable with a "not ready" message guard at each call site
 - **Saved password not cleared when "Save Password" unchecked** — editing a connection and unchecking "Save Password" left the old Keystore credential in place; it was silently reused on the next connect; now calls `clearPassword(profile.id)` on uncheck
 - **`finish()` indentation trap in connection-failure path** — the `finish()` call in the null-errorInfo branch was indented at the outer scope level, making it look like it ran for both errorInfo paths; re-indented to match its actual inner-`else` scope

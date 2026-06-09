@@ -1348,13 +1348,23 @@ private fun showSnippetsPickerForActiveTab() {
         // confusing UX. Manual show/hide is still available via
         // showCustomKeyboardBar / hideCustomKeyboardBar (toolbar action).
 
-        // Line-spacing — applies to whichever TerminalView is active (swipe
-        // mode or classic). Stored 100–200, default 120 = 1.2× tight.
+        // Line-spacing and scroll-direction — push to all bound terminal views
+        // so every tab gets the current setting, not just the one visible at
+        // the moment this method runs.
         val spacing = prefs.getStringAsInt("terminal_line_spacing", 120)
+        val reversed = prefs.isReverseScrollDirection()
         try {
-            getActiveTerminalView()?.setLineSpacingPercent(spacing)
+            val adapter = pagerAdapter
+            if (adapter != null) {
+                adapter.setLineSpacingPercent(spacing)
+                adapter.setReverseScrollDirection(reversed)
+            } else {
+                // Classic (non-swipe) mode: one TerminalView in the layout.
+                terminalView?.setLineSpacingPercent(spacing)
+                terminalView?.let { it.reverseScrollDirection = reversed }
+            }
         } catch (e: Exception) {
-            Logger.w("TabTerminalActivity", "Line spacing apply failed: ${e.message}")
+            Logger.w("TabTerminalActivity", "Terminal pref apply failed: ${e.message}")
         }
 
         // `terminal_word_wrap` (default ON) → DECAWM on the LOCAL emulator.
@@ -2058,7 +2068,8 @@ private fun showSnippetsPickerForActiveTab() {
                 commandCallback,
                 onContextMenuRequested = { x, y -> beginSelection(x, y) },
                 onSelectionStarted = { tv -> startTerminalSelectionActionMode(tv) },
-                reverseScrollDirection = app.preferencesManager.isReverseScrollDirection()
+                reverseScrollDirection = app.preferencesManager.isReverseScrollDirection(),
+                lineSpacingPercent = app.preferencesManager.getStringAsInt("terminal_line_spacing", 120)
             )
             // Suppress onPageSelected / onTabSelected while the adapter is
             // being installed. viewPager.adapter resets the pager to page 0,
@@ -2118,7 +2129,8 @@ private fun showSnippetsPickerForActiveTab() {
                 commandCallback,
                 onContextMenuRequested = { x, y -> beginSelection(x, y) },
                 onSelectionStarted = { tv -> startTerminalSelectionActionMode(tv) },
-                reverseScrollDirection = app.preferencesManager.isReverseScrollDirection()
+                reverseScrollDirection = app.preferencesManager.isReverseScrollDirection(),
+                lineSpacingPercent = app.preferencesManager.getStringAsInt("terminal_line_spacing", 120)
             )
             viewPager?.adapter = pagerAdapter
 

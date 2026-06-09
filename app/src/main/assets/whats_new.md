@@ -1,5 +1,25 @@
 # What's New
 
+## Wave 24 — Public key export fixed, scroll and spacing settings work
+
+### Public key export (issue #7)
+Generated SSH keys (Ed25519, RSA, DSA, ECDSA) now export in the correct
+**OpenSSH `authorized_keys` wire format**. Previously all key types were
+exported in X.509 SPKI/DER encoding, which `sshd` silently rejects — meaning
+public-key authentication could never work with any key generated in TabSSH.
+If you've been using public-key auth, please re-export your keys and update
+your `~/.ssh/authorized_keys`.
+
+### Vertical spacing setting now works (issue #9)
+The **Vertical spacing** slider in Settings → Terminal now takes effect
+immediately on all open tabs and persists across tab switches.
+
+### Reverse scroll direction setting now works (issue #8)
+Toggling **Reverse scroll direction** in Settings now takes effect as soon as
+you return to the terminal — no more needing to restart the app.
+
+---
+
 ## Wave 23 — Import/Export crash and password revoke fixed
 
 - **Import/Export** no longer crashes if you tap a card in the first

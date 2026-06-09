@@ -1151,34 +1151,92 @@ Error: ${e.javaClass.simpleName}: ${e.message}"""
             "$keyTypeStr $keyData$commentStr"
             
         } catch (e: Exception) {
-            Logger.e("KeyStorage", "Failed to format public key", e)
-            // Fallback to simple encoding
-            val keyTypeStr = KeyType.valueOf(keyType).getOpenSSHIdentifier()
-            val keyData = android.util.Base64.encodeToString(publicKey.encoded, android.util.Base64.NO_WRAP)
-            val commentStr = comment?.let { " $it" } ?: ""
-            "$keyTypeStr $keyData$commentStr"
+            Logger.e("KeyStorage", "Failed to format public key in OpenSSH wire format", e)
+            // Last-resort: log a clear warning. publicKey.encoded is SPKI/DER, not
+            // authorized_keys format — do NOT base64 it as-is (sshd would reject it).
+            // Propagate the error so the caller can surface it to the user.
+            throw e
         }
     }
     
+    // ── OpenSSH wire-format helpers ──────────────────────────────────────────
+    //
+    // `PublicKey.encoded` returns the X.509 SPKI/DER blob, NOT the OpenSSH
+    // authorized_keys wire format. sshd silently rejects SPKI-encoded lines.
+    // Each helper builds the SSH wire encoding manually:
+    //   uint32(len(type_string)) || type_string || [key-type-specific payload]
+    //
+    // Reference: RFC 4253 §6.6 (SSH public-key wire format).
+
+    private fun opensshWireString(s: String): ByteArray {
+        val b = s.toByteArray(java.nio.charset.StandardCharsets.UTF_8)
+        return java.nio.ByteBuffer.allocate(4 + b.size).putInt(b.size).put(b).array()
+    }
+
+    private fun opensshWireMPInt(n: java.math.BigInteger): ByteArray {
+        val b = n.toByteArray()   // two's-complement big-endian, with sign byte if needed
+        return java.nio.ByteBuffer.allocate(4 + b.size).putInt(b.size).put(b).array()
+    }
+
     private fun encodeRSAPublicKey(rsaKey: RSAPublicKey): String {
-        // OpenSSH RSA public key format: ssh-rsa AAAAB3NzaC1yc2EAAAA...
-        // This requires proper wire format encoding
-        return android.util.Base64.encodeToString(rsaKey.encoded, android.util.Base64.NO_WRAP)
+        val buf = java.io.ByteArrayOutputStream()
+        buf.write(opensshWireString("ssh-rsa"))
+        buf.write(opensshWireMPInt(rsaKey.publicExponent))
+        buf.write(opensshWireMPInt(rsaKey.modulus))
+        return android.util.Base64.encodeToString(buf.toByteArray(), android.util.Base64.NO_WRAP)
     }
-    
+
     private fun encodeDSAPublicKey(dsaKey: DSAPublicKey): String {
-        // OpenSSH DSA public key format
-        return android.util.Base64.encodeToString(dsaKey.encoded, android.util.Base64.NO_WRAP)
+        val buf = java.io.ByteArrayOutputStream()
+        buf.write(opensshWireString("ssh-dss"))
+        buf.write(opensshWireMPInt(dsaKey.params.p))
+        buf.write(opensshWireMPInt(dsaKey.params.q))
+        buf.write(opensshWireMPInt(dsaKey.params.g))
+        buf.write(opensshWireMPInt(dsaKey.y))
+        return android.util.Base64.encodeToString(buf.toByteArray(), android.util.Base64.NO_WRAP)
     }
-    
+
     private fun encodeECDSAPublicKey(ecKey: ECPublicKey): String {
-        // OpenSSH ECDSA public key format
-        return android.util.Base64.encodeToString(ecKey.encoded, android.util.Base64.NO_WRAP)
+        val bits = ecKey.params.order.bitLength()
+        val keyType = when (bits) {
+            256 -> "ecdsa-sha2-nistp256"
+            384 -> "ecdsa-sha2-nistp384"
+            521 -> "ecdsa-sha2-nistp521"
+            else -> throw IllegalArgumentException("Unsupported EC curve: $bits bits")
+        }
+        val curveName = when (bits) {
+            256 -> "nistp256"; 384 -> "nistp384"; else -> "nistp521"
+        }
+        // Uncompressed EC point: 0x04 || x || y, each field ceil(bits/8) bytes.
+        val fieldLen = (bits + 7) / 8
+        fun bigIntToFixedLen(n: java.math.BigInteger): ByteArray {
+            val raw = n.toByteArray()
+            return when {
+                raw.size == fieldLen     -> raw
+                raw.size == fieldLen + 1 -> raw.copyOfRange(1, raw.size)  // strip sign byte
+                else                     -> ByteArray(fieldLen - raw.size) + raw
+            }
+        }
+        val pointBytes = byteArrayOf(0x04.toByte()) +
+            bigIntToFixedLen(ecKey.w.affineX) +
+            bigIntToFixedLen(ecKey.w.affineY)
+        val buf = java.io.ByteArrayOutputStream()
+        buf.write(opensshWireString(keyType))
+        buf.write(opensshWireString(curveName))
+        buf.write(java.nio.ByteBuffer.allocate(4 + pointBytes.size)
+            .putInt(pointBytes.size).put(pointBytes).array())
+        return android.util.Base64.encodeToString(buf.toByteArray(), android.util.Base64.NO_WRAP)
     }
-    
+
     private fun encodeEd25519PublicKey(edKey: PublicKey): String {
-        // OpenSSH Ed25519 public key format
-        return android.util.Base64.encodeToString(edKey.encoded, android.util.Base64.NO_WRAP)
+        // Ed25519 SPKI/DER = 44 bytes:
+        //   30 2a 30 05 06 03 2b 65 70 03 21 00 <32-byte-raw-key>
+        // The raw public key is always the last 32 bytes.
+        val raw = edKey.encoded.takeLast(32).toByteArray()
+        val buf = java.io.ByteArrayOutputStream()
+        buf.write(opensshWireString("ssh-ed25519"))
+        buf.write(java.nio.ByteBuffer.allocate(4 + raw.size).putInt(raw.size).put(raw).array())
+        return android.util.Base64.encodeToString(buf.toByteArray(), android.util.Base64.NO_WRAP)
     }
 }
 

@@ -35,7 +35,8 @@ class TerminalPagerAdapter(
      * Copy ActionMode against the right view.
      */
     private val onSelectionStarted: ((TerminalView) -> Unit)? = null,
-    private val reverseScrollDirection: Boolean = false
+    private var reverseScrollDirection: Boolean = false,
+    private var lineSpacingPercent: Int = 120
 ) : RecyclerView.Adapter<TerminalPagerAdapter.TerminalViewHolder>() {
 
     // Track bound view holders for theme updates
@@ -52,6 +53,24 @@ class TerminalPagerAdapter(
     }
 
     /**
+     * Update scroll direction on all bound terminal views.
+     * Called from applyTerminalUiPrefs() when the user changes the preference.
+     */
+    fun setReverseScrollDirection(reversed: Boolean) {
+        reverseScrollDirection = reversed
+        boundViewHolders.forEach { it.terminalView.reverseScrollDirection = reversed }
+    }
+
+    /**
+     * Update line spacing on all bound terminal views.
+     * Called from applyTerminalUiPrefs() when the user changes the preference.
+     */
+    fun setLineSpacingPercent(percent: Int) {
+        lineSpacingPercent = percent
+        boundViewHolders.forEach { it.terminalView.setLineSpacingPercent(percent) }
+    }
+
+    /**
      * Get terminal view at position (for theme application)
      */
     fun getTerminalViewAt(position: Int): TerminalView? {
@@ -65,6 +84,7 @@ class TerminalPagerAdapter(
             ViewGroup.LayoutParams.MATCH_PARENT
         )
         terminalView.reverseScrollDirection = reverseScrollDirection
+        terminalView.setLineSpacingPercent(lineSpacingPercent)
         return TerminalViewHolder(
             terminalView,
             fontSize,
