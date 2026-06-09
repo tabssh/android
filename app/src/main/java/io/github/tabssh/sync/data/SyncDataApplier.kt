@@ -262,6 +262,8 @@ class SyncDataApplier {
     private suspend fun applySecrets(secrets: Map<String, String>) {
         val pm: SecurePasswordManager? = app?.securePasswordManager
         val ks: KeyStorage? = app?.keyStorage
+        if (pm == null) Logger.w(TAG, "SecurePasswordManager unavailable — Keystore-backed secrets will not be restored")
+        if (ks == null) Logger.w(TAG, "KeyStorage unavailable — SSH key bytes will not be restored")
         var passwordCount = 0
         var keyCount = 0
         secrets.forEach { (alias, value) ->
@@ -544,6 +546,18 @@ class SyncDataApplier {
             sync?.let {
                 count += applySyncPreferences(it)
             }
+            val multiplexer = (preferences["multiplexer"] as? JsonObject)?.toAnyMap()
+            multiplexer?.let {
+                count += applyMultiplexerPreferences(it)
+            }
+            val accessibility = (preferences["accessibility"] as? JsonObject)?.toAnyMap()
+            accessibility?.let {
+                count += applyAccessibilityPreferences(it)
+            }
+            val proxy = (preferences["proxy"] as? JsonObject)?.toAnyMap()
+            proxy?.let {
+                count += applyProxyPreferences(it)
+            }
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to apply preferences", e)
         }
@@ -569,6 +583,71 @@ class SyncDataApplier {
                 count++
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to apply sync preference: $key", e)
+            }
+        }
+        return count
+    }
+
+    private fun applyMultiplexerPreferences(prefs: Map<String, Any>): Int {
+        var count = 0
+        try {
+            val defaultPrefs = AndroidPreferenceManager.getDefaultSharedPreferences(context)
+            prefs.forEach { (key, value) ->
+                try {
+                    when (key) {
+                        "gestureEnabled" -> defaultPrefs.edit()
+                            .putBoolean("enable_custom_gestures", value as Boolean).apply()
+                        "gestureType"    -> defaultPrefs.edit()
+                            .putString("gesture_multiplexer_type", value as String).apply()
+                        "prefixTmux"    -> preferenceManager.setMultiplexerPrefix("tmux",   value as String)
+                        "prefixScreen"  -> preferenceManager.setMultiplexerPrefix("screen", value as String)
+                        "prefixZellij"  -> preferenceManager.setMultiplexerPrefix("zellij", value as String)
+                    }
+                    count++
+                } catch (e: Exception) {
+                    Logger.e(TAG, "Failed to apply multiplexer preference: $key", e)
+                }
+            }
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to apply multiplexer preferences", e)
+        }
+        return count
+    }
+
+    private fun applyAccessibilityPreferences(prefs: Map<String, Any>): Int {
+        var count = 0
+        prefs.forEach { (key, value) ->
+            try {
+                when (key) {
+                    "highContrast"      -> preferenceManager.setHighContrastMode(value as Boolean)
+                    "largeTouchTargets" -> preferenceManager.setLargeTouchTargets(value as Boolean)
+                }
+                count++
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to apply accessibility preference: $key", e)
+            }
+        }
+        return count
+    }
+
+    private fun applyProxyPreferences(prefs: Map<String, Any>): Int {
+        var count = 0
+        prefs.forEach { (key, value) ->
+            try {
+                when (key) {
+                    "enabled"     -> preferenceManager.setProxyEnabled(value as Boolean)
+                    "type"        -> preferenceManager.setProxyType(value as String)
+                    "host"        -> preferenceManager.setProxyHost(value as String)
+                    "port"        -> preferenceManager.setProxyPort((value as Number).toInt())
+                    "username"    -> preferenceManager.setProxyUsername(value as String)
+                    "password"    -> preferenceManager.setProxyPassword(value as String)
+                    "bypassHosts" -> preferenceManager.setProxyBypassHosts(
+                        (value as String).split(",").filter { it.isNotEmpty() }
+                    )
+                }
+                count++
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to apply proxy preference: $key", e)
             }
         }
         return count

@@ -669,6 +669,51 @@ class BackupImporter(
                 putInt("monitoring_default_disk_threshold",    m.optInt("monitoring_default_disk_threshold", 0))
             }.apply()
         }
+        root.optJSONObject("connection")?.let { c ->
+            preferenceManager.setDefaultUsername(c.optString("defaultUsername", "root"))
+            preferenceManager.setDefaultPort(c.optInt("defaultPort", 22))
+            preferenceManager.setConnectTimeout(c.optInt("connectTimeout", 15))
+            preferenceManager.setAutoReconnect(c.optBoolean("autoReconnect", true))
+            preferenceManager.setCompressionEnabled(c.optBoolean("compression", true))
+        }
+        root.optJSONObject("sync")?.let { s ->
+            preferenceManager.setSyncFrequency(s.optString("frequency", "hourly"))
+            preferenceManager.setSyncWifiOnly(s.optBoolean("wifiOnly", false))
+            preferenceManager.setSyncOnChangeEnabled(s.optBoolean("onChangeEnabled", false))
+            preferenceManager.setSyncConnectionsEnabled(s.optBoolean("syncConnections", true))
+            preferenceManager.setSyncKeysEnabled(s.optBoolean("syncKeys", true))
+            preferenceManager.setSyncIdentitiesEnabled(s.optBoolean("syncIdentities", true))
+            preferenceManager.setSyncSnippetsEnabled(s.optBoolean("syncSnippets", true))
+            preferenceManager.setSyncSettingsEnabled(s.optBoolean("syncSettings", true))
+            preferenceManager.setSyncThemesEnabled(s.optBoolean("syncThemes", true))
+        }
+        root.optJSONObject("multiplexer")?.let { m ->
+            defaultPrefs.edit().apply {
+                putBoolean("enable_custom_gestures",  m.optBoolean("gestureEnabled", false))
+                putString("gesture_multiplexer_type", m.optString("gestureType", "tmux"))
+            }.apply()
+            preferenceManager.setMultiplexerPrefix("tmux",   m.optString("prefixTmux",   "C-b"))
+            preferenceManager.setMultiplexerPrefix("screen", m.optString("prefixScreen", "C-a"))
+            preferenceManager.setMultiplexerPrefix("zellij", m.optString("prefixZellij", "C-g"))
+        }
+        root.optJSONObject("accessibility")?.let { a ->
+            preferenceManager.setHighContrastMode(a.optBoolean("highContrast", false))
+            preferenceManager.setLargeTouchTargets(a.optBoolean("largeTouchTargets", false))
+        }
+        root.optJSONObject("proxy")?.let { p ->
+            preferenceManager.setProxyEnabled(p.optBoolean("enabled", false))
+            preferenceManager.setProxyType(p.optString("type", "SOCKS5"))
+            preferenceManager.setProxyHost(p.optString("host", ""))
+            preferenceManager.setProxyPort(p.optInt("port", 1080))
+            val proxyUser = p.optString("username", "")
+            preferenceManager.setProxyUsername(proxyUser.takeIf { it.isNotEmpty() })
+            val proxyPass = p.optString("password", "")
+            preferenceManager.setProxyPassword(proxyPass.takeIf { it.isNotEmpty() })
+            val bypass = p.optString("bypassHosts", "")
+            if (bypass.isNotEmpty()) {
+                preferenceManager.setProxyBypassHosts(bypass.split(",").filter { it.isNotEmpty() })
+            }
+        }
     }
 
 }

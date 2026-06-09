@@ -530,6 +530,9 @@ class SyncDataCollector {
             if (notifPrefs.isNotEmpty()) prefs["notifications"] = anyMapToJsonObject(notifPrefs)
             val monitorPrefs = collectMonitoringPreferences()
             if (monitorPrefs.isNotEmpty()) prefs["monitoring"] = anyMapToJsonObject(monitorPrefs)
+            prefs["multiplexer"]    = anyMapToJsonObject(collectMultiplexerPreferences())
+            prefs["accessibility"]  = anyMapToJsonObject(collectAccessibilityPreferences())
+            prefs["proxy"]          = anyMapToJsonObject(collectProxyPreferences())
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to collect preferences", e)
         }
@@ -674,6 +677,37 @@ class SyncDataCollector {
         return out
     }
 
+    private fun collectMultiplexerPreferences(): Map<String, Any> {
+        val defaultPrefs = AndroidPreferenceManager.getDefaultSharedPreferences(context)
+        return mapOf(
+            "gestureEnabled" to defaultPrefs.getBoolean("enable_custom_gestures", false),
+            "gestureType"    to (defaultPrefs.getString("gesture_multiplexer_type", "tmux") ?: "tmux"),
+            "prefixTmux"     to preferenceManager.getMultiplexerPrefix("tmux"),
+            "prefixScreen"   to preferenceManager.getMultiplexerPrefix("screen"),
+            "prefixZellij"   to preferenceManager.getMultiplexerPrefix("zellij")
+        )
+    }
+
+    private fun collectAccessibilityPreferences(): Map<String, Any> = mapOf(
+        "highContrast"      to preferenceManager.isHighContrastMode(),
+        "largeTouchTargets" to preferenceManager.isLargeTouchTargets()
+    )
+
+    private fun collectProxyPreferences(): Map<String, Any> {
+        val out = mutableMapOf<String, Any>()
+        out["enabled"]     = preferenceManager.isProxyEnabled()
+        out["type"]        = preferenceManager.getProxyType()
+        out["host"]        = preferenceManager.getProxyHost()
+        out["port"]        = preferenceManager.getProxyPort()
+        val user = preferenceManager.getProxyUsername()
+        if (!user.isNullOrEmpty()) out["username"] = user
+        val pass = preferenceManager.getProxyPassword()
+        if (!pass.isNullOrEmpty()) out["password"] = pass
+        val bypass = preferenceManager.getProxyBypassHosts()
+        if (bypass.isNotEmpty()) out["bypassHosts"] = bypass.joinToString(",")
+        return out
+    }
+
     /**
      * Check if preferences have changed since timestamp
      */
@@ -687,11 +721,23 @@ class SyncDataCollector {
      */
     suspend fun getItemCounts(): SyncItemCounts = withContext(Dispatchers.IO) {
         SyncItemCounts(
-            connections = database.connectionDao().getConnectionCount(),
-            keys = database.keyDao().getKeyCount(),
-            themes = database.themeDao().getThemeCount(),
-            preferences = collectPreferences().size,
-            hostKeys = database.hostKeyDao().getHostKeyCount()
+            connections       = database.connectionDao().getConnectionCount(),
+            keys              = database.keyDao().getKeyCount(),
+            themes            = database.themeDao().getThemeCount(),
+            preferences       = collectPreferences().size,
+            hostKeys          = database.hostKeyDao().getHostKeyCount(),
+            workspaces        = try { database.workspaceDao().getAll().size } catch (_: Exception) { 0 },
+            snippets          = try { database.snippetDao().getAllSnippets().first().size } catch (_: Exception) { 0 },
+            identities        = try { database.identityDao().getAllIdentitiesList().size } catch (_: Exception) { 0 },
+            groups            = try { database.connectionGroupDao().getAllGroups().first().size } catch (_: Exception) { 0 },
+            hypervisors       = try { database.hypervisorDao().getAllList().size } catch (_: Exception) { 0 },
+            certificates      = try { database.certificateDao().getAllCertificates().first().size } catch (_: Exception) { 0 },
+            macros            = try { database.macroDao().getAllMacrosList().size } catch (_: Exception) { 0 },
+            monitorSlots      = try { database.monitorSlotDao().getAllSlots().first().size } catch (_: Exception) { 0 },
+            hypervisorAccounts= try { database.hypervisorAccountDao().getAllAccountsList().size } catch (_: Exception) { 0 },
+            vncHosts          = try { database.vncHostDao().getAllHostsList().size } catch (_: Exception) { 0 },
+            vncIdentities     = try { database.vncIdentityDao().getAllIdentitiesList().size } catch (_: Exception) { 0 },
+            cloudAccounts     = try { database.cloudAccountDao().getAll().size } catch (_: Exception) { 0 }
         )
     }
 

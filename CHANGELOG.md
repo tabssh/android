@@ -9,6 +9,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Full preference sync and backup** — connection defaults, sync toggles, multiplexer key bindings, accessibility flags, and proxy configuration are now included in both SAF sync and backup/restore; previously these five categories were silently absent from both systems
+
+### Fixed
+
+- **`getItemCounts()` undercounting** — only counted 5 of 16 entity types; now counts all: connections, keys, themes, host keys, workspaces, snippets, identities, groups, hypervisors, certificates, macros, monitor slots, hypervisor accounts, VNC hosts, VNC identities, cloud accounts
+- **`applySecrets()` silent failure** — missing `SecurePasswordManager` or `KeyStorage` (e.g. during test runs) now logs a warning instead of silently dropping all credentials
+
 - **Scroll direction preference** — `terminal_reverse_scroll` in Settings → Terminal; OFF (default) = swipe UP to see older output, matching JuiceSSH/Termux/ConnectBot; ON = old TabSSH inverted behaviour for users accustomed to it
 
 ### Changed

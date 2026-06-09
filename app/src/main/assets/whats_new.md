@@ -1,5 +1,22 @@
 # What's New
 
+## Wave 20 — Sync and backup now cover everything
+
+Five preference categories that were silently missing from both sync and
+backup/restore are now fully covered:
+
+- **Connection defaults** — default username, port, timeout, auto-reconnect,
+  compression
+- **Sync settings** — frequency, Wi-Fi only, per-category sync toggles
+- **Multiplexer bindings** — gesture enable/type, per-type prefix keys (tmux,
+  screen, zellij)
+- **Accessibility** — high-contrast terminal, large touch targets
+- **Proxy** — type, host, port, credentials, bypass list
+
+Restore a backup or sync to a new device and every setting comes with it.
+
+---
+
 ## Wave 19 — Bug batch: auth dialog, search, connect, ANR
 
 Nine correctness bugs fixed in one batch:

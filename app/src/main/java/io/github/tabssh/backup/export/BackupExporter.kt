@@ -438,6 +438,54 @@ class BackupExporter(
             put("monitoring_default_disk_threshold",       defaultPrefs.getInt("monitoring_default_disk_threshold", 0))
         })
 
+        root.put("connection", JSONObject().apply {
+            put("defaultUsername", preferenceManager.getDefaultUsername())
+            put("defaultPort",     preferenceManager.getDefaultPort())
+            put("connectTimeout",  preferenceManager.getConnectTimeout())
+            put("autoReconnect",   preferenceManager.isAutoReconnect())
+            put("compression",     preferenceManager.isCompressionEnabled())
+        })
+
+        root.put("sync", JSONObject().apply {
+            put("frequency",       preferenceManager.getSyncFrequency())
+            put("wifiOnly",        preferenceManager.isSyncWifiOnly())
+            put("onChangeEnabled", preferenceManager.isSyncOnChangeEnabled())
+            put("syncConnections", preferenceManager.isSyncConnectionsEnabled())
+            put("syncKeys",        preferenceManager.isSyncKeysEnabled())
+            put("syncIdentities",  preferenceManager.isSyncIdentitiesEnabled())
+            put("syncSnippets",    preferenceManager.isSyncSnippetsEnabled())
+            put("syncSettings",    preferenceManager.isSyncSettingsEnabled())
+            put("syncThemes",      preferenceManager.isSyncThemesEnabled())
+        })
+
+        // Multiplexer key bindings: gesture type/enable in default SharedPreferences;
+        // per-type prefix overrides in PreferenceManager.
+        root.put("multiplexer", JSONObject().apply {
+            put("gestureEnabled", defaultPrefs.getBoolean("enable_custom_gestures", false))
+            put("gestureType",    defaultPrefs.getString("gesture_multiplexer_type", "tmux"))
+            put("prefixTmux",     preferenceManager.getMultiplexerPrefix("tmux"))
+            put("prefixScreen",   preferenceManager.getMultiplexerPrefix("screen"))
+            put("prefixZellij",   preferenceManager.getMultiplexerPrefix("zellij"))
+        })
+
+        root.put("accessibility", JSONObject().apply {
+            put("highContrast",      preferenceManager.isHighContrastMode())
+            put("largeTouchTargets", preferenceManager.isLargeTouchTargets())
+        })
+
+        // Proxy configuration. Password is in plain SharedPreferences (not Keystore-
+        // backed) so it round-trips safely. Encrypted backups wrap the whole payload
+        // in AES-GCM, protecting it on disk.
+        root.put("proxy", JSONObject().apply {
+            put("enabled",     preferenceManager.isProxyEnabled())
+            put("type",        preferenceManager.getProxyType())
+            put("host",        preferenceManager.getProxyHost())
+            put("port",        preferenceManager.getProxyPort())
+            put("username",    preferenceManager.getProxyUsername() ?: "")
+            put("password",    preferenceManager.getProxyPassword() ?: "")
+            put("bypassHosts", preferenceManager.getProxyBypassHosts().joinToString(","))
+        })
+
         return root.toString(2)
     }
 
