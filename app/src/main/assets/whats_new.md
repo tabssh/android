@@ -1,5 +1,13 @@
 # What's New
 
+## Wave 21 — Terminal menu tab switch fixed
+
+Tapping a tab in the long-press menu after another tab had closed would
+activate the wrong session. The row tap now looks up the live tab by ID
+rather than using the position from when the sheet opened.
+
+---
+
 ## Wave 20 — Sync and backup now cover everything
 
 Five preference categories that were silently missing from both sync and

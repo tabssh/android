@@ -658,8 +658,15 @@ class TabTerminalActivity : AppCompatActivity() {
                 }
 
                 rowHolder.row.setOnClickListener {
-                    tabManager.setActiveTab(position)
-                    switchToTab(position)
+                    // Resolve the live index by tabId — tabs may have been closed
+                    // or reordered while the sheet was open, so the snapshot position
+                    // could point to the wrong tab in the live list.
+                    val liveIdx = tabManager.getAllTabs()
+                        .indexOfFirst { it.tabId == tab.tabId }
+                    if (liveIdx >= 0) {
+                        tabManager.setActiveTab(liveIdx)
+                        switchToTab(liveIdx)
+                    }
                     bottomSheet.dismiss()
                 }
             }
