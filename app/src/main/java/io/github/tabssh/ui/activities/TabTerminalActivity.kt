@@ -3065,17 +3065,22 @@ private fun showSnippetsPickerForActiveTab() {
     
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         // Volume key action: font_size (default) / scroll / off.
-        // Migrate legacy boolean key → new string key on first read.
+        // Migrate legacy boolean key on first run. The old key was a boolean
+        // stored by SwitchPreferenceCompat; migrate only if the new key has
+        // not been written yet (default returns "font_size" which is also the
+        // correct migrated value for "was enabled", so false→"off" is the
+        // only meaningful migration).
         val volumeAction = run {
             val prefs = app.preferencesManager
-            val legacy = prefs.getString("volume_keys_font_size", null)
-            if (legacy != null) {
-                val migrated = if (legacy == "true") "font_size" else "off"
+            val current = prefs.getString("volume_keys_action", "")
+            if (current.isEmpty()) {
+                // New key not set yet — check the old boolean pref.
+                val legacyEnabled = prefs.getBoolean("volume_keys_font_size", true)
+                val migrated = if (legacyEnabled) "font_size" else "off"
                 prefs.setString("volume_keys_action", migrated)
-                prefs.remove("volume_keys_font_size")
                 migrated
             } else {
-                prefs.getString("volume_keys_action", "font_size")
+                current
             }
         }
         when (volumeAction) {

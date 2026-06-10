@@ -129,7 +129,7 @@ class ImportExportActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val bm = backupManager ?: run {
-                    showError("Backup system is still initialising — please wait a moment and try again.", "Not Ready")
+                    android.widget.Toast.makeText(this@ImportExportActivity, "Backup system is still initialising — please wait a moment and try again.", android.widget.Toast.LENGTH_LONG).show()
                     return@launch
                 }
                 val result = bm.restoreBackup(uri, password = null, overwriteExisting = false)
@@ -717,7 +717,7 @@ class ImportExportActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val bm = backupManager ?: run {
-                    showError("Backup system is still initialising — please wait a moment and try again.", "Not Ready")
+                    android.widget.Toast.makeText(this@ImportExportActivity, "Backup system is still initialising — please wait a moment and try again.", android.widget.Toast.LENGTH_LONG).show()
                     return@launch
                 }
                 val result = bm.createBackup(
