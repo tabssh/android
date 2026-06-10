@@ -306,7 +306,6 @@ class VMwareManagerActivity : AppCompatActivity() {
             val rowConnect: android.widget.LinearLayout = view.findViewById(R.id.row_connect)
             val rowMain: android.widget.LinearLayout = view.findViewById(R.id.row_main)
             val rowSecondary: android.widget.LinearLayout = view.findViewById(R.id.row_secondary)
-            val btnConsole: MaterialButton = view.findViewById(R.id.btn_console)
             val btnSsh: MaterialButton = view.findViewById(R.id.btn_ssh)
             val btnStart: MaterialButton = view.findViewById(R.id.btn_start)
             val btnStop: MaterialButton = view.findViewById(R.id.btn_stop)
@@ -343,7 +342,6 @@ class VMwareManagerActivity : AppCompatActivity() {
             // Button visibility by power state
             when (vm.powerState.uppercase()) {
                 "POWERED_ON" -> {
-                    holder.btnConsole.visibility = View.GONE
                     holder.btnSsh.visibility = if (!vm.ipAddress.isNullOrBlank()) View.VISIBLE else View.GONE
                     holder.btnStart.visibility = View.GONE
                     holder.btnStop.visibility = View.VISIBLE
@@ -351,7 +349,6 @@ class VMwareManagerActivity : AppCompatActivity() {
                     holder.btnReset.visibility = View.VISIBLE
                 }
                 "POWERED_OFF" -> {
-                    holder.btnConsole.visibility = View.GONE
                     holder.btnSsh.visibility = View.GONE
                     holder.btnStart.visibility = View.VISIBLE
                     holder.btnStop.visibility = View.GONE
@@ -359,7 +356,6 @@ class VMwareManagerActivity : AppCompatActivity() {
                     holder.btnReset.visibility = View.GONE
                 }
                 else -> {
-                    holder.btnConsole.visibility = View.GONE
                     holder.btnSsh.visibility = View.GONE
                     holder.btnStart.visibility = View.VISIBLE
                     holder.btnStop.visibility = View.VISIBLE
@@ -368,7 +364,7 @@ class VMwareManagerActivity : AppCompatActivity() {
                 }
             }
 
-            holder.rowConnect.visibility = if (holder.btnConsole.visibility == View.VISIBLE || holder.btnSsh.visibility == View.VISIBLE) View.VISIBLE else View.GONE
+            holder.rowConnect.visibility = if (holder.btnSsh.visibility == View.VISIBLE) View.VISIBLE else View.GONE
             holder.rowMain.visibility = if (holder.btnStart.visibility == View.VISIBLE || holder.btnStop.visibility == View.VISIBLE) View.VISIBLE else View.GONE
             holder.rowSecondary.visibility = if (holder.btnReboot.visibility == View.VISIBLE || holder.btnReset.visibility == View.VISIBLE) View.VISIBLE else View.GONE
 

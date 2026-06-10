@@ -15,6 +15,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Removed FIDO2 alpha stub** — `Fido2Detector`, `Fido2SshIdentity`, the Settings detection entry, and the NFC/USB-host manifest declarations are removed; `FIDO2_SECURITY_KEY` auth-type enum value is kept for database compatibility but remains non-selectable; the error guard in `SSHConnection` stays to handle any legacy DB rows
+- **Removed dead VMware console button** — `btnConsole` in `VMwareManagerActivity` was always `View.GONE`; removed the field and the three visibility assignments; `rowConnect` visibility now depends on `btnSsh` only
 - **Audit log now records SSH session events** — `AuditLogManager` had all methods implemented but none were wired; session start/end, auth success/failure, SFTP upload/download/delete, and port-forward open/close are now recorded when audit logging is enabled in Settings → Logging → Audit
 - **Connection list now shows groups** — the Connections tab was rendering a flat list even when connections were assigned to groups; switched to `GroupedConnectionAdapter` so groups are visible
 - **`KeyStorage.importKeyFromFile` leaked SAF InputStream** — `openInputStream()` result was read via `.bufferedReader().readText()` without `.use {}`; the underlying `ParcelFileDescriptor` was never closed; reshaped to `?.bufferedReader()?.use { it.readText() }`
