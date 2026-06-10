@@ -451,7 +451,10 @@ class PortForwardingManager(private val sshConnection: SSHConnection) {
                         val audit = app?.auditLogManager
                         if (audit != null) {
                             val spec = "${tunnel.type}:${tunnel.localPort}"
-                            kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                            // Dispatch on the process-lifetime applicationScope so the
+                            // audit write survives forwardingScope.cancel() below
+                            // without allocating an orphan parent Job.
+                            app.applicationScope.launch(Dispatchers.IO) {
                                 try {
                                     audit.logPortForwardClose(sshConnection.profile, sshConnection.id, spec)
                                 } catch (e: Exception) {

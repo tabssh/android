@@ -272,13 +272,19 @@ class HypervisorsFragment : Fragment() {
                         client.connect()
                         client.disconnect()
                     } else {
-                        // REST/WebSocket hypervisors — TCP reachability probe on the API port
+                        // REST/WebSocket hypervisors — TCP reachability probe on the API port.
+                        // Wrap in try/finally so the fd is released even if connect() throws
+                        // (timeout / unreachable / refused) — otherwise the Socket leaks until
+                        // the GC finalizer runs.
                         val socket = java.net.Socket()
-                        socket.connect(
-                            java.net.InetSocketAddress(hypervisor.host, hypervisor.port),
-                            5_000
-                        )
-                        socket.close()
+                        try {
+                            socket.connect(
+                                java.net.InetSocketAddress(hypervisor.host, hypervisor.port),
+                                5_000
+                            )
+                        } finally {
+                            try { socket.close() } catch (_: Exception) {}
+                        }
                     }
                     true
                 } catch (e: Exception) {

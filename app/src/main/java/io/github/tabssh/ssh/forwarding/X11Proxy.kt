@@ -171,27 +171,32 @@ class X11Proxy(
      * or null if neither is reachable.
      */
     private fun connectToXServer(): XServerConnection? {
-        // 1. Termux:X11 (Unix domain socket)
+        // 1. Termux:X11 (Unix domain socket).
+        // Hoist the allocation above the try so that an exception from connect()
+        // can still close the descriptor — otherwise the LocalSocket fd leaks.
         if (File(TERMUX_X11_SOCKET).exists()) {
+            val localSocket = LocalSocket()
             try {
-                val localSocket = LocalSocket()
                 localSocket.connect(
                     LocalSocketAddress(TERMUX_X11_SOCKET, LocalSocketAddress.Namespace.FILESYSTEM)
                 )
                 Logger.i(TAG, "Connected to Termux:X11 Unix socket")
                 return LocalSocketConnection(localSocket)
             } catch (e: Exception) {
+                try { localSocket.close() } catch (_: Exception) {}
                 Logger.w(TAG, "Termux:X11 socket exists but connect failed: ${e.message}")
             }
         }
 
-        // 2. XServer XSDL (TCP)
+        // 2. XServer XSDL (TCP) — same hoist-and-close pattern as above to
+        // avoid leaking the TCP Socket fd on a failed connect().
+        val tcp = Socket()
         try {
-            val tcp = Socket()
             tcp.connect(java.net.InetSocketAddress(XSDL_HOST, XSDL_PORT), XSERVER_CONNECT_TIMEOUT_MS)
             Logger.i(TAG, "Connected to XServer XSDL on $XSDL_HOST:$XSDL_PORT")
             return TcpSocketConnection(tcp)
         } catch (e: Exception) {
+            try { tcp.close() } catch (_: Exception) {}
             Logger.d(TAG, "XServer XSDL not reachable: ${e.message}")
         }
 

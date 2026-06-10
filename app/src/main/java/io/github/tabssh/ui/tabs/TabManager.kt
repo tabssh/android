@@ -149,7 +149,6 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
      */
     fun switchToTab(index: Int) {
         if (index in 0 until tabs.size && index != activeTabIndex) {
-            val previousTab = getActiveTab()
             activeTabIndex = index
             val newTab = getActiveTab()
 

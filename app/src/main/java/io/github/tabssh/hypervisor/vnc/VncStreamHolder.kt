@@ -21,9 +21,18 @@ object VncStreamHolder {
      *  closed alongside the streams when the console session ends. */
     @Volatile private var _socket: Socket? = null
 
-    /** Store streams before starting VMConsoleActivity. */
+    /**
+     * Store streams before starting VMConsoleActivity. If a previous producer
+     * left streams here that were never consumed (e.g. user backed out of the
+     * launch before the consumer's `take()` ran), close the stale set first
+     * — otherwise the prior Socket fd and stream descriptors leak until
+     * process death.
+     */
     @Synchronized
     fun set(inputStream: InputStream, outputStream: OutputStream, socket: Socket? = null) {
+        try { _inputStream?.close() } catch (_: Exception) {}
+        try { _outputStream?.close() } catch (_: Exception) {}
+        try { _socket?.close() } catch (_: Exception) {}
         _inputStream = inputStream
         _outputStream = outputStream
         _socket = socket

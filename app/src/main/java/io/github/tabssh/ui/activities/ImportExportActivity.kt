@@ -348,9 +348,12 @@ class ImportExportActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val profiles = withContext(Dispatchers.IO) {
-                    val inputStream = contentResolver.openInputStream(uri)
+                    // Chain `?.bufferedReader()?.use {}` so the underlying SAF
+                    // ParcelFileDescriptor closes even if the reader exhausts
+                    // the stream — assigning to a `val` first leaked the fd.
+                    val configContent = contentResolver.openInputStream(uri)
+                        ?.bufferedReader()?.use { it.readText() }
                         ?: throw Exception("Could not open file")
-                    val configContent = inputStream.bufferedReader().use { it.readText() }
                     val raw = io.github.tabssh.ssh.config.SSHConfigParser().parseConfig(configContent)
 
                     // Attempt to resolve each profile's IdentityFile path to a

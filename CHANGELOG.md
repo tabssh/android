@@ -15,6 +15,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **`PortForwardingManager.cleanup` audit-logging orphan scope** — per-tunnel audit-log write spawned a throwaway `CoroutineScope(Dispatchers.IO)` whose parent `Job` was never cancelled; routed through `app.applicationScope.launch(Dispatchers.IO)` to match the pattern used by `TaskerWorker` and `PerformanceFragment`
+- **`HypervisorsFragment` REST reachability probe socket leak** — `Socket()` allocated, `connect()` could throw, `close()` was skipped; wrapped in `try { connect() } finally { close() }`
+- **`X11Proxy.connectToXServer` LocalSocket and TCP Socket leak on connect throw** — both probes allocated the socket inside the `try` block; a `connect()` exception fell through to the catch arm without closing the descriptor; hoisted allocation above `try` and added explicit close in catch
+- **`ImportExportActivity.importSSHConfigFromUri` InputStream leak window** — reshaped to chained `openInputStream(uri)?.bufferedReader()?.use { it.readText() }` form to eliminate the window between local-`val` assignment and `.use {}` entry
+- **`VncStreamHolder.set` orphan-stream leak on producer re-launch** — set without consume left prior streams unclosed; added explicit close-then-replace under the `@Synchronized` block
+- **`TabManager.switchToTab` unused `previousTab` local** — dead `val` removed
+- **`ConsoleWebSocketClient.isConnected` missing `@Volatile`** — read by the keepalive thread loop and written by the OkHttp callback thread; added `@Volatile` to prevent JIT-cached reads firing one ghost-send after disconnect
 - **Collapsed database to version 1** — dropped all 38 migration objects, 33 schema JSON files, and the `room.schemaLocation` KSP arg; `fallbackToDestructiveMigration()` replaces the migration chain; any alpha install is wiped on upgrade
 - **Removed all legacy/compat code** — alpha build, no existing users: dropped GSSAPI + FIDO2_SECURITY_KEY from AuthType, FIDO2 error guard from SSHConnection, v1 backup restore path from BackupImporter + BackupManager, deprecated `terminal` alias from SSHTab, and `isXenOrchestra` DB column from HypervisorProfile (migrated to `apiTypeOverride`; DB schema → v39)
 - **Removed FIDO2 alpha stub** — `Fido2Detector`, `Fido2SshIdentity`, the Settings detection entry, and the NFC/USB-host manifest declarations are removed; `FIDO2_SECURITY_KEY` auth-type enum value is kept for database compatibility but remains non-selectable; the error guard in `SSHConnection` stays to handle any legacy DB rows

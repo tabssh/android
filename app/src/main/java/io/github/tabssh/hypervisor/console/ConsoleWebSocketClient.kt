@@ -81,8 +81,12 @@ class ConsoleWebSocketClient(
     private var outputPipeIn: PipedInputStream? = null
     private var outputPipeOut: PipedOutputStream? = null
 
-    // Connection state
-    private var isConnected = false
+    // Connection state.
+    // @Volatile: read from the keepalive Thread's loop and written from
+    // OkHttp's WebSocket callback thread + the disconnect path; without
+    // it the keepalive thread can observe a stale `true` after disconnect
+    // and emit one extra send before noticing.
+    @Volatile private var isConnected = false
     private var connectionListener: ConsoleConnectionListener? = null
 
     // Terminal size for resize messages
