@@ -59,7 +59,7 @@ repository: https://github.com/tabssh/android
 - Backup and restore as a portable encrypted archive
 
 ### Hypervisor management
-- Proxmox, XCP-ng (and Xen Orchestra), VMware, QEMU/libvirt (KVM) — list VMs/instances, start, stop, shutdown, reboot, snapshot, serial console
+- Proxmox, XCP-ng (and Xen Orchestra), VMware, QEMU/libvirt (KVM) — list VMs/instances, start, stop, shutdown, reboot, snapshot
 - Reusable hypervisor credential accounts (username/password or OCI API key) shared across hypervisor profiles
 - TLS certificate pinning (TOFU) for hypervisor REST APIs
 - OCI API key authentication (tenancy, user, region, fingerprint, compartment, private key)

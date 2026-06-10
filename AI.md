@@ -882,7 +882,7 @@ Realm format `user@pam` / `user@pve`. Optional SSL bypass.
 - Auth: `POST /api/session` with HTTP Basic → session ID cookie.
 - Operations: `GET /api/vcenter/vm`, `POST /api/vcenter/vm/{id}/power?action={start,stop,reset}`.
 - Detects vCenter vs standalone ESXi by probing `/api/vcenter/datacenter`.
-- **Console support: not yet implemented.**
+- **Console support: not implemented** — VMware WebMKS/VMRC is a proprietary protocol; SSH into the guest VM via `btn_ssh` is the supported path.
 
 ### 11.5 Oracle Cloud Infrastructure (OCI)
 
@@ -1253,7 +1253,7 @@ If a new file triggers a false positive, add a targeted `grep -v` to the chain a
 | `ssh.config` | `SSHConfigParser` |
 | `ssh.connection` | `SSHConnection`, `HostKeyVerifier`, `SSHSessionManager` and listeners, `TelnetConnection` (RFC 854; fully implemented — not a stub) |
 | `ssh.forwarding` | `PortForwardingManager`, `X11Proxy`, `HttpPortProbe` |
-| `ssh.auth` | Auth helpers (FIDO2 auth-type spinner glue, etc.) |
+| `ssh.auth` | Auth type definitions (`AuthType` enum) |
 | `storage.database` | `TabSSHDatabase` |
 | `storage.database.dao` | DAOs |
 | `storage.database.entities` | Room entities |
@@ -1297,13 +1297,8 @@ These exist in source but are **not** wired into a working user-facing flow. Tre
 
 - **Mosh** — fully wired. `MoshHandoff.kt` bootstraps via an SSH exec channel (`mosh-server` on the remote), parses the `MOSH CONNECT <port> <key>` response, then calls `TermuxBridge.connectMoshClient()` which launches the bundled native `mosh-client` binary through `TerminalSession` (JNI `forkpty()`). The binary handles all UDP/SSP/AES-128-OCB transport natively — no user action required. The `use_mosh` flag on `ConnectionProfile` (DB v11) switches the connection path in `SSHTab`. `MoshConnection.kt` scaffolding is superseded by this architecture.
 - **X11 forwarding** — fully wired via `ssh/forwarding/X11Proxy.kt`. The proxy binds an ephemeral `localhost` port, JSch X11 channels are routed through it to either Termux:X11 (Unix socket) or XServer XSDL (TCP `:6000`). `SSHConnection.applyForwardingFlags()` passes the dynamic port via `session.setX11Port(proxy.port)`; the proxy is stopped in `disconnect()`. Non-fatal `X11NoServerException` surfaces in `TabTerminalActivity` as a Snackbar via the `SSHConnection.warnings` `SharedFlow`. The `x11_forwarding` flag is persisted (DB v7).
-- **VMware console** — `VMwareApiClient` and `VMwareManagerActivity` fully route to `VMConsoleActivity`; list / start / stop / reset / console all implemented.
 - **Frequently-used UI** — fully interactive: top-10 connections loaded, tap to connect, swipe-right for delete/duplicate/edit actions.
 - **Devkeystore** — `keystore.jks` is checked in for development; production releases must override `KEYSTORE_BASE64` via GitHub Secrets.
-- **Connection groups in flat list** — full group infrastructure exists (`ConnectionGroup`, `ConnectionGroupDao`, `GroupedConnectionAdapter`, `GroupManagementActivity`); some list surfaces still render flat.
-- **Chinese / Japanese strings** — listed in `arrays.xml` but `values-zh/` and `values-ja/` translation files are absent.
-- **HypervisorProfile.isXenOrchestra** — flag is still in the schema (added in v12) but superseded by `apiTypeOverride` (added in v17). Keep both for compatibility; new code should write `apiTypeOverride` only.
-- **FIDO2 / hardware security keys** — detection only; **no CTAP2 authentication**. `crypto/fido/Fido2Manager.kt` (or equivalent) detects whether a FIDO2-capable device is present: checks USB host-mode for known FIDO2 vendor/product IDs, and checks NFC capability via `android.nfc.NfcAdapter`. There is no CTAP2 assertion or attestation flow — the implementation does not authenticate via FIDO2. This is roadmap work (Wave future).
 - **Note — Telnet is NOT a stub.** `TelnetConnection` (§5.6) is fully implemented (RFC 854, ECHO/SGA/TERMINAL-TYPE/NAWS) and wired into `SSHSessionManager` for `protocol == TELNET` profiles. Do not treat it as unfinished.
 
 ---
