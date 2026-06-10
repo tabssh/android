@@ -184,6 +184,7 @@ jobs:
     - name: Create GitHub Release
       uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
       with:
+        token: ${{ secrets.GITHUB_TOKEN }}
         name: "TabSSH ${{ steps.version.outputs.VERSION }} - Complete Mobile SSH Client"
         files: |
           app/build/outputs/apk/release/tabssh-android-arm64.apk
@@ -199,8 +200,6 @@ jobs:
         generate_release_notes: false
         prerelease: false
         draft: false
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         
     - name: Prepare F-Droid submission package
       run: |
