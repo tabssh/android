@@ -221,15 +221,17 @@ class SAFSyncManager(private val context: Context) {
 
         val uri = getSyncUri()
         if (uri == null) {
-            lastError = "No sync location configured"
-            Logger.e(TAG, lastError!!)
+            val msg = "No sync location configured"
+            lastError = msg
+            Logger.e(TAG, msg)
             return@withContext false
         }
 
         val password = getSyncPassword()
         if (password == null) {
-            lastError = "Sync password not found - please re-enter your password in Settings"
-            Logger.e(TAG, lastError!!)
+            val msg = "Sync password not found - please re-enter your password in Settings"
+            lastError = msg
+            Logger.e(TAG, msg)
             return@withContext false
         }
 
@@ -277,15 +279,17 @@ class SAFSyncManager(private val context: Context) {
 
         val uri = getSyncUri()
         if (uri == null) {
-            lastError = "No sync location configured"
-            Logger.e(TAG, lastError!!)
+            val msg = "No sync location configured"
+            lastError = msg
+            Logger.e(TAG, msg)
             return@withContext null
         }
 
         val password = getSyncPassword()
         if (password == null) {
-            lastError = "Sync password not found - please re-enter your password in Settings"
-            Logger.e(TAG, lastError!!)
+            val msg = "Sync password not found - please re-enter your password in Settings"
+            lastError = msg
+            Logger.e(TAG, msg)
             return@withContext null
         }
 
@@ -298,8 +302,9 @@ class SAFSyncManager(private val context: Context) {
             Logger.d(TAG, "Read ${encrypted.size} bytes from sync file")
 
             if (encrypted.isEmpty()) {
-                lastError = "Sync file is empty"
-                Logger.w(TAG, lastError!!)
+                val msg = "Sync file is empty"
+                lastError = msg
+                Logger.w(TAG, msg)
                 return@withContext null
             }
 

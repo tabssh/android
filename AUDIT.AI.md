@@ -154,4 +154,29 @@ These cannot be conclusively validated from code review alone:
 
 `make check` not run from this audit pass — Docker toolchain image not exercised here. The shape of the edits is targeted (no public API changes, no signature changes, no new dependencies); review the diff before flipping the lint gate.
 
+## Fixed in pass 9 (2026-06-09) — off-by-one + scope leak + race nulls
+
+- [x] **`MetricsCollector.parseNetworkStats` off-by-one (MEDIUM)** — `parts.size < 10` guarded reads up to `parts[10]` (which needs `parts.size >= 11`). On any iface row whose `/proc/net/dev` whitespace-split produced exactly 10 columns (degenerate but possible with truncated reads / non-standard kernels), the `txPackets` read threw `ArrayIndexOutOfBoundsException` and tore down the metrics collector for the rest of the session. Tightened guard to `< 11`.
+  - `app/src/main/java/io/github/tabssh/performance/MetricsCollector.kt`
+- [x] **`SAFSyncManager.lastError!!` NPE race (LOW)** — `lastError` is a class-scoped `var String?` mutated by both `upload()` and `download()` on `Dispatchers.IO`. Sequence `lastError = "msg" ; Logger.e(TAG, lastError!!)` was vulnerable to a concurrent `upload()` setting `lastError = null` between the two statements, NPE-ing the logger. Switched all four sites to capture a local `val msg` first, assign the field, then log the local — same observable behaviour, no inter-thread NPE window.
+  - `app/src/main/java/io/github/tabssh/sync/SAFSyncManager.kt`
+- [x] **`PerformanceFragment` throwaway scope leak (MEDIUM)** — `SSHConnection(scope = CoroutineScope(Dispatchers.IO), ...)` created a parent Job per connect attempt with no reference held, no SupervisorJob, no cancellation. Each "Connect" tap left an orphan parent Job in the heap. Routed through `app.applicationScope` (process-lifetime), matching the `TaskerWorker` pattern fixed in pass 8. `disconnect()` in `onDestroyView` still tears down the SSH session correctly.
+  - `app/src/main/java/io/github/tabssh/ui/fragments/PerformanceFragment.kt`
+- [x] **`ClusterCommandExecutor.executeOnSingleServer` SSHConnection + scope leak on exception (HIGH)** — `connection.disconnect()` was only called on the happy path. A throw from `connect()` / `executeCommand()` / `withTimeout` left the JSch Session attached to the per-call `CoroutineScope(Dispatchers.IO + SupervisorJob())` until process death. For any cluster command run against N servers where M failed, M SSH sessions and M SupervisorJob scopes accumulated. Hoisted `connection` to a nullable local, moved `disconnect()` into a `finally{}` block, added `scope.cancel()` after disconnect.
+  - `app/src/main/java/io/github/tabssh/cluster/ClusterCommandExecutor.kt`
+
+## Verified clean (pass 9)
+
+- All `!!` operators surveyed in `app/src/main/java`: the remaining 30+ sites are either (a) inside a same-block null-check, (b) on a field assigned non-null on the line above, (c) on a smart-cast-blocked `data class` property read where the property is `val` and cannot change. No additional NPE risk.
+- `BroadcastReceiver` audit: `grep -rn "registerReceiver\|unregisterReceiver"` returns zero hits in the production source tree. The app does not register dynamic receivers; the only receiver (`TaskerActionReceiver`) is manifest-declared and managed by the framework. No matching-lifecycle bug surface.
+- `NetworkDetector.networkCallback` is paired: `registerNetworkCallback` at line 99, `unregisterNetworkCallback` at line 170 inside the `networkCallback?.let{}` cleanup path.
+- `TermuxBridge.startReadLoop` and `TerminalEmulator.startReadLoop` use throwaway `CoroutineScope(Dispatchers.IO)` parents but the returned `readJob` is the only reference held; `readJob?.cancel()` is correctly invoked on stop. The parent Job is empty after child cancellation and is GC'd. Acceptable.
+- `ConnectionWidgetProvider.onUpdate` fire-and-forget scope is correct: SupervisorJob has no parent, work completes, GC'd. No leak.
+- `MetricsCollector.parseCpuStats` (`parts.size < 5`, reads up to `parts[5]` via `getOrNull` — correct) and `parseDiskUsage` (`parts.size < 6`, reads up to `parts[5]` via `getOrNull` — correct) — no off-by-one. Only `parseNetworkStats` was wrong.
+- Existing `lateinit var` audit: every `lateinit` flagged is bound in `onCreate`/`onCreateView` (or earlier) and the activity/fragment lifecycle guarantees init-before-use. No premature reads observed.
+
+## Build verification (pass 9)
+
+`make check` not run from this pass — the toolchain image `ghcr.io/tabssh/android:build` (and the alternative `casjaysdev/android:latest`) are not present locally on this host, and the from-scratch image build is ≥10 min on this hardware. The edits in this pass are targeted, non-API-changing, and Kotlin-syntactically equivalent to the originals (one `<` operator changed, one local `val` introduced before logging, one constructor arg swap, one `finally{}` block added). Re-verify with `make check` in CI before merging.
+
 Delete this file once all items above are addressed or the user confirms they are out of scope.

@@ -28,7 +28,6 @@ import io.github.tabssh.performance.PerformanceMetrics
 import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.utils.logging.Logger
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -309,9 +308,13 @@ class PerformanceFragment : Fragment() {
             try {
                 progressLoading.visibility = View.VISIBLE
 
+                // Use the process-lifetime applicationScope so the SSH read loop
+                // is not orphaned in a throwaway scope (one per connect attempt).
+                // disconnect() (called from onDestroyView) tears down the session;
+                // applicationScope is shared and never cancelled per-fragment.
                 val newConnection = SSHConnection(
                     profile = connection,
-                    scope = CoroutineScope(Dispatchers.IO),
+                    scope = app.applicationScope,
                     context = requireContext()
                 )
 

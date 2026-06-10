@@ -209,7 +209,8 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
      */
     private fun parseNetworkStats(output: String): NetworkMetrics {
         val parts = output.trim().split("\\s+".toRegex())
-        if (parts.size < 10) return NetworkMetrics.empty()
+        // /proc/net/dev row has 17 columns: iface + 8 rx + 8 tx; we read up to index 10 (txPackets)
+        if (parts.size < 11) return NetworkMetrics.empty()
 
         val rxBytes = parts[1].toLongOrNull() ?: 0
         val rxPackets = parts[2].toLongOrNull() ?: 0

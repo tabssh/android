@@ -102,10 +102,16 @@ class ClusterCommandExecutor(private val app: TabSSHApplication) {
     ): ExecutionResult {
         val startTime = System.currentTimeMillis()
         
+        // Hoist connection + scope so the finally{} block guarantees teardown
+        // even if connect()/executeCommand() throws (network error, auth, timeout).
+        // Previously a throw from connect() leaked the JSch Session and the
+        // SupervisorJob scope until process death.
+        var connection: SSHConnection? = null
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         return try {
             withTimeout(timeoutMs) {
-                val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-                val connection = SSHConnection(profile, scope, app)
+                val c = SSHConnection(profile, scope, app)
+                connection = c
                 // Inherit the app-wide host-key callbacks (set on
                 // SSHSessionManager by TabSSHApplication). Without them
                 // JSch rejects any host whose fingerprint isn't already
@@ -114,14 +120,13 @@ class ClusterCommandExecutor(private val app: TabSSHApplication) {
                 // standard "host key changed" / "first time seeing this
                 // host" dialog fires inline and the user can accept on
                 // the spot — same UX as a normal connect.
-                connection.hostKeyChangedCallback = app.sshSessionManager.hostKeyChangedCallback
-                connection.newHostKeyCallback = app.sshSessionManager.newHostKeyCallback
-                connection.connect()
-                val output = connection.executeCommand(command)
-                connection.disconnect()
+                c.hostKeyChangedCallback = app.sshSessionManager.hostKeyChangedCallback
+                c.newHostKeyCallback = app.sshSessionManager.newHostKeyCallback
+                c.connect()
+                val output = c.executeCommand(command)
 
                 val executionTime = System.currentTimeMillis() - startTime
-                
+
                 ExecutionResult(
                     profile = profile,
                     success = true,
@@ -150,6 +155,13 @@ class ClusterCommandExecutor(private val app: TabSSHApplication) {
                 error = e.message ?: "Unknown error",
                 executionTimeMs = executionTime
             )
+        } finally {
+            try {
+                connection?.disconnect()
+            } catch (e: Exception) {
+                Logger.w("ClusterCommand", "Disconnect after error failed: ${e.message}")
+            }
+            scope.cancel()
         }
     }
 

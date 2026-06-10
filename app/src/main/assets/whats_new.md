@@ -1,5 +1,21 @@
 # What's New
 
+## Wave 28 — Reliability: SSH session leaks, metrics, sync race
+
+Under-the-hood fixes that improve stability, especially when running cluster
+commands or viewing live performance metrics:
+
+- **Cluster commands** now always clean up their SSH connection and background
+  job — previously a connect failure could leave a "ghost" session open in the
+  background
+- **Performance monitor** SSH connection no longer leaks per reconnect attempt
+- **Sync** — a rare race condition that could crash the sync logger on
+  multi-core devices is resolved
+- **Metrics collection** — fixed a crash reading network stats on devices with
+  non-standard `/proc/net/dev` formatting
+
+---
+
 ## Wave 27 — Bug batch: key export, proxy, IPv6, scroll render
 
 - **SSH key export on older devices** — Ed25519 keys now export correctly on

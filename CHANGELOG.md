@@ -15,6 +15,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **`ClusterCommandExecutor` SSH session + scope leak on error** — `SSHConnection` and `CoroutineScope(SupervisorJob)` were not cleaned up when `connect()` / `executeCommand()` threw; a `finally{}` block now always calls `disconnect()` and `scope.cancel()`
+- **`PerformanceFragment` orphan coroutine scope per connect** — `SSHConnection` was constructed with a throwaway `CoroutineScope(Dispatchers.IO)` per tap; now routes through `app.applicationScope` matching the pattern used elsewhere
+- **`SAFSyncManager.lastError!!` NPE race** — four sites assigned `lastError` then force-dereferenced it; a concurrent write on `Dispatchers.IO` could null the field between those two statements; all sites now capture a local `val` first
+- **`MetricsCollector.parseNetworkStats` off-by-one** — guard `parts.size < 10` failed to protect the `parts[10]` read (txPackets); tightened to `< 11`
+
 - **Ed25519 / RSA / DSA / ECDSA public-key export wrong format** — `KeyStorage.encode*PublicKey()` all called `key.encoded` which returns the X.509 SPKI/DER blob; sshd silently rejects SPKI-encoded `authorized_keys` lines; all four helpers now build the correct OpenSSH SSH wire format (length-prefixed type string + key-type-specific payload per RFC 4253 §6.6)
 - **Vertical spacing setting has no effect** — `TerminalPagerAdapter` had no `lineSpacingPercent` parameter so every new terminal view used the default 1.2×; `applyTerminalUiPrefs()` only updated the active view; `lineSpacingPercent` now passed to the adapter at construction and applied in `onCreateViewHolder`; adapter exposes `setLineSpacingPercent()` called from `applyTerminalUiPrefs()` to update all bound views
 - **Reverse-scroll direction setting has no effect after returning from Settings** — `applyTerminalUiPrefs()` never updated `reverseScrollDirection` on live views; now calls adapter `setReverseScrollDirection()` which updates all bound terminal views in place
