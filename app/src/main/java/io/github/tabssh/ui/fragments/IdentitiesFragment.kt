@@ -534,7 +534,7 @@ class IdentitiesFragment : Fragment() {
 
         val initAuthIndex = when (existing?.authType) {
             AuthType.PASSWORD -> 0
-            AuthType.PUBLIC_KEY, AuthType.GSSAPI, AuthType.FIDO2_SECURITY_KEY -> 1
+            AuthType.PUBLIC_KEY -> 1
             AuthType.KEYBOARD_INTERACTIVE -> 2
             null -> 0
         }
