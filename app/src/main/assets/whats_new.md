@@ -1,5 +1,15 @@
 # What's New
 
+## Wave 29 — Long press restored to terminal menu
+
+Long pressing the terminal now opens the action menu again (copy/paste,
+send text, font size, etc.) as originally designed. A regression introduced
+when rewiring URL detection had quietly swapped it for a text-selection
+overlay instead. Text selection is still available via the **SEL** key in
+the keyboard bar.
+
+---
+
 ## Wave 28 — Reliability: SSH session leaks, metrics, sync race
 
 Under-the-hood fixes that improve stability, especially when running cluster

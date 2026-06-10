@@ -826,8 +826,8 @@ class TabTerminalActivity : AppCompatActivity() {
                         showUrlDialog(url)
                     }
                 }
-                onContextMenuRequested = { x, y ->
-                    beginSelection(x, y)
+                onContextMenuRequested = { _, _ ->
+                    showTerminalMenu()
                 }
 
                 // Wired once at view setup so the floating Copy ActionMode
@@ -2066,7 +2066,7 @@ private fun showSnippetsPickerForActiveTab() {
                 multiplexerType,
                 customPrefix,
                 commandCallback,
-                onContextMenuRequested = { x, y -> beginSelection(x, y) },
+                onContextMenuRequested = { _, _ -> showTerminalMenu() },
                 onSelectionStarted = { tv -> startTerminalSelectionActionMode(tv) },
                 reverseScrollDirection = app.preferencesManager.isReverseScrollDirection(),
                 lineSpacingPercent = app.preferencesManager.getStringAsInt("terminal_line_spacing", 120)
@@ -2127,7 +2127,7 @@ private fun showSnippetsPickerForActiveTab() {
                 multiplexerType,
                 customPrefix,
                 commandCallback,
-                onContextMenuRequested = { x, y -> beginSelection(x, y) },
+                onContextMenuRequested = { _, _ -> showTerminalMenu() },
                 onSelectionStarted = { tv -> startTerminalSelectionActionMode(tv) },
                 reverseScrollDirection = app.preferencesManager.isReverseScrollDirection(),
                 lineSpacingPercent = app.preferencesManager.getStringAsInt("terminal_line_spacing", 120)

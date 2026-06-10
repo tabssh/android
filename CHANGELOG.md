@@ -15,6 +15,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Long press shows terminal menu again** — all three `TerminalView` wiring sites in `TabTerminalActivity` had `onContextMenuRequested` pointing at `beginSelection()` (copy/paste ActionMode) instead of `showTerminalMenu()` (the bottom-sheet action menu); long press now reliably shows the menu on URL and non-URL text alike; text selection is still available via the dedicated SEL key
 - **`ClusterCommandExecutor` SSH session + scope leak on error** — `SSHConnection` and `CoroutineScope(SupervisorJob)` were not cleaned up when `connect()` / `executeCommand()` threw; a `finally{}` block now always calls `disconnect()` and `scope.cancel()`
 - **`PerformanceFragment` orphan coroutine scope per connect** — `SSHConnection` was constructed with a throwaway `CoroutineScope(Dispatchers.IO)` per tap; now routes through `app.applicationScope` matching the pattern used elsewhere
 - **`SAFSyncManager.lastError!!` NPE race** — four sites assigned `lastError` then force-dereferenced it; a concurrent write on `Dispatchers.IO` could null the field between those two statements; all sites now capture a local `val` first
