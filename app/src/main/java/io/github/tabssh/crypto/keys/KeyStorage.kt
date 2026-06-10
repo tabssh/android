@@ -275,7 +275,19 @@ class KeyStorage(private val context: Context) {
                 ?.bufferedReader()?.use { it.readText() }
                 ?: return@withContext ImportResult.Error("Cannot open file")
 
-            importKeyFromText(keyContent, passphrase, fileUri.lastPathSegment ?: "Imported Key")
+            // Query the content resolver for the human-readable display name.
+            // fileUri.lastPathSegment on a content:// URI returns an encoded
+            // path component (often raw bytes), not the filename the user sees.
+            val displayName = context.contentResolver
+                .query(fileUri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+                ?.use { cursor ->
+                    if (cursor.moveToFirst()) cursor.getString(0) else null
+                }
+                ?.takeIf { it.isNotBlank() }
+                ?: fileUri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+                ?: "Imported Key"
+
+            importKeyFromText(keyContent, passphrase, displayName)
             
         } catch (e: Exception) {
             Logger.e("KeyStorage", "Failed to import key from file", e)
