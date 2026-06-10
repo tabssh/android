@@ -86,8 +86,6 @@ data class Identity(
             AuthType.PASSWORD -> "Password"
             AuthType.PUBLIC_KEY -> "SSH Key"
             AuthType.KEYBOARD_INTERACTIVE -> "Keyboard Interactive"
-            AuthType.GSSAPI -> "GSSAPI"
-            AuthType.FIDO2_SECURITY_KEY -> "FIDO2 (Alpha)"
         }
     }
 }

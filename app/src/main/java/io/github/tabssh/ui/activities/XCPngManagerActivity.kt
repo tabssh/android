@@ -135,10 +135,11 @@ class XCPngManagerActivity : AppCompatActivity() {
                 isXenOrchestra = detectedXO
 
                 if (authenticated) {
-                    // Update profile if we auto-detected a different type
-                    if (profile.isXenOrchestra != detectedXO) {
+                    // Persist the auto-detected API type when it differs from the stored override.
+                    val detectedOverride = if (detectedXO) "centralized" else "direct"
+                    if (profile.apiTypeOverride != detectedOverride) {
                         Logger.i("XCPngManager", "Auto-detected API type: ${if (detectedXO) "Xen Orchestra" else "XCP-ng Direct"}")
-                        app.database.hypervisorDao().updateIsXenOrchestra(profile.id, detectedXO)
+                        app.database.hypervisorDao().updateApiTypeOverride(profile.id, detectedOverride)
                     }
 
                     val modeText = if (detectedXO) "Xen Orchestra" else "XCP-ng Direct"
@@ -174,7 +175,7 @@ class XCPngManagerActivity : AppCompatActivity() {
             } catch (e: java.net.ConnectException) {
                 Logger.e("XCPngManager", "Connection refused", e)
                 statusText.text = "Error: Connection refused"
-                val apiType = if (profile.isXenOrchestra) "Xen Orchestra" else "XCP-ng"
+                val apiType = if (profile.apiTypeOverride == "centralized") "Xen Orchestra" else "XCP-ng"
                 Toast.makeText(this@XCPngManagerActivity, "Connection refused. Check:\n• Port ${profile.port} is correct\n• $apiType API is accessible\n• Firewall allows connection", Toast.LENGTH_LONG).show()
                 progressBar.visibility = View.GONE
             } catch (e: javax.net.ssl.SSLHandshakeException) {

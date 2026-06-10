@@ -77,9 +77,6 @@ data class HypervisorProfile(
     @ColumnInfo(name = "pinned_cert_sha256")
     val pinnedCertSha256: String? = null,
     
-    @ColumnInfo(name = "is_xen_orchestra")
-    val isXenOrchestra: Boolean = false, // DEPRECATED: Use apiTypeOverride instead
-
     @ColumnInfo(name = "api_type_override")
     val apiTypeOverride: String = "auto", // "auto", "direct", "centralized" - Override auto-detection
 

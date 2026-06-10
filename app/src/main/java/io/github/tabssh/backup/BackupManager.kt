@@ -16,8 +16,6 @@ import org.json.JSONObject
 import java.io.*
 import java.text.SimpleDateFormat
 import java.util.*
-import java.util.zip.ZipEntry
-import java.util.zip.ZipInputStream
 
 /**
  * Main backup and restore manager
@@ -74,14 +72,9 @@ class BackupManager(private val context: Context) {
 
     companion object {
         private const val BACKUP_VERSION = 3
-        private const val METADATA_FILE = "metadata.json"
-        // Wire-format `v` field on each entity file (set by BackupExporter).
-        // Bumped from 1 to 2 in the 2026-05-16 backup-coverage audit:
-        // every Room entity is now serialised in full so restore reproduces
-        // the exact source row. v1 backups still restore via the legacy
-        // hand-rolled path in BackupImporter.
-        // v3 (2026-05-17): single-JSON format (.tabssh extension) replaces ZIP.
-        // Old ZIP backups are still restored via the legacy ZipInputStream path.
+        // Wire-format: single-JSON .tabssh file. Each entity file inside
+        // carries `{"v":2,"items":[...]}`. Restore is single-path; no ZIP
+        // legacy fallback.
     }
 
     /**
@@ -164,69 +157,45 @@ class BackupManager(private val context: Context) {
 
             context.contentResolver.openInputStream(inputUri)?.use { inputStream ->
                 val allBytes = inputStream.readBytes()
-                // Detect format: ZIP magic is PK (0x50 0x4B).
-                if (allBytes.size >= 2 && allBytes[0] == 0x50.toByte() && allBytes[1] == 0x4B.toByte()) {
-                    // Legacy ZIP backup
-                    ZipInputStream(allBytes.inputStream()).use { zipIn ->
-                        var entry: ZipEntry? = zipIn.nextEntry
-                        while (entry != null) {
-                            if (!entry.isDirectory) {
-                                val content = zipIn.bufferedReader().readText()
-                                if (entry.name == METADATA_FILE) {
-                                    metadata = parseMetadata(content)
-                                } else {
-                                    backupData[entry.name] = if (password != null) {
-                                        decryptData(content, password)
-                                    } else {
-                                        content
-                                    }
-                                }
-                            }
-                            zipIn.closeEntry()
-                            entry = zipIn.nextEntry
-                        }
-                    }
-                } else {
-                    // v3 single-JSON format (optionally AES-GCM encrypted).
-                    // Detect the SyncEncryptor magic header so we can surface a
-                    // clear "need password" error instead of a raw JSONException.
-                    val isEncrypted = allBytes.size >= 14 &&
-                        String(allBytes, 0, 14, Charsets.ISO_8859_1) == "TABSSH_SYNC_V2"
-                    if (isEncrypted && password == null) {
+                // v3 single-JSON format (optionally AES-GCM encrypted).
+                // Detect the SyncEncryptor magic header so we can surface a
+                // clear "need password" error instead of a raw JSONException.
+                val isEncrypted = allBytes.size >= 14 &&
+                    String(allBytes, 0, 14, Charsets.ISO_8859_1) == "TABSSH_SYNC_V2"
+                if (isEncrypted && password == null) {
+                    return@withContext RestoreResult(
+                        success = false,
+                        message = "This backup is encrypted — enter your backup password to restore"
+                    )
+                }
+                val plainBytes: ByteArray = if (isEncrypted && password != null) {
+                    try {
+                        encryptor.decrypt(allBytes, password)
+                    } catch (e: Exception) {
                         return@withContext RestoreResult(
                             success = false,
-                            message = "This backup is encrypted — enter your backup password to restore"
+                            message = "Incorrect backup password",
+                            errors = listOf(e.message ?: "Decryption failed")
                         )
                     }
-                    val plainBytes: ByteArray = if (isEncrypted && password != null) {
-                        try {
-                            encryptor.decrypt(allBytes, password)
-                        } catch (e: Exception) {
-                            return@withContext RestoreResult(
-                                success = false,
-                                message = "Incorrect backup password",
-                                errors = listOf(e.message ?: "Decryption failed")
-                            )
-                        }
-                    } else {
-                        allBytes
-                    }
-                    val root = JSONObject(String(plainBytes, Charsets.UTF_8))
-                    val metaObj = root.getJSONObject("metadata")
-                    val itemCountsObj = metaObj.getJSONObject("itemCounts")
-                    val itemCounts = mutableMapOf<String, Int>()
-                    itemCountsObj.keys().forEach { key -> itemCounts[key] = itemCountsObj.getInt(key) }
-                    metadata = BackupMetadata(
-                        version = metaObj.getInt("version"),
-                        createdAt = metaObj.getLong("createdAt"),
-                        appVersion = metaObj.getString("appVersion"),
-                        deviceModel = metaObj.getString("deviceModel"),
-                        androidVersion = metaObj.getInt("androidVersion"),
-                        itemCounts = itemCounts
-                    )
-                    val dataObj = root.getJSONObject("data")
-                    dataObj.keys().forEach { key -> backupData[key] = dataObj.getString(key) }
+                } else {
+                    allBytes
                 }
+                val root = JSONObject(String(plainBytes, Charsets.UTF_8))
+                val metaObj = root.getJSONObject("metadata")
+                val itemCountsObj = metaObj.getJSONObject("itemCounts")
+                val itemCounts = mutableMapOf<String, Int>()
+                itemCountsObj.keys().forEach { key -> itemCounts[key] = itemCountsObj.getInt(key) }
+                metadata = BackupMetadata(
+                    version = metaObj.getInt("version"),
+                    createdAt = metaObj.getLong("createdAt"),
+                    appVersion = metaObj.getString("appVersion"),
+                    deviceModel = metaObj.getString("deviceModel"),
+                    androidVersion = metaObj.getInt("androidVersion"),
+                    itemCounts = itemCounts
+                )
+                val dataObj = root.getJSONObject("data")
+                dataObj.keys().forEach { key -> backupData[key] = dataObj.getString(key) }
             }
 
             // Validate backup
@@ -288,46 +257,6 @@ class BackupManager(private val context: Context) {
             androidVersion = android.os.Build.VERSION.SDK_INT,
             itemCounts = itemCounts
         )
-    }
-
-    /**
-     * Parse backup metadata
-     */
-    private fun parseMetadata(content: String): BackupMetadata {
-        val json = JSONObject(content)
-        val itemCountsJson = json.getJSONObject("itemCounts")
-        val itemCounts = mutableMapOf<String, Int>()
-
-        itemCountsJson.keys().forEach { key ->
-            itemCounts[key] = itemCountsJson.getInt(key)
-        }
-
-        return BackupMetadata(
-            version = json.getInt("version"),
-            createdAt = json.getLong("createdAt"),
-            appVersion = json.getString("appVersion"),
-            deviceModel = json.getString("deviceModel"),
-            androidVersion = json.getInt("androidVersion"),
-            itemCounts = itemCounts
-        )
-    }
-
-    /**
-     * Decrypt a legacy ZIP entry value (Base64-wrapped AES-GCM or bare Base64).
-     * Only used by the legacy ZIP restore path.
-     */
-    private fun decryptData(data: String, password: String): String {
-        val raw = android.util.Base64.decode(data, android.util.Base64.NO_WRAP)
-        return try {
-            val plain = encryptor.decrypt(raw, password)
-            String(plain, Charsets.UTF_8)
-        } catch (e: Exception) {
-            // Legacy fallthrough — old backups were Base64-only; this
-            // path keeps them restorable.
-            Logger.w("BackupManager",
-                "decrypt failed (${e.message}); falling back to legacy Base64-only format")
-            String(raw, Charsets.UTF_8)
-        }
     }
 
     /**

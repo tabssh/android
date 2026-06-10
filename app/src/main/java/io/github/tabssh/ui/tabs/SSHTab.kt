@@ -899,9 +899,6 @@ class SSHTab(
         return "SSHTab(id=$tabId, profile=${profile.getDisplayName()}, state=${_connectionState.value})"
     }
 
-    // Legacy compatibility - provide terminal property that aliases to termuxBridge
-    @Deprecated("Use termuxBridge directly", ReplaceWith("termuxBridge"))
-    val terminal: TermuxBridge get() = termuxBridge
 }
 
 /**

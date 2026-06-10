@@ -1071,18 +1071,6 @@ class SSHConnection(
     private suspend fun setupAuthentication(jsch: JSch, session: Session) = withContext(Dispatchers.IO) {
         val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
 
-        // Wave 2.9 — fail loudly on FIDO2 selection so users don't think
-        // we silently silently fell back to password. The auth type is
-        // surfaced in the UI as "(Alpha)" and the docstring on
-        // Fido2SshIdentity explains the missing CTAP2 plumbing.
-        if (profile.authType == AuthType.FIDO2_SECURITY_KEY.name) {
-            val msg = "FIDO2 SSH auth is not yet implemented (Wave 2.9 alpha). " +
-                "Switch this connection to Public Key or Password for now."
-            _errorMessage.value = msg
-            Logger.w("SSHConnection", "FIDO2 auth requested but not implemented")
-            throw UnsupportedOperationException(msg)
-        }
-
         // Wave 1.5 runtime wiring — when agent forwarding is enabled we
         // populate JSch's identity repository up-front with every stored
         // key the user has unlocked. JSch services agent-forwarded sign

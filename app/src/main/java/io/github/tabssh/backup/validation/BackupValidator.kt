@@ -28,10 +28,9 @@ class BackupValidator {
         if (metadata == null) {
             errors.add("Missing backup metadata")
         } else {
-            // Wire formats supported: v1 (legacy hand-rolled), v2
-            // (entity-serialised — 2026-05-16 audit), and v3
-            // (single-JSON .tabssh — 2026-05-17). Anything newer means
-            // the backup was produced by a future build we don't know yet.
+            // Wire formats supported: v2 (entity-serialised) and v3
+            // (single-JSON .tabssh). Anything newer means the backup was
+            // produced by a future build we don't know yet.
             if (metadata.version > 3) {
                 errors.add("Unsupported backup version: ${metadata.version}")
             }
@@ -106,8 +105,7 @@ class BackupValidator {
                         connection.optString("auth_type", ""))
                     val ok = authType in listOf(
                         "password", "publickey", "keyboard-interactive",
-                        "PASSWORD", "PUBLIC_KEY", "KEYBOARD_INTERACTIVE",
-                        "GSSAPI", "FIDO2_SECURITY_KEY"
+                        "PASSWORD", "PUBLIC_KEY", "KEYBOARD_INTERACTIVE"
                     )
                     if (!ok) warnings.add("Connection at index $i has unknown authType: $authType")
                 }

@@ -15,6 +15,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Removed all legacy/compat code** — alpha build, no existing users: dropped GSSAPI + FIDO2_SECURITY_KEY from AuthType, FIDO2 error guard from SSHConnection, v1 backup restore path from BackupImporter + BackupManager, deprecated `terminal` alias from SSHTab, and `isXenOrchestra` DB column from HypervisorProfile (migrated to `apiTypeOverride`; DB schema → v39)
 - **Removed FIDO2 alpha stub** — `Fido2Detector`, `Fido2SshIdentity`, the Settings detection entry, and the NFC/USB-host manifest declarations are removed; `FIDO2_SECURITY_KEY` auth-type enum value is kept for database compatibility but remains non-selectable; the error guard in `SSHConnection` stays to handle any legacy DB rows
 - **Removed dead VMware console button** — `btnConsole` in `VMwareManagerActivity` was always `View.GONE`; removed the field and the three visibility assignments; `rowConnect` visibility now depends on `btnSsh` only
 - **Audit log now records SSH session events** — `AuditLogManager` had all methods implemented but none were wired; session start/end, auth success/failure, SFTP upload/download/delete, and port-forward open/close are now recorded when audit logging is enabled in Settings → Logging → Audit

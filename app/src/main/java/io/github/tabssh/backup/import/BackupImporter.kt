@@ -4,7 +4,6 @@ import android.content.Context
 import io.github.tabssh.backup.export.BackupExporter
 import io.github.tabssh.crypto.keys.KeyStorage
 import io.github.tabssh.crypto.storage.SecurePasswordManager
-import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.database.entities.CloudAccount
 import io.github.tabssh.storage.database.entities.ConnectionGroup
@@ -31,7 +30,6 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.json.JSONObject
@@ -39,13 +37,7 @@ import org.json.JSONObject
 /**
  * Handles importing data from backup.
  *
- * Reads both the v2 entity-serialised format (current — emitted by
- * [BackupExporter]) and the v1 hand-rolled per-field format
- * (legacy — emitted by versions before this audit). v1 is only
- * supported for the six original tables: connections, keys, themes,
- * certificates, host_keys, identities. All other tables (groups,
- * snippets, hypervisors, hypervisor_accounts, workspaces, cloud_accounts,
- * macros, monitor_slots) only exist in v2 backups.
+ * Reads the v2 entity-serialised format emitted by [BackupExporter].
  */
 class BackupImporter(
     private val context: Context,
@@ -139,61 +131,27 @@ class BackupImporter(
 
     private suspend fun restoreConnections(data: String, overwriteExisting: Boolean): Int {
         val root = json.parseToJsonElement(data).jsonObject
-        val v = root["v"]?.jsonPrimitive?.intOrNull ?: 1
         var count = 0
-        if (v >= 2) {
-            val itemsArr = root["items"] as? JsonArray ?: run {
-                Logger.w(TAG, "v2 backup missing 'items' in connections section")
-                return 0
+        val itemsArr = root["items"] as? JsonArray ?: run {
+            Logger.w(TAG, "v2 backup missing 'items' in connections section")
+            return 0
+        }
+        val items = json.decodeFromJsonElement(
+            ListSerializer(ConnectionProfile.serializer()), itemsArr
+        )
+        val passwords: Map<String, String> = (root["passwords"] as? JsonObject)?.let { obj ->
+            obj.mapValues { it.value.jsonPrimitive.content }
+        } ?: emptyMap()
+        for (c in items) {
+            val existing = database.connectionDao().getConnection(c.id)
+            if (existing != null && !overwriteExisting) continue
+            database.connectionDao().insertConnection(c)
+            passwords[c.id]?.let { b64 ->
+                val pw = String(android.util.Base64.decode(b64, android.util.Base64.NO_WRAP),
+                    Charsets.UTF_8)
+                preferenceManager.setConnectionPassword(c.id, pw)
             }
-            val items = json.decodeFromJsonElement(
-                ListSerializer(ConnectionProfile.serializer()), itemsArr
-            )
-            val passwords: Map<String, String> = (root["passwords"] as? JsonObject)?.let { obj ->
-                obj.mapValues { it.value.jsonPrimitive.content }
-            } ?: emptyMap()
-            for (c in items) {
-                val existing = database.connectionDao().getConnection(c.id)
-                if (existing != null && !overwriteExisting) continue
-                database.connectionDao().insertConnection(c)
-                passwords[c.id]?.let { b64 ->
-                    val pw = String(android.util.Base64.decode(b64, android.util.Base64.NO_WRAP),
-                        Charsets.UTF_8)
-                    preferenceManager.setConnectionPassword(c.id, pw)
-                }
-                count++
-            }
-        } else {
-            // v1 legacy path — only the 12 fields the old exporter wrote.
-            val arr = JSONObject(data).getJSONArray("connections")
-            for (i in 0 until arr.length()) {
-                val o = arr.getJSONObject(i)
-                val existing = database.connectionDao().getConnection(o.getString("id"))
-                if (existing != null && !overwriteExisting) continue
-                val c = ConnectionProfile(
-                    id = o.getString("id"),
-                    name = o.getString("name"),
-                    host = o.getString("host"),
-                    port = o.getInt("port"),
-                    username = o.getString("username"),
-                    authType = AuthType.fromString(o.optString("authType")).name,
-                    keyId = o.optString("keyId").takeIf { it.isNotEmpty() },
-                    groupId = o.optString("groupId").takeIf { it.isNotEmpty() },
-                    theme = o.optString("theme", "dracula"),
-                    createdAt = System.currentTimeMillis(),
-                    lastConnected = o.optLong("lastConnected", 0),
-                    connectionCount = o.optInt("connectionCount", 0),
-                    advancedSettings = o.optString("advancedSettings").takeIf { it.isNotEmpty() }
-                )
-                database.connectionDao().insertConnection(c)
-                if (o.has("encryptedPassword")) {
-                    val pw = String(android.util.Base64.decode(
-                        o.getString("encryptedPassword"), android.util.Base64.NO_WRAP
-                    ), Charsets.UTF_8)
-                    preferenceManager.setConnectionPassword(c.id, pw)
-                }
-                count++
-            }
+            count++
         }
         return count
     }
@@ -202,42 +160,19 @@ class BackupImporter(
 
     private suspend fun restoreKeys(data: String, overwriteExisting: Boolean): Int {
         val root = json.parseToJsonElement(data).jsonObject
-        val v = root["v"]?.jsonPrimitive?.intOrNull ?: 1
         var count = 0
-        if (v >= 2) {
-            val itemsArr = root["items"] as? JsonArray ?: run {
-                Logger.w(TAG, "v2 backup missing 'items' in keys section")
-                return 0
-            }
-            val items = json.decodeFromJsonElement(
-                ListSerializer(StoredKey.serializer()), itemsArr
-            )
-            for (k in items) {
-                val existing = database.keyDao().getKey(k.keyId)
-                if (existing != null && !overwriteExisting) continue
-                database.keyDao().insertKey(k)
-                count++
-            }
-        } else {
-            val arr = JSONObject(data).getJSONArray("keys")
-            for (i in 0 until arr.length()) {
-                val o = arr.getJSONObject(i)
-                val existing = database.keyDao().getKey(o.getString("keyId"))
-                if (existing != null && !overwriteExisting) continue
-                database.keyDao().insertKey(
-                    StoredKey(
-                        keyId = o.getString("keyId"),
-                        name = o.getString("name"),
-                        keyType = o.getString("keyType"),
-                        comment = o.optString("comment").takeIf { it.isNotEmpty() },
-                        fingerprint = o.getString("fingerprint"),
-                        createdAt = o.getLong("createdAt"),
-                        lastUsed = o.optLong("lastUsed", 0),
-                        requiresPassphrase = o.getBoolean("requiresPassphrase")
-                    )
-                )
-                count++
-            }
+        val itemsArr = root["items"] as? JsonArray ?: run {
+            Logger.w(TAG, "v2 backup missing 'items' in keys section")
+            return 0
+        }
+        val items = json.decodeFromJsonElement(
+            ListSerializer(StoredKey.serializer()), itemsArr
+        )
+        for (k in items) {
+            val existing = database.keyDao().getKey(k.keyId)
+            if (existing != null && !overwriteExisting) continue
+            database.keyDao().insertKey(k)
+            count++
         }
         return count
     }
@@ -246,47 +181,19 @@ class BackupImporter(
 
     private suspend fun restoreThemes(data: String, overwriteExisting: Boolean): Int {
         val root = json.parseToJsonElement(data).jsonObject
-        val v = root["v"]?.jsonPrimitive?.intOrNull ?: 1
         var count = 0
-        if (v >= 2) {
-            val itemsArr = root["items"] as? JsonArray ?: run {
-                Logger.w(TAG, "v2 backup missing 'items' in themes section")
-                return 0
-            }
-            val items = json.decodeFromJsonElement(
-                ListSerializer(ThemeDefinition.serializer()), itemsArr
-            )
-            for (t in items) {
-                val existing = database.themeDao().getTheme(t.themeId)
-                if (existing != null && !overwriteExisting) continue
-                database.themeDao().insertTheme(t)
-                count++
-            }
-        } else {
-            // v1: best-effort — colors were never written by the buggy v1
-            // exporter so we accept whatever defaults the constructor uses.
-            val arr = JSONObject(data).getJSONArray("themes")
-            for (i in 0 until arr.length()) {
-                val o = arr.getJSONObject(i)
-                val existing = database.themeDao().getTheme(o.getString("id"))
-                if (existing != null && !overwriteExisting) continue
-                database.themeDao().insertTheme(
-                    ThemeDefinition(
-                        themeId = o.getString("id"),
-                        name = o.getString("name"),
-                        author = o.optString("author", "Unknown"),
-                        isDark = o.getBoolean("isDark"),
-                        isBuiltIn = false,
-                        backgroundColor = o.optInt("backgroundColor", 0xFF000000.toInt()),
-                        foregroundColor = o.optInt("foregroundColor", 0xFFFFFFFF.toInt()),
-                        cursorColor = o.optInt("cursorColor", 0xFFFFFFFF.toInt()),
-                        selectionColor = o.optInt("selectionColor", 0x80808080.toInt()),
-                        ansiColors = o.optString("ansiColors", o.optString("themeData", "[]")),
-                        createdAt = o.optLong("createdAt", System.currentTimeMillis())
-                    )
-                )
-                count++
-            }
+        val itemsArr = root["items"] as? JsonArray ?: run {
+            Logger.w(TAG, "v2 backup missing 'items' in themes section")
+            return 0
+        }
+        val items = json.decodeFromJsonElement(
+            ListSerializer(ThemeDefinition.serializer()), itemsArr
+        )
+        for (t in items) {
+            val existing = database.themeDao().getTheme(t.themeId)
+            if (existing != null && !overwriteExisting) continue
+            database.themeDao().insertTheme(t)
+            count++
         }
         return count
     }
@@ -295,48 +202,19 @@ class BackupImporter(
 
     private suspend fun restoreCertificates(data: String, overwriteExisting: Boolean): Int {
         val root = json.parseToJsonElement(data).jsonObject
-        val v = root["v"]?.jsonPrimitive?.intOrNull ?: 1
         var count = 0
-        if (v >= 2) {
-            val itemsArr = root["items"] as? JsonArray ?: run {
-                Logger.w(TAG, "v2 backup missing 'items' in certificates section")
-                return 0
-            }
-            val items = json.decodeFromJsonElement(
-                ListSerializer(TrustedCertificate.serializer()), itemsArr
-            )
-            for (c in items) {
-                val existing = database.certificateDao().getCertificateByHostAndPort(c.hostname, c.port)
-                if (existing != null && !overwriteExisting) continue
-                database.certificateDao().insertCertificate(c)
-                count++
-            }
-        } else {
-            val arr = JSONObject(data).getJSONArray("certificates")
-            for (i in 0 until arr.length()) {
-                val o = arr.getJSONObject(i)
-                val host = o.getString("hostname"); val port = o.getInt("port")
-                val existing = database.certificateDao().getCertificateByHostAndPort(host, port)
-                if (existing != null && !overwriteExisting) continue
-                database.certificateDao().insertCertificate(
-                    TrustedCertificate(
-                        id = "$host:$port",
-                        hostname = host, port = port,
-                        fingerprint = o.getString("fingerprint"),
-                        algorithm = "SHA-256",
-                        certificateData = o.getString("certificateData"),
-                        subject = o.getString("subject"),
-                        issuer = o.getString("issuer"),
-                        serialNumber = o.optString("serialNumber", "UNKNOWN"),
-                        notBefore = o.getLong("notBefore"),
-                        notAfter = o.getLong("notAfter"),
-                        expiresAt = o.getLong("notAfter"),
-                        createdAt = System.currentTimeMillis(),
-                        lastUsed = System.currentTimeMillis()
-                    )
-                )
-                count++
-            }
+        val itemsArr = root["items"] as? JsonArray ?: run {
+            Logger.w(TAG, "v2 backup missing 'items' in certificates section")
+            return 0
+        }
+        val items = json.decodeFromJsonElement(
+            ListSerializer(TrustedCertificate.serializer()), itemsArr
+        )
+        for (c in items) {
+            val existing = database.certificateDao().getCertificateByHostAndPort(c.hostname, c.port)
+            if (existing != null && !overwriteExisting) continue
+            database.certificateDao().insertCertificate(c)
+            count++
         }
         return count
     }
@@ -345,42 +223,19 @@ class BackupImporter(
 
     private suspend fun restoreHostKeys(data: String, overwriteExisting: Boolean): Int {
         val root = json.parseToJsonElement(data).jsonObject
-        val v = root["v"]?.jsonPrimitive?.intOrNull ?: 1
         var count = 0
-        if (v >= 2) {
-            val itemsArr = root["items"] as? JsonArray ?: run {
-                Logger.w(TAG, "v2 backup missing 'items' in host keys section")
-                return 0
-            }
-            val items = json.decodeFromJsonElement(
-                ListSerializer(HostKeyEntry.serializer()), itemsArr
-            )
-            for (h in items) {
-                val existing = database.hostKeyDao().getHostKey(h.hostname, h.port)
-                if (existing != null && !overwriteExisting) continue
-                database.hostKeyDao().insertHostKey(h)
-                count++
-            }
-        } else {
-            val arr = JSONObject(data).getJSONArray("host_keys")
-            for (i in 0 until arr.length()) {
-                val o = arr.getJSONObject(i)
-                val host = o.getString("hostname"); val port = o.getInt("port")
-                val existing = database.hostKeyDao().getHostKey(host, port)
-                if (existing != null && !overwriteExisting) continue
-                database.hostKeyDao().insertHostKey(
-                    HostKeyEntry(
-                        id = "$host:$port",
-                        hostname = host, port = port,
-                        keyType = o.getString("keyType"),
-                        fingerprint = o.getString("fingerprint"),
-                        publicKey = o.getString("publicKey"),
-                        firstSeen = o.getLong("addedAt"),
-                        lastVerified = o.optLong("lastVerified", 0)
-                    )
-                )
-                count++
-            }
+        val itemsArr = root["items"] as? JsonArray ?: run {
+            Logger.w(TAG, "v2 backup missing 'items' in host keys section")
+            return 0
+        }
+        val items = json.decodeFromJsonElement(
+            ListSerializer(HostKeyEntry.serializer()), itemsArr
+        )
+        for (h in items) {
+            val existing = database.hostKeyDao().getHostKey(h.hostname, h.port)
+            if (existing != null && !overwriteExisting) continue
+            database.hostKeyDao().insertHostKey(h)
+            count++
         }
         return count
     }
@@ -389,46 +244,22 @@ class BackupImporter(
 
     private suspend fun restoreIdentities(data: String, overwriteExisting: Boolean): Int {
         val root = json.parseToJsonElement(data).jsonObject
-        val v = root["v"]?.jsonPrimitive?.intOrNull ?: 1
         var count = 0
-        if (v >= 2) {
-            val itemsArr = root["items"] as? JsonArray ?: run {
-                Logger.w(TAG, "v2 backup missing 'items' in identities section")
-                return 0
-            }
-            val items = json.decodeFromJsonElement(
-                ListSerializer(Identity.serializer()), itemsArr
-            )
-            // Identity.password is null in this row — the exporter strips it because the
-            // Keystore-encrypted-at-rest blob is not portable. The plaintext password is
-            // restored from the secrets file (identity_{id}) when present in the backup.
-            for (id in items) {
-                val existing = database.identityDao().getIdentityById(id.id)
-                if (existing != null && !overwriteExisting) continue
-                database.identityDao().insert(id)
-                count++
-            }
-        } else {
-            val arr = JSONObject(data).getJSONArray("identities")
-            for (i in 0 until arr.length()) {
-                val o = arr.getJSONObject(i)
-                val existing = database.identityDao().getIdentityById(o.getString("id"))
-                if (existing != null && !overwriteExisting) continue
-                val authType = AuthType.fromString(o.optString("authType"))
-                database.identityDao().insert(
-                    Identity(
-                        id = o.getString("id"),
-                        name = o.getString("name"),
-                        username = o.getString("username"),
-                        authType = authType,
-                        keyId = o.optString("keyId").takeIf { it.isNotEmpty() },
-                        description = o.optString("description").takeIf { it.isNotEmpty() },
-                        createdAt = o.optLong("createdAt", System.currentTimeMillis()),
-                        modifiedAt = o.optLong("modifiedAt", System.currentTimeMillis())
-                    )
-                )
-                count++
-            }
+        val itemsArr = root["items"] as? JsonArray ?: run {
+            Logger.w(TAG, "v2 backup missing 'items' in identities section")
+            return 0
+        }
+        val items = json.decodeFromJsonElement(
+            ListSerializer(Identity.serializer()), itemsArr
+        )
+        // Identity.password is null in this row — the exporter strips it because the
+        // Keystore-encrypted-at-rest blob is not portable. The plaintext password is
+        // restored from the secrets file (identity_{id}) when present in the backup.
+        for (id in items) {
+            val existing = database.identityDao().getIdentityById(id.id)
+            if (existing != null && !overwriteExisting) continue
+            database.identityDao().insert(id)
+            count++
         }
         return count
     }

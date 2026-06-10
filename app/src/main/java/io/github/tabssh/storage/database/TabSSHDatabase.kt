@@ -35,7 +35,7 @@ import io.github.tabssh.utils.logging.Logger
         VncHost::class,
         VncIdentity::class
     ],
-    version = 38,
+    version = 39,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -326,7 +326,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     MIGRATION_34_35,
                     MIGRATION_35_36,
                     MIGRATION_36_37,
-                    MIGRATION_37_38
+                    MIGRATION_37_38,
+                    MIGRATION_38_39
                 )
                 .build()
                 INSTANCE = instance
@@ -980,6 +981,79 @@ data class DatabaseStats(
                 database.execSQL("ALTER TABLE stored_keys ADD COLUMN alias TEXT")
                 database.execSQL("ALTER TABLE connections ADD COLUMN server_alive_interval INTEGER")
                 Logger.i("Database", "Migration 37→38: key alias + per-host serverAliveInterval")
+            }
+        }
+
+        /**
+         * Migration 38 → 39 — drop the deprecated `is_xen_orchestra` column
+         * from `hypervisors`. The auto-detected dialect is stored in
+         * `api_type_override` ("direct" / "centralized"). SQLite < 3.35 has
+         * no `DROP COLUMN`, so use the table-copy pattern.
+         */
+        val MIGRATION_38_39 = object : Migration(38, 39) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE hypervisors_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        name TEXT NOT NULL,
+                        type TEXT NOT NULL,
+                        host TEXT NOT NULL,
+                        port INTEGER NOT NULL,
+                        username TEXT NOT NULL,
+                        password TEXT NOT NULL,
+                        realm TEXT,
+                        verify_ssl INTEGER NOT NULL DEFAULT 0,
+                        pinned_cert_sha256 TEXT,
+                        api_type_override TEXT NOT NULL DEFAULT 'auto',
+                        linked_connection_id TEXT,
+                        account_id INTEGER,
+                        notes TEXT,
+                        last_connected INTEGER NOT NULL DEFAULT 0,
+                        created_at INTEGER NOT NULL,
+                        auth_type TEXT NOT NULL DEFAULT 'password',
+                        oci_tenancy_ocid TEXT,
+                        oci_user_ocid TEXT,
+                        oci_region TEXT,
+                        oci_fingerprint TEXT,
+                        oci_compartment_ocid TEXT,
+                        ssh_identity_id TEXT
+                    )
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    INSERT INTO hypervisors_new (
+                        id, name, type, host, port, username, password, realm,
+                        verify_ssl, pinned_cert_sha256, api_type_override,
+                        linked_connection_id, account_id, notes, last_connected,
+                        created_at, auth_type, oci_tenancy_ocid, oci_user_ocid,
+                        oci_region, oci_fingerprint, oci_compartment_ocid,
+                        ssh_identity_id
+                    )
+                    SELECT
+                        id, name, type, host, port, username, password, realm,
+                        verify_ssl, pinned_cert_sha256,
+                        CASE
+                            WHEN api_type_override = 'auto' AND is_xen_orchestra = 1 THEN 'centralized'
+                            ELSE api_type_override
+                        END,
+                        linked_connection_id, account_id, notes, last_connected,
+                        created_at, auth_type, oci_tenancy_ocid, oci_user_ocid,
+                        oci_region, oci_fingerprint, oci_compartment_ocid,
+                        ssh_identity_id
+                    FROM hypervisors
+                    """.trimIndent()
+                )
+                database.execSQL("DROP TABLE hypervisors")
+                database.execSQL("ALTER TABLE hypervisors_new RENAME TO hypervisors")
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_hypervisors_account_id ON hypervisors(account_id)"
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_hypervisors_linked_connection_id ON hypervisors(linked_connection_id)"
+                )
+                Logger.i("Database", "Migration 38→39: dropped is_xen_orchestra column from hypervisors")
             }
         }
 

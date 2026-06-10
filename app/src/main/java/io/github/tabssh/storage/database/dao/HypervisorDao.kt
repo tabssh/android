@@ -38,8 +38,8 @@ interface HypervisorDao {
     @Query("UPDATE hypervisors SET last_connected = :timestamp WHERE id = :id")
     suspend fun updateLastConnected(id: Long, timestamp: Long)
 
-    @Query("UPDATE hypervisors SET is_xen_orchestra = :isXO WHERE id = :id")
-    suspend fun updateIsXenOrchestra(id: Long, isXO: Boolean)
+    @Query("UPDATE hypervisors SET api_type_override = :override WHERE id = :id")
+    suspend fun updateApiTypeOverride(id: Long, override: String)
 
     /** Phase 1 cert pinning — write the captured leaf SHA-256
      *  immediately after a successful TOFU connect so the next
