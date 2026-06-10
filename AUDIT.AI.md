@@ -209,4 +209,30 @@ These cannot be conclusively validated from code review alone:
 
 `make check` not run from this pass — same Docker-image rationale as pass 9. Edits are local, additive (extra try/catch arms, isEmpty guards, local captures), and do not change any public signature, return type, or visibility modifier. Re-verify with `make check` in CI before merging.
 
+## Fixed in pass 11 (2026-06-10) — stream / fd leaks on failure paths
+
+- [x] **`KeyStorage.importKeyFromFile` InputStream leak (MEDIUM)** — `context.contentResolver.openInputStream(fileUri)` was assigned to a local `val inputStream`, then `inputStream.bufferedReader().readText()` was called without `.use {}`. The intermediate `BufferedReader` wraps the underlying `InputStream`, so `readText()` exhausting the stream does NOT close the underlying ParcelFileDescriptor. Each failed (or successful) key import leaked one SAF fd; chained imports during onboarding could hit `EMFILE` on low-end devices. Re-shaped to `openInputStream(...)?.bufferedReader()?.use { it.readText() }` (matches the pattern already used in `CloudAccountsFragment` and `ImportExportActivity`).
+  - `app/src/main/java/io/github/tabssh/crypto/keys/KeyStorage.kt`
+- [x] **`TelnetConnection.connect` Socket leak on connect throw (MEDIUM)** — `val s = Socket()` was allocated inside the `try{}` block, then `s.connect(...)` immediately on the next line. If `connect()` threw (timeout, unreachable, refused), control jumped to the `catch{}` arm which called `disconnect()` — but `disconnect()` only closes the class-scope `socket` field, which had not yet been assigned (`socket = s` only happens after `connect()` succeeds). The locally-allocated `s` fell out of scope still holding an open fd, releasable only by the GC finaliser minutes later. Hoisted `val s = Socket()` above the `try{}`, added an explicit `s.close()` in the `catch{}` arm. Same shape as the `VncDirectConnector` fix from pass 10.
+  - `app/src/main/java/io/github/tabssh/ssh/connection/TelnetConnection.kt`
+- [x] **`SessionRecorder.startRecording` FileWriter leak on partial-init failure (LOW)** — `fileWriter = FileWriter(currentFile, true)` was assigned to the field before the initial `# TabSSH Session…` write. If that write/flush threw (e.g. external storage went away mid-init), the field was left non-null with an open fd, but `isRecording` stayed `false`, so the subsequent retry's `startRecording()` returned past the `isRecording` guard and overwrote `fileWriter` without closing the old one. Re-shaped to: write into a local `val w`, only publish to the field after the initial write succeeds, and explicitly close `w` in the catch arm before re-throwing.
+  - `app/src/main/java/io/github/tabssh/terminal/recording/SessionRecorder.kt`
+- [x] **`SessionRecorder.stopRecording` FileWriter leak on trailing-write failure (LOW)** — The original sequence `fileWriter?.write("\n# Session ended…"); fileWriter?.close(); isRecording = false` would skip `close()` entirely if `write()` threw, and would also leave `isRecording = true`, blocking any restart. Re-ordered: capture the writer into a local, null the field and flip `isRecording = false` first, then attempt the trailing write inside its own try/catch, then close in another try/catch. `close()` is now guaranteed to run.
+  - `app/src/main/java/io/github/tabssh/terminal/recording/SessionRecorder.kt`
+
+## Verified clean (pass 11)
+
+- `rg "openInputStream"` across `app/src/main`: every other call site already uses `?.bufferedReader()?.use { … }` or wraps the stream in `.use { }`. KeyStorage was the only leaker.
+- `rg "Socket\(\)"` raw-Socket allocations: all other sites (`HttpPortProbe`, `ssh/forwarding/PortForward*`, `network/portknock/PortKnocker`) already wrap allocation+connect in `try/finally { socket.close() }` or `.use { }`. `TelnetConnection` was the only mis-shaped one after pass 10's `VncDirectConnector` fix.
+- `rg "FileWriter\(|FileOutputStream\(|FileInputStream\("` app-wide: `SessionRecorder` was the only long-lived writer holding a member field; all other allocations are inside `.use { }` blocks or `try/finally`.
+- Unchecked-cast survey (`as <Type>` without `?` and not from a documented platform contract): remaining hits are all JCA (`as RSAPublicKey`, `as ASN1OctetString`), JSSE (`as SSLSocket` from `SSLSocketFactory.createSocket`), JSch (`as Vector<ChannelSftp.LsEntry>`, `as ChannelExec/Shell/Sftp`), or `getSystemService(...)` for documented service constants — all platform-guaranteed.
+- Companion-object Context survey: no companion holds an Activity Context or View reference. The five companion objects that import `Context` use it only as a parameter to `startService`/`stopService`/factory helpers — no field capture, no leak surface.
+- BroadcastReceiver register/unregister survey: still zero dynamic `registerReceiver` calls in production source; the prior pass-9 finding holds.
+- `lateinit var` survey: re-spot-checked the top 20 by file size — every site is bound in `onCreate`/`onCreateView` (or constructor) before any public method that reads it; no premature-read paths added since pass 10.
+- Coroutine-scope survey: no new throwaway `CoroutineScope(Dispatchers.*)` introduced since pass 9; the existing six per-class scopes are all cancelled in `cleanup()` / `onDestroy` / `close()`.
+
+## Build verification (pass 11)
+
+`make check` not run from this pass — same Docker-image rationale as passes 9 and 10. Edits are local, additive (one `?.use { }` chain replacement, one Socket hoist with an extra catch-arm close, two `SessionRecorder` rewrites). No public signature, return type, or visibility modifier changed. Re-verify with `make check` in CI before merging.
+
 Delete this file once all items above are addressed or the user confirms they are out of scope.

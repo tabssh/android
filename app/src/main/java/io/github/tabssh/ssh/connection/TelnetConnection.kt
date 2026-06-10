@@ -83,8 +83,8 @@ class TelnetConnection(
     private var termType: String = "xterm-256color"
 
     suspend fun connect(timeoutMs: Int = 15_000): Boolean = withContext(Dispatchers.IO) {
+        val s = Socket()
         try {
-            val s = Socket()
             s.connect(InetSocketAddress(host, port), timeoutMs)
             s.tcpNoDelay = true
             socket = s
@@ -96,6 +96,10 @@ class TelnetConnection(
             true
         } catch (e: Exception) {
             Logger.e(TAG, "Telnet connect failed: $host:$port", e)
+            // Ensure the freshly allocated socket is released even if it was
+            // never assigned to the field (e.g. connect() threw before line
+            // `socket = s` ran). disconnect() only closes the field.
+            try { s.close() } catch (_: Exception) {}
             disconnect()
             false
         }

@@ -271,10 +271,10 @@ class KeyStorage(private val context: Context) {
 
     suspend fun importKeyFromFile(fileUri: Uri, passphrase: String? = null): ImportResult = withContext(Dispatchers.IO) {
         try {
-            val inputStream = context.contentResolver.openInputStream(fileUri)
+            val keyContent = context.contentResolver.openInputStream(fileUri)
+                ?.bufferedReader()?.use { it.readText() }
                 ?: return@withContext ImportResult.Error("Cannot open file")
-            
-            val keyContent = inputStream.bufferedReader().readText()
+
             importKeyFromText(keyContent, passphrase, fileUri.lastPathSegment ?: "Imported Key")
             
         } catch (e: Exception) {

@@ -1,5 +1,19 @@
 # What's New
 
+## Wave 31 — File handle and socket leak fixes
+
+More under-the-hood reliability improvements:
+
+- **SSH key import** no longer leaks a file descriptor per import — the
+  stream was not being properly closed after reading
+- **Telnet connect** no longer leaks a socket file descriptor on
+  connection failures (timeout, refused, unreachable)
+- **Session recording** start and stop are now leak-proof — a storage
+  failure during recording init or shutdown can no longer leave a file
+  handle open until the app exits
+
+---
+
 ## Wave 30 — Deep reliability fixes (port forwards, tab cleanup, VNC)
 
 A second round of under-the-hood fixes targeting resource leaks and crashes
