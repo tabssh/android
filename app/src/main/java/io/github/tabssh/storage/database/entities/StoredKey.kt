@@ -87,10 +87,17 @@ data class StoredKey(
     val syncDeviceId: String = ""
 ) {
     fun getDisplayName(): String {
-        return if (comment.isNullOrBlank()) {
+        // Only show the comment if it contains printable ASCII/Unicode text.
+        // OpenSSH binary key format stores a comment field that is sometimes
+        // empty or contains non-printable bytes; displaying raw binary as the
+        // key name produces garbled text in the UI.
+        val safeComment = comment
+            ?.takeIf { it.isNotBlank() }
+            ?.takeIf { c -> c.all { it.code in 32..126 || it.code > 160 } }
+        return if (safeComment == null) {
             "$name ($keyType)"
         } else {
-            "$name - $comment"
+            "$name - $safeComment"
         }
     }
     

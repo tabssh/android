@@ -17,6 +17,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **SSH key name shows garbled binary after import** — `StoredKey.getDisplayName()` appends the key comment to the name; comments are parsed from the OpenSSH binary format and can contain non-printable bytes when no comment was set; added printability check in both `SSHKeyParser` (discard on store) and `getDisplayName()` (discard on display) — keys already in the DB are also fixed
 - **SSH key import shows garbled name** — `fileUri.lastPathSegment` on a `content://` URI returns an encoded path component, not the display filename; now queries `OpenableColumns.DISPLAY_NAME` via the `ContentResolver` with `lastPathSegment` as fallback
 - **`PortForwardingManager.cleanup` audit-logging orphan scope** — per-tunnel audit-log write spawned a throwaway `CoroutineScope(Dispatchers.IO)` whose parent `Job` was never cancelled; routed through `app.applicationScope.launch(Dispatchers.IO)` to match the pattern used by `TaskerWorker` and `PerformanceFragment`
 - **`HypervisorsFragment` REST reachability probe socket leak** — `Socket()` allocated, `connect()` could throw, `close()` was skipped; wrapped in `try { connect() } finally { close() }`

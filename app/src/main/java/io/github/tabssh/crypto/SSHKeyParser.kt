@@ -160,7 +160,11 @@ object SSHKeyParser {
         val comment = try {
             if (privateBuffer.hasRemaining()) {
                 val bytes = readString(privateBuffer)
-                String(bytes, StandardCharsets.UTF_8).trim()
+                val raw = String(bytes, StandardCharsets.UTF_8).trim()
+                // Discard the comment if it contains non-printable bytes —
+                // some keys have no comment and the parser may read adjacent
+                // key material instead, producing binary garbage.
+                if (raw.all { it.code in 32..126 || it.code > 160 }) raw else ""
             } else ""
         } catch (_: Exception) { "" }
 
