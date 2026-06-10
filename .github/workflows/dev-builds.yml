@@ -28,6 +28,9 @@ concurrency:
   group: dev-build-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
   build-devel:
     name: Build Development APKs
