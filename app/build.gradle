@@ -61,10 +61,6 @@ android {
             abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64', 'x86'
         }
 
-        // Room schema export — moved out of defaultConfig under KSP. See
-        // the top-level `ksp { ... }` block below; KSP rejects the
-        // `arguments { arg(...) }` syntax that Kapt accepted here.
-
         // Build information - version, commit ID, and build date
         buildConfigField "String", "VERSION_NAME", "\"${versionName}\""
         buildConfigField "int", "VERSION_CODE", "${versionCode}"
@@ -225,16 +221,6 @@ android {
         }
     }
 
-    sourceSets {
-        androidTest.assets.srcDirs += files("$projectDir/schemas".toString())
-    }
-}
-
-// Room schema export under KSP. Same path that Kapt was writing to
-// (`$projectDir/schemas/io.github.tabssh.storage.database.TabSSHDatabase/`),
-// so existing schema files keep validating across versions.
-ksp {
-    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {
