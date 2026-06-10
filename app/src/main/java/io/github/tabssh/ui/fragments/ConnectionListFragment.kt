@@ -10,7 +10,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import io.github.tabssh.R
-import io.github.tabssh.ui.adapters.ConnectionAdapter
+import io.github.tabssh.ui.adapters.GroupedConnectionAdapter
+import io.github.tabssh.ui.models.ConnectionListItem
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import kotlinx.coroutines.launch
 
@@ -20,7 +21,7 @@ import kotlinx.coroutines.launch
 class ConnectionListFragment : Fragment() {
 
     private lateinit var recyclerView: RecyclerView
-    private lateinit var adapter: ConnectionAdapter
+    private lateinit var adapter: GroupedConnectionAdapter
     private lateinit var viewModel: ConnectionListViewModel
 
     override fun onCreateView(
@@ -41,9 +42,17 @@ class ConnectionListFragment : Fragment() {
 
     private fun setupRecyclerView(view: View) {
         recyclerView = view.findViewById(R.id.recycler_connections)
-        adapter = ConnectionAdapter { connection ->
-            onConnectionSelected(connection)
-        }
+        // This fragment shows a flat connection list (no group model wired in
+        // here), so the grouped adapter is fed only Connection items.
+        adapter = GroupedConnectionAdapter(
+            items = mutableListOf(),
+            onConnectionClick = { connection -> onConnectionSelected(connection) },
+            onConnectionLongClick = { _ -> },
+            onConnectionEdit = { _ -> },
+            onConnectionDelete = { _ -> },
+            onGroupClick = { _ -> },
+            onGroupLongClick = { _ -> }
+        )
 
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
         recyclerView.adapter = adapter
@@ -55,7 +64,16 @@ class ConnectionListFragment : Fragment() {
 
     private fun observeConnections() {
         viewModel.connections.observe(viewLifecycleOwner) { connections ->
-            adapter.submitList(connections)
+            val items = connections.map { profile ->
+                ConnectionListItem.Connection(
+                    profile = profile,
+                    isInGroup = false,
+                    indentLevel = 0
+                )
+            }
+            adapter.items.clear()
+            adapter.items.addAll(items)
+            adapter.notifyDataSetChanged()
         }
     }
 

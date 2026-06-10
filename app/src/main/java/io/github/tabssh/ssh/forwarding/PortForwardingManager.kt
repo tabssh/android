@@ -201,9 +201,20 @@ class PortForwardingManager(private val sshConnection: SSHConnection) {
             if (result) {
                 tunnel.updateState(TunnelState.ACTIVE)
                 tunnel.startTime = System.currentTimeMillis()
-                
+
                 Logger.i("PortForwardingManager", "Started tunnel: ${tunnel.getDescription()}")
                 notifyListeners { onTunnelStarted(tunnel) }
+                // Audit logging — best-effort, never break tunnel startup.
+                try {
+                    val app = sshConnection.context.applicationContext as? io.github.tabssh.TabSSHApplication
+                    app?.auditLogManager?.logPortForwardOpen(
+                        sshConnection.profile,
+                        sshConnection.id,
+                        "${tunnel.type}:${tunnel.localPort}"
+                    )
+                } catch (e: Exception) {
+                    Logger.w("PortForwardingManager", "Audit log (portForwardOpen) failed: ${e.message}")
+                }
                 true
             } else {
                 tunnel.updateState(TunnelState.ERROR)
@@ -252,9 +263,20 @@ class PortForwardingManager(private val sshConnection: SSHConnection) {
             
             tunnel.updateState(TunnelState.STOPPED)
             tunnel.stopTime = System.currentTimeMillis()
-            
+
             Logger.i("PortForwardingManager", "Stopped tunnel: ${tunnel.getDescription()}")
             notifyListeners { onTunnelStopped(tunnel) }
+            // Audit logging — best-effort, never break tunnel teardown.
+            try {
+                val app = sshConnection.context.applicationContext as? io.github.tabssh.TabSSHApplication
+                app?.auditLogManager?.logPortForwardClose(
+                    sshConnection.profile,
+                    sshConnection.id,
+                    "${tunnel.type}:${tunnel.localPort}"
+                )
+            } catch (e: Exception) {
+                Logger.w("PortForwardingManager", "Audit log (portForwardClose) failed: ${e.message}")
+            }
             true
             
         } catch (e: Exception) {
@@ -408,6 +430,9 @@ class PortForwardingManager(private val sshConnection: SSHConnection) {
         // calls directly here — non-suspending — then cancel the scope.
         try {
             val session = try { getSSHSession() } catch (_: Exception) { null }
+            val app = try {
+                sshConnection.context.applicationContext as? io.github.tabssh.TabSSHApplication
+            } catch (_: Exception) { null }
             activeTunnels.values.forEach { tunnel ->
                 if (tunnel.state == TunnelState.ACTIVE && session != null) {
                     try {
@@ -419,6 +444,21 @@ class PortForwardingManager(private val sshConnection: SSHConnection) {
                                 session.delPortForwardingR(tunnel.remotePort)
                         }
                         tunnel.updateState(TunnelState.STOPPED)
+                        // Audit logging — best-effort, must not block cleanup.
+                        // forwardingScope is about to be cancelled, so dispatch
+                        // on a one-shot IO coroutine on GlobalScope-equivalent
+                        // (the app-level scope embedded in TabSSHApplication).
+                        val audit = app?.auditLogManager
+                        if (audit != null) {
+                            val spec = "${tunnel.type}:${tunnel.localPort}"
+                            kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                                try {
+                                    audit.logPortForwardClose(sshConnection.profile, sshConnection.id, spec)
+                                } catch (e: Exception) {
+                                    Logger.w("PortForwardingManager", "Audit log (portForwardClose) failed: ${e.message}")
+                                }
+                            }
+                        }
                     } catch (e: Exception) {
                         Logger.w("PortForwardingManager", "tunnel teardown failed: ${e.message}")
                     }

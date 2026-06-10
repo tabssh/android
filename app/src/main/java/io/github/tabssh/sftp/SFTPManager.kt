@@ -291,7 +291,20 @@ class SFTPManager(private val sshConnection: SSHConnection) {
             
             task.complete(TransferResult.Success)
             Logger.i("SFTPManager", "Upload completed: ${task.localPath}")
-            
+
+            // Audit logging — best-effort, never break the SFTP success path.
+            try {
+                val app = sshConnection.context.applicationContext as? io.github.tabssh.TabSSHApplication
+                app?.auditLogManager?.logSftpUpload(
+                    sshConnection.profile,
+                    sshConnection.id,
+                    task.remotePath,
+                    localFile.length()
+                )
+            } catch (e: Exception) {
+                Logger.w("SFTPManager", "Audit log (sftpUpload) failed: ${e.message}")
+            }
+
         } catch (e: Exception) {
             Logger.e("SFTPManager", "Upload failed: ${task.localPath}", e)
             task.complete(TransferResult.Error(e.message ?: "Upload failed"))
@@ -366,7 +379,20 @@ class SFTPManager(private val sshConnection: SSHConnection) {
             
             task.complete(TransferResult.Success)
             Logger.i("SFTPManager", "Download completed: ${task.remotePath}")
-            
+
+            // Audit logging — best-effort, never break the SFTP success path.
+            try {
+                val app = sshConnection.context.applicationContext as? io.github.tabssh.TabSSHApplication
+                app?.auditLogManager?.logSftpDownload(
+                    sshConnection.profile,
+                    sshConnection.id,
+                    task.remotePath,
+                    localFile.length()
+                )
+            } catch (e: Exception) {
+                Logger.w("SFTPManager", "Audit log (sftpDownload) failed: ${e.message}")
+            }
+
         } catch (e: Exception) {
             Logger.e("SFTPManager", "Download failed: ${task.remotePath}", e)
             task.complete(TransferResult.Error(e.message ?: "Download failed"))
@@ -444,6 +470,13 @@ class SFTPManager(private val sshConnection: SSHConnection) {
                 channel.rm(path)
             }
             Logger.d("SFTPManager", "Deleted remote ${if (isDirectory) "directory" else "file"}: $path")
+            // Audit logging — best-effort, never break the SFTP success path.
+            try {
+                val app = sshConnection.context.applicationContext as? io.github.tabssh.TabSSHApplication
+                app?.auditLogManager?.logSftpDelete(sshConnection.profile, sshConnection.id, path)
+            } catch (e: Exception) {
+                Logger.w("SFTPManager", "Audit log (sftpDelete) failed: ${e.message}")
+            }
             true
         } catch (e: SftpException) {
             Logger.e("SFTPManager", "Failed to delete remote $path", e)

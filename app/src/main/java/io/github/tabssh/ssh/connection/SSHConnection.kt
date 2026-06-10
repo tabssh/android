@@ -39,7 +39,7 @@ data class SSHConnectionErrorInfo(
 class SSHConnection(
     val profile: ConnectionProfile,
     private val scope: CoroutineScope,
-    private val context: android.content.Context
+    internal val context: android.content.Context
 ) {
     /**
      * True when this connection was created by [SSHSessionManager.connectForMonitoring]
@@ -369,6 +369,14 @@ class SSHConnection(
                 }
 
                 notifyListeners { onConnected(id) }
+
+                // Audit logging — best-effort, never break the SSH happy path.
+                try {
+                    val method = if (profile.keyId != null) "publickey" else "password"
+                    app?.auditLogManager?.logAuthSuccess(profile, id, method)
+                } catch (e: Exception) {
+                    Logger.w("SSHConnection", "Audit log (authSuccess) failed: ${e.message}")
+                }
 
                 Logger.i("SSHConnection", "Connection complete to ${profile.host}")
                 
@@ -1703,6 +1711,24 @@ class SSHConnection(
         _errorMessage.value = errorInfo.userMessage
         _detailedError.value = errorInfo
         notifyListeners { onError(id, error) }
+
+        // Audit logging — best-effort, fire-and-forget so a logging failure
+        // never interferes with error reporting or reconnect logic.
+        try {
+            val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
+            val audit = app?.auditLogManager
+            if (audit != null) {
+                scope.launch(Dispatchers.IO) {
+                    try {
+                        audit.logAuthFailure(profile, id, "unknown", error.message ?: "")
+                    } catch (e: Exception) {
+                        Logger.w("SSHConnection", "Audit log (authFailure) failed: ${e.message}")
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Logger.w("SSHConnection", "Audit log (authFailure) dispatch failed: ${e.message}")
+        }
 
         // Auth-fail markers JSch actually emits — substring matches on
         // "password" / "publickey" alone caught unrelated kex failures.

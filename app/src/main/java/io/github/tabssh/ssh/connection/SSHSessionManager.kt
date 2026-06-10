@@ -156,6 +156,14 @@ class SSHSessionManager(private val context: Context) {
                 // Start foreground service to maintain persistent notification
                 SSHConnectionService.startService(context)
                 notifyListeners { onConnectionEstablished(profile.id) }
+                // Audit logging — best-effort, never block the SSH happy path.
+                try {
+                    val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
+                    app?.auditLogManager?.logConnect(profile, profile.id, success = true)
+                    app?.auditLogManager?.logSessionStart(profile, profile.id)
+                } catch (e: Exception) {
+                    Logger.w("SSHSessionManager", "Audit log (connect) failed: ${e.message}")
+                }
                 connection
             } else {
                 Logger.w("SSHSessionManager", "Failed to connect to ${profile.getDisplayName()}")
@@ -248,15 +256,36 @@ class SSHSessionManager(private val context: Context) {
      */
     fun closeConnection(profileId: String) {
         Logger.d("SSHSessionManager", "Closing connection: $profileId")
-        
+
         activeConnections[profileId]?.let { connection ->
+            // Capture the profile BEFORE the connection is removed from the map
+            // so the audit-log calls below have stable references.
+            val profile = connection.profile
             connection.disconnect()
             activeConnections.remove(profileId)
             connectionPool.remove(profileId) // Also remove from pool
             updateConnectionStates()
-            
+
             Logger.i("SSHSessionManager", "Closed connection: $profileId")
             notifyListeners { onConnectionClosed(profileId) }
+            // Audit logging — best-effort, fire-and-forget so a logging failure
+            // never interferes with the SSH teardown.
+            try {
+                val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
+                val audit = app?.auditLogManager
+                if (audit != null) {
+                    scope.launch(Dispatchers.IO) {
+                        try {
+                            audit.logSessionEnd(profile, profileId, 0L)
+                            audit.logDisconnect(profile, profileId)
+                        } catch (e: Exception) {
+                            Logger.w("SSHSessionManager", "Audit log (disconnect) failed: ${e.message}")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Logger.w("SSHSessionManager", "Audit log (disconnect) dispatch failed: ${e.message}")
+            }
         }
     }
     

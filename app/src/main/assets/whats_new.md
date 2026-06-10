@@ -1,5 +1,18 @@
 # What's New
 
+## Wave 32 — Audit logging + connection groups
+
+**Audit log** — When you enable audit logging in Settings → Logging →
+Audit, the app now actually records what you'd expect: session connect
+and disconnect, authentication results, SFTP file operations, and port
+forward open/close events. The audit viewer was already there — the
+recording was just never wired in.
+
+**Connection groups** — Connections assigned to a group now appear
+grouped in the Connections tab list instead of rendering as a flat list.
+
+---
+
 ## Wave 31 — File handle and socket leak fixes
 
 More under-the-hood reliability improvements:

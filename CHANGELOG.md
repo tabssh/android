@@ -15,6 +15,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Audit log now records SSH session events** — `AuditLogManager` had all methods implemented but none were wired; session start/end, auth success/failure, SFTP upload/download/delete, and port-forward open/close are now recorded when audit logging is enabled in Settings → Logging → Audit
+- **Connection list now shows groups** — the Connections tab was rendering a flat list even when connections were assigned to groups; switched to `GroupedConnectionAdapter` so groups are visible
 - **`KeyStorage.importKeyFromFile` leaked SAF InputStream** — `openInputStream()` result was read via `.bufferedReader().readText()` without `.use {}`; the underlying `ParcelFileDescriptor` was never closed; reshaped to `?.bufferedReader()?.use { it.readText() }`
 - **`TelnetConnection.connect` socket leak on connection failure** — `Socket()` was allocated inside `try{}` and only assigned to the field after `connect()` succeeded; a timeout/refusal meant `disconnect()` in the catch arm couldn't reach it; hoisted allocation above `try{}` and added explicit `s.close()` in the catch arm
 - **`SessionRecorder.startRecording` FileWriter leak on init failure** — `fileWriter` was assigned before the initial write/flush, so a storage failure left an open fd in the field while `isRecording` stayed false; deferred field assignment until after the write succeeds, closes the local writer in the catch arm
