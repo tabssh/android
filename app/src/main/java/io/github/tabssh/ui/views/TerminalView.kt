@@ -1853,17 +1853,9 @@ class TerminalView @JvmOverloads constructor(
         }
 
         override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-            // URL detection on tap (when enabled). Falls through to keyboard
-            // toggle so users who don't have a URL under their finger still
-            // get the expected "tap = show/hide keyboard" behaviour.
-            val url = detectUrlAtPosition(e.x, e.y)
-            if (url != null) {
-                onUrlDetected?.invoke(url)
-                Logger.d("TerminalView", "Tap on URL: $url")
-            } else {
-                toggleKeyboard()
-                Logger.d("TerminalView", "Single tap — toggling keyboard")
-            }
+            // Single tap = toggle keyboard.
+            toggleKeyboard()
+            Logger.d("TerminalView", "Single tap — toggling keyboard")
             return true
         }
 
@@ -1874,12 +1866,19 @@ class TerminalView @JvmOverloads constructor(
         }
 
         override fun onLongPress(e: MotionEvent) {
-            // Long press = terminal action menu. Copy/paste lives on the
-            // dedicated clipboard key in the keyboard bar — long press is
-            // reserved exclusively for the menu.
+            // Long press on a URL → URL open/copy dialog.
+            // Long press on anything else → terminal action menu.
+            // Copy/paste lives on the dedicated clipboard key in the keyboard
+            // bar — text selection is NOT triggered from long press.
             performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
-            onContextMenuRequested?.invoke(e.x, e.y)
-            Logger.d("TerminalView", "Long press — showing terminal menu")
+            val url = detectUrlAtPosition(e.x, e.y)
+            if (url != null) {
+                onUrlDetected?.invoke(url)
+                Logger.d("TerminalView", "Long press on URL: $url")
+            } else {
+                onContextMenuRequested?.invoke(e.x, e.y)
+                Logger.d("TerminalView", "Long press — showing terminal menu")
+            }
         }
     }
 

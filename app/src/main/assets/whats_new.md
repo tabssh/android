@@ -3,12 +3,11 @@
 ## Wave 26 — Long press = menu, smooth scrolling
 
 ### Long press
-Long pressing the terminal now **always opens the action menu**. Copy and
-paste live on the dedicated clipboard key (📋) in the keyboard bar — there
-was no reason for long press to also do text selection.
+- Long press on a **URL** → Open / Copy URL dialog (unchanged)
+- Long press on **anything else** → terminal action menu
 
-Tapping a URL (when URL detection is on) still shows the Open / Copy dialog
-— the detection just moved from long press to single tap.
+Copy and paste live on the dedicated clipboard key (📋) in the keyboard
+bar — long press no longer starts text selection.
 
 ### Smooth scrolling (issue #8)
 Terminal scrolling is significantly faster and smoother:
