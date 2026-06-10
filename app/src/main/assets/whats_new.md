@@ -1,5 +1,23 @@
 # What's New
 
+## Wave 30 — Deep reliability fixes (port forwards, tab cleanup, VNC)
+
+A second round of under-the-hood fixes targeting resource leaks and crashes
+that were only observable in edge cases:
+
+- **Port forwards** are now properly torn down when you disconnect — a race
+  meant the cleanup coroutine was cancelled before it ran, leaving tunnels
+  "open" in JSch until the session fully dropped
+- **Tab close** now fully cleans up background jobs and the terminal bridge —
+  previously only the SSH session was torn down, leaving a memory leak per
+  closed tab
+- **VNC connect failure** no longer leaks a file descriptor — the socket is
+  now always closed if the connection attempt fails
+- **Keyboard shortcuts** (`Ctrl+Tab` / `Ctrl+Shift+Tab`) no longer crash if
+  all tabs have been closed
+
+---
+
 ## Wave 29 — Long press restored to terminal menu
 
 Long pressing the terminal now opens the action menu again (copy/paste,

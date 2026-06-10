@@ -45,21 +45,30 @@ object VncDirectConnector {
         Logger.d(TAG, "Connecting to ${host.host}:$effectivePort (security=${host.securityType} consoleMode=$consoleMode)")
 
         val socket = Socket()
-        socket.soTimeout = SO_TIMEOUT_MS
-        socket.connect(InetSocketAddress(host.host, effectivePort), CONNECT_TIMEOUT_MS)
+        try {
+            socket.soTimeout = SO_TIMEOUT_MS
+            socket.connect(InetSocketAddress(host.host, effectivePort), CONNECT_TIMEOUT_MS)
 
-        val rfbClient = RfbClient(
-            inputStream = socket.inputStream,
-            outputStream = socket.outputStream,
-            vncPassword = password,
-            rawSocket = socket,
-            tlsHost = host.host,
-            tlsPort = effectivePort,
-            tlsVerify = host.tlsVerify,
-            vncUsername = username,
-            consoleMode = consoleMode
-        )
-        Logger.d(TAG, "Socket connected; RfbClient constructed for ${host.name}")
-        Pair(rfbClient, socket)
+            val rfbClient = RfbClient(
+                inputStream = socket.inputStream,
+                outputStream = socket.outputStream,
+                vncPassword = password,
+                rawSocket = socket,
+                tlsHost = host.host,
+                tlsPort = effectivePort,
+                tlsVerify = host.tlsVerify,
+                vncUsername = username,
+                consoleMode = consoleMode
+            )
+            Logger.d(TAG, "Socket connected; RfbClient constructed for ${host.name}")
+            Pair(rfbClient, socket)
+        } catch (e: Throwable) {
+            // If connect() or the RfbClient constructor throws after the
+            // Socket was allocated, the caller never receives it and cannot
+            // close it. Close here to prevent file-descriptor leaks on every
+            // failed VNC connect attempt.
+            try { socket.close() } catch (_: Exception) {}
+            throw e
+        }
     }
 }

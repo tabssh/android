@@ -1352,6 +1352,7 @@ class SSHConnection(
 
             if (remoteCmd != null) {
                 val exec = currentSession.openChannel("exec") as ChannelExec
+                try {
                 exec.setCommand(remoteCmd)
                 // Respect RequestTTY from advancedSettings (set via ~/.ssh/config import or manual edit).
                 // Semantics mirror OpenSSH: "force"/"yes" → allocate PTY; "no" → never; "auto" → no PTY
@@ -1379,26 +1380,40 @@ class SSHConnection(
                 openChannels.add(exec)
                 Logger.i("SSHConnection", "Opened exec channel: ${remoteCmd.take(60)} (pty=$requestTTY)")
                 return@withContext exec
+                } catch (e: Exception) {
+                    // Channel was opened (allocated on the Session) but not yet
+                    // tracked in openChannels — disconnect it directly so it
+                    // doesn't linger attached to the Session.
+                    try { exec.disconnect() } catch (_: Exception) {}
+                    throw e
+                }
             }
 
             // Default path — login shell.
             val shell = currentSession.openChannel("shell") as ChannelShell
-            shell.setPtyType(profile.terminalType)
-            shell.setPtySize(80, 24, 0, 0) // Will be updated by terminal
-            // Wave 1.2: per-host env vars before channel.connect()
-            applyEnvVarsTo(shell)
-            applyForwardingFlags(currentSession, shell)
-            // JSch requires getInputStream/getOutputStream to be called BEFORE
-            // connect() — accessing after connect() triggers a warning and may
-            // return stale references.
-            @Suppress("UNUSED_VARIABLE") val _shellIn  = shell.inputStream
-            @Suppress("UNUSED_VARIABLE") val _shellOut = shell.outputStream
-            shell.connect()
+            try {
+                shell.setPtyType(profile.terminalType)
+                shell.setPtySize(80, 24, 0, 0) // Will be updated by terminal
+                // Wave 1.2: per-host env vars before channel.connect()
+                applyEnvVarsTo(shell)
+                applyForwardingFlags(currentSession, shell)
+                // JSch requires getInputStream/getOutputStream to be called BEFORE
+                // connect() — accessing after connect() triggers a warning and may
+                // return stale references.
+                @Suppress("UNUSED_VARIABLE") val _shellIn  = shell.inputStream
+                @Suppress("UNUSED_VARIABLE") val _shellOut = shell.outputStream
+                shell.connect()
 
-            shellChannel = shell
-            openChannels.add(shell)
-            Logger.d("SSHConnection", "Shell channel opened (total open: ${openChannels.size})")
-            return@withContext shell
+                shellChannel = shell
+                openChannels.add(shell)
+                Logger.d("SSHConnection", "Shell channel opened (total open: ${openChannels.size})")
+                return@withContext shell
+            } catch (e: Exception) {
+                // Same pre-tracking-failure case as the exec branch above —
+                // explicitly disconnect to release the Session slot.
+                try { shell.disconnect() } catch (_: Exception) {}
+                throw e
+            }
 
         } catch (e: Exception) {
             Logger.e("SSHConnection", "Failed to open shell channel", e)
@@ -1568,12 +1583,20 @@ class SSHConnection(
             }
             
             val channel = currentSession.openChannel("sftp") as ChannelSftp
-            channel.connect()
-            
+            try {
+                channel.connect()
+            } catch (e: Exception) {
+                // connect() failed — channel was allocated on the Session
+                // but never assigned to sftpChannel, so callers can't reach
+                // it for cleanup. Disconnect directly to release the slot.
+                try { channel.disconnect() } catch (_: Exception) {}
+                throw e
+            }
+
             sftpChannel = channel
             Logger.d("SSHConnection", "SFTP channel opened")
             return@withContext channel
-            
+
         } catch (e: Exception) {
             Logger.e("SSHConnection", "Failed to open SFTP channel", e)
             return@withContext null

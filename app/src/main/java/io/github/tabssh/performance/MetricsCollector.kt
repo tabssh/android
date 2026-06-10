@@ -219,10 +219,14 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
 
         val currentTime = System.currentTimeMillis()
 
-        // Calculate bytes/sec if we have previous measurement
-        val (rxBytesPerSec, txBytesPerSec, rxPacketsPerSec, txPacketsPerSec) = if (previousNetworkStats != null && previousNetworkTime > 0) {
+        // Calculate bytes/sec if we have previous measurement. Capture the
+        // nullable field into a local so a concurrent `resetNetworkStats()`
+        // (called from another thread when a connection is replaced) can't
+        // null it out between the check and the read.
+        val prev = previousNetworkStats
+        val (rxBytesPerSec, txBytesPerSec, rxPacketsPerSec, txPacketsPerSec) = if (prev != null && previousNetworkTime > 0) {
             val timeDiff = (currentTime - previousNetworkTime) / 1000.0
-            val (prevRx, prevTx) = previousNetworkStats!!
+            val (prevRx, prevTx) = prev
             
             if (timeDiff > 0) {
                 val rxDiff = (rxBytes - prevRx).coerceAtLeast(0)

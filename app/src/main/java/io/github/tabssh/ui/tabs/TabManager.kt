@@ -125,7 +125,11 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
     fun closeTab(index: Int) {
         if (index in 0 until tabs.size) {
             val tab = tabs[index]
-            tab.disconnect()
+            // cleanup() = disconnect() + termuxBridge.cleanup() + connectionScope.cancel().
+            // Previously only disconnect() was called, leaking the tab's
+            // SupervisorJob scope and TermuxBridge resources for the remainder
+            // of the process lifetime.
+            tab.cleanup()
             tabs.removeAt(index)
             tabObservers.remove(tab.tabId)?.cancel()
 
@@ -185,15 +189,21 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
                 true
             }
             isCtrlPressed && keyCode == KeyEvent.KEYCODE_TAB -> {
-                // Ctrl+Tab - Next tab
-                val nextIndex = (activeTabIndex + 1) % tabs.size
-                switchToTab(nextIndex)
+                // Ctrl+Tab - Next tab. Guard against empty tab list (modulo would
+                // throw ArithmeticException if a shortcut fires after the last
+                // tab closes but the consumer hasn't been removed yet).
+                if (tabs.isNotEmpty()) {
+                    val nextIndex = (activeTabIndex + 1) % tabs.size
+                    switchToTab(nextIndex)
+                }
                 true
             }
             isCtrlPressed && event.isShiftPressed && keyCode == KeyEvent.KEYCODE_TAB -> {
-                // Ctrl+Shift+Tab - Previous tab
-                val prevIndex = if (activeTabIndex == 0) tabs.size - 1 else activeTabIndex - 1
-                switchToTab(prevIndex)
+                // Ctrl+Shift+Tab - Previous tab. Same empty-list guard.
+                if (tabs.isNotEmpty()) {
+                    val prevIndex = if (activeTabIndex == 0) tabs.size - 1 else activeTabIndex - 1
+                    switchToTab(prevIndex)
+                }
                 true
             }
             isCtrlPressed && keyCode >= KeyEvent.KEYCODE_1 && keyCode <= KeyEvent.KEYCODE_9 -> {
@@ -281,6 +291,7 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
      * Switch to previous tab
      */
     fun switchToPreviousTab() {
+        if (tabs.isEmpty()) return
         val prevIndex = if (activeTabIndex == 0) tabs.size - 1 else activeTabIndex - 1
         switchToTab(prevIndex)
     }
@@ -289,6 +300,7 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
      * Switch to next tab
      */
     fun switchToNextTab() {
+        if (tabs.isEmpty()) return
         val nextIndex = (activeTabIndex + 1) % tabs.size
         switchToTab(nextIndex)
     }
@@ -381,7 +393,9 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
         Logger.d("TabManager", "Cleaning up tab manager")
         tabObservers.values.forEach { it.cancel() }
         tabObservers.clear()
-        tabs.forEach { it.disconnect() }
+        // cleanup() also tears down each tab's connectionScope and the
+        // Termux bridge — disconnect() alone leaked both.
+        tabs.forEach { it.cleanup() }
         tabs.clear()
         listeners.clear()
         // Publish so the Connections-tab "Active Sessions" strip — and any

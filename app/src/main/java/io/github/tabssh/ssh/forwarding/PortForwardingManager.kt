@@ -399,14 +399,37 @@ class PortForwardingManager(private val sshConnection: SSHConnection) {
      */
     fun cleanup() {
         Logger.d("PortForwardingManager", "Cleaning up port forwarding manager")
-        
-        forwardingScope.launch {
-            stopAllTunnels()
+
+        // Race fix: previously this called `forwardingScope.launch { stopAllTunnels() }`
+        // and then `forwardingScope.cancel()` on the next line. Cancelling the
+        // scope cancelled the just-launched coroutine before it executed, so
+        // active port forwards were never torn down (JSch kept them attached
+        // to the Session until Session disconnect). Issue the JSch unforward
+        // calls directly here — non-suspending — then cancel the scope.
+        try {
+            val session = try { getSSHSession() } catch (_: Exception) { null }
+            activeTunnels.values.forEach { tunnel ->
+                if (tunnel.state == TunnelState.ACTIVE && session != null) {
+                    try {
+                        when (tunnel.type) {
+                            TunnelType.LOCAL_FORWARD,
+                            TunnelType.DYNAMIC_FORWARD ->
+                                session.delPortForwardingL(tunnel.actualLocalPort ?: tunnel.localPort)
+                            TunnelType.REMOTE_FORWARD ->
+                                session.delPortForwardingR(tunnel.remotePort)
+                        }
+                        tunnel.updateState(TunnelState.STOPPED)
+                    } catch (e: Exception) {
+                        Logger.w("PortForwardingManager", "tunnel teardown failed: ${e.message}")
+                    }
+                }
+            }
+            notifyListeners { onAllTunnelsStopped() }
+        } finally {
+            forwardingScope.cancel()
+            activeTunnels.clear()
+            listeners.clear()
         }
-        
-        forwardingScope.cancel()
-        activeTunnels.clear()
-        listeners.clear()
     }
 }
 
