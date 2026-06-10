@@ -9,6 +9,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Session persistence** — `SessionPersistenceManager` is now wired as an `ActivityLifecycleCallbacks`; saves terminal scrollback and tab state to the database every 30 s while the app is in the foreground, immediately on background, and on every `onSaveInstanceState`; restores sessions on foreground return if the app was backgrounded for less than 24 h; applies auto-lock and clipboard-clear security policies on background
+
 - **Volume key action setting** — Settings → Terminal → Volume Key Action; three options: "Font size (+ / −)" (default, preserves existing behaviour), "Scroll (page up / down)" (Volume Up = older content, Volume Down = newest), "System volume (off)"; existing `volume_keys_font_size` boolean preference is migrated automatically on first launch
 
 - **Full preference sync and backup** — connection defaults, sync toggles, multiplexer key bindings, accessibility flags, and proxy configuration are now included in both SAF sync and backup/restore; previously these five categories were silently absent from both systems

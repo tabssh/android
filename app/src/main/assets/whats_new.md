@@ -1,5 +1,18 @@
 # What's New
 
+## Wave 33 — Sessions survive backgrounding
+
+TabSSH now saves your open terminal sessions automatically. When you
+switch to another app or lock your screen, the current scrollback and
+tab state are saved. If you come back within 24 hours, your tabs are
+restored exactly where you left them — no reconnecting needed.
+
+Security policies also run on background: auto-lock triggers if you
+have it enabled, and the clipboard clears on schedule if you have
+auto-clear configured.
+
+---
+
 ## Wave 32 — Audit logging + connection groups
 
 **Audit log** — When you enable audit logging in Settings → Logging →

@@ -59,6 +59,9 @@ class TabSSHApplication : Application() {
     val performanceManager by lazy { PerformanceManager(this) }
     val auditLogManager by lazy { io.github.tabssh.audit.AuditLogManager(this, database, preferencesManager) }
     val tabManager by lazy { io.github.tabssh.ui.tabs.TabManager(database) }
+    val sessionPersistenceManager by lazy {
+        io.github.tabssh.background.SessionPersistenceManager(this, tabManager)
+    }
     /** App-wide network state observer. Single instance so every connection
      *  type (SSH, VNC, Telnet) shares one [ConnectivityManager] callback. */
     val networkDetector by lazy { io.github.tabssh.network.detection.NetworkDetector(this) }
@@ -395,6 +398,10 @@ class TabSSHApplication : Application() {
             io.github.tabssh.background.HostAvailabilityWorker.schedule(this)
         }
 
+        tryInit("SessionPersistence") {
+            registerActivityLifecycleCallbacks(sessionPersistenceManager)
+        }
+
         Logger.d("TabSSHApplication", "Core components initialized")
     }
     
@@ -560,13 +567,11 @@ class TabSSHApplication : Application() {
     
     override fun onTerminate() {
         Logger.d("TabSSHApplication", "Application terminating...")
-        
-        // Close all SSH connections
+
+        sessionPersistenceManager.cleanup()
         sshSessionManager.closeAllConnections()
-        
-        // Clear sensitive data from memory
         securePasswordManager.clearSensitiveData()
-        
+
         super.onTerminate()
     }
     
