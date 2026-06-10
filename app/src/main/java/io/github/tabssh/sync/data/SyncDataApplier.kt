@@ -570,7 +570,9 @@ class SyncDataApplier {
         prefs.forEach { (key, value) ->
             try {
                 when (key) {
-                    "frequency"        -> preferenceManager.setSyncFrequency(value as String)
+                    "frequency"        -> preferenceManager.setSyncFrequency(when (value) {
+                        is String -> value; is Number -> value.toString(); else -> "hourly"
+                    })
                     "wifiOnly"         -> preferenceManager.setSyncWifiOnly(value as Boolean)
                     "onChangeEnabled"  -> preferenceManager.setSyncOnChangeEnabled(value as Boolean)
                     "syncConnections"  -> preferenceManager.setSyncConnectionsEnabled(value as Boolean)
@@ -598,10 +600,18 @@ class SyncDataApplier {
                         "gestureEnabled" -> defaultPrefs.edit()
                             .putBoolean("enable_custom_gestures", value as Boolean).apply()
                         "gestureType"    -> defaultPrefs.edit()
-                            .putString("gesture_multiplexer_type", value as String).apply()
-                        "prefixTmux"    -> preferenceManager.setMultiplexerPrefix("tmux",   value as String)
-                        "prefixScreen"  -> preferenceManager.setMultiplexerPrefix("screen", value as String)
-                        "prefixZellij"  -> preferenceManager.setMultiplexerPrefix("zellij", value as String)
+                            .putString("gesture_multiplexer_type", when (value) {
+                                is String -> value; is Number -> value.toString(); else -> "tmux"
+                            }).apply()
+                        "prefixTmux"    -> preferenceManager.setMultiplexerPrefix("tmux",   when (value) {
+                            is String -> value; is Number -> value.toString(); else -> "C-b"
+                        })
+                        "prefixScreen"  -> preferenceManager.setMultiplexerPrefix("screen", when (value) {
+                            is String -> value; is Number -> value.toString(); else -> "C-a"
+                        })
+                        "prefixZellij"  -> preferenceManager.setMultiplexerPrefix("zellij", when (value) {
+                            is String -> value; is Number -> value.toString(); else -> "C-g"
+                        })
                     }
                     count++
                 } catch (e: Exception) {
@@ -641,9 +651,19 @@ class SyncDataApplier {
                     "port"        -> preferenceManager.setProxyPort((value as Number).toInt())
                     "username"    -> preferenceManager.setProxyUsername(value as String)
                     "password"    -> preferenceManager.setProxyPassword(value as String)
-                    "bypassHosts" -> preferenceManager.setProxyBypassHosts(
-                        (value as String).split(",").filter { it.isNotEmpty() }
-                    )
+                    "bypassHosts" -> {
+                        val raw = when (value) {
+                            is String -> value
+                            is Number -> value.toString()
+                            else      -> ""
+                        }
+                        if (raw.isNotEmpty()) {
+                            val sep = if ('\n' in raw) "\n" else ","
+                            preferenceManager.setProxyBypassHosts(
+                                raw.split(sep).filter { it.isNotEmpty() }
+                            )
+                        }
+                    }
                 }
                 count++
             } catch (e: Exception) {

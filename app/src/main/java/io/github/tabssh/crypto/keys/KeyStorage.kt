@@ -1229,10 +1229,20 @@ Error: ${e.javaClass.simpleName}: ${e.message}"""
     }
 
     private fun encodeEd25519PublicKey(edKey: PublicKey): String {
-        // Ed25519 SPKI/DER = 44 bytes:
+        // On API < 33 generateEd25519KeyPair() silently falls back to ECDSA P-256.
+        // Dispatch to the correct encoder so the exported line is always valid.
+        if (edKey is ECPublicKey) {
+            Logger.w("KeyStorage", "Ed25519 requested but got EC key (API<33 fallback) — encoding as ECDSA")
+            return encodeECDSAPublicKey(edKey)
+        }
+        // BouncyCastle Ed25519 SPKI/DER is always exactly 44 bytes:
         //   30 2a 30 05 06 03 2b 65 70 03 21 00 <32-byte-raw-key>
-        // The raw public key is always the last 32 bytes.
-        val raw = edKey.encoded.takeLast(32).toByteArray()
+        // Validate the length before trusting takeLast(32).
+        val spki = edKey.encoded
+        require(spki.size == 44) {
+            "Unexpected Ed25519 SPKI size ${spki.size} — cannot extract raw public key"
+        }
+        val raw = spki.takeLast(32).toByteArray()
         val buf = java.io.ByteArrayOutputStream()
         buf.write(opensshWireString("ssh-ed25519"))
         buf.write(java.nio.ByteBuffer.allocate(4 + raw.size).putInt(raw.size).put(raw).array())

@@ -483,7 +483,10 @@ class BackupExporter(
             put("port",        preferenceManager.getProxyPort())
             put("username",    preferenceManager.getProxyUsername() ?: "")
             put("password",    preferenceManager.getProxyPassword() ?: "")
-            put("bypassHosts", preferenceManager.getProxyBypassHosts().joinToString(","))
+            // Use "\n" as separator — commas are valid inside bypass-list entries
+            // (e.g. "*.example.com,10.0.0.0/8" stored as one item). Newlines cannot
+            // appear in a hostname or CIDR and survive JSON string serialisation.
+            put("bypassHosts", preferenceManager.getProxyBypassHosts().joinToString("\n"))
         })
 
         return root.toString(2)

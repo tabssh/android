@@ -704,7 +704,7 @@ class SyncDataCollector {
         val pass = preferenceManager.getProxyPassword()
         if (!pass.isNullOrEmpty()) out["password"] = pass
         val bypass = preferenceManager.getProxyBypassHosts()
-        if (bypass.isNotEmpty()) out["bypassHosts"] = bypass.joinToString(",")
+        if (bypass.isNotEmpty()) out["bypassHosts"] = bypass.joinToString("\n")
         return out
     }
 

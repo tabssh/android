@@ -580,21 +580,16 @@ class SSHConnection(
             Logger.i("SSHConnection", "advancedSettings: RemoteForward $rp -> $lh:$lp")
         }
         applyForwardArray(json, "dynamicForwards") { spec ->
-            // Accept both bare "1080" and OpenSSH-style "bindAddress:port".
-            // substringAfter on a bare port returns the full spec — toIntOrNull
-            // handles that correctly. For "127.0.0.1:1080" substringAfter(':')
-            // returns "1080". For any other host-qualified form we take the last
-            // colon-delimited segment so IPv6 addresses do not break the parse.
+            // Accept bare "1080", IPv4 "127.0.0.1:1080", and IPv6 "[::1]:1080".
             val trimmed = spec.trim()
-            val portStr = if (':' in trimmed) trimmed.substringAfterLast(':') else trimmed
-            val port = portStr.toIntOrNull()
-            if (port == null) {
+            val (bindAddr, port) = parseDynamicForwardSpec(trimmed) ?: run {
                 Logger.w("SSHConnection", "advancedSettings: bad DynamicForward spec '$spec'")
                 return@applyForwardArray
             }
-            // SOCKS proxy — bind to loopback only.
-            session.setPortForwardingL("127.0.0.1:$port")
-            Logger.i("SSHConnection", "advancedSettings: DynamicForward (SOCKS) on 127.0.0.1:$port")
+            // SOCKS proxy — honour the caller's bind address so IPv6-only
+            // environments work correctly with "[::1]:port".
+            session.setPortForwardingL("$bindAddr:$port")
+            Logger.i("SSHConnection", "advancedSettings: DynamicForward (SOCKS) on $bindAddr:$port")
         }
     }
 
@@ -615,23 +610,61 @@ class SSHConnection(
     }
 
     /**
+     * Parse `[bindAddr:]port` for DynamicForward. Returns (bindAddr, port).
+     * Handles bare port, IPv4 address:port, and IPv6 [::1]:port forms.
+     * Default bind address is 127.0.0.1 (loopback only).
+     */
+    private fun parseDynamicForwardSpec(spec: String): Pair<String, Int>? {
+        // IPv6 bracketed form: "[::1]:1080"
+        if (spec.startsWith("[")) {
+            val closeBracket = spec.indexOf(']')
+            if (closeBracket < 0) return null
+            val addr = spec.substring(1, closeBracket)
+            val rest = spec.substring(closeBracket + 1)
+            val port = rest.removePrefix(":").toIntOrNull() ?: return null
+            return Pair(addr, port)
+        }
+        // Bare port: "1080"
+        val bare = spec.toIntOrNull()
+        if (bare != null) return Pair("127.0.0.1", bare)
+        // IPv4 with bind address: "127.0.0.1:1080"
+        val lastColon = spec.lastIndexOf(':')
+        if (lastColon > 0) {
+            val port = spec.substring(lastColon + 1).toIntOrNull() ?: return null
+            val addr = spec.substring(0, lastColon)
+            return Pair(addr, port)
+        }
+        return null
+    }
+
+    /**
      * Parse OpenSSH forward spec: `"<localPart> <remotePart>"` where each
-     * part is either `port` or `host:port`. Returns (localPort, remoteHost,
-     * remotePort). For LocalForward the local part may be just a port and
-     * the remote part is `host:port`; for RemoteForward the meaning is
-     * mirrored but the structure is the same.
+     * part is either `port`, `host:port`, or `[ipv6]:port`. Returns
+     * (localPort, remoteHost, remotePort). For LocalForward the local part
+     * may be just a port and the remote part is `host:port`; for
+     * RemoteForward the meaning is mirrored but the structure is the same.
      */
     private fun parseForwardSpec(spec: String): Triple<Int, String, Int>? {
         val parts = spec.trim().split(Regex("\\s+"))
         if (parts.size < 2) return null
-        val left = parts[0]
+        val left  = parts[0]
         val right = parts[1]
 
-        val localPort = left.substringAfter(':', left).toIntOrNull() ?: return null
-        val rhostRportColon = right.lastIndexOf(':')
-        if (rhostRportColon <= 0) return null
-        val rhost = right.substring(0, rhostRportColon)
-        val rport = right.substring(rhostRportColon + 1).toIntOrNull() ?: return null
+        // Local side: bare port or [bindAddr:]port (we only care about the port).
+        val localPort = parseDynamicForwardSpec(left)?.second ?: return null
+
+        // Remote side: host:port or [ipv6host]:port.
+        val (rhost, rport) = if (right.startsWith("[")) {
+            val close = right.indexOf(']')
+            if (close < 0) return null
+            val h = right.substring(1, close)
+            val p = right.substring(close + 1).removePrefix(":").toIntOrNull() ?: return null
+            Pair(h, p)
+        } else {
+            val lastColon = right.lastIndexOf(':')
+            if (lastColon <= 0) return null
+            Pair(right.substring(0, lastColon), right.substring(lastColon + 1).toIntOrNull() ?: return null)
+        }
         return Triple(localPort, rhost, rport)
     }
 

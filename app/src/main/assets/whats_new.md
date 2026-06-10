@@ -1,5 +1,19 @@
 # What's New
 
+## Wave 27 — Bug batch: key export, proxy, IPv6, scroll render
+
+- **SSH key export on older devices** — Ed25519 keys now export correctly on
+  devices that fall back to ECDSA P-256 (API < 33 without full BouncyCastle
+  JCE support)
+- **Proxy bypass hosts** now survive a backup/restore or sync round-trip without
+  splitting into extra entries
+- **Port forwarding** with IPv6 bind addresses (`[::1]:port`) now works for
+  DynamicForward, LocalForward, and RemoteForward
+- **Terminal rendering** — fixed a column-position glitch for characters that
+  follow a wide (CJK/emoji) glyph in the same row
+
+---
+
 ## Wave 26 — Long press = menu, smooth scrolling
 
 ### Long press

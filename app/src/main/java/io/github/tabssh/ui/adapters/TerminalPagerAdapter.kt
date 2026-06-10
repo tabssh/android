@@ -58,7 +58,9 @@ class TerminalPagerAdapter(
      */
     fun setReverseScrollDirection(reversed: Boolean) {
         reverseScrollDirection = reversed
-        boundViewHolders.forEach { it.terminalView.reverseScrollDirection = reversed }
+        // Snapshot to avoid ConcurrentModificationException if a layout pass
+        // triggered by the update causes RecyclerView to recycle a view.
+        boundViewHolders.toList().forEach { it.terminalView.reverseScrollDirection = reversed }
     }
 
     /**
@@ -67,7 +69,7 @@ class TerminalPagerAdapter(
      */
     fun setLineSpacingPercent(percent: Int) {
         lineSpacingPercent = percent
-        boundViewHolders.forEach { it.terminalView.setLineSpacingPercent(percent) }
+        boundViewHolders.toList().forEach { it.terminalView.setLineSpacingPercent(percent) }
     }
 
     /**

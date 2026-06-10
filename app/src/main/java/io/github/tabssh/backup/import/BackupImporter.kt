@@ -711,7 +711,10 @@ class BackupImporter(
             preferenceManager.setProxyPassword(proxyPass.takeIf { it.isNotEmpty() })
             val bypass = p.optString("bypassHosts", "")
             if (bypass.isNotEmpty()) {
-                preferenceManager.setProxyBypassHosts(bypass.split(",").filter { it.isNotEmpty() })
+                // Separator is "\n" (set by BackupExporter). Accept "," too for
+                // backward-compat with backups written before this fix.
+                val sep = if ('\n' in bypass) "\n" else ","
+                preferenceManager.setProxyBypassHosts(bypass.split(sep).filter { it.isNotEmpty() })
             }
         }
     }

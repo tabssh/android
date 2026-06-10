@@ -1131,6 +1131,9 @@ class TerminalView @JvmOverloads constructor(
             val runBuf = StringBuilder(cols)
             var runStartCol = 0
             var runStyle   = 0L
+            // Separate char buffer for wide-glyph solo draws so it does not
+            // alias the shared charBuf used for run character accumulation.
+            val wideCharBuf = CharArray(2)
 
             fun flushRun() {
                 if (runBuf.isEmpty()) return
@@ -1174,18 +1177,23 @@ class TerminalView @JvmOverloads constructor(
                     if (!sameStyle || isWide) flushRun()
 
                     if (isWide) {
-                        // Double-width glyph: draw solo, then advance two cells.
+                        // Double-width glyph: draw solo using wideCharBuf so it
+                        // does not alias the charBuf used for run accumulation.
                         val fg  = com.termux.terminal.TextStyle.decodeForeColor(style)
                         val eff = com.termux.terminal.TextStyle.decodeEffect(style)
                         textPaint.color          = termuxColorToAndroid(fg)
                         textPaint.isFakeBoldText = (eff and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_BOLD) != 0
                         textPaint.textSkewX      = if ((eff and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0) -0.25f else 0f
                         textPaint.isUnderlineText= (eff and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE) != 0
-                        val wideCount = Character.toChars(codePoint, charBuf, 0)
-                        canvas.drawText(charBuf, 0, wideCount, startX + col * cellWidth, y, textPaint)
+                        val wideCount = Character.toChars(codePoint, wideCharBuf, 0)
+                        canvas.drawText(wideCharBuf, 0, wideCount, startX + col * cellWidth, y, textPaint)
                         textPaint.isFakeBoldText = false
                         textPaint.textSkewX      = 0f
                         textPaint.isUnderlineText= false
+                        // A wide glyph always ends any pending run. runStyle must
+                        // be reset here so the NEXT character's sameStyle check
+                        // compares against its own style, not the pre-flush style.
+                        runStyle = 0L
                     } else {
                         // Normal single-cell char: append to run.
                         if (runBuf.isEmpty()) { runStartCol = col; runStyle = style }
