@@ -38,7 +38,7 @@ data class ExportedConnection(
     val compression: Boolean,
     val keepAlive: Boolean,
     val x11Forwarding: Boolean,
-    val useMosh: Boolean,
+    val moshMode: String,
     val agentForwarding: Boolean,
     val theme: String,
     val colorTag: Int,

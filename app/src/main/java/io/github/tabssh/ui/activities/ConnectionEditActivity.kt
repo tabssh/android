@@ -728,7 +728,7 @@ class ConnectionEditActivity : AppCompatActivity() {
         binding.spinnerTerminalType.setText(profile.terminalType, false)
         binding.switchCompression.isChecked = profile.compression
         binding.switchX11Forwarding.isChecked = profile.x11Forwarding
-        binding.switchUseMosh.isChecked = profile.useMosh
+        binding.spinnerMoshMode.setText(moshModeLabel(profile.moshMode), false)
         restoreMoshCommandDropdown(profile)
 
         val notifAlertEntries = resources.getStringArray(R.array.notif_alert_mode_entries)
@@ -1067,7 +1067,7 @@ class ConnectionEditActivity : AppCompatActivity() {
         val compression = binding.switchCompression.isChecked
         val keepAlive = true
         val x11Forwarding = binding.switchX11Forwarding.isChecked
-        val useMosh = binding.switchUseMosh.isChecked
+        val moshMode = readMoshModeFromUi()
         val moshCommandOverride = readMoshCommandFromUi()
 
         val modeEntries = resources.getStringArray(R.array.multiplexer_mode_entries)
@@ -1139,7 +1139,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             protocol = protocol, authType = authType.name, keyId = keyId,
             identityId = selectedIdentityId, terminalType = terminalType,
             compression = compression, keepAlive = keepAlive,
-            x11Forwarding = x11Forwarding, useMosh = useMosh,
+            x11Forwarding = x11Forwarding, moshMode = moshMode,
             multiplexerMode = multiplexerMode, multiplexerSessionName = multiplexerSessionName,
             theme = theme, fontSizeOverride = fontSizeOverride,
             postConnectScript = postConnectScript, envVars = envVars,
@@ -1155,7 +1155,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             protocol = protocol, authType = authType.name, keyId = keyId,
             identityId = selectedIdentityId, terminalType = terminalType,
             compression = compression, keepAlive = keepAlive,
-            x11Forwarding = x11Forwarding, useMosh = useMosh,
+            x11Forwarding = x11Forwarding, moshMode = moshMode,
             multiplexerMode = multiplexerMode, multiplexerSessionName = multiplexerSessionName,
             theme = theme, fontSizeOverride = fontSizeOverride,
             postConnectScript = postConnectScript, envVars = envVars,
@@ -1841,10 +1841,16 @@ class ConnectionEditActivity : AppCompatActivity() {
         )
         binding.spinnerMoshCommand.setAdapter(adapter)
 
-        // Show / hide the whole dropdown panel with the mosh toggle.
-        binding.switchUseMosh.setOnCheckedChangeListener { _, isChecked ->
-            binding.layoutMoshCommand.visibility = if (isChecked) View.VISIBLE else View.GONE
-            if (!isChecked) {
+        // Mode spinner: Off / Auto / On — drives command panel visibility.
+        val moshModeLabels = arrayOf("Off", "Auto (default)", "On")
+        binding.spinnerMoshMode.setAdapter(
+            android.widget.ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, moshModeLabels)
+        )
+        binding.spinnerMoshMode.setText("Auto (default)", false)
+        binding.spinnerMoshMode.setOnItemClickListener { _, _, position, _ ->
+            val isActive = position > 0  // Auto or On
+            binding.layoutMoshCommand.visibility = if (isActive) View.VISIBLE else View.GONE
+            if (!isActive) {
                 binding.layoutMoshCustomCommand.visibility = View.GONE
                 binding.layoutMoshCustomDesc.visibility = View.GONE
             }
@@ -1868,7 +1874,7 @@ class ConnectionEditActivity : AppCompatActivity() {
      */
     private fun restoreMoshCommandDropdown(profile: ConnectionProfile) {
         binding.layoutMoshCommand.visibility =
-            if (profile.useMosh) View.VISIBLE else View.GONE
+            if (profile.moshMode != "off") View.VISIBLE else View.GONE
 
         val savedCmd = try {
             profile.advancedSettings?.let { org.json.JSONObject(it).optString("moshServerCommand") }
@@ -1896,12 +1902,26 @@ class ConnectionEditActivity : AppCompatActivity() {
         }
     }
 
+    /** Map a moshMode value to the display label used in the spinner. */
+    private fun moshModeLabel(mode: String): String = when (mode) {
+        "off" -> "Off"
+        "on"  -> "On"
+        else  -> "Auto (default)"
+    }
+
+    /** Read the current mosh mode ("off"/"auto"/"on") from the spinner. */
+    private fun readMoshModeFromUi(): String = when (binding.spinnerMoshMode.text.toString()) {
+        "Off" -> "off"
+        "On"  -> "on"
+        else  -> "auto"
+    }
+
     /**
      * Read the effective mosh command from the UI.
      * Returns null if the Default preset is selected (no override stored).
      */
     private fun readMoshCommandFromUi(): String? {
-        if (!binding.switchUseMosh.isChecked) return null
+        if (readMoshModeFromUi() == "off") return null
         val selectedLabel = binding.spinnerMoshCommand.text.toString()
         val preset = MOSH_PRESETS.firstOrNull { it.description == selectedLabel }
         return when {

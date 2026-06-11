@@ -200,7 +200,7 @@ object QrPayloadCodec {
             compression = m.boolField("compression") ?: true,
             keepAlive = m.boolField("keep_alive") ?: true,
             x11Forwarding = m.boolField("x11_forwarding") ?: false,
-            useMosh = m.boolField("use_mosh") ?: false,
+            moshMode = m.textField("mosh_mode") ?: "auto",
             agentForwarding = m.boolField("agent_forwarding") ?: false,
             theme = m.textField("theme") ?: "dracula",
             colorTag = m.intField("color_tag")?.toInt() ?: 0,

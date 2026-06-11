@@ -116,7 +116,7 @@ object PairingImporter {
                         compression = exported.compression,
                         keepAlive = exported.keepAlive,
                         x11Forwarding = exported.x11Forwarding,
-                        useMosh = exported.useMosh,
+                        moshMode = exported.moshMode,
                         proxyHost = exported.proxyHost,
                         proxyPort = exported.proxyPort,
                         proxyType = exported.proxyType,

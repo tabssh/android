@@ -9,6 +9,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Mosh auto mode** — per-connection Mosh setting is now three-way: Off / Auto (default) / On; "Auto" silently tries `mosh-server` on the remote and falls back to plain SSH if it isn't installed; the old on/off toggle is replaced by a dropdown in the connection editor; all existing connections default to "Auto"
+
 - **Export private key** — "⬇️ Export private key…" option in the SSH key actions menu; prompts for an optional passphrase; exports the key in OpenSSH PEM format (encrypted with AES-256-CBC if a passphrase is provided, unencrypted otherwise) via the system file picker
 
 - **Install SSH key on server** — "⬆️ Install on server…" option in the SSH key actions menu; shows a single-select list of saved SSH connections; connects and runs an idempotent `authorized_keys` install command (creates `~/.ssh` if absent, skips if the exact key line is already present); confirms success or "already installed" via toast
@@ -20,6 +22,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Full preference sync and backup** — connection defaults, sync toggles, multiplexer key bindings, accessibility flags, and proxy configuration are now included in both SAF sync and backup/restore; previously these five categories were silently absent from both systems
 
 ### Fixed
+
+- **Mosh connection lost lastlog/MOTD** — when Mosh was enabled, the SSH shell channel opened briefly (printing lastlog/MOTD), then got ripped out and replaced by mosh-client, which syncs to the current terminal state and doesn't replay scrollback; fixed by bootstrapping `mosh-server` before opening any shell channel so `mosh-server`'s own login shell is the only one and its output is visible
 
 - **Spurious "Text copied" system toast on clipboard auto-clear** — `ClipboardHelper` and `SessionPersistenceManager` both cleared the clipboard via `setPrimaryClip(empty)`, which on Android 13+ always triggers the OS "Text copied" notification even for a blank string; replaced with `clearPrimaryClip()` (API 28+) which clears silently
 

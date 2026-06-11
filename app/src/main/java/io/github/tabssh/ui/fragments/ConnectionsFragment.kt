@@ -1033,7 +1033,7 @@ class ConnectionsFragment : Fragment() {
                             updated = updated.copy(x11Forwarding = x11 == TriState.ON)
                         }
                         if (mosh != TriState.UNCHANGED) {
-                            updated = updated.copy(useMosh = mosh == TriState.ON)
+                            updated = updated.copy(moshMode = if (mosh == TriState.ON) "on" else "off")
                         }
                         if (agentFwd != TriState.UNCHANGED) {
                             updated = updated.copy(agentForwarding = agentFwd == TriState.ON)

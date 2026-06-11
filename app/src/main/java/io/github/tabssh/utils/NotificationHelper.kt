@@ -265,7 +265,7 @@ object NotificationHelper {
         // Mosh takes precedence over the protocol column (a mosh connection
         // is still SSH underneath but presents as "mosh" to the user).
         val protocol = when {
-            profile.useMosh -> "mosh"
+            profile.moshMode == "on" -> "mosh"
             profile.protocol.equals("telnet", ignoreCase = true) -> "telnet"
             else -> "ssh"
         }

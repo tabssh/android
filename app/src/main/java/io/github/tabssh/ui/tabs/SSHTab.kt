@@ -317,6 +317,24 @@ class SSHTab(
     }
 
     /**
+     * Wire the SSH connection for cleanup/state tracking without opening a
+     * shell channel. Called on the mosh path when we bootstrap mosh-server
+     * before touching the shell — avoids the SSH shell briefly flashing
+     * lastlog on screen then getting wiped when mosh-client takes over.
+     */
+    fun initConnectionForMosh(sshConnection: SSHConnection) {
+        connection = sshConnection
+        stateCollectorJob?.cancel()
+        stateCollectorJob = connectionScope.launch {
+            sshConnection.connectionState.collect { state ->
+                _connectionState.value = state
+                updateTitleWithStatus(state)
+                if (state == ConnectionState.ERROR) _hasError.value = true
+            }
+        }
+    }
+
+    /**
      * Connect this tab's terminal to the SSH connection
      */
     suspend fun connect(sshConnection: SSHConnection): Boolean {

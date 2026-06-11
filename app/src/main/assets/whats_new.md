@@ -1,5 +1,23 @@
 # What's New
 
+## Wave 37 — Mosh auto mode
+
+Mosh now has three modes: **Off**, **Auto** (the new default), and **On**.
+
+In **Auto** mode TabSSH silently tries to start `mosh-server` when you
+connect. If it's installed you get Mosh — roaming, UDP, the works. If
+it's not installed you get a normal SSH session with no error and no
+fuss. You only need to set it to **Off** if you never want Mosh, or
+**On** if you want a warning when Mosh isn't available.
+
+This also fixes a long-standing issue where Mosh connections missed the
+login banner (`Last login:`, MOTD). The old code briefly opened an SSH
+shell to show that output, then wiped it when mosh-client took over.
+The new code skips the SSH shell entirely and lets `mosh-server`'s own
+login shell print the banner — which is what you actually see.
+
+---
+
 ## Wave 36 — Export private key
 
 You can now export any of your SSH private keys directly from the app.

@@ -78,8 +78,8 @@ data class ConnectionProfile(
     @ColumnInfo(name = "x11_forwarding")
     val x11Forwarding: Boolean = false,
     
-    @ColumnInfo(name = "use_mosh")
-    val useMosh: Boolean = false,
+    @ColumnInfo(name = "mosh_mode")
+    val moshMode: String = "auto",
 
     @ColumnInfo(name = "multiplexer_mode")
     val multiplexerMode: String = "OFF", // OFF, AUTO_ATTACH, CREATE_NEW, ASK

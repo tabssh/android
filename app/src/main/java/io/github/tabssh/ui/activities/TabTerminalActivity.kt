@@ -1754,9 +1754,68 @@ private fun showSnippetsPickerForActiveTab() {
                     // enqueued first, so it executes before our withContext(Main) body.
                     withContext(kotlinx.coroutines.Dispatchers.Main) {}
 
-                    // Connect the tab's terminal to SSH streams
+                    // Connect the tab's terminal to SSH streams.
+                    // For mosh modes ("auto"/"on"): bootstrap mosh-server FIRST
+                    // without opening a shell channel — avoids the SSH shell
+                    // flashing lastlog on screen then getting wiped when
+                    // mosh-client takes over. The mosh-server's own login shell
+                    // is the only one; lastlog/MOTD prints normally through it.
+                    // For "off" (or telnet): open the SSH shell directly.
                     Logger.i("TabTerminalActivity", "🔌 Connecting terminal to SSH streams...")
-                    val connected = tab.connect(sshConnection)
+                    val moshMode = profile.moshMode
+                    val binaryAvailable = io.github.tabssh.protocols.mosh.MoshNativeClient.resolveBinary(this) != null
+                    val connected: Boolean
+                    if (moshMode != "off" && binaryAvailable) {
+                        // Mosh path: init connection tracking, bootstrap, then decide.
+                        tab.initConnectionForMosh(sshConnection)
+                        val moshCmd = profile.advancedSettings?.let { raw ->
+                            try { org.json.JSONObject(raw).optString("moshServerCommand")
+                                .takeIf { it.isNotBlank() } }
+                            catch (_: Exception) { null }
+                        }
+                        showToast("Connecting… (trying Mosh)")
+                        val handoff = io.github.tabssh.protocols.mosh.MoshHandoff.bootstrap(
+                            sshConnection, profile.username, profile.host,
+                            commandOverride = moshCmd
+                        )
+                        if (handoff is io.github.tabssh.protocols.mosh.MoshHandoff.Result.Success) {
+                            val moshOk = tab.connectMosh(
+                                this, handoff.info.host, handoff.info.port, handoff.info.keyBase64
+                            )
+                            if (moshOk) {
+                                Logger.i("TabTerminalActivity", "✅ MOSH attached for ${profile.getDisplayName()}")
+                                showToast("Mosh: ${profile.getDisplayName()}")
+                                connected = true
+                            } else {
+                                // mosh-client process failed to start — fall back.
+                                Logger.w("TabTerminalActivity", "Mosh attach failed; falling back to SSH")
+                                connected = tab.connect(sshConnection)
+                                showToast(if (moshMode == "on") "Mosh failed — using SSH" else "Connected to ${profile.getDisplayName()}")
+                            }
+                        } else {
+                            val errMsg = (handoff as? io.github.tabssh.protocols.mosh.MoshHandoff.Result.Error)?.message
+                            Logger.w("TabTerminalActivity", "Mosh bootstrap failed: $errMsg")
+                            connected = tab.connect(sshConnection)
+                            showToast(when {
+                                moshMode == "on" -> "Mosh not available — using SSH"
+                                else -> "Connected to ${profile.getDisplayName()}"
+                            })
+                        }
+                    } else if (moshMode != "off" && !binaryAvailable) {
+                        // Mosh mode requested but no native binary for this ABI.
+                        // Open SSH shell; for "on" offer the server-side handoff.
+                        connected = tab.connect(sshConnection)
+                        if (connected && moshMode == "on") {
+                            showToast("Connected to ${profile.getDisplayName()}")
+                            runOnUiThread { showMoshHandoff() }
+                        } else {
+                            showToast("Connected to ${profile.getDisplayName()}")
+                        }
+                    } else {
+                        // "off" mode — plain SSH shell.
+                        connected = tab.connect(sshConnection)
+                        showToast("Connected to ${profile.getDisplayName()}")
+                    }
                     if (connected) {
                         Logger.i("TabTerminalActivity", "TERMINAL CONNECTED SUCCESSFULLY to ${profile.getDisplayName()}")
 
@@ -1768,51 +1827,6 @@ private fun showSnippetsPickerForActiveTab() {
                         val newIdx = tabManager.getAllTabs().indexOf(tab)
                         runOnUiThread {
                             if (newIdx >= 0) switchToTab(newIdx)
-                        }
-
-                        // Wave 9.2 — auto-mosh path. When `useMosh` is true on the
-                        // profile AND we have a bundled native mosh-client, run
-                        // mosh-server over the just-opened SSH session, then swap
-                        // the tab's I/O from SSH to mosh-client. The SSH stays open
-                        // briefly so the bootstrap completes; mosh-server detaches
-                        // and continues listening on UDP independently.
-                        if (profile.useMosh && io.github.tabssh.protocols.mosh.MoshNativeClient.resolveBinary(this) == null) {
-                            // Native mosh-client binary not bundled — offer the
-                            // server-side handoff (Termux / manual copy) instead
-                            // of silently falling back to plain SSH with no notice.
-                            showToast("Connected to ${profile.getDisplayName()}")
-                            runOnUiThread { showMoshHandoff() }
-                        } else if (profile.useMosh) {
-                            // Read the per-connection mosh server command if one was
-                            // saved via the dropdown in ConnectionEditActivity.
-                            val moshCmd = profile.advancedSettings?.let { raw ->
-                                try { org.json.JSONObject(raw).optString("moshServerCommand")
-                                    .takeIf { it.isNotBlank() } }
-                                catch (_: Exception) { null }
-                            }
-                            val handoff = io.github.tabssh.protocols.mosh.MoshHandoff.bootstrap(
-                                sshConnection, profile.username, profile.host,
-                                commandOverride = moshCmd
-                            )
-                            if (handoff is io.github.tabssh.protocols.mosh.MoshHandoff.Result.Success) {
-                                tab.disconnect()
-                                val moshOk = tab.connectMosh(
-                                    this, handoff.info.host, handoff.info.port, handoff.info.keyBase64
-                                )
-                                if (moshOk) {
-                                    Logger.i("TabTerminalActivity", "✅ MOSH attached for ${profile.getDisplayName()}")
-                                    showToast("Mosh: ${profile.getDisplayName()}")
-                                } else {
-                                    Logger.w("TabTerminalActivity", "Mosh attach failed; falling back to SSH")
-                                    tab.connect(sshConnection)  // restore SSH
-                                    showToast("Mosh failed — using SSH")
-                                }
-                            } else {
-                                Logger.w("TabTerminalActivity", "Mosh bootstrap failed: ${(handoff as? io.github.tabssh.protocols.mosh.MoshHandoff.Result.Error)?.message}")
-                                showToast("Mosh bootstrap failed — using SSH")
-                            }
-                        } else {
-                            showToast("Connected to ${profile.getDisplayName()}")
                         }
 
                         // Update connection statistics (count + timestamp)
