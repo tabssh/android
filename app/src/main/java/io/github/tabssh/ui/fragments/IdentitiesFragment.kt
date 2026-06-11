@@ -33,10 +33,15 @@ import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.hypervisor.oci.OciConfigParser
 import io.github.tabssh.hypervisor.oci.OciConfigProfile
 import io.github.tabssh.ssh.auth.AuthType
+import io.github.tabssh.ssh.connection.SSHConnection
+import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HypervisorAccount
 import io.github.tabssh.storage.database.entities.Identity
 import io.github.tabssh.storage.database.entities.StoredKey
 import io.github.tabssh.storage.database.entities.VncIdentity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.SupervisorJob
 import io.github.tabssh.ui.adapters.HypervisorAccountAdapter
 import io.github.tabssh.ui.adapters.IdentityAdapter
 import io.github.tabssh.ui.adapters.StoredKeyAdapter
@@ -1186,6 +1191,7 @@ class IdentitiesFragment : Fragment() {
     private fun showMoreActionsDialog(key: StoredKey) {
         val items = mutableListOf(
             "📋 Copy Public Key",
+            "⬆️ Install on server…",
             "Rename",
             "Attach certificate (paste)…",
             "Attach certificate (file)…"
@@ -1196,6 +1202,7 @@ class IdentitiesFragment : Fragment() {
             .setItems(items.toTypedArray()) { _, which ->
                 when (items[which]) {
                     "📋 Copy Public Key" -> copyPublicKeyToClipboard(key)
+                    "⬆️ Install on server…" -> showInstallOnServerDialog(key)
                     "Rename" -> showRenameKeyDialog(key)
                     "Attach certificate (paste)…" -> showPasteCertDialog(key)
                     "Attach certificate (file)…" -> { pendingCertKey = key; attachCertLauncher.launch(arrayOf("*/*")) }
@@ -1204,6 +1211,90 @@ class IdentitiesFragment : Fragment() {
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    private fun showInstallOnServerDialog(key: StoredKey) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val sshConnections = app.database.connectionDao().getAllConnectionsList()
+                .filter { it.protocol == "ssh" }
+            if (sshConnections.isEmpty()) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(requireContext(), "No SSH connections saved", Toast.LENGTH_SHORT).show()
+                }
+                return@launch
+            }
+            val names = sshConnections
+                .map { "${it.name} (${it.username}@${it.host}:${it.port})" }
+                .toTypedArray()
+            withContext(Dispatchers.Main) {
+                var selectedIdx = 0
+                MaterialAlertDialogBuilder(requireContext())
+                    .setTitle("Install \"${key.name}\" on server")
+                    .setSingleChoiceItems(names, 0) { _, i -> selectedIdx = i }
+                    .setPositiveButton("Install") { _, _ ->
+                        installKeyOnServer(key, sshConnections[selectedIdx])
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+        }
+    }
+
+    private fun installKeyOnServer(key: StoredKey, profile: ConnectionProfile) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val progressDialog = withContext(Dispatchers.Main) {
+                MaterialAlertDialogBuilder(requireContext())
+                    .setTitle("Installing key…")
+                    .setMessage("Connecting to ${profile.host}…")
+                    .setCancelable(false)
+                    .show()
+            }
+            val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+            var connection: SSHConnection? = null
+            try {
+                val pubKey = app.keyStorage.getPublicKeyText(key.keyId)
+                    ?: throw Exception("Could not read public key")
+                connection = SSHConnection(profile, scope, app)
+                connection.hostKeyChangedCallback = app.sshSessionManager.hostKeyChangedCallback
+                connection.newHostKeyCallback = app.sshSessionManager.newHostKeyCallback
+                val connected = connection.connect()
+                if (!connected) throw Exception("Authentication failed")
+                // Shell-safe single-quote escaping for the public key literal.
+                val safeKey = pubKey.trim().replace("'", "'\\''")
+                // Idempotent: check for the exact key line before appending.
+                val cmd = "mkdir -p ~/.ssh && chmod 700 ~/.ssh && " +
+                    "if grep -qxF '$safeKey' ~/.ssh/authorized_keys 2>/dev/null; " +
+                    "then printf 'already_present\\n'; " +
+                    "else printf '%s\\n' '$safeKey' >> ~/.ssh/authorized_keys && " +
+                    "chmod 600 ~/.ssh/authorized_keys && printf 'installed\\n'; fi"
+                val output = connection.executeCommand(cmd).trim()
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+                    val msg = when {
+                        output.contains("already_present") ->
+                            "Key is already installed on ${profile.host}"
+                        output.contains("installed") ->
+                            "Key installed on ${profile.host}"
+                        else ->
+                            "Key installation completed on ${profile.host}"
+                    }
+                    Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show()
+                }
+            } catch (e: Exception) {
+                Logger.e("IdentitiesFragment", "installKeyOnServer failed: ${e.message}", e)
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+                    Toast.makeText(
+                        requireContext(),
+                        "Failed to install key: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            } finally {
+                try { connection?.disconnect() } catch (_: Exception) {}
+                scope.cancel()
+            }
+        }
     }
 
     private fun copyPublicKeyToClipboard(key: StoredKey) {

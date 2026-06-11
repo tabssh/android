@@ -1,5 +1,16 @@
 # What's New
 
+## Wave 35 — Install SSH key on server
+
+You can now push your public key to a server directly from the app — no
+more manual copying and pasting. Long-press any SSH key → "⬆️ Install on
+server…", pick one of your saved connections, and the app connects and
+adds your key to `~/.ssh/authorized_keys` automatically. If the key is
+already there it skips the duplicate. The `~/.ssh` directory and
+permissions are created correctly if they don't exist yet.
+
+---
+
 ## Wave 34 — SSH key import fixed
 
 Importing an Ed25519 private key no longer shows garbled binary as the
