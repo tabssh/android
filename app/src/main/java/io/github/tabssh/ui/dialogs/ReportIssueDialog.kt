@@ -18,7 +18,10 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.widget.NestedScrollView
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.bottomsheet.BottomSheetBehavior
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
@@ -329,6 +332,25 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
             }
         }
 
-        return root
+        // Wrap in a NestedScrollView so content is always reachable on small
+        // screens regardless of sheet expansion state.
+        val scroll = NestedScrollView(ctx).apply {
+            isFillViewport = true
+            addView(root)
+        }
+        return scroll
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        // Expand the sheet immediately so the form is fully visible without
+        // the user having to swipe it up. Also set a sensible peek height
+        // (240 dp) so partial-expand still shows the primary action buttons.
+        val sheet = (dialog as? BottomSheetDialog) ?: return
+        val density = resources.displayMetrics.density
+        val behavior = sheet.behavior
+        behavior.skipCollapsed = true
+        behavior.peekHeight = (240 * density).toInt()
+        behavior.state = BottomSheetBehavior.STATE_EXPANDED
     }
 }

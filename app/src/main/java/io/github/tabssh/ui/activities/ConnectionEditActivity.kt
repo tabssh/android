@@ -326,6 +326,7 @@ class ConnectionEditActivity : AppCompatActivity() {
                 )
                 binding.spinnerIdentity.setAdapter(adapter)
                 binding.spinnerIdentity.setOnItemClickListener { _, _, position, _ ->
+                    binding.spinnerIdentity.setText(items[position], false)
                     if (position > 0) {
                         val identity = availableIdentities[position - 1]
                         selectedIdentityId = identity.id

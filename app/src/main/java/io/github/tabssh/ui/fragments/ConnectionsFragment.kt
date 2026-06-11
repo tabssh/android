@@ -462,15 +462,28 @@ class ConnectionsFragment : Fragment() {
     }
 
     private fun showGroupMenu(groupHeader: ConnectionListItem.GroupHeader) {
-        val items = arrayOf("Rename Group", "Delete Group", "Collapse All Groups")
+        val items = arrayOf(
+            "Bulk edit all hosts in this group",
+            "Rename Group",
+            "Delete Group",
+            "Collapse All Groups"
+        )
 
         AlertDialog.Builder(requireContext())
             .setTitle(groupHeader.group.name)
             .setItems(items) { _, which ->
                 when (which) {
-                    0 -> renameGroup(groupHeader.group)
-                    1 -> deleteGroup(groupHeader.group)
-                    2 -> collapseAllGroups()
+                    0 -> {
+                        val groupConnections = allConnections.filter { it.groupId == groupHeader.group.id }
+                        if (groupConnections.isEmpty()) {
+                            Toast.makeText(requireContext(), "No connections in this group", Toast.LENGTH_SHORT).show()
+                        } else {
+                            showBulkEditDialog(groupConnections)
+                        }
+                    }
+                    1 -> renameGroup(groupHeader.group)
+                    2 -> deleteGroup(groupHeader.group)
+                    3 -> collapseAllGroups()
                 }
             }
             .show()

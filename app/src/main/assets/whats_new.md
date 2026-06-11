@@ -1,5 +1,20 @@
 # What's New
 
+## Wave 38 — Connection editor and bulk-edit polish
+
+Several UX fixes across the Connections screen:
+
+- **Identity picker works again** — tapping an identity in Connections → Edit
+  host → Identity now correctly shows the selected name in the field.
+- **Bulk edit all hosts in a group** — long-press any group header and choose
+  "Bulk edit all hosts in this group" to open the full bulk-edit sheet
+  pre-filled for that group.
+- **Create Paste sheet fits your screen** — the debug-log / paste upload form
+  now opens fully expanded and scrolls on small phones instead of being
+  clipped off the bottom.
+
+---
+
 ## Wave 37 — Mosh auto mode
 
 Mosh now has three modes: **Off**, **Auto** (the new default), and **On**.
