@@ -1,5 +1,16 @@
 # What's New
 
+## Wave 39 — Stability fix: database crash on first launch after update
+
+Fixes a crash on startup ("Room cannot verify the data integrity") that
+affected devices which had installed an intermediate build. The internal
+database version has been bumped to force a clean rebuild of all tables.
+**Note: all saved connections and identities will be wiped on this update.**
+Back up your connections via Settings → Export before updating if you haven't
+already.
+
+---
+
 ## Wave 38 — Connection editor and bulk-edit polish
 
 Several UX fixes across the Connections screen:

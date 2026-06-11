@@ -37,7 +37,7 @@ import io.github.tabssh.utils.logging.Logger
         VncHost::class,
         VncIdentity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -77,7 +77,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     DATABASE_NAME
                 )
                 .addCallback(DatabaseCallback())
-                .fallbackToDestructiveMigration()
+                .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
                 INSTANCE = instance
                 instance
