@@ -17,6 +17,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **`encodePrivateKeySectionForOpenSSH` wrote broken OpenSSH private key files** — three bugs: (1) Ed25519 case was missing entirely so no private key bytes were written; (2) ECDSA case was missing so the private scalar was never written; (3) RSA wrote `(e, n)` in the private section but OpenSSH requires `(n, e, d, iqmp, p, q)` — fixed all three; the function is not yet called from UI code but is now correct for when private key export is wired up
+
 - **SSH key name shows garbled binary after import** — `parseOpenSSHEd25519Key` was reading the 32-byte public-key copy in the private section as the private key, leaving the real 64-byte private key blob unconsumed; the comment-reading code then read those 64 binary bytes as the comment string, producing garbage in the key list; fixed by consuming the pubkey copy with a `readString` before reading the actual private key — this also fixes the silent auth failure caused by storing the wrong key material; added printability guard in `getDisplayName()` as a defence-in-depth layer for keys already in the DB
 - **SSH key import shows garbled name** — `fileUri.lastPathSegment` on a `content://` URI returns an encoded path component, not the display filename; now queries `OpenableColumns.DISPLAY_NAME` via the `ContentResolver` with `lastPathSegment` as fallback
 - **`PortForwardingManager.cleanup` audit-logging orphan scope** — per-tunnel audit-log write spawned a throwaway `CoroutineScope(Dispatchers.IO)` whose parent `Job` was never cancelled; routed through `app.applicationScope.launch(Dispatchers.IO)` to match the pattern used by `TaskerWorker` and `PerformanceFragment`

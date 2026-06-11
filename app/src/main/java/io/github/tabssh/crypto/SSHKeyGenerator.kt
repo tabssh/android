@@ -349,12 +349,13 @@ object SSHKeyGenerator {
     ): ByteArray {
         val buffer = java.io.ByteArrayOutputStream()
 
-        // Check bytes (random, should be identical)
+        // Check bytes — two identical random uint32 values used by the
+        // parser to verify the passphrase (or detect corruption).
         val checkBytes = SecureRandom().nextInt()
         buffer.write(ByteBuffer.allocate(4).putInt(checkBytes).array())
         buffer.write(ByteBuffer.allocate(4).putInt(checkBytes).array())
 
-        // Key type
+        // Key type string
         val keyType = when (publicKey) {
             is RSAPublicKey -> "ssh-rsa"
             is ECPublicKey -> {
@@ -370,13 +371,23 @@ object SSHKeyGenerator {
         }
         writeString(buffer, keyType.toByteArray(StandardCharsets.UTF_8))
 
-        // Public key data (same as in public key section)
-        when (publicKey) {
-            is RSAPublicKey -> {
-                writeMPInt(buffer, publicKey.publicExponent)
-                writeMPInt(buffer, publicKey.modulus)
+        // Per-type layout.  Each block writes exactly the fields that
+        // OpenSSH/sshd expects in the private section for that key type.
+        when {
+            // ── RSA ──────────────────────────────────────────────────────────
+            // Private-section order: n e d iqmp p q  (n BEFORE e, unlike the
+            // public-section order which is e n).
+            publicKey is RSAPublicKey && privateKey is java.security.interfaces.RSAPrivateCrtKey -> {
+                writeMPInt(buffer, publicKey.modulus)               // n
+                writeMPInt(buffer, publicKey.publicExponent)        // e
+                writeMPInt(buffer, privateKey.privateExponent)      // d
+                writeMPInt(buffer, privateKey.crtCoefficient)       // iqmp
+                writeMPInt(buffer, privateKey.primeP)               // p
+                writeMPInt(buffer, privateKey.primeQ)               // q
             }
-            is ECPublicKey -> {
+            // ── ECDSA ─────────────────────────────────────────────────────────
+            // Private-section order: curvename Q d
+            publicKey is ECPublicKey && privateKey is java.security.interfaces.ECPrivateKey -> {
                 val curveNameSSH = when (publicKey.params.order.bitLength()) {
                     256 -> "nistp256"
                     384 -> "nistp384"
@@ -386,30 +397,32 @@ object SSHKeyGenerator {
                 writeString(buffer, curveNameSSH.toByteArray(StandardCharsets.UTF_8))
                 val pointBytes = encodeECPoint(publicKey.w, publicKey.params.order.bitLength())
                 writeString(buffer, pointBytes)
+                writeMPInt(buffer, privateKey.s)                    // d (private scalar)
             }
-            else -> {
-                // Ed25519
-                val encoded = publicKey.encoded
-                val keyBytes = encoded.takeLast(32).toByteArray()
-                writeString(buffer, keyBytes)
+            // ── Ed25519 ───────────────────────────────────────────────────────
+            // Private-section order: pk  sk
+            //   pk = 32-byte public key
+            //   sk = 64 bytes: 32-byte seed || 32-byte public key copy
+            // The PKCS8 DER encoding for Ed25519 is 48 bytes; the last 32
+            // bytes are the raw seed.  The X.509 public-key encoding is 44
+            // bytes; the last 32 bytes are the raw public key.
+            publicKey.algorithm == "Ed25519" -> {
+                val pkBytes = publicKey.encoded.takeLast(32).toByteArray()
+                val seed    = privateKey.encoded.takeLast(32).toByteArray()
+                // sk blob = seed || pubkey (64 bytes total)
+                val skBlob  = seed + pkBytes
+                writeString(buffer, pkBytes)
+                writeString(buffer, skBlob)
             }
-        }
-
-        // Private key data
-        when (privateKey) {
-            is java.security.interfaces.RSAPrivateCrtKey -> {
-                writeMPInt(buffer, privateKey.privateExponent)
-                writeMPInt(buffer, privateKey.crtCoefficient)
-                writeMPInt(buffer, privateKey.primeP)
-                writeMPInt(buffer, privateKey.primeQ)
-            }
-            // Add other key types as needed
+            else -> throw IllegalArgumentException(
+                "Unsupported key type for OpenSSH export: ${publicKey.algorithm}"
+            )
         }
 
         // Comment
         writeString(buffer, comment.toByteArray(StandardCharsets.UTF_8))
 
-        // Padding (1, 2, 3, 4, 5, 6, 7, ...)
+        // NUL-terminated padding: bytes 1, 2, 3 … up to the next 8-byte boundary.
         val paddingLength = 8 - (buffer.size() % 8)
         for (i in 1..paddingLength) {
             buffer.write(i)
