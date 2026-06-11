@@ -33,6 +33,7 @@ import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.hypervisor.oci.OciConfigParser
 import io.github.tabssh.hypervisor.oci.OciConfigProfile
 import io.github.tabssh.ssh.auth.AuthType
+import io.github.tabssh.crypto.SSHKeyGenerator
 import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HypervisorAccount
@@ -96,6 +97,37 @@ class IdentitiesFragment : Fragment() {
                 withContext(Dispatchers.Main) {
                     if (!isAdded) return@withContext
                     Toast.makeText(requireContext(), "Failed to read certificate: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    /**
+     * Opens a SAF file-save dialog so the user can choose where to write
+     * the exported private key.  [pendingExportContent] must be set before
+     * calling launch().
+     */
+    private val exportKeyLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        val content = pendingExportContent ?: return@registerForActivityResult
+        pendingExportContent = null
+        uri ?: return@registerForActivityResult
+        val ctx = context ?: return@registerForActivityResult
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                ctx.contentResolver.openOutputStream(uri)?.use { out ->
+                    out.write(content.toByteArray(Charsets.UTF_8))
+                }
+                withContext(Dispatchers.Main) {
+                    if (!isAdded) return@withContext
+                    Toast.makeText(requireContext(), "Private key exported", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to write private key export", e)
+                withContext(Dispatchers.Main) {
+                    if (!isAdded) return@withContext
+                    Toast.makeText(requireContext(), "Export failed: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -165,6 +197,9 @@ class IdentitiesFragment : Fragment() {
 
     /** The key currently awaiting a certificate file from [attachCertLauncher]. */
     private var pendingCertKey: StoredKey? = null
+
+    /** Staged private key PEM content waiting for the SAF save dialog from [exportKeyLauncher]. */
+    private var pendingExportContent: String? = null
 
     /** PEM text staged in the virt identity dialog — reset on each open. */
     private var ociDialogPem: String = ""
@@ -1192,6 +1227,7 @@ class IdentitiesFragment : Fragment() {
         val items = mutableListOf(
             "📋 Copy Public Key",
             "⬆️ Install on server…",
+            "⬇️ Export private key…",
             "Rename",
             "Attach certificate (paste)…",
             "Attach certificate (file)…"
@@ -1203,6 +1239,7 @@ class IdentitiesFragment : Fragment() {
                 when (items[which]) {
                     "📋 Copy Public Key" -> copyPublicKeyToClipboard(key)
                     "⬆️ Install on server…" -> showInstallOnServerDialog(key)
+                    "⬇️ Export private key…" -> showExportPrivateKeyDialog(key)
                     "Rename" -> showRenameKeyDialog(key)
                     "Attach certificate (paste)…" -> showPasteCertDialog(key)
                     "Attach certificate (file)…" -> { pendingCertKey = key; attachCertLauncher.launch(arrayOf("*/*")) }
@@ -1312,6 +1349,58 @@ class IdentitiesFragment : Fragment() {
                     android.content.ClipData.newPlainText("SSH public key", text)
                 )
                 Toast.makeText(requireContext(), "Public key copied to clipboard", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun showExportPrivateKeyDialog(key: StoredKey) {
+        val passphraseEdit = android.widget.EditText(requireContext()).apply {
+            hint = "Passphrase (leave blank for unencrypted)"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Export Private Key")
+            .setMessage("Enter a passphrase to encrypt the exported key, or leave blank to export without encryption.")
+            .setView(passphraseEdit)
+            .setPositiveButton("Export") { _, _ ->
+                val passphrase = passphraseEdit.text.toString().takeIf { it.isNotEmpty() }
+                triggerPrivateKeyExport(key, passphrase)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun triggerPrivateKeyExport(key: StoredKey, passphrase: String?) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val pem = try {
+                val privateKey = app.keyStorage.retrievePrivateKey(key.keyId)
+                    ?: throw Exception("Could not read private key from secure storage")
+                val publicKey = app.keyStorage.getPublicKeyFromPrivate(privateKey)
+                val comment = key.comment?.takeIf { it.isNotBlank() } ?: key.name
+                SSHKeyGenerator.exportOpenSSHPrivateKey(
+                    privateKey = privateKey,
+                    publicKey = publicKey,
+                    comment = comment,
+                    passphrase = passphrase?.takeIf { it.isNotEmpty() }
+                )
+            } catch (e: Exception) {
+                Logger.e(TAG, "Private key export failed", e)
+                null
+            }
+            withContext(Dispatchers.Main) {
+                if (!isAdded) return@withContext
+                if (pem == null) {
+                    Toast.makeText(requireContext(), "Failed to read key for export", Toast.LENGTH_LONG).show()
+                    return@withContext
+                }
+                pendingExportContent = pem
+                // Suggested filename: key name sanitized to a safe identifier.
+                val safeName = key.name
+                    .lowercase()
+                    .replace(Regex("[^a-z0-9._-]"), "_")
+                    .trimStart('_')
+                    .ifBlank { "id_${key.keyType.lowercase()}" }
+                exportKeyLauncher.launch(safeName)
             }
         }
     }

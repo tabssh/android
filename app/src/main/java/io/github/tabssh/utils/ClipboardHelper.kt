@@ -62,7 +62,14 @@ object ClipboardHelper {
                 val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 val current = cm.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString()
                 if (current == justCopied) {
-                    cm.setPrimaryClip(ClipData.newPlainText("", ""))
+                    // clearPrimaryClip() (API 28+) removes the clip silently.
+                    // setPrimaryClip(empty) triggers the Android 13+ system
+                    // "Text copied" popup even for blank content, so we avoid it.
+                    if (Build.VERSION.SDK_INT >= 28) {
+                        cm.clearPrimaryClip()
+                    } else {
+                        cm.setPrimaryClip(ClipData.newPlainText("", ""))
+                    }
                     Logger.d("ClipboardHelper", "Auto-cleared clipboard after ${timeoutSec}s")
                 }
             } catch (e: Exception) {

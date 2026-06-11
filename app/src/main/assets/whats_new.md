@@ -1,5 +1,16 @@
 # What's New
 
+## Wave 36 — Export private key
+
+You can now export any of your SSH private keys directly from the app.
+Long-press a key → "⬇️ Export private key…", optionally enter a
+passphrase, and save the file wherever you like. The exported file is in
+standard OpenSSH PEM format — compatible with `ssh`, `ssh-keygen`, and
+any other SSH client. Without a passphrase the key is unencrypted;
+with one it's protected using AES-256-CBC.
+
+---
+
 ## Wave 35 — Install SSH key on server
 
 You can now push your public key to a server directly from the app — no

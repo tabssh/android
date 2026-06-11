@@ -9,6 +9,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Export private key** — "⬇️ Export private key…" option in the SSH key actions menu; prompts for an optional passphrase; exports the key in OpenSSH PEM format (encrypted with AES-256-CBC if a passphrase is provided, unencrypted otherwise) via the system file picker
+
 - **Install SSH key on server** — "⬆️ Install on server…" option in the SSH key actions menu; shows a single-select list of saved SSH connections; connects and runs an idempotent `authorized_keys` install command (creates `~/.ssh` if absent, skips if the exact key line is already present); confirms success or "already installed" via toast
 
 - **Session persistence** — `SessionPersistenceManager` is now wired as an `ActivityLifecycleCallbacks`; saves terminal scrollback and tab state to the database every 30 s while the app is in the foreground, immediately on background, and on every `onSaveInstanceState`; restores sessions on foreground return if the app was backgrounded for less than 24 h; applies auto-lock and clipboard-clear security policies on background
@@ -18,6 +20,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Full preference sync and backup** — connection defaults, sync toggles, multiplexer key bindings, accessibility flags, and proxy configuration are now included in both SAF sync and backup/restore; previously these five categories were silently absent from both systems
 
 ### Fixed
+
+- **Spurious "Text copied" system toast on clipboard auto-clear** — `ClipboardHelper` and `SessionPersistenceManager` both cleared the clipboard via `setPrimaryClip(empty)`, which on Android 13+ always triggers the OS "Text copied" notification even for a blank string; replaced with `clearPrimaryClip()` (API 28+) which clears silently
 
 - **`encodePrivateKeySectionForOpenSSH` wrote broken OpenSSH private key files** — three bugs: (1) Ed25519 case was missing entirely so no private key bytes were written; (2) ECDSA case was missing so the private scalar was never written; (3) RSA wrote `(e, n)` in the private section but OpenSSH requires `(n, e, d, iqmp, p, q)` — fixed all three; the function is not yet called from UI code but is now correct for when private key export is wired up
 

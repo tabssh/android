@@ -200,11 +200,16 @@ class SessionPersistenceManager(
     
     private fun clearClipboard() {
         try {
-            val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) 
+            val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE)
                 as android.content.ClipboardManager
-            val emptyClip = android.content.ClipData.newPlainText("", "")
-            clipboardManager.setPrimaryClip(emptyClip)
-            
+            // clearPrimaryClip() (API 28+) removes the clip silently.
+            // setPrimaryClip(empty) triggers the Android 13+ "Text copied" system
+            // popup even for blank content, which is confusing on app-background.
+            if (android.os.Build.VERSION.SDK_INT >= 28) {
+                clipboardManager.clearPrimaryClip()
+            } else {
+                clipboardManager.setPrimaryClip(android.content.ClipData.newPlainText("", ""))
+            }
             Logger.d("SessionPersistenceManager", "Cleared clipboard for security")
         } catch (e: Exception) {
             Logger.e("SessionPersistenceManager", "Failed to clear clipboard", e)
