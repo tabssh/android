@@ -428,15 +428,21 @@ object SSHKeyParser {
     }
 
     private fun parseOpenSSHEd25519Key(publicBuffer: ByteBuffer, privateBuffer: ByteBuffer): ParsedKey {
-        // OpenSSH Ed25519 format:
-        // - Public key: 32 bytes raw
-        // - Private key: 64 bytes (32 bytes seed + 32 bytes public key copy)
+        // OpenSSH Ed25519 private-section layout (after checkints and keytype have been consumed):
+        //   string  pk   — 32-byte public key copy (identical to the public section)
+        //   string  sk   — 64 bytes: 32-byte seed followed by 32-byte public key copy
+        // The comment field is read by the caller (parseOpenSSHPrivateKey) after this
+        // function returns, so we must consume exactly pk + sk and nothing more.
         val publicKeyBytes = readString(publicBuffer)
+        // Skip the public-key copy stored redundantly in the private section.
+        readString(privateBuffer)
+        // Read the 64-byte private key blob (seed || pubkey).
         val privateKeyBytes = readString(privateBuffer)
 
         // Use BouncyCastle Ed25519 parameters to handle raw bytes
         // (X509EncodedKeySpec/PKCS8EncodedKeySpec expect ASN.1/DER format, not raw)
         val bcPublicKey = Ed25519PublicKeyParameters(publicKeyBytes, 0)
+        // Ed25519PrivateKeyParameters reads exactly 32 bytes from offset 0 (the seed).
         val bcPrivateKey = Ed25519PrivateKeyParameters(privateKeyBytes, 0)
 
         // Convert BouncyCastle keys to Java KeyPair format
@@ -449,6 +455,7 @@ object SSHKeyParser {
             ),
             publicKeyBytes
         )
+        // PrivateKeyInfo wraps only the 32-byte seed, not the full 64-byte blob.
         val privateKeyInfo = PrivateKeyInfo(
             org.bouncycastle.asn1.x509.AlgorithmIdentifier(
                 org.bouncycastle.asn1.edec.EdECObjectIdentifiers.id_Ed25519

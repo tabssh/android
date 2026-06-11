@@ -1,5 +1,14 @@
 # What's New
 
+## Wave 34 — SSH key import fixed
+
+Importing an Ed25519 private key no longer shows garbled binary as the
+key name. The parser was reading the wrong bytes as the comment field —
+the same bug also meant the stored private key was unusable for auth.
+Both are now fixed. Keys already in your library display correctly too.
+
+---
+
 ## Wave 33 — Sessions survive backgrounding
 
 TabSSH now saves your open terminal sessions automatically. When you
