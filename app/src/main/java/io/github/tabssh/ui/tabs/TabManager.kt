@@ -336,7 +336,11 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
         val liveIds = mutableSetOf<String>()
 
         val connDao = database.connectionDao()
-        tabs.forEachIndexed { index, tab ->
+        // Snapshot: tabs is a plain ArrayList mutated on the main thread.
+        // saveTabState runs on Dispatchers.IO; iterating the live list
+        // races with addTab/closeTab and causes ConcurrentModificationException.
+        val snapshot = tabs.toList()
+        snapshot.forEachIndexed { index, tab ->
             liveIds.add(tab.tabId)
 
             // Guard: the TabSession FK requires the connection profile to exist
@@ -382,7 +386,7 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
             dao.deleteSession(stale)
         }
 
-        Logger.i("TabManager", "Tab state persistence: ${tabs.size} tab(s) saved")
+        Logger.i("TabManager", "Tab state persistence: ${snapshot.size} tab(s) saved")
     }
 
     /**
