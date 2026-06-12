@@ -109,21 +109,25 @@ class KeyboardRowView @JvmOverloads constructor(
 
     /**
      * Set the visual state of a key by ID:
-     *  - [active] = true → accent colour (green), full alpha — multiplexer attached
+     *  - [active] = true → solid green fill, full alpha — latch armed
+     *  - [active] = false + [accentColor] != 0 → coloured outline only — mux detected
      *  - [active] = false + [enabled] = false → heavily dimmed — no multiplexer
      *  - [active] = false + [enabled] = true → default styling
-     * Used by the PREFIX key to reflect live multiplexer detection state.
+     * Used by the PREFIX key to reflect live multiplexer detection and armed state.
      */
-    fun setKeyState(keyId: String, active: Boolean, enabled: Boolean) {
+    fun setKeyState(keyId: String, active: Boolean, enabled: Boolean, accentColor: Int = 0) {
         val btn = keyButtonMap[keyId] ?: return
         btn.isEnabled = enabled
-        // Use the same green-fill active style as modifier keys for consistency.
+        // Solid fill when armed; plain outline when only mux-detected.
         btn.setActive(active)
-        if (!active) btn.setHighlight(0)   // reset any stale accent
+        // When not in the solid-fill active state, apply accent (coloured outline)
+        // or reset to the default grey outline depending on caller.
+        if (!active) btn.setHighlight(accentColor)
         btn.alpha = when {
-            active  -> 1.0f
-            enabled -> 0.7f
-            else    -> 0.25f   // Very dim: "nothing to send"
+            active           -> 1.0f
+            accentColor != 0 -> 0.95f  // mux detected, not armed — slightly dim
+            enabled          -> 0.7f
+            else             -> 0.25f  // Very dim: "nothing to send"
         }
     }
 

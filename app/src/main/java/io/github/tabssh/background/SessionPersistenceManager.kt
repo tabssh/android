@@ -12,6 +12,8 @@ import io.github.tabssh.ui.tabs.SSHTab
 import io.github.tabssh.ui.tabs.TabManager
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Manages session persistence for background/app switching support
@@ -26,7 +28,12 @@ class SessionPersistenceManager(
     private val database = app.database
     
     private val persistenceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    
+
+    // Serialises all saveSessionState() calls so concurrent callers (auto-save,
+    // onActivitySaveInstanceState, onAppBackgrounded) never interleave their
+    // deactivateAllSessions() + insertSession() pairs and produce duplicate active rows.
+    private val saveMutex = Mutex()
+
     // App lifecycle state
     private var isAppInForeground = true
     private var activeActivityCount = 0
@@ -53,11 +60,14 @@ class SessionPersistenceManager(
     
     override fun onActivityStarted(activity: Activity) {
         activeActivityCount++
-        
-        if (!isAppInForeground) {
+        // Trigger foreground only on the 0→1 transition to avoid false positives
+        // from late-registered callbacks (where count starts at 0 even though
+        // activities were already running) or from transparent dialog activities
+        // that inflate the count above 1.
+        if (activeActivityCount == 1 && !isAppInForeground) {
             onAppForegrounded()
         }
-        
+
         Logger.d("SessionPersistenceManager", "Activity started, active count: $activeActivityCount")
     }
     
@@ -70,22 +80,27 @@ class SessionPersistenceManager(
     }
     
     override fun onActivityStopped(activity: Activity) {
-        activeActivityCount--
-        
-        if (activeActivityCount <= 0 && isAppInForeground) {
+        // Clamp at 0 — the SPM may be registered after activities are already
+        // running, so it can receive onStop without a matching onStart.
+        if (activeActivityCount > 0) activeActivityCount--
+        // Use == 0 (not <= 0) so a spurious extra stop at 0 doesn't re-trigger
+        // onAppBackgrounded() when we're already in the background state.
+        if (activeActivityCount == 0 && isAppInForeground) {
             onAppBackgrounded()
         }
-        
+
         Logger.d("SessionPersistenceManager", "Activity stopped, active count: $activeActivityCount")
     }
     
     override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {
-        Logger.d("SessionPersistenceManager", "Saving instance state for: ${activity.javaClass.simpleName}")
-        
-        // Save critical session data immediately
-        persistenceScope.launch {
-            saveSessionState(immediate = true)
-        }
+        // Intentionally NOT saving here. onActivitySaveInstanceState fires for every
+        // Activity on every rotation and system-initiated save — with Dispatchers.IO it
+        // can launch multiple concurrent saves that race through deactivateAllSessions()
+        // + insertSession() and create duplicate active rows (which become duplicate tabs
+        // on the next fresh-start restore). Session state is already saved reliably by
+        // the 30-second auto-save and the onAppBackgrounded() save; the extra save here
+        // provided no real benefit and was the main driver of the "1 connection → N tabs" bug.
+        Logger.d("SessionPersistenceManager", "Instance state save skipped: ${activity.javaClass.simpleName}")
     }
     
     override fun onActivityDestroyed(activity: Activity) {
@@ -141,6 +156,12 @@ class SessionPersistenceManager(
                     
                     delay(60000) // Check every minute
                     
+                } catch (e: CancellationException) {
+                    // Normal coroutine cancellation (job replaced by startBackgroundMonitoring
+                    // or scope shut down on cleanup). Must be re-thrown so structured
+                    // concurrency can cancel this coroutine — swallowing it here would
+                    // log a false ERROR on every foreground/background transition.
+                    throw e
                 } catch (e: Exception) {
                     Logger.e("SessionPersistenceManager", "Error in background monitoring", e)
                     delay(60000) // Wait longer on error
@@ -223,29 +244,35 @@ class SessionPersistenceManager(
         if (!preserveSessionsOnBackground && !immediate) {
             return
         }
-        
-        try {
-            val tabs = tabManager.getAllTabs()
-            
-            if (tabs.isEmpty()) {
-                Logger.d("SessionPersistenceManager", "No tabs to save")
-                return
+        // Serialise all saves. Without this lock, concurrent callers (rotation
+        // fires onActivitySaveInstanceState for each Activity simultaneously, the
+        // auto-save timer fires while a background save is in flight, etc.) can
+        // interleave their deactivateAllSessions() + insertSession() pairs and
+        // insert multiple active rows for the same tab — those duplicates multiply
+        // into duplicate tabs on the next fresh-start restore.
+        saveMutex.withLock {
+            try {
+                val tabs = tabManager.getAllTabs()
+
+                if (tabs.isEmpty()) {
+                    Logger.d("SessionPersistenceManager", "No tabs to save")
+                    return@withLock
+                }
+
+                Logger.d("SessionPersistenceManager", "Saving session state for ${tabs.size} tabs")
+
+                // Deactivate then insert as an atomic unit (protected by saveMutex).
+                database.tabSessionDao().deactivateAllSessions()
+
+                tabs.forEachIndexed { index, tab ->
+                    saveTabSession(tab, index, immediate)
+                }
+
+                Logger.i("SessionPersistenceManager", "Saved session state for ${tabs.size} tabs")
+
+            } catch (e: Exception) {
+                Logger.e("SessionPersistenceManager", "Failed to save session state", e)
             }
-            
-            Logger.d("SessionPersistenceManager", "Saving session state for ${tabs.size} tabs")
-            
-            // First, deactivate all existing sessions
-            database.tabSessionDao().deactivateAllSessions()
-            
-            // Save each tab's session
-            tabs.forEachIndexed { index, tab ->
-                saveTabSession(tab, index, immediate)
-            }
-            
-            Logger.i("SessionPersistenceManager", "Saved session state for ${tabs.size} tabs")
-            
-        } catch (e: Exception) {
-            Logger.e("SessionPersistenceManager", "Failed to save session state", e)
         }
     }
     
@@ -304,31 +331,51 @@ class SessionPersistenceManager(
             }
             
             Logger.d("SessionPersistenceManager", "Restoring ${savedSessions.size} saved sessions")
-            
+
+            // Filter out sessions whose tabs are already alive in TabManager.
+            // The Android lifecycle fires onAppBackgrounded → onAppForegrounded
+            // during a normal BACK (TabTerminalActivity → MainActivity) because
+            // onStop(TabTerminalActivity) momentarily brings activeActivityCount to 0
+            // before onStart(MainActivity) runs. Without this guard we create a
+            // second (dead) SSHTab for every live session the user navigates away from.
+            val liveTabIds = tabManager.getAllTabs().map { it.tabId }.toSet()
+            val sessionsToRestore = savedSessions
+                .sortedBy { it.tabOrder }
+                // Deduplicate by tabId — concurrent save races can insert multiple active
+                // rows for the same tab. Keep only the first (lowest tabOrder) per tabId
+                // to prevent restoring duplicate tabs for one real connection.
+                .distinctBy { it.tabId }
+                .filter { it.tabId !in liveTabIds }
+
+            if (sessionsToRestore.isEmpty()) {
+                Logger.d("SessionPersistenceManager", "All saved sessions already alive — skipping restore")
+                return false
+            }
+
             var restoredCount = 0
-            
-            for (session in savedSessions.sortedBy { it.tabOrder }) {
+
+            for (session in sessionsToRestore) {
                 try {
                     val connectionProfile = database.connectionDao().getConnectionById(session.connectionId)
-                    
+
                     if (connectionProfile != null) {
                         // Create tab without auto-connecting (using user's preferred cursor style)
                         val cursorStyle = app.preferencesManager.getCursorStyleInt()
                         val tab = tabManager.createTab(connectionProfile, cursorStyle)
-                        
+
                         if (tab != null) {
                             // Restore terminal state
                             restoreTabTerminalState(tab, session)
                             restoredCount++
                         }
                     }
-                    
+
                 } catch (e: Exception) {
                     Logger.e("SessionPersistenceManager", "Failed to restore session ${session.sessionId}", e)
                 }
             }
             
-            Logger.i("SessionPersistenceManager", "Restored $restoredCount of ${savedSessions.size} sessions")
+            Logger.i("SessionPersistenceManager", "Restored $restoredCount of ${sessionsToRestore.size} sessions")
             true
             
         } catch (e: Exception) {

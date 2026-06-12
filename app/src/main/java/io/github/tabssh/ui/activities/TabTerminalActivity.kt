@@ -142,6 +142,13 @@ class TabTerminalActivity : AppCompatActivity() {
      */
     private var prefixArmed = false
 
+    /**
+     * The multiplexer type string that was active when [prefixArmed] was set.
+     * Stored so the arm-handler can recall it without querying the tab again
+     * (the tab's detection state could theoretically change between arm and fire).
+     */
+    private var prefixArmedType: String? = null
+
     // Find-in-scrollback
     private var searchController: ScrollbackSearchController? = null
     
@@ -2219,20 +2226,36 @@ private fun showSnippetsPickerForActiveTab() {
     }
 
     private fun updatePrefixKeyVisual(multiplexerType: String?) {
-        // Key is "active" (green) when a mux is detected OR when the user has
-        // armed PRE by tapping it once (latch mode — waiting for the command key).
-        val active = multiplexerType != null || prefixArmed
-        // Always leave the key clickable — when inactive the click handler
-        // shows the type picker instead of sending a prefix.
-        binding.multiRowKeyboard.setKeyState("PREFIX", active = active, enabled = true)
-        // Update label to show the configured prefix notation so the user can
-        // see at a glance what byte the key will send (e.g. "^B" for C-b).
-        // Falls back to "PRE" when no multiplexer is active.
-        val label = if (multiplexerType != null) {
-            val notation = app.preferencesManager.getMultiplexerPrefix(multiplexerType)
-            prefixToShortLabel(notation)
-        } else {
-            "PRE"
+        // Three distinct visual states:
+        //   1. Armed (prefixArmed = true)     → solid green fill — latch ready to fire
+        //   2. Mux detected (type != null)    → green outline only — mux present, not armed
+        //   3. No mux                         → default grey — nothing to send
+        // The active=true solid fill is reserved for the armed state only so the user
+        // can tell the difference between "mux running" and "about to send prefix".
+        val MUX_GREEN = 0xFF4CAF50.toInt()
+        when {
+            prefixArmed ->
+                binding.multiRowKeyboard.setKeyState("PREFIX", active = true, enabled = true)
+            multiplexerType != null ->
+                binding.multiRowKeyboard.setKeyState(
+                    "PREFIX", active = false, enabled = true, accentColor = MUX_GREEN
+                )
+            else ->
+                binding.multiRowKeyboard.setKeyState("PREFIX", active = false, enabled = true)
+        }
+        // Label shows the configured prefix notation when a mux is known, wrapped in
+        // brackets while the latch is armed so the state is unambiguous (e.g. "[^B]").
+        val label = when {
+            prefixArmed && multiplexerType != null -> {
+                val notation = app.preferencesManager.getMultiplexerPrefix(multiplexerType)
+                "[${prefixToShortLabel(notation)}]"
+            }
+            prefixArmed -> "[PRE]"
+            multiplexerType != null -> {
+                val notation = app.preferencesManager.getMultiplexerPrefix(multiplexerType)
+                prefixToShortLabel(notation)
+            }
+            else -> "PRE"
         }
         binding.multiRowKeyboard.setKeyLabel("PREFIX", label)
     }
@@ -2301,6 +2324,16 @@ private fun showSnippetsPickerForActiveTab() {
                 supportActionBar?.title = tab.getDisplayTitle()
 
                 Logger.d("TabTerminalActivity", "Switched to tab: ${tab.profile.getDisplayName()}")
+            }
+        }
+        // Disarm any pending PREFIX latch — the latch belongs to the previous tab's
+        // terminal session and must not bleed into the new tab.
+        if (prefixArmed) {
+            prefixArmed = false
+            prefixArmedType = null
+            getActiveTerminalView()?.let { tv ->
+                tv.setPendingPrefix(null)
+                tv.onPrefixConsumed = null
             }
         }
         // Mirror the new tab's multiplexer detection state to the PREFIX key.
@@ -3914,6 +3947,13 @@ private fun showSnippetsPickerForActiveTab() {
                 Logger.w("TabTerminalActivity", "Keyboard layout load failed; using defaults: ${e.message}")
                 binding.multiRowKeyboard.resetToDefault()
             }
+            // Re-sync the PREFIX key visual after the keyboard is rebuilt.
+            // resetToDefault() / setLayout() create fresh KeyButton instances with
+            // the label "PRE"; the StateFlow won't re-emit (value unchanged since
+            // the last collect), so we force an update here to restore the correct
+            // label and colour state.
+            val currentMuxType = tabManager.getActiveTab()?.activeMultiplexerType
+            updatePrefixKeyVisual(currentMuxType)
         }
     }
 
@@ -3958,6 +3998,11 @@ private fun showSnippetsPickerForActiveTab() {
                     // Second tap on PRE while already armed — cancel the latch
                     // without sending anything, mirroring CTL/ALT toggle-off.
                     prefixArmed = false
+                    prefixArmedType = null
+                    getActiveTerminalView()?.let { tv ->
+                        tv.setPendingPrefix(null)
+                        tv.onPrefixConsumed = null
+                    }
                     updatePrefixKeyVisual(type)
                     Logger.d("TabTerminalActivity", "PREFIX key: disarmed (second tap)")
                 } else if (type == null) {
@@ -3966,41 +4011,59 @@ private fun showSnippetsPickerForActiveTab() {
                     // a non-multiplexer session would inject a stray control byte.
                     showMultiplexerPickerDialog()
                 } else {
-                    // Arm the latch — next key tap will prepend the prefix byte.
+                    // Arm the latch: push the prefix bytes into TerminalView so the
+                    // NEXT keystroke (hardware key, IME text, or custom-bar key) will
+                    // prepend them automatically via consumePendingPrefix().
+                    val prefixStr = when (type) {
+                        "tmux"   -> app.preferencesManager.getString(
+                            "multiplexer_custom_prefix_tmux",   "C-b")
+                        "screen" -> app.preferencesManager.getString(
+                            "multiplexer_custom_prefix_screen", "C-a")
+                        "zellij" -> app.preferencesManager.getString(
+                            "multiplexer_custom_prefix_zellij", "C-g")
+                        else     -> app.preferencesManager.getString(
+                            "multiplexer_custom_prefix_tmux",   "C-b")
+                    }
+                    val bytes = io.github.tabssh.terminal.gestures.PrefixParser.parse(prefixStr)
                     prefixArmed = true
+                    prefixArmedType = type
+                    getActiveTerminalView()?.let { tv ->
+                        tv.setPendingPrefix(bytes)
+                        tv.onPrefixConsumed = {
+                            prefixArmed = false
+                            prefixArmedType = null
+                            updatePrefixKeyVisual(tabManager.getActiveTab()?.activeMultiplexerType)
+                        }
+                    }
                     updatePrefixKeyVisual(type)
-                    Logger.d("TabTerminalActivity", "PREFIX key: armed for $type")
+                    Logger.d("TabTerminalActivity", "PREFIX key: armed for $type ($prefixStr)")
                 }
             }
             else -> {
-                // If the PREFIX latch is armed, fire the prefix byte before this
-                // key — same as pressing PRE then the command key in sequence.
-                // Disarm immediately afterwards so the latch is consumed once.
+                // If the PREFIX latch is armed, the bytes were already pushed into
+                // TerminalView via setPendingPrefix() at arm time. TerminalView's
+                // consumePendingPrefix() fires automatically from onKeyDown() and
+                // commitText() — we only need to clear the Activity-side state here
+                // so that the visual deactivation happens correctly when the latch
+                // fires from a custom-bar key (which bypasses those TerminalView paths).
                 if (prefixArmed) {
-                    val tab = tabManager.getActiveTab()
-                    val type = tab?.activeMultiplexerType
-                    if (type != null) {
-                        val prefixStr = when (type) {
-                            "tmux"   -> app.preferencesManager.getString(
-                                "multiplexer_custom_prefix_tmux",   "C-b")
-                            "screen" -> app.preferencesManager.getString(
-                                "multiplexer_custom_prefix_screen", "C-a")
-                            "zellij" -> app.preferencesManager.getString(
-                                "multiplexer_custom_prefix_zellij", "C-g")
-                            else     -> app.preferencesManager.getString(
-                                "multiplexer_custom_prefix_tmux",   "C-b")
-                        }
-                        val bytes = io.github.tabssh.terminal.gestures.PrefixParser.parse(prefixStr)
-                        if (bytes != null) {
-                            terminal?.sendText(String(bytes, Charsets.ISO_8859_1))
-                            Logger.d(
-                                "TabTerminalActivity",
-                                "PREFIX latch: sent $prefixStr for $type before ${key.label}"
-                            )
-                        }
-                    }
+                    val consumedType = prefixArmedType
                     prefixArmed = false
-                    updatePrefixKeyVisual(type)
+                    prefixArmedType = null
+                    getActiveTerminalView()?.let { tv ->
+                        // consumePendingPrefix() sends the bytes and fires onPrefixConsumed;
+                        // calling it here handles the custom-bar key path. For hardware/IME
+                        // keys it was already called — setPendingPrefix(null) is a no-op then.
+                        tv.consumePendingPrefix()
+                        tv.onPrefixConsumed = null
+                    }
+                    updatePrefixKeyVisual(tabManager.getActiveTab()?.activeMultiplexerType)
+                    if (consumedType != null) {
+                        Logger.d(
+                            "TabTerminalActivity",
+                            "PREFIX latch: consumed for $consumedType before ${key.label}"
+                        )
+                    }
                 }
                 if (key.keySequence.isNotEmpty()) {
                     // ARROW keys from the keyboard bar must respect DECCKM. When the

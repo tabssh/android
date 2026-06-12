@@ -290,14 +290,16 @@ class MultiRowKeyboardView @JvmOverloads constructor(
      * the key. Used to make the PREFIX key green when a multiplexer is active
      * and dimmed/disabled when none is detected.
      *
-     * @param keyId  The key's ID (e.g. "PREFIX")
-     * @param active true  → accent green, full alpha (multiplexer attached)
-     *               false → default or dimmed depending on [enabled]
-     * @param enabled true  → key is clickable (default appearance or green)
-     *                false → key is dimmed and non-interactive (no multiplexer)
+     * @param keyId       The key's ID (e.g. "PREFIX")
+     * @param active      true  → solid green fill (latch armed)
+     *                    false → default or accent outline depending on [accentColor]
+     * @param enabled     true  → key is clickable
+     *                    false → key is dimmed and non-interactive
+     * @param accentColor non-zero → coloured outline only (mux detected, not armed);
+     *                    0 → default grey outline
      */
-    fun setKeyState(keyId: String, active: Boolean, enabled: Boolean = true) {
-        keyboardRows.forEach { it.setKeyState(keyId, active, enabled) }
+    fun setKeyState(keyId: String, active: Boolean, enabled: Boolean = true, accentColor: Int = 0) {
+        keyboardRows.forEach { it.setKeyState(keyId, active, enabled, accentColor) }
     }
 
     /**

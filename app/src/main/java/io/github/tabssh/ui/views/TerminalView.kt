@@ -745,8 +745,37 @@ class TerminalView @JvmOverloads constructor(
     private var pendingCtrl = false
     private var pendingAlt = false
 
+    // PREFIX latch — exact parallel to pendingCtrl/pendingAlt. Bytes to
+    // prepend before the NEXT user keystroke (set by TabTerminalActivity
+    // when the PRE bar key is tapped). Consumed by onKeyDown() and the
+    // InputConnection commitText path so IME and hardware keys both receive
+    // the prefix, not just custom-bar taps.
+    private var pendingPrefixBytes: ByteArray? = null
+
     /** Notified after a pending modifier is consumed so the bar can clear UI. */
     var onModifierConsumed: (() -> Unit)? = null
+
+    /**
+     * Notified after [consumePendingPrefix] fires so the bar can clear
+     * the armed-PREFIX visual state. Posted to the main looper — safe to
+     * call from any thread (including the InputConnection thread).
+     */
+    var onPrefixConsumed: (() -> Unit)? = null
+
+    /** Arm the PREFIX latch with the bytes to prepend before the next keystroke. */
+    fun setPendingPrefix(bytes: ByteArray?) { pendingPrefixBytes = bytes }
+
+    /**
+     * If a PREFIX latch is armed, send its bytes to the terminal immediately
+     * then clear the latch. Posts [onPrefixConsumed] to the main looper so
+     * the activity can update the PREFIX key visual from any thread.
+     */
+    internal fun consumePendingPrefix() {
+        val p = pendingPrefixBytes ?: return
+        pendingPrefixBytes = null
+        sendText(String(p, Charsets.ISO_8859_1))
+        android.os.Handler(android.os.Looper.getMainLooper()).post { onPrefixConsumed?.invoke() }
+    }
 
     /** Set/clear the pending one-shot modifier. */
     fun setPendingModifier(modifier: String?) {
@@ -1614,6 +1643,9 @@ class TerminalView @JvmOverloads constructor(
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        // Fire any armed PREFIX latch before this keystroke reaches the terminal.
+        // Mirrors the one-shot modifier behaviour of pendingCtrl/pendingAlt.
+        consumePendingPrefix()
         // OR in any sticky modifier set by the custom keyboard bar so a CTL
         // tap on the bar followed by an IME letter still produces a control
         // code, not a literal character (Issue #37).
@@ -2627,6 +2659,10 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
         text?.let {
             // Convert newline to carriage return for SSH compatibility
             val converted = it.toString().replace("\n", "\r")
+            // Fire any armed PREFIX latch before this text arrives at the terminal.
+            // This makes the PRE bar key work for soft-keyboard and hardware-key
+            // input, not just for custom-bar taps.
+            terminalView.consumePendingPrefix()
             // If the bar has CTL/ALT pending and we got a single character,
             // apply the modifier so chords like CTL+c work via IME (Issue #37).
             if (converted.length == 1 &&
