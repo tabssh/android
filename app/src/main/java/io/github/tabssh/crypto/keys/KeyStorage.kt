@@ -726,12 +726,15 @@ class KeyStorage(private val context: Context) {
 
         // Step 2 — Remove encrypted ciphertext from SharedPrefs. Synchronous
         // commit() ensures the write completes before we touch the DB.
-        sharedPrefs.edit()
+        // Log if commit returns false — ciphertext would remain as an unreadable
+        // orphan (its Keystore encryption key is already gone above).
+        val cleared = sharedPrefs.edit()
             .remove("$PREF_ENCRYPTED_KEY_PREFIX$keyId")
             .remove("$PREF_KEY_IV_PREFIX$keyId")
             .remove("$PREF_JSCH_BYTES_PREFIX$keyId")
             .remove("$PREF_JSCH_IV_PREFIX$keyId")
             .commit()
+        if (!cleared) Logger.w("KeyStorage", "SharedPrefs commit() returned false clearing ciphertext for key $keyId")
 
         // Step 3 — Remove the DB record. If this fails the record is a
         // dangling row (key shows in UI but can't decrypt); a second

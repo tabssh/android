@@ -173,12 +173,17 @@ class SecurePasswordManager(private val context: Context) {
             editor.putLong("$PREF_TIMESTAMP_PREFIX$connectionId", System.currentTimeMillis())
             // Use commit() (synchronous) since this is always called from a background thread
             // (Dispatchers.IO). apply() queues an async write; if the process is killed before
-            // it flushes, the credential is silently lost.
-            editor.commit()
+            // it flushes, the credential is silently lost. Check return value — false means
+            // the write failed (e.g. storage full); surface it as a store failure.
+            val written = editor.commit()
+            if (!written) {
+                Logger.e("SecurePasswordManager", "SharedPrefs commit() returned false for $connectionId — disk full?")
+                return false
+            }
 
             // Clear session password since we have persistent storage
             sessionPasswords.remove(connectionId)
-            
+
             Logger.d("SecurePasswordManager", "Stored encrypted password for $connectionId (biometric: $useBiometric)")
             return true
             
@@ -408,12 +413,15 @@ class SecurePasswordManager(private val context: Context) {
         // Synchronous commit() — this is always called from Dispatchers.IO.
         // apply() queues an async write; if the process is killed before it
         // flushes, stale ciphertext persists in SharedPrefs.
-        sharedPrefs.edit()
+        // Log if commit returns false — the ciphertext would remain as an
+        // unreadable orphan (its Keystore key is already gone above).
+        val cleared = sharedPrefs.edit()
             .remove("$PREF_ENCRYPTED_DATA_PREFIX$connectionId")
             .remove("$PREF_IV_PREFIX$connectionId")
             .remove("$PREF_STORAGE_LEVEL_PREFIX$connectionId")
             .remove("$PREF_TIMESTAMP_PREFIX$connectionId")
             .commit()
+        if (!cleared) Logger.w("SecurePasswordManager", "SharedPrefs commit() returned false clearing $connectionId")
     }
     
     /**

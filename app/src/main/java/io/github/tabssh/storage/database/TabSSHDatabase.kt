@@ -93,6 +93,10 @@ abstract class TabSSHDatabase : RoomDatabase() {
 
             override fun onOpen(db: SupportSQLiteDatabase) {
                 super.onOpen(db)
+                // Enable FK enforcement so CASCADE deletes on TabSession and AuditLogEntry
+                // (declared via @ForeignKey) actually fire at the SQLite level.
+                // Safe for existing rows — FK checks only run on new writes, not on reads.
+                db.execSQL("PRAGMA foreign_keys = ON")
             }
         }
 
