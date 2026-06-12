@@ -2,6 +2,7 @@ package io.github.tabssh.storage.database
 
 import android.content.Context
 import androidx.room.*
+import androidx.room.RoomDatabase.JournalMode
 import androidx.sqlite.db.SupportSQLiteDatabase
 import io.github.tabssh.storage.database.dao.*
 import io.github.tabssh.storage.database.entities.*
@@ -39,7 +40,7 @@ import io.github.tabssh.utils.logging.Logger
         VncIdentity::class
     ],
     version = 3,
-    exportSchema = false
+    exportSchema = true
 )
 @TypeConverters(Converters::class)
 abstract class TabSSHDatabase : RoomDatabase() {
@@ -78,6 +79,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     DATABASE_NAME
                 )
                 .addCallback(DatabaseCallback())
+                .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
                 .build()
                 INSTANCE = instance
                 instance
@@ -94,7 +96,11 @@ abstract class TabSSHDatabase : RoomDatabase() {
             }
         }
 
-        suspend fun clearAllData(context: Context) {
+        // Requires explicit opt-in to prevent accidental wipes.
+        // Call sites must pass confirmed = true after showing the user a
+        // destructive-action confirmation dialog.
+        suspend fun clearAllData(context: Context, confirmed: Boolean = false) {
+            require(confirmed) { "clearAllData called without confirmation — pass confirmed = true" }
             val db = getDatabase(context)
             db.clearAllTables()
         }

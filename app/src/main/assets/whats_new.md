@@ -8,6 +8,16 @@ database whenever it detected a version mismatch — instead of migrating your
 data forward. That bug is fixed; going forward updates will never erase your
 configuration.
 
+Several lower-level data safety improvements also landed in this wave:
+
+- **WAL journal mode** — the database now uses SQLite's Write-Ahead Logging;
+  writes are atomic even if the device loses power mid-write, eliminating the
+  class of corruption that the old journal mode could produce
+- **SSH key delete is now atomic** — the deletion order was reversed so a
+  crash or power-off during delete leaves the key fully intact rather than
+  partially deleted; credentials are flushed synchronously to disk before the
+  database record is removed
+
 ## Wave 45 — Paste into vim actually works
 
 Pasting text into the terminal now behaves correctly in vim, nano, and any

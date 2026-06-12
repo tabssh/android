@@ -394,20 +394,26 @@ class SecurePasswordManager(private val context: Context) {
     }
 
     private fun clearPersistedPassword(connectionId: String) {
-        // Remove from SharedPreferences
-        val editor = sharedPrefs.edit()
-        editor.remove("$PREF_ENCRYPTED_DATA_PREFIX$connectionId")
-        editor.remove("$PREF_IV_PREFIX$connectionId")
-        editor.remove("$PREF_STORAGE_LEVEL_PREFIX$connectionId")
-        editor.remove("$PREF_TIMESTAMP_PREFIX$connectionId")
-        editor.apply()
-        // Remove keys from keystore — blocking HAL op, must be called from IO dispatcher.
+        // Remove keys from Keystore first — blocking HAL op, must be called
+        // from IO dispatcher. Doing this before SharedPrefs ensures that if the
+        // process is killed mid-cleanup, the ciphertext left in SharedPrefs is
+        // unreadable (its key is already gone) rather than leaving a live key
+        // with no ciphertext to encrypt (less dangerous but still inconsistent).
         try {
             keyStore.deleteEntry("$KEY_ALIAS_PREFIX$connectionId")
             keyStore.deleteEntry("$BIOMETRIC_KEY_ALIAS_PREFIX$connectionId")
         } catch (e: Exception) {
             Logger.w("SecurePasswordManager", "Error deleting keystore entries for $connectionId", e)
         }
+        // Synchronous commit() — this is always called from Dispatchers.IO.
+        // apply() queues an async write; if the process is killed before it
+        // flushes, stale ciphertext persists in SharedPrefs.
+        sharedPrefs.edit()
+            .remove("$PREF_ENCRYPTED_DATA_PREFIX$connectionId")
+            .remove("$PREF_IV_PREFIX$connectionId")
+            .remove("$PREF_STORAGE_LEVEL_PREFIX$connectionId")
+            .remove("$PREF_TIMESTAMP_PREFIX$connectionId")
+            .commit()
     }
     
     /**

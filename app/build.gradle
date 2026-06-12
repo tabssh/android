@@ -223,6 +223,14 @@ android {
 
 }
 
+ksp {
+    // Tell Room where to write the exported schema JSON files.
+    // With exportSchema = true in @Database, KSP writes one JSON file per
+    // DB version so migrations can be verified at compile time against the
+    // expected schema. The files are committed to source control.
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
     // Android Support
     implementation 'androidx.appcompat:appcompat:1.6.1'

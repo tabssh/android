@@ -704,29 +704,44 @@ class KeyStorage(private val context: Context) {
     // -------------------------------------------------------------------------
 
     /**
-     * Delete a stored key
+     * Delete a stored key.
+     *
+     * Order: Keystore → SharedPrefs (commit) → DB.
+     * Rationale: if Keystore delete fails the key is still usable and the
+     * caller can retry. If we deleted the DB record first and the Keystore
+     * delete then failed, the key would disappear from the UI but the
+     * private key material would still be sitting in Keystore — a worse
+     * inconsistency. SharedPrefs uses commit() (synchronous) so the
+     * ciphertext is purged from disk before the DB row is removed.
      */
     suspend fun deleteKey(keyId: String): Boolean = withContext(Dispatchers.IO) {
+        // Step 1 — Keystore first. Hard-abort if this fails so the DB record
+        // remains intact and the key is still usable.
         try {
-            // Remove from database
-            database.keyDao().deleteKeyById(keyId)
-            
-            // Remove encrypted data
-            val editor = sharedPrefs.edit()
-            editor.remove("$PREF_ENCRYPTED_KEY_PREFIX$keyId")
-            editor.remove("$PREF_KEY_IV_PREFIX$keyId")
-            editor.remove("$PREF_JSCH_BYTES_PREFIX$keyId")
-            editor.remove("$PREF_JSCH_IV_PREFIX$keyId")
-            editor.apply()
-            
-            // Remove encryption key from keystore
             keyStore.deleteEntry("$KEY_ENCRYPTION_ALIAS_PREFIX$keyId")
-            
+        } catch (e: Exception) {
+            Logger.e("KeyStorage", "Keystore delete failed for key $keyId — aborting (key still intact)", e)
+            return@withContext false
+        }
+
+        // Step 2 — Remove encrypted ciphertext from SharedPrefs. Synchronous
+        // commit() ensures the write completes before we touch the DB.
+        sharedPrefs.edit()
+            .remove("$PREF_ENCRYPTED_KEY_PREFIX$keyId")
+            .remove("$PREF_KEY_IV_PREFIX$keyId")
+            .remove("$PREF_JSCH_BYTES_PREFIX$keyId")
+            .remove("$PREF_JSCH_IV_PREFIX$keyId")
+            .commit()
+
+        // Step 3 — Remove the DB record. If this fails the record is a
+        // dangling row (key shows in UI but can't decrypt); a second
+        // deleteKey() call will succeed since the Keystore entry is gone.
+        return@withContext try {
+            database.keyDao().deleteKeyById(keyId)
             Logger.i("KeyStorage", "Deleted SSH key: $keyId")
             true
-            
         } catch (e: Exception) {
-            Logger.e("KeyStorage", "Failed to delete key $keyId", e)
+            Logger.e("KeyStorage", "DB remove failed for key $keyId (Keystore+prefs already cleared)", e)
             false
         }
     }

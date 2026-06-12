@@ -38,6 +38,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - **Data wiped on app update** — removed `fallbackToDestructiveMigration()` from the Room database builder; future app updates will no longer silently destroy saved connections, SSH keys, and settings; any future schema change must supply a proper `Migration` object
 
+- **SQLite power-loss corruption** — database now opens in WAL (Write-Ahead Logging) journal mode; writes are atomic even if the device loses power mid-write; the previous DELETE journal mode could produce a truncated or corrupted database file
+
+- **SSH key delete could silently corrupt state** — deleting a key now follows Keystore → SharedPrefs (synchronous commit) → DB order; previously, the DB row was removed first so a process kill halfway through left an orphaned Keystore entry with no matching DB record; new order ensures the key remains fully intact if the Keystore step fails, and the ciphertext is flushed synchronously before the record is removed
+
+- **Stored password cleanup used async SharedPrefs write** — `SecurePasswordManager.clearPersistedPassword()` used `apply()` (fire-and-forget); changed to `commit()` (synchronous, blocking) so the encrypted credential is guaranteed to be removed from disk before the Keystore key is deleted; also moved the Keystore delete before the SharedPrefs clear so a crash mid-cleanup leaves unreadable ciphertext rather than a live key with missing data
+
+- **Room schema export disabled** — `exportSchema` is now `true`; KSP emits a JSON schema file per DB version into `app/schemas/`; future migrations can be validated against the expected schema at compile time instead of only failing at runtime on a user's device
+
 - **URL detection matched trailing punctuation** — URLs followed by `.`, `,`, `)`, `]`, `'`, `"`, `;`, `:`, `!`, or `?` (as in normal prose) incorrectly included those characters in the matched URL; a trailing-strip pass now removes them
 - **URL detection joined unrelated lines** — the word-wrap cross-row URL join (for URLs that split at a terminal column boundary) fired even on rows that ended with a hard newline; for VM console sessions the new `TerminalBuffer.isRowWrapped()` flag is now consulted so only genuinely soft-wrapped rows are joined; for SSH sessions the Termux library's `'\n'`-at-hard-newline behaviour already prevents a false match in the combined text
 - **URL detection missed common schemes** — `ftp://`, `ftps://`, `ssh://`, `git://`, `svn://`, `file://` were not matched; all are now included
