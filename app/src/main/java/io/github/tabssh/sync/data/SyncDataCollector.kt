@@ -669,15 +669,28 @@ class SyncDataCollector {
 
     private fun collectSyncPreferences(): Map<String, Any> {
         return mapOf(
-            "frequency" to preferenceManager.getSyncFrequency(),
-            "wifiOnly" to preferenceManager.isSyncWifiOnly(),
-            "onChangeEnabled" to preferenceManager.isSyncOnChangeEnabled(),
-            "syncConnections" to preferenceManager.isSyncConnectionsEnabled(),
-            "syncKeys" to preferenceManager.isSyncKeysEnabled(),
-            "syncIdentities" to preferenceManager.isSyncIdentitiesEnabled(),
-            "syncSnippets" to preferenceManager.isSyncSnippetsEnabled(),
-            "syncSettings" to preferenceManager.isSyncSettingsEnabled(),
-            "syncThemes" to preferenceManager.isSyncThemesEnabled()
+            "frequency"             to preferenceManager.getSyncFrequency(),
+            "wifiOnly"              to preferenceManager.isSyncWifiOnly(),
+            "onChangeEnabled"       to preferenceManager.isSyncOnChangeEnabled(),
+            "syncConnections"       to preferenceManager.isSyncConnectionsEnabled(),
+            "syncKeys"              to preferenceManager.isSyncKeysEnabled(),
+            "syncIdentities"        to preferenceManager.isSyncIdentitiesEnabled(),
+            "syncSnippets"          to preferenceManager.isSyncSnippetsEnabled(),
+            "syncSettings"          to preferenceManager.isSyncSettingsEnabled(),
+            "syncThemes"            to preferenceManager.isSyncThemesEnabled(),
+            "syncHostKeys"          to preferenceManager.isSyncHostKeysEnabled(),
+            "syncGroups"            to preferenceManager.isSyncGroupsEnabled(),
+            "syncWorkspaces"        to preferenceManager.isSyncWorkspacesEnabled(),
+            "syncMacros"            to preferenceManager.isSyncMacrosEnabled(),
+            "syncMonitorSlots"      to preferenceManager.isSyncMonitorSlotsEnabled(),
+            "syncHypervisors"       to preferenceManager.isSyncHypervisorsEnabled(),
+            "syncHypervisorAccounts" to preferenceManager.isSyncHypervisorAccountsEnabled(),
+            "syncVncHosts"          to preferenceManager.isSyncVncHostsEnabled(),
+            "syncVncIdentities"     to preferenceManager.isSyncVncIdentitiesEnabled(),
+            "syncCloudAccounts"     to preferenceManager.isSyncCloudAccountsEnabled(),
+            "syncCertificates"      to preferenceManager.isSyncCertificatesEnabled(),
+            "syncDashboard"         to preferenceManager.isSyncDashboardEnabled(),
+            "autoResolve"           to preferenceManager.isAutoResolveConflictsEnabled()
         )
     }
 

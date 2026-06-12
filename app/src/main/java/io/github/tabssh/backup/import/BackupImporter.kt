@@ -548,6 +548,7 @@ class BackupImporter(
             preferenceManager.setSyncCloudAccountsEnabled(s.optBoolean("syncCloudAccounts", true))
             preferenceManager.setSyncCertificatesEnabled(s.optBoolean("syncCertificates", true))
             preferenceManager.setSyncDashboardEnabled(s.optBoolean("syncDashboard", false))
+            preferenceManager.setAutoResolveConflicts(s.optBoolean("autoResolve", true))
         }
         root.optJSONObject("multiplexer")?.let { m ->
             defaultPrefs.edit().apply {

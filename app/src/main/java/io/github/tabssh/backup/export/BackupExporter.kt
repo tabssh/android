@@ -507,6 +507,7 @@ class BackupExporter(
             put("syncCloudAccounts",      preferenceManager.isSyncCloudAccountsEnabled())
             put("syncCertificates",       preferenceManager.isSyncCertificatesEnabled())
             put("syncDashboard",          preferenceManager.isSyncDashboardEnabled())
+            put("autoResolve",            preferenceManager.isAutoResolveConflictsEnabled())
         })
 
         // Multiplexer key bindings: gesture type/enable in default SharedPreferences;

@@ -588,8 +588,21 @@ class SyncDataApplier {
                     "syncKeys"         -> preferenceManager.setSyncKeysEnabled(value as Boolean)
                     "syncIdentities"   -> preferenceManager.setSyncIdentitiesEnabled(value as Boolean)
                     "syncSnippets"     -> preferenceManager.setSyncSnippetsEnabled(value as Boolean)
-                    "syncSettings"     -> preferenceManager.setSyncSettingsEnabled(value as Boolean)
-                    "syncThemes"       -> preferenceManager.setSyncThemesEnabled(value as Boolean)
+                    "syncSettings"          -> preferenceManager.setSyncSettingsEnabled(value as Boolean)
+                    "syncThemes"            -> preferenceManager.setSyncThemesEnabled(value as Boolean)
+                    "syncHostKeys"          -> preferenceManager.setSyncHostKeysEnabled(value as Boolean)
+                    "syncGroups"            -> preferenceManager.setSyncGroupsEnabled(value as Boolean)
+                    "syncWorkspaces"        -> preferenceManager.setSyncWorkspacesEnabled(value as Boolean)
+                    "syncMacros"            -> preferenceManager.setSyncMacrosEnabled(value as Boolean)
+                    "syncMonitorSlots"      -> preferenceManager.setSyncMonitorSlotsEnabled(value as Boolean)
+                    "syncHypervisors"       -> preferenceManager.setSyncHypervisorsEnabled(value as Boolean)
+                    "syncHypervisorAccounts" -> preferenceManager.setSyncHypervisorAccountsEnabled(value as Boolean)
+                    "syncVncHosts"          -> preferenceManager.setSyncVncHostsEnabled(value as Boolean)
+                    "syncVncIdentities"     -> preferenceManager.setSyncVncIdentitiesEnabled(value as Boolean)
+                    "syncCloudAccounts"     -> preferenceManager.setSyncCloudAccountsEnabled(value as Boolean)
+                    "syncCertificates"      -> preferenceManager.setSyncCertificatesEnabled(value as Boolean)
+                    "syncDashboard"         -> preferenceManager.setSyncDashboardEnabled(value as Boolean)
+                    "autoResolve"           -> preferenceManager.setAutoResolveConflicts(value as Boolean)
                 }
                 count++
             } catch (e: Exception) {
