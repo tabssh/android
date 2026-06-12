@@ -266,4 +266,114 @@ These cannot be conclusively validated from code review alone:
 
 `make check` not run from this pass — same Docker-image rationale as passes 9–11. Edits are local, additive (one `applicationScope.launch` swap, three Socket / LocalSocket hoists with extra catch-arm closes, one chained `?.use` replacement, one `@Synchronized` close-then-replace, one dead-`val` deletion, one `@Volatile` annotation). No public signature, return type, or visibility modifier changed. Re-verify with `make check` in CI before merging.
 
+## Fixed in pass 13 (2026-06-12) — main-thread / concurrency / lifecycle audit
+
+Scope: SSH stack + tab manager + terminal bridge + services + Activities/Receivers/Services.
+
+- [x] **`SSHTab` plain `var` fields lacked `@Volatile` (HIGH)** — `connection`,
+  `ownChannel`, `telnetConnection`, `moshSession`, `sessionStartTime`,
+  `bytesReceived`, `bytesSent` were all written from `connectionScope`
+  (Dispatchers.IO) and read from Main (UI status, gesture send) and from
+  TermuxBridge/JSch worker callbacks (listener `onData`, `onDisconnected`).
+  Without `@Volatile` the JIT can cache a stale read across threads —
+  realistic symptom: post-disconnect listener callback sees a non-null
+  `connection` and tries to use a half-torn-down JSch session, or the UI
+  shows stale bytes-counter values. Added `@Volatile` with a brief
+  comment on each field documenting which threads write/read it.
+  - `app/src/main/java/io/github/tabssh/ui/tabs/SSHTab.kt:41,48,52,57,91-96`
+- [x] **`SSHConnection` JSch-callback fields lacked `@Volatile` (HIGH)** —
+  `lastHostKeyDecision`, `resolvedIdentity`, `cachedPassword`,
+  `cachedPassphrase` are written from the connect coroutine (IO) and
+  read from JSch's `UserInfo` callbacks which fire on JSch's own
+  internal worker thread (not the coroutine that called `connect()`).
+  Same visibility risk as the SSHTab fields. `cachedPassword` /
+  `cachedPassphrase` additionally get cleared by `clearCachedCredentials()`
+  on app-background which races with an in-flight JSch re-auth read.
+  Added `@Volatile` to all four fields.
+  - `app/src/main/java/io/github/tabssh/ssh/connection/SSHConnection.kt:163,166,169,172`
+- [x] **`TabTerminalActivity.closeSplitPane` blocked the UI thread on JSch
+  teardown (HIGH)** — User tap → `tab.disconnect()` ran inline on Main.
+  `disconnect()` calls `termuxBridge.disconnect()` (closes JSch streams)
+  and lets `SSHSessionManager.closeConnection` call `connection.disconnect()`
+  which performs blocking `session.disconnect()` against the remote — a
+  network round-trip. On a slow / dropped link this is the classic ANR
+  shape (5 s threshold). Wrapped both the `tab.disconnect()` and the
+  `sshSessionManager.closeConnection()` calls in `app.applicationScope.launch(Dispatchers.IO)`.
+  UI updates (`splitTab = null`, view visibility, Toast) stay on Main.
+  - `app/src/main/java/io/github/tabssh/ui/activities/TabTerminalActivity.kt:2840-2855`
+- [x] **`TabTerminalActivity.onDestroy` split-tab teardown blocked Main
+  thread (HIGH)** — Same shape: `onDestroy` runs on Main and called
+  `stab.disconnect()` + `sshSessionManager.closeConnection()` inline.
+  Moved to `applicationScope.launch(Dispatchers.IO)` so the user's
+  back-button gesture returns immediately and the SSH teardown completes
+  in the background. `applicationScope` outlives the Activity so the
+  cleanup is guaranteed to run.
+  - `app/src/main/java/io/github/tabssh/ui/activities/TabTerminalActivity.kt:3807-3819`
+- [x] **`Dispatchers` import added** —
+  `TabTerminalActivity.kt:35` — supports the two `applicationScope.launch(Dispatchers.IO)`
+  call sites above.
+
+## Reported only (MEDIUM / LOW — not fixed this pass)
+
+- MEDIUM: `SSHConnection.disconnect()` (line 1654) is not `suspend` and
+  performs blocking JSch session disconnect + jump-host teardown + audit
+  log writes synchronously. Currently every known Main-thread caller has
+  been wrapped in IO (`ConfirmDisconnectActivity` in prior fix,
+  `TabTerminalActivity.closeSplitPane` + `onDestroy` in this pass). A
+  future Main-thread caller would silently re-introduce the ANR. Recommend
+  converting to `suspend fun disconnect() = withContext(Dispatchers.IO) { … }`
+  to enforce the dispatcher at the type system level. Out of scope for
+  this pass — call-site churn would touch ~10 files.
+- MEDIUM: `SSHConnection.executeCommand` (line 1527) busy-waits on
+  `inputStream.available()` with `delay(100)` until either bytes arrive
+  or timeout. Wakes every 100 ms even when idle, and on a slow server
+  spends most of its budget sleeping instead of reading. Recommend
+  blocking read on `inputStream.read(buf)` with timeout via
+  `withTimeoutOrNull`.
+- LOW: `SSHTab.disconnect()` (line 533) swallows telnet/mosh close
+  exceptions with `catch (_: Exception) {}`. Acceptable in a cleanup
+  path but should `Logger.d` the swallowed exception for diagnostics.
+- LOW: `TabManager.listeners` is a plain `mutableListOf`. Currently only
+  registered/unregistered from UI thread, but the iteration in
+  `notifyTabCreated`/`notifyTabClosed`/`notifyActiveTabChanged`/`notifyTabConnectionStateChanged`
+  happens on whichever thread last published. No actual cross-thread
+  contention today (all four are called from Main), but consider
+  `CopyOnWriteArrayList` to match the pattern used elsewhere
+  (`SSHSessionManager`, `SSHConnection`, `PortForwardingManager`,
+  `TerminalEmulator`).
+
+## Verified clean (pass 13)
+
+- `RfbClient.keepaliveLoop` / `eventLoop` `Thread.sleep` calls (lines
+  706, 724, 982) all run on dedicated worker threads created in
+  `start()`. Not on Main. Safe.
+- `ConsoleWebSocketClient.startProxmoxKeepalive` `Thread.sleep` (line
+  415) runs on the dedicated `keepaliveThread`. Safe.
+- `AnrWatchdog` `Thread.sleep` runs on its own watchdog thread. Safe.
+- `HostKeyVerifier.check()` uses `runBlocking(Dispatchers.IO)` but is
+  invoked by JSch from JSch's own worker thread during host-key
+  negotiation, not from Main. Safe.
+- `SSHSessionManager.closeConnection` already has try-catch around
+  `connection.disconnect()` (prior fix). The CancellationException
+  branch in `connectToServer` already calls `closeConnection(profile.id)`
+  to release the orphan authenticated session. Clean.
+- `SSHConnectionService` uses `START_NOT_STICKY`, cancels `monitoringJob`
+  before relaunch, propagates `CancellationException`. Per-host
+  notifications anchored on first `onConnectionEstablished`. Clean.
+- `MdmRestrictionsReceiver`, `TaskerActionReceiver`,
+  `MonitoringBootReceiver` all idempotent and hand off to WorkManager
+  or do near-zero work. No `onReceive` doing blocking work. Clean.
+- `TabManager.saveTabState` uses `tabs.toList()` snapshot to avoid CME
+  during IO iteration. (Prior fix, verified.)
+- `TabManager.cleanup` now calls `tab.cleanup()` (not `tab.disconnect()`)
+  which also tears down the per-tab `connectionScope` and `TermuxBridge`.
+  (Pass-10 fix, verified.)
+- `TermuxBridge` uses `@Volatile` on cross-thread fields and a `writeLock`
+  Mutex serializes all SSH writes to prevent the JSch GCM-cipher-state
+  race. `CopyOnWriteArrayList` for listeners. Disconnect idempotent.
+- `ConfirmDisconnectActivity` already dispatches all blocking work to
+  `applicationScope.launch(Dispatchers.IO)` and uses
+  `closeConnectionIntentionally` to mark the tab so the reconnect
+  dialog is skipped.
+
 Delete this file once all items above are addressed or the user confirms they are out of scope.

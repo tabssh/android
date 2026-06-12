@@ -160,15 +160,29 @@ class SSHConnection(
     // Last decision returned from the HostKeyRepository.check() callback path.
     // UserInfo.promptYesNo() consults this so it never fires a second dialog
     // for the same host (Issues #33 / #34).
+    // @Volatile: written from the connect coroutine on Dispatchers.IO,
+    // read from JSch's UserInfo callbacks that fire on JSch's internal
+    // worker thread.
+    @Volatile
     private var lastHostKeyDecision: HostKeyAction? = null
 
-    // Cached resolved identity (loaded on connect)
+    // Cached resolved identity (loaded on connect).
+    // @Volatile: written from the connect coroutine on Dispatchers.IO,
+    // read from JSch UserInfo callbacks and from disconnect() which can
+    // be called from either Main or IO.
+    @Volatile
     private var resolvedIdentity: io.github.tabssh.storage.database.entities.Identity? = null
 
-    // Cached password for UserInfo callbacks (set during setupAuthentication)
+    // Cached password for UserInfo callbacks (set during setupAuthentication).
+    // @Volatile: written on the connect coroutine (IO), read by JSch's
+    // UserInfo callbacks on JSch's worker thread, cleared from disconnect()
+    // and clearCachedCredentials() which can race with the JSch reads.
+    @Volatile
     private var cachedPassword: String? = null
 
-    // Cached passphrase for encrypted SSH keys
+    // Cached passphrase for encrypted SSH keys. Same threading constraints
+    // as cachedPassword.
+    @Volatile
     private var cachedPassphrase: String? = null
 
     val id: String = profile.id

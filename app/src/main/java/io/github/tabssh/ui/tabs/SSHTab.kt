@@ -37,7 +37,11 @@ class SSHTab(
     // the mosh-fallback path doesn't accumulate observers.
     private var stateCollectorJob: Job? = null
 
-    // Connection (public for gesture command sending)
+    // Connection (public for gesture command sending).
+    // @Volatile: written from Dispatchers.IO (connect/disconnect coroutines)
+    // and read from Main (gesture send, UI status) and from JSch/TermuxBridge
+    // worker threads (listener callbacks).
+    @Volatile
     var connection: SSHConnection? = null
 
     // Issue #163 — this tab's own ChannelShell (or ChannelExec if the
@@ -45,15 +49,21 @@ class SSHTab(
     // close-on-tab-disconnect route through this rather than the
     // connection-level shellChannel pointer, so opening the same profile
     // in multiple tabs no longer makes them share one stream.
+    // @Volatile: written from Dispatchers.IO (connect path), read from Main
+    // (resize/PTY size), and cleared from disconnect() that may be invoked
+    // from either thread.
+    @Volatile
     private var ownChannel: com.jcraft.jsch.Channel? = null
 
     // Wave 2.3 — telnet alternative. Only one of `connection` / `telnetConnection`
     // is set; gesture command sending and clean disconnect both check both.
+    @Volatile
     var telnetConnection: io.github.tabssh.ssh.connection.TelnetConnection? = null
 
     // Wave 9.2 — bundled native mosh-client session. Lives in parallel to
     // (or in place of) the SSH session; mosh-server detaches from its
     // bootstrap SSH and roams independently after start.
+    @Volatile
     var moshSession: io.github.tabssh.protocols.mosh.MoshNativeClient.Session? = null
 
     // Tab state
@@ -87,9 +97,15 @@ class SSHTab(
     var tabIndex: Int = 0
         internal set
 
-    // Session statistics
+    // Session statistics.
+    // @Volatile: bytesReceived/bytesSent are incremented from TermuxBridge's
+    // IO read loop and read from Main (status bar). sessionStartTime is set
+    // from connect-success on IO and read from Main.
+    @Volatile
     private var sessionStartTime: Long = 0
+    @Volatile
     private var bytesReceived: Long = 0
+    @Volatile
     private var bytesSent: Long = 0
 
     // Session recording
