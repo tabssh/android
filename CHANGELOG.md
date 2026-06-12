@@ -36,6 +36,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Data wiped on app update** — removed `fallbackToDestructiveMigration()` from the Room database builder; future app updates will no longer silently destroy saved connections, SSH keys, and settings; any future schema change must supply a proper `Migration` object
+
 - **URL detection matched trailing punctuation** — URLs followed by `.`, `,`, `)`, `]`, `'`, `"`, `;`, `:`, `!`, or `?` (as in normal prose) incorrectly included those characters in the matched URL; a trailing-strip pass now removes them
 - **URL detection joined unrelated lines** — the word-wrap cross-row URL join (for URLs that split at a terminal column boundary) fired even on rows that ended with a hard newline; for VM console sessions the new `TerminalBuffer.isRowWrapped()` flag is now consulted so only genuinely soft-wrapped rows are joined; for SSH sessions the Termux library's `'\n'`-at-hard-newline behaviour already prevents a false match in the combined text
 - **URL detection missed common schemes** — `ftp://`, `ftps://`, `ssh://`, `git://`, `svn://`, `file://` were not matched; all are now included

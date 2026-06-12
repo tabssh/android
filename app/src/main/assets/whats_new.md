@@ -1,5 +1,13 @@
 # What's New
 
+## Wave 46 — Your data is safe across updates
+
+Connections, SSH keys, themes, snippets, and all other saved data now survive
+app updates. A long-standing bug caused the app to wipe and recreate its
+database whenever it detected a version mismatch — instead of migrating your
+data forward. That bug is fixed; going forward updates will never erase your
+configuration.
+
 ## Wave 45 — Paste into vim actually works
 
 Pasting text into the terminal now behaves correctly in vim, nano, and any

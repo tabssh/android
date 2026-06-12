@@ -12,8 +12,9 @@ import io.github.tabssh.utils.logging.Logger
 /**
  * Main Room database for TabSSH.
  *
- * Pre-release: version is 1. No migration chain — any existing alpha install
- * is wiped via fallbackToDestructiveMigration().
+ * Current version: 3 (all alpha installs were reset at v3; data is now preserved across updates).
+ * Every future version bump MUST include a corresponding Migration object
+ * registered via addMigrations() — do NOT add fallbackToDestructiveMigration.
  */
 @Database(
     entities = [
@@ -77,7 +78,6 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     DATABASE_NAME
                 )
                 .addCallback(DatabaseCallback())
-                .fallbackToDestructiveMigration()
                 .build()
                 INSTANCE = instance
                 instance
