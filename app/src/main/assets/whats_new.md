@@ -1,5 +1,14 @@
 # What's New
 
+## Wave 42 — Copy text now handles word-wrapped lines correctly
+
+When you copy the screen content from a terminal session, long lines that
+wrapped visually at the edge of the screen are now joined back into a single
+logical line instead of being split at the column boundary. This affects both
+SSH sessions and VM console sessions (Proxmox serial / Libvirt console).
+
+---
+
 ## Wave 41 — VM power actions now always work
 
 The Stop button used to silently do nothing on Proxmox, OCI, and Libvirt / KVM

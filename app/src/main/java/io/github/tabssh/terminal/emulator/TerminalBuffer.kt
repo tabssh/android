@@ -26,6 +26,12 @@ class TerminalBuffer(
 ) {
 
     private var screen = Array(rows) { Array(cols) { TerminalChar(' ', 7, 0, false, false, false) } }
+
+    // Per-row soft-wrap flag.  true = this row ends with an auto-wrap (the line
+    // continues on the next row); false = this row ends with a hard newline or is
+    // the last row.  Used by getScreenContent() to decide whether to insert '\n'.
+    private var rowWrapped = BooleanArray(rows)
+
     private val scrollback = mutableListOf<Array<TerminalChar>>()
     private var cursorX = 0
     private var cursorY = 0
@@ -76,14 +82,16 @@ class TerminalBuffer(
     fun scrollUp() {
         // Move first line to scrollback
         scrollback.add(screen[0].copyOf())
-        
-        // Shift all lines up
+
+        // Shift all lines up, carrying wrap flags with them
         for (i in 1 until rows) {
             screen[i - 1] = screen[i]
+            rowWrapped[i - 1] = rowWrapped[i]
         }
-        
-        // Clear last line
+
+        // Clear last line and its wrap flag
         screen[rows - 1] = Array(cols) { TerminalChar(' ', 7, 0, false, false, false) }
+        rowWrapped[rows - 1] = false
         
         // Limit scrollback size based on preference
         if (maxScrollbackLines != -1 && scrollback.size > maxScrollbackLines) {
@@ -110,6 +118,7 @@ class TerminalBuffer(
                 screen[row][col] = TerminalChar(' ', 7, 0, false, false, false)
             }
         }
+        rowWrapped.fill(false)
         cursorX = 0
         cursorY = 0
     }
@@ -178,8 +187,10 @@ class TerminalBuffer(
         if (row in 0 until rows) {
             for (i in rows - 1 downTo row + 1) {
                 screen[i] = screen[i - 1]
+                rowWrapped[i] = rowWrapped[i - 1]
             }
             screen[row] = Array(cols) { TerminalChar(' ', 7, 0, false, false, false) }
+            rowWrapped[row] = false
         }
     }
 
@@ -187,8 +198,10 @@ class TerminalBuffer(
         if (row in 0 until rows) {
             for (i in row until rows - 1) {
                 screen[i] = screen[i + 1]
+                rowWrapped[i] = rowWrapped[i + 1]
             }
             screen[rows - 1] = Array(cols) { TerminalChar(' ', 7, 0, false, false, false) }
+            rowWrapped[rows - 1] = false
         }
     }
 
@@ -242,6 +255,9 @@ class TerminalBuffer(
     fun getCursorRow(): Int = cursorY
     fun getCursorCol(): Int = cursorX
 
+    /** Returns true if [row] soft-wraps into the next row (auto-wrap, no hard newline). */
+    fun isRowWrapped(row: Int): Boolean = row in 0 until rows && rowWrapped[row]
+
     fun saveCursor() {
         savedCursorX = cursorX
         savedCursorY = cursorY
@@ -262,17 +278,20 @@ class TerminalBuffer(
 
     fun resize(newRows: Int, newCols: Int) {
         val oldScreen = screen
+        val oldRowWrapped = rowWrapped
         rows = newRows
         cols = newCols
         screen = Array(rows) { Array(cols) { TerminalChar(' ', 7, 0, false, false, false) } }
+        rowWrapped = BooleanArray(rows)
 
-        // Copy existing content
+        // Copy existing content and wrap flags
         val copyRows = minOf(oldScreen.size, rows)
         for (r in 0 until copyRows) {
             val copyCols = minOf(oldScreen[r].size, cols)
             for (c in 0 until copyCols) {
                 screen[r][c] = oldScreen[r][c]
             }
+            rowWrapped[r] = oldRowWrapped.getOrElse(r) { false }
         }
 
         // Adjust cursor position
@@ -363,6 +382,8 @@ class TerminalBuffer(
     fun writeChar(ch: Char) {
         when (ch) {
             '\n' -> {
+                // Hard newline — the current row is NOT soft-wrapped
+                rowWrapped[cursorY] = false
                 cursorY++
                 if (cursorY >= rows) {
                     scrollUp()
@@ -392,6 +413,8 @@ class TerminalBuffer(
                     )
                     cursorX++
                     if (cursorX >= cols && wrapMode) {
+                        // Mark this row as soft-wrapped before advancing to the next
+                        rowWrapped[cursorY] = true
                         cursorX = 0
                         cursorY++
                         if (cursorY >= rows) {

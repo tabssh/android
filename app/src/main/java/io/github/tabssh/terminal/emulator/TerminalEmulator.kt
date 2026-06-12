@@ -165,17 +165,23 @@ class TerminalEmulator(private val buffer: TerminalBuffer) {
     }
 
     /**
-     * Get screen content as string
+     * Get screen content as string.
+     * Rows that soft-wrapped (auto-wrap at column boundary) are joined to the
+     * next row without a newline so that the logical line is reconstructed
+     * correctly.  Only rows that end with a hard newline (or the last row)
+     * receive a '\n'.
      */
     fun getScreenContent(): String {
         val sb = StringBuilder()
-        for (row in 0 until getRows()) {
-            val line = buffer.getLine(row)
-            if (line != null) {
-                for (cell in line) {
-                    sb.append(cell.char)
-                }
-                if (row < getRows() - 1) sb.append('\n')
+        val rows = getRows()
+        for (row in 0 until rows) {
+            val line = buffer.getLine(row) ?: continue
+            for (cell in line) {
+                sb.append(cell.char)
+            }
+            // Only append a newline when the row was NOT soft-wrapped into the next
+            if (!buffer.isRowWrapped(row) && row < rows - 1) {
+                sb.append('\n')
             }
         }
         return sb.toString()

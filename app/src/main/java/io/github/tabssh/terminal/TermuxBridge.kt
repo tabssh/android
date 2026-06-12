@@ -593,25 +593,20 @@ class TermuxBridge(
     }
 
     /**
-     * Get screen content as text
+     * Get screen content as text.
+     *
+     * Uses a single getSelectedText span covering the full visible screen so
+     * that the Termux library's mLineWrap flags are respected — wrapped rows
+     * do NOT get a spurious '\n' at their visual break point, matching what
+     * the user sees on screen. A row-by-row loop with per-row '\n' injection
+     * would produce broken output for any line wider than the terminal width.
      */
     fun getScreenContent(): String {
         val screen = emulator?.screen ?: return ""
         val rows = currentRows
         val cols = currentColumns
-        // Extract one row at a time, not one cell — the old per-cell
-        // loop allocated `rows * cols` Strings (1920 for 80x24) every
-        // call and the result was identical. getSelectedText is
-        // O(width) per call so per-row is O(rows*cols), per-cell was
-        // O(rows*cols^2).
-        val sb = StringBuilder(rows * (cols + 1))
         return try {
-            for (row in 0 until rows) {
-                val line = screen.getSelectedText(0, row, cols, row) ?: ""
-                sb.append(line)
-                if (row < rows - 1) sb.append('\n')
-            }
-            sb.toString()
+            screen.getSelectedText(0, 0, cols, rows - 1) ?: ""
         } catch (e: Exception) {
             Logger.w(TAG, "Error getting screen content", e)
             ""
