@@ -27,14 +27,11 @@ import com.google.android.material.textfield.TextInputLayout
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.cloud.CloudProviderType
-import io.github.tabssh.cloud.ImportCandidate
 import io.github.tabssh.cloud.newClient
 import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.databinding.ItemCloudAccountBinding
-import io.github.tabssh.storage.database.SystemGroupHelper
 import io.github.tabssh.storage.database.entities.CloudAccount
 import io.github.tabssh.ui.activities.CloudAccountManagerActivity
-import io.github.tabssh.ui.activities.TabTerminalActivity
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -560,6 +557,11 @@ class CloudAccountsFragment : Fragment() {
         }
     }
 
+    /**
+     * Fetches the live instance count from the provider and updates the account
+     * row's lastRefreshAt / lastCount metadata. Browsing and connecting to
+     * instances happens exclusively inside CloudAccountManagerActivity (tap the row).
+     */
     private fun refreshAccount(account: CloudAccount) {
         if (!isAdded) return
         Toast.makeText(requireContext(), "Refreshing ${account.name}…", Toast.LENGTH_SHORT).show()
@@ -578,13 +580,14 @@ class CloudAccountsFragment : Fragment() {
                 Toast.makeText(requireContext(), "Unknown provider: ${account.provider}", Toast.LENGTH_LONG).show()
                 return@launch
             }
-            val provider = providerType.newClient()
-            val candidates = try {
-                withContext(Dispatchers.IO) { provider.fetchInventory(token, account.name) }
+            val count = try {
+                withContext(Dispatchers.IO) {
+                    providerType.newClient().fetchInventory(token, account.name).size
+                }
             } catch (e: Exception) {
                 Logger.e(TAG, "Inventory fetch failed", e)
                 if (!isAdded) return@launch
-                Toast.makeText(requireContext(), "Refresh failed: cloud ${account.name}: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(requireContext(), "Refresh failed: ${e.message}", Toast.LENGTH_LONG).show()
                 return@launch
             }
             try {
@@ -592,117 +595,17 @@ class CloudAccountsFragment : Fragment() {
                     app.database.cloudAccountDao().update(
                         account.copy(
                             lastRefreshAt = System.currentTimeMillis(),
-                            lastCount = candidates.size
+                            lastCount     = count
                         )
                     )
                 }
             } catch (_: Exception) {}
             if (!isAdded) return@launch
-            showImportPicker(account, candidates)
-        }
-    }
-
-    private fun showImportPicker(account: CloudAccount, candidates: List<ImportCandidate>) {
-        if (!isAdded) return
-        if (candidates.isEmpty()) {
-            Toast.makeText(requireContext(), "${account.name}: 0 hosts found", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val labels  = candidates.map { "${it.profile.getDisplayName()} (${it.sourceLabel})" }.toTypedArray()
-        val checked = BooleanArray(candidates.size) { true }
-        AlertDialog.Builder(requireContext())
-            .setTitle("${account.name}: pick to import (${candidates.size})")
-            .setMultiChoiceItems(labels, checked) { _, idx, isChecked -> checked[idx] = isChecked }
-            .setPositiveButton("Import") { _, _ ->
-                importPicked(candidates.filterIndexed { i, _ -> checked[i] })
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    private fun importPicked(picked: List<ImportCandidate>) {
-        if (picked.isEmpty()) return
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val (inserted, updated) = withContext(Dispatchers.IO) {
-                    val existing = app.database.connectionDao().getAllConnectionsList()
-                    var ins = 0
-                    var upd = 0
-                    val cloudGroupId = SystemGroupHelper.getOrCreateSystemGroupId(
-                        app.database, "cloud", "Cloud Instances", "cloud"
-                    )
-                    for (cand in picked) {
-                        val src   = extractCloudSource(cand.profile.advancedSettings)
-                        val match = existing.firstOrNull { e ->
-                            e.host     == cand.profile.host     &&
-                            e.port     == cand.profile.port     &&
-                            e.username == cand.profile.username &&
-                            extractCloudSource(e.advancedSettings) == src
-                        }
-                        if (match != null) {
-                            app.database.connectionDao().updateConnection(
-                                match.copy(
-                                    name             = cand.profile.name,
-                                    advancedSettings = cand.profile.advancedSettings,
-                                    groupId          = cloudGroupId,
-                                    modifiedAt       = System.currentTimeMillis()
-                                )
-                            )
-                            upd++
-                        } else {
-                            app.database.connectionDao().insertConnection(
-                                cand.profile.copy(groupId = cloudGroupId)
-                            )
-                            ins++
-                        }
-                    }
-                    ins to upd
-                }
-                if (!isAdded) return@launch
-                Toast.makeText(
-                    requireContext(),
-                    "Inserted $inserted, updated $updated",
-                    Toast.LENGTH_SHORT
-                ).show()
-            } catch (e: Exception) {
-                Logger.e(TAG, "Bulk insert/update failed", e)
-                if (!isAdded) return@launch
-                Toast.makeText(requireContext(), "Import failed: ${e.message}", Toast.LENGTH_LONG).show()
-            }
-        }
-    }
-
-    private fun showAccountHosts(account: CloudAccount) {
-        if (!isAdded) return
-        viewLifecycleOwner.lifecycleScope.launch {
-            val allConnections = withContext(Dispatchers.IO) {
-                app.database.connectionDao().getAllConnectionsList()
-            }
-            if (!isAdded) return@launch
-            val accountSource = "${account.provider}:${account.name}"
-            val hosts = allConnections.filter { conn ->
-                extractCloudSource(conn.advancedSettings) == accountSource
-            }
-            if (hosts.isEmpty()) {
-                AlertDialog.Builder(requireContext())
-                    .setTitle(account.name)
-                    .setMessage("No hosts imported yet. Use the refresh button to fetch and import hosts.")
-                    .setPositiveButton("OK", null)
-                    .show()
-                return@launch
-            }
-            val labels = hosts.map { "${it.getDisplayName()}  –  ${it.host}:${it.port}" }.toTypedArray()
-            AlertDialog.Builder(requireContext())
-                .setTitle("${account.name} · ${hosts.size} host${if (hosts.size == 1) "" else "s"}")
-                .setItems(labels) { _, idx ->
-                    startActivity(
-                        TabTerminalActivity.createIntent(
-                            requireContext(), hosts[idx], autoConnect = true
-                        )
-                    )
-                }
-                .setNegativeButton("Close", null)
-                .show()
+            Toast.makeText(
+                requireContext(),
+                "${account.name}: $count instance${if (count == 1) "" else "s"}",
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
 
@@ -710,7 +613,7 @@ class CloudAccountsFragment : Fragment() {
         if (!isAdded) return
         AlertDialog.Builder(requireContext())
             .setTitle("Delete ${account.name}?")
-            .setMessage("Removes this cloud account record and its stored token. Imported connections stay.")
+            .setMessage("Removes this cloud account record and its stored token.")
             .setPositiveButton("Delete") { _, _ ->
                 viewLifecycleOwner.lifecycleScope.launch {
                     try {
@@ -855,14 +758,6 @@ class CloudAccountsFragment : Fragment() {
             values[key] = value
         }
         return values.ifEmpty { null }
-    }
-
-    /** Pull the cloud_source field out of the advancedSettings JSON, or null. */
-    private fun extractCloudSource(advanced: String?): String? {
-        if (advanced.isNullOrBlank()) return null
-        return try {
-            org.json.JSONObject(advanced).optString("cloud_source").takeIf { it.isNotBlank() }
-        } catch (_: Exception) { null }
     }
 
 }
