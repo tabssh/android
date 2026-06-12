@@ -18,7 +18,7 @@
             android:orientation="vertical"
             android:paddingBottom="@dimen/space_xxl">
 
-            <!-- ── Host Identities section ── -->
+            <!-- ── 1. Host Identities ── -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -99,169 +99,7 @@
                 android:layout_marginTop="@dimen/space_sm"
                 android:background="?attr/colorOutlineVariant" />
 
-            <!-- ── Virtualization Identities section ── -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingStart="@dimen/space_md"
-                android:paddingEnd="@dimen/space_sm"
-                android:paddingTop="@dimen/space_md"
-                android:paddingBottom="@dimen/space_sm"
-                android:background="?attr/colorSurfaceVariant">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="🖥️"
-                    android:textSize="20sp"
-                    android:layout_marginEnd="@dimen/space_sm" />
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Virtualization Identities"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
-                        android:textColor="?attr/colorOnSurface" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="Credentials for Proxmox, VMware, XCP-ng, and OCI"
-                        android:textSize="12sp"
-                        android:textColor="?attr/colorOnSurfaceVariant" />
-
-                </LinearLayout>
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_add_virt_identity"
-                    style="@style/Widget.Material3.Button.IconButton"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:contentDescription="Add virtualization identity"
-                    app:icon="@android:drawable/ic_input_add" />
-
-            </LinearLayout>
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/recycler_virt_identities"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:nestedScrollingEnabled="false"
-                android:clipToPadding="false"
-                android:paddingStart="@dimen/space_sm"
-                android:paddingEnd="@dimen/space_sm"
-                android:paddingTop="@dimen/space_xs"
-                android:paddingBottom="@dimen/space_xs" />
-
-            <TextView
-                android:id="@+id/text_virt_identities_empty"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="No virtualization identities yet — tap + to create one"
-                android:textSize="13sp"
-                android:textColor="?attr/colorOnSurfaceVariant"
-                android:gravity="center"
-                android:paddingTop="@dimen/space_md"
-                android:paddingBottom="@dimen/space_md"
-                android:visibility="gone" />
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:layout_marginTop="@dimen/space_sm"
-                android:background="?attr/colorOutlineVariant" />
-
-            <!-- ── VNC Identities section ── -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingStart="@dimen/space_md"
-                android:paddingEnd="@dimen/space_sm"
-                android:paddingTop="@dimen/space_md"
-                android:paddingBottom="@dimen/space_sm"
-                android:background="?attr/colorSurfaceVariant">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="🖵"
-                    android:textSize="20sp"
-                    android:layout_marginEnd="@dimen/space_sm" />
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="VNC Identities"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
-                        android:textColor="?attr/colorOnSurface" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="Credentials for direct VNC and VeNCrypt connections"
-                        android:textSize="12sp"
-                        android:textColor="?attr/colorOnSurfaceVariant" />
-
-                </LinearLayout>
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_add_vnc_identity"
-                    style="@style/Widget.Material3.Button.IconButton"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:contentDescription="Add VNC identity"
-                    app:icon="@android:drawable/ic_input_add" />
-
-            </LinearLayout>
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/recycler_vnc_identities"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:nestedScrollingEnabled="false"
-                android:clipToPadding="false"
-                android:paddingStart="@dimen/space_sm"
-                android:paddingEnd="@dimen/space_sm"
-                android:paddingTop="@dimen/space_xs"
-                android:paddingBottom="@dimen/space_xs" />
-
-            <TextView
-                android:id="@+id/text_vnc_identities_empty"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="No VNC identities yet — tap + to create one"
-                android:textSize="13sp"
-                android:textColor="?attr/colorOnSurfaceVariant"
-                android:gravity="center"
-                android:paddingTop="@dimen/space_md"
-                android:paddingBottom="@dimen/space_md"
-                android:visibility="gone" />
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:layout_marginTop="@dimen/space_sm"
-                android:background="?attr/colorOutlineVariant" />
-
-            <!-- ── SSH Keys section ── -->
+            <!-- ── 2. SSH Keys ── -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -329,6 +167,168 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="No SSH keys yet — tap + to import or generate one"
+                android:textSize="13sp"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:gravity="center"
+                android:paddingTop="@dimen/space_md"
+                android:paddingBottom="@dimen/space_md"
+                android:visibility="gone" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="@dimen/space_sm"
+                android:background="?attr/colorOutlineVariant" />
+
+            <!-- ── 3. VM Credentials ── -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="@dimen/space_md"
+                android:paddingEnd="@dimen/space_sm"
+                android:paddingTop="@dimen/space_md"
+                android:paddingBottom="@dimen/space_sm"
+                android:background="?attr/colorSurfaceVariant">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🖥️"
+                    android:textSize="20sp"
+                    android:layout_marginEnd="@dimen/space_sm" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="VM Credentials"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:textColor="?attr/colorOnSurface" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Login credentials for Proxmox, VMware, and XCP-ng"
+                        android:textSize="12sp"
+                        android:textColor="?attr/colorOnSurfaceVariant" />
+
+                </LinearLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_add_virt_identity"
+                    style="@style/Widget.Material3.Button.IconButton"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:contentDescription="Add VM credential"
+                    app:icon="@android:drawable/ic_input_add" />
+
+            </LinearLayout>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/recycler_virt_identities"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:nestedScrollingEnabled="false"
+                android:clipToPadding="false"
+                android:paddingStart="@dimen/space_sm"
+                android:paddingEnd="@dimen/space_sm"
+                android:paddingTop="@dimen/space_xs"
+                android:paddingBottom="@dimen/space_xs" />
+
+            <TextView
+                android:id="@+id/text_virt_identities_empty"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="No VM credentials yet — tap + to create one"
+                android:textSize="13sp"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:gravity="center"
+                android:paddingTop="@dimen/space_md"
+                android:paddingBottom="@dimen/space_md"
+                android:visibility="gone" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="@dimen/space_sm"
+                android:background="?attr/colorOutlineVariant" />
+
+            <!-- ── 4. VNC Identities ── -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="@dimen/space_md"
+                android:paddingEnd="@dimen/space_sm"
+                android:paddingTop="@dimen/space_md"
+                android:paddingBottom="@dimen/space_sm"
+                android:background="?attr/colorSurfaceVariant">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🖵"
+                    android:textSize="20sp"
+                    android:layout_marginEnd="@dimen/space_sm" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="VNC Identities"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:textColor="?attr/colorOnSurface" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Credentials for direct VNC and VeNCrypt connections"
+                        android:textSize="12sp"
+                        android:textColor="?attr/colorOnSurfaceVariant" />
+
+                </LinearLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_add_vnc_identity"
+                    style="@style/Widget.Material3.Button.IconButton"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:contentDescription="Add VNC identity"
+                    app:icon="@android:drawable/ic_input_add" />
+
+            </LinearLayout>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/recycler_vnc_identities"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:nestedScrollingEnabled="false"
+                android:clipToPadding="false"
+                android:paddingStart="@dimen/space_sm"
+                android:paddingEnd="@dimen/space_sm"
+                android:paddingTop="@dimen/space_xs"
+                android:paddingBottom="@dimen/space_xs" />
+
+            <TextView
+                android:id="@+id/text_vnc_identities_empty"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="No VNC identities yet — tap + to create one"
                 android:textSize="13sp"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:gravity="center"

@@ -1,5 +1,19 @@
 # What's New
 
+## Wave 40 — Identities tab clean-up
+
+The Identities screen has been reorganised and polished:
+
+- **New order** — Host Identities → SSH Keys → VM Credentials → VNC Identities;
+  the most-used sections are now at the top
+- **VM Credentials** — the former "Virtualization Identities" section is renamed
+  and trimmed to Proxmox / VMware / XCP-ng only; OCI API-key credentials live
+  exclusively in the OCI wizard now
+- **VNC identity dialog** — the add/edit form now uses the same Material text
+  fields as the rest of the app, with a proper password visibility toggle
+
+---
+
 ## Wave 39 — Stability fix: database crash on first launch after update
 
 Fixes a crash on startup ("Room cannot verify the data integrity") that

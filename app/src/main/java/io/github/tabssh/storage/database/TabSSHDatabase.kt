@@ -77,7 +77,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
                     DATABASE_NAME
                 )
                 .addCallback(DatabaseCallback())
-                .fallbackToDestructiveMigration(dropAllTables = true)
+                .fallbackToDestructiveMigration()
                 .build()
                 INSTANCE = instance
                 instance

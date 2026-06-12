@@ -21,13 +21,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - **Full preference sync and backup** — connection defaults, sync toggles, multiplexer key bindings, accessibility flags, and proxy configuration are now included in both SAF sync and backup/restore; previously these five categories were silently absent from both systems
 
+### Changed
+
+- **Identities tab reordered** — sections now appear as: Host Identities → SSH Keys → VM Credentials → VNC Identities; the former "Virtualization Identities" section is renamed "VM Credentials" with a shorter subtitle
+- **OCI accounts removed from Identities tab** — OCI API-key credentials are managed exclusively through the dedicated OCI wizard; they are filtered from the VM Credentials list and the create/edit dialog no longer offers an OCI option
+- **VNC identity dialog uses Material TextInputLayout** — replaced the programmatic plain-`EditText` dialog with a proper `TextInputLayout` form matching the rest of the app; password field gains visibility toggle and correct mask/replace behaviour
+
 ### Fixed
 
 - **Identity picker didn't show selection in Connections → Edit host → Identity** — `MaterialAutoCompleteTextView` requires an explicit `setText(item, false)` call in the item-click listener to display the selected item; the SSH identity listener was missing this call (the VNC listener already had it); added to the SSH path so tapping an identity name now visually sticks in the field
 - **Group long-press menu lacked "Bulk edit all hosts"** — the three-item context menu (Rename / Delete / Collapse All) now has "Bulk edit all hosts in this group" as the first entry, wiring directly into the existing `showBulkEditDialog` path
 - **"Create Paste" bottom sheet clipped off-screen on mobile** — `ReportIssueDialog` built a plain `LinearLayout` with no scrolling; on small screens the action buttons were out of reach; wrapped the root in a `NestedScrollView` and added `onViewCreated` to force `STATE_EXPANDED` + sensible peek height at show time
 
-- **Room DB crash on upgrade ("cannot verify data integrity")** — bumped database version to 3 and switched to `fallbackToDestructiveMigration(dropAllTables = true)` (the Room 2.6.x explicit form); devices where the DB was already at version 2 with the old schema never triggered `onUpgrade` on the previous bump, so the hash mismatch persisted; this bump forces `onUpgrade(2→3)` regardless of intermediate state
+- **Room DB crash on upgrade ("cannot verify data integrity")** — bumped database version to 3; devices where the DB was already at version 2 with the old schema never triggered `onUpgrade` on the previous bump, so the hash mismatch persisted; this bump forces `onUpgrade(2→3)` regardless of intermediate state
 
 - **Mosh connection lost lastlog/MOTD** — when Mosh was enabled, the SSH shell channel opened briefly (printing lastlog/MOTD), then got ripped out and replaced by mosh-client, which syncs to the current terminal state and doesn't replay scrollback; fixed by bootstrapping `mosh-server` before opening any shell channel so `mosh-server`'s own login shell is the only one and its output is visible
 

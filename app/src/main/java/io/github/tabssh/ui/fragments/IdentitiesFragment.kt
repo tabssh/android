@@ -10,7 +10,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
-import android.widget.RadioGroup
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -30,8 +29,6 @@ import io.github.tabssh.crypto.keys.ImportResult
 import io.github.tabssh.crypto.keys.KeyType
 import io.github.tabssh.crypto.storage.HypervisorPasswordStore
 import io.github.tabssh.crypto.storage.SecurePasswordManager
-import io.github.tabssh.hypervisor.oci.OciConfigParser
-import io.github.tabssh.hypervisor.oci.OciConfigProfile
 import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.crypto.SSHKeyGenerator
 import io.github.tabssh.ssh.connection.SSHConnection
@@ -53,11 +50,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Unified credentials screen — three sections on one scrollable page:
+ * Unified credentials screen — four sections on one scrollable page:
  *
- *   1. Host Identities      — SSH auth credential sets (username + auth method)
- *   2. Virtualization Identities — Hypervisor REST credentials (Proxmox/VMware/XCP-ng/OCI)
- *   3. SSH Keys             — Raw private keys used by host identities
+ *   1. Host Identities  — SSH auth credential sets (username + auth method)
+ *   2. SSH Keys         — Raw private keys used by host identities
+ *   3. VM Credentials   — Hypervisor login credentials (Proxmox / VMware / XCP-ng)
+ *   4. VNC Identities   — Credentials for direct VNC and VeNCrypt connections
  */
 class IdentitiesFragment : Fragment() {
 
@@ -133,66 +131,6 @@ class IdentitiesFragment : Fragment() {
         }
     }
 
-    /** Opens a file picker for an OCI PEM private key in the virt identity dialog. */
-    private val ociPemLauncher = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        uri ?: return@registerForActivityResult
-        // Capture context on the Main thread before switching to IO
-        val ctx = context ?: return@registerForActivityResult
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                val text = ctx.contentResolver
-                    .openInputStream(uri)?.bufferedReader()?.use { it.readText() }?.trim().orEmpty()
-                withContext(Dispatchers.Main) {
-                    if (!isAdded) return@withContext
-                    ociDialogPem = text
-                    ociDialogPemCallback?.invoke(text)
-                }
-            } catch (e: Exception) {
-                Logger.e(TAG, "Failed to read PEM file", e)
-                withContext(Dispatchers.Main) {
-                    if (!isAdded) return@withContext
-                    Toast.makeText(requireContext(), "Failed to read PEM file: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-    }
-
-    /** Opens a file picker for an OCI ~/.oci/config in the virt identity dialog. */
-    private val ociConfigLauncher = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        uri ?: return@registerForActivityResult
-        // Capture context on the Main thread before switching to IO
-        val ctx = context ?: return@registerForActivityResult
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                val text = ctx.contentResolver
-                    .openInputStream(uri)?.bufferedReader()?.use { it.readText() }.orEmpty()
-                val profiles = OciConfigParser.parse(text).filter { !it.usesSessionToken }
-                withContext(Dispatchers.Main) {
-                    if (!isAdded) return@withContext
-                    when {
-                        profiles.isEmpty() -> Toast.makeText(
-                            requireContext(),
-                            "No API-key profiles found in that config (session-token profiles are not supported)",
-                            Toast.LENGTH_LONG
-                        ).show()
-                        profiles.size == 1 -> ociDialogConfigCallback?.invoke(profiles[0])
-                        else -> showOciProfilePickerDialog(profiles)
-                    }
-                }
-            } catch (e: Exception) {
-                Logger.e(TAG, "Failed to read OCI config file", e)
-                withContext(Dispatchers.Main) {
-                    if (!isAdded) return@withContext
-                    Toast.makeText(requireContext(), "Failed to read .oci/config: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-    }
-
     // ── State bridging SAF results back to dialog callbacks ──────────────────
 
     /** The key currently awaiting a certificate file from [attachCertLauncher]. */
@@ -200,22 +138,6 @@ class IdentitiesFragment : Fragment() {
 
     /** Staged private key PEM content waiting for the SAF save dialog from [exportKeyLauncher]. */
     private var pendingExportContent: String? = null
-
-    /** PEM text staged in the virt identity dialog — reset on each open. */
-    private var ociDialogPem: String = ""
-
-    /**
-     * Callback that updates the dialog's PEM status text when a key is
-     * loaded (paste or file import). Captured from the dialog's closure;
-     * set to null when the dialog closes.
-     */
-    private var ociDialogPemCallback: ((String) -> Unit)? = null
-
-    /**
-     * Callback that populates the dialog's OCI fields from a parsed
-     * profile. Set from the dialog closure; null when not showing.
-     */
-    private var ociDialogConfigCallback: ((OciConfigProfile) -> Unit)? = null
 
     // ── Fragment lifecycle ────────────────────────────────────────────────────
 
@@ -232,9 +154,9 @@ class IdentitiesFragment : Fragment() {
         app = requireActivity().application as TabSSHApplication
 
         setupHostIdentitiesSection(view)
+        setupSshKeysSection(view)
         setupVirtIdentitiesSection(view)
         setupVncIdentitiesSection(view)
-        setupSshKeysSection(view)
         observeData()
     }
 
@@ -316,65 +238,61 @@ class IdentitiesFragment : Fragment() {
 
     private fun showVncIdentityDialog(existing: VncIdentity?) {
         val ctx = requireContext()
-        val isEditing = existing != null
+        val dialogView = LayoutInflater.from(ctx).inflate(R.layout.dialog_edit_vnc_identity, null)
 
-        val dialogView = android.view.LayoutInflater.from(ctx).inflate(
-            android.R.layout.simple_list_item_2, null, false
-        )
-        // Build fields manually since we don't have a dedicated dialog layout
-        val layout = android.widget.LinearLayout(ctx).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(48, 32, 48, 8)
+        val nameInput     = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.edit_name)
+        val usernameInput = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.edit_username)
+        val passwordInput = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.edit_password)
+        val descInput     = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.edit_description)
+
+        existing?.let { id ->
+            nameInput.setText(id.name)
+            usernameInput.setText(id.username ?: "")
+            descInput.setText(id.description ?: "")
         }
-        fun makeEditText(hint: String, value: String? = null, inputType: Int = android.text.InputType.TYPE_CLASS_TEXT): android.widget.EditText {
-            return android.widget.EditText(ctx).apply {
-                this.hint = hint
-                setText(value ?: "")
-                this.inputType = inputType
-                val params = android.widget.LinearLayout.LayoutParams(
-                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
-                )
-                params.bottomMargin = 16
-                layoutParams = params
+        if (existing != null) {
+            lifecycleScope.launch(Dispatchers.IO) {
+                val hasPw = try {
+                    app.securePasswordManager.retrievePassword("vnc_identity_${existing.id}")?.isNotBlank() == true
+                } catch (_: Exception) { false }
+                withContext(Dispatchers.Main) {
+                    if (hasPw) {
+                        passwordInput.setText(PASSWORD_MASK)
+                        passwordInput.hint = "Password set — leave to keep, or type to replace"
+                    }
+                }
             }
         }
-        val editName = makeEditText("Name (required)", existing?.name)
-        val editUsername = makeEditText("Username (for VeNCrypt Plain)", existing?.username)
-        val editDescription = makeEditText("Description", existing?.description)
-        val editPassword = makeEditText(
-            if (isEditing) "Password (blank = keep existing)" else "Password",
-            null,
-            android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-        )
-        layout.addView(editName)
-        layout.addView(editUsername)
-        layout.addView(editDescription)
-        layout.addView(editPassword)
 
         MaterialAlertDialogBuilder(ctx)
-            .setTitle(if (isEditing) "Edit VNC Identity" else "Add VNC Identity")
-            .setView(layout)
+            .setTitle(if (existing == null) "Add VNC Identity" else "Edit VNC Identity")
+            .setView(dialogView)
             .setPositiveButton("Save") { _, _ ->
-                val name = editName.text.toString().trim()
+                val name = nameInput.text.toString().trim()
                 if (name.isBlank()) {
                     Toast.makeText(ctx, "Name is required", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
                 val now = System.currentTimeMillis()
-                val id = existing?.id ?: java.util.UUID.randomUUID().toString()
+                val id  = existing?.id ?: java.util.UUID.randomUUID().toString()
                 val identity = VncIdentity(
-                    id = id,
-                    name = name,
-                    username = editUsername.text.toString().trim().takeIf { it.isNotBlank() },
-                    description = editDescription.text.toString().trim().takeIf { it.isNotBlank() },
-                    createdAt = existing?.createdAt ?: now,
-                    modifiedAt = now
+                    id          = id,
+                    name        = name,
+                    username    = usernameInput.text.toString().trim().takeIf { it.isNotBlank() },
+                    description = descInput.text.toString().trim().takeIf { it.isNotBlank() },
+                    createdAt   = existing?.createdAt ?: now,
+                    modifiedAt  = now
                 )
-                val password = editPassword.text.toString()
+                val password = passwordInput.text.toString()
                 lifecycleScope.launch {
                     withContext(Dispatchers.IO) { app.database.vncIdentityDao().insert(identity) }
-                    if (password.isNotBlank()) {
+                    val shouldSavePassword = when {
+                        password == PASSWORD_MASK -> false
+                        existing == null          -> password.isNotBlank()
+                        password.isNotBlank()     -> true
+                        else                      -> false
+                    }
+                    if (shouldSavePassword) {
                         try {
                             app.securePasswordManager.storePassword(
                                 "vnc_identity_$id",
@@ -497,9 +415,11 @@ class IdentitiesFragment : Fragment() {
                 }
                 launch {
                     app.database.hypervisorAccountDao().getAllAccounts().collect { list ->
-                        virtAdapter.submit(list)
-                        view?.let { updateVirtEmptyState(it, list.size) }
-                        Logger.d(TAG, "Loaded ${list.size} virtualization identities")
+                        // OCI accounts are managed through the dedicated OCI wizard; exclude them here
+                        val vmOnly = list.filter { it.authType != "oci_api_key" }
+                        virtAdapter.submit(vmOnly)
+                        view?.let { updateVirtEmptyState(it, vmOnly.size) }
+                        Logger.d(TAG, "Loaded ${vmOnly.size} VM credentials (${list.size - vmOnly.size} OCI excluded)")
                     }
                 }
                 launch {
@@ -819,149 +739,33 @@ class IdentitiesFragment : Fragment() {
 
     // ─── Virtualization Identity dialogs ────────────────────────────────────
 
-    /**
-     * Show the create / edit dialog for a [HypervisorAccount].
-     * The dialog uses [R.layout.dialog_edit_virt_identity] which has a
-     * RadioGroup type selector at the top: "Password" or "OCI API Key".
-     * The appropriate section is shown / hidden when the user toggles.
-     *
-     * OCI PEM and passphrase are staged in [ociDialogPem] /
-     * [ociDialogPemCallback] / [ociDialogConfigCallback] so the SAF
-     * launchers (field initializers) can deliver results to the dialog
-     * without needing a direct reference to it.
-     */
     private fun showVirtAccountDialog(existing: HypervisorAccount?) {
         val dialogView = LayoutInflater.from(requireContext())
             .inflate(R.layout.dialog_edit_virt_identity, null)
 
-        val radioGroupType = dialogView.findViewById<RadioGroup>(R.id.radio_group_type)
-        val sectionPassword = dialogView.findViewById<View>(R.id.section_password)
-        val sectionOci = dialogView.findViewById<View>(R.id.section_oci)
-        val editName = dialogView.findViewById<TextInputEditText>(R.id.edit_name)
-
-        // Password section
+        val editName     = dialogView.findViewById<TextInputEditText>(R.id.edit_name)
         val editUsername = dialogView.findViewById<TextInputEditText>(R.id.edit_username)
         val editPassword = dialogView.findViewById<TextInputEditText>(R.id.edit_password)
-        val editRealm = dialogView.findViewById<TextInputEditText>(R.id.edit_realm)
+        val editRealm    = dialogView.findViewById<TextInputEditText>(R.id.edit_realm)
 
-        // OCI section
-        val editOciTenancy = dialogView.findViewById<TextInputEditText>(R.id.edit_oci_tenancy)
-        val editOciUser = dialogView.findViewById<TextInputEditText>(R.id.edit_oci_user)
-        val dropdownOciRegion = dialogView.findViewById<AutoCompleteTextView>(R.id.dropdown_oci_region)
-        val editOciFingerprint = dialogView.findViewById<TextInputEditText>(R.id.edit_oci_fingerprint)
-        val editOciCompartment = dialogView.findViewById<TextInputEditText>(R.id.edit_oci_compartment)
-        val buttonPastePem = dialogView.findViewById<MaterialButton>(R.id.button_paste_pem)
-        val buttonImportPem = dialogView.findViewById<MaterialButton>(R.id.button_import_pem)
-        val buttonImportOciConfig = dialogView.findViewById<MaterialButton>(R.id.button_import_oci_config)
-        val textPemStatus = dialogView.findViewById<TextView>(R.id.text_pem_status)
-        val editOciPassphrase = dialogView.findViewById<TextInputEditText>(R.id.edit_oci_passphrase)
-
-        // Seed region autocomplete
-        dropdownOciRegion.setAdapter(
-            ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, REGION_SEED)
-        )
-
-        // Section visibility driven by type radio
-        radioGroupType.setOnCheckedChangeListener { _, checkedId ->
-            sectionPassword.visibility = if (checkedId == R.id.radio_password) View.VISIBLE else View.GONE
-            sectionOci.visibility = if (checkedId == R.id.radio_oci) View.VISIBLE else View.GONE
-        }
-
-        // Reset staged PEM state for this dialog session
-        ociDialogPem = ""
-        ociDialogPemCallback = null
-        ociDialogConfigCallback = null
-
-        // Pre-fill fields if editing
         existing?.let { acc ->
             editName.setText(acc.name)
-            val isOci = acc.authType == "oci_api_key"
-            if (isOci) {
-                dialogView.findViewById<android.widget.RadioButton>(R.id.radio_oci).isChecked = true
-                sectionPassword.visibility = View.GONE
-                sectionOci.visibility = View.VISIBLE
-                editOciTenancy.setText(acc.ociTenancyOcid ?: "")
-                editOciUser.setText(acc.ociUserOcid ?: "")
-                dropdownOciRegion.setText(acc.ociRegion ?: "", false)
-                editOciFingerprint.setText(acc.ociFingerprint ?: "")
-                editOciCompartment.setText(acc.ociCompartmentOcid ?: "")
-                // Load PEM status from Keystore asynchronously — just show
-                // whether a key exists; never surface the PEM itself.
-                lifecycleScope.launch(Dispatchers.IO) {
-                    val hasPem = HypervisorPasswordStore
-                        .retrieveOciAccountKey(requireContext(), acc.id)?.isNotBlank() == true
-                    withContext(Dispatchers.Main) {
-                        if (hasPem) {
-                            textPemStatus.text = "PEM key loaded — choose a new file to replace"
-                            ociDialogPem = EXISTING_PEM_SENTINEL
-                        } else {
-                            textPemStatus.text = "No key loaded"
-                        }
-                    }
-                }
-            } else {
-                editUsername.setText(acc.username)
-                editRealm.setText(acc.realm ?: "")
-                // Show mask if a password is stored, async
-                lifecycleScope.launch(Dispatchers.IO) {
-                    val hasPw = HypervisorPasswordStore
-                        .retrieveAccountPassword(requireContext(), acc.id)?.isNotBlank() == true
-                    withContext(Dispatchers.Main) {
-                        if (hasPw) {
-                            editPassword.setText(PASSWORD_MASK)
-                            editPassword.hint = "Password set — leave to keep, or type to replace"
-                        }
+            editUsername.setText(acc.username)
+            editRealm.setText(acc.realm ?: "")
+            lifecycleScope.launch(Dispatchers.IO) {
+                val hasPw = HypervisorPasswordStore
+                    .retrieveAccountPassword(requireContext(), acc.id)?.isNotBlank() == true
+                withContext(Dispatchers.Main) {
+                    if (hasPw) {
+                        editPassword.setText(PASSWORD_MASK)
+                        editPassword.hint = "Password set — leave to keep, or type to replace"
                     }
                 }
             }
         }
-
-        // Wire up PEM callback — updates status text and stores the PEM
-        ociDialogPemCallback = { pem ->
-            ociDialogPem = pem
-            val looksValid = pem.contains("PRIVATE KEY")
-            textPemStatus.text = if (looksValid)
-                "PEM key loaded (${pem.lines().size} lines)"
-            else
-                "⚠ Doesn't look like a private key — verify format"
-        }
-
-        // Wire up .oci/config profile callback — populates the five OCI fields.
-        // Auto-fills the identity name from the section header (e.g. [DEFAULT] → DEFAULT)
-        // when the name field is blank so the user doesn't have to type it manually.
-        ociDialogConfigCallback = { profile ->
-            if (editName.text.toString().isBlank()) {
-                editName.setText(profile.name)
-            }
-            editOciTenancy.setText(profile.tenancyOcid ?: "")
-            editOciUser.setText(profile.userOcid ?: "")
-            dropdownOciRegion.setText(profile.region ?: "", false)
-            editOciFingerprint.setText(profile.fingerprint ?: "")
-            Toast.makeText(
-                requireContext(),
-                "Profile \"${profile.name}\" imported — add the PEM key separately",
-                Toast.LENGTH_LONG
-            ).show()
-        }
-
-        // PEM paste: try clipboard first; fall back to manual paste dialog
-        buttonPastePem.setOnClickListener {
-            val clipboard = requireContext()
-                .getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-            val clip = clipboard?.primaryClip?.getItemAt(0)
-                ?.coerceToText(requireContext())?.toString().orEmpty()
-            if (clip.contains("PRIVATE KEY")) {
-                ociDialogPemCallback?.invoke(clip)
-                Toast.makeText(requireContext(), "PEM key pasted from clipboard", Toast.LENGTH_SHORT).show()
-            } else {
-                showPasteOciPemDialog()
-            }
-        }
-        buttonImportPem.setOnClickListener { ociPemLauncher.launch(arrayOf("*/*")) }
-        buttonImportOciConfig.setOnClickListener { ociConfigLauncher.launch(arrayOf("*/*")) }
 
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle(if (existing == null) "New Virtualization Identity" else "Edit Identity")
+            .setTitle(if (existing == null) "New VM Credential" else "Edit VM Credential")
             .setView(dialogView)
             .setPositiveButton("Save") { _, _ ->
                 val name = editName.text?.toString()?.trim().orEmpty()
@@ -969,60 +773,14 @@ class IdentitiesFragment : Fragment() {
                     Toast.makeText(requireContext(), "Name is required", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
-                val isOciSelected = radioGroupType.checkedRadioButtonId == R.id.radio_oci
-                if (isOciSelected) {
-                    saveOciAccount(
-                        existing, name,
-                        editOciTenancy, editOciUser, dropdownOciRegion,
-                        editOciFingerprint, editOciCompartment, editOciPassphrase
-                    )
-                } else {
-                    savePasswordAccount(existing, name, editUsername, editPassword, editRealm)
-                }
-            }
-            .setNegativeButton("Cancel") { _, _ ->
-                // Null callbacks so the launchers don't call into a dismissed dialog
-                ociDialogPemCallback = null
-                ociDialogConfigCallback = null
-            }
-            .show()
-    }
-
-    /** Show a multi-line paste dialog for OCI PEM keys. */
-    private fun showPasteOciPemDialog() {
-        val edit = android.widget.EditText(requireContext()).apply {
-            hint = "Paste PEM private key (-----BEGIN … PRIVATE KEY-----)"
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
-            minLines = 6
-            maxLines = 20
-        }
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Paste PEM Private Key")
-            .setView(edit)
-            .setPositiveButton("Use Key") { _, _ ->
-                val pem = edit.text.toString().trim()
-                if (pem.isNotBlank()) ociDialogPemCallback?.invoke(pem)
+                saveVirtAccount(existing, name, editUsername, editPassword, editRealm)
             }
             .setNegativeButton("Cancel", null)
             .show()
     }
 
-    /** Show a profile picker when the .oci/config contains multiple profiles. */
-    private fun showOciProfilePickerDialog(profiles: List<OciConfigProfile>) {
-        val names = profiles.map { p ->
-            p.name + if (!p.isComplete) " (incomplete)" else ""
-        }.toTypedArray()
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Choose OCI Profile")
-            .setItems(names) { _, which ->
-                ociDialogConfigCallback?.invoke(profiles[which])
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    /** Persist a password-type [HypervisorAccount]. */
-    private fun savePasswordAccount(
+    /** Persist a [HypervisorAccount] credential. */
+    private fun saveVirtAccount(
         existing: HypervisorAccount?,
         name: String,
         editUsername: TextInputEditText,
@@ -1070,105 +828,28 @@ class IdentitiesFragment : Fragment() {
         }
     }
 
-    /** Persist an OCI API-key-type [HypervisorAccount]. */
-    private fun saveOciAccount(
-        existing: HypervisorAccount?,
-        name: String,
-        editOciTenancy: TextInputEditText,
-        editOciUser: TextInputEditText,
-        dropdownOciRegion: AutoCompleteTextView,
-        editOciFingerprint: TextInputEditText,
-        editOciCompartment: TextInputEditText,
-        editOciPassphrase: TextInputEditText
-    ) {
-        val tenancy = editOciTenancy.text?.toString()?.trim().orEmpty()
-        val user = editOciUser.text?.toString()?.trim().orEmpty()
-        val region = dropdownOciRegion.text?.toString()?.trim().orEmpty()
-        val fingerprint = editOciFingerprint.text?.toString()?.trim().orEmpty()
-        val compartment = editOciCompartment.text?.toString()?.trim()?.takeIf { it.isNotBlank() }
-        val passphrase = editOciPassphrase.text?.toString().orEmpty()
-
-        if (tenancy.isBlank() || user.isBlank() || region.isBlank() || fingerprint.isBlank()) {
-            Toast.makeText(
-                requireContext(),
-                "Tenancy, User OCID, Region, and Fingerprint are required",
-                Toast.LENGTH_SHORT
-            ).show()
-            return
-        }
-        // Require a PEM key for new accounts; for edits the sentinel means
-        // the existing Keystore key should be kept.
-        if (existing == null && (ociDialogPem.isBlank() || ociDialogPem == EXISTING_PEM_SENTINEL)) {
-            Toast.makeText(requireContext(), "A PEM private key is required", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        lifecycleScope.launch {
-            val savedId: Long = if (existing == null) {
-                app.database.hypervisorAccountDao().insert(
-                    HypervisorAccount(
-                        name = name,
-                        authType = "oci_api_key",
-                        ociTenancyOcid = tenancy,
-                        ociUserOcid = user,
-                        ociRegion = region,
-                        ociFingerprint = fingerprint,
-                        ociCompartmentOcid = compartment
-                    )
-                )
-            } else {
-                app.database.hypervisorAccountDao().update(
-                    existing.copy(
-                        name = name,
-                        ociTenancyOcid = tenancy,
-                        ociUserOcid = user,
-                        ociRegion = region,
-                        ociFingerprint = fingerprint,
-                        ociCompartmentOcid = compartment,
-                        modifiedAt = System.currentTimeMillis()
-                    )
-                )
-                existing.id
-            }
-            // Only replace the stored PEM when a new one was loaded
-            if (ociDialogPem.isNotBlank() && ociDialogPem != EXISTING_PEM_SENTINEL) {
-                HypervisorPasswordStore.storeOciAccountKey(requireContext(), savedId, ociDialogPem)
-            }
-            if (passphrase.isNotEmpty()) {
-                HypervisorPasswordStore.storeOciAccountPassphrase(requireContext(), savedId, passphrase)
-            }
-            Logger.i(TAG, if (existing == null) "Created OCI identity id=$savedId ($name)"
-                          else "Updated OCI identity id=$savedId ($name)")
-        }
-    }
-
     private fun confirmDeleteVirtAccount(account: HypervisorAccount) {
         lifecycleScope.launch {
             val linked = try {
                 app.database.hypervisorDao().getAllList().count { it.accountId == account.id }
             } catch (_: Exception) { 0 }
 
-            val secretLabel = if (account.authType == "oci_api_key") "API key" else "password"
             val message = if (linked > 0) {
                 "$linked hypervisor${if (linked == 1) "" else "s"} still link to \"${account.name}\". " +
                 "Unlink them in their edit screen first."
             } else {
-                "Delete \"${account.name}\"?\n\nThe stored $secretLabel will be cleared from the Keystore."
+                "Delete \"${account.name}\"?\n\nThe stored password will be cleared from the Keystore."
             }
 
             MaterialAlertDialogBuilder(requireContext())
-                .setTitle("Delete Virtualization Identity")
+                .setTitle("Delete VM Credential")
                 .setMessage(message)
                 .setPositiveButton("Delete") { _, _ ->
                     if (linked > 0) return@setPositiveButton
                     lifecycleScope.launch {
                         app.database.hypervisorAccountDao().delete(account)
-                        if (account.authType == "oci_api_key") {
-                            HypervisorPasswordStore.clearOciAccountSecrets(requireContext(), account.id)
-                        } else {
-                            HypervisorPasswordStore.clearAccountPassword(requireContext(), account.id)
-                        }
-                        Logger.i(TAG, "Deleted virt identity id=${account.id} (${account.name})")
+                        HypervisorPasswordStore.clearAccountPassword(requireContext(), account.id)
+                        Logger.i(TAG, "Deleted VM credential id=${account.id} (${account.name})")
                     }
                 }
                 .setNegativeButton("Cancel", null)
@@ -1791,28 +1472,6 @@ class IdentitiesFragment : Fragment() {
 
         /** Displayed in password fields for existing stored credentials. */
         private const val PASSWORD_MASK = "••••••••"
-
-        /**
-         * Sentinel stored in [ociDialogPem] when an edit dialog finds an
-         * existing Keystore key. Signals "leave the stored PEM unchanged".
-         */
-        private const val EXISTING_PEM_SENTINEL = " existing "
-
-        /** Seed list of OCI commercial regions. The AutoCompleteTextView
-         *  allows the user to type a custom one (Oracle adds regions periodically). */
-        private val REGION_SEED = arrayOf(
-            "us-ashburn-1", "us-phoenix-1", "us-chicago-1", "us-sanjose-1",
-            "ca-toronto-1", "ca-montreal-1",
-            "sa-saopaulo-1", "sa-vinhedo-1", "sa-santiago-1",
-            "uk-london-1", "uk-cardiff-1",
-            "eu-frankfurt-1", "eu-amsterdam-1", "eu-zurich-1", "eu-stockholm-1",
-            "eu-marseille-1", "eu-milan-1", "eu-madrid-1", "eu-paris-1",
-            "me-jeddah-1", "me-dubai-1", "me-abudhabi-1",
-            "ap-tokyo-1", "ap-osaka-1", "ap-seoul-1", "ap-sydney-1",
-            "ap-melbourne-1", "ap-mumbai-1", "ap-hyderabad-1", "ap-singapore-1",
-            "af-johannesburg-1", "il-jerusalem-1",
-            "mx-queretaro-1", "mx-monterrey-1"
-        )
 
         fun newInstance() = IdentitiesFragment()
     }
