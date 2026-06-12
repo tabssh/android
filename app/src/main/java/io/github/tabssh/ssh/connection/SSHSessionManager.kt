@@ -261,7 +261,13 @@ class SSHSessionManager(private val context: Context) {
             // Capture the profile BEFORE the connection is removed from the map
             // so the audit-log calls below have stable references.
             val profile = connection.profile
-            connection.disconnect()
+            // Wrap in try-catch: JSch can throw if the socket is already closed
+            // or if a channel was in a partially-torn-down state. The cleanup
+            // below (remove, listeners) MUST run regardless so the notification
+            // clears and the service can stop.
+            try { connection.disconnect() } catch (e: Exception) {
+                Logger.w("SSHSessionManager", "disconnect() threw for $profileId — continuing cleanup", e)
+            }
             activeConnections.remove(profileId)
             connectionPool.remove(profileId) // Also remove from pool
             updateConnectionStates()

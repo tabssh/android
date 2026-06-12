@@ -485,6 +485,19 @@ class SSHTab(
             // moshSession (MoshNativeClient.Session) is not used in the PTY path —
             // the TerminalSession is owned by TermuxBridge.
             moshSession = null
+
+            // Detach from the SSH connection state collector. Keeping it
+            // running would mirror the SSH session's CONNECTED state onto
+            // _connectionState and immediately override the DISCONNECTED
+            // emitted by onSessionFinished when the mosh-client PTY exits
+            // (the SSH session itself may still be alive at that point).
+            // Null connection so getShellExitStatus() correctly falls back
+            // to termuxBridge.moshLastExitCode when the reconnect-dialog
+            // gate runs in TabTerminalActivity.
+            stateCollectorJob?.cancel()
+            stateCollectorJob = null
+            connection = null
+
             _connectionState.value = ConnectionState.CONNECTED
             updateTitleWithStatus(ConnectionState.CONNECTED)
             Logger.i("SSHTab", "=== MOSH TAB WIRED (PTY) for ${profile.getDisplayName()} ===")
