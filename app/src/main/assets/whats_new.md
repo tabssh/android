@@ -1,5 +1,21 @@
 # What's New
 
+## Wave 41 — VM power actions now always work
+
+The Stop button used to silently do nothing on Proxmox, OCI, and Libvirt / KVM
+hosts when the virtual machine's guest agent was absent or unresponsive. All
+three have been switched to hard power-off, which cuts power immediately and
+never gets stuck waiting for the guest OS:
+
+- **Proxmox** — Stop now uses the hard stop API instead of the graceful ACPI
+  shutdown that requires the QEMU guest agent to be installed
+- **OCI** — Stop now uses the hard `STOP` action instead of `SOFTSTOP`; any API
+  error is now reported in the log rather than being silently ignored
+- **Libvirt / KVM** — Stop now calls `virsh destroy` (immediate power-off)
+  instead of `virsh shutdown` (graceful, guest-agent-dependent)
+
+---
+
 ## Wave 40 — Identities tab clean-up
 
 The Identities screen has been reorganised and polished:

@@ -205,7 +205,7 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                 val ok = withContext(Dispatchers.IO) {
                     when (action) {
                         "start"  -> client.startVM(vm.node, vm.vmid, vm.type)
-                        "stop"   -> client.shutdownVM(vm.node, vm.vmid, vm.type)
+                        "stop"   -> client.stopVM(vm.node, vm.vmid, vm.type)
                         "reboot" -> client.rebootVM(vm.node, vm.vmid, vm.type)
                         "reset"  -> client.resetVM(vm.node, vm.vmid, vm.type)
                         else     -> false

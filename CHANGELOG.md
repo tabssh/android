@@ -29,6 +29,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **VM stop button had no effect on Proxmox** — the Stop button was sending `virsh`'s graceful ACPI shutdown signal (`/status/shutdown`), which requires the QEMU guest agent to be installed and responding; changed to `/status/stop` (hard power-off) which always works regardless of guest state
+- **VM stop button had no effect on OCI** — the Stop action was sending `SOFTSTOP` (ACPI graceful), which silently did nothing when the OCI cloud agent was absent or the instance was unresponsive; changed to `STOP` (hard power-off) so the button is always reliable; errors are now logged instead of silently swallowed
+- **VM stop button had no effect on Libvirt / KVM** — the Stop button was calling `virsh shutdown` (graceful, requires guest agent); changed to `virsh destroy` (hard power-off) which cuts power immediately and always succeeds
+
 - **Identity picker didn't show selection in Connections → Edit host → Identity** — `MaterialAutoCompleteTextView` requires an explicit `setText(item, false)` call in the item-click listener to display the selected item; the SSH identity listener was missing this call (the VNC listener already had it); added to the SSH path so tapping an identity name now visually sticks in the field
 - **Group long-press menu lacked "Bulk edit all hosts"** — the three-item context menu (Rename / Delete / Collapse All) now has "Bulk edit all hosts in this group" as the first entry, wiring directly into the existing `showBulkEditDialog` path
 - **"Create Paste" bottom sheet clipped off-screen on mobile** — `ReportIssueDialog` built a plain `LinearLayout` with no scrolling; on small screens the action buttons were out of reach; wrapped the root in a `NestedScrollView` and added `onViewCreated` to force `STATE_EXPANDED` + sensible peek height at show time

@@ -164,9 +164,22 @@ class LibvirtApiClient(
     }
 
     /**
+     * Hard-stop a running domain immediately via `virsh destroy <domain>`.
+     * Equivalent to cutting power — always succeeds regardless of guest agent.
+     * The domain transitions to "shut off" synchronously from libvirt's view.
+     */
+    suspend fun destroyDomain(domain: String) = withContext(Dispatchers.IO) {
+        val output = runCommand("virsh destroy $domain 2>&1").trim()
+        if (output.contains("error:") || output.contains("failed")) {
+            throw LibvirtException("virsh destroy failed: $output")
+        }
+        Logger.i(TAG, "destroyDomain($domain): $output")
+    }
+
+    /**
      * Gracefully shut down a running domain via `virsh shutdown <domain>`.
-     * The domain transitions to "shut off" asynchronously; callers should
-     * poll [listDomains] to confirm.
+     * Requires the guest agent or ACPI support. Prefer [destroyDomain] when
+     * a reliable stop is needed.
      */
     suspend fun shutdownDomain(domain: String) = withContext(Dispatchers.IO) {
         val output = runCommand("virsh shutdown $domain 2>&1").trim()

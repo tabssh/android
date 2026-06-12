@@ -225,10 +225,10 @@ class LibvirtManagerActivity : AppCompatActivity() {
             try {
                 withContext(Dispatchers.IO) {
                     when (action) {
-                        "start"    -> client.startDomain(vm.name)
-                        "shutdown" -> client.shutdownDomain(vm.name)
-                        "reboot"   -> client.rebootDomain(vm.name)
-                        "reset"    -> client.resetDomain(vm.name)
+                        "start"  -> client.startDomain(vm.name)
+                        "stop"   -> client.destroyDomain(vm.name)
+                        "reboot" -> client.rebootDomain(vm.name)
+                        "reset"  -> client.resetDomain(vm.name)
                     }
                 }
                 Toast.makeText(this@LibvirtManagerActivity, "${vm.name}: $action sent", Toast.LENGTH_SHORT).show()
@@ -570,7 +570,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
             holder.btnConsole.setOnClickListener { openConsole(vm, client) }
             holder.btnSsh.setOnClickListener { directSshToVm(vm, client) }
             holder.btnStart.setOnClickListener { powerAction(vm, client, "start") }
-            holder.btnStop.setOnClickListener { powerAction(vm, client, "shutdown") }
+            holder.btnStop.setOnClickListener { powerAction(vm, client, "stop") }
             holder.btnReboot.setOnClickListener { powerAction(vm, client, "reboot") }
             holder.btnReset.setOnClickListener { confirmHardReset(vm, client) }
         }

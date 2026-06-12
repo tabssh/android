@@ -4,6 +4,7 @@ import io.github.tabssh.hypervisor.oci.OciApiClient
 import io.github.tabssh.hypervisor.oci.OciInstanceAction
 import io.github.tabssh.hypervisor.oci.OciKeyMaterial
 import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.utils.logging.Logger
 import org.json.JSONObject
 
 /**
@@ -46,6 +47,10 @@ import org.json.JSONObject
  * [CloudAccountManagerActivity] implements step 3 via `persistOciCloudPin()`.
  */
 class OciCloudClient : CloudProvider {
+
+    companion object {
+        private const val TAG = "OciCloudClient"
+    }
 
     override val type: CloudProviderType = CloudProviderType.OCI
 
@@ -151,9 +156,9 @@ class OciCloudClient : CloudProvider {
     override suspend fun startInstance(bearerToken: String, instanceId: String): Boolean =
         ociAction(bearerToken, instanceId, OciInstanceAction.START)
 
-    /** OCI SOFTSTOP sends an ACPI shutdown signal for a graceful guest OS stop. */
+    /** OCI STOP immediately cuts power to the instance — always reliable regardless of guest agent. */
     override suspend fun stopInstance(bearerToken: String, instanceId: String): Boolean =
-        ociAction(bearerToken, instanceId, OciInstanceAction.SOFTSTOP)
+        ociAction(bearerToken, instanceId, OciInstanceAction.STOP)
 
     /** OCI SOFTRESET sends a graceful reboot signal to the guest OS. */
     override suspend fun restartInstance(bearerToken: String, instanceId: String): Boolean =
@@ -172,7 +177,8 @@ class OciCloudClient : CloudProvider {
             val creds     = JSONObject(bearerToken)
             val apiClient = buildApiClient(creds)
             apiClient.instanceAction(instanceId, action)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Logger.e(TAG, "ociAction(${action.wireValue}, $instanceId) failed", e)
             false
         }
     }
