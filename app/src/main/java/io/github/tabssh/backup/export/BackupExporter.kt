@@ -102,6 +102,12 @@ class BackupExporter(
         const val FILE_VNC_HOSTS         = "vnc_hosts.json"
         const val FILE_VNC_IDENTITIES    = "vnc_identities.json"
         /**
+         * Multi-host dashboard configuration — dashboard groups and per-group
+         * host membership.  Stored in the `multi_host_dashboard` SharedPreferences
+         * file (not the Room DB), so it must be backed up and restored separately.
+         */
+        const val FILE_DASHBOARD         = "dashboard_config.json"
+        /**
          * All credentials — Keystore-backed passwords, tokens, OCI PEM keys,
          * SSH key JSch bytes, and connection passwords. Always written by
          * [BackupManager.createBackup]; the user decides whether to encrypt
@@ -145,6 +151,7 @@ class BackupExporter(
         out[FILE_MONITOR_SLOTS]    = exportMonitorSlots()
         out[FILE_VNC_HOSTS]        = exportVncHosts()
         out[FILE_VNC_IDENTITIES]   = exportVncIdentities()
+        out[FILE_DASHBOARD]        = exportDashboardConfig()
         if (includeSecrets) out[FILE_SECRETS] = exportSecrets()
 
         out
@@ -253,6 +260,24 @@ class BackupExporter(
         // is encrypted so restore does not require user re-entry.
         encodeEntities(ListSerializer(VncIdentity.serializer()),
             database.vncIdentityDao().getAllIdentitiesList())
+
+    /**
+     * Export the multi-host dashboard configuration — groups JSON and per-group
+     * host membership — from the `multi_host_dashboard` SharedPreferences file.
+     *
+     * All values are stored as strings (JSON blobs or comma-separated ID lists)
+     * so the flat key→value map round-trips without type ambiguity.
+     */
+    private fun exportDashboardConfig(): String {
+        val dashPrefs = context.getSharedPreferences("multi_host_dashboard", android.content.Context.MODE_PRIVATE)
+        val obj = buildJsonObject {
+            put("v", WIRE_VERSION)
+            dashPrefs.all.forEach { (k, v) ->
+                put(k, v?.toString() ?: "")
+            }
+        }
+        return json.encodeToString(JsonObject.serializer(), obj)
+    }
 
     // ── Secrets (encrypted backup only) ─────────────────────────────────────
 
@@ -447,15 +472,27 @@ class BackupExporter(
         })
 
         root.put("sync", JSONObject().apply {
-            put("frequency",       preferenceManager.getSyncFrequency())
-            put("wifiOnly",        preferenceManager.isSyncWifiOnly())
-            put("onChangeEnabled", preferenceManager.isSyncOnChangeEnabled())
-            put("syncConnections", preferenceManager.isSyncConnectionsEnabled())
-            put("syncKeys",        preferenceManager.isSyncKeysEnabled())
-            put("syncIdentities",  preferenceManager.isSyncIdentitiesEnabled())
-            put("syncSnippets",    preferenceManager.isSyncSnippetsEnabled())
-            put("syncSettings",    preferenceManager.isSyncSettingsEnabled())
-            put("syncThemes",      preferenceManager.isSyncThemesEnabled())
+            put("frequency",              preferenceManager.getSyncFrequency())
+            put("wifiOnly",               preferenceManager.isSyncWifiOnly())
+            put("onChangeEnabled",        preferenceManager.isSyncOnChangeEnabled())
+            put("syncConnections",        preferenceManager.isSyncConnectionsEnabled())
+            put("syncKeys",               preferenceManager.isSyncKeysEnabled())
+            put("syncIdentities",         preferenceManager.isSyncIdentitiesEnabled())
+            put("syncSnippets",           preferenceManager.isSyncSnippetsEnabled())
+            put("syncSettings",           preferenceManager.isSyncSettingsEnabled())
+            put("syncThemes",             preferenceManager.isSyncThemesEnabled())
+            put("syncHostKeys",           preferenceManager.isSyncHostKeysEnabled())
+            put("syncGroups",             preferenceManager.isSyncGroupsEnabled())
+            put("syncWorkspaces",         preferenceManager.isSyncWorkspacesEnabled())
+            put("syncMacros",             preferenceManager.isSyncMacrosEnabled())
+            put("syncMonitorSlots",       preferenceManager.isSyncMonitorSlotsEnabled())
+            put("syncHypervisors",        preferenceManager.isSyncHypervisorsEnabled())
+            put("syncHypervisorAccounts", preferenceManager.isSyncHypervisorAccountsEnabled())
+            put("syncVncHosts",           preferenceManager.isSyncVncHostsEnabled())
+            put("syncVncIdentities",      preferenceManager.isSyncVncIdentitiesEnabled())
+            put("syncCloudAccounts",      preferenceManager.isSyncCloudAccountsEnabled())
+            put("syncCertificates",       preferenceManager.isSyncCertificatesEnabled())
+            put("syncDashboard",          preferenceManager.isSyncDashboardEnabled())
         })
 
         // Multiplexer key bindings: gesture type/enable in default SharedPreferences;

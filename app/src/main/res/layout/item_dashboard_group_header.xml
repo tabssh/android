@@ -83,6 +83,16 @@
             app:srcCompat="@drawable/ic_add"
             app:tint="?attr/colorOnSurfaceVariant" />
 
+        <!-- Bulk monitor config for all hosts in this group -->
+        <ImageButton
+            android:id="@+id/btn_bulk_monitor"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Configure monitoring for all hosts in group"
+            app:srcCompat="@drawable/ic_flash"
+            app:tint="?attr/colorOnSurfaceVariant" />
+
         <!-- Rename group -->
         <ImageButton
             android:id="@+id/btn_rename"

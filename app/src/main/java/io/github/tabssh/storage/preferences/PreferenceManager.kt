@@ -576,6 +576,44 @@ class PreferenceManager(private val context: Context) {
     fun isSyncThemesEnabled(): Boolean = getBoolean("sync_themes", true)
     fun setSyncThemesEnabled(enabled: Boolean) = setBoolean("sync_themes", enabled)
 
+    fun isSyncHostKeysEnabled(): Boolean = getBoolean("sync_host_keys", true)
+    fun setSyncHostKeysEnabled(enabled: Boolean) = setBoolean("sync_host_keys", enabled)
+
+    fun isSyncGroupsEnabled(): Boolean = getBoolean("sync_groups", true)
+    fun setSyncGroupsEnabled(enabled: Boolean) = setBoolean("sync_groups", enabled)
+
+    fun isSyncWorkspacesEnabled(): Boolean = getBoolean("sync_workspaces", true)
+    fun setSyncWorkspacesEnabled(enabled: Boolean) = setBoolean("sync_workspaces", enabled)
+
+    fun isSyncMacrosEnabled(): Boolean = getBoolean("sync_macros", true)
+    fun setSyncMacrosEnabled(enabled: Boolean) = setBoolean("sync_macros", enabled)
+
+    fun isSyncMonitorSlotsEnabled(): Boolean = getBoolean("sync_monitor_slots", true)
+    fun setSyncMonitorSlotsEnabled(enabled: Boolean) = setBoolean("sync_monitor_slots", enabled)
+
+    fun isSyncHypervisorsEnabled(): Boolean = getBoolean("sync_hypervisors", true)
+    fun setSyncHypervisorsEnabled(enabled: Boolean) = setBoolean("sync_hypervisors", enabled)
+
+    fun isSyncHypervisorAccountsEnabled(): Boolean = getBoolean("sync_hypervisor_accounts", true)
+    fun setSyncHypervisorAccountsEnabled(enabled: Boolean) = setBoolean("sync_hypervisor_accounts", enabled)
+
+    fun isSyncVncHostsEnabled(): Boolean = getBoolean("sync_vnc_hosts", true)
+    fun setSyncVncHostsEnabled(enabled: Boolean) = setBoolean("sync_vnc_hosts", enabled)
+
+    fun isSyncVncIdentitiesEnabled(): Boolean = getBoolean("sync_vnc_identities", true)
+    fun setSyncVncIdentitiesEnabled(enabled: Boolean) = setBoolean("sync_vnc_identities", enabled)
+
+    fun isSyncCloudAccountsEnabled(): Boolean = getBoolean("sync_cloud_accounts", true)
+    fun setSyncCloudAccountsEnabled(enabled: Boolean) = setBoolean("sync_cloud_accounts", enabled)
+
+    fun isSyncCertificatesEnabled(): Boolean = getBoolean("sync_certificates", true)
+    fun setSyncCertificatesEnabled(enabled: Boolean) = setBoolean("sync_certificates", enabled)
+
+    // Dashboard config is per-device by default — the user must explicitly opt in to sync it
+    // so that each device keeps its own dashboard layout. Useful for migrating to a new device.
+    fun isSyncDashboardEnabled(): Boolean = getBoolean("sync_dashboard", false)
+    fun setSyncDashboardEnabled(enabled: Boolean) = setBoolean("sync_dashboard", enabled)
+
     fun isSyncOnChangeEnabled(): Boolean = getBoolean("sync_on_change", true)
     fun setSyncOnChangeEnabled(enabled: Boolean) = setBoolean("sync_on_change", enabled)
 

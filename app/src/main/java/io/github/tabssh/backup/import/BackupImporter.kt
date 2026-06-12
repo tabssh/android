@@ -116,6 +116,11 @@ class BackupImporter(
             { restoreVncHosts(it, overwriteExisting) }) { out["vnc_hosts"] = it; Logger.d(TAG, "Restored $it VNC hosts") }
         table(BackupExporter.FILE_VNC_IDENTITIES, "vnc_identities",
             { restoreVncIdentities(it, overwriteExisting) }) { out["vnc_identities"] = it; Logger.d(TAG, "Restored $it VNC identities") }
+        backupData[BackupExporter.FILE_DASHBOARD]?.let {
+            val n = restoreDashboardConfig(it, overwriteExisting)
+            out["dashboard_config"] = n
+            Logger.d(TAG, "Restored $n dashboard config keys")
+        } ?: Logger.d(TAG, "Skipping dashboard config — not in backup (pre-v4)")
 
         // Secrets must be restored AFTER entity rows so all IDs are present.
         backupData[BackupExporter.FILE_SECRETS]?.let {
@@ -517,6 +522,18 @@ class BackupImporter(
             preferenceManager.setSyncSnippetsEnabled(s.optBoolean("syncSnippets", true))
             preferenceManager.setSyncSettingsEnabled(s.optBoolean("syncSettings", true))
             preferenceManager.setSyncThemesEnabled(s.optBoolean("syncThemes", true))
+            preferenceManager.setSyncHostKeysEnabled(s.optBoolean("syncHostKeys", true))
+            preferenceManager.setSyncGroupsEnabled(s.optBoolean("syncGroups", true))
+            preferenceManager.setSyncWorkspacesEnabled(s.optBoolean("syncWorkspaces", true))
+            preferenceManager.setSyncMacrosEnabled(s.optBoolean("syncMacros", true))
+            preferenceManager.setSyncMonitorSlotsEnabled(s.optBoolean("syncMonitorSlots", true))
+            preferenceManager.setSyncHypervisorsEnabled(s.optBoolean("syncHypervisors", true))
+            preferenceManager.setSyncHypervisorAccountsEnabled(s.optBoolean("syncHypervisorAccounts", true))
+            preferenceManager.setSyncVncHostsEnabled(s.optBoolean("syncVncHosts", true))
+            preferenceManager.setSyncVncIdentitiesEnabled(s.optBoolean("syncVncIdentities", true))
+            preferenceManager.setSyncCloudAccountsEnabled(s.optBoolean("syncCloudAccounts", true))
+            preferenceManager.setSyncCertificatesEnabled(s.optBoolean("syncCertificates", true))
+            preferenceManager.setSyncDashboardEnabled(s.optBoolean("syncDashboard", false))
         }
         root.optJSONObject("multiplexer")?.let { m ->
             defaultPrefs.edit().apply {
@@ -550,4 +567,34 @@ class BackupImporter(
         }
     }
 
+    // ── Dashboard config ──────────────────────────────────────────────────────
+
+    /**
+     * Restore multi-host dashboard groups and host membership from the flat
+     * key→value JSON blob written by [BackupExporter.exportDashboardConfig].
+     *
+     * All values are strings (JSON blobs or comma-separated ID lists); the
+     * "v" version key is silently skipped.  When [overwriteExisting] is false,
+     * keys that already exist in the SharedPreferences are left untouched so
+     * a partial restore does not clobber a user's current dashboard layout.
+     */
+    private fun restoreDashboardConfig(data: String, overwriteExisting: Boolean): Int {
+        return try {
+            val root = json.parseToJsonElement(data).jsonObject
+            val dashPrefs = context.getSharedPreferences("multi_host_dashboard", android.content.Context.MODE_PRIVATE)
+            val editor = dashPrefs.edit()
+            var count = 0
+            for ((k, v) in root) {
+                if (k == "v") continue
+                if (!overwriteExisting && dashPrefs.contains(k)) continue
+                editor.putString(k, v.jsonPrimitive.content)
+                count++
+            }
+            editor.apply()
+            count
+        } catch (e: Exception) {
+            Logger.w(TAG, "Failed to restore dashboard config: ${e.message}")
+            0
+        }
+    }
 }

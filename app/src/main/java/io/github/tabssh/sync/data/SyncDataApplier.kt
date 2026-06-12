@@ -244,6 +244,11 @@ class SyncDataApplier {
                 Logger.d(TAG, "No secrets in sync payload (pre-v14 or empty device)")
             }
 
+            // Dashboard config lives in SharedPreferences outside the Room DB.
+            if (data.dashboardConfig.isNotEmpty()) {
+                appliedCount += applyDashboardConfig(data.dashboardConfig)
+            }
+
             Logger.i(TAG, "Applied $appliedCount items from sync data")
             ApplyResult.Success(appliedCount)
         } catch (e: Exception) {
@@ -932,6 +937,26 @@ class SyncDataApplier {
         }
         editor.apply()
         return count
+    }
+
+    /**
+     * Write dashboard groups/host-membership keys into the `multi_host_dashboard`
+     * SharedPreferences file.  Existing keys are overwritten (last-write-wins,
+     * matching the behaviour of every other sync entity).  Returns the count of
+     * keys written.
+     */
+    private fun applyDashboardConfig(config: Map<String, String>): Int {
+        return try {
+            val sp = context.getSharedPreferences("multi_host_dashboard", android.content.Context.MODE_PRIVATE)
+            val editor = sp.edit()
+            config.forEach { (k, v) -> editor.putString(k, v) }
+            editor.apply()
+            Logger.d(TAG, "Applied ${config.size} dashboard config keys")
+            config.size
+        } catch (e: Exception) {
+            Logger.w(TAG, "Failed to apply dashboard config: ${e.message}")
+            0
+        }
     }
 
     /**

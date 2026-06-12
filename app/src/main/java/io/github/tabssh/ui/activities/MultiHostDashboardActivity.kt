@@ -572,6 +572,179 @@ class MultiHostDashboardActivity : AppCompatActivity() {
             .show()
     }
 
+    /**
+     * Show a monitor-config dialog that applies the same settings to every host
+     * in [groupId].  Existing MonitorSlot values are used as initial defaults so
+     * the user sees the current state rather than blank fields.  On save the
+     * template is merged onto every slot in the group — enable/disable and
+     * threshold fields are always overwritten.
+     */
+    private fun showBulkMonitorConfigDialog(groupId: String, groupName: String) {
+        val hostIds = groupHosts[groupId] ?: run { toast("Group has no hosts"); return }
+        if (hostIds.isEmpty()) { toast("Group has no hosts"); return }
+
+        val app     = TabSSHApplication.get()
+        val MATCH   = ViewGroup.LayoutParams.MATCH_PARENT
+        val WRAP    = ViewGroup.LayoutParams.WRAP_CONTENT
+
+        val scroll = ScrollView(this)
+        val form   = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(this@MultiHostDashboardActivity, 20))
+        }
+        scroll.addView(form)
+
+        fun label(text: String) = TextView(this).apply {
+            this.text = text
+            textSize = 12f
+            setTextColor(0xFF888888.toInt())
+            val lp = LinearLayout.LayoutParams(MATCH, WRAP)
+            lp.topMargin = dp(this@MultiHostDashboardActivity, 12)
+            layoutParams = lp
+        }
+
+        // Use first available slot as defaults; fall back to blank if none yet.
+        val firstSlot = hostIds.firstOrNull()?.let { monitorSlots[it] }
+
+        val cbEnabled = CheckBox(this).apply {
+            text = "Enable monitoring"
+            isChecked = firstSlot?.enabled ?: true
+        }
+        form.addView(cbEnabled)
+
+        val cbDown = CheckBox(this).apply {
+            text = "Notify when host is unreachable"
+            isChecked = firstSlot?.alertOnDown ?: true
+        }
+        form.addView(cbDown)
+
+        val cbUp = CheckBox(this).apply {
+            text = "Notify when host recovers"
+            isChecked = firstSlot?.alertOnRecovery ?: true
+        }
+        form.addView(cbUp)
+
+        form.addView(label("Check interval"))
+        val intervalOptions = arrayOf("15 min", "30 min", "1 hour", "4 hours", "12 hours")
+        val intervalValues  = intArrayOf(15, 30, 60, 240, 720)
+        val intervalAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, intervalOptions)
+        intervalAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        val spInterval = Spinner(this).apply { adapter = intervalAdapter }
+        val currentInterval = firstSlot?.checkIntervalMinutes ?: 60
+        spInterval.setSelection(intervalValues.indexOfFirst { it >= currentInterval }.coerceAtLeast(0))
+        form.addView(spInterval)
+
+        form.addView(label("Alert cooldown (min gap between repeat alerts)"))
+        val cooldownOptions = arrayOf("15 min", "30 min", "1 hour", "4 hours", "24 hours")
+        val cooldownValues  = intArrayOf(15, 30, 60, 240, 1440)
+        val cooldownAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, cooldownOptions)
+        cooldownAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        val spCooldown = Spinner(this).apply { adapter = cooldownAdapter }
+        val currentCooldown = firstSlot?.alertCooldownMinutes ?: 60
+        spCooldown.setSelection(cooldownValues.indexOfFirst { it >= currentCooldown }.coerceAtLeast(0))
+        form.addView(spCooldown)
+
+        val cbPerf = CheckBox(this).apply {
+            text = "Enable SSH metric checks (CPU/memory/disk)"
+            isChecked = firstSlot?.enablePerformanceChecks ?: false
+        }
+        form.addView(cbPerf)
+
+        form.addView(label("CPU threshold (0 = disabled)"))
+        val tvCpuVal = TextView(this).apply {
+            val v = firstSlot?.cpuThreshold
+            text = if (v != null && v > 0) "$v%" else "Disabled"
+        }
+        form.addView(tvCpuVal)
+        val sbCpu = SeekBar(this).apply { max = 100; progress = firstSlot?.cpuThreshold ?: 0 }
+        sbCpu.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar, v: Int, f: Boolean) {
+                tvCpuVal.text = if (v == 0) "Disabled" else "$v%"
+            }
+            override fun onStartTrackingTouch(sb: SeekBar) {}
+            override fun onStopTrackingTouch(sb: SeekBar) {}
+        })
+        form.addView(sbCpu)
+
+        form.addView(label("Memory threshold (0 = disabled)"))
+        val tvMemVal = TextView(this).apply {
+            val v = firstSlot?.memoryThreshold
+            text = if (v != null && v > 0) "$v%" else "Disabled"
+        }
+        form.addView(tvMemVal)
+        val sbMem = SeekBar(this).apply { max = 100; progress = firstSlot?.memoryThreshold ?: 0 }
+        sbMem.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar, v: Int, f: Boolean) {
+                tvMemVal.text = if (v == 0) "Disabled" else "$v%"
+            }
+            override fun onStartTrackingTouch(sb: SeekBar) {}
+            override fun onStopTrackingTouch(sb: SeekBar) {}
+        })
+        form.addView(sbMem)
+
+        form.addView(label("Disk threshold (0 = disabled)"))
+        val tvDiskVal = TextView(this).apply {
+            val v = firstSlot?.diskThreshold
+            text = if (v != null && v > 0) "$v%" else "Disabled"
+        }
+        form.addView(tvDiskVal)
+        val sbDisk = SeekBar(this).apply { max = 100; progress = firstSlot?.diskThreshold ?: 0 }
+        sbDisk.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar, v: Int, f: Boolean) {
+                tvDiskVal.text = if (v == 0) "Disabled" else "$v%"
+            }
+            override fun onStartTrackingTouch(sb: SeekBar) {}
+            override fun onStopTrackingTouch(sb: SeekBar) {}
+        })
+        form.addView(sbDisk)
+
+        AlertDialog.Builder(this)
+            .setTitle("Monitor: all hosts in \"$groupName\"")
+            .setMessage("${hostIds.size} host${if (hostIds.size == 1) "" else "s"} will be updated.")
+            .setView(scroll)
+            .setPositiveButton("Apply to all") { _, _ ->
+                val enabled      = cbEnabled.isChecked
+                val alertOnDown  = cbDown.isChecked
+                val alertOnRecov = cbUp.isChecked
+                val interval     = intervalValues[spInterval.selectedItemPosition]
+                val cooldown     = cooldownValues[spCooldown.selectedItemPosition]
+                val perfChecks   = cbPerf.isChecked
+                val cpuThr       = sbCpu.progress.takeIf { it > 0 }
+                val memThr       = sbMem.progress.takeIf { it > 0 }
+                val diskThr      = sbDisk.progress.takeIf { it > 0 }
+
+                app.applicationScope.launch(Dispatchers.IO) {
+                    hostIds.forEach { connId ->
+                        val base    = monitorSlots[connId] ?: MonitorSlot(connectionId = connId)
+                        val updated = base.copy(
+                            enabled                 = enabled,
+                            alertOnDown             = alertOnDown,
+                            alertOnRecovery         = alertOnRecov,
+                            checkIntervalMinutes    = interval,
+                            alertCooldownMinutes    = cooldown,
+                            enablePerformanceChecks = perfChecks,
+                            cpuThreshold            = cpuThr,
+                            memoryThreshold         = memThr,
+                            diskThreshold           = diskThr
+                        )
+                        app.database.monitorSlotDao().insertOrReplace(updated)
+                        monitorSlots[connId] = updated
+                    }
+                    withContext(Dispatchers.Main) {
+                        rebuildAndSubmit()
+                        toast("Monitor config applied to ${hostIds.size} host${if (hostIds.size == 1) "" else "s"}")
+                        if (enabled) {
+                            BatteryOptimizationHelper.requestExemptionIfNeeded(this@MultiHostDashboardActivity) {
+                                BatteryOptimizationHelper.showManufacturerGuidanceIfNeeded(this@MultiHostDashboardActivity)
+                            }
+                        }
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     private fun toggleGroupCollapsed(groupId: String) {
         if (groupId == UNGROUPED_ID) {
             ungroupedCollapsed = !ungroupedCollapsed
@@ -939,11 +1112,12 @@ class MultiHostDashboardActivity : AppCompatActivity() {
 
             bindMetricsRow(item.aggMetrics)
 
-            b.btnToggle.setOnClickListener    { toggleGroupCollapsed(g.id) }
-            b.root.setOnClickListener         { toggleGroupCollapsed(g.id) }
-            b.btnAddHosts.setOnClickListener  { showHostPicker(g.id) }
-            b.btnRename.setOnClickListener    { showRenameGroupDialog(g) }
-            b.btnDelete.setOnClickListener    { confirmDeleteGroup(g) }
+            b.btnToggle.setOnClickListener       { toggleGroupCollapsed(g.id) }
+            b.root.setOnClickListener            { toggleGroupCollapsed(g.id) }
+            b.btnAddHosts.setOnClickListener     { showHostPicker(g.id) }
+            b.btnBulkMonitor.setOnClickListener  { showBulkMonitorConfigDialog(g.id, g.name) }
+            b.btnRename.setOnClickListener       { showRenameGroupDialog(g) }
+            b.btnDelete.setOnClickListener       { confirmDeleteGroup(g) }
         }
 
         fun bindUngrouped(item: DashboardItem.UngroupedHeader) {
@@ -955,9 +1129,10 @@ class MultiHostDashboardActivity : AppCompatActivity() {
 
             bindMetricsRow(computeGroupAgg(UNGROUPED_ID))
 
-            b.btnToggle.setOnClickListener    { toggleGroupCollapsed(UNGROUPED_ID) }
-            b.root.setOnClickListener         { toggleGroupCollapsed(UNGROUPED_ID) }
-            b.btnAddHosts.setOnClickListener  { showHostPicker(UNGROUPED_ID) }
+            b.btnToggle.setOnClickListener       { toggleGroupCollapsed(UNGROUPED_ID) }
+            b.root.setOnClickListener            { toggleGroupCollapsed(UNGROUPED_ID) }
+            b.btnAddHosts.setOnClickListener     { showHostPicker(UNGROUPED_ID) }
+            b.btnBulkMonitor.setOnClickListener  { showBulkMonitorConfigDialog(UNGROUPED_ID, "Ungrouped") }
             // Ungrouped cannot be renamed or deleted — hide those buttons
             b.btnRename.visibility = View.GONE
             b.btnDelete.visibility = View.GONE

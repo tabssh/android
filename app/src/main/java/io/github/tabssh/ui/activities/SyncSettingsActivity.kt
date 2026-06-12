@@ -33,11 +33,23 @@ class SyncSettingsActivity : AppCompatActivity() {
         private const val PREF_ENABLED       = "sync_enabled"
         private const val PREF_WIFI_ONLY     = "sync_wifi_only"
         private const val PREF_ON_CHANGE     = "sync_on_change"
-        private const val PREF_CONNECTIONS   = "sync_connections"
-        private const val PREF_IDENTITIES    = "sync_identities"
-        private const val PREF_KEYS          = "sync_keys"
-        private const val PREF_SNIPPETS      = "sync_snippets"
-        private const val PREF_THEMES        = "sync_themes"
+        private const val PREF_CONNECTIONS          = "sync_connections"
+        private const val PREF_IDENTITIES           = "sync_identities"
+        private const val PREF_KEYS                 = "sync_keys"
+        private const val PREF_SNIPPETS             = "sync_snippets"
+        private const val PREF_THEMES               = "sync_themes"
+        private const val PREF_HOST_KEYS            = "sync_host_keys"
+        private const val PREF_GROUPS               = "sync_groups"
+        private const val PREF_WORKSPACES           = "sync_workspaces"
+        private const val PREF_MACROS               = "sync_macros"
+        private const val PREF_MONITOR_SLOTS        = "sync_monitor_slots"
+        private const val PREF_HYPERVISORS          = "sync_hypervisors"
+        private const val PREF_HYPERVISOR_ACCOUNTS  = "sync_hypervisor_accounts"
+        private const val PREF_VNC_HOSTS            = "sync_vnc_hosts"
+        private const val PREF_VNC_IDENTITIES       = "sync_vnc_identities"
+        private const val PREF_CLOUD_ACCOUNTS       = "sync_cloud_accounts"
+        private const val PREF_CERTIFICATES         = "sync_certificates"
+        private const val PREF_DASHBOARD            = "sync_dashboard"
         private const val PREF_FREQUENCY     = "sync_frequency"
         private val FREQUENCY_LABELS = mapOf(
             "manual" to "Manual only",
@@ -137,14 +149,37 @@ class SyncSettingsActivity : AppCompatActivity() {
 
         // Bind what-to-sync rows
         syncItems = listOf(
-            Triple(findViewById(R.id.row_sync_connections), PREF_CONNECTIONS, "SSH connection profiles"),
-            Triple(findViewById(R.id.row_sync_identities),  PREF_IDENTITIES,  "Reusable credentials"),
-            Triple(findViewById(R.id.row_sync_keys),        PREF_KEYS,        "Key metadata (private keys stay local)"),
-            Triple(findViewById(R.id.row_sync_snippets),    PREF_SNIPPETS,    "Command snippets"),
-            Triple(findViewById(R.id.row_sync_themes),      PREF_THEMES,      "Custom terminal themes")
+            Triple(findViewById(R.id.row_sync_connections),        PREF_CONNECTIONS,         "SSH connection profiles"),
+            Triple(findViewById(R.id.row_sync_identities),         PREF_IDENTITIES,          "Reusable credentials"),
+            Triple(findViewById(R.id.row_sync_keys),               PREF_KEYS,                "Key metadata (private keys stay local)"),
+            Triple(findViewById(R.id.row_sync_snippets),           PREF_SNIPPETS,            "Command snippets"),
+            Triple(findViewById(R.id.row_sync_themes),             PREF_THEMES,              "Custom terminal themes"),
+            Triple(findViewById(R.id.row_sync_host_keys),          PREF_HOST_KEYS,           "Trusted server fingerprints"),
+            Triple(findViewById(R.id.row_sync_groups),             PREF_GROUPS,              "Connection groups"),
+            Triple(findViewById(R.id.row_sync_workspaces),         PREF_WORKSPACES,          "Workspaces"),
+            Triple(findViewById(R.id.row_sync_macros),             PREF_MACROS,              "Command macros"),
+            Triple(findViewById(R.id.row_sync_monitor_slots),      PREF_MONITOR_SLOTS,       "Host monitor config"),
+            Triple(findViewById(R.id.row_sync_hypervisors),        PREF_HYPERVISORS,         "Hypervisor profiles"),
+            Triple(findViewById(R.id.row_sync_hypervisor_accounts),PREF_HYPERVISOR_ACCOUNTS, "Hypervisor accounts"),
+            Triple(findViewById(R.id.row_sync_vnc_hosts),          PREF_VNC_HOSTS,           "VNC hosts"),
+            Triple(findViewById(R.id.row_sync_vnc_identities),     PREF_VNC_IDENTITIES,      "VNC credentials"),
+            Triple(findViewById(R.id.row_sync_cloud_accounts),     PREF_CLOUD_ACCOUNTS,      "Cloud accounts"),
+            Triple(findViewById(R.id.row_sync_certificates),       PREF_CERTIFICATES,        "Trusted certificates"),
+            Triple(findViewById(R.id.row_sync_dashboard),          PREF_DASHBOARD,           "Multi-host dashboard layout")
         )
-        val titles = listOf("Connections", "Identities", "SSH Keys", "Snippets", "Themes")
-        val defaults = listOf(true, true, true, true, true)
+        val titles = listOf(
+            "Connections", "Identities", "SSH Keys", "Snippets", "Themes",
+            "Host Keys", "Groups", "Workspaces", "Macros", "Monitor Slots",
+            "Hypervisors", "Hypervisor Accounts", "VNC Hosts", "VNC Identities",
+            "Cloud Accounts", "Certificates", "Dashboard"
+        )
+        val defaults = listOf(
+            true, true, true, true, true,
+            true, true, true, true, true,
+            true, true, true, true,
+            true, true,
+            false
+        )
         syncItems.forEachIndexed { i, (row, prefKey, subtitle) ->
             row.findViewById<TextView>(R.id.text_sync_item_title).text  = titles[i]
             row.findViewById<TextView>(R.id.text_sync_item_subtitle).text = subtitle

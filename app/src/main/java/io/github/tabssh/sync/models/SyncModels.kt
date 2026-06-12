@@ -50,12 +50,14 @@ data class SyncItemCounts(
     val vncHosts: Int = 0,
     val vncIdentities: Int = 0,
     /** Wave 14 (2026-05-21) — cloud provider account metadata (token stays Keystore-bound). */
-    val cloudAccounts: Int = 0
+    val cloudAccounts: Int = 0,
+    /** Multi-host dashboard config — groups and host membership from SharedPreferences. */
+    val dashboard: Int = 0
 ) {
     fun total(): Int = connections + keys + themes + preferences + hostKeys +
         workspaces + snippets + identities + groups + hypervisors + certificates +
         macros + monitorSlots + hypervisorAccounts + vncHosts + vncIdentities +
-        cloudAccounts
+        cloudAccounts + dashboard
 }
 
 /**
@@ -104,7 +106,10 @@ data class SyncFileData(
     val vncHosts: List<io.github.tabssh.storage.database.entities.VncHost> = emptyList(),
     val vncIdentities: List<io.github.tabssh.storage.database.entities.VncIdentity> = emptyList(),
     /** Wave 14 — cloud provider account metadata (token stays Keystore-bound via secrets). */
-    val cloudAccounts: List<CloudAccount> = emptyList()
+    val cloudAccounts: List<CloudAccount> = emptyList(),
+    /** Multi-host dashboard groups and host membership from the `multi_host_dashboard`
+     *  SharedPreferences file.  Empty when sync_dashboard switch is off (per-device default). */
+    val dashboardConfig: Map<String, String> = emptyMap()
 )
 
 /**
@@ -157,6 +162,11 @@ data class SyncDataPackage(
      *  device under `cloud_token_${id}` and is transferred via the secrets map only
      *  in encrypted sync payloads. */
     val cloudAccounts: List<CloudAccount> = emptyList(),
+    /** Multi-host dashboard groups and host membership from the `multi_host_dashboard`
+     *  SharedPreferences file.  Map keys are raw SharedPrefs keys (e.g.
+     *  `dash_groups_json`, `dash_hosts_<groupId>`); values are stored strings.
+     *  Empty when the sync_dashboard switch is off (per-device, the default). */
+    val dashboardConfig: Map<String, String> = emptyMap(),
     /** Keystore-backed credentials — included only in encrypted sync payloads.
      *  Map keys are alias names; values are plaintext (safe inside AES-GCM envelope).
      *  SSH private key material is base64-encoded JSch bytes under key

@@ -80,49 +80,63 @@ class SyncDataCollector {
         // Each collection is gated on the corresponding user toggle so that
         // turning off a category in Sync Settings actually stops it from being
         // included in the sync payload.
-        val syncConns      = preferenceManager.isSyncConnectionsEnabled()
-        val syncKeys       = preferenceManager.isSyncKeysEnabled()
-        val syncThemes     = preferenceManager.isSyncThemesEnabled()
-        val syncIdentities = preferenceManager.isSyncIdentitiesEnabled()
-        val syncSnippets   = preferenceManager.isSyncSnippetsEnabled()
-        val syncSettings   = preferenceManager.isSyncSettingsEnabled()
+        val syncConns              = preferenceManager.isSyncConnectionsEnabled()
+        val syncKeys               = preferenceManager.isSyncKeysEnabled()
+        val syncThemes             = preferenceManager.isSyncThemesEnabled()
+        val syncIdentities         = preferenceManager.isSyncIdentitiesEnabled()
+        val syncSnippets           = preferenceManager.isSyncSnippetsEnabled()
+        val syncSettings           = preferenceManager.isSyncSettingsEnabled()
+        val syncHostKeys           = preferenceManager.isSyncHostKeysEnabled()
+        val syncGroups             = preferenceManager.isSyncGroupsEnabled()
+        val syncWorkspaces         = preferenceManager.isSyncWorkspacesEnabled()
+        val syncMacros             = preferenceManager.isSyncMacrosEnabled()
+        val syncMonitorSlots       = preferenceManager.isSyncMonitorSlotsEnabled()
+        val syncHypervisors        = preferenceManager.isSyncHypervisorsEnabled()
+        val syncHypervisorAccounts = preferenceManager.isSyncHypervisorAccountsEnabled()
+        val syncVncHosts           = preferenceManager.isSyncVncHostsEnabled()
+        val syncVncIdentities      = preferenceManager.isSyncVncIdentitiesEnabled()
+        val syncCloudAccounts      = preferenceManager.isSyncCloudAccountsEnabled()
+        val syncCertificates       = preferenceManager.isSyncCertificatesEnabled()
+        val syncDashboard          = preferenceManager.isSyncDashboardEnabled()
 
-        val connections = if (syncConns)      collectConnections()   else emptyList()
-        val keys        = if (syncKeys)       collectKeys()          else emptyList()
-        val themes      = if (syncThemes)     collectThemes()        else emptyList()
-        val preferences = if (syncSettings)   collectPreferences()   else emptyMap()
-        val hostKeys = collectHostKeys()
-        val workspaces = collectWorkspaces() // Wave 5.3
-        val snippets    = if (syncSnippets)   collectSnippets()      else emptyList()
-        val identities  = if (syncIdentities) collectIdentities()    else emptyList()
-        val groups = collectGroups()          // Wave 5.4
-        val hypervisors = collectHypervisors()  // Wave 7.1
-        val certificates = collectCertificates() // Wave 7.1
-        val macros = collectMacros()             // Wave 11
-        val monitorSlots = collectMonitorSlots() // Wave 11
-        val hypervisorAccounts = collectHypervisorAccounts() // Audit 2026-05-16
-        val vncHosts = collectVncHosts()         // Wave 13
-        val vncIdentities = collectVncIdentities() // Wave 13
-        val cloudAccounts = collectCloudAccounts() // Wave 14
+        val connections        = if (syncConns)              collectConnections()        else emptyList()
+        val keys               = if (syncKeys)               collectKeys()               else emptyList()
+        val themes             = if (syncThemes)             collectThemes()             else emptyList()
+        val preferences        = if (syncSettings)           collectPreferences()        else emptyMap()
+        val hostKeys           = if (syncHostKeys)           collectHostKeys()           else emptyList()
+        val workspaces         = if (syncWorkspaces)         collectWorkspaces()         else emptyList()
+        val snippets           = if (syncSnippets)           collectSnippets()           else emptyList()
+        val identities         = if (syncIdentities)         collectIdentities()         else emptyList()
+        val groups             = if (syncGroups)             collectGroups()             else emptyList()
+        val hypervisors        = if (syncHypervisors)        collectHypervisors()        else emptyList()
+        val certificates       = if (syncCertificates)       collectCertificates()       else emptyList()
+        val macros             = if (syncMacros)             collectMacros()             else emptyList()
+        val monitorSlots       = if (syncMonitorSlots)       collectMonitorSlots()       else emptyList()
+        val hypervisorAccounts = if (syncHypervisorAccounts) collectHypervisorAccounts() else emptyList()
+        val vncHosts           = if (syncVncHosts)           collectVncHosts()           else emptyList()
+        val vncIdentities      = if (syncVncIdentities)      collectVncIdentities()      else emptyList()
+        val cloudAccounts      = if (syncCloudAccounts)      collectCloudAccounts()      else emptyList()
+        val dashboardConfig    = if (syncDashboard)          collectDashboardConfig()    else emptyMap()
 
         val itemCounts = SyncItemCounts(
-            connections = connections.size,
-            keys = keys.size,
-            themes = themes.size,
-            preferences = preferences.size,
-            hostKeys = hostKeys.size,
-            workspaces = workspaces.size,
-            snippets = snippets.size,
-            identities = identities.size,
-            groups = groups.size,
-            hypervisors = hypervisors.size,
-            certificates = certificates.size,
-            macros = macros.size,
-            monitorSlots = monitorSlots.size,
+            connections        = connections.size,
+            keys               = keys.size,
+            themes             = themes.size,
+            preferences        = preferences.size,
+            hostKeys           = hostKeys.size,
+            workspaces         = workspaces.size,
+            snippets           = snippets.size,
+            identities         = identities.size,
+            groups             = groups.size,
+            hypervisors        = hypervisors.size,
+            certificates       = certificates.size,
+            macros             = macros.size,
+            monitorSlots       = monitorSlots.size,
             hypervisorAccounts = hypervisorAccounts.size,
-            vncHosts = vncHosts.size,
-            vncIdentities = vncIdentities.size,
-            cloudAccounts = cloudAccounts.size
+            vncHosts           = vncHosts.size,
+            vncIdentities      = vncIdentities.size,
+            cloudAccounts      = cloudAccounts.size,
+            dashboard          = dashboardConfig.size
         )
 
         val metadata = metadataManager.createSyncMetadata(itemCounts)
@@ -131,25 +145,26 @@ class SyncDataCollector {
         Logger.d(TAG, "Collected ${itemCounts.total()} items for sync")
 
         SyncDataPackage(
-            connections = connections,
-            keys = keys,
-            themes = themes,
-            preferences = preferences,
-            hostKeys = hostKeys,
-            metadata = metadata,
-            workspaces = workspaces,
-            snippets = snippets,
-            identities = identities,
-            groups = groups,
-            hypervisors = hypervisors,
-            certificates = certificates,
-            macros = macros,
-            monitorSlots = monitorSlots,
+            connections        = connections,
+            keys               = keys,
+            themes             = themes,
+            preferences        = preferences,
+            hostKeys           = hostKeys,
+            metadata           = metadata,
+            workspaces         = workspaces,
+            snippets           = snippets,
+            identities         = identities,
+            groups             = groups,
+            hypervisors        = hypervisors,
+            certificates       = certificates,
+            macros             = macros,
+            monitorSlots       = monitorSlots,
             hypervisorAccounts = hypervisorAccounts,
-            vncHosts = vncHosts,
-            vncIdentities = vncIdentities,
-            cloudAccounts = cloudAccounts,
-            secrets = secrets
+            vncHosts           = vncHosts,
+            vncIdentities      = vncIdentities,
+            cloudAccounts      = cloudAccounts,
+            dashboardConfig    = dashboardConfig,
+            secrets            = secrets
         )
     }
 
@@ -267,6 +282,19 @@ class SyncDataCollector {
         }
     }
 
+    /** Dashboard groups and host-membership keys from the `multi_host_dashboard`
+     *  SharedPreferences file.  Collected as a flat String→String map so it
+     *  round-trips through the sync payload without any schema change. */
+    private fun collectDashboardConfig(): Map<String, String> {
+        return try {
+            val sp = context.getSharedPreferences("multi_host_dashboard", android.content.Context.MODE_PRIVATE)
+            sp.all.mapValues { (_, v) -> v?.toString() ?: "" }
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to collect dashboard config", e)
+            emptyMap()
+        }
+    }
+
     /** Wave 14 — cloud provider account metadata rows. Token lives in
      *  SecurePasswordManager under `cloud_token_${id}` and is captured by
      *  [collectSecrets]. */
@@ -285,55 +313,76 @@ class SyncDataCollector {
     suspend fun collectChangedSince(timestamp: Long): SyncDataPackage = withContext(Dispatchers.IO) {
         Logger.d(TAG, "Collecting data changed since: $timestamp")
 
-        val connections = collectConnections().filter { it.modifiedAt > timestamp }
-        val keys = collectKeys().filter { it.modifiedAt > timestamp }
-        val themes = collectThemes().filter { it.modifiedAt > timestamp }
-        val hostKeys = collectHostKeys().filter { it.modifiedAt > timestamp }
-        val workspaces = collectWorkspaces().filter { it.modifiedAt > timestamp }
-        val snippets = collectSnippets().filter { it.modifiedAt > timestamp }
-        val identities = collectIdentities().filter { it.modifiedAt > timestamp }
-        val groups = collectGroups().filter { it.modifiedAt > timestamp }
+        val syncConns              = preferenceManager.isSyncConnectionsEnabled()
+        val syncKeys               = preferenceManager.isSyncKeysEnabled()
+        val syncThemes             = preferenceManager.isSyncThemesEnabled()
+        val syncIdentities         = preferenceManager.isSyncIdentitiesEnabled()
+        val syncSnippets           = preferenceManager.isSyncSnippetsEnabled()
+        val syncSettings           = preferenceManager.isSyncSettingsEnabled()
+        val syncHostKeys           = preferenceManager.isSyncHostKeysEnabled()
+        val syncGroups             = preferenceManager.isSyncGroupsEnabled()
+        val syncWorkspaces         = preferenceManager.isSyncWorkspacesEnabled()
+        val syncMacros             = preferenceManager.isSyncMacrosEnabled()
+        val syncMonitorSlots       = preferenceManager.isSyncMonitorSlotsEnabled()
+        val syncHypervisors        = preferenceManager.isSyncHypervisorsEnabled()
+        val syncHypervisorAccounts = preferenceManager.isSyncHypervisorAccountsEnabled()
+        val syncVncHosts           = preferenceManager.isSyncVncHostsEnabled()
+        val syncVncIdentities      = preferenceManager.isSyncVncIdentitiesEnabled()
+        val syncCloudAccounts      = preferenceManager.isSyncCloudAccountsEnabled()
+        val syncCertificates       = preferenceManager.isSyncCertificatesEnabled()
+        val syncDashboard          = preferenceManager.isSyncDashboardEnabled()
+
+        val connections = if (syncConns)      collectConnections().filter { it.modifiedAt > timestamp } else emptyList()
+        val keys        = if (syncKeys)       collectKeys().filter { it.modifiedAt > timestamp }        else emptyList()
+        val themes      = if (syncThemes)     collectThemes().filter { it.modifiedAt > timestamp }      else emptyList()
+        val hostKeys    = if (syncHostKeys)   collectHostKeys().filter { it.modifiedAt > timestamp }    else emptyList()
+        val workspaces  = if (syncWorkspaces) collectWorkspaces().filter { it.modifiedAt > timestamp }  else emptyList()
+        val snippets    = if (syncSnippets)   collectSnippets().filter { it.modifiedAt > timestamp }    else emptyList()
+        val identities  = if (syncIdentities) collectIdentities().filter { it.modifiedAt > timestamp }  else emptyList()
+        val groups      = if (syncGroups)     collectGroups().filter { it.modifiedAt > timestamp }      else emptyList()
         // Wave 7.1 — neither HypervisorProfile nor TrustedCertificate has a
         // modifiedAt column. They're low-volume tables (a few rows per user)
         // so include them all in delta payloads — cheap, never wrong.
-        val hypervisors = collectHypervisors()
-        val certificates = collectCertificates()
-        // Wave 11 — Macro has modifiedAt; MonitorSlot does not (low-volume,
-        // always include in full).
-        val macros = collectMacros().filter { it.modifiedAt > timestamp }
-        val monitorSlots = collectMonitorSlots()
-        val hypervisorAccounts = collectHypervisorAccounts().filter { it.modifiedAt > timestamp }
+        val hypervisors  = if (syncHypervisors)  collectHypervisors()  else emptyList()
+        val certificates = if (syncCertificates) collectCertificates() else emptyList()
+        // Wave 11 — Macro has modifiedAt; MonitorSlot does not (low-volume, always include in full).
+        val macros       = if (syncMacros)       collectMacros().filter { it.modifiedAt > timestamp } else emptyList()
+        val monitorSlots = if (syncMonitorSlots)  collectMonitorSlots() else emptyList()
+        val hypervisorAccounts = if (syncHypervisorAccounts)
+            collectHypervisorAccounts().filter { it.modifiedAt > timestamp } else emptyList()
         // Wave 13 — both tables have modifiedAt; delta-filter them.
-        val vncHosts = collectVncHosts().filter { it.modifiedAt > timestamp }
-        val vncIdentities = collectVncIdentities().filter { it.modifiedAt > timestamp }
-        // Wave 14 — CloudAccount has no modifiedAt column; always include all rows
-        // (low-volume, rarely more than a few entries per user).
-        val cloudAccounts = collectCloudAccounts()
+        val vncHosts      = if (syncVncHosts)      collectVncHosts().filter { it.modifiedAt > timestamp }      else emptyList()
+        val vncIdentities = if (syncVncIdentities) collectVncIdentities().filter { it.modifiedAt > timestamp } else emptyList()
+        // Wave 14 — CloudAccount has no modifiedAt column; always include all rows (low-volume).
+        val cloudAccounts = if (syncCloudAccounts) collectCloudAccounts() else emptyList()
+        // Dashboard — SharedPrefs has no per-key timestamp; include all keys when enabled.
+        val dashboardConfig = if (syncDashboard) collectDashboardConfig() else emptyMap()
 
-        val preferences = if (hasPreferencesChanged(timestamp)) {
+        val preferences = if (syncSettings && hasPreferencesChanged(timestamp)) {
             collectPreferences()
         } else {
             emptyMap()
         }
 
         val itemCounts = SyncItemCounts(
-            connections = connections.size,
-            keys = keys.size,
-            themes = themes.size,
-            preferences = preferences.size,
-            hostKeys = hostKeys.size,
-            workspaces = workspaces.size,
-            snippets = snippets.size,
-            identities = identities.size,
-            groups = groups.size,
-            hypervisors = hypervisors.size,
-            certificates = certificates.size,
-            macros = macros.size,
-            monitorSlots = monitorSlots.size,
+            connections        = connections.size,
+            keys               = keys.size,
+            themes             = themes.size,
+            preferences        = preferences.size,
+            hostKeys           = hostKeys.size,
+            workspaces         = workspaces.size,
+            snippets           = snippets.size,
+            identities         = identities.size,
+            groups             = groups.size,
+            hypervisors        = hypervisors.size,
+            certificates       = certificates.size,
+            macros             = macros.size,
+            monitorSlots       = monitorSlots.size,
             hypervisorAccounts = hypervisorAccounts.size,
-            vncHosts = vncHosts.size,
-            vncIdentities = vncIdentities.size,
-            cloudAccounts = cloudAccounts.size
+            vncHosts           = vncHosts.size,
+            vncIdentities      = vncIdentities.size,
+            cloudAccounts      = cloudAccounts.size,
+            dashboard          = dashboardConfig.size
         )
 
         val metadata = metadataManager.createSyncMetadata(itemCounts)
@@ -342,25 +391,26 @@ class SyncDataCollector {
         Logger.d(TAG, "Collected ${itemCounts.total()} changed items")
 
         SyncDataPackage(
-            connections = connections,
-            keys = keys,
-            themes = themes,
-            preferences = preferences,
-            hostKeys = hostKeys,
-            metadata = metadata,
-            workspaces = workspaces,
-            snippets = snippets,
-            identities = identities,
-            groups = groups,
-            hypervisors = hypervisors,
-            certificates = certificates,
-            macros = macros,
-            monitorSlots = monitorSlots,
+            connections        = connections,
+            keys               = keys,
+            themes             = themes,
+            preferences        = preferences,
+            hostKeys           = hostKeys,
+            metadata           = metadata,
+            workspaces         = workspaces,
+            snippets           = snippets,
+            identities         = identities,
+            groups             = groups,
+            hypervisors        = hypervisors,
+            certificates       = certificates,
+            macros             = macros,
+            monitorSlots       = monitorSlots,
             hypervisorAccounts = hypervisorAccounts,
-            vncHosts = vncHosts,
-            vncIdentities = vncIdentities,
-            cloudAccounts = cloudAccounts,
-            secrets = secrets
+            vncHosts           = vncHosts,
+            vncIdentities      = vncIdentities,
+            cloudAccounts      = cloudAccounts,
+            dashboardConfig    = dashboardConfig,
+            secrets            = secrets
         )
     }
 
@@ -737,7 +787,8 @@ class SyncDataCollector {
             hypervisorAccounts= try { database.hypervisorAccountDao().getAllAccountsList().size } catch (_: Exception) { 0 },
             vncHosts          = try { database.vncHostDao().getAllHostsList().size } catch (_: Exception) { 0 },
             vncIdentities     = try { database.vncIdentityDao().getAllIdentitiesList().size } catch (_: Exception) { 0 },
-            cloudAccounts     = try { database.cloudAccountDao().getAll().size } catch (_: Exception) { 0 }
+            cloudAccounts     = try { database.cloudAccountDao().getAll().size } catch (_: Exception) { 0 },
+            dashboard         = try { collectDashboardConfig().size } catch (_: Exception) { 0 }
         )
     }
 
