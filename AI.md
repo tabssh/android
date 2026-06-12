@@ -1402,6 +1402,16 @@ When modifying this codebase follow these rules:
 14. **Never add `Co-Authored-By` (or any attribution footer) to commit messages.** End commit bodies at the last description line, no trailer.
 15. **Save commit messages to `{project_root}/.git/COMMIT_MESS`.** Overwrite the file each time. Do not save to `/tmp/tabssh-android/`.
 16. **Downscale screenshots before reading them.** Android screenshots are 1080×2400+. Downscale first: `python3 /tmp/tabssh-android/resize.py <src>.png /tmp/tabssh-android/screenshots/<name>-small.png`.
+17. **Changelog hygiene — required on every commit.** Every commit that changes user-visible behaviour **MUST** update BOTH files in the same commit (never stale, never a separate follow-up):
+
+    | File | Format | Audience |
+    |------|--------|----------|
+    | `CHANGELOG.md` | Keep-a-Changelog, `[Unreleased]` section | Developers, release notes |
+    | `app/src/main/assets/whats_new.md` | Wave-numbered prose, user-facing | In-app "What's New" screen |
+
+    - `CHANGELOG.md [Unreleased]` gets one bullet per logical change under **Added / Changed / Fixed**.
+    - `whats_new.md` gets a new **Wave N** section (increment from the previous highest wave number) covering the most user-visible features in plain language. Skip internal refactors and CI changes.
+    - Both files must be staged in the COMMIT_MESS diff. If the diff touches only code and not these files, the commit is incomplete.
 
 ---
 

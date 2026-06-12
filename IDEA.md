@@ -67,7 +67,7 @@ repository: https://github.com/tabssh/android
 ### Cloud provider management
 - Manage SSH-accessible instances across DigitalOcean, Hetzner, Linode, Vultr, AWS EC2, Google Cloud Compute, Azure VMs, and Oracle Cloud (OCI)
 - Live instance state (running / stopped / transitioning) with start/stop control
-- Cloud account credentials stored in Keystore, never in the database
+- Cloud account credentials must never be stored in the database
 - No vendor SDKs embedded — all providers accessed via their REST APIs
 
 ### Accessibility and UI
