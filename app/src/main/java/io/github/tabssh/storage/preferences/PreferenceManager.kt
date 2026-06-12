@@ -238,9 +238,21 @@ class PreferenceManager(private val context: Context) {
      */
     fun isReverseScrollDirection(): Boolean = getBoolean(KEY_REVERSE_SCROLL, false)
     fun setReverseScrollDirection(reversed: Boolean) = setBoolean(KEY_REVERSE_SCROLL, reversed)
-    
+
+    fun isWordWrap(): Boolean = getBoolean(KEY_WORD_WRAP, true)
+    fun setWordWrap(enabled: Boolean) = setBoolean(KEY_WORD_WRAP, enabled)
+
+    fun isCopyOnSelect(): Boolean = getBoolean(KEY_COPY_ON_SELECT, true)
+    fun setCopyOnSelect(enabled: Boolean) = setBoolean(KEY_COPY_ON_SELECT, enabled)
+
     fun isBellNotificationEnabled(): Boolean = getBoolean(KEY_BELL_NOTIFICATION, true)
     fun setBellNotificationEnabled(enabled: Boolean) = setBoolean(KEY_BELL_NOTIFICATION, enabled)
+
+    fun isBellVibrate(): Boolean = getBoolean(KEY_BELL_VIBRATE, true)
+    fun setBellVibrate(enabled: Boolean) = setBoolean(KEY_BELL_VIBRATE, enabled)
+
+    fun isBellVisual(): Boolean = getBoolean(KEY_BELL_VISUAL, true)
+    fun setBellVisual(enabled: Boolean) = setBoolean(KEY_BELL_VISUAL, enabled)
 
     // Keyboard preferences
     fun getKeyboardRowCount(): Int {
@@ -396,6 +408,9 @@ class PreferenceManager(private val context: Context) {
     fun getServerAliveIntervalMs(): Long =
         (getStringAsInt(KEY_SERVER_ALIVE_INTERVAL, 60).coerceAtLeast(5)) * 1_000L
 
+    fun getServerAliveIntervalSec(): Int = getStringAsInt(KEY_SERVER_ALIVE_INTERVAL, 60).coerceAtLeast(5)
+    fun setServerAliveIntervalSec(seconds: Int) = setString(KEY_SERVER_ALIVE_INTERVAL, seconds.toString())
+
     fun isX11ForwardingDefault(): Boolean = getBoolean(KEY_X11_FORWARDING_DEFAULT, false)
     fun setX11ForwardingDefault(enabled: Boolean) = setBoolean(KEY_X11_FORWARDING_DEFAULT, enabled)
 
@@ -426,7 +441,10 @@ class PreferenceManager(private val context: Context) {
     
     fun isLargeTouchTargets(): Boolean = getBoolean(KEY_LARGE_TOUCH_TARGETS, false)
     fun setLargeTouchTargets(enabled: Boolean) = setBoolean(KEY_LARGE_TOUCH_TARGETS, enabled)
-    
+
+    fun isScreenReaderEnabled(): Boolean = getBoolean(KEY_SCREEN_READER_ENABLED, false)
+    fun setScreenReaderEnabled(enabled: Boolean) = setBoolean(KEY_SCREEN_READER_ENABLED, enabled)
+
     // Helper methods
     fun getString(key: String, defaultValue: String): String {
         return preferences.getString(key, defaultValue) ?: defaultValue
@@ -629,8 +647,17 @@ class PreferenceManager(private val context: Context) {
 
     // Issue reporting — paste service
     fun getPasteService(): String = getString("paste_service", "stikked")
+    fun setPasteService(service: String) = setString("paste_service", service)
+
     fun getPasteMicrobinUrl(): String = getString("paste_microbin_url", "https://mb.pste.us").trimEnd('/')
+    fun setPasteMicrobinUrl(url: String) = setString("paste_microbin_url", url)
+
     fun getPasteLenpasteUrl(): String = getString("paste_lenpaste_url", "https://lp.pste.us").trimEnd('/')
+    fun setPasteLenpasteUrl(url: String) = setString("paste_lenpaste_url", url)
+
     fun getPasteStikkedUrl(): String = getString("paste_stikked_url", "https://pste.us").trimEnd('/')
+    fun setPasteStikkedUrl(url: String) = setString("paste_stikked_url", url)
+
     fun getPastebinApiKey(): String = getString("paste_pastebin_api_key", "")
+    fun setPastebinApiKey(key: String) = setString("paste_pastebin_api_key", key)
 }

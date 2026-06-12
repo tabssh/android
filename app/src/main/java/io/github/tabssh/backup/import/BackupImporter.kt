@@ -453,6 +453,8 @@ class BackupImporter(
             preferenceManager.setClearClipboardTimeout(s.optInt("clearClipboardTimeout", 60))
             preferenceManager.setAutoLockOnBackground(s.optBoolean("autoLockEnabled", false))
             preferenceManager.setAutoLockTimeout(s.optInt("lockTimeout", 300))
+            preferenceManager.setPasswordTTLHours(s.optInt("passwordTTLHours", 24))
+            preferenceManager.setPreventScreenshots(s.optBoolean("preventScreenshots", false))
         }
         root.optJSONObject("terminal")?.let { t ->
             preferenceManager.setTerminalTheme(t.optString("theme", "dracula"))
@@ -462,12 +464,21 @@ class BackupImporter(
             preferenceManager.setCursorBlinkEnabled(t.optBoolean("cursorBlink", true))
             preferenceManager.setScrollbackLines(t.optInt("scrollbackLines", 1000))
             preferenceManager.setBellNotificationEnabled(t.optBoolean("terminalBell", false))
+            preferenceManager.setLineSpacing(t.optDouble("lineSpacing", 1.2).toFloat())
+            preferenceManager.setReverseScrollDirection(t.optBoolean("reverseScroll", false))
+            preferenceManager.setBellVibrate(t.optBoolean("bellVibrate", true))
+            preferenceManager.setBellVisual(t.optBoolean("bellVisual", true))
+            preferenceManager.setWordWrap(t.optBoolean("wordWrap", true))
+            preferenceManager.setCopyOnSelect(t.optBoolean("copyOnSelect", true))
         }
         root.optJSONObject("ui")?.let { u ->
             preferenceManager.setMaxTabs(u.optInt("maxTabs", 10))
             preferenceManager.setConfirmTabClose(u.optBoolean("confirmTabClose", true))
             preferenceManager.setAppTheme(u.optString("appTheme", "system"))
             preferenceManager.setDynamicColors(u.optBoolean("dynamicColors", true))
+            preferenceManager.setShowFunctionKeys(u.optBoolean("showFunctionKeys", true))
+            preferenceManager.setFullscreenMode(u.optBoolean("fullscreenMode", false))
+            preferenceManager.setKeepScreenOn(u.optBoolean("keepScreenOn", false))
         }
         root.optJSONObject("keyboard")?.let { k ->
             preferenceManager.setKeyboardRowCount(k.optInt("rowCount", 3))
@@ -511,6 +522,9 @@ class BackupImporter(
             preferenceManager.setConnectTimeout(c.optInt("connectTimeout", 15))
             preferenceManager.setAutoReconnect(c.optBoolean("autoReconnect", true))
             preferenceManager.setCompressionEnabled(c.optBoolean("compression", true))
+            preferenceManager.setServerAliveIntervalSec(c.optInt("serverAliveIntervalSec", 60))
+            preferenceManager.setX11ForwardingDefault(c.optBoolean("x11ForwardingDefault", false))
+            preferenceManager.setAgentForwardingDefault(c.optBoolean("agentForwardingDefault", false))
         }
         root.optJSONObject("sync")?.let { s ->
             preferenceManager.setSyncFrequency(s.optString("frequency", "hourly"))
@@ -547,6 +561,14 @@ class BackupImporter(
         root.optJSONObject("accessibility")?.let { a ->
             preferenceManager.setHighContrastMode(a.optBoolean("highContrast", false))
             preferenceManager.setLargeTouchTargets(a.optBoolean("largeTouchTargets", false))
+            preferenceManager.setScreenReaderEnabled(a.optBoolean("screenReader", false))
+        }
+        root.optJSONObject("paste")?.let { p ->
+            preferenceManager.setPasteService(p.optString("service", "stikked"))
+            preferenceManager.setPasteMicrobinUrl(p.optString("microbinUrl", "https://mb.pste.us"))
+            preferenceManager.setPasteLenpasteUrl(p.optString("lenpasteUrl", "https://lp.pste.us"))
+            preferenceManager.setPasteStikkedUrl(p.optString("stikkedUrl", "https://pste.us"))
+            preferenceManager.setPastebinApiKey(p.optString("pastebinApiKey", ""))
         }
         root.optJSONObject("proxy")?.let { p ->
             preferenceManager.setProxyEnabled(p.optBoolean("enabled", false))

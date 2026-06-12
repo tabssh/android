@@ -407,6 +407,8 @@ class BackupExporter(
             put("clearClipboardTimeout", preferenceManager.getClearClipboardTimeout())
             put("autoLockEnabled", preferenceManager.isAutoLockOnBackground())
             put("lockTimeout", preferenceManager.getAutoLockTimeout())
+            put("passwordTTLHours", preferenceManager.getPasswordTTLHours())
+            put("preventScreenshots", preferenceManager.isPreventScreenshots())
         })
 
         root.put("terminal", JSONObject().apply {
@@ -417,6 +419,12 @@ class BackupExporter(
             put("cursorBlink", preferenceManager.isCursorBlinkEnabled())
             put("scrollbackLines", preferenceManager.getScrollbackLines())
             put("terminalBell", preferenceManager.isBellNotificationEnabled())
+            put("lineSpacing", preferenceManager.getLineSpacing())
+            put("reverseScroll", preferenceManager.isReverseScrollDirection())
+            put("bellVibrate", preferenceManager.isBellVibrate())
+            put("bellVisual", preferenceManager.isBellVisual())
+            put("wordWrap", preferenceManager.isWordWrap())
+            put("copyOnSelect", preferenceManager.isCopyOnSelect())
         })
 
         root.put("ui", JSONObject().apply {
@@ -424,6 +432,9 @@ class BackupExporter(
             put("confirmTabClose", preferenceManager.isConfirmTabClose())
             put("appTheme", preferenceManager.getAppTheme())
             put("dynamicColors", preferenceManager.isDynamicColors())
+            put("showFunctionKeys", preferenceManager.isShowFunctionKeys())
+            put("fullscreenMode", preferenceManager.isFullscreenMode())
+            put("keepScreenOn", preferenceManager.isKeepScreenOn())
         })
 
         root.put("keyboard", JSONObject().apply {
@@ -464,11 +475,14 @@ class BackupExporter(
         })
 
         root.put("connection", JSONObject().apply {
-            put("defaultUsername", preferenceManager.getDefaultUsername())
-            put("defaultPort",     preferenceManager.getDefaultPort())
-            put("connectTimeout",  preferenceManager.getConnectTimeout())
-            put("autoReconnect",   preferenceManager.isAutoReconnect())
-            put("compression",     preferenceManager.isCompressionEnabled())
+            put("defaultUsername",       preferenceManager.getDefaultUsername())
+            put("defaultPort",           preferenceManager.getDefaultPort())
+            put("connectTimeout",        preferenceManager.getConnectTimeout())
+            put("autoReconnect",         preferenceManager.isAutoReconnect())
+            put("compression",           preferenceManager.isCompressionEnabled())
+            put("serverAliveIntervalSec", preferenceManager.getServerAliveIntervalSec())
+            put("x11ForwardingDefault",  preferenceManager.isX11ForwardingDefault())
+            put("agentForwardingDefault", preferenceManager.isAgentForwardingDefault())
         })
 
         root.put("sync", JSONObject().apply {
@@ -508,6 +522,15 @@ class BackupExporter(
         root.put("accessibility", JSONObject().apply {
             put("highContrast",      preferenceManager.isHighContrastMode())
             put("largeTouchTargets", preferenceManager.isLargeTouchTargets())
+            put("screenReader",      preferenceManager.isScreenReaderEnabled())
+        })
+
+        root.put("paste", JSONObject().apply {
+            put("service",       preferenceManager.getPasteService())
+            put("microbinUrl",   preferenceManager.getPasteMicrobinUrl())
+            put("lenpasteUrl",   preferenceManager.getPasteLenpasteUrl())
+            put("stikkedUrl",    preferenceManager.getPasteStikkedUrl())
+            put("pastebinApiKey", preferenceManager.getPastebinApiKey())
         })
 
         // Proxy configuration. Password is in plain SharedPreferences (not Keystore-

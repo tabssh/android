@@ -559,6 +559,10 @@ class SyncDataApplier {
             accessibility?.let {
                 count += applyAccessibilityPreferences(it)
             }
+            val paste = (preferences["paste"] as? JsonObject)?.toAnyMap()
+            paste?.let {
+                count += applyPastePreferences(it)
+            }
             val proxy = (preferences["proxy"] as? JsonObject)?.toAnyMap()
             proxy?.let {
                 count += applyProxyPreferences(it)
@@ -636,10 +640,30 @@ class SyncDataApplier {
                 when (key) {
                     "highContrast"      -> preferenceManager.setHighContrastMode(value as Boolean)
                     "largeTouchTargets" -> preferenceManager.setLargeTouchTargets(value as Boolean)
+                    "screenReader"      -> preferenceManager.setScreenReaderEnabled(value as Boolean)
                 }
                 count++
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to apply accessibility preference: $key", e)
+            }
+        }
+        return count
+    }
+
+    private fun applyPastePreferences(prefs: Map<String, Any>): Int {
+        var count = 0
+        prefs.forEach { (key, value) ->
+            try {
+                when (key) {
+                    "service"        -> preferenceManager.setPasteService(value as String)
+                    "microbinUrl"    -> preferenceManager.setPasteMicrobinUrl(value as String)
+                    "lenpasteUrl"    -> preferenceManager.setPasteLenpasteUrl(value as String)
+                    "stikkedUrl"     -> preferenceManager.setPasteStikkedUrl(value as String)
+                    "pastebinApiKey" -> preferenceManager.setPastebinApiKey(value as String)
+                }
+                count++
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to apply paste preference: $key", e)
             }
         }
         return count
@@ -743,6 +767,15 @@ class SyncDataApplier {
                         }
                         preferenceManager.setAutoLockTimeout(timeout)
                     }
+                    "passwordTTLHours" -> {
+                        val hours = when (value) {
+                            is Number -> value.toInt()
+                            is String -> value.toInt()
+                            else -> 24
+                        }
+                        preferenceManager.setPasswordTTLHours(hours)
+                    }
+                    "preventScreenshots" -> preferenceManager.setPreventScreenshots(value as Boolean)
                 }
                 count++
             } catch (e: Exception) {
@@ -778,6 +811,19 @@ class SyncDataApplier {
                         preferenceManager.setScrollbackLines(lines)
                     }
                     "terminalBell" -> preferenceManager.setBellNotificationEnabled(value as Boolean)
+                    "lineSpacing" -> {
+                        val spacing = when (value) {
+                            is Number -> value.toFloat()
+                            is String -> value.toFloat()
+                            else -> 1.2f
+                        }
+                        preferenceManager.setLineSpacing(spacing)
+                    }
+                    "reverseScroll" -> preferenceManager.setReverseScrollDirection(value as Boolean)
+                    "bellVibrate"   -> preferenceManager.setBellVibrate(value as Boolean)
+                    "bellVisual"    -> preferenceManager.setBellVisual(value as Boolean)
+                    "wordWrap"      -> preferenceManager.setWordWrap(value as Boolean)
+                    "copyOnSelect"  -> preferenceManager.setCopyOnSelect(value as Boolean)
                 }
                 count++
             } catch (e: Exception) {
@@ -803,6 +849,9 @@ class SyncDataApplier {
                     "confirmTabClose" -> preferenceManager.setConfirmTabClose(value as Boolean)
                     "appTheme" -> preferenceManager.setAppTheme(value as String)
                     "dynamicColors" -> preferenceManager.setDynamicColors(value as Boolean)
+                    "showFunctionKeys" -> preferenceManager.setShowFunctionKeys(value as Boolean)
+                    "fullscreenMode"   -> preferenceManager.setFullscreenMode(value as Boolean)
+                    "keepScreenOn"     -> preferenceManager.setKeepScreenOn(value as Boolean)
                 }
                 count++
             } catch (e: Exception) {
@@ -836,6 +885,16 @@ class SyncDataApplier {
                     }
                     "autoReconnect" -> preferenceManager.setAutoReconnect(value as Boolean)
                     "compression" -> preferenceManager.setCompressionEnabled(value as Boolean)
+                    "serverAliveIntervalSec" -> {
+                        val sec = when (value) {
+                            is Number -> value.toInt()
+                            is String -> value.toInt()
+                            else -> 60
+                        }
+                        preferenceManager.setServerAliveIntervalSec(sec)
+                    }
+                    "x11ForwardingDefault"   -> preferenceManager.setX11ForwardingDefault(value as Boolean)
+                    "agentForwardingDefault" -> preferenceManager.setAgentForwardingDefault(value as Boolean)
                 }
                 count++
             } catch (e: Exception) {

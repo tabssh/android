@@ -582,6 +582,7 @@ class SyncDataCollector {
             if (monitorPrefs.isNotEmpty()) prefs["monitoring"] = anyMapToJsonObject(monitorPrefs)
             prefs["multiplexer"]    = anyMapToJsonObject(collectMultiplexerPreferences())
             prefs["accessibility"]  = anyMapToJsonObject(collectAccessibilityPreferences())
+            prefs["paste"]          = anyMapToJsonObject(collectPastePreferences())
             prefs["proxy"]          = anyMapToJsonObject(collectProxyPreferences())
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to collect preferences", e)
@@ -617,7 +618,9 @@ class SyncDataCollector {
             "strictHostKeyChecking" to preferenceManager.isStrictHostKeyChecking(),
             "clearClipboardTimeout" to preferenceManager.getClearClipboardTimeout(),
             "autoLockEnabled" to preferenceManager.isAutoLockOnBackground(),
-            "lockTimeout" to preferenceManager.getAutoLockTimeout()
+            "lockTimeout" to preferenceManager.getAutoLockTimeout(),
+            "passwordTTLHours" to preferenceManager.getPasswordTTLHours(),
+            "preventScreenshots" to preferenceManager.isPreventScreenshots()
         )
     }
 
@@ -629,7 +632,13 @@ class SyncDataCollector {
             "cursorStyle" to preferenceManager.getCursorStyle(),
             "cursorBlink" to preferenceManager.isCursorBlinkEnabled(),
             "scrollbackLines" to preferenceManager.getScrollbackLines(),
-            "terminalBell" to preferenceManager.isBellNotificationEnabled()
+            "terminalBell" to preferenceManager.isBellNotificationEnabled(),
+            "lineSpacing" to preferenceManager.getLineSpacing(),
+            "reverseScroll" to preferenceManager.isReverseScrollDirection(),
+            "bellVibrate" to preferenceManager.isBellVibrate(),
+            "bellVisual" to preferenceManager.isBellVisual(),
+            "wordWrap" to preferenceManager.isWordWrap(),
+            "copyOnSelect" to preferenceManager.isCopyOnSelect()
         )
     }
 
@@ -638,7 +647,10 @@ class SyncDataCollector {
             "maxTabs" to preferenceManager.getMaxTabs(),
             "confirmTabClose" to preferenceManager.isConfirmTabClose(),
             "appTheme" to preferenceManager.getAppTheme(),
-            "dynamicColors" to preferenceManager.isDynamicColors()
+            "dynamicColors" to preferenceManager.isDynamicColors(),
+            "showFunctionKeys" to preferenceManager.isShowFunctionKeys(),
+            "fullscreenMode" to preferenceManager.isFullscreenMode(),
+            "keepScreenOn" to preferenceManager.isKeepScreenOn()
         )
     }
 
@@ -648,7 +660,10 @@ class SyncDataCollector {
             "defaultPort" to preferenceManager.getDefaultPort(),
             "connectTimeout" to preferenceManager.getConnectTimeout(),
             "autoReconnect" to preferenceManager.isAutoReconnect(),
-            "compression" to preferenceManager.isCompressionEnabled()
+            "compression" to preferenceManager.isCompressionEnabled(),
+            "serverAliveIntervalSec" to preferenceManager.getServerAliveIntervalSec(),
+            "x11ForwardingDefault" to preferenceManager.isX11ForwardingDefault(),
+            "agentForwardingDefault" to preferenceManager.isAgentForwardingDefault()
         )
     }
 
@@ -740,7 +755,16 @@ class SyncDataCollector {
 
     private fun collectAccessibilityPreferences(): Map<String, Any> = mapOf(
         "highContrast"      to preferenceManager.isHighContrastMode(),
-        "largeTouchTargets" to preferenceManager.isLargeTouchTargets()
+        "largeTouchTargets" to preferenceManager.isLargeTouchTargets(),
+        "screenReader"      to preferenceManager.isScreenReaderEnabled()
+    )
+
+    private fun collectPastePreferences(): Map<String, Any> = mapOf(
+        "service"        to preferenceManager.getPasteService(),
+        "microbinUrl"    to preferenceManager.getPasteMicrobinUrl(),
+        "lenpasteUrl"    to preferenceManager.getPasteLenpasteUrl(),
+        "stikkedUrl"     to preferenceManager.getPasteStikkedUrl(),
+        "pastebinApiKey" to preferenceManager.getPastebinApiKey()
     )
 
     private fun collectProxyPreferences(): Map<String, Any> {
