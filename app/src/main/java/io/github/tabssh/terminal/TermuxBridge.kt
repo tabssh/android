@@ -41,6 +41,7 @@ class TermuxBridge(
     companion object {
         private const val TAG = "TermuxBridge"
         private const val READ_BUFFER_SIZE = 8192
+        private const val PASTE_CHUNK_SIZE = 4096
 
         /**
          * When false (default), keystroke writes log only `Sent N bytes to SSH`.
@@ -196,6 +197,12 @@ class TermuxBridge(
     @Volatile
     private var osc8Links = CopyOnWriteArrayList<Osc8Link>()
 
+    // Set by the read loop whenever the remote sends ESC[?2004h (enable) or
+    // ESC[?2004l (disable).  Read by pasteText() on the UI/main thread.
+    @Volatile
+    var bracketedPasteActive = false
+        private set
+
     // Matches: ESC ] 8 ; params ; url ESC \ anchor ESC ] 8 ; ; ESC \
     // Groups: 1=params, 2=url, 3=anchor
     // DOT_MATCHES_ALL so anchor can contain any byte (including LF).
@@ -252,6 +259,15 @@ class TermuxBridge(
      */
     private fun appendWithOsc8Tracking(em: TerminalEmulator, data: ByteArray, length: Int) {
         val text = String(data, 0, length, Charsets.UTF_8)
+
+        // Track DEC private mode ?2004 (bracketed paste).  When both enable and
+        // disable appear in the same buffer, the later occurrence wins.
+        val lastEnable  = text.lastIndexOf("[?2004h")
+        val lastDisable = text.lastIndexOf("[?2004l")
+        if (lastEnable >= 0 || lastDisable >= 0) {
+            bracketedPasteActive = lastEnable > lastDisable
+        }
+
         val matches = osc8Pattern.findAll(text).toList()
 
         // Track scroll by monitoring the transcript size before/after each
@@ -670,6 +686,27 @@ class TermuxBridge(
     }
 
     /**
+     * Send clipboard text to the SSH server, applying bracketed paste mode
+     * markers (ESC[200~ / ESC[201~) when the remote has enabled ?2004, and
+     * chunking large payloads so a single large write never holds the writeLock
+     * long enough to starve concurrent keystrokes.
+     * Line endings are normalised: CRLF and bare LF both become CR.
+     */
+    fun pasteText(text: String) {
+        val normalized = text.replace("\r\n", "\r").replace('\n', '\r')
+        val bracketed = bracketedPasteActive
+        if (bracketed) writeString("[200~")
+        var offset = 0
+        while (offset < normalized.length) {
+            val end = minOf(offset + PASTE_CHUNK_SIZE, normalized.length)
+            writeString(normalized.substring(offset, end))
+            offset = end
+        }
+        if (bracketed) writeString("[201~")
+        Logger.d(TAG, "Pasted ${normalized.length} chars (bracketed=$bracketed)")
+    }
+
+    /**
      * Send key press to terminal
      * Converts key codes to appropriate terminal escape sequences
      */
@@ -951,9 +988,11 @@ class TermuxBridge(
         try { moshSession?.finishIfRunning() } catch (_: Exception) {}
         moshSession = null
 
-        // OSC 8 links are session-scoped — clear them on every disconnect so
-        // stale link coordinates from one SSH session don't bleed into the next.
+        // OSC 8 links and bracketed paste state are session-scoped — clear them
+        // on every disconnect so stale data from one SSH session doesn't bleed
+        // into the next.
         osc8Links = CopyOnWriteArrayList()
+        bracketedPasteActive = false
 
         if (wasConnected) {
             runOnMain {

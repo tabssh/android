@@ -1,5 +1,19 @@
 # What's New
 
+## Wave 45 — Paste into vim actually works
+
+Pasting text into the terminal now behaves correctly in vim, nano, and any
+other editor. Previously, pasting a multi-line block could trigger
+auto-indent, run commands, or corrupt the text. That's fixed.
+
+- **Bracketed paste** — when vim (or any program) tells the terminal it
+  wants paste mode, the app now wraps your clipboard content in the correct
+  markers so the editor receives it as a plain insert, not a stream of
+  individual keystrokes
+- **Large paste support** — configs, scripts, SQL dumps, and other big
+  blocks of text are sent in chunks so the connection stays responsive while
+  pasting; line endings are automatically normalised
+
 ## Wave 44 — Hyperlinks light up and open with a tap
 
 URLs and hyperlinks in the terminal are now visually underlined in blue, and

@@ -29,6 +29,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Bracketed paste** — pasting into vim, nano, or any editor that enables `?2004` (bracketed paste mode) now works correctly; the app tracks `ESC[?2004h`/`ESC[?2004l` from the server and wraps paste data in `ESC[200~` / `ESC[201~`; large pastes (configs, scripts, SQL) are chunked at 4 KB to prevent stalling the SSH write path; CRLF and bare LF are normalised to CR on the way out
+
 - **OSC 8 hyperlinks** — SSH and VM console sessions now recognise OSC 8 hyperlink sequences (`\e]8;params;url\e\\anchor\e]8;;\e\\`); long-pressing an anchor word opens the embedded URL rather than relying on regex guessing; anchor text is underlined in link-blue during rendering for both the Termux path (TermuxBridge intercept) and the custom emulator path (ANSIParser + TerminalChar.url)
 - **Visual URL underlines** — every detected URL (OSC 8 or regex-matched) is now underlined with a thin colored rect drawn below the text during render; color follows the theme's primary hue when set, otherwise defaults to a link-blue that reads on both dark and light backgrounds
 

@@ -709,6 +709,25 @@ class TerminalView @JvmOverloads constructor(
     }
 
     /**
+     * Send clipboard text to the remote, respecting bracketed paste mode and
+     * chunking large payloads so the write lock is never held for a full 2 MB
+     * write.  Always use this for paste — never sendText() — so that programs
+     * like vim that enable ?2004 receive properly wrapped paste data.
+     */
+    fun pasteText(text: String) {
+        if (!cursorBlinkPhase) {
+            cursorBlinkPhase = true
+            invalidate()
+        }
+        termuxBridge?.let { bridge ->
+            bridge.pasteText(text)
+            return
+        }
+        terminalEmulator?.pasteText(text)
+            ?: Logger.w("TerminalView", "Unable to paste - no bridge attached")
+    }
+
+    /**
      * Send special key sequence
      */
     fun sendKeySequence(sequence: String) {

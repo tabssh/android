@@ -511,6 +511,7 @@ class ANSIParser(private val buffer: TerminalBuffer) {
                 25 -> { /* Cursor visible - would affect cursor rendering */ }
                 7 -> buffer.setWrapMode(set) // Auto wrap mode
                 6 -> buffer.setOriginMode(set) // Origin mode
+                2004 -> buffer.setBracketedPasteMode(set) // Bracketed paste mode
                 else -> {
                     Logger.d("ANSIParser", "Unhandled mode parameter: $param")
                 }

@@ -272,6 +272,14 @@ class TerminalBuffer(
         currentLinkUrl = url
     }
 
+    private var bracketedPasteMode = false
+
+    fun setBracketedPasteMode(enabled: Boolean) {
+        bracketedPasteMode = enabled
+    }
+
+    fun isBracketedPasteModeActive(): Boolean = bracketedPasteMode
+
     /**
      * Return the OSC 8 URL embedded in the cell at [row],[col], or null if the
      * cell has no link or the coordinates are out of range.

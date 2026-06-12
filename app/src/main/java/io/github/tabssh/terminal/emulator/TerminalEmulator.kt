@@ -25,6 +25,9 @@ class TerminalEmulator(private val buffer: TerminalBuffer) {
 
     companion object {
         private const val READ_BUFFER_SIZE = 4096
+        private const val PASTE_CHUNK_SIZE = 4096
+        private const val BRACKETED_PASTE_START = "[200~"
+        private const val BRACKETED_PASTE_END = "[201~"
     }
 
     // ANSI Parser for proper escape sequence handling
@@ -79,6 +82,40 @@ class TerminalEmulator(private val buffer: TerminalBuffer) {
             }
         } ?: run {
             Logger.w("TerminalEmulator", "Cannot send text - output stream not connected")
+        }
+    }
+
+    /**
+     * Send clipboard text to the remote, applying bracketed paste mode markers
+     * (ESC[200~ / ESC[201~) when the remote has enabled ?2004, and chunking
+     * large payloads so a single 2 MB write never stalls for a whole round-trip.
+     * Line endings are normalised: CRLF and bare LF both become CR.
+     */
+    fun pasteText(text: String) {
+        val stream = outputStream ?: run {
+            Logger.w("TerminalEmulator", "Cannot paste - output stream not connected")
+            return
+        }
+        val normalized = text.replace("\r\n", "\r").replace('\n', '\r')
+        val bracketed = buffer.isBracketedPasteModeActive()
+        try {
+            if (bracketed) stream.write("$BRACKETED_PASTE_START".toByteArray(currentCharset))
+            var offset = 0
+            while (offset < normalized.length) {
+                val end = minOf(offset + PASTE_CHUNK_SIZE, normalized.length)
+                val bytes = normalized.substring(offset, end).toByteArray(currentCharset)
+                stream.write(bytes)
+                stream.flush()
+                offset = end
+            }
+            if (bracketed) {
+                stream.write("$BRACKETED_PASTE_END".toByteArray(currentCharset))
+                stream.flush()
+            }
+            Logger.d("TerminalEmulator", "Pasted ${normalized.length} chars (bracketed=$bracketed)")
+        } catch (e: Exception) {
+            Logger.e("TerminalEmulator", "Error pasting text", e)
+            listeners.forEach { it.onTerminalError(e) }
         }
     }
 

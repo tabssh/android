@@ -3352,7 +3352,7 @@ private fun showSnippetsPickerForActiveTab() {
     private fun pasteFromClipboard() {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
         clipboard.primaryClip?.getItemAt(0)?.text?.let { text ->
-            getActiveTerminalView()?.sendText(text.toString())
+            getActiveTerminalView()?.pasteText(text.toString())
         }
     }
     
