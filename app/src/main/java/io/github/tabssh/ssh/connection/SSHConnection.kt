@@ -1481,6 +1481,42 @@ class SSHConnection(
      * is gone" (cascade so the global notification fires).
      */
     fun isSessionAlive(): Boolean = session?.isConnected == true
+
+    /**
+     * Health-check entry point called by [io.github.tabssh.services.SSHConnectionService]
+     * every 30 s from its monitoring loop.
+     *
+     * Detects sessions that died silently — JSch keepalive timeout, remote EOF
+     * after screen lock, NAT expiry — without going through [handleConnectionError].
+     * When the JSch session is dead but our state still reports an active value
+     * (CONNECTED / CONNECTING / AUTHENTICATING), this method:
+     *   1. Transitions state to DISCONNECTED and fires the onDisconnected listeners
+     *      so the service notification updates immediately.
+     *   2. Arms [NetworkAwareReconnector] via [NetworkAwareReconnector.onConnectionLost]
+     *      so it applies exponential backoff and network gating before the next attempt.
+     *
+     * Safe to call from any thread — all state writes are coroutine-safe StateFlow
+     * assignments and the listener list is a CopyOnWriteArrayList.
+     */
+    fun triggerReconnectIfDead() {
+        // Never connected yet, or already in a terminal / reconnecting state.
+        if (!hadSuccessfulConnect) return
+        if (!_connectionState.value.isActive()) return
+        // JSch session is still alive — nothing to do.
+        if (session?.isConnected == true) return
+        Logger.w(
+            "SSHConnection",
+            "Health check: JSch session is dead but state=${_connectionState.value} " +
+                "for ${profile.host}:${profile.port} — transitioning to DISCONNECTED"
+        )
+        _connectionState.value = ConnectionState.DISCONNECTED
+        notifyListeners { onDisconnected(id) }
+        reconnector?.onConnectionLost()
+            ?: Logger.w(
+                "SSHConnection",
+                "Health check: reconnector is null for ${profile.host} — session will not auto-reconnect"
+            )
+    }
     
     /**
      * Execute a command on the remote server and return output

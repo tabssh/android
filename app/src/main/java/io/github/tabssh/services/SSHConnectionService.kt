@@ -150,6 +150,14 @@ class SSHConnectionService : Service() {
     }
     
     private fun startForegroundService() {
+        // Acquire the wake lock immediately — before any session event fires.
+        // Without this the CPU can idle during the connecting / authenticating
+        // phase (especially on devices with aggressive power management), which
+        // causes the TCP handshake or JSch kex to time out on screen-off.
+        // acquireWakeLock() is idempotent; releaseWakeLock() is called when
+        // activeConnections drops back to zero.
+        acquireWakeLock()
+
         // The foreground-service contract requires *some* notification
         // to be live before startForeground returns. If we already have
         // an active connection, anchor on it; otherwise post a transient
@@ -593,15 +601,34 @@ class SSHConnectionService : Service() {
         }
     }
 
+    /**
+     * Health-check every active SSH connection.
+     *
+     * This runs every 30 s from [startConnectionMonitoring]. It calls
+     * [SSHConnection.triggerReconnectIfDead] on each non-monitoring connection,
+     * which:
+     *   - Detects sessions that died silently (screen lock → WiFi sleep →
+     *     keepalive timeout, NAT expiry, remote EOF) without the disconnect
+     *     bubbling back through [handleConnectionError].
+     *   - Transitions the connection state to DISCONNECTED so the notification
+     *     stops showing "Connected" for a dead session.
+     *   - Arms [NetworkAwareReconnector] so the reconnect fires with exponential
+     *     backoff and network gating — the same path a normal error-path drop uses.
+     */
     private suspend fun handleNetworkChanges() {
-        // This would implement network change detection and reconnection logic
-        // For now, just log that we're checking
-        Logger.d("SSHConnectionService", "Checking network state")
-        
-        // In a full implementation, this would:
-        // 1. Check network connectivity
-        // 2. Detect network changes (WiFi to mobile, etc.)
-        // 3. Trigger reconnections if needed
-        // 4. Handle connection failures due to network issues
+        val connections = try {
+            app.sshSessionManager.getActiveConnections()
+        } catch (e: Exception) {
+            Logger.w(TAG, "handleNetworkChanges: failed to get active connections", e)
+            return
+        }
+        for (conn in connections) {
+            if (conn.isMonitoringOnly) continue
+            try {
+                conn.triggerReconnectIfDead()
+            } catch (e: Exception) {
+                Logger.w(TAG, "handleNetworkChanges: probe failed for ${conn.profile.host}", e)
+            }
+        }
     }
 }
