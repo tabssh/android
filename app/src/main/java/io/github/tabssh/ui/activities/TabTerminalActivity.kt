@@ -133,6 +133,13 @@ class TabTerminalActivity : AppCompatActivity() {
     private var customKeyboardVisible: Boolean = true
     /** Coroutine that mirrors the active tab's multiplexer StateFlow to the PREFIX key visual state. */
     private var multiplexerObserverJob: kotlinx.coroutines.Job? = null
+    /**
+     * True while the PREFIX key is "armed" — user tapped it once and is about
+     * to tap the tmux/screen command key. A second tap on PRE cancels (disarms)
+     * without sending anything. Any other key tap sends the prefix then the key.
+     * Mirrors the latch behaviour of CTL/ALT on the keyboard bar.
+     */
+    private var prefixArmed = false
 
     // Find-in-scrollback
     private var searchController: ScrollbackSearchController? = null
@@ -2211,7 +2218,9 @@ private fun showSnippetsPickerForActiveTab() {
     }
 
     private fun updatePrefixKeyVisual(multiplexerType: String?) {
-        val active = multiplexerType != null
+        // Key is "active" (green) when a mux is detected OR when the user has
+        // armed PRE by tapping it once (latch mode — waiting for the command key).
+        val active = multiplexerType != null || prefixArmed
         // Always leave the key clickable — when inactive the click handler
         // shows the type picker instead of sending a prefix.
         binding.multiRowKeyboard.setKeyState("PREFIX", active = active, enabled = true)
@@ -3928,33 +3937,54 @@ private fun showSnippetsPickerForActiveTab() {
             "PREFIX" -> {
                 val tab = tabManager.getActiveTab()
                 val type = tab?.activeMultiplexerType
-                if (type == null) {
+                if (prefixArmed) {
+                    // Second tap on PRE while already armed — cancel the latch
+                    // without sending anything, mirroring CTL/ALT toggle-off.
+                    prefixArmed = false
+                    updatePrefixKeyVisual(type)
+                    Logger.d("TabTerminalActivity", "PREFIX key: disarmed (second tap)")
+                } else if (type == null) {
                     // No multiplexer detected — show the type picker so the user
                     // can tell us which one is running. Sending a blind prefix to
                     // a non-multiplexer session would inject a stray control byte.
                     showMultiplexerPickerDialog()
                 } else {
-                    val prefixStr = when (type) {
-                        "tmux"   -> app.preferencesManager.getString(
-                            "multiplexer_custom_prefix_tmux",   "C-b")
-                        "screen" -> app.preferencesManager.getString(
-                            "multiplexer_custom_prefix_screen", "C-a")
-                        "zellij" -> app.preferencesManager.getString(
-                            "multiplexer_custom_prefix_zellij", "C-g")
-                        else     -> app.preferencesManager.getString(
-                            "multiplexer_custom_prefix_tmux",   "C-b")
-                    }
-                    val bytes = io.github.tabssh.terminal.gestures.PrefixParser.parse(prefixStr)
-                    if (bytes != null) {
-                        // Send raw bytes via ISO-8859-1 so control bytes (0x01–0x1f)
-                        // are preserved exactly. sendText → TermuxBridge.sendText writes
-                        // the byte values through to the SSH stream unchanged.
-                        terminal?.sendText(String(bytes, Charsets.ISO_8859_1))
-                        Logger.d("TabTerminalActivity", "PREFIX key: sent $prefixStr for $type")
-                    }
+                    // Arm the latch — next key tap will prepend the prefix byte.
+                    prefixArmed = true
+                    updatePrefixKeyVisual(type)
+                    Logger.d("TabTerminalActivity", "PREFIX key: armed for $type")
                 }
             }
             else -> {
+                // If the PREFIX latch is armed, fire the prefix byte before this
+                // key — same as pressing PRE then the command key in sequence.
+                // Disarm immediately afterwards so the latch is consumed once.
+                if (prefixArmed) {
+                    val tab = tabManager.getActiveTab()
+                    val type = tab?.activeMultiplexerType
+                    if (type != null) {
+                        val prefixStr = when (type) {
+                            "tmux"   -> app.preferencesManager.getString(
+                                "multiplexer_custom_prefix_tmux",   "C-b")
+                            "screen" -> app.preferencesManager.getString(
+                                "multiplexer_custom_prefix_screen", "C-a")
+                            "zellij" -> app.preferencesManager.getString(
+                                "multiplexer_custom_prefix_zellij", "C-g")
+                            else     -> app.preferencesManager.getString(
+                                "multiplexer_custom_prefix_tmux",   "C-b")
+                        }
+                        val bytes = io.github.tabssh.terminal.gestures.PrefixParser.parse(prefixStr)
+                        if (bytes != null) {
+                            terminal?.sendText(String(bytes, Charsets.ISO_8859_1))
+                            Logger.d(
+                                "TabTerminalActivity",
+                                "PREFIX latch: sent $prefixStr for $type before ${key.label}"
+                            )
+                        }
+                    }
+                    prefixArmed = false
+                    updatePrefixKeyVisual(type)
+                }
                 if (key.keySequence.isNotEmpty()) {
                     // ARROW keys from the keyboard bar must respect DECCKM. When the
                     // remote (e.g. vim) has set application cursor key mode (\033[?1h),
