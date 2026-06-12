@@ -137,11 +137,28 @@ class TerminalView @JvmOverloads constructor(
     private var accessibilityHelper: TerminalAccessibilityHelper? = null
 
     // URL detection
+    //
+    // Covers: http/https/ftp/ftps/ssh/git/svn/file schemes, www. bare prefix,
+    // IPv4 host:port, and percent-encoded paths.
+    //
+    // Trailing-punctuation strip: URLs in prose are often followed by '.', ',',
+    // ')', ']', '"', or ''' that are not part of the URL. The path segment
+    // [^\s<>"')\]]* refuses to consume those characters so they are not
+    // included in the match.
     private val urlPattern = Regex(
-        "(https?://[a-zA-Z0-9.-]+(?:\\.[a-zA-Z]{2,})+(?:/[^\\s]*)?)|" +
-        "(www\\.[a-zA-Z0-9.-]+(?:\\.[a-zA-Z]{2,})+(?:/[^\\s]*)?)",
+        "(?:" +
+            // Scheme-based: http/https/ftp/ftps/ssh/git/svn/file + authority + optional path
+            "(?:https?|ftps?|ssh|git|svn|file)://[^\\s<>\"')\\]\\[\\\\]+" +
+            "|" +
+            // www. bare prefix (scheme is prepended by the caller)
+            "www\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\\.[a-zA-Z]{2,})+(?:/[^\\s<>\"')\\]\\[\\\\]*)?" +
+        ")",
         RegexOption.IGNORE_CASE
     )
+
+    // Trailing characters that should be stripped from a matched URL when they
+    // appear at the very end (e.g. "see https://example.com." in a sentence).
+    private val urlTrailingStripRe = Regex("[.,;:!?)\\]'\"]+$")
     var onUrlDetected: ((String) -> Unit)? = null
 
     // Performance optimization: dirty region tracking
@@ -1374,7 +1391,12 @@ class TerminalView @JvmOverloads constructor(
 
     /**
      * Detect URL at the given position.
-     * Also checks the following row to catch URLs that span a terminal word-wrap boundary.
+     *
+     * Also checks the following row to catch URLs that split across a soft-wrap boundary.
+     * For the custom TerminalBuffer the wrap flag is consulted so we never join two
+     * logically separate lines.  For the Termux buffer the library's own getSelectedText
+     * inserts '\n' at hard-newline row boundaries; the URL pattern's exclusion of '\n'
+     * (via [^\s]) naturally prevents a false cross-line match, so no extra check is needed.
      */
     private fun detectUrlAtPosition(x: Float, y: Float): String? {
         val (row, lineText) = getTextAtPosition(x, y) ?: return null
@@ -1383,36 +1405,44 @@ class TerminalView @JvmOverloads constructor(
         // Check if the touch point is within any URL on the current row.
         val matchInRow = urlPattern.findAll(lineText).firstOrNull { col in it.range }
         if (matchInRow != null) {
-            var url = matchInRow.value
-            if (url.startsWith("www.", ignoreCase = true) && !url.startsWith("http", ignoreCase = true)) {
-                url = "http://$url"
-            }
-            return url
+            return normaliseUrl(matchInRow.value)
         }
 
-        // The URL may be split across a word-wrap boundary: the tail of the current row
-        // continues at the start of the next row with no whitespace between them. Try
-        // joining the two rows and matching the combined text.
-        val nextRowText = getRowText(row + 1)
-        if (nextRowText.isNotEmpty()) {
-            // Trim trailing whitespace from current row before joining — the terminal
-            // buffer pads short lines with spaces up to terminalCols.
-            val combined = lineText.trimEnd() + nextRowText
-            val combinedMatches = urlPattern.findAll(combined)
-            // The touch column falls somewhere in the current row's portion, so the
-            // match must start at or before col to be the URL the user tapped on.
-            for (match in combinedMatches) {
-                if (match.range.first <= col) {
-                    var url = match.value
-                    if (url.startsWith("www.", ignoreCase = true) && !url.startsWith("http", ignoreCase = true)) {
-                        url = "http://$url"
+        // The URL may span a soft-wrap boundary: the tail of the current row
+        // continues at the start of the next row with no whitespace between them.
+        // For the custom buffer: only join when the row is actually soft-wrapped.
+        // For the Termux buffer: always attempt the join — the Termux library's
+        //   getSelectedText inserts '\n' at hard-newline boundaries, so the regex
+        //   will not cross a real line break.
+        val rowActuallyWraps = terminalBuffer?.isRowWrapped(row) ?: true
+        if (rowActuallyWraps) {
+            val nextRowText = getRowText(row + 1)
+            if (nextRowText.isNotEmpty()) {
+                // Trim trailing spaces — the buffer pads short lines to terminalCols.
+                val combined = lineText.trimEnd() + nextRowText
+                for (match in urlPattern.findAll(combined)) {
+                    // The tapped column is in the current-row portion, so the match
+                    // must start at or before that column.
+                    if (match.range.first <= col) {
+                        return normaliseUrl(match.value)
                     }
-                    return url
                 }
             }
         }
 
         return null
+    }
+
+    /**
+     * Prepend "http://" to bare www. URLs and strip trailing punctuation that
+     * is not part of the URL itself (e.g. a period at the end of a sentence).
+     */
+    private fun normaliseUrl(raw: String): String {
+        var url = urlTrailingStripRe.replace(raw, "")
+        if (url.startsWith("www.", ignoreCase = true) && !url.startsWith("http", ignoreCase = true)) {
+            url = "http://$url"
+        }
+        return url
     }
 
     override fun onTouch(v: View, event: MotionEvent): Boolean {

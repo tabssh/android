@@ -1,5 +1,19 @@
 # What's New
 
+## Wave 43 — URL detection improvements
+
+Long-pressing a URL in the terminal is now more accurate:
+
+- **More schemes** — `ftp://`, `ssh://`, `git://`, `svn://`, and `file://` are
+  now recognised alongside the existing `http://` and `https://`
+- **No more trailing punctuation** — a URL at the end of a sentence like
+  `https://example.com.` no longer includes the period in the copied link
+- **Word-wrapped URLs** — a URL that splits across two display rows is only
+  joined when the row actually word-wrapped; the fix prevents an unrelated
+  line from being accidentally glued onto the URL
+
+---
+
 ## Wave 42 — Copy text now handles word-wrapped lines correctly
 
 When you copy the screen content from a terminal session, long lines that

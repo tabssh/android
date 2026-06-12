@@ -29,6 +29,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **URL detection matched trailing punctuation** — URLs followed by `.`, `,`, `)`, `]`, `'`, `"`, `;`, `:`, `!`, or `?` (as in normal prose) incorrectly included those characters in the matched URL; a trailing-strip pass now removes them
+- **URL detection joined unrelated lines** — the word-wrap cross-row URL join (for URLs that split at a terminal column boundary) fired even on rows that ended with a hard newline; for VM console sessions the new `TerminalBuffer.isRowWrapped()` flag is now consulted so only genuinely soft-wrapped rows are joined; for SSH sessions the Termux library's `'\n'`-at-hard-newline behaviour already prevents a false match in the combined text
+- **URL detection missed common schemes** — `ftp://`, `ftps://`, `ssh://`, `git://`, `svn://`, `file://` were not matched; all are now included
+
 - **VM stop button had no effect on Proxmox** — the Stop button was sending `virsh`'s graceful ACPI shutdown signal (`/status/shutdown`), which requires the QEMU guest agent to be installed and responding; changed to `/status/stop` (hard power-off) which always works regardless of guest state
 - **VM stop button had no effect on OCI** — the Stop action was sending `SOFTSTOP` (ACPI graceful), which silently did nothing when the OCI cloud agent was absent or the instance was unresponsive; changed to `STOP` (hard power-off) so the button is always reliable; errors are now logged instead of silently swallowed
 - **OCI all actions failed after first instance load (TOFU cert loop)** — the TLS pin is stored as `"sha_identity;sha_iaas"` at fixed positions, but `getCapturedCertSha256()` used `listOfNotNull` which collapsed missing slots; an IAAS-only pin was stored as a bare `"sha"` with no semicolons, so on reload it was read into index 0 (identity) while `iaasPinnedSha` stayed null; every subsequent action triggered a fresh TOFU cert dialog that defaulted to REJECT after 30 s; fixed by always writing the fixed `"idSha;iaasSha"` format (empty slot = empty string, not omitted) and removing the `filter { isNotBlank() }` that compacted positions on parse
