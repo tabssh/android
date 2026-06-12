@@ -1,5 +1,25 @@
 # What's New
 
+## Wave 44 — Hyperlinks light up and open with a tap
+
+URLs and hyperlinks in the terminal are now visually underlined in blue, and
+links produced by OSC 8-aware tools (such as modern versions of `ls`, `git`,
+and `grep`) open the correct URL when you long-press the anchor text — no more
+guessing from the surrounding characters.
+
+- **Underlined links** — every URL (detected by pattern or embedded as an OSC 8
+  hyperlink) gets a thin blue underline as it renders, so links are visible at a
+  glance without having to tap first
+- **OSC 8 support** — programs that emit `\e]8;;url\e\\anchor\e]8;;\e\\`
+  sequences now have their URLs recognised and opened exactly; this covers
+  `ls --hyperlink`, `git log` with hyperlinks enabled, `man`, `delta`, and
+  anything else that follows the OSC 8 spec
+- **Accurate long-press** — when you long-press an OSC 8 anchor the embedded URL
+  is returned directly; regex detection is only used as a fallback when no OSC 8
+  URL is present
+
+---
+
 ## Wave 43 — URL detection improvements
 
 Long-pressing a URL in the terminal is now more accurate:

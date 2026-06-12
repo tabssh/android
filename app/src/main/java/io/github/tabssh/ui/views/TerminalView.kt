@@ -50,6 +50,14 @@ class TerminalView @JvmOverloads constructor(
     private val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG)
     private val backgroundPaint = Paint()
     private val cursorPaint = Paint()
+    // URL underline paint — drawn as a thin rect below hyperlink text spans.
+    // Color defaults to a link-blue that reads well on both dark and light
+    // backgrounds; applyTheme() updates it to the theme's primary color when
+    // one is set.
+    private val urlUnderlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFF4FC3F7.toInt()
+        style = Paint.Style.FILL
+    }
 
     // Cursor blink state — toggled every 500 ms when blink is enabled.
     // Starts true so the cursor is visible immediately (even before the
@@ -781,6 +789,9 @@ class TerminalView @JvmOverloads constructor(
         backgroundPaint.color = theme.background
         textPaint.color = theme.foreground
 
+        // URL underline: use theme primary when available, otherwise the default link-blue.
+        urlUnderlinePaint.color = theme.primary ?: 0xFF4FC3F7.toInt()
+
         // Update terminal buffer colors
         terminalBuffer?.let { buffer ->
             buffer.setColors(theme.ansiColors)
@@ -1038,6 +1049,36 @@ class TerminalView @JvmOverloads constructor(
                 Logger.d("TerminalView", "Rendering terminal: ${buffer.getRows()}x${buffer.getCols()}, scroll=$scrollYInt")
                 renderer.render(canvas, buffer, paddingLeft.toFloat(), paddingTop.toFloat(),
                     cellWidth, cellHeight, scrollYInt)
+                // URL underline pass — drawn after text so underlines are on top of glyphs.
+                val rows = buffer.getRows()
+                val cols = buffer.getCols()
+                val urlUnderlineH = maxOf(2f, cellHeight * 0.06f)
+                for (row in 0 until rows) {
+                    val rowBottom = paddingTop + (row + 1) * cellHeight - scrollYInt
+                    if (rowBottom < 0 || rowBottom - cellHeight > height) continue
+                    val line = buffer.getLine(row)
+                    // Regex URL underlines
+                    val rowText = line?.map { it.char }?.joinToString("") ?: continue
+                    for (match in urlPattern.findAll(rowText)) {
+                        val ux = paddingLeft + match.range.first * cellWidth
+                        val uw = (match.range.last - match.range.first + 1) * cellWidth
+                        canvas.drawRect(ux, rowBottom - urlUnderlineH, ux + uw, rowBottom, urlUnderlinePaint)
+                    }
+                    // OSC 8 cell-attribute underlines — run-length encoded to avoid
+                    // drawing one rect per cell.
+                    var linkRunStart = -1
+                    for (col in 0..cols) {
+                        val hasLink = col < cols && line[col].url != null
+                        if (hasLink && linkRunStart < 0) {
+                            linkRunStart = col
+                        } else if (!hasLink && linkRunStart >= 0) {
+                            val ux = paddingLeft + linkRunStart * cellWidth
+                            val uw = (col - linkRunStart) * cellWidth
+                            canvas.drawRect(ux, rowBottom - urlUnderlineH, ux + uw, rowBottom, urlUnderlinePaint)
+                            linkRunStart = -1
+                        }
+                    }
+                }
             } ?: run {
                 Logger.w("TerminalView", "Terminal buffer is null in onDraw")
             }
@@ -1097,8 +1138,9 @@ class TerminalView @JvmOverloads constructor(
             canvas.drawRect(startX, rowTop, width.toFloat(), rowBottom, backgroundPaint)
 
             // Negative externalRow values index into the scrollback transcript.
+            val externalRow = row - scrollRows
             val internalRow = try {
-                buffer.externalToInternalRow(row - scrollRows)
+                buffer.externalToInternalRow(externalRow)
             } catch (e: Exception) {
                 continue
             }
@@ -1226,6 +1268,30 @@ class TerminalView @JvmOverloads constructor(
                 charIndex += charsConsumed
             }
             flushRun()
+
+            // ── Pass 3: URL underlines ──────────────────────────────────────
+            // Draw a thin colored rect below every URL on this row (both
+            // OSC 8 spans and regex-detected URLs). Only the live-screen rows
+            // are checked for OSC 8; scrollback rows fall back to regex only.
+            val urlUnderlineH = maxOf(2f, cellHeight * 0.06f)
+            // OSC 8 spans — emitted by the read loop's appendWithOsc8Tracking.
+            // `bridge` is already non-null here (it's the outer function parameter).
+            if (externalRow in 0 until rows) {
+                for ((startCol, endCol, _) in bridge.getOsc8RangesForRow(externalRow)) {
+                    val ux = startX + startCol * cellWidth
+                    val uw = (endCol - startCol) * cellWidth
+                    canvas.drawRect(ux, rowBottom - urlUnderlineH, ux + uw, rowBottom, urlUnderlinePaint)
+                }
+            }
+            // Regex-detected URLs — scan the row text for scheme/www patterns.
+            val rowText = try {
+                buffer.getSelectedText(0, externalRow, cols, externalRow) ?: ""
+            } catch (_: Exception) { "" }
+            for (match in urlPattern.findAll(rowText)) {
+                val ux = startX + match.range.first * cellWidth
+                val uw = (match.range.last - match.range.first + 1) * cellWidth
+                canvas.drawRect(ux, rowBottom - urlUnderlineH, ux + uw, rowBottom, urlUnderlinePaint)
+            }
         }
 
         // Restore canvas after the translated row drawing so that selection
@@ -1401,6 +1467,11 @@ class TerminalView @JvmOverloads constructor(
     private fun detectUrlAtPosition(x: Float, y: Float): String? {
         val (row, lineText) = getTextAtPosition(x, y) ?: return null
         val col = ((x - paddingLeft) / cellWidth).toInt()
+
+        // OSC 8 hyperlinks take priority over regex detection: they carry the exact
+        // URL that the program intended, without any heuristic matching.
+        termuxBridge?.getOsc8UrlAt(row, col)?.let { return it }
+        terminalBuffer?.getUrlAt(row, col)?.let { return it }
 
         // Check if the touch point is within any URL on the current row.
         val matchInRow = urlPattern.findAll(lineText).firstOrNull { col in it.range }

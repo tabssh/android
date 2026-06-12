@@ -27,6 +27,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **OCI accounts removed from Identities tab** — OCI API-key credentials are managed exclusively through the dedicated OCI wizard; they are filtered from the VM Credentials list and the create/edit dialog no longer offers an OCI option
 - **VNC identity dialog uses Material TextInputLayout** — replaced the programmatic plain-`EditText` dialog with a proper `TextInputLayout` form matching the rest of the app; password field gains visibility toggle and correct mask/replace behaviour
 
+### Added
+
+- **OSC 8 hyperlinks** — SSH and VM console sessions now recognise OSC 8 hyperlink sequences (`\e]8;params;url\e\\anchor\e]8;;\e\\`); long-pressing an anchor word opens the embedded URL rather than relying on regex guessing; anchor text is underlined in link-blue during rendering for both the Termux path (TermuxBridge intercept) and the custom emulator path (ANSIParser + TerminalChar.url)
+- **Visual URL underlines** — every detected URL (OSC 8 or regex-matched) is now underlined with a thin colored rect drawn below the text during render; color follows the theme's primary hue when set, otherwise defaults to a link-blue that reads on both dark and light backgrounds
+
 ### Fixed
 
 - **URL detection matched trailing punctuation** — URLs followed by `.`, `,`, `)`, `]`, `'`, `"`, `;`, `:`, `!`, or `?` (as in normal prose) incorrectly included those characters in the matched URL; a trailing-strip pass now removes them

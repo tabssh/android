@@ -1,7 +1,10 @@
 package io.github.tabssh.terminal.emulator
 
 /**
- * Terminal character buffer with formatting
+ * Terminal character buffer with formatting.
+ *
+ * The [url] field carries an OSC 8 hyperlink URL when the character was written
+ * while an OSC 8 link was active (via ANSIParser).  null = no link.
  */
 data class TerminalChar(
     val char: Char,
@@ -9,7 +12,8 @@ data class TerminalChar(
     val bgColor: Int,
     val bold: Boolean,
     val underline: Boolean,
-    val reverse: Boolean
+    val reverse: Boolean,
+    val url: String? = null
 ) {
     companion object {
         fun empty(): TerminalChar = TerminalChar(' ', 7, 0, false, false, false)
@@ -258,6 +262,23 @@ class TerminalBuffer(
     /** Returns true if [row] soft-wraps into the next row (auto-wrap, no hard newline). */
     fun isRowWrapped(row: Int): Boolean = row in 0 until rows && rowWrapped[row]
 
+    // OSC 8 hyperlink state: the URL that is "active" while the cursor is inside
+    // an OSC 8 link span.  ANSIParser sets this on the open tag and clears it on
+    // the close tag; writeChar() stamps the current value onto every cell it writes.
+    private var currentLinkUrl: String? = null
+
+    /** Set or clear the active OSC 8 hyperlink URL (null = no link). */
+    fun setCurrentLinkUrl(url: String?) {
+        currentLinkUrl = url
+    }
+
+    /**
+     * Return the OSC 8 URL embedded in the cell at [row],[col], or null if the
+     * cell has no link or the coordinates are out of range.
+     */
+    fun getUrlAt(row: Int, col: Int): String? =
+        if (row in 0 until rows && col in 0 until cols) screen[row][col].url else null
+
     fun saveCursor() {
         savedCursorX = cursorX
         savedCursorY = cursorY
@@ -409,7 +430,8 @@ class TerminalBuffer(
                         currentAttrs.bgColor,
                         currentAttrs.bold,
                         currentAttrs.underline,
-                        currentAttrs.reverse
+                        currentAttrs.reverse,
+                        currentLinkUrl
                     )
                     cursorX++
                     if (cursorX >= cols && wrapMode) {

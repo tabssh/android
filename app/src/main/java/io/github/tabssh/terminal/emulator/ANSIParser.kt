@@ -557,6 +557,13 @@ class ANSIParser(private val buffer: TerminalBuffer) {
                     // Set icon name
                     Logger.d("ANSIParser", "Setting icon name: $data")
                 }
+                8 -> {
+                    // OSC 8 hyperlink: data = "params;URI"
+                    // An empty URI closes the current link; non-empty opens one.
+                    val semiIdx = data.indexOf(';')
+                    val uri = if (semiIdx >= 0) data.substring(semiIdx + 1) else data
+                    buffer.setCurrentLinkUrl(uri.takeIf { it.isNotBlank() })
+                }
                 else -> {
                     Logger.d("ANSIParser", "Unhandled OSC command $commandNum: $data")
                 }

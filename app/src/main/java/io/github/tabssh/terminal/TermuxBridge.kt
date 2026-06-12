@@ -169,6 +169,150 @@ class TermuxBridge(
     // Main thread handler for callbacks
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    // ── OSC 8 hyperlink tracking ────────────────────────────────────────────
+    //
+    // Termux v0.118.1 does not implement OSC 8 natively. We intercept the raw
+    // byte stream in the read loop, split data at OSC 8 boundaries, feed only
+    // the anchor text to the emulator, and record start/end cursor coordinates.
+    // Scroll is tracked by watching `em.screen.activeTranscriptRows` grow —
+    // each additional transcript row means one screen row scrolled off the top,
+    // so stored row indices are decremented accordingly.
+    //
+    // Thread safety: all writes happen on Dispatchers.IO (read loop); reads
+    // happen on the UI thread (render, long-press).  Using `@Volatile var`
+    // pointing to a CopyOnWriteArrayList lets us atomically swap the whole
+    // list during scroll adjustment so the UI thread never sees a partially
+    // updated state.
+
+    /** Represents one complete OSC 8 span in screen-row coordinates. */
+    data class Osc8Link(
+        val url: String,
+        val startRow: Int,
+        val startCol: Int,
+        val endRow: Int,
+        val endCol: Int
+    )
+
+    @Volatile
+    private var osc8Links = CopyOnWriteArrayList<Osc8Link>()
+
+    // Matches: ESC ] 8 ; params ; url ESC \ anchor ESC ] 8 ; ; ESC \
+    // Groups: 1=params, 2=url, 3=anchor
+    // DOT_MATCHES_ALL so anchor can contain any byte (including LF).
+    private val osc8Pattern = Regex(
+        "]8;([^;]*);([^]*)\\\\(.*?)]8;;\\\\",
+        RegexOption.DOT_MATCHES_ALL
+    )
+
+    /**
+     * Return the OSC 8 URL at the given screen position, or null if no link
+     * covers that cell.  Safe to call from any thread.
+     */
+    fun getOsc8UrlAt(row: Int, col: Int): String? =
+        osc8Links.firstOrNull { link ->
+            when {
+                link.startRow == link.endRow ->
+                    row == link.startRow && col in link.startCol until link.endCol
+                row == link.startRow -> col >= link.startCol
+                row == link.endRow   -> col < link.endCol
+                else -> row in (link.startRow + 1) until link.endRow
+            }
+        }?.url
+
+    /**
+     * Return all OSC 8 link ranges that intersect [row] as
+     * (startColInclusive, endColExclusive, url) triples.
+     * Used by the renderer to draw underlines without a per-cell loop.
+     */
+    fun getOsc8RangesForRow(row: Int): List<Triple<Int, Int, String>> {
+        val result = mutableListOf<Triple<Int, Int, String>>()
+        for (link in osc8Links) {
+            when {
+                link.startRow == link.endRow && link.startRow == row ->
+                    result.add(Triple(link.startCol, link.endCol, link.url))
+                link.startRow == row && link.startRow < link.endRow ->
+                    result.add(Triple(link.startCol, currentColumns, link.url))
+                link.endRow == row && link.startRow < link.endRow ->
+                    result.add(Triple(0, link.endCol, link.url))
+                link.startRow < row && row < link.endRow ->
+                    result.add(Triple(0, currentColumns, link.url))
+            }
+        }
+        return result
+    }
+
+    /**
+     * Feed data to the emulator with OSC 8 interception.
+     *
+     * Complete OSC 8 sequences within [data] are split: only the anchor text is
+     * forwarded to the emulator (the OSC tags are consumed here). Cursor
+     * positions before and after the anchor are recorded as an [Osc8Link].
+     * When rows scroll off the top during the append, all stored link row
+     * indices are adjusted downward to stay aligned with screen coordinates.
+     */
+    private fun appendWithOsc8Tracking(em: TerminalEmulator, data: ByteArray, length: Int) {
+        val text = String(data, 0, length, Charsets.UTF_8)
+        val matches = osc8Pattern.findAll(text).toList()
+
+        // Track scroll by monitoring the transcript size before/after each
+        // append.  Each additional transcript row = one screen row scrolled.
+        fun appendAndAdjust(bytes: ByteArray) {
+            if (bytes.isEmpty()) return
+            val prevTranscript = em.screen?.activeTranscriptRows ?: 0
+            em.append(bytes, bytes.size)
+            val scrolled = (em.screen?.activeTranscriptRows ?: 0) - prevTranscript
+            if (scrolled > 0) {
+                // Atomically replace the list so readers never see a partial update.
+                osc8Links = CopyOnWriteArrayList(
+                    osc8Links.mapNotNull { link ->
+                        val newEnd = link.endRow - scrolled
+                        if (newEnd < 0) null
+                        else link.copy(startRow = link.startRow - scrolled, endRow = newEnd)
+                    }
+                )
+            }
+        }
+
+        if (matches.isEmpty()) {
+            appendAndAdjust(data.copyOf(length))
+            return
+        }
+
+        var pos = 0
+        for (match in matches) {
+            val url    = match.groupValues[2]
+            val anchor = match.groupValues[3]
+
+            // Feed everything that came before this OSC 8 sequence.
+            val before = text.substring(pos, match.range.first)
+            if (before.isNotEmpty()) appendAndAdjust(before.toByteArray(Charsets.UTF_8))
+
+            // Record cursor position — this is where the link underline starts.
+            val startRow = em.cursorRow
+            val startCol = em.cursorCol
+
+            // Feed only the anchor text; the OSC tags are consumed here.
+            if (anchor.isNotEmpty()) appendAndAdjust(anchor.toByteArray(Charsets.UTF_8))
+
+            // Record cursor position — this is where the link underline ends.
+            val endRow = em.cursorRow
+            val endCol = em.cursorCol
+
+            if (url.isNotBlank()) {
+                osc8Links.add(Osc8Link(url, startRow, startCol, endRow, endCol))
+                // Cap the list to prevent unbounded growth across a long session.
+                while (osc8Links.size > 200) osc8Links.removeAt(0)
+            }
+
+            pos = match.range.last + 1
+        }
+
+        // Feed any trailing bytes after the last OSC 8 sequence.
+        if (pos < text.length) {
+            appendAndAdjust(text.substring(pos).toByteArray(Charsets.UTF_8))
+        }
+    }
+
     // Terminal dimensions (can be updated).
     // @Volatile — resize() may be called from the main thread (keyboard
     // open) while the read loop and writeScope coroutines read these
@@ -456,9 +600,11 @@ class TermuxBridge(
                     // Feed data to Termux emulator. The append() call is
                     // internally synchronized on the screen object so
                     // injectLocally() from other threads cannot interleave.
+                    // appendWithOsc8Tracking wraps append() and intercepts
+                    // OSC 8 hyperlink sequences before they reach the emulator.
                     val em = emulator
                     if (em != null) {
-                        em.append(buffer, bytesRead)
+                        appendWithOsc8Tracking(em, buffer, bytesRead)
                     } else {
                         Logger.e(TAG, "EMULATOR IS NULL - cannot process $bytesRead bytes!")
                     }
@@ -804,6 +950,10 @@ class TermuxBridge(
         // process and closes the master PTY fd.
         try { moshSession?.finishIfRunning() } catch (_: Exception) {}
         moshSession = null
+
+        // OSC 8 links are session-scoped — clear them on every disconnect so
+        // stale link coordinates from one SSH session don't bleed into the next.
+        osc8Links = CopyOnWriteArrayList()
 
         if (wasConnected) {
             runOnMain {
