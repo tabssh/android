@@ -9,8 +9,10 @@ never gets stuck waiting for the guest OS:
 
 - **Proxmox** — Stop now uses the hard stop API instead of the graceful ACPI
   shutdown that requires the QEMU guest agent to be installed
-- **OCI** — Stop now uses the hard `STOP` action instead of `SOFTSTOP`; any API
-  error is now reported in the log rather than being silently ignored
+- **OCI** — Stop now uses the hard `STOP` action instead of `SOFTSTOP`; a
+  secondary fix corrects a TLS pin storage bug that caused every Stop/Start/
+  Restart action to show a certificate confirmation dialog (which timed out
+  and rejected the request if not answered within 30 s)
 - **Libvirt / KVM** — Stop now calls `virsh destroy` (immediate power-off)
   instead of `virsh shutdown` (graceful, guest-agent-dependent)
 

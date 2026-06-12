@@ -45,32 +45,35 @@ class OciApiClient(
     // OCI uses two distinct hostnames (identity.* and iaas.*) that carry
     // separate TLS leaf certs.  We need one captured-pin holder per host so
     // TOFU prompts for each cert are shown once and both pins are persisted.
-    // The stored pinnedCertSha256 column may hold "sha_id;sha_iaas" (semicolon
-    // delimited).  Legacy single-sha rows are treated as the identity pin only.
+    //
+    // Storage format: "sha_identity;sha_iaas" — FIXED POSITIONS.
+    // An absent entry is represented by an empty string, NOT omitted.
+    // e.g. only-IAAS pin is stored as ";sha_iaas", only-identity as "sha_id;".
+    //
+    // DO NOT filter blank entries when parsing — that collapses positions and
+    // assigns the IAAS sha to the identity slot, triggering TOFU on every
+    // subsequent action call.
     private val pinnedParts: List<String> = pinnedCertSha256
         ?.split(";")
         ?.map { it.trim() }
-        ?.filter { it.isNotBlank() }
         ?: emptyList()
-    private val identityPinnedSha: String? = pinnedParts.getOrNull(0)
-    private val iaasPinnedSha: String? = pinnedParts.getOrNull(1)
+    private val identityPinnedSha: String? = pinnedParts.getOrNull(0)?.takeIf { it.isNotBlank() }
+    private val iaasPinnedSha: String?     = pinnedParts.getOrNull(1)?.takeIf { it.isNotBlank() }
 
     private val identityCapturedPin = io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.CapturedPin()
     private val iaasCapturedPin    = io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.CapturedPin()
 
     /**
-     * Returns the full semicolon-delimited pin string to persist after connect.
-     * Combines any newly-captured SHAs with the already-stored SHAs so that
-     * incremental persistence (identity captured first, iaas captured later)
-     * never loses a previously-stored pin.
+     * Returns the fixed-position semicolon-delimited pin string to persist.
+     * Format is always "sha_identity;sha_iaas" — either slot may be blank but
+     * the semicolon separator is always present so positions never shift.
+     * Returns null only when both slots are blank (nothing to persist).
      */
     fun getCapturedCertSha256(): String? {
-        val idSha   = identityCapturedPin.sha256?.takeIf { it.isNotBlank() } ?: identityPinnedSha
-        val iaasSha = iaasCapturedPin.sha256?.takeIf    { it.isNotBlank() } ?: iaasPinnedSha
-        return listOfNotNull(idSha, iaasSha)
-            .filter { it.isNotBlank() }
-            .joinToString(";")
-            .takeIf { it.isNotBlank() }
+        val idSha   = identityCapturedPin.sha256?.takeIf { it.isNotBlank() } ?: identityPinnedSha ?: ""
+        val iaasSha = iaasCapturedPin.sha256?.takeIf    { it.isNotBlank() } ?: iaasPinnedSha     ?: ""
+        if (idSha.isBlank() && iaasSha.isBlank()) return null
+        return "$idSha;$iaasSha"
     }
 
     private val signer = OciSigner(tenancyOcid, userOcid, fingerprint, keyMaterial)
