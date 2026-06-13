@@ -688,18 +688,26 @@ class HypervisorEditActivity : AppCompatActivity() {
                 }
                 val realm = account?.realm ?: editRealm.text.toString()
 
-                val success = when (type) {
+                var success = false
+                var capturedTestSha: String? = null
+                when (type) {
                     HypervisorType.PROXMOX -> {
-                        val client = ProxmoxApiClient(host, port, username, password, realm, verifySsl)
-                        client.authenticate()
+                        val client = ProxmoxApiClient(host, port, username, password, realm, verifySsl,
+                            pinnedCertSha256 = currentPin)
+                        success = client.authenticate()
+                        capturedTestSha = client.getCapturedCertSha256()
                     }
                     HypervisorType.XCPNG -> {
-                        val client = XCPngApiClient(host, port, username, password, verifySsl)
-                        client.authenticate()
+                        val client = XCPngApiClient(host, port, username, password, verifySsl,
+                            pinnedCertSha256 = currentPin)
+                        success = client.authenticate()
+                        capturedTestSha = client.getCapturedCertSha256()
                     }
                     HypervisorType.VMWARE -> {
-                        val client = VMwareApiClient(host, username, password, verifySsl)
-                        client.authenticate()
+                        val client = VMwareApiClient(host, username, password, verifySsl,
+                            pinnedCertSha256 = currentPin)
+                        success = client.authenticate()
+                        capturedTestSha = client.getCapturedCertSha256()
                     }
                     HypervisorType.LIBVIRT -> {
                         // SSH-based; just do a quick connect/disconnect
@@ -718,15 +726,22 @@ class HypervisorEditActivity : AppCompatActivity() {
                         )
                         client.connect()
                         client.disconnect()
-                        true
+                        success = true
                     }
                     else -> {
                         Toast.makeText(this@HypervisorEditActivity,
                             "Test not supported for this type", Toast.LENGTH_SHORT).show()
-                        false
                     }
                 }
-                
+
+                // Persist any cert the user pinned during this test — update currentPin
+                // so saveHypervisor() writes the SHA to the DB row.
+                if (!capturedTestSha.isNullOrBlank() &&
+                    !capturedTestSha.equals(currentPin, ignoreCase = true)) {
+                    currentPin = capturedTestSha
+                    renderPinnedCertText()
+                }
+
                 if (success) {
                     Toast.makeText(this@HypervisorEditActivity, "✓ Connection successful", Toast.LENGTH_LONG).show()
                 } else {

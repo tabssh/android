@@ -11,29 +11,25 @@ import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 
 /**
- * Phase-1 TLS pinning for hypervisor REST + WebSocket clients.
+ * TLS pinning for hypervisor REST + WebSocket clients and cloud provider APIs.
  *
- *   verifySsl = false           → trust-all (today's behavior, MITM-able).
- *   verifySsl = true, no pin    → capture leaf SHA-256 on first connect;
- *                                 the caller reads it via `CapturedPin`
- *                                 and persists it to the DB after a
- *                                 successful authenticate(). The very
- *                                 first connect is therefore TOFU
- *                                 (Trust On First Use) — same model
- *                                 SSH host keys use.
- *   verifySsl = true, pin set   → enforce match. On mismatch the trust
- *                                 manager throws CertificateException;
- *                                 the TLS handshake aborts cleanly and
- *                                 OkHttp surfaces the failure as the
- *                                 caller's request error.
+ *   verifySsl = false           → trust-all (MITM-able; only for user-opted hosts).
+ *   verifySsl = true, no pin    → try the system CA first.
+ *                                   • System CA accepts (publicly-trusted cert, e.g.
+ *                                     OCI, Let's Encrypt on Proxmox): silently capture
+ *                                     the leaf SHA-256 and accept. The caller persists
+ *                                     it so the next connect uses the stored pin.
+ *                                   • System CA rejects (self-signed / private CA):
+ *                                     show the user a TOFU dialog so they can verify
+ *                                     the fingerprint out-of-band before pinning.
+ *   verifySsl = true, pin set   → enforce match. On mismatch show the "cert changed"
+ *                                 dialog. If still rejected, throw CertificateException;
+ *                                 the TLS handshake aborts cleanly and OkHttp surfaces
+ *                                 the failure as the caller's request error.
  *
- * Hostname verification is intentionally bypassed in BOTH the pinning
- * and trust-all paths: hypervisor TLS certs are routinely self-signed
- * with a CN/SAN that doesn't match the user's bookmark hostname (an
- * IP, a `*.local`, or `localhost`). Pin-by-fingerprint replaces it.
- *
- * Phase 2 (deferred) adds the user-facing prompt dialogs for first-pin
- * confirm and pin-changed warning, modelled on `HostKeyVerifier`.
+ * Hostname verification is intentionally bypassed: hypervisor TLS certs are
+ * routinely self-signed with a CN/SAN that doesn't match the user's bookmark
+ * hostname (an IP, a `*.local`, or `localhost`). Pin-by-fingerprint replaces it.
  */
 object HypervisorTrustManagerFactory {
 
@@ -100,10 +96,18 @@ object HypervisorTrustManagerFactory {
 
     /**
      * Install a TrustManager that pins the leaf cert SHA-256.
-     * - No prior pin (`pinnedSha256 == null`): capture, accept, return.
-     *   The `captured` holder lets the caller persist after success.
-     * - Prior pin set: SHA-256 must match (case-insensitive). Mismatch
-     *   throws CertificateException — TLS handshake aborts.
+     *
+     * No prior pin (TOFU path):
+     *   1. Try the Android system CA store. If the cert is publicly trusted
+     *      (OCI endpoints, Let's Encrypt on Proxmox, etc.) accept silently
+     *      and capture the pin — no dialog needed; system CA already vetted it.
+     *   2. If the system CA rejects it (self-signed / private CA), show the
+     *      user a TOFU dialog to verify the fingerprint out-of-band.
+     *
+     * Prior pin set:
+     *   SHA-256 must match (case-insensitive). On mismatch show the
+     *   "cert changed" dialog; if still rejected throw CertificateException
+     *   and abort the TLS handshake.
      */
     private fun installPinning(
         builder: OkHttpClient.Builder,
@@ -112,6 +116,9 @@ object HypervisorTrustManagerFactory {
         host: String,
         port: Int
     ) {
+        // Resolved once at install time and closed over by the TrustManager.
+        val systemTm = resolveSystemTrustManager()
+
         // checkClientTrusted is empty by design — we are the TLS client
         // here, never validating an inbound client cert. checkServerTrusted
         // does the real TOFU pinning work below.
@@ -133,45 +140,72 @@ object HypervisorTrustManagerFactory {
                     return
                 }
 
-                // Either no prior pin (TOFU) or mismatch. Both cases need
-                // user consent. The prompt dialog blocks this thread up
-                // to 30 s waiting on the UI; default REJECT on timeout.
-                val action = if (pinnedSha256.isNullOrBlank()) {
+                if (pinnedSha256.isNullOrBlank()) {
+                    // TOFU — no stored pin yet.
+                    // Try the system CA first. Publicly-trusted certs (e.g. OCI,
+                    // cloud provider endpoints, Let's Encrypt) are accepted silently
+                    // and pinned so future connects verify the same leaf.
+                    val systemTrusted = if (systemTm != null) {
+                        try {
+                            systemTm.checkServerTrusted(chain, t)
+                            true
+                        } catch (_: CertificateException) {
+                            false
+                        }
+                    } else {
+                        false
+                    }
+
+                    if (systemTrusted) {
+                        captured.sha256 = presented
+                        Logger.i(TAG, "Publicly-trusted cert accepted silently — captured pin: $presented (host=$host:$port)")
+                        return
+                    }
+
+                    // Self-signed / private CA — ask the user to verify the fingerprint.
                     Logger.i(TAG, "TOFU prompt — leaf SHA-256: $presented (host=$host:$port)")
-                    HypervisorCertPromptDialog.promptNewHost(host, port, presented)
+                    val action = HypervisorCertPromptDialog.promptNewHost(host, port, presented)
+                    when (action) {
+                        HypervisorCertPromptDialog.Action.ACCEPT_AND_PIN -> {
+                            captured.sha256 = presented
+                            Logger.i(TAG, "User accepted + pinned: $presented")
+                        }
+                        HypervisorCertPromptDialog.Action.ACCEPT_ONCE -> {
+                            // Don't touch captured holder — DB stays unchanged.
+                            // Connection succeeds for this session only.
+                            Logger.i(TAG, "User accepted once-only — pin NOT captured")
+                        }
+                        HypervisorCertPromptDialog.Action.REJECT -> {
+                            Logger.w(TAG, "User rejected cert — aborting handshake")
+                            throw CertificateException(
+                                "User rejected certificate for $host:$port\n" +
+                                "First-time pin not accepted.\n" +
+                                "SHA-256: $presented"
+                            )
+                        }
+                    }
                 } else {
-                    Logger.w(
-                        TAG,
-                        "Cert pin MISMATCH prompt — pinned $pinnedSha256 vs presented $presented (host=$host:$port)"
-                    )
-                    HypervisorCertPromptDialog.promptChangedCert(
+                    // Prior pin set but presented cert doesn't match → possible MITM or cert rotation.
+                    Logger.w(TAG, "Cert pin MISMATCH — pinned $pinnedSha256 vs presented $presented (host=$host:$port)")
+                    val action = HypervisorCertPromptDialog.promptChangedCert(
                         host, port, pinnedSha256, presented
                     )
-                }
-
-                when (action) {
-                    HypervisorCertPromptDialog.Action.ACCEPT_AND_PIN -> {
-                        // Mark the captured holder so persistCapturedPinIfAny
-                        // writes the new pin to the DB after authenticate().
-                        captured.sha256 = presented
-                        Logger.i(TAG, "User accepted + pinned: $presented")
-                    }
-                    HypervisorCertPromptDialog.Action.ACCEPT_ONCE -> {
-                        // Don't touch captured holder — DB stays unchanged.
-                        // Connection succeeds for this session only.
-                        Logger.i(TAG, "User accepted (once-only) — pin NOT updated")
-                    }
-                    HypervisorCertPromptDialog.Action.REJECT -> {
-                        Logger.w(TAG, "User rejected cert — aborting handshake")
-                        throw CertificateException(
-                            "User rejected hypervisor certificate.\n" +
-                            (if (pinnedSha256.isNullOrBlank()) {
-                                "First-time pin not accepted."
-                            } else {
+                    when (action) {
+                        HypervisorCertPromptDialog.Action.ACCEPT_AND_PIN -> {
+                            captured.sha256 = presented
+                            Logger.i(TAG, "User accepted pin update: $pinnedSha256 → $presented")
+                        }
+                        HypervisorCertPromptDialog.Action.ACCEPT_ONCE -> {
+                            Logger.i(TAG, "User accepted changed cert once-only — pin NOT updated")
+                        }
+                        HypervisorCertPromptDialog.Action.REJECT -> {
+                            Logger.w(TAG, "User rejected changed cert — aborting handshake")
+                            throw CertificateException(
+                                "User rejected certificate change for $host:$port\n" +
                                 "Pinned:    SHA-256 $pinnedSha256\n" +
                                 "Presented: SHA-256 $presented"
-                            })
-                        )
+                            )
+                        }
                     }
                 }
             }
@@ -182,6 +216,22 @@ object HypervisorTrustManagerFactory {
         builder.sslSocketFactory(ctx.socketFactory, pinning)
         // Bypass hostname verification — pinning replaces it (see kdoc).
         builder.hostnameVerifier { _, _ -> true }
+    }
+
+    /**
+     * Resolve the Android system X509TrustManager using the platform's
+     * default TrustManagerFactory. Returns null if the platform API is
+     * unavailable (should not happen on any supported Android version).
+     */
+    private fun resolveSystemTrustManager(): X509TrustManager? = try {
+        val tmf = javax.net.ssl.TrustManagerFactory.getInstance(
+            javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm()
+        )
+        tmf.init(null as java.security.KeyStore?)
+        tmf.trustManagers.firstOrNull { it is X509TrustManager } as? X509TrustManager
+    } catch (e: Exception) {
+        Logger.w(TAG, "Could not resolve system TrustManager: ${e.message}")
+        null
     }
 
     private fun sha256Hex(bytes: ByteArray): String {
