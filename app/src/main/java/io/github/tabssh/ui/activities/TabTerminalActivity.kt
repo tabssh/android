@@ -320,10 +320,15 @@ class TabTerminalActivity : AppCompatActivity() {
                     val profileId = tab.profile.id
                     val anyRemaining = tabManager.getAllTabs().any { it.profile.id == profileId }
                     if (!anyRemaining) {
-                        try {
-                            app.sshSessionManager.closeConnection(profileId)
-                        } catch (e: Exception) {
-                            Logger.w("TabTerminalActivity", "Failed to release SSH session for $profileId on tab close", e)
+                        // closeConnection is now suspend — dispatch to IO so
+                        // the Handler.post callback (Main thread) doesn't block
+                        // on JSch session teardown.
+                        lifecycleScope.launch(Dispatchers.IO) {
+                            try {
+                                app.sshSessionManager.closeConnection(profileId)
+                            } catch (e: Exception) {
+                                Logger.w("TabTerminalActivity", "Failed to release SSH session for $profileId on tab close", e)
+                            }
                         }
                     }
 

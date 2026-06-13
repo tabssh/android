@@ -1561,46 +1561,32 @@ class SSHConnection(
             channel.connect(timeoutMs.toInt())
 
             val output = StringBuilder()
-            val buffer = ByteArray(1024)
+            val buffer = ByteArray(4096)
 
-            // Read stdout
-            while (true) {
-                val available = inputStream.available()
-                if (available > 0) {
-                    val bytesRead = inputStream.read(buffer)
-                    if (bytesRead > 0) {
-                        output.append(String(buffer, 0, bytesRead, Charsets.UTF_8))
-                    }
+            // Blocking read loop: blocks until the server sends data or closes
+            // the channel (read returns -1). This replaces the prior
+            // inputStream.available() + delay(100) poll which woke every 100 ms
+            // even when idle and introduced up to 100 ms of latency per chunk.
+            // withTimeoutOrNull bounds the total read phase so a hung server or
+            // a command that never terminates cannot stall the caller indefinitely.
+            withTimeoutOrNull(timeoutMs) {
+                while (true) {
+                    val n = inputStream.read(buffer)
+                    if (n == -1) break
+                    if (n > 0) output.append(String(buffer, 0, n, Charsets.UTF_8))
                 }
+            } ?: Logger.w("SSHConnection", "executeCommand timed out after ${timeoutMs}ms: $command")
 
-                // Check if channel is closed
-                if (channel.isClosed) {
-                    // Read any remaining data
-                    while (inputStream.available() > 0) {
-                        val bytesRead = inputStream.read(buffer)
-                        if (bytesRead > 0) {
-                            output.append(String(buffer, 0, bytesRead, Charsets.UTF_8))
-                        }
-                    }
-                    break
-                }
-
-                kotlinx.coroutines.delay(100)
-            }
-
-            // Read stderr if there's an error
+            // Drain stderr after stdout EOF (channel is closed by remote at this point)
             val errorOutput = StringBuilder()
             while (errorStream.available() > 0) {
-                val bytesRead = errorStream.read(buffer)
-                if (bytesRead > 0) {
-                    errorOutput.append(String(buffer, 0, bytesRead, Charsets.UTF_8))
-                }
+                val n = errorStream.read(buffer)
+                if (n > 0) errorOutput.append(String(buffer, 0, n, Charsets.UTF_8))
             }
 
             val exitStatus = channel.exitStatus
-
             if (exitStatus != 0 && errorOutput.isNotEmpty()) {
-                Logger.w("SSHConnection", "Command exit status: $exitStatus, stderr: $errorOutput")
+                Logger.w("SSHConnection", "Command '$command' exit $exitStatus — stderr: $errorOutput")
             }
 
             output.toString()
@@ -1663,9 +1649,15 @@ class SSHConnection(
     }
 
     /**
-     * Disconnect from the SSH server
+     * Disconnect from the SSH server.
+     *
+     * Runs on [Dispatchers.IO] via `withContext`: JSch channel teardown,
+     * session close, and jump-host cleanup are all blocking socket I/O.
+     * Making the function `suspend` enforces the dispatcher at the type-system
+     * level — a future Main-thread caller will not compile without wrapping in
+     * a launch or withContext, preventing silent ANR regressions.
      */
-    fun disconnect() {
+    suspend fun disconnect() = withContext(Dispatchers.IO) {
         Logger.i("SSHConnection", "Disconnecting from ${profile.host}")
         val effectiveUser = resolvedIdentity?.username ?: profile.username
         val duration = if (sessionStartMs > 0) {

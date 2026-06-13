@@ -49,6 +49,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
@@ -395,9 +396,14 @@ class MultiHostDashboardActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         pumpScope.cancel()
-        ownedSessions.values.forEach {
-            try { it.disconnect() } catch (e: Exception) {
-                Logger.w(TAG, "onDestroy disconnect: ${e.message}")
+        // Blocking disconnect — JSch teardown is blocking I/O; runBlocking keeps
+        // the teardown synchronous so the Activity is fully cleaned up before the
+        // OS reclaims it, without blocking the UI earlier in the lifecycle.
+        runBlocking {
+            ownedSessions.values.forEach {
+                try { it.disconnect() } catch (e: Exception) {
+                    Logger.w(TAG, "onDestroy disconnect: ${e.message}")
+                }
             }
         }
         ownedSessions.clear()
@@ -887,9 +893,14 @@ class MultiHostDashboardActivity : AppCompatActivity() {
 
     private fun stopPump(connectionId: String) {
         jobs.remove(connectionId)?.cancel()
-        ownedSessions.remove(connectionId)?.let {
-            try { it.disconnect() } catch (e: Exception) {
-                Logger.w(TAG, "stopPump disconnect: ${e.message}")
+        ownedSessions.remove(connectionId)?.let { conn ->
+            // disconnect() is suspend (blocking I/O); fire-and-forget on IO
+            // dispatcher so the UI thread is never blocked. Monitoring connections
+            // tolerate a brief teardown delay — there is no user-facing terminal.
+            lifecycleScope.launch(Dispatchers.IO) {
+                try { conn.disconnect() } catch (e: Exception) {
+                    Logger.w(TAG, "stopPump disconnect: ${e.message}")
+                }
             }
         }
         metricsMap.remove(connectionId)

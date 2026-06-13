@@ -16,6 +16,7 @@ import io.github.tabssh.storage.preferences.PreferenceManager
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.performance.PerformanceManager
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 /**
  * Main application class for TabSSH
@@ -558,7 +559,7 @@ class TabSSHApplication : Application() {
             // Release build: clean up and let Android handle it normally
             try {
                 securePasswordManager.clearSensitiveDataOnCrash()
-                sshSessionManager.closeAllConnections()
+                runBlocking { sshSessionManager.closeAllConnections() }
             } catch (_: Exception) {}
 
             defaultHandler?.uncaughtException(thread, throwable)
@@ -569,7 +570,7 @@ class TabSSHApplication : Application() {
         Logger.d("TabSSHApplication", "Application terminating...")
 
         sessionPersistenceManager.cleanup()
-        sshSessionManager.closeAllConnections()
+        runBlocking { sshSessionManager.closeAllConnections() }
         securePasswordManager.clearSensitiveData()
 
         super.onTerminate()

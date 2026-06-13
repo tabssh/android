@@ -246,7 +246,7 @@ class SSHSessionManager(private val context: Context) {
      * intentionally closed so [TabTerminalActivity] skips the reconnect dialog
      * and closes the tab cleanly instead.
      */
-    fun closeConnectionIntentionally(profileId: String) {
+    suspend fun closeConnectionIntentionally(profileId: String) {
         activeConnections[profileId]?.markIntentionalClose()
         closeConnection(profileId)
     }
@@ -254,7 +254,7 @@ class SSHSessionManager(private val context: Context) {
     /**
      * Close a specific connection
      */
-    fun closeConnection(profileId: String) {
+    suspend fun closeConnection(profileId: String) {
         Logger.d("SSHSessionManager", "Closing connection: $profileId")
 
         activeConnections[profileId]?.let { connection ->
@@ -298,7 +298,7 @@ class SSHSessionManager(private val context: Context) {
     /**
      * Close all active connections
      */
-    fun closeAllConnections() {
+    suspend fun closeAllConnections() {
         Logger.d("SSHSessionManager", "Closing all connections (${activeConnections.size} active)")
         
         activeConnections.values.forEach { connection ->
@@ -409,11 +409,12 @@ class SSHSessionManager(private val context: Context) {
     }
     
     /**
-     * Cleanup resources
+     * Cleanup resources. Blocks the calling thread until all active connections
+     * are torn down, then cancels the internal coroutine scope.
      */
     fun cleanup() {
         Logger.d("SSHSessionManager", "Cleaning up SSH session manager")
-        closeAllConnections()
+        runBlocking { closeAllConnections() }
         scope.cancel()
     }
 }

@@ -156,10 +156,14 @@ class ClusterCommandExecutor(private val app: TabSSHApplication) {
                 executionTimeMs = executionTime
             )
         } finally {
-            try {
-                connection?.disconnect()
-            } catch (e: Exception) {
-                Logger.w("ClusterCommand", "Disconnect after error failed: ${e.message}")
+            // NonCancellable: guarantee JSch teardown even when the outer
+            // coroutine is cancelled (e.g. cancelAll() fires mid-connect).
+            withContext(NonCancellable) {
+                try {
+                    connection?.disconnect()
+                } catch (e: Exception) {
+                    Logger.w("ClusterCommand", "Disconnect after error failed: ${e.message}")
+                }
             }
             scope.cancel()
         }
