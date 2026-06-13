@@ -369,4 +369,34 @@ Scope: SSH stack + tab manager + terminal bridge + services + Activities/Receive
   `closeConnectionIntentionally` to mark the tab so the reconnect
   dialog is skipped.
 
+## Fixed in pass 15 (2026-06-13) — OCI POST signing 401
+
+- [x] **`OciSigner.asInterceptor()` — POST/PUT/PATCH `content-type` carries
+  `; charset=utf-8` (BUG)** — OkHttp's `String.toRequestBody()` appends
+  `; charset=utf-8` to the `MediaType` when no charset is specified (confirmed
+  by bytecode inspection of `okhttp-4.12.0.jar`). The signer read the body's
+  `contentType().toString()` (which included the suffix) for the signing string.
+  Simultaneously, `BridgeInterceptor` unconditionally replaces `Content-Type`
+  from the body object — so the signed value and the wire value both carried
+  `application/json; charset=utf-8`. OCI's server-side verifier normalises the
+  received `Content-Type` before reconstructing the signing string, yielding
+  `application/json`. This caused the signed value and the server's computed
+  value to diverge, producing a 401 "Failed to verify the HTTP(S) Signature"
+  on every `instanceAction` POST call (GET/DELETE calls were unaffected as they
+  carry no body and no body-related signing headers). Confirmed by the debug log
+  at 2026-06-13 17:49:01 (cert-pin match, then immediate 401).
+
+  **Fix** (`OciSigner.kt` `asInterceptor()`):
+  - Compute `bareContentType` using `"${mt.type}/${mt.subtype}"` — strips all
+    MediaType parameters (charset, boundary, etc.).
+  - Replace the original body with a `ByteArray.toRequestBody(bareContentType)`
+    body so `BridgeInterceptor` propagates the bare MIME type on the wire.
+  - Use `bareContentType` for the `content-type` signing header.
+  - Result: signed value = `application/json`, wire value = `application/json`,
+    OCI computed value = `application/json`. All three match. ✓
+  - Matches the behaviour of OCI's official Python, Java, and Go SDKs which
+    all send `content-type: application/json` (no charset).
+  - Added `Logger.d("OciSigner", ...)` line that logs the signed header names
+    per request so future signing failures can be diagnosed without guessing.
+
 Delete this file once all items above are addressed or the user confirms they are out of scope.

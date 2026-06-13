@@ -1,7 +1,10 @@
 package io.github.tabssh.hypervisor.oci
 
+import io.github.tabssh.utils.logging.Logger
 import okhttp3.HttpUrl
 import okhttp3.Interceptor
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okio.Buffer
 import java.security.MessageDigest
@@ -182,6 +185,25 @@ class OciSigner(
             val bodyBytes = original.body?.let { rb ->
                 Buffer().also { rb.writeTo(it) }.readByteArray()
             } ?: ByteArray(0)
+
+            // Strip charset and any other parameters from the Content-Type to
+            // produce the bare MIME type (e.g. "application/json" not
+            // "application/json; charset=utf-8"). OkHttp's String.toRequestBody()
+            // injects "; charset=utf-8" when no charset is specified, and
+            // BridgeInterceptor unconditionally re-stamps Content-Type from the
+            // body — so we MUST replace the body with a ByteArray body carrying
+            // the bare type. Otherwise the signed value and the wire value may
+            // both carry the charset, but OCI's server-side verifier may
+            // normalise the received header before computing its signing string,
+            // producing a mismatch and a 401 "Failed to verify the HTTP(S)
+            // Signature". Using the bare type matches OCI SDK behaviour (Python,
+            // Java, Go SDKs all send "application/json" without charset).
+            val bareContentType: String = original.body?.contentType()
+                ?.let { mt -> "${mt.type}/${mt.subtype}" }
+                ?: "application/json"
+            val signingBody = bodyBytes.toRequestBody(bareContentType.toMediaTypeOrNull())
+            builder.method(original.method, signingBody)
+
             if (original.header("x-content-sha256") == null) {
                 builder.header("x-content-sha256", bodySha256Base64(bodyBytes))
             }
@@ -189,8 +211,7 @@ class OciSigner(
                 builder.header("content-length", bodyBytes.size.toString())
             }
             if (original.header("content-type") == null) {
-                val ct = original.body?.contentType()?.toString() ?: "application/json"
-                builder.header("content-type", ct)
+                builder.header("content-type", bareContentType)
             }
         }
 
@@ -204,6 +225,12 @@ class OciSigner(
 
         val authValue = authorizationFor(original.method, url, snapshot)
         builder.header("Authorization", authValue)
+
+        // Debug: log the signed header names so OCI signing failures are easy
+        // to correlate with the Authorization header on the wire.
+        Logger.d("OciSigner", "${original.method} ${url.encodedPath} — signed: ${
+            snapshot.keys.joinToString(", ")
+        }")
 
         val signed = builder.build()
         chain.proceed(signed)
