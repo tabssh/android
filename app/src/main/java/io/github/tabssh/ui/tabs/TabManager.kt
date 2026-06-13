@@ -46,7 +46,11 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
      * Get active tab index
      */
     fun getActiveTabIndex(): Int = activeTabIndex
-    private val listeners = mutableListOf<TabManagerListener>()
+    // CopyOnWriteArrayList: add/remove happens on UI thread; the four
+    // notify* helpers may be called from whichever thread published a
+    // state change — matching the pattern used by SSHSessionManager,
+    // SSHConnection, PortForwardingManager, and TerminalEmulator.
+    private val listeners = java.util.concurrent.CopyOnWriteArrayList<TabManagerListener>()
 
     /**
      * Create new tab with connection profile

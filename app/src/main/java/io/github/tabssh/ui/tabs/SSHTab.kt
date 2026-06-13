@@ -546,9 +546,13 @@ class SSHTab(
         connection?.let { c -> ownChannel?.let { c.closeChannel(it) } }
         ownChannel = null
         connection = null
-        try { telnetConnection?.disconnect() } catch (_: Exception) {}
+        try { telnetConnection?.disconnect() } catch (e: Exception) {
+            Logger.d("SSHTab", "telnetConnection.disconnect suppressed: ${e.message}")
+        }
         telnetConnection = null
-        try { moshSession?.close() } catch (_: Exception) {}
+        try { moshSession?.close() } catch (e: Exception) {
+            Logger.d("SSHTab", "moshSession.close suppressed: ${e.message}")
+        }
         moshSession = null
         _connectionState.value = ConnectionState.DISCONNECTED
     }

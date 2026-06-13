@@ -313,34 +313,27 @@ Scope: SSH stack + tab manager + terminal bridge + services + Activities/Receive
   `TabTerminalActivity.kt:35` — supports the two `applicationScope.launch(Dispatchers.IO)`
   call sites above.
 
-## Reported only (MEDIUM / LOW — not fixed this pass)
+## Fixed in pass 14 (2026-06-13) — LOW items from pass 13
 
-- MEDIUM: `SSHConnection.disconnect()` (line 1654) is not `suspend` and
-  performs blocking JSch session disconnect + jump-host teardown + audit
-  log writes synchronously. Currently every known Main-thread caller has
-  been wrapped in IO (`ConfirmDisconnectActivity` in prior fix,
-  `TabTerminalActivity.closeSplitPane` + `onDestroy` in this pass). A
-  future Main-thread caller would silently re-introduce the ANR. Recommend
-  converting to `suspend fun disconnect() = withContext(Dispatchers.IO) { … }`
-  to enforce the dispatcher at the type system level. Out of scope for
-  this pass — call-site churn would touch ~10 files.
-- MEDIUM: `SSHConnection.executeCommand` (line 1527) busy-waits on
-  `inputStream.available()` with `delay(100)` until either bytes arrive
-  or timeout. Wakes every 100 ms even when idle, and on a slow server
-  spends most of its budget sleeping instead of reading. Recommend
-  blocking read on `inputStream.read(buf)` with timeout via
-  `withTimeoutOrNull`.
-- LOW: `SSHTab.disconnect()` (line 533) swallows telnet/mosh close
-  exceptions with `catch (_: Exception) {}`. Acceptable in a cleanup
-  path but should `Logger.d` the swallowed exception for diagnostics.
-- LOW: `TabManager.listeners` is a plain `mutableListOf`. Currently only
-  registered/unregistered from UI thread, but the iteration in
-  `notifyTabCreated`/`notifyTabClosed`/`notifyActiveTabChanged`/`notifyTabConnectionStateChanged`
-  happens on whichever thread last published. No actual cross-thread
-  contention today (all four are called from Main), but consider
-  `CopyOnWriteArrayList` to match the pattern used elsewhere
-  (`SSHSessionManager`, `SSHConnection`, `PortForwardingManager`,
-  `TerminalEmulator`).
+- [x] **`SSHTab.disconnect()` swallows telnet/mosh exceptions silently (LOW)** — Both
+  `catch (_: Exception) {}` blocks in `SSHTab.disconnect()` (telnetConnection and
+  moshSession close paths) now log the swallowed exception at `Logger.d` level so
+  it appears in debug builds and crash-report attachments without disrupting the
+  cleanup sequence.
+- [x] **`TabManager.listeners` plain `mutableListOf` (LOW)** — Replaced with
+  `CopyOnWriteArrayList<TabManagerListener>()`. Registration still happens on UI
+  thread; iteration in the four `notify*` helpers is now safe regardless of which
+  thread publishes a state change. Matches the pattern used by `SSHSessionManager`,
+  `SSHConnection`, `PortForwardingManager`, and `TerminalEmulator`.
+
+## Resolved (pass 13 MEDIUMs)
+
+- [x] **`SSHConnection.disconnect()` not `suspend`** — Fixed in commit 135b826
+  (2026-06-13). `disconnect()` is now `suspend fun disconnect() = withContext(Dispatchers.IO)`.
+  All ~10 call-site files updated.
+- [x] **`SSHConnection.executeCommand` busy-wait** — Fixed in commit 135b826
+  (2026-06-13). Replaced `available()` + `delay(100)` poll with blocking
+  `inputStream.read()` inside `withTimeoutOrNull(timeoutMs)`.
 
 ## Verified clean (pass 13)
 
