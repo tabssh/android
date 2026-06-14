@@ -154,20 +154,19 @@ class TerminalPagerAdapter(
                 terminalView.onUrlDetected = onUrlDetected
             }
 
-            // Long-press: always call beginWordSelectionAtTouch on THIS
-            // specific view, not on whatever getActiveTerminalView() returns
-            // at call time. getActiveTerminalView() uses
-            // findViewHolderForAdapterPosition which can return null during
-            // RecyclerView relayouts, causing silent no-ops or calling the
-            // method on the wrong view with wrong coordinates.
+            // Long-press: enter word-selection mode on THIS specific view and
+            // show the floating Copy/Paste ActionMode bar. Do NOT also invoke
+            // onContextMenuRequested (which shows the terminal bottom-sheet
+            // menu) — Android dismisses floating ActionMode bars when any
+            // dialog/bottom-sheet takes window focus, so doing both leaves the
+            // user with a bottom-sheet that has no Paste option and no way to
+            // paste. The terminal menu remains reachable via the "Menu" button
+            // in the bottom action bar.
             terminalView.onContextMenuRequested = { x, y ->
                 terminalView.beginWordSelectionAtTouch(x, y)
-                // Notify the activity so it can start the floating ActionMode.
-                // onSelectionStarted fires from beginWordSelectionAtTouch itself,
-                // so we don't need to call it here — this is just for any
-                // activity-level side effects (e.g. analytics) that the original
-                // callback carried.
-                onContextMenuRequested?.invoke(x, y)
+                // onSelectionStarted fires from beginWordSelectionAtTouch and
+                // routes to startTerminalSelectionActionMode — no extra call
+                // needed here.
             }
 
             // Selection-mode entered (from SEL key + drag, or the direct

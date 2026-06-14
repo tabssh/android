@@ -1302,8 +1302,22 @@ private fun showSnippetsPickerForActiveTab() {
                         return true
                     }
                     3 -> {
+                        // Paste directly to the captured `view` — do NOT use
+                        // getActiveTerminalView() here. mode.finish() may trigger
+                        // a RecyclerView relayout (and ACTION_MODE_FINISHED events),
+                        // during which findViewHolderForAdapterPosition returns null,
+                        // causing a silent no-op. `view` is captured in this closure
+                        // and is always the correct TerminalView to paste into.
+                        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE)
+                            as android.content.ClipboardManager
+                        val text = clipboard.primaryClip?.getItemAt(0)
+                            ?.coerceToText(this@TabTerminalActivity)?.toString()
+                        if (text.isNullOrEmpty()) {
+                            Toast.makeText(this@TabTerminalActivity, "Clipboard is empty", Toast.LENGTH_SHORT).show()
+                        } else {
+                            view.pasteText(text)
+                        }
                         mode.finish()
-                        pasteFromClipboard()
                         return true
                     }
                     4 -> {
@@ -3407,9 +3421,21 @@ private fun showSnippetsPickerForActiveTab() {
 
     private fun pasteFromClipboard() {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        clipboard.primaryClip?.getItemAt(0)?.text?.let { text ->
-            getActiveTerminalView()?.pasteText(text.toString())
+        // coerceToText() handles plain-text, HTML, and URI clipboard items; plain
+        // .text only returns non-null for ClipData.newPlainText() clips, so it
+        // silently drops everything else.
+        val text = clipboard.primaryClip?.getItemAt(0)
+            ?.coerceToText(this)?.toString()
+        if (text.isNullOrEmpty()) {
+            Toast.makeText(this, "Clipboard is empty", Toast.LENGTH_SHORT).show()
+            return
         }
+        val tv = getActiveTerminalView()
+        if (tv == null) {
+            Logger.w("TabTerminalActivity", "pasteFromClipboard: no active terminal view")
+            return
+        }
+        tv.pasteText(text)
     }
     
     private fun showConnectionSelector() {
