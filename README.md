@@ -1,18 +1,14 @@
 # 📱 TabSSH — Modern SSH Client for Android
 
-<p align="center">
-  <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Platform-Android-green.svg" alt="Platform"></a>
-  <a href="https://github.com/tabssh/android/blob/main/LICENSE.md"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License"></a>
-  <a href="https://github.com/tabssh/android/releases/latest"><img src="https://img.shields.io/github/v/release/tabssh/android?label=Version" alt="Version"></a>
-  <a href="https://developer.android.com/tools/releases/platforms"><img src="https://img.shields.io/badge/Min%20SDK-21-brightgreen.svg" alt="Min SDK"></a>
-  <a href="https://github.com/tabssh/android/actions/workflows/ci.yml"><img src="https://github.com/tabssh/android/actions/workflows/ci.yml/badge.svg" alt="Build Status"></a>
-  <a href="https://github.com/tabssh/android/releases"><img src="https://img.shields.io/github/downloads/tabssh/android/total?label=Downloads" alt="Downloads"></a>
-</p>
+A beautiful, modern, open-source SSH client for Android with true browser-style tabs,
+enterprise security, hypervisor management, and cloud provider integration.
 
-<p align="center">
-  A beautiful, modern, open-source SSH client for Android with true browser-style tabs,<br>
-  enterprise security, hypervisor management, and cloud provider integration.
-</p>
+[![Platform](https://img.shields.io/badge/Platform-Android-green.svg)](https://developer.android.com)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/tabssh/android/blob/main/LICENSE.md)
+[![Version](https://img.shields.io/github/v/release/tabssh/android?label=Version)](https://github.com/tabssh/android/releases/latest)
+[![Min SDK](https://img.shields.io/badge/Min%20SDK-21-brightgreen.svg)](https://developer.android.com/tools/releases/platforms)
+[![Build Status](https://github.com/tabssh/android/actions/workflows/ci.yml/badge.svg)](https://github.com/tabssh/android/actions/workflows/ci.yml)
+[![Downloads](https://img.shields.io/github/downloads/tabssh/android/total?label=Downloads)](https://github.com/tabssh/android/releases)
 
 ---
 
@@ -125,13 +121,13 @@ Download from [Releases](https://github.com/tabssh/android/releases):
 
 | APK | Use case |
 |---|---|
-| `tabssh-universal.apk` | **Recommended** — all devices |
-| `tabssh-arm64-v8a.apk` | Modern 64-bit ARM |
-| `tabssh-armeabi-v7a.apk` | Older 32-bit ARM |
-| `tabssh-x86_64.apk` | x86 64-bit |
-| `tabssh-x86.apk` | x86 32-bit |
+| `tabssh-android-universal.apk` | **Recommended** — all devices |
+| `tabssh-android-arm64.apk` | Modern 64-bit ARM |
+| `tabssh-android-arm.apk` | Older 32-bit ARM |
+| `tabssh-android-amd64.apk` | x86_64 (Chromebooks / emulators) |
+| `tabssh-android-x86.apk` | x86 32-bit |
 
-1. Download `tabssh-universal.apk`
+1. Download `tabssh-android-universal.apk`
 2. Enable **Install from Unknown Sources** in Android Settings → Security
 3. Open the APK and tap **Install**
 4. Launch TabSSH, grant Storage + Notification permissions
@@ -163,59 +159,9 @@ Cloud          → Cloud Accounts → tap account → view live instances
 
 ---
 
-## 🛠️ Development
-
-### Prerequisites
-
-**Docker (recommended)**
-- Docker 20.10+ and Docker Compose 2.0+
-
-**Local build**
-- Android SDK 34, JDK 17 (Temurin/OpenJDK), Gradle 8.11.1+
-
-### Build Commands
-
-```bash
-make build      # Debug APKs → ./binaries/   (~5 min, Docker-cached)
-make check      # Compile-only check         (~2 min, Docker-cached)
-make install    # Install to connected device
-make logs       # Tail logcat
-make test       # Run UI tests
-make clean      # Remove build artifacts
-```
-
-Production releases are built by the `release.yml` workflow on tag push (`v*`).
-
-### Project Structure
-
-```
-android/
-├── app/src/main/java/io/github/tabssh/
-│   ├── cloud/          # Cloud provider clients + CloudInstanceState
-│   ├── crypto/         # AES-GCM, Keystore wrappers, key storage
-│   ├── hypervisor/     # Proxmox, XCP-ng, VMware, libvirt, OCI API clients
-│   ├── ssh/            # SSHConnection, SSHSessionManager, port forwarding, X11
-│   ├── sftp/           # SFTP browser and file transfer
-│   ├── terminal/       # TermuxBridge, TerminalView, VNC RFB client
-│   ├── storage/        # Room DB (v37, 36 migrations), DAOs, entities
-│   ├── sync/           # SAF-based 3-way merge sync
-│   ├── backup/         # Encrypted ZIP backup/restore
-│   └── ui/             # Activities, Fragments, Adapters, ViewModels
-├── app/src/main/res/   # Layouts, strings, themes, drawables
-├── app/schemas/        # Room migration JSON schemas
-├── .github/workflows/  # CI/CD (android-ci, release)
-├── docker/             # Dockerfile.build (toolchain image)
-├── scripts/            # Build and automation scripts
-├── fdroid-submission/  # F-Droid metadata
-├── Makefile
-└── release.txt         # Version pin (0.9.1)
-```
-
----
-
 ## 🔐 Security
 
-**Report vulnerabilities privately:** `git-admin+security@casjaysdev.pro` — we respond within 48 hours.
+**Report vulnerabilities privately via [GitHub Security Advisories](https://github.com/tabssh/android/security/advisories/new)** — reports are encrypted and not visible publicly until a fix is released. See [SECURITY.md](.github/SECURITY.md) for full scope, SLA, and attribution policy.
 
 - AES-256-GCM for all stored credentials
 - Android Keystore (hardware-backed when available)
@@ -278,13 +224,13 @@ make check          # must pass
 
 ---
 
-## 📜 License
+## 🙏 Acknowledgments
 
-MIT — see [LICENSE.md](LICENSE.md).
-
-```
-Copyright (c) 2024 TabSSH Contributors
-```
+- **[JSch (mwiede fork)](https://github.com/mwiede/jsch)** — modern SSH2 (chacha20-poly1305, aes256-gcm, curve25519, ed25519)
+- **[Termux Terminal Emulator](https://github.com/termux/termux-app)** — VT100/ANSI terminal core
+- **[Material Design Components](https://material.io/)** — UI framework
+- **[BouncyCastle](https://www.bouncycastle.org/)** — cryptography
+- The ConnectBot and JuiceSSH teams for pioneering Android SSH
 
 ---
 
@@ -296,23 +242,74 @@ Copyright (c) 2024 TabSSH Contributors
 
 ---
 
-## 🙏 Acknowledgments
+## 🛠️ Development
 
-- **[JSch (mwiede fork)](https://github.com/mwiede/jsch)** — modern SSH2 (chacha20-poly1305, aes256-gcm, curve25519, ed25519)
-- **[Termux Terminal Emulator](https://github.com/termux/termux-app)** — VT100/ANSI terminal core
-- **[Material Design Components](https://material.io/)** — UI framework
-- **[BouncyCastle](https://www.bouncycastle.org/)** — cryptography
-- The ConnectBot and JuiceSSH teams for pioneering Android SSH
+### Prerequisites
+
+**Docker (recommended)**
+- Docker 20.10+ and Docker Compose 2.0+
+
+**Local build**
+- Android SDK 34, JDK 17 (Temurin/OpenJDK), Gradle 8.11.1+
+
+### Build Commands
+
+```bash
+make build      # Debug APKs → ./binaries/   (~5 min, Docker-cached)
+make check      # Compile-only check         (~2 min, Docker-cached)
+make install    # Install to connected device
+make logs       # Tail logcat
+make test       # Run UI tests
+make clean      # Remove build artifacts
+```
+
+Production releases are built by the `release.yml` workflow on tag push (`v*`).
+
+### Project Structure
+
+```
+android/
+├── app/src/main/java/io/github/tabssh/
+│   ├── cloud/          # Cloud provider clients + CloudInstanceState
+│   ├── crypto/         # AES-GCM, Keystore wrappers, key storage
+│   ├── hypervisor/     # Proxmox, XCP-ng, VMware, libvirt, OCI API clients
+│   ├── ssh/            # SSHConnection, SSHSessionManager, port forwarding, X11
+│   ├── sftp/           # SFTP browser and file transfer
+│   ├── terminal/       # TermuxBridge, TerminalView, VNC RFB client
+│   ├── storage/        # Room DB (v37, 36 migrations), DAOs, entities
+│   ├── sync/           # SAF-based 3-way merge sync
+│   ├── backup/         # Encrypted ZIP backup/restore
+│   └── ui/             # Activities, Fragments, Adapters, ViewModels
+├── app/src/main/res/   # Layouts, strings, themes, drawables
+├── app/schemas/        # Room migration JSON schemas
+├── .github/workflows/  # CI/CD (ci, dev-builds, mosh-binaries, release)
+├── docker/             # Dockerfile (toolchain image), docker-compose.yml
+├── scripts/            # Build and automation scripts
+├── fdroid-submission/  # F-Droid metadata
+├── Makefile
+└── release.txt         # Version pin (0.9.1)
+```
+
+### 🐳 Docker Build
+
+The build toolchain runs inside Docker — no local Android SDK or JDK required.
+
+```bash
+# Build debug APKs
+docker compose -f docker/docker-compose.yml run --rm build
+
+# Or via make (recommended)
+make build
+```
+
+The `:build` image (`docker/Dockerfile`) contains Android SDK 34, JDK 17, and Gradle. It is rebuilt monthly by the `dev-builds.yml` workflow.
 
 ---
 
-<p align="center">
-  <b>Made with ❤️ for the open-source community</b><br>
-  <sub>Empowering secure remote access for everyone</sub>
-</p>
+## 📄 License
 
-<p align="center">
-  <a href="https://github.com/tabssh/android/issues">Report Bug</a> ·
-  <a href="https://github.com/tabssh/android/issues">Request Feature</a> ·
-  <a href=".github/CONTRIBUTING.md">Contribute</a>
-</p>
+MIT — see [LICENSE.md](LICENSE.md).
+
+```
+Copyright (c) 2024 TabSSH Contributors
+```

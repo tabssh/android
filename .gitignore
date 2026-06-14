@@ -122,6 +122,7 @@ replay_pid*
 ### Android ###
 # Gradle files
 .gradle/
+.gradle-cache/
 build/
 # Kotlin compiler cache
 .kotlin/
@@ -168,6 +169,7 @@ keystore.jks
 
 # Mosh native binaries — fetched from GH releases at build time
 # (see scripts/fetch-mosh-binaries.sh + .github/workflows/mosh-binaries.yml)
+mosh/out/
 app/src/main/jniLibs/*/libmosh-client.so
 
 # Nerd Fonts — fetched from upstream nerd-fonts at build time
