@@ -121,34 +121,6 @@
             app:iconSize="20dp" />
 
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_select_text"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="48dp"
-            android:paddingStart="16dp"
-            android:gravity="start|center_vertical"
-            android:text="Select Text…"
-            app:icon="@drawable/ic_select_all"
-            app:iconGravity="start"
-            app:iconPadding="12dp"
-            app:iconSize="20dp" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_copy_screen"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="48dp"
-            android:paddingStart="16dp"
-            android:gravity="start|center_vertical"
-            android:text="Copy Screen"
-            app:icon="@drawable/ic_copy"
-            app:iconGravity="start"
-            app:iconPadding="12dp"
-            app:iconSize="20dp" />
-
-        <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_snippets"
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="match_parent"

@@ -722,19 +722,6 @@ class TabTerminalActivity : AppCompatActivity() {
                 showSearchOverlay()
             }
 
-        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_select_text)
-            ?.setOnClickListener {
-                bottomSheet.dismiss()
-                getActiveTerminalView()?.armSelectionForNextDrag()
-                Toast.makeText(this, "Drag to select, then tap Copy.", Toast.LENGTH_LONG).show()
-            }
-
-        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_copy_screen)
-            ?.setOnClickListener {
-                bottomSheet.dismiss()
-                copyTerminalScreen()
-            }
-
         view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_snippets)
             ?.setOnClickListener {
                 bottomSheet.dismiss()
@@ -846,19 +833,15 @@ class TabTerminalActivity : AppCompatActivity() {
                         showUrlDialog(url)
                     }
                 }
-                // Long-press: enter word-selection mode so the floating
-                // Copy / Select All / Paste ActionMode bar appears — same
-                // UX as swipe mode. Do NOT call showTerminalMenu() here;
-                // the bottom sheet steals window focus, dismissing the
-                // ActionMode immediately after it opens. The terminal menu
-                // remains reachable via the "Menu" button in the action bar.
+                // Long-press: show the terminal bottom-sheet menu for new tab,
+                // tab list, session controls, and settings.
                 val viewRef = this
-                onContextMenuRequested = { x, y ->
-                    viewRef.beginWordSelectionAtTouch(x, y)
+                onContextMenuRequested = { _, _ ->
+                    showTerminalMenu()
                 }
 
-                // onSelectionStarted fires from beginWordSelectionAtTouch
-                // (and from double-tap / SEL-drag) → raise the ActionMode.
+                // Selection-mode entered (from SEL key + drag, or double-tap)
+                // → raise the floating Copy ActionMode for this view.
                 onSelectionStarted = {
                     startTerminalSelectionActionMode(viewRef)
                 }
@@ -2119,6 +2102,7 @@ private fun showSnippetsPickerForActiveTab() {
                 customPrefix,
                 commandCallback,
                 onSelectionStarted = { tv -> startTerminalSelectionActionMode(tv) },
+                onContextMenuRequested = { _, _ -> showTerminalMenu() },
                 reverseScrollDirection = app.preferencesManager.isReverseScrollDirection(),
                 lineSpacingPercent = app.preferencesManager.getStringAsInt("terminal_line_spacing", 120)
             )
@@ -2179,6 +2163,7 @@ private fun showSnippetsPickerForActiveTab() {
                 customPrefix,
                 commandCallback,
                 onSelectionStarted = { tv -> startTerminalSelectionActionMode(tv) },
+                onContextMenuRequested = { _, _ -> showTerminalMenu() },
                 reverseScrollDirection = app.preferencesManager.isReverseScrollDirection(),
                 lineSpacingPercent = app.preferencesManager.getStringAsInt("terminal_line_spacing", 120)
             )
@@ -2264,20 +2249,8 @@ private fun showSnippetsPickerForActiveTab() {
             else ->
                 binding.multiRowKeyboard.setKeyState("PREFIX", active = false, enabled = true)
         }
-        // Label shows the configured prefix notation when a mux is known, wrapped in
-        // brackets while the latch is armed so the state is unambiguous (e.g. "[^B]").
-        val label = when {
-            prefixArmed && multiplexerType != null -> {
-                val notation = app.preferencesManager.getMultiplexerPrefix(multiplexerType)
-                "[${prefixToShortLabel(notation)}]"
-            }
-            prefixArmed -> "[PRE]"
-            multiplexerType != null -> {
-                val notation = app.preferencesManager.getMultiplexerPrefix(multiplexerType)
-                prefixToShortLabel(notation)
-            }
-            else -> "PRE"
-        }
+        // Label is always "PRE"; brackets indicate the latch is armed.
+        val label = if (prefixArmed) "[PRE]" else "PRE"
         binding.multiRowKeyboard.setKeyLabel("PREFIX", label)
     }
 
@@ -2305,7 +2278,15 @@ private fun showSnippetsPickerForActiveTab() {
      * PREFIX presses send the correct prefix immediately.
      */
     private fun showMultiplexerPickerDialog() {
-        val types = arrayOf("tmux (Ctrl+B)", "screen (Ctrl+A)", "zellij (Ctrl+G)")
+        val prefs = app.preferencesManager
+        val tmuxLabel   = prefixToShortLabel(prefs.getMultiplexerPrefix("tmux"))
+        val screenLabel = prefixToShortLabel(prefs.getMultiplexerPrefix("screen"))
+        val zellijLabel = prefixToShortLabel(prefs.getMultiplexerPrefix("zellij"))
+        val types = arrayOf(
+            "tmux ($tmuxLabel)",
+            "screen ($screenLabel)",
+            "zellij ($zellijLabel)"
+        )
         val keys  = arrayOf("tmux", "screen", "zellij")
         // setMessage and setItems both occupy the dialog body — using both silently
         // hides the item list. Move the hint into the title so the list renders.
@@ -3421,6 +3402,27 @@ private fun showSnippetsPickerForActiveTab() {
         }
     }
 
+    /**
+     * Text-operations popup attached to the 📋 keyboard key. Offers paste,
+     * drag-select, and full-screen copy without cluttering the terminal bottom
+     * sheet with text-only actions.
+     */
+    private fun showClipboardMenu() {
+        val options = arrayOf("Paste", "Select Text…", "Copy Screen")
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> pasteFromClipboard()
+                    1 -> {
+                        getActiveTerminalView()?.armSelectionForNextDrag()
+                        Toast.makeText(this, "Drag to select, then tap Copy.", Toast.LENGTH_LONG).show()
+                    }
+                    2 -> copyTerminalScreen()
+                }
+            }
+            .show()
+    }
+
     private fun pasteFromClipboard() {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
         // coerceToText() handles plain-text, HTML, and URI clipboard items; plain
@@ -4002,12 +4004,8 @@ private fun showSnippetsPickerForActiveTab() {
                 pasteFromClipboard()
             }
             "CLIPBOARD" -> {
-                // Paste directly — showing a sub-menu here means two taps
-                // to paste, which is confusing when the key icon is a
-                // clipboard. Copy is reachable via long-press (ActionMode)
-                // and "Copy Screen" via Menu → terminal section.
-                Logger.d("TabTerminalActivity", "Clipboard key — paste directly")
-                pasteFromClipboard()
+                Logger.d("TabTerminalActivity", "Clipboard key — opening text operations menu")
+                showClipboardMenu()
             }
             "MENU" -> {
                 Logger.d("TabTerminalActivity", "Menu key — opening terminal bottom sheet")

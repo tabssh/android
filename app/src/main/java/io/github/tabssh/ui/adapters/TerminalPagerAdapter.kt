@@ -28,6 +28,7 @@ class TerminalPagerAdapter(
      * Copy ActionMode against the right view.
      */
     private val onSelectionStarted: ((TerminalView) -> Unit)? = null,
+    private val onContextMenuRequested: ((Float, Float) -> Unit)? = null,
     private var reverseScrollDirection: Boolean = false,
     private var lineSpacingPercent: Int = 120
 ) : RecyclerView.Adapter<TerminalPagerAdapter.TerminalViewHolder>() {
@@ -89,7 +90,8 @@ class TerminalPagerAdapter(
             multiplexerType,
             customPrefix,
             onCommandSent,
-            onSelectionStarted
+            onSelectionStarted,
+            onContextMenuRequested
         )
     }
 
@@ -127,7 +129,8 @@ class TerminalPagerAdapter(
         private val multiplexerType: io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType,
         private val customPrefix: String?,
         private val onCommandSent: ((ByteArray) -> Unit)?,
-        private val onSelectionStarted: ((TerminalView) -> Unit)? = null
+        private val onSelectionStarted: ((TerminalView) -> Unit)? = null,
+        private val onContextMenuRequested: ((Float, Float) -> Unit)? = null
     ) : RecyclerView.ViewHolder(terminalView) {
 
         fun bind(tab: SSHTab) {
@@ -145,24 +148,13 @@ class TerminalPagerAdapter(
                 terminalView.onUrlDetected = onUrlDetected
             }
 
-            // Long-press: enter word-selection mode on THIS specific view and
-            // show the floating Copy/Paste ActionMode bar. Do NOT also invoke
-            // onContextMenuRequested (which shows the terminal bottom-sheet
-            // menu) — Android dismisses floating ActionMode bars when any
-            // dialog/bottom-sheet takes window focus, so doing both leaves the
-            // user with a bottom-sheet that has no Paste option and no way to
-            // paste. The terminal menu remains reachable via the "Menu" button
-            // in the bottom action bar.
-            terminalView.onContextMenuRequested = { x, y ->
-                terminalView.beginWordSelectionAtTouch(x, y)
-                // onSelectionStarted fires from beginWordSelectionAtTouch and
-                // routes to startTerminalSelectionActionMode — no extra call
-                // needed here.
-            }
+            // Long-press: show the terminal bottom-sheet menu so the user can
+            // access new tab, tab list, session controls, and settings. x/y are
+            // passed by TerminalView but not needed since the sheet is full-width.
+            terminalView.onContextMenuRequested = onContextMenuRequested
 
-            // Selection-mode entered (from SEL key + drag, or the direct
-            // beginWordSelectionAtTouch call above) → activity starts the
-            // floating Copy ActionMode against THIS specific view.
+            // Selection-mode entered (from SEL key + drag or double-tap)
+            // → activity starts the floating Copy ActionMode against THIS view.
             onSelectionStarted?.let { cb ->
                 terminalView.onSelectionStarted = { cb(terminalView) }
             }
