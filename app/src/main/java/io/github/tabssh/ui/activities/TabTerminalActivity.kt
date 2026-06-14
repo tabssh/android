@@ -2261,11 +2261,11 @@ private fun showSnippetsPickerForActiveTab() {
     private fun prefixToShortLabel(notation: String): String {
         val t = notation.trim()
         return when {
-            t.matches(Regex("^(C-|\\^|Ctrl-)([a-zA-Z])$", RegexOption.IGNORE_CASE)) ->
+            t.matches(Regex("^(C-|\\^|Ctrl[-+])([a-zA-Z])$", RegexOption.IGNORE_CASE)) ->
                 "^${t.last().uppercaseChar()}"
-            t.matches(Regex("^(C-|\\^|Ctrl-)Space$", RegexOption.IGNORE_CASE)) ->
+            t.matches(Regex("^(C-|\\^|Ctrl[-+])Space$", RegexOption.IGNORE_CASE)) ->
                 "^Sp"
-            t.matches(Regex("^(M-|Alt-)([a-zA-Z])$", RegexOption.IGNORE_CASE)) ->
+            t.matches(Regex("^(M-|Alt[-+])([a-zA-Z])$", RegexOption.IGNORE_CASE)) ->
                 "M-${t.last()}"
             t.length <= 4 -> t
             else -> t.take(4)

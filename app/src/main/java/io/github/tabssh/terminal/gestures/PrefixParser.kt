@@ -27,31 +27,31 @@ object PrefixParser {
         val trimmed = notation.trim()
         
         return when {
-            // Ctrl+key variants: C-a, ^a, Ctrl-a
-            trimmed.matches(Regex("^(C-|\\^|Ctrl-)([a-zA-Z])$", RegexOption.IGNORE_CASE)) -> {
+            // Ctrl+key variants: C-a, ^a, Ctrl-a, Ctrl+a
+            trimmed.matches(Regex("^(C-|\\^|Ctrl[-+])([a-zA-Z])$", RegexOption.IGNORE_CASE)) -> {
                 parseCtrlKey(trimmed)
             }
-            
-            // Ctrl+Space: C-Space, ^Space, Ctrl-Space
-            trimmed.matches(Regex("^(C-|\\^|Ctrl-)Space$", RegexOption.IGNORE_CASE)) -> {
+
+            // Ctrl+Space: C-Space, ^Space, Ctrl-Space, Ctrl+Space
+            trimmed.matches(Regex("^(C-|\\^|Ctrl[-+])Space$", RegexOption.IGNORE_CASE)) -> {
                 byteArrayOf(0x00.toByte()) // Ctrl+Space is NUL
             }
-            
-            // Alt+key variants: M-a, Alt-a
-            trimmed.matches(Regex("^(M-|Alt-)([a-zA-Z])$", RegexOption.IGNORE_CASE)) -> {
+
+            // Alt+key variants: M-a, Alt-a, Alt+a
+            trimmed.matches(Regex("^(M-|Alt[-+])([a-zA-Z])$", RegexOption.IGNORE_CASE)) -> {
                 parseAltKey(trimmed)
             }
-            
+
             // Literal single character: `, ~, etc.
             trimmed.length == 1 -> {
                 byteArrayOf(trimmed[0].code.toByte())
             }
-            
+
             // Hex notation: 0x02, \x02
             trimmed.matches(Regex("^(0x|\\\\x)([0-9a-fA-F]{2})$")) -> {
                 parseHexKey(trimmed)
             }
-            
+
             else -> null // Invalid notation
         }
     }
@@ -104,14 +104,14 @@ object PrefixParser {
         }
         
         return when {
-            notation.matches(Regex("^(C-|\\^|Ctrl-)([a-zA-Z])$", RegexOption.IGNORE_CASE)) -> {
+            notation.matches(Regex("^(C-|\\^|Ctrl[-+])([a-zA-Z])$", RegexOption.IGNORE_CASE)) -> {
                 val key = notation.last().uppercaseChar()
                 "Ctrl+$key"
             }
-            notation.matches(Regex("^(C-|\\^|Ctrl-)Space$", RegexOption.IGNORE_CASE)) -> {
+            notation.matches(Regex("^(C-|\\^|Ctrl[-+])Space$", RegexOption.IGNORE_CASE)) -> {
                 "Ctrl+Space"
             }
-            notation.matches(Regex("^(M-|Alt-)([a-zA-Z])$", RegexOption.IGNORE_CASE)) -> {
+            notation.matches(Regex("^(M-|Alt[-+])([a-zA-Z])$", RegexOption.IGNORE_CASE)) -> {
                 val key = notation.last().uppercaseChar()
                 "Alt+$key"
             }
