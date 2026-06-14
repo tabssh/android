@@ -701,6 +701,9 @@ class IdentitiesFragment : Fragment() {
             withContext(Dispatchers.Main) {
                 Toast.makeText(requireContext(), "Identity \"$name\" created", Toast.LENGTH_SHORT).show()
                 Logger.d(TAG, "Created identity: $name")
+                // Immediately offer to link the new identity to connections so the
+                // user doesn't have to discover "Apply to Connections" separately.
+                showApplyToConnectionsDialog(identity)
             }
         }
     }

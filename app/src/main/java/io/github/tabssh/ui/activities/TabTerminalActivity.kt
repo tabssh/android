@@ -1684,7 +1684,7 @@ private fun showSnippetsPickerForActiveTab() {
             } else null
 
             // Use effective credentials: identity overrides profile
-            val effectiveUsername = linkedIdentity?.username ?: profile.username
+            val effectiveUsername = linkedIdentity?.username?.takeIf { it.isNotBlank() } ?: profile.username
             val effectiveAuthType = linkedIdentity?.authType ?: AuthType.fromString(profile.authType)
             val effectiveKeyId = linkedIdentity?.keyId ?: profile.keyId
 

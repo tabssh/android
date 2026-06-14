@@ -254,8 +254,8 @@ class SSHConnection(
                     null
                 }
 
-                // Use identity username if available, otherwise profile username
-                val effectiveUsername = resolvedIdentity?.username ?: profile.username
+                // Use identity username if available and non-blank, otherwise profile username
+                val effectiveUsername = resolvedIdentity?.username?.takeIf { it.isNotBlank() } ?: profile.username
 
                 Logger.i("SSHConnection", "STEP 1: Starting connection to ${profile.host}:${profile.port} as $effectiveUsername")
                 Logger.logHostEvent(profile.id, effectiveUsername, profile.host, profile.port, "INFO", "Connecting")
@@ -1125,7 +1125,9 @@ class SSHConnection(
         // When the target explicitly requests keyboard-interactive auth, skip publickey even if an
         // identity key is configured — some servers drop keyboard-interactive from the offered-methods
         // list after a failed publickey attempt, leaving no viable auth path.
-        if (effectiveKeyId != null && profile.authType != AuthType.KEYBOARD_INTERACTIVE.name) {
+        // Use the identity's authType when one is linked; fall back to the connection-level authType.
+        val effectiveAuthTypeName = linkedIdentity?.authType?.name ?: profile.authType
+        if (effectiveKeyId != null && effectiveAuthTypeName != AuthType.KEYBOARD_INTERACTIVE.name) {
             Logger.i("SSHConnection", "Auth: Attempting SSH key authentication with keyId=$effectiveKeyId")
 
             // Try to retrieve passphrase if key is encrypted (non-blocking)
@@ -1659,7 +1661,7 @@ class SSHConnection(
      */
     suspend fun disconnect() = withContext(Dispatchers.IO) {
         Logger.i("SSHConnection", "Disconnecting from ${profile.host}")
-        val effectiveUser = resolvedIdentity?.username ?: profile.username
+        val effectiveUser = resolvedIdentity?.username?.takeIf { it.isNotBlank() } ?: profile.username
         val duration = if (sessionStartMs > 0) {
             val secs = (System.currentTimeMillis() - sessionStartMs) / 1000
             when {
@@ -1732,7 +1734,7 @@ class SSHConnection(
         val errorInfo = buildDetailedErrorInfo(error)
 
         Logger.e("SSHConnection", "Connection failed: ${errorInfo.userMessage}", error)
-        val effectiveUser = resolvedIdentity?.username ?: profile.username
+        val effectiveUser = resolvedIdentity?.username?.takeIf { it.isNotBlank() } ?: profile.username
         val hostLogLevel = if (errorInfo.errorType.contains("AUTH", ignoreCase = true)) "WARN" else "ERROR"
         Logger.logHostEvent(profile.id, effectiveUser, profile.host, profile.port, hostLogLevel, "Connection failed: ${errorInfo.userMessage}")
         sessionStartMs = 0
