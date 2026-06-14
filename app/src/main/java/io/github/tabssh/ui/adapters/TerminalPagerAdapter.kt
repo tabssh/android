@@ -23,8 +23,8 @@ class TerminalPagerAdapter(
     private var currentTheme: Theme? = null,
     /**
      * Invoked when the user enters selection mode on a per-page
-     * TerminalView (e.g. via the SEL key + drag). Receives the
-     * TerminalView so the host activity can start the floating
+     * TerminalView (e.g. via "Select Text…" in the clipboard menu + drag).
+     * Receives the TerminalView so the host activity can start the floating
      * Copy ActionMode against the right view.
      */
     private val onSelectionStarted: ((TerminalView) -> Unit)? = null,

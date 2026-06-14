@@ -840,7 +840,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     showTerminalMenu()
                 }
 
-                // Selection-mode entered (from SEL key + drag, or double-tap)
+                // Selection-mode entered ("Select Text…" + drag, or double-tap)
                 // → raise the floating Copy ActionMode for this view.
                 onSelectionStarted = {
                     startTerminalSelectionActionMode(viewRef)
@@ -1317,6 +1317,8 @@ private fun showSnippetsPickerForActiveTab() {
             override fun onDestroyActionMode(mode: android.view.ActionMode) {
                 view.exitSelectionMode()
                 if (selectionActionMode === mode) selectionActionMode = null
+                // Re-enable swipe now that text selection is done.
+                viewPager?.isUserInputEnabled = true
             }
         }
         selectionActionMode = if (android.os.Build.VERSION.SDK_INT >= 23) {
@@ -1324,6 +1326,9 @@ private fun showSnippetsPickerForActiveTab() {
         } else {
             view.startActionMode(callback)
         }
+        // Disable swipe while the user is selecting text so a horizontal
+        // drag does not accidentally switch tabs mid-selection.
+        viewPager?.isUserInputEnabled = false
     }
 
     /**
@@ -4010,17 +4015,6 @@ private fun showSnippetsPickerForActiveTab() {
             "MENU" -> {
                 Logger.d("TabTerminalActivity", "Menu key — opening terminal bottom sheet")
                 showTerminalMenu()
-            }
-            "SEL" -> {
-                // Compat fallback for saved layouts that still contain the
-                // legacy SEL key — the default palette now uses CLIPBOARD.
-                Logger.d("TabTerminalActivity", "Select key (legacy) — arming drag-select on next touch")
-                getActiveTerminalView()?.armSelectionForNextDrag()
-                Toast.makeText(
-                    this,
-                    "Drag on the terminal to select. Tap Copy when done.",
-                    Toast.LENGTH_SHORT
-                ).show()
             }
             "TOGGLE" -> {
                 Logger.d("TabTerminalActivity", "Toggle keyboard action")

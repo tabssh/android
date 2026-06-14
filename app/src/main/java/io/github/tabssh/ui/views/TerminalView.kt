@@ -316,16 +316,16 @@ class TerminalView @JvmOverloads constructor(
     /**
      * When true, the next ACTION_DOWN on the terminal starts selection
      * mode at the touch point (instead of scrolling / toggling the
-     * keyboard). Armed via the SEL key on the multi-row keyboard bar
-     * and consumed on the first touch — single-shot, so an accidental
-     * SEL tap doesn't leave the view stuck in a non-scroll state.
+     * keyboard). Armed via "Select Text…" in the clipboard menu and
+     * consumed on the first touch — single-shot, so an accidental arm
+     * doesn't leave the view stuck in a non-scroll state.
      */
     private var selectionArmed = false
     // Pending runnable that defers entering selection mode until we confirm
     // the touch is single-finger (not the first finger of a pinch gesture).
     private var selectionArmRunnable: Runnable? = null
 
-    /** Called by the host activity when the SEL key fires. */
+    /** Called by the host activity when "Select Text…" is chosen from the clipboard menu. */
     fun armSelectionForNextDrag() {
         selectionArmed = true
         // Tiny visual hint that something will happen on next touch —
@@ -2497,6 +2497,21 @@ class TerminalView @JvmOverloads constructor(
             ?: terminalBuffer?.getScrollbackSize()
             ?: 0
         return (rows * cellHeight).toInt()
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        // ViewPager2 detaches off-screen pages (onDetachedFromWindow clears
+        // currentBridgeListener). Re-register the listener and restart cursor
+        // blink when the view is re-attached so the tab is live again.
+        val bridge = termuxBridge
+        if (bridge != null && currentBridgeListener == null) {
+            attachTerminalEmulator(bridge)
+            Logger.d("TerminalView", "Re-attached bridge listener on window attach")
+        }
+        // Ensure this view has focus so key events and the soft keyboard work
+        // without requiring the user to tap the terminal first.
+        requestFocus()
     }
 
     override fun onDetachedFromWindow() {
