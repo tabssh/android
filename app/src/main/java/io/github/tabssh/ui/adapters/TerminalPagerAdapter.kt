@@ -153,7 +153,7 @@ class TerminalPagerAdapter(
             // passed by TerminalView but not needed since the sheet is full-width.
             terminalView.onContextMenuRequested = onContextMenuRequested
 
-            // Selection-mode entered (from SEL key + drag or double-tap)
+            // Selection-mode entered ("Select Text…" in the clipboard menu + drag, or double-tap)
             // → activity starts the floating Copy ActionMode against THIS view.
             onSelectionStarted?.let { cb ->
                 terminalView.onSelectionStarted = { cb(terminalView) }

@@ -1504,52 +1504,111 @@ class TerminalView @JvmOverloads constructor(
     }
 
     /**
+     * Returns true when row [r] is a soft-wrapped row that continues into row r+1.
+     *
+     * For the local TerminalBuffer: use its isRowWrapped() flag directly.
+     * For the Termux TerminalBuffer (SSH path): approximate via row text length —
+     * a soft-wrapped row fills the full terminal width; a hard-newline row is shorter.
+     */
+    private fun isRowSoftWrapped(r: Int): Boolean {
+        terminalBuffer?.let { return it.isRowWrapped(r) }
+        return getRowText(r).trimEnd().length >= terminalCols
+    }
+
+    /**
+     * Build a wrap-aware combined string for rows startRow to endRow (inclusive).
+     *
+     * Termux TerminalBuffer.getSelectedText() natively omits '\n' between soft-wrapped
+     * rows and inserts '\n' only at hard line breaks.  The local TerminalBuffer path
+     * uses isRowWrapped() to replicate the same behaviour manually.
+     */
+    private fun buildWrappedWindowText(startRow: Int, endRow: Int): String? {
+        termuxBuffer?.let { buf ->
+            return try {
+                buf.getSelectedText(0, startRow, terminalCols, endRow)
+            } catch (e: Exception) {
+                null
+            }
+        }
+        terminalBuffer?.let { buf ->
+            val sb = StringBuilder()
+            for (r in startRow..endRow) {
+                val lineChars = buf.getLine(r)
+                val text = lineChars?.map { it.char }?.joinToString("") ?: ""
+                sb.append(text.trimEnd())
+                if (!buf.isRowWrapped(r) && r < endRow) sb.append('\n')
+            }
+            return sb.toString()
+        }
+        return null
+    }
+
+    /**
      * Detect URL at the given position.
      *
-     * Also checks the following row to catch URLs that split across a soft-wrap boundary.
-     * For the custom TerminalBuffer the wrap flag is consulted so we never join two
-     * logically separate lines.  For the Termux buffer the library's own getSelectedText
-     * inserts '\n' at hard-newline row boundaries; the URL pattern's exclusion of '\n'
-     * (via [^\s]) naturally prevents a false cross-line match, so no extra check is needed.
+     * Handles URLs that span soft-wrap boundaries by walking backward to the start
+     * of the wrap segment and forward to its end, then building a single combined
+     * string. When the tap is on the second or later continuation row of a wrapped
+     * URL, the URL is still found and returned in full.
+     *
+     * Termux's getSelectedText joins soft-wrapped rows without '\n' so the URL
+     * regex naturally reassembles them.  The local TerminalBuffer uses isRowWrapped()
+     * for the same effect.  When multiple URLs appear in the window the one whose
+     * range covers the computed tap offset is returned; the first URL is the fallback.
      */
     private fun detectUrlAtPosition(x: Float, y: Float): String? {
-        val (row, lineText) = getTextAtPosition(x, y) ?: return null
-        val col = ((x - paddingLeft) / cellWidth).toInt()
+        val scrollRows = if (cellHeight > 0f) (scrollYInt / cellHeight).toInt() else 0
+        val screenRow  = if (cellHeight > 0f) ((y - paddingTop) / cellHeight).toInt() else 0
+        val row = (screenRow + scrollRows).coerceIn(0, terminalRows - 1)
+        val col = ((x - paddingLeft) / cellWidth).toInt().coerceIn(0, terminalCols - 1)
 
-        // OSC 8 hyperlinks take priority over regex detection: they carry the exact
-        // URL that the program intended, without any heuristic matching.
+        // OSC 8 hyperlinks take priority: they carry the exact URL the program intended.
         termuxBridge?.getOsc8UrlAt(row, col)?.let { return it }
         terminalBuffer?.getUrlAt(row, col)?.let { return it }
 
-        // Check if the touch point is within any URL on the current row.
-        val matchInRow = urlPattern.findAll(lineText).firstOrNull { col in it.range }
-        if (matchInRow != null) {
-            return normaliseUrl(matchInRow.value)
+        // Fast path: URL starts and ends on the tapped row.
+        val rowText = getRowText(row)
+        urlPattern.findAll(rowText).firstOrNull { col in it.range }
+            ?.let { return normaliseUrl(it.value) }
+
+        // Walk backward to find the first row of the soft-wrap segment containing `row`.
+        // A row r is part of this segment when row r-1 soft-wraps into r.
+        var segStart = row
+        while (segStart > 0 && isRowSoftWrapped(segStart - 1)) {
+            segStart--
         }
 
-        // The URL may span a soft-wrap boundary: the tail of the current row
-        // continues at the start of the next row with no whitespace between them.
-        // For the custom buffer: only join when the row is actually soft-wrapped.
-        // For the Termux buffer: always attempt the join — the Termux library's
-        //   getSelectedText inserts '\n' at hard-newline boundaries, so the regex
-        //   will not cross a real line break.
-        val rowActuallyWraps = terminalBuffer?.isRowWrapped(row) ?: true
-        if (rowActuallyWraps) {
-            val nextRowText = getRowText(row + 1)
-            if (nextRowText.isNotEmpty()) {
-                // Trim trailing spaces — the buffer pads short lines to terminalCols.
-                val combined = lineText.trimEnd() + nextRowText
-                for (match in urlPattern.findAll(combined)) {
-                    // The tapped column is in the current-row portion, so the match
-                    // must start at or before that column.
-                    if (match.range.first <= col) {
-                        return normaliseUrl(match.value)
-                    }
-                }
-            }
+        // Walk forward to find the last row of the segment.
+        var segEnd = row
+        while (segEnd < terminalRows - 1 && isRowSoftWrapped(segEnd)) {
+            segEnd++
         }
 
-        return null
+        // Clamp to ±4 rows around the tap so we never build excessively large strings.
+        val winStart = maxOf(segStart, row - 4)
+        val winEnd   = minOf(segEnd,   row + 4)
+        if (winStart == row && winEnd == row) return null
+
+        val combined = buildWrappedWindowText(winStart, winEnd) ?: return null
+
+        // Compute the character offset of the tap position inside `combined`.
+        // Each row before `row` contributes its trimmed text length.  Hard-newline rows
+        // add 1 extra for the '\n' separator that appears in the combined string.
+        var tapOffset = col
+        for (r in winStart until row) {
+            val rTrimmed = getRowText(r).trimEnd()
+            tapOffset += rTrimmed.length
+            if (!isRowSoftWrapped(r)) tapOffset++
+        }
+        tapOffset = tapOffset.coerceIn(0, combined.length)
+
+        // Return the URL whose range covers tapOffset; fall back to the first URL found.
+        var fallback: String? = null
+        for (match in urlPattern.findAll(combined)) {
+            if (tapOffset in match.range) return normaliseUrl(match.value)
+            if (fallback == null) fallback = normaliseUrl(match.value)
+        }
+        return fallback
     }
 
     /**

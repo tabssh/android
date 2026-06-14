@@ -2,7 +2,7 @@
 
 > **Audience:** AI coding assistants (Claude Code, Copilot, Gemini, etc.) and human contributors who need an accurate, code-grounded picture of how this project is actually built. **CLAUDE.md** is the operational/runbook document; this file is the architectural ground truth derived from a full source survey.
 >
-> **Generated:** 2026-04-25; updated 2026-05-12 from a parallel survey of ~201 Kotlin sources, all Gradle/Docker/CI configs, and every preference/layout/menu XML.
+> **Generated:** 2026-04-25; updated 2026-05-12 from a parallel survey of ~201 Kotlin sources, all Gradle/Docker/CI configs, and every preference/layout/menu XML. Updated 2026-06-14: tab-freeze fix, swipe-lock during selection, SEL key removal, URL wrap detection, `Ctrl+` notation fix, multiplexer picker prefix fix, long-press context menu restore, clipboard menu restore.
 >
 > **Last verified against:** `versionCode 9` / `versionName 0.0.9`, database `v37` (full chain: v17→v18 env_vars+agent_forwarding → v19 stored_keys.certificate → v20 connections.protocol → v21 workspaces → v22 connections.color_tag → v23 cloud_accounts → v24 connections.remote_command → v25 connections.ip_mode → v26 macros → v27 hypervisor_accounts+account_id → v28 hypervisors.pinned_cert_sha256 → v29 OCI auth_type+5 OCI columns → v30 hypervisors.display_host/port → v31 connections.oci_instance_id → v32 monitor_slots → v33 OCI credentials promoted to hypervisor_accounts), JSch `mwiede:2.27.7`, Termux `terminal-emulator:0.118.1`, AGP 8.7.3, Kotlin 2.0.21, Gradle 8.11.1.
 >
@@ -458,9 +458,13 @@ The same bridge is used by `VMConsoleActivity` — a `ConsoleWebSocketClient` ex
 - Custom canvas rendering with monospace font, default 80×24 cells.
 - 16-color ANSI palette + 256-color rendering of Termux buffer cells (foreground/background indices, bold, underline, reverse).
 - Pinch-to-zoom (font size 8–32 sp).
-- Long-press URL detection (regex matches `https?://…` and `www.…`); shows a dialog with **Open / Copy / Cancel**. URL detection runs first; if no URL is found the long-press delegates to `onContextMenuRequested`.
+- **Long-press URL detection** (regex matches `https?://…`, `www.…`, etc.); shows a dialog with **Open / Copy / Cancel**. URL detection runs first; if no URL is found the long-press delegates to `onContextMenuRequested`.
+  - **Wrap-aware URL detection** — `detectUrlAtPosition()` walks backward through soft-wrapped rows to find the segment start, then forward to the segment end, then calls `termuxBuffer.getSelectedText(0, startRow, terminalCols, endRow)` (which joins soft-wrapped rows without `\n` natively) to build the combined string. The URL whose range covers the computed tap offset is returned; first URL in the window is the fallback. Handles URLs spanning 2+ visual rows (tapping any row of the URL works).
+  - Helper `isRowSoftWrapped(r)`: for Termux buffer uses row-length heuristic (full-width row = soft-wrapped); for local `TerminalBuffer` uses `isRowWrapped()` directly.
+  - Helper `buildWrappedWindowText(startRow, endRow)`: Termux path delegates to `getSelectedText()`; local buffer path manually joins with `isRowWrapped()` guard, inserting `\n` only at hard line breaks.
 - **Long-press → terminal bottom sheet menu** (`showTerminalMenu()` in `TabTerminalActivity`): slides in from the bottom (always fully on-screen regardless of where the long-press occurred). Contains: New Tab, Open Tabs list, Toggle Keyboard, Toggle Key Bar, Find in Scrollback, Snippets, Broadcast, Port Forwarding, Share Session, Close Tab, Disconnect All, Settings.
-- **Text selection ActionMode** (`startTerminalSelectionActionMode`): `TYPE_FLOATING` bar with Copy / Select All / Paste / Cancel. Entered via SEL key + drag, double-tap, or `beginWordSelectionAtTouch()`. The ActionMode is a distinct path from the long-press menu — they do not combine.
+- **Text selection ActionMode** (`startTerminalSelectionActionMode`): `TYPE_FLOATING` bar with Copy / Select All / Paste / Cancel. Entered via **"Select Text…" in the clipboard menu** + drag, or double-tap, or `beginWordSelectionAtTouch()`. The ActionMode is a distinct path from the long-press menu — they do not combine. During the ActionMode `viewPager?.isUserInputEnabled = false` to prevent accidental tab swipes; restored in `onDestroyActionMode()`.
+- **ViewPager2 tab-switch fix** — `onAttachedToWindow()` re-registers the `TermuxBridgeListener` and calls `requestFocus()` after ViewPager2 re-attaches the off-screen page, reversing the listener-removal that `onDetachedFromWindow()` performs. Without this, switching tabs froze the terminal (no redraws, no input).
 - `TerminalAccessibilityHelper` integration (TalkBack) with custom `READ_SCREEN`/`READ_LINE` actions.
 - `BitSet`-based dirty-row tracking for incremental redraws.
 
@@ -496,7 +500,11 @@ Key dispatches route to `TabTerminalActivity.handleCustomKeyPress()`. Notable sp
 | `CLIPBOARD` | 📋 | Opens `showClipboardMenu()` — a three-item popup: **Paste** (reads clipboard via `coerceToText()` and calls `TerminalView.pasteText()`), **Select Text…** (arms drag-select via `armSelectionForNextDrag()` + toast), **Copy Screen** (`copyTerminalScreen()`) |
 | `PREFIX` | **PRE** / **[PRE]** | Sends the current multiplexer prefix. Label is always `"PRE"`; shows `"[PRE]"` when the latch is armed. Color: green when a multiplexer is detected (active state), grey when none. First tap arms the latch (prefix bytes queued in `TerminalView.setPendingPrefix()`); next keystroke prepends them. Second tap on PRE cancels the latch. If no multiplexer is detected, shows `showMultiplexerPickerDialog()` with the user's **actual configured prefix** for each type (read from `PreferenceManager.getMultiplexerPrefix()` + `prefixToShortLabel()`), not hardcoded defaults. |
 | `MENU` | Menu | Opens `showTerminalMenu()` bottom sheet |
-| `SEL` / `TOGGLE` | (legacy) | Compat fallbacks; `SEL` arms drag-select, `TOGGLE` hides/shows the custom keyboard |
+| `TOGGLE` | (legacy) | Compat fallback; hides/shows the custom keyboard |
+
+**Removed keys:** `SEL` has been removed — text selection is now entered exclusively via "Select Text…" in the clipboard menu (📋 → Select Text…). The `SEL` case in `handleCustomKeyPress()` no longer exists.
+
+**`PrefixParser` notation** (`terminal/gestures/PrefixParser.kt`): accepts `C-a`, `^A`, `Ctrl-a`, and `Ctrl+a` (both `-` and `+` separators) for Ctrl sequences; likewise `M-a`, `Alt-a`, `Alt+a` for Alt. Human-readable descriptions use `Ctrl+X` / `Alt+X` form. Hex notation `0x02` / `\x02` is also accepted.
 
 ### 6.5 Recording
 
@@ -1393,6 +1401,8 @@ Production releases are produced by the `release.yml` GitHub Actions workflow on
 
 When modifying this codebase follow these rules:
 
+0. **Comment placement.** Comments go **above** the code they describe — never appended inline at the end of a code line. Single-line, ≤ 180 characters. Exception: tool-required directives (`// nolint`, `@Suppress`) that must sit on the same line are allowed inline, but an explanatory comment above is still required when the reason is not obvious. **Never** add `TODO`, `FIXME`, or `HACK` to committed code — resolve the issue before committing or track it in `TODO.AI.md`.
+
 1. **Don't reimplement what's there.** Termux owns the terminal emulator; JSch owns the SSH protocol; Room owns persistence; SAF owns cloud transport. New features should compose these — not replace them.
 2. **Database changes must ship a migration.** Steps in order: (1) bump `TabSSHDatabase` `version` constant; (2) add a `Migration` object for the new version step; (3) register it in the `databaseBuilder` migration chain; (4) run `make check` to trigger schema export; (5) commit the updated `app/schemas/` JSON. Never destructive-migrate — SQLite < 3.35 does not support `DROP COLUMN`; rename by adding a column, migrating data, and leaving the old column.
 3. **Sync surface is opinionated.** Anything user-visible and persisted that is *not* in `SyncDataCollector` won't sync. If you add a new entity, decide whether to sync it and update `SyncDataCollector`, `SyncDataApplier`, and the sync coverage matrix in §9.4.
@@ -1420,7 +1430,7 @@ When modifying this codebase follow these rules:
 12. **Docker build quirk.** Do not volume-mount `/opt/android-sdk` — that overlays the baked SDK in the build container. The correct bind-mounts are: source tree → `/workspace`, Gradle cache and AVD state → named compose volumes. The device is on a remote server; ADB and logcat are unavailable. All debugging is static analysis only.
 13. **Paste service quirk (MicroBin).** `mb.pste.us` and any self-hosted MicroBin instance return HTTP 404 on raw-paste URLs but still deliver the paste body. Never use `curl -f` for MicroBin URLs — it discards the body on 404. Always: `curl -qLs "https://mb.pste.us/raw/<id>"`.
 14. **Never add `Co-Authored-By` (or any attribution footer) to commit messages.** End commit bodies at the last description line, no trailer.
-15. **Save commit messages to `{project_root}/.git/COMMIT_MESS`.** Overwrite the file each time. Do not save to `/tmp/tabssh-android/`.
+15. **Save commit messages to `{project_root}/.git/COMMIT_MESS`.** Overwrite the file each time. Do not save to `/tmp/tabssh-android/`. Commit only via `gitcommit --dir {dir} all` — never bare `git commit`.
 16. **Downscale screenshots before reading them.** Android screenshots are 1080×2400+. Downscale first: `python3 /tmp/tabssh-android/resize.py <src>.png /tmp/tabssh-android/screenshots/<name>-small.png`.
 17. **Changelog hygiene — required on every commit.** Every commit that changes user-visible behaviour **MUST** update BOTH files in the same commit (never stale, never a separate follow-up):
 
@@ -1432,6 +1442,20 @@ When modifying this codebase follow these rules:
     - `CHANGELOG.md [Unreleased]` gets one bullet per logical change under **Added / Changed / Fixed**.
     - `whats_new.md` gets a new **Wave N** section (increment from the previous highest wave number) covering the most user-visible features in plain language. Skip internal refactors and CI changes.
     - Both files must be staged in the COMMIT_MESS diff. If the diff touches only code and not these files, the commit is incomplete.
+
+### 17.4 Terminology
+
+Use these terms consistently across code, comments, commit messages, and bug reports. Never substitute synonyms.
+
+| Term | Definition |
+|---|---|
+| **Tab** | A single SSH session slot in the ViewPager2 tab strip. Each tab owns one `SSHConnection`, one `TermuxBridge`, and one `TerminalView`. |
+| **Terminal / Terminal view** | The custom `TerminalView` canvas widget that renders the VT100/ANSI output for one tab. |
+| **Session** | The live SSH connection for a tab — `SSHConnection` + `TermuxBridge` together. A tab has at most one session at a time. |
+| **Keyboard bar / key bar** | The `MultiRowKeyboardView` strip of extra SSH keys (Esc, Tab, Ctrl, arrows, PRE, 📋 …) shown above the system keyboard. |
+| **Clipboard menu** | The three-item popup opened by the 📋 key on the keyboard bar: Paste · Select Text… · Copy Screen. |
+| **Selection mode / text selection** | The `TYPE_FLOATING` ActionMode (Copy / Select All / Paste / Cancel) entered via "Select Text…" in the clipboard menu or by double-tapping a word. |
+| **Context menu / terminal menu** | The bottom-sheet menu (`showTerminalMenu()`) summoned by a long-press on the terminal when no URL is detected. Contains: New Tab, Open Tabs, Toggle Keyboard, Toggle Key Bar, Find in Scrollback, Snippets, Broadcast, Port Forwarding, Share Session, Close Tab, Disconnect All, Settings. |
 
 ---
 

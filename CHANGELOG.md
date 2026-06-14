@@ -7,6 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **SEL key removed** — the legacy SEL key on the keyboard bar no longer exists; text selection is now entered exclusively via **"Select Text…"** in the clipboard menu (📋 → Select Text…); double-tap word-selection still works as before
+- **`Ctrl+` prefix notation** — `PrefixParser` now accepts `Ctrl+a` (plus separator) in addition to `Ctrl-a` (dash separator) and the existing `C-a` / `^a` forms; human-readable descriptions always use `Ctrl+X` / `Alt+X` style
+
+### Fixed
+
+- **Tab switch froze the terminal** — ViewPager2 calls `onDetachedFromWindow()` on off-screen pages, which removed the `TermuxBridgeListener` and stopped cursor blink; the SSH read loop kept running but `invalidate()` was never called so the view looked frozen; added `onAttachedToWindow()` to re-register the listener and call `requestFocus()` when the page slides back on-screen
+- **Horizontal swipe could accidentally switch tabs during text selection** — `startTerminalSelectionActionMode()` now sets `viewPager.isUserInputEnabled = false` while the floating Copy ActionMode bar is active; swipe is re-enabled in `onDestroyActionMode()` (fires on Copy, Cancel, Paste, and tap-outside)
+- **Tapping a word-wrapped URL opened a cut-off URL** — `detectUrlAtPosition()` only looked forward one row; tapping the second or later row of a wrapped URL found nothing and fell through; new implementation walks backward to the soft-wrap segment start, forward to the segment end (clamped to ±4 rows), calls `termuxBuffer.getSelectedText(0, startRow, terminalCols, endRow)` which joins soft-wrapped rows without `\n`, then finds the URL whose range covers the tap position; `isRowSoftWrapped()` helper provides the wrap flag for both Termux and local `TerminalBuffer` paths
+
 ### Added
 
 - **Mosh auto mode** — per-connection Mosh setting is now three-way: Off / Auto (default) / On; "Auto" silently tries `mosh-server` on the remote and falls back to plain SSH if it isn't installed; the old on/off toggle is replaced by a dropdown in the connection editor; all existing connections default to "Auto"
@@ -94,7 +105,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **`VncDirectConnector` socket file-descriptor leak on connect failure** — `Socket()` was allocated then `socket.connect()` or `RfbClient` constructor could throw; caller never receives the socket so the fd leaked until GC finalised it; wrapped in `catch(Throwable) { socket.close(); throw }`
 - **`TabManager` `ArithmeticException` on empty tab list** — `switchToNextTab`, `switchToPreviousTab`, and the `Ctrl+Tab` / `Ctrl+Shift+Tab` keyboard shortcut path computed `% tabs.size` with no empty-list guard; added `if (tabs.isEmpty()) return` guards to all three paths
 - **`MetricsCollector.previousNetworkStats!!` TOCTOU race** — field checked non-null then force-dereferenced; a concurrent `resetNetworkStats()` on another thread could null it between the two reads; captured into a local `val` first
-- **Long press shows terminal menu again** — all three `TerminalView` wiring sites in `TabTerminalActivity` had `onContextMenuRequested` pointing at `beginSelection()` (copy/paste ActionMode) instead of `showTerminalMenu()` (the bottom-sheet action menu); long press now reliably shows the menu on URL and non-URL text alike; text selection is still available via the dedicated SEL key
+- **Long press shows terminal menu again** — all three `TerminalView` wiring sites in `TabTerminalActivity` had `onContextMenuRequested` pointing at `beginSelection()` (copy/paste ActionMode) instead of `showTerminalMenu()` (the bottom-sheet action menu); long press now reliably shows the menu on URL and non-URL text alike; text selection is available via "Select Text…" in the clipboard menu (📋)
 - **`ClusterCommandExecutor` SSH session + scope leak on error** — `SSHConnection` and `CoroutineScope(SupervisorJob)` were not cleaned up when `connect()` / `executeCommand()` threw; a `finally{}` block now always calls `disconnect()` and `scope.cancel()`
 - **`PerformanceFragment` orphan coroutine scope per connect** — `SSHConnection` was constructed with a throwaway `CoroutineScope(Dispatchers.IO)` per tap; now routes through `app.applicationScope` matching the pattern used elsewhere
 - **`SAFSyncManager.lastError!!` NPE race** — four sites assigned `lastError` then force-dereferenced it; a concurrent write on `Dispatchers.IO` could null the field between those two statements; all sites now capture a local `val` first

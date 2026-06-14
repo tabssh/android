@@ -1,5 +1,13 @@
 # What's New
 
+## Wave 47 — Reliability fixes
+
+- **Tapping wrapped URLs now works** — links that span multiple terminal rows open correctly instead of being cut off
+- **Tab switching no longer freezes the terminal** — switching tabs then back no longer left the terminal unresponsive
+- **Swipe lock during text selection** — horizontal swipes can no longer accidentally switch tabs while selecting text
+- **Removed SEL key** — text selection is now entered via "Select Text…" in the clipboard menu (📋)
+- **`Ctrl+` shortcut notation** — the `+` separator is now accepted alongside `Ctrl-`, `C-`, and `^` in custom key bindings
+
 ## Wave 46 — Your data is safe across updates
 
 Connections, SSH keys, themes, snippets, and all other saved data now survive
