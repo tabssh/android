@@ -458,7 +458,9 @@ The same bridge is used by `VMConsoleActivity` — a `ConsoleWebSocketClient` ex
 - Custom canvas rendering with monospace font, default 80×24 cells.
 - 16-color ANSI palette + 256-color rendering of Termux buffer cells (foreground/background indices, bold, underline, reverse).
 - Pinch-to-zoom (font size 8–32 sp).
-- Long-press URL detection (regex matches `https?://…` and `www.…`); shows a dialog with **Open / Copy / Cancel**.
+- Long-press URL detection (regex matches `https?://…` and `www.…`); shows a dialog with **Open / Copy / Cancel**. URL detection runs first; if no URL is found the long-press delegates to `onContextMenuRequested`.
+- **Long-press → terminal bottom sheet menu** (`showTerminalMenu()` in `TabTerminalActivity`): slides in from the bottom (always fully on-screen regardless of where the long-press occurred). Contains: New Tab, Open Tabs list, Toggle Keyboard, Toggle Key Bar, Find in Scrollback, Snippets, Broadcast, Port Forwarding, Share Session, Close Tab, Disconnect All, Settings.
+- **Text selection ActionMode** (`startTerminalSelectionActionMode`): `TYPE_FLOATING` bar with Copy / Select All / Paste / Cancel. Entered via SEL key + drag, double-tap, or `beginWordSelectionAtTouch()`. The ActionMode is a distinct path from the long-press menu — they do not combine.
 - `TerminalAccessibilityHelper` integration (TalkBack) with custom `READ_SCREEN`/`READ_LINE` actions.
 - `BitSet`-based dirty-row tracking for incremental redraws.
 
@@ -476,7 +478,25 @@ The same bridge is used by `VMConsoleActivity` — a `ConsoleWebSocketClient` ex
 - `KeyboardHandler` translates Android key events into ANSI control sequences.
 - `view_custom_keyboard.xml` + `KeyboardKeyAdapter` implement an on-screen SSH keyboard (Esc, Tab, Ctrl, Alt, arrows, Fn keys, customizable rows 1–5).
 - `GestureCommandMapper` + `TerminalGestureHandler` bind multi-touch gestures (2/3-finger swipes, pinch in/out — 10 mappings) to tmux/screen/zellij command sequences with configurable prefix.
-- **Find-in-scrollback** — `TabTerminalActivity.showFindDialog()` (line 1010) opens an `AlertDialog` with an `EditText`. On submit it calls `TermuxBridge.findInScrollback(query)` which scans the Termux buffer rows for the query string (case-insensitive), highlights matches by temporarily inverting their cell colours, and scrolls to the first hit. Accessible from the terminal context menu ("Find in scrollback…") and the palette dialog.
+- **Find-in-scrollback** — `TabTerminalActivity.showFindDialog()` opens an `AlertDialog` with an `EditText`. On submit it calls `TermuxBridge.findInScrollback(query)` which scans the Termux buffer rows for the query string (case-insensitive), highlights matches by temporarily inverting their cell colours, and scrolls to the first hit. Accessible from the terminal bottom sheet menu ("Find in Scrollback…").
+
+**`MultiRowKeyboardView` — custom keyboard bar**
+
+`ui/keyboard/MultiRowKeyboardView.kt` renders a 1–5 row SSH-function bar above the system keyboard. Key layout (rows shown from top):
+- Row 1: Esc, Tab, Ctrl, Alt, arrow cluster (↑ ↓ ← →), Del, PgUp, PgDn, Home, End
+- Row 2: F1–F12
+- Row 3: PREFIX (2×), `|`, `\`, `-`, `~`, `_`, `[`, `]`, `{`, `}`, `;`, `'`, `` ` ``, `#`, `@`, `$`, `%`, `^`, `&`, `*`, `(`, `)`, CLIPBOARD (📋)
+- Row 4: number row 0–9
+- Row 5: customizable; alphabet row by default
+
+Key dispatches route to `TabTerminalActivity.handleCustomKeyPress()`. Notable special keys:
+
+| Key ID | Label | Behavior |
+|---|---|---|
+| `CLIPBOARD` | 📋 | Opens `showClipboardMenu()` — a three-item popup: **Paste** (reads clipboard via `coerceToText()` and calls `TerminalView.pasteText()`), **Select Text…** (arms drag-select via `armSelectionForNextDrag()` + toast), **Copy Screen** (`copyTerminalScreen()`) |
+| `PREFIX` | **PRE** / **[PRE]** | Sends the current multiplexer prefix. Label is always `"PRE"`; shows `"[PRE]"` when the latch is armed. Color: green when a multiplexer is detected (active state), grey when none. First tap arms the latch (prefix bytes queued in `TerminalView.setPendingPrefix()`); next keystroke prepends them. Second tap on PRE cancels the latch. If no multiplexer is detected, shows `showMultiplexerPickerDialog()` with the user's **actual configured prefix** for each type (read from `PreferenceManager.getMultiplexerPrefix()` + `prefixToShortLabel()`), not hardcoded defaults. |
+| `MENU` | Menu | Opens `showTerminalMenu()` bottom sheet |
+| `SEL` / `TOGGLE` | (legacy) | Compat fallbacks; `SEL` arms drag-select, `TOGGLE` hides/shows the custom keyboard |
 
 ### 6.5 Recording
 
