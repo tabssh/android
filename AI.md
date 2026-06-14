@@ -1430,7 +1430,18 @@ When modifying this codebase follow these rules:
 12. **Docker build quirk.** Do not volume-mount `/opt/android-sdk` — that overlays the baked SDK in the build container. The correct bind-mounts are: source tree → `/workspace`, Gradle cache and AVD state → named compose volumes. The device is on a remote server; ADB and logcat are unavailable. All debugging is static analysis only.
 13. **Paste service quirk (MicroBin).** `mb.pste.us` and any self-hosted MicroBin instance return HTTP 404 on raw-paste URLs but still deliver the paste body. Never use `curl -f` for MicroBin URLs — it discards the body on 404. Always: `curl -qLs "https://mb.pste.us/raw/<id>"`.
 14. **Never add `Co-Authored-By` (or any attribution footer) to commit messages.** End commit bodies at the last description line, no trailer.
-15. **Save commit messages to `{project_root}/.git/COMMIT_MESS`.** Overwrite the file each time. Do not save to `/tmp/tabssh-android/`. Commit only via `gitcommit --dir {dir} all` — never bare `git commit`.
+15. **Commit workflow — pre-commit sequence (required on every commit).**
+
+    1. `git status --porcelain` + `git diff --stat` — see exactly what changed.
+    2. **Run `make check`** — compile + lint; never commit with violations or compile errors. (`make test` requires a connected device/emulator; run it when available, but `make check` is the mandatory gate.)
+    3. **Changelog gate** — for any commit that touches user-visible behaviour, confirm both `CHANGELOG.md` and `app/src/main/assets/whats_new.md` are staged (`git diff --stat` must list them); if either is absent, update it before continuing (see rule 17).
+    4. Write `.git/COMMIT_MESS` from the `git diff --stat` output — describe every changed file; never write from memory.
+    5. Re-read `COMMIT_MESS` and compare against the diff — rewrite if anything is missing or wrong.
+    6. Run `gitcommit --dir {dir} all` — the only valid commit path; never bare `git commit` or `-m`.
+
+    **`COMMIT_MESS` format:** `{emoji} Title (≤64 chars) {emoji}` + blank line + body + `- path: change` bullets per file. Emoji map: ✨ feat · 🐛 fix · 📝 docs · 🎨 style · ♻️ refactor · ⚡ perf · ✅ test · 🔧 chore · 🔒 security · 🗑️ remove · 🚀 deploy · 📦 deps. No bare `@` handles in the commit body. One logical change per commit.
+
+    Save `COMMIT_MESS` to `{project_root}/.git/COMMIT_MESS` — never to `/tmp/tabssh-android/`.
 16. **Downscale screenshots before reading them.** Android screenshots are 1080×2400+. Downscale first: `python3 /tmp/tabssh-android/resize.py <src>.png /tmp/tabssh-android/screenshots/<name>-small.png`.
 17. **Changelog hygiene — required on every commit.** Every commit that changes user-visible behaviour **MUST** update BOTH files in the same commit (never stale, never a separate follow-up):
 
