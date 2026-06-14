@@ -21,13 +21,6 @@ class TerminalPagerAdapter(
     private val customPrefix: String? = null,
     private val onCommandSent: ((ByteArray) -> Unit)? = null,
     private var currentTheme: Theme? = null,
-    // The long-press context menu callback. Without wiring this, the
-    // per-page TerminalView's `onContextMenuRequested` field stays
-    // null, so long-press silently no-ops in swipe mode (the default).
-    // setupTerminalView() in TabTerminalActivity only sets the field
-    // on the SINGLE classic-mode TerminalView; pass it through here
-    // so the swipe-mode pages get it too.
-    private val onContextMenuRequested: ((Float, Float) -> Unit)? = null,
     /**
      * Invoked when the user enters selection mode on a per-page
      * TerminalView (e.g. via the SEL key + drag). Receives the
@@ -96,7 +89,6 @@ class TerminalPagerAdapter(
             multiplexerType,
             customPrefix,
             onCommandSent,
-            onContextMenuRequested,
             onSelectionStarted
         )
     }
@@ -135,7 +127,6 @@ class TerminalPagerAdapter(
         private val multiplexerType: io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType,
         private val customPrefix: String?,
         private val onCommandSent: ((ByteArray) -> Unit)?,
-        private val onContextMenuRequested: ((Float, Float) -> Unit)?,
         private val onSelectionStarted: ((TerminalView) -> Unit)? = null
     ) : RecyclerView.ViewHolder(terminalView) {
 

@@ -846,15 +846,19 @@ class TabTerminalActivity : AppCompatActivity() {
                         showUrlDialog(url)
                     }
                 }
-                onContextMenuRequested = { _, _ ->
-                    showTerminalMenu()
+                // Long-press: enter word-selection mode so the floating
+                // Copy / Select All / Paste ActionMode bar appears — same
+                // UX as swipe mode. Do NOT call showTerminalMenu() here;
+                // the bottom sheet steals window focus, dismissing the
+                // ActionMode immediately after it opens. The terminal menu
+                // remains reachable via the "Menu" button in the action bar.
+                val viewRef = this
+                onContextMenuRequested = { x, y ->
+                    viewRef.beginWordSelectionAtTouch(x, y)
                 }
 
-                // Wired once at view setup so the floating Copy ActionMode
-                // appears any time selection enters (currently only via the
-                // SEL key + drag flow). Without this the user's drag would
-                // highlight text but they'd have no way to copy it.
-                val viewRef = this
+                // onSelectionStarted fires from beginWordSelectionAtTouch
+                // (and from double-tap / SEL-drag) → raise the ActionMode.
                 onSelectionStarted = {
                     startTerminalSelectionActionMode(viewRef)
                 }
@@ -2114,7 +2118,6 @@ private fun showSnippetsPickerForActiveTab() {
                 multiplexerType,
                 customPrefix,
                 commandCallback,
-                onContextMenuRequested = { _, _ -> showTerminalMenu() },
                 onSelectionStarted = { tv -> startTerminalSelectionActionMode(tv) },
                 reverseScrollDirection = app.preferencesManager.isReverseScrollDirection(),
                 lineSpacingPercent = app.preferencesManager.getStringAsInt("terminal_line_spacing", 120)
@@ -2175,7 +2178,6 @@ private fun showSnippetsPickerForActiveTab() {
                 multiplexerType,
                 customPrefix,
                 commandCallback,
-                onContextMenuRequested = { _, _ -> showTerminalMenu() },
                 onSelectionStarted = { tv -> startTerminalSelectionActionMode(tv) },
                 reverseScrollDirection = app.preferencesManager.isReverseScrollDirection(),
                 lineSpacingPercent = app.preferencesManager.getStringAsInt("terminal_line_spacing", 120)
@@ -4000,8 +4002,12 @@ private fun showSnippetsPickerForActiveTab() {
                 pasteFromClipboard()
             }
             "CLIPBOARD" -> {
-                Logger.d("TabTerminalActivity", "Clipboard menu")
-                showClipboardMenu()
+                // Paste directly — showing a sub-menu here means two taps
+                // to paste, which is confusing when the key icon is a
+                // clipboard. Copy is reachable via long-press (ActionMode)
+                // and "Copy Screen" via Menu → terminal section.
+                Logger.d("TabTerminalActivity", "Clipboard key — paste directly")
+                pasteFromClipboard()
             }
             "MENU" -> {
                 Logger.d("TabTerminalActivity", "Menu key — opening terminal bottom sheet")
@@ -4151,32 +4157,6 @@ private fun showSnippetsPickerForActiveTab() {
         customKeyboardVisible = true
         binding.multiRowKeyboard.visibility = android.view.View.VISIBLE
         app.preferencesManager.setBoolean(PREF_KEY_BAR_VISIBLE, true)
-    }
-
-    /**
-     * Show a dialog with Copy / Paste / Select All clipboard actions.
-     * Replaces the old SEL and PASTE keyboard keys — both actions live here
-     * together with a Select All shortcut (sends Ctrl+A).
-     */
-    private fun showClipboardMenu() {
-        val actions = arrayOf("📋  Paste", "✂️  Copy (select text)", "☑️  Select All (Ctrl+A)")
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Clipboard")
-            .setItems(actions) { _, which ->
-                when (which) {
-                    0 -> pasteFromClipboard()
-                    1 -> {
-                        getActiveTerminalView()?.armSelectionForNextDrag()
-                        Toast.makeText(
-                            this,
-                            "Drag on the terminal to select. Tap Copy when done.",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                    2 -> getActiveTerminalView()?.sendText("")
-                }
-            }
-            .show()
     }
 
 }
