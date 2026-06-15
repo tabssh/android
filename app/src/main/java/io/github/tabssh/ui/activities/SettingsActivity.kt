@@ -164,6 +164,18 @@ class GeneralSettingsFragment : PreferenceFragmentCompat() {
             openSystemNotificationSettings()
             true
         }
+
+        // Max open tabs bounds: 1..200. Anything above ~200 risks OOM on
+        // low-end devices because every tab holds a Termux session buffer.
+        findPreference<Preference>("ui_max_tabs")?.setOnPreferenceChangeListener { _, newValue ->
+            val raw = (newValue as? String).orEmpty().trim()
+            val n = raw.toIntOrNull()
+            if (n == null || n < 1 || n > 200) {
+                android.widget.Toast.makeText(requireContext(), "Max tabs must be 1–200", android.widget.Toast.LENGTH_SHORT).show()
+                return@setOnPreferenceChangeListener false
+            }
+            true
+        }
     }
 
     private fun openSystemNotificationSettings() {
@@ -537,12 +549,31 @@ class ConnectionSettingsFragment : PreferenceFragmentCompat() {
             }
         }
 
-        // Connection timeout change listener
+        // Connection timeout change listener.
+        // Bounds: 1..600 seconds. A 0 timeout would make connect() return
+        // immediately; >600s blocks the UI for ten minutes on a dead host.
         findPreference<Preference>("connect_timeout")?.setOnPreferenceChangeListener { _, newValue ->
-            val timeout = newValue as String
-            val seconds = timeout.toInt()
+            val raw = (newValue as? String).orEmpty().trim()
+            val seconds = raw.toIntOrNull()
+            if (seconds == null || seconds < 1 || seconds > 600) {
+                android.widget.Toast.makeText(requireContext(), "Connection timeout must be 1–600 seconds", android.widget.Toast.LENGTH_SHORT).show()
+                return@setOnPreferenceChangeListener false
+            }
             android.widget.Toast.makeText(requireContext(), "Connection timeout: ${seconds}s", android.widget.Toast.LENGTH_SHORT).show()
             Logger.i("Settings", "Connection timeout changed to: $seconds")
+            true
+        }
+
+        // Server alive interval bounds: 0 disables keepalive, max 3600s (1h).
+        // Negative values would be coerced to Int and rejected by JSch.
+        findPreference<Preference>("server_alive_interval")?.setOnPreferenceChangeListener { _, newValue ->
+            val raw = (newValue as? String).orEmpty().trim()
+            val seconds = raw.toIntOrNull()
+            if (seconds == null || seconds < 0 || seconds > 3600) {
+                android.widget.Toast.makeText(requireContext(), "Keepalive must be 0–3600 seconds (0 disables)", android.widget.Toast.LENGTH_SHORT).show()
+                return@setOnPreferenceChangeListener false
+            }
+            Logger.i("Settings", "Server alive interval changed to: $seconds")
             true
         }
 
@@ -570,6 +601,30 @@ class AuditSettingsFragment : PreferenceFragmentCompat() {
                 // Reflect the MDM-forced value so the toggle shows the right state.
                 isChecked = app.auditLogManager.isEnabled()
             }
+        }
+
+        // Bounds for audit log size: 1..10000 MB. Below 1MB would truncate
+        // within seconds on a chatty session; above 10GB exhausts storage.
+        findPreference<Preference>("audit_log_max_size_mb")?.setOnPreferenceChangeListener { _, newValue ->
+            val raw = (newValue as? String).orEmpty().trim()
+            val n = raw.toIntOrNull()
+            if (n == null || n < 1 || n > 10_000) {
+                android.widget.Toast.makeText(requireContext(), "Max log size must be 1–10000 MB", android.widget.Toast.LENGTH_SHORT).show()
+                return@setOnPreferenceChangeListener false
+            }
+            true
+        }
+
+        // Bounds for retention: 1..3650 days (~10 years). Zero would prune
+        // entries before they could be read; >10y is effectively unlimited.
+        findPreference<Preference>("audit_log_max_age_days")?.setOnPreferenceChangeListener { _, newValue ->
+            val raw = (newValue as? String).orEmpty().trim()
+            val n = raw.toIntOrNull()
+            if (n == null || n < 1 || n > 3650) {
+                android.widget.Toast.makeText(requireContext(), "Retention must be 1–3650 days", android.widget.Toast.LENGTH_SHORT).show()
+                return@setOnPreferenceChangeListener false
+            }
+            true
         }
 
         // View logs button
@@ -659,6 +714,18 @@ class TaskerSettingsFragment : PreferenceFragmentCompat() {
         // Events help
         findPreference<Preference>("tasker_events_help")?.setOnPreferenceClickListener {
             showEventsHelp()
+            true
+        }
+
+        // Command timeout bounds: 100ms..1h (3_600_000ms). Below 100ms the
+        // shell barely starts; above 1h Tasker tasks block forever.
+        findPreference<Preference>("tasker_command_timeout")?.setOnPreferenceChangeListener { _, newValue ->
+            val raw = (newValue as? String).orEmpty().trim()
+            val n = raw.toLongOrNull()
+            if (n == null || n < 100 || n > 3_600_000) {
+                android.widget.Toast.makeText(requireContext(), "Timeout must be 100–3600000 ms", android.widget.Toast.LENGTH_SHORT).show()
+                return@setOnPreferenceChangeListener false
+            }
             true
         }
         

@@ -482,6 +482,21 @@ object NotificationHelper {
         message: String,
         isError: Boolean
     ) {
+        // Global gates: error events still respect showErrorNotifications();
+        // non-error connect/disconnect events respect showConnectionNotifications().
+        // The master notifications_enabled toggle is folded into both helpers.
+        val prefManager = PreferenceManager(context)
+        if (isError) {
+            if (!prefManager.showErrorNotifications()) {
+                Logger.d("NotificationHelper", "Error notifications disabled, skipping alert")
+                return
+            }
+        } else {
+            if (!prefManager.showConnectionNotifications()) {
+                Logger.d("NotificationHelper", "Connection notifications disabled, skipping alert")
+                return
+            }
+        }
         val soundMode = AlertMode.fromInt(profile.notifSoundMode)
         val vibMode = AlertMode.fromInt(profile.notifVibrateMode)
         val soundOn = when (soundMode) {
@@ -489,7 +504,10 @@ object NotificationHelper {
             AlertMode.ALWAYS -> true
             AlertMode.ON_ERROR -> isError
         }
-        val vibOn = when (vibMode) {
+        // Global vibrate toggle suppresses vibration across all per-profile modes;
+        // the user can mute system-wide haptics here without touching each profile.
+        val globalVibrateOn = prefManager.isNotificationVibrateEnabled()
+        val vibOn = globalVibrateOn && when (vibMode) {
             AlertMode.NEVER -> false
             AlertMode.ALWAYS -> true
             AlertMode.ON_ERROR -> isError

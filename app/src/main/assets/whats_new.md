@@ -1,5 +1,21 @@
 # What's New
 
+## Wave 50 — Settings audit cleanup
+
+- **"Show connection notifications" and "Vibrate" toggles work again** — both
+  switches in Settings → General → Notifications were saved but no
+  notification code path consulted them. The global vibrate switch now
+  suppresses haptics across every per-profile alert mode, and connection
+  notifications are gated by the matching toggle.
+- **Duplicate SSH Agent Forwarding switch removed** — the same setting
+  appeared in both Settings → Connection and Settings → Security. Removed
+  the duplicate from Security; Connection is the canonical home.
+- **Settings numeric inputs no longer crash on bad input** — Connection
+  Timeout previously threw an exception on an empty or non-numeric entry;
+  Keepalive, Max Tabs, Tasker Command Timeout, Audit Log Size, and Audit
+  Retention had no bounds at all. All six now reject invalid input with a
+  clear message and enforce sane minimum/maximum bounds.
+
 ## Wave 49 — SSH bytes-transferred counter actually counts
 
 The per-connection `bytesTransferred` figure shown in connection stats and
