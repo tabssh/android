@@ -114,7 +114,7 @@ class BackupValidator {
             errors.add("Invalid JSON in connections.json: ${e.message}")
         }
 
-        return ValidationResult(false, errors, warnings)
+        return ValidationResult(errors.isEmpty(), errors, warnings)
     }
 
     private fun validateKeysData(data: String): ValidationResult {
@@ -145,7 +145,7 @@ class BackupValidator {
             errors.add("Invalid JSON in keys.json: ${e.message}")
         }
 
-        return ValidationResult(false, errors, warnings)
+        return ValidationResult(errors.isEmpty(), errors, warnings)
     }
 
     private fun validatePreferencesData(data: String): ValidationResult {
@@ -186,7 +186,7 @@ class BackupValidator {
             errors.add("Invalid JSON in preferences.json: ${e.message}")
         }
 
-        return ValidationResult(false, errors, warnings)
+        return ValidationResult(errors.isEmpty(), errors, warnings)
     }
 
     private fun validateThemesData(data: String): ValidationResult {
@@ -217,21 +217,28 @@ class BackupValidator {
             errors.add("Invalid JSON in themes.json: ${e.message}")
         }
 
-        return ValidationResult(false, errors, warnings)
+        return ValidationResult(errors.isEmpty(), errors, warnings)
     }
 
     /**
-     * Check if backup file is encrypted
+     * Check whether a v3 backup file is encrypted.
+     *
+     * v3 backups produced by [BackupManager] are either plain UTF-8 JSON or
+     * an AES-GCM ciphertext with the literal magic header `TABSSH_SYNC_V2`
+     * (see [io.github.tabssh.sync.encryption.SyncEncryptor]). The previous
+     * heuristic — "fails to parse as JSON and matches a base64 regex" —
+     * never matched because SyncEncryptor's output is raw binary, not
+     * base64, so any encrypted backup was misreported as plaintext.
+     * Accepts both the raw byte form (preferred) and the legacy
+     * String-decoded form for callers that still pass a `String` view.
      */
+    fun isBackupEncrypted(data: ByteArray): Boolean {
+        if (data.size < 14) return false
+        return String(data, 0, 14, Charsets.ISO_8859_1) == "TABSSH_SYNC_V2"
+    }
+
     fun isBackupEncrypted(data: String): Boolean {
-        // Simple check - encrypted data would be base64 and not valid JSON
-        return try {
-            JSONObject(data)
-            false
-        } catch (e: Exception) {
-            // If it's not valid JSON, it might be encrypted
-            data.matches(Regex("^[A-Za-z0-9+/]+=*$"))
-        }
+        return isBackupEncrypted(data.toByteArray(Charsets.ISO_8859_1))
     }
 
     /**

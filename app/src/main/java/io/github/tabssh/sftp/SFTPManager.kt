@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
+import java.io.FileOutputStream
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.Vector
@@ -344,12 +345,18 @@ class SFTPManager(private val sshConnection: SSHConnection) {
                     inputStream.skip(startOffset)
                 }
 
+                // Resume-download fix: previously this branch called
+                // `localFile.outputStream().close()` (which truncates the
+                // partial file to zero bytes) and then `appendOutputStream()`
+                // which was a stub that *also* truncated, so resuming a
+                // download discarded the bytes-on-disk and silently produced
+                // a tail-only file. Use FileOutputStream(file, append=true)
+                // so the post-skip bytes are appended after the already-
+                // downloaded prefix.
                 val outputStream = if (startOffset > 0) {
-                    // Ensure file exists before opening for append
-                    localFile.outputStream().close()
-                    localFile.appendOutputStream()
+                    FileOutputStream(localFile, true)
                 } else {
-                    localFile.outputStream()
+                    FileOutputStream(localFile, false)
                 }
 
                 outputStream.use { output ->
@@ -660,12 +667,6 @@ class SFTPManager(private val sshConnection: SSHConnection) {
             file.setExecutable(executable)
         } catch (e: Exception) {
             Logger.w("SFTPManager", "Failed to set local file permissions", e)
-        }
-    }
-    
-    private fun File.appendOutputStream(): OutputStream {
-        return outputStream().apply {
-            // This is a simplified append - real implementation would need proper append mode
         }
     }
     

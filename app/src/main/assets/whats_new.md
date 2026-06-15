@@ -1,5 +1,23 @@
 # What's New
 
+## Wave 51 — SFTP + Backup audit fixes
+
+- **SFTP resume downloads no longer corrupt the file** — resuming a
+  partially-downloaded file previously truncated the already-downloaded
+  prefix to zero bytes and wrote only the tail of the stream after the
+  resume offset, silently producing a corrupt file that looked like a
+  successful "recovery". The resume path now appends after the existing
+  bytes, matching how `ChannelSftp.RESUME` is supposed to work.
+- **Encrypted backups are now detected as encrypted** — `isBackupEncrypted`
+  used a base64 regex that never matched the raw AES-GCM binary actually
+  produced by the v3 backup writer, so the UI skipped the passphrase
+  prompt and then failed with a confusing JSON parser error. The check now
+  reads the `TABSSH_SYNC_V2` magic header directly.
+- **Backup validator no longer reports valid sections as invalid** — each
+  per-section sub-result (connections / keys / preferences / themes) hard-
+  coded its `isValid` flag to `false`, so any future code consuming the
+  per-section flag would treat clean backups as broken.
+
 ## Wave 50 — Settings audit cleanup
 
 - **"Show connection notifications" and "Vibrate" toggles work again** — both
