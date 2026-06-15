@@ -1,5 +1,28 @@
 # What's New
 
+## Wave 53 — Keyboard & tabs deep-dive audit
+
+- **Friendlier tab-limit message** — opening a new SSH tab when you
+  have already hit your max-tabs setting no longer flashes a generic
+  "Failed to create terminal tab" before closing the screen. You now
+  see "Tab limit reached (N tabs open). Close a tab before opening a
+  new one." and the freshly-opened SSH connection is torn down
+  cleanly so it does not linger in the background.
+- **FN mode is robust against layout changes** — if the keyboard
+  layout is updated while you have the FN row showing, the FN-swap
+  snapshot is now cleared so the next FN toggle paints the new layout
+  rather than the stale one.
+- **Legacy `CustomKeyboardView` removed** — the multi-row keyboard
+  view has been the only one wired up for several releases; the
+  unused single-row sibling and its layout XML are gone. No visible
+  change.
+- **`KeyboardLayoutManager` slimmed down** — the unused single-row
+  CSV save/load methods were removed; only the multi-row JSON
+  helpers everything actually uses remain. No visible change.
+- No regressions to keyboard input — all key sequences (arrows, F1-F12,
+  HOME/END/PGUP/PGDN, FN swap) and DECCKM application-cursor mode
+  continue to send the correct ESC-prefixed sequences.
+
 ## Wave 52 — Subsystems audit: orphan code removal
 
 - **Removed the orphan `accessibility/` package** — `AccessibilityManager`,

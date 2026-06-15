@@ -19,29 +19,13 @@ data class KeyboardKey(
         MODIFIER,     // CTL, ALT, FN
         ACTION        // Toggle, Paste
     }
-    
+
     companion object {
-        // Default flat keyboard layout (used by the legacy single-row
-        // CustomKeyboardView). The IME-toggle (⌨) was dropped — back-key
-        // closes the soft keyboard, no dedicated button needed.
-        fun getDefaultKeys(): List<KeyboardKey> = listOf(
-            KeyboardKey("ESC", "ESC", "\u001B"),
-            KeyboardKey("CTL", "CTL", "", KeyCategory.MODIFIER),
-            KeyboardKey("ALT", "ALT", "", KeyCategory.MODIFIER),
-            KeyboardKey("FN", "FN", "", KeyCategory.MODIFIER),
-            KeyboardKey("TAB", "TAB", "\t"),
-            KeyboardKey("SLASH", "/", "/", KeyCategory.SYMBOL),
-            KeyboardKey("BACKSLASH", "\\", "\\", KeyCategory.SYMBOL),
-            KeyboardKey("PIPE", "|", "|", KeyCategory.SYMBOL),
-            KeyboardKey("MINUS", "-", "-", KeyCategory.SYMBOL),
-            KeyboardKey("HOME", "HOME", "\u001B[H"),
-            KeyboardKey("END", "END", "\u001B[F"),
-            KeyboardKey("PGUP", "PGUP", "\u001B[5~"),
-            KeyboardKey("PGDN", "PGDN", "\u001B[6~"),
-            KeyboardKey("ENTER", "ENT", "\r")
-        )
-        
-        // All available keys for customization
+        // All available keys for customization. Used by both the layout-editor
+        // and KeyboardLayoutManager.parseLayoutJson when resolving saved key IDs.
+        // The legacy getDefaultKeys() (single-row flat layout) was removed in
+        // Pass 16 — MultiRowKeyboardView.getDefaultRowLayouts() is the only
+        // default-layout source the running app uses.
         fun getAllAvailableKeys(): List<KeyboardKey> = listOf(
             // Special keys
             KeyboardKey("ESC", "ESC", "\u001B"),

@@ -1893,8 +1893,18 @@ class TabTerminalActivity : AppCompatActivity() {
                         }
                     }
                 } else {
-                    Logger.e("TabTerminalActivity", "Failed to create tab for ${profile.getDisplayName()}")
-                    showError("Failed to create terminal tab", "Error")
+                    // createTab() returns null only when the tab limit (ui_max_tabs)
+                    // is reached. Give the user actionable feedback instead of a
+                    // generic "Failed to create terminal tab" message.
+                    val limit = tabManager.getTabCount()
+                    Logger.e("TabTerminalActivity", "Tab limit reached ($limit tabs open) — cannot open ${profile.getDisplayName()}")
+                    showError(
+                        "Tab limit reached ($limit tabs open). Close a tab before opening a new one.",
+                        "Cannot open tab"
+                    )
+                    // Tear down the SSH connection we just established — it can never
+                    // be wired to a tab and would otherwise leak until process exit.
+                    try { sshConnection.disconnect() } catch (_: Exception) {}
                     // No tab was created — no terminal to show; close the activity so
                     // the user isn't left on a blank screen with no way to recover.
                     finish()

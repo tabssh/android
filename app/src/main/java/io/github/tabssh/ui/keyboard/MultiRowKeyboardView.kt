@@ -140,6 +140,11 @@ class MultiRowKeyboardView @JvmOverloads constructor(
      * new rows a useful starting point.
      */
     fun setLayout(rows: List<List<KeyboardKey>>) {
+        // Reset transient FN-swap state — a new base layout invalidates the
+        // savedLayout snapshot taken when FN was entered. Without this, a
+        // restoreFromFn() after a layout change would re-paint the OLD rows.
+        fnMode = false
+        savedLayout = null
         // Do NOT override portraitRowCount — the Activity already set it via
         // setRowCount() to honour the user's row-count preference. We only
         // clamp if the saved layout is larger than the allowed maximum.

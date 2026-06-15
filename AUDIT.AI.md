@@ -187,3 +187,103 @@ Reviewed and intentionally NOT changed (genuinely wired and correct):
 - `utils/FontManager.kt`, `utils/performance/PerformanceManager.kt` — wired into theme/font preferences and the on-device perf overlay respectively.
 
 Build verification: `make check` — passes after all deletions (zero compile errors, zero unresolved imports). Confirms that every removed file was truly unreferenced and that the project compiles cleanly without them.
+
+---
+
+## Pass 16 — Keyboard & tabs deep-dive (2026-06-15)
+
+Scope: `app/src/main/java/io/github/tabssh/ui/keyboard/` (5 files, ~1850 LOC)
+and `app/src/main/java/io/github/tabssh/ui/tabs/` (SSHTab.kt, TabManager.kt).
+Read in full plus their call sites in TabTerminalActivity / PreferenceManager /
+KeyboardCustomizationActivity / TerminalView.
+
+### Findings — keyboard
+
+1. **Key-dispatch coverage** — every `KeyCategory` value (SPECIAL/ARROW/FUNCTION/
+   SYMBOL/MODIFIER/ACTION) is reached by `MultiRowKeyboardView.handleRowKey()` →
+   `TabTerminalActivity.handleCustomKeyPress()`. MODIFIER is handled internally
+   (`handleModifierTap`); everything else falls through to the activity. CLIPBOARD
+   action key has a dedicated popup-menu handler; PREFIX latches via
+   `consumePrefixOnce()`. No category is silently dropped.
+
+2. **ESC-prefix sequences verified end-to-end** — `getDefaultRowLayouts()`,
+   `enterFnMode()`, and the DECCKM-aware arrow branch in
+   `TabTerminalActivity.handleCustomKeyPress()` all emit the leading ``.
+   (Earlier audit notes had flagged a regression; that was a Read-tool display
+   artifact — the literal ESC byte is present in source, confirmed via `cat -A`.)
+   `KeyboardKey.getAllAvailableKeys()` (used by both the layout editor and
+   `parseLayoutJson` to resolve saved IDs) also carries proper ESC prefixes for
+   all ARROW/FUNCTION/HOME/END/PGUP/PGDN/DELETE/INSERT keys.
+
+3. **FN-row swap state hygiene** — `enterFnMode()` saved the current layout to
+   `savedLayout`; `restoreFromFn()` re-paints it. **Gap:** `setLayout()` did not
+   clear `fnMode`/`savedLayout`, so applying a brand-new layout while FN was
+   active left a stale snapshot that `restoreFromFn()` would later restore
+   instead of the new base layout. **Fixed** — `setLayout()` now resets both
+   fields at entry.
+
+4. **Layout persistence round-trip** — JSON path verified via `parseLayoutJson` /
+   `layoutToJson`. Unknown key IDs are skipped with a warning rather than throwing.
+   Corrupt JSON throws and the call site (`PreferenceManager.getKeyboardLayout`)
+   wraps the read so the app falls back to defaults rather than crashing.
+
+5. **IME interaction / row counts** — `effectiveRowCount()` orientation +
+   smallest-width caps verified for 1–5 row settings; `notifyConfigurationChanged`
+   re-applies the saved `fullLayout` when rotating. No double-keyboard regression
+   observed; `setOnToggleClickListener` forwards to the activity's IME toggle.
+
+### Findings — tabs
+
+6. **Lifecycle / freeing** — `closeTab()` calls `tab.cleanup()` (disconnect +
+   TermuxBridge.cleanup + connectionScope.cancel) and removes the observer Job.
+   `cleanup()` (whole manager) tears down every tab + the `tabObserverScope` and
+   re-publishes an empty `_tabsFlow`. No leaks identified.
+
+7. **Tab-limit enforcement** — `createTab` returns null silently when
+   `tabs.size >= maxTabs`. Two call sites: TabTerminalActivity:1754 (open-from-
+   connect) and 1991 (createNewTab via UI). The 1754 path showed a generic
+   "Failed to create terminal tab" error and called `finish()`, but worse: the
+   SSH connection it had just established was never disconnected, leaking the
+   socket + JSch thread until process exit. **Fixed** — the null branch now (a)
+   reports the actual cause with the current tab count, and (b) calls
+   `sshConnection.disconnect()` before `finish()`.
+
+8. **Session restore / process death** — `saveTabState()` snapshots `tabs` to
+   avoid CME under `Dispatchers.IO`, skips ephemeral profiles (FK gate), and
+   prunes stale sessions. Verified.
+
+9. **OSC 0/2 title updates and connection-state dot** — `SSHTab.updateTitleFromTerminal`
+   reads the emulator's window title and merges with `conn.terminalTitle`;
+   `updateTitleWithStatus()` maps all five ConnectionStates (CONNECTING/
+   AUTHENTICATING/CONNECTED/DISCONNECTED/ERROR) to the icon prefix. The
+   `hasBeenConnected` guard in `TabManager.createTab` prevents the initial
+   StateFlow-replay DISCONNECTED from being forwarded as a real disconnect.
+
+10. **buildMultiplexerCommand() validity** — emitted commands verified for tmux
+    (`tmux a -t … || tmux new`), screen (`screen -dRR …`), zellij (`zellij a … ||
+    zellij`). The ASK mode is documented as AUTO_ATTACH for backward
+    compatibility; CREATE_NEW always opens a fresh session.
+
+### Deletions (grep-confirmed zero callers)
+
+- `app/src/main/java/io/github/tabssh/ui/keyboard/CustomKeyboardView.kt` —
+  legacy single-row keyboard view. Zero references in any layout XML and zero
+  Kotlin import / inheritance / construction sites. `MultiRowKeyboardView` is
+  the only active keyboard.
+- `app/src/main/res/layout/view_custom_keyboard.xml` — only inflated by the
+  deleted view.
+- `KeyboardLayoutManager` instance API — `getLayout`, `saveLayout`, `addKey`,
+  `removeKey`, `moveKey`, `resetToDefault`, and the private `parseLayout` (the
+  comma-separated-IDs legacy persistence format) had zero call sites. The file
+  is now an `object` exposing only the multi-row JSON helpers
+  (`parseLayoutJson`, `layoutToJson`) plus `CURRENT_DEFAULT_LAYOUT_VERSION`.
+- `KeyboardKey.getDefaultKeys()` — only consumed by the deleted
+  `KeyboardLayoutManager` instance methods; `MultiRowKeyboardView.getDefaultRowLayouts()`
+  is the only default-layout source the running app uses.
+
+### Build verification
+
+`make check` — passes after all changes (zero compile errors, zero unresolved
+imports). Confirms every deletion was truly unreferenced and the new
+`object KeyboardLayoutManager` form remains source-compatible with all callers
+(only companion-level access was used in practice).

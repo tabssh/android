@@ -9,6 +9,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Removed
 
+- **Orphan `CustomKeyboardView` removed** — the legacy single-row keyboard view and its `view_custom_keyboard.xml` layout had zero callers; `MultiRowKeyboardView` is the only active keyboard surface, used by both `activity_tab_terminal.xml` and `activity_vm_console.xml`
+- **Dead `KeyboardLayoutManager` instance methods removed** — `getLayout`, `saveLayout`, `addKey`, `removeKey`, `moveKey`, `resetToDefault`, and the private `parseLayout` (single-row CSV) had zero callers; the file is now an `object` exposing only `parseLayoutJson`, `layoutToJson`, and `CURRENT_DEFAULT_LAYOUT_VERSION` — the multi-row JSON helpers everyone actually uses
+- **Legacy `KeyboardKey.getDefaultKeys()` removed** — was only consumed by the deleted `KeyboardLayoutManager` instance methods; `MultiRowKeyboardView.getDefaultRowLayouts()` is the sole default-layout source
+
+### Fixed
+
+- **Tab-limit error message is now actionable** — opening a new tab when `ui_max_tabs` is reached previously showed a generic "Failed to create terminal tab" and closed the activity; now reports the actual cause ("Tab limit reached (N tabs open). Close a tab before opening a new one.") and tears down the SSH connection that was just established so it does not leak until process exit
+- **MultiRowKeyboardView FN-swap state survives layout changes cleanly** — `setLayout()` now resets the `fnMode`/`savedLayout` snapshot taken when the user pressed FN, so a subsequent `restoreFromFn()` cannot re-paint the stale pre-change rows
+
 - **Orphan `accessibility/` package removed** — `AccessibilityManager` (stub bodies), `HighContrastHelper`, `TalkBackHelper`, and `KeyboardNavigationHelper` had zero callers across UI code; the real accessibility surface is the contentDescription/Material 3 default screen-reader path through the layouts, not this parallel subsystem
 - **Orphan `network/proxy/ProxyManager.kt` removed** — never called from any connect path; real per-host proxy is `SSHConnection.setupHttpSocksProxy()` driven by the per-profile proxy fields
 - **Orphan `terminal/MultiplexerManager.kt` removed** — multiplexer auto-launch is genuinely wired through `SSHTab.buildMultiplexerCommand()` + `GestureCommandMapper`; this file was a parallel/legacy implementation never reached
