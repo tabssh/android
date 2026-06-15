@@ -774,6 +774,19 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
                 true
             }
 
+        // Live-update the Logger min level when the user picks a new
+        // value in the `debug_log_level` ListPreference, so the new
+        // threshold takes effect immediately without a restart.
+        findPreference<androidx.preference.ListPreference>("debug_log_level")
+            ?.setOnPreferenceChangeListener { _, _ ->
+                // Defer to the next frame so SharedPreferences has the new
+                // value persisted before Logger re-reads it.
+                requireView().post {
+                    io.github.tabssh.utils.logging.Logger.updateMinLevelFromPrefs()
+                }
+                true
+            }
+
         // Live-toggle keystroke-byte logging. Default off for privacy
         // (every byte typed at the terminal — including remote sudo/ssh
         // password prompts — flows through TermuxBridge). Static flag so

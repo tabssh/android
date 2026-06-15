@@ -20,6 +20,28 @@ object Logger {
 
     private var debugMode = false
     private var logToFile = false
+
+    // Minimum log level — fed by the `debug_log_level` ListPreference
+    // (preferences_logging.xml). Lower numbers = more verbose. Used by
+    // shouldLog() to drop entries below the user-selected threshold.
+    private const val LVL_VERBOSE = 0
+    private const val LVL_DEBUG = 1
+    private const val LVL_INFO = 2
+    private const val LVL_WARNING = 3
+    private const val LVL_ERROR = 4
+    @Volatile private var minLevel: Int = LVL_DEBUG
+
+    private fun levelFromPref(value: String?): Int = when (value) {
+        "verbose" -> LVL_VERBOSE
+        "debug"   -> LVL_DEBUG
+        "info"    -> LVL_INFO
+        "warning" -> LVL_WARNING
+        "error"   -> LVL_ERROR
+        else      -> LVL_DEBUG
+    }
+
+    private fun shouldLog(level: Int): Boolean = level >= minLevel
+
     private var logFile: File? = null
     private var appLogFile: File? = null  // Always-on sanitized log for bug reports
     private var appContext: Context? = null
@@ -111,6 +133,12 @@ object Logger {
         this.debugMode = debugMode
         this.logToFile = debugMode
 
+        // Read user-selected verbosity from `debug_log_level` ListPreference;
+        // re-read on every log call would be wasteful, so we cache and let
+        // updateMinLevelFromPrefs() refresh when SettingsActivity changes it.
+        val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+        minLevel = levelFromPref(prefs.getString("debug_log_level", "debug"))
+
         // Always enable app log (sanitized for public sharing)
         appLogFile = File(context.filesDir, APP_LOG_FILE_NAME)
         writeToAppLog("I", "Logger", "=== TabSSH Started ===")
@@ -150,8 +178,19 @@ object Logger {
         }
     }
 
+    /**
+     * Re-read the `debug_log_level` preference at runtime — called by
+     * SettingsActivity after the user changes the ListPreference so the
+     * new threshold takes effect immediately without restarting the app.
+     */
+    fun updateMinLevelFromPrefs() {
+        val ctx = appContext ?: return
+        val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(ctx)
+        minLevel = levelFromPref(prefs.getString("debug_log_level", "debug"))
+    }
+
     fun d(tag: String, message: String, throwable: Throwable? = null) {
-        if (debugMode) {
+        if (debugMode && shouldLog(LVL_DEBUG)) {
             Log.d("$TAG_PREFIX:$tag", message, throwable)
             writeToFile("D", tag, message, throwable)
         }
@@ -159,6 +198,7 @@ object Logger {
     }
 
     fun i(tag: String, message: String, throwable: Throwable? = null) {
+        if (!shouldLog(LVL_INFO)) return
         Log.i("$TAG_PREFIX:$tag", message, throwable)
         if (logToFile) {
             writeToFile("I", tag, message, throwable)
@@ -168,6 +208,7 @@ object Logger {
     }
 
     fun w(tag: String, message: String, throwable: Throwable? = null) {
+        if (!shouldLog(LVL_WARNING)) return
         Log.w("$TAG_PREFIX:$tag", message, throwable)
         if (logToFile) {
             writeToFile("W", tag, message, throwable)
@@ -177,6 +218,7 @@ object Logger {
     }
 
     fun e(tag: String, message: String, throwable: Throwable? = null) {
+        if (!shouldLog(LVL_ERROR)) return
         Log.e("$TAG_PREFIX:$tag", message, throwable)
         if (logToFile) {
             writeToFile("E", tag, message, throwable)
@@ -771,7 +813,17 @@ object Logger {
 
     // ── Per-host log ─────────────────────────────────────────────────────────
 
-    private const val HOST_LOG_MAX_SIZE = 1 * 1024 * 1024L  // 1 MiB
+    // Default rotation cap when the host_log_max_size_mb preference is unset.
+    // The user-visible SeekBarPreference (preferences_logging.xml, range 1–10 MB)
+    // overrides this at runtime — see resolveHostLogMaxSize().
+    private const val HOST_LOG_MAX_SIZE_DEFAULT_MB = 1
+    private const val ONE_MB_BYTES = 1024L * 1024L
+
+    private fun resolveHostLogMaxSize(prefs: android.content.SharedPreferences): Long {
+        val mb = prefs.getInt("host_log_max_size_mb", HOST_LOG_MAX_SIZE_DEFAULT_MB)
+            .coerceIn(1, 10)
+        return mb * ONE_MB_BYTES
+    }
 
     /**
      * Write a single event to the per-connection host log.
@@ -790,13 +842,14 @@ object Logger {
         val ctx = appContext ?: return
         val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(ctx)
         if (!prefs.getBoolean("host_logging_enabled", false)) return
+        val maxBytes = resolveHostLogMaxSize(prefs)
         executor.execute {
             try {
                 val logsDir = File(ctx.filesDir, "host_logs")
                 if (!logsDir.exists()) logsDir.mkdirs()
 
                 val logFile = File(logsDir, "$connectionId.log")
-                if (logFile.exists() && logFile.length() > HOST_LOG_MAX_SIZE) {
+                if (logFile.exists() && logFile.length() > maxBytes) {
                     val backup = File(logsDir, "$connectionId.log.1")
                     backup.delete()
                     logFile.renameTo(backup)

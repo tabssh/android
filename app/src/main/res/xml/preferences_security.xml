@@ -78,9 +78,9 @@
             android:summary="Wipe previously seen host keys/fingerprints" />
 
         <SwitchPreferenceCompat
-            android:key="ssh_agent_forwarding"
-            android:title="SSH Agent Forwarding"
-            android:summary="Forward authentication agent connections"
+            android:key="agent_forwarding_default"
+            android:title="SSH Agent Forwarding (default)"
+            android:summary="Default to forwarding the authentication agent on new connections"
             android:defaultValue="false" />
 
         <SwitchPreferenceCompat

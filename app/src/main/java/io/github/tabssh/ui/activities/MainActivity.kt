@@ -148,11 +148,28 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             android.view.View.GONE
         }
 
-        // Handle back press for drawer
+        // Handle back press for drawer + optional exit-confirmation prompt
+        // controlled by the user-visible `confirm_exit` preference
+        // (preferences_general.xml). When the toggle is on, the back press
+        // that would exit MainActivity is intercepted and an AlertDialog
+        // asks the user to confirm before finishing.
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
                     drawerLayout.closeDrawer(GravityCompat.START)
+                    return
+                }
+                val confirmExit = app.preferencesManager.getBoolean("confirm_exit", false)
+                if (confirmExit) {
+                    androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+                        .setTitle(R.string.app_name)
+                        .setMessage("Exit TabSSH?")
+                        .setPositiveButton("Exit") { _, _ ->
+                            isEnabled = false
+                            onBackPressedDispatcher.onBackPressed()
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
                 } else {
                     isEnabled = false
                     onBackPressedDispatcher.onBackPressed()

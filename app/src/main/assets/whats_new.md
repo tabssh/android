@@ -1,5 +1,21 @@
 # What's New
 
+## Wave 48 — Settings that were silently broken now work
+
+Four settings that previously appeared to do nothing have been wired up to
+their actual feature paths:
+
+- **Confirm on exit** — Settings → General → "Confirm on exit" now actually
+  shows an "Exit TabSSH?" prompt when you press Back
+- **SSH Agent Forwarding (default)** — the Security setting now controls the
+  default for new connections; previously the toggle saved but the SSH
+  connection layer read a different key, so the switch had no effect
+- **Debug Log Level** — the verbosity dropdown in Settings → Logging now
+  filters log output in real time; Verbose / Debug / Info / Warning / Error
+- **Max host log size** — the per-host log SeekBar in Settings → Logging now
+  governs the rotation cap (1–10 MB); previously host logs kept the same
+  hard-coded 1 MB cap regardless of the slider position
+
 ## Wave 47 — Reliability fixes
 
 - **Tapping wrapped URLs now works** — links that span multiple terminal rows open correctly instead of being cut off
