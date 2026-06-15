@@ -154,6 +154,7 @@ class ConnectionEditActivity : AppCompatActivity() {
         // Protocol spinner wired last — it calls updateProtocolUI() which
         // triggers identity list loading and card visibility.
         setupProtocolSpinner()
+        setupUnsavedChangesGuard()
 
         val vncHostId = intent.getStringExtra(EXTRA_VNC_HOST_ID)
         val connectionId = intent.getStringExtra(EXTRA_CONNECTION_ID)
@@ -619,9 +620,59 @@ class ConnectionEditActivity : AppCompatActivity() {
         binding.editUsername.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) validateUsername() }
     }
 
+    // Set to true the first time the user types in or toggles any of the
+    // primary form fields after the activity has finished populating. Used by
+    // [setupUnsavedChangesGuard] to decide whether the back button needs to
+    // confirm a discard. Reset to false at the end of [populateFields] and
+    // after a successful save.
+    private var hasUnsavedChanges: Boolean = false
+
+    private fun setupUnsavedChangesGuard() {
+        val watcher = object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) { hasUnsavedChanges = true }
+        }
+        binding.editName.addTextChangedListener(watcher)
+        binding.editHost.addTextChangedListener(watcher)
+        binding.editPort.addTextChangedListener(watcher)
+        binding.editUsername.addTextChangedListener(watcher)
+        binding.editPassword.addTextChangedListener(watcher)
+
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (!hasUnsavedChanges) {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                    return
+                }
+                androidx.appcompat.app.AlertDialog.Builder(this@ConnectionEditActivity)
+                    .setTitle("Discard changes?")
+                    .setMessage("You have unsaved changes. Leave without saving?")
+                    .setPositiveButton("Discard") { _, _ ->
+                        isEnabled = false
+                        finish()
+                    }
+                    .setNegativeButton("Keep editing", null)
+                    .show()
+            }
+        })
+    }
+
     private fun setupButtons() {
         binding.btnSave.setOnClickListener { saveConnection() }
-        binding.btnCancel.setOnClickListener { finish() }
+        binding.btnCancel.setOnClickListener {
+            if (!hasUnsavedChanges) {
+                finish()
+            } else {
+                androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("Discard changes?")
+                    .setMessage("You have unsaved changes. Leave without saving?")
+                    .setPositiveButton("Discard") { _, _ -> finish() }
+                    .setNegativeButton("Keep editing", null)
+                    .show()
+            }
+        }
         binding.btnTest.setOnClickListener { testConnection() }
         binding.btnGenerateKey.setOnClickListener { showKeyManagementDialog() }
         binding.btnPickColorTag.setOnClickListener { showColorTagPicker() }
@@ -691,8 +742,26 @@ class ConnectionEditActivity : AppCompatActivity() {
         // turn loads the right identity list and resets visibility.
         binding.spinnerProtocol.setSelection(protocolIndex)
 
-        // Set identity before restoring, so restoreSshIdentitySpinner() can use it
+        // Set identity before restoring, so restoreSshIdentitySpinner() can use it.
         selectedIdentityId = profile.identityId
+        // Synchronously fetch SSH identities BEFORE calling restore — the prior
+        // version ran restore immediately while loadSshIdentities() was still
+        // pending on Dispatchers.IO, causing the spinner to silently show
+        // "No Identity" for every edited connection.
+        availableIdentities = withContext(Dispatchers.IO) {
+            app.database.identityDao().getAllIdentitiesList()
+        }
+        // Rebuild the adapter on the main thread so the visible text below
+        // matches the selection state.
+        run {
+            val items = listOf("No Identity") + availableIdentities.map { it.name }
+            val adapter = ArrayAdapter(
+                this@ConnectionEditActivity,
+                android.R.layout.simple_dropdown_item_1line,
+                items
+            )
+            binding.spinnerIdentity.setAdapter(adapter)
+        }
         restoreSshIdentitySpinner()
 
         val authType = profile.getAuthTypeEnum()
@@ -843,6 +912,11 @@ class ConnectionEditActivity : AppCompatActivity() {
         binding.switchPortKnock.isChecked = profile.portKnockEnabled == true
         binding.btnConfigurePortKnock.visibility =
             if (profile.portKnockEnabled == true) View.VISIBLE else View.GONE
+
+        // populateFields fires TextWatchers as it fills the form — clear the
+        // dirty flag now so the back-press guard does not nag the user for
+        // changes they didn't actually make.
+        hasUnsavedChanges = false
     }
 
     // -------------------------------------------------------------------------
@@ -1033,6 +1107,9 @@ class ConnectionEditActivity : AppCompatActivity() {
                     }
                 }
 
+                // Save succeeded — clear the dirty flag so back/cancel don't
+                // prompt for discard on the way out.
+                hasUnsavedChanges = false
                 setResult(RESULT_OK)
                 finish()
             } catch (e: Exception) {

@@ -9,9 +9,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Identity dropdown on the connection editor no longer silently resets to "No Identity" when editing an identity-bound profile** — `populateFields()` was firing the spinner restore synchronously while `loadSshIdentities()` was still fetching on `Dispatchers.IO`, so `availableIdentities` was always empty at the moment `restoreSshIdentitySpinner()` ran; the editor now awaits the identity list and rebuilds the adapter before restoring the selection
+- **Editing a VNC host no longer removes it from its group or rewrites its creation time** — `VncHostEditActivity.saveHost()` was hardcoding `groupId = null`, rewriting `createdAt = now`, and calling `vncHostDao.insert()` (whose `OnConflictStrategy.REPLACE` masked the bug by overwriting the row); the editor now preserves the loaded record's `groupId` and `createdAt` and dispatches to `update()` for edits and `insert()` only for new records
 - **PerformanceFragment no longer paints `textLoad1min` twice per frame** — two identical `setTextColor(when { … })` blocks (lines 495-499 and 501-506) ran back-to-back on every metrics tick; the second was exact dead code with the same comment and same branches, removed it
 - **HypervisorsFragment delete and refresh-status now bound to view lifecycle** — both used the Fragment-scoped `lifecycleScope`, so a coroutine that survived `onDestroyView` could still call `requireContext()` / `Toast.makeText` against a dead view tree; switched both to `viewLifecycleOwner.lifecycleScope` and captured `requireContext()` on the main thread before the IO probe so `LibvirtApiClient` no longer receives a context fetched from a background dispatcher
 - **Bulk-edit identity dropdown no longer wipes user selection on identity-table changes** — the dropdown adapter was being rebuilt on every emission of `identityDao().getAllIdentities()` while the dialog was open; replaced the continuous `.collect { … }` with a one-shot `.first()` so the adapter is set exactly once when the dialog opens
+
+### Added
+
+- **Connection editor now asks before discarding unsaved edits** — both the system Back button and the Cancel button now check a dirty flag tracked via a `TextWatcher` on the name / host / port / username / password fields; if anything has been changed since the form was populated the editor shows a "Discard changes? — Discard / Keep editing" prompt instead of dropping the user's work silently
 
 ### Removed
 

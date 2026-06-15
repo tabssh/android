@@ -1,5 +1,26 @@
 # What's New
 
+## Wave 55 — Edit-activity deep-dive audit
+
+- **Editing a connection no longer silently forgets its
+  identity** — opening an SSH connection that was bound to a
+  reusable identity used to reset the identity dropdown to
+  "No Identity" because the form was restored while the identity
+  list was still loading in the background. The editor now waits
+  for the identity list to finish loading before restoring the
+  selection, so identity-bound profiles open with the right
+  identity already selected.
+- **Connection editor asks before discarding your edits** — the
+  Back button and the Cancel button now prompt "Discard changes?
+  — Discard / Keep editing" when you have unsaved edits. A clean
+  form (no edits made, or saved successfully) closes immediately
+  without nagging.
+- **Editing a VNC host no longer kicks it out of its group** — the
+  VNC host editor was rewriting `groupId = null` and overwriting
+  the original creation time on every save. Group membership and
+  creation time are now preserved across edits; only the fields
+  you actually change get updated.
+
 ## Wave 54 — Fragments deep-dive audit
 
 - **Performance screen no longer paints the 1-minute load colour

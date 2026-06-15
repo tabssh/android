@@ -69,6 +69,11 @@ class VncHostEditActivity : AppCompatActivity() {
     private var availableIdentities: List<VncIdentity> = emptyList()
     private var selectedIdentityId: String? = null
 
+    // Preserved across an edit so save() does not clobber fields the editor
+    // doesn't expose (group membership, original creation time, etc.). Null
+    // for new-host mode.
+    private var editingExisting: VncHost? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_vnc_host_edit)
@@ -158,6 +163,7 @@ class VncHostEditActivity : AppCompatActivity() {
                 finish()
                 return@launch
             }
+            editingExisting = host
             editName.setText(host.name)
             editHost.setText(host.host)
             if (host.displayNumber != null) {
@@ -209,7 +215,11 @@ class VncHostEditActivity : AppCompatActivity() {
         else colorTagStr.removePrefix("0x").toLongOrNull(16)?.toInt() ?: 0
 
         val now = System.currentTimeMillis()
-        val id = editingHostId ?: UUID.randomUUID().toString()
+        val existing = editingExisting
+        val id = existing?.id ?: editingHostId ?: UUID.randomUUID().toString()
+        // Preserve groupId and createdAt from the existing record so editing a
+        // host doesn't kick it out of its group or rewrite history. The edit
+        // UI doesn't expose group membership — that's set elsewhere.
         val vncHost = VncHost(
             id = id,
             name = name,
@@ -219,15 +229,21 @@ class VncHostEditActivity : AppCompatActivity() {
             identityId = selectedIdentityId,
             securityType = secType,
             tlsVerify = switchTlsVerify.isChecked,
-            groupId = null,
+            groupId = existing?.groupId,
             colorTag = colorTag,
             notes = editNotes.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
-            createdAt = now,
+            createdAt = existing?.createdAt ?: now,
             modifiedAt = now
         )
         lifecycleScope.launch {
             try {
-                withContext(Dispatchers.IO) { app.database.vncHostDao().insert(vncHost) }
+                withContext(Dispatchers.IO) {
+                    if (existing != null) {
+                        app.database.vncHostDao().update(vncHost)
+                    } else {
+                        app.database.vncHostDao().insert(vncHost)
+                    }
+                }
                 Toast.makeText(this@VncHostEditActivity, "Saved", Toast.LENGTH_SHORT).show()
                 finish()
             } catch (e: Exception) {

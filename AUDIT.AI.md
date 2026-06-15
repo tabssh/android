@@ -394,3 +394,128 @@ No UI elements, menu items, dialogs, buttons, fields, or user-visible flows
 were removed in this pass. Only one piece of dead code was deleted
 (PerformanceFragment.kt's exact-duplicate `setTextColor` block) — confirmed
 zero behavioural change.
+
+---
+
+## Pass 18 — 2026-06-15 — Edit-activity deep-dive (Connection / Hypervisor / VNC)
+
+Targeted audit of the four edit/list activities the orchestrator flagged:
+
+- `ConnectionEditActivity.kt` (1979 LOC) — SSH / Telnet / VNC profile editor
+- `HypervisorEditActivity.kt` (901 LOC) — Proxmox / XCP-ng / VMware / libvirt editor
+- `VncHostEditActivity.kt` (262 LOC) — VNC host record editor
+- `VncHostsActivity.kt` (188 LOC) — VNC host list screen
+
+### Findings against the 13 audit concerns
+
+1. **Form completeness vs `ConnectionProfile`** — these `ConnectionProfile`
+   columns have NO widget in `activity_connection_edit.xml` and are silently
+   carried via `existingProfile?.copy()` on edit (default on new):
+   `encoding`, `serverAliveInterval`, `connectTimeout`, `readTimeout`,
+   `portKnockDelayMs`. Round-trip safe; not user-editable. Logged for a
+   future UI pass (decision: low priority — defaults are sane and the
+   global preference covers `serverAliveInterval` for 99% of users).
+2. **Identity spinner async-load race** — CONFIRMED and FIXED.
+   `populateFields()` previously ran `restoreSshIdentitySpinner()` synchronously
+   while `loadSshIdentities()` was still fetching on `Dispatchers.IO`.
+   `availableIdentities` was empty when restore ran → spinner silently
+   reverted to "No Identity" on every edit of an identity-bound connection.
+   Fix: `populateFields()` now `withContext(Dispatchers.IO)`-loads the
+   identity list itself and rebuilds the adapter before calling `restoreSshIdentitySpinner()`.
+3. **Auth type changes UI correctness** — `updateAuthTypeUI()` toggles the
+   right cards for PASSWORD / PUBLIC_KEY / KEYBOARD_INTERACTIVE. OK.
+4. **Port knock fields visible/saved** — `switchPortKnock` toggles
+   `btnConfigurePortKnock`; sequence persisted as JSON via `portKnockSequence`.
+   OK. Delay (`portKnockDelayMs`) has no widget (see finding #1).
+5. **ProxyJump fields visible/saved** — `proxy_*` cards switch on proxy
+   type; SSH-jump path supports auth-type + key-id with pending-restore
+   indirection. OK.
+6. **Tunnels (local/remote/dynamic)** — `ConnectionProfile` has no tunnel
+   columns; tunnels live in a separate entity wired through a different
+   editor. Not in scope of this activity. OK.
+7. **Advanced fields** — `keepAlive` is HARDCODED to `true` in
+   `createConnectionProfile()` (line ~1143) — there is no UI toggle. Other
+   advanced fields (`multiplexerMode`, `multiplexerSessionName`,
+   `postConnectScript`, `ipMode`, `x11Forwarding`, `agentForwarding`) are
+   wired correctly. Recording: no field on `ConnectionProfile`. Logged the
+   hardcoded `keepAlive` for a future pass (decision: it has been hardcoded
+   `true` since v1; flipping it requires schema-aware UX work, not a
+   drive-by audit fix).
+8. **Duplicate detection** — none. Saving a profile with the same
+   `host/port/username` as an existing one silently creates a second row.
+   Logged; not fixed in this pass to avoid scope-creep (touches DAO + UX
+   copy + dedup-vs-overwrite decision).
+9. **Unsaved-changes back-button confirmation** — was MISSING; FIXED.
+   `ConnectionEditActivity` now installs an `OnBackPressedCallback` and
+   tracks `hasUnsavedChanges` via a `TextWatcher` on the five primary
+   fields (name/host/port/username/password). Back press and the Cancel
+   button both prompt "Discard changes?" when dirty, no prompt when clean
+   (including immediately after `populateFields()` and after a successful
+   save).
+10. **Host/port/username validation** — `setupValidation()` wires
+    `OnFocusChangeListener` checks; `validateHost()` etc. set `error`
+    text. OK.
+11. **Hypervisor types — correct fields per type** — `HypervisorEditActivity`
+    visibility matrix toggles correctly (Libvirt → SSH identity picker;
+    Proxmox/XCP/VMware → API URL+token UI). OK.
+12. **Credential fields routed via `HypervisorPasswordStore`** — confirmed.
+    The hypervisor editor never writes credentials into the DB row; passwords
+    and API tokens go through `HypervisorPasswordStore.save()` which proxies
+    to `SecurePasswordManager`. OK.
+13. **Test connection exercises real API client** — confirmed.
+    `HypervisorEditActivity.testConnection()` instantiates the matching
+    `ProxmoxApiClient` / `XCPngApiClient` / `VMwareApiClient` /
+    `LibvirtApiClient` (or the SSH probe path for Libvirt) and reports the
+    real auth/network outcome. OK.
+
+### Additional finding (VNC editor)
+
+- `VncHostEditActivity.saveHost()` was calling `vncHostDao.insert()` for
+  BOTH new and edit (the DAO's `OnConflictStrategy.REPLACE` masked the bug
+  by overwriting the row). Worse, the save explicitly hardcoded
+  `groupId = null`, so editing a host silently removed it from its group,
+  and `createdAt` was rewritten to `now`. FIXED:
+  - Activity now keeps the loaded `VncHost` as `editingExisting`
+  - `groupId` and `createdAt` are preserved from the existing record
+  - The save dispatches to `update()` when `editingExisting != null`, and
+    to `insert()` only for genuinely new records.
+
+### `VncHostsActivity` review
+
+Read end-to-end. Uses `repeatOnLifecycle(STARTED) + Flow.collect` and a
+`DiffUtil`-backed adapter. No issues found.
+
+### What was fixed in this pass
+
+- `ConnectionEditActivity.populateFields()` — eliminate the identity-spinner
+  load race by awaiting the identity list before calling
+  `restoreSshIdentitySpinner()` (audit concern #2).
+- `ConnectionEditActivity` — add a back-button + Cancel-button
+  unsaved-changes guard with a "Discard / Keep editing" dialog (audit
+  concern #9). Dirty flag tracked via `TextWatcher` on the five primary
+  text fields; cleared at the end of `populateFields()` and after a
+  successful save.
+- `VncHostEditActivity.saveHost()` — preserve `groupId` and `createdAt`
+  from the loaded record on edit; dispatch to `vncHostDao.update()` for
+  edits and `insert()` only for new records.
+
+### Findings logged but NOT fixed in this pass
+
+- Missing widgets for `encoding`, `serverAliveInterval`, `connectTimeout`,
+  `readTimeout`, `portKnockDelayMs`, and the `keepAlive` boolean.
+- No duplicate detection on save (host + port + username).
+- VNC editor still has no per-host password override widget — VNC creds
+  flow through `VncIdentity`; per-host passwords are not in the layout.
+
+Each is recorded above so a future pass can pick them up without re-discovery.
+
+### Verification
+
+`make check` — passes, zero compile errors, zero unresolved imports.
+
+### Feature preservation note
+
+No UI elements, menu items, dialogs, buttons, fields, or user-visible
+behaviour were removed in this pass. All edits ADD safety (unsaved-changes
+guard) or FIX a silent data-loss bug (identity race, VNC group/createdAt
+clobbering).
