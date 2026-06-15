@@ -197,10 +197,11 @@ class CloudAccountsFragment : Fragment() {
         emptyState  = view.findViewById(R.id.layout_empty_state)
 
         adapter = CloudAccountAdapter(
-            onRefresh   = { refreshAccount(it) },
-            onDelete    = { confirmDelete(it) },
-            onEdit      = { showEditAccountDialog(it) },
-            onItemClick = { startActivity(CloudAccountManagerActivity.createIntent(requireContext(), it)) }
+            onRefresh        = { refreshAccount(it) },
+            onDelete         = { confirmDelete(it) },
+            onEdit           = { showEditAccountDialog(it) },
+            onToggleEnabled  = { acct, enabled -> setAccountEnabled(acct, enabled) },
+            onItemClick      = { startActivity(CloudAccountManagerActivity.createIntent(requireContext(), it)) }
         )
         recycler.layoutManager = LinearLayoutManager(requireContext())
         recycler.adapter = adapter
@@ -224,10 +225,11 @@ class CloudAccountsFragment : Fragment() {
     // ── Adapter ──────────────────────────────────────────────────────────────
 
     private inner class CloudAccountAdapter(
-        private val onRefresh:   (CloudAccount) -> Unit,
-        private val onDelete:    (CloudAccount) -> Unit,
-        private val onEdit:      (CloudAccount) -> Unit,
-        private val onItemClick: (CloudAccount) -> Unit
+        private val onRefresh:       (CloudAccount) -> Unit,
+        private val onDelete:        (CloudAccount) -> Unit,
+        private val onEdit:          (CloudAccount) -> Unit,
+        private val onToggleEnabled: (CloudAccount, Boolean) -> Unit,
+        private val onItemClick:     (CloudAccount) -> Unit
     ) : ListAdapter<CloudAccount, CloudAccountAdapter.ViewHolder>(AccountDiff) {
 
         inner class ViewHolder(val b: ItemCloudAccountBinding) :
@@ -257,8 +259,13 @@ class CloudAccountsFragment : Fragment() {
                 "Never synced"
             }
 
-            b.switchEnabled.isChecked = true
+            // Detach listener BEFORE updating isChecked so DiffUtil-driven
+            // rebinds don't fire spurious toggle callbacks against the DAO.
             b.switchEnabled.setOnCheckedChangeListener(null)
+            b.switchEnabled.isChecked = account.enabled
+            b.switchEnabled.setOnCheckedChangeListener { _, isChecked ->
+                if (isChecked != account.enabled) onToggleEnabled(account, isChecked)
+            }
 
             b.root.setOnClickListener      { onItemClick(account) }
             b.root.setOnLongClickListener  { onEdit(account); true }
@@ -562,8 +569,41 @@ class CloudAccountsFragment : Fragment() {
      * row's lastRefreshAt / lastCount metadata. Browsing and connecting to
      * instances happens exclusively inside CloudAccountManagerActivity (tap the row).
      */
+    /**
+     * Persists the per-account enabled flag. Disabled accounts are skipped by
+     * [refreshAccount] (manual Refresh button no-ops with a hint toast) and
+     * by any future background refresh worker. The user can still tap the
+     * row to open the instance manager — disabled only suppresses automated
+     * inventory polling, never blocks explicit navigation.
+     */
+    private fun setAccountEnabled(account: CloudAccount, enabled: Boolean) {
+        if (!isAdded) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    app.database.cloudAccountDao().update(account.copy(enabled = enabled))
+                }
+                if (!isAdded) return@launch
+                Toast.makeText(
+                    requireContext(),
+                    if (enabled) "${account.name} enabled" else "${account.name} disabled",
+                    Toast.LENGTH_SHORT
+                ).show()
+            } catch (e: Exception) {
+                Logger.e(TAG, "Toggle enabled failed for ${account.name}", e)
+                if (!isAdded) return@launch
+                Toast.makeText(requireContext(), "Save failed: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     private fun refreshAccount(account: CloudAccount) {
         if (!isAdded) return
+        if (!account.enabled) {
+            Toast.makeText(requireContext(),
+                "${account.name} is disabled — enable to refresh", Toast.LENGTH_SHORT).show()
+            return
+        }
         Toast.makeText(requireContext(), "Refreshing ${account.name}…", Toast.LENGTH_SHORT).show()
         viewLifecycleOwner.lifecycleScope.launch {
             val token = withContext(Dispatchers.IO) {
@@ -584,6 +624,12 @@ class CloudAccountsFragment : Fragment() {
                 withContext(Dispatchers.IO) {
                     providerType.newClient().fetchInventory(token, account.name).size
                 }
+            } catch (e: io.github.tabssh.cloud.CloudAuthException) {
+                Logger.e(TAG, "Inventory auth failed for ${account.name}", e)
+                if (!isAdded) return@launch
+                Toast.makeText(requireContext(),
+                    "Token invalid — re-add account (${e.message})", Toast.LENGTH_LONG).show()
+                return@launch
             } catch (e: Exception) {
                 Logger.e(TAG, "Inventory fetch failed", e)
                 if (!isAdded) return@launch

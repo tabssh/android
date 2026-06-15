@@ -149,8 +149,12 @@ class CloudAccountsActivity : AppCompatActivity() {
                 "Never synced"
             }
 
-            b.switchEnabled.isChecked = true
+            // Deprecated activity — read-only enabled indicator; tap row to open
+            // the live CloudAccountsFragment for editing. Listener intentionally
+            // null because this activity is no longer reachable from the live UI.
             b.switchEnabled.setOnCheckedChangeListener(null)
+            b.switchEnabled.isChecked = account.enabled
+            b.switchEnabled.isEnabled = false
 
             b.root.setOnClickListener      { onItemClick(account) }
             b.btnRefresh.setOnClickListener { onRefresh(account) }

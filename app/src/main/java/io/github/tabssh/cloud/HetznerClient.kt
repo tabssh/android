@@ -131,7 +131,12 @@ class HetznerClient : CloudProvider {
             .get()
             .build()
         val body = http.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) throw IllegalStateException("Hetzner API HTTP ${resp.code}: ${resp.message}")
+            if (!resp.isSuccessful) {
+                if (resp.code == 401 || resp.code == 403) {
+                    throw CloudAuthException("Hetzner token rejected (HTTP ${resp.code})")
+                }
+                throw IllegalStateException("Hetzner API HTTP ${resp.code}: ${resp.message}")
+            }
             resp.body?.string().orEmpty()
         }
         return JSONObject(body)
@@ -150,6 +155,9 @@ class HetznerClient : CloudProvider {
             .post(body)
             .build()
         http.newCall(req).execute().use { resp ->
+            if (resp.code == 401 || resp.code == 403) {
+                throw CloudAuthException("Hetzner token rejected (HTTP ${resp.code})")
+            }
             resp.code == 201 || resp.isSuccessful
         }
     }

@@ -134,6 +134,9 @@ class DigitalOceanClient : CloudProvider {
             .build()
         val body = http.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) {
+                if (resp.code == 401 || resp.code == 403) {
+                    throw CloudAuthException("DigitalOcean token rejected (HTTP ${resp.code})")
+                }
                 throw IllegalStateException("DigitalOcean API HTTP ${resp.code}: ${resp.message}")
             }
             resp.body?.string().orEmpty()
@@ -155,6 +158,9 @@ class DigitalOceanClient : CloudProvider {
             .post(body)
             .build()
         http.newCall(req).execute().use { resp ->
+            if (resp.code == 401 || resp.code == 403) {
+                throw CloudAuthException("DigitalOcean token rejected (HTTP ${resp.code})")
+            }
             resp.code == expectedCode || resp.isSuccessful
         }
     }

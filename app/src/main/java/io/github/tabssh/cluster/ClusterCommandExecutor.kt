@@ -38,6 +38,17 @@ class ClusterCommandExecutor(private val app: TabSSHApplication) {
     private val _progress = MutableStateFlow(ExecutionProgress(0, 0, 0, 0, 0))
     val progress: StateFlow<ExecutionProgress> = _progress.asStateFlow()
 
+    /**
+     * Tracks the currently-running fan-out so [cancelAll] can interrupt the
+     * coroutineScope mid-flight (e.g. the user taps the Cancel button while
+     * SSH connects are still being established). Previously this field was
+     * declared but never assigned, so `cancelAll()` was a silent no-op and
+     * the UI's Cancel button did nothing.
+     *
+     * `@Volatile` because the assignment in [executeOnCluster] happens on
+     * an IO worker but the cancel call comes from the UI thread.
+     */
+    @Volatile
     private var executionJob: Job? = null
 
     suspend fun executeOnCluster(
@@ -66,32 +77,39 @@ class ClusterCommandExecutor(private val app: TabSSHApplication) {
         val sem = Semaphore(maxConcurrent.coerceAtLeast(1))
         val mutex = Mutex()
 
-        coroutineScope {
-            val deferreds = connections.map { profile ->
-                async {
-                    sem.withPermit {
-                        val r = executeOnSingleServer(profile, command, timeoutMs)
-                        mutex.withLock {
-                            results.add(r)
-                            val succeeded = results.count { it.success }
-                            val failed = results.count { !it.success }
-                            _progress.value = ExecutionProgress(
-                                total = connections.size,
-                                completed = results.size,
-                                inProgress = connections.size - results.size,
-                                succeeded = succeeded,
-                                failed = failed,
-                                results = results.toList()
-                            )
+        try {
+            coroutineScope {
+                // Publish the parent Job so cancelAll() can interrupt the
+                // whole fan-out, not just observe it as a no-op.
+                executionJob = coroutineContext[Job]
+                val deferreds = connections.map { profile ->
+                    async {
+                        sem.withPermit {
+                            val r = executeOnSingleServer(profile, command, timeoutMs)
+                            mutex.withLock {
+                                results.add(r)
+                                val succeeded = results.count { it.success }
+                                val failed = results.count { !it.success }
+                                _progress.value = ExecutionProgress(
+                                    total = connections.size,
+                                    completed = results.size,
+                                    inProgress = connections.size - results.size,
+                                    succeeded = succeeded,
+                                    failed = failed,
+                                    results = results.toList()
+                                )
+                            }
                         }
                     }
                 }
+                deferreds.awaitAll()
             }
-            deferreds.awaitAll()
+        } finally {
+            executionJob = null
         }
 
         Logger.i("ClusterCommand", "Complete: ${results.count { it.success }}/${connections.size} succeeded")
-        
+
         results
     }
 

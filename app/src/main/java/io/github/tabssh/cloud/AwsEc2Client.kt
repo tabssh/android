@@ -94,6 +94,7 @@ class AwsEc2Client : CloudProvider {
             val parts = bearerToken.split(":", limit = 3)
             if (parts.size != 3) throw IllegalStateException("AWS token must be 'AKID:SECRET:REGION'")
             val (accessKey, secretKey, region) = parts
+            if (region.isBlank()) throw IllegalStateException("AWS region is required")
 
             val out = mutableListOf<CloudInstanceState>()
             var nextToken: String? = null
@@ -133,6 +134,7 @@ class AwsEc2Client : CloudProvider {
         val parts = bearerToken.split(":", limit = 3)
         if (parts.size != 3) return@withContext false
         val (accessKey, secretKey, region) = parts
+        if (region.isBlank()) return@withContext false
 
         val query = "Action=$action&InstanceId.1=$instanceId&Version=2016-11-15"
         val host = "ec2.$region.amazonaws.com"
@@ -161,7 +163,12 @@ class AwsEc2Client : CloudProvider {
             .header("Accept", "application/xml")
             .get()
             .build()
-        http.newCall(req).execute().use { resp -> resp.isSuccessful }
+        http.newCall(req).execute().use { resp ->
+            if (resp.code == 401 || resp.code == 403) {
+                throw CloudAuthException("AWS credentials rejected (HTTP ${resp.code})")
+            }
+            resp.isSuccessful
+        }
     }
 
     private fun awsGetXml(
@@ -199,6 +206,9 @@ class AwsEc2Client : CloudProvider {
         return http.newCall(req).execute().use { resp ->
             val body = resp.body?.string().orEmpty()
             if (!resp.isSuccessful) {
+                if (resp.code == 401 || resp.code == 403) {
+                    throw CloudAuthException("AWS credentials rejected (HTTP ${resp.code}): ${extractAwsError(body) ?: resp.message}")
+                }
                 throw IllegalStateException("AWS EC2 HTTP ${resp.code}: ${extractAwsError(body) ?: resp.message}")
             }
             body

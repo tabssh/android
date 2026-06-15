@@ -56,7 +56,13 @@ class AzureVmClient : CloudProvider {
         .callTimeout(60, TimeUnit.SECONDS)
         .build()
 
-    /** Cached instances from the last fetchLiveInstances call; used to resolve resource group for power actions. */
+    /**
+     * Cached instances from the last fetchLiveInstances call; used to resolve
+     * resource group for power actions. Volatile because fetchLiveInstances
+     * and the power-action methods can run on different IO threads when the
+     * caller reuses one client instance across operations.
+     */
+    @Volatile
     private var cachedInstances: List<CloudInstanceState> = emptyList()
 
     override suspend fun fetchInventory(
@@ -217,8 +223,14 @@ class AzureVmClient : CloudProvider {
         val rg = cachedInstances.firstOrNull { it.id == instanceId }?.metadata?.get("resourceGroup")
             ?: return@withContext false
 
+        // exchangeForAccessToken throws CloudAuthException on 401/403 — let it
+        // propagate so the UI can show the "Token invalid — re-add account"
+        // hint. Any other exception (network, parse) falls back to a generic
+        // failed-action result.
         val accessToken = try {
             exchangeForAccessToken(tenant, clientId, clientSecret)
+        } catch (e: CloudAuthException) {
+            throw e
         } catch (_: Exception) { return@withContext false }
 
         val url = "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Compute/virtualMachines/$instanceId/$action?api-version=2023-03-01"
@@ -229,6 +241,9 @@ class AzureVmClient : CloudProvider {
             .post(body)
             .build()
         http.newCall(req).execute().use { resp ->
+            if (resp.code == 401 || resp.code == 403) {
+                throw CloudAuthException("Azure power action rejected (HTTP ${resp.code})")
+            }
             resp.code == 200 || resp.code == 202 || resp.isSuccessful
         }
     }
@@ -247,6 +262,9 @@ class AzureVmClient : CloudProvider {
         val raw = http.newCall(req).execute().use { resp ->
             val r = resp.body?.string().orEmpty()
             if (!resp.isSuccessful) {
+                if (resp.code == 401 || resp.code == 403) {
+                    throw CloudAuthException("Azure OAuth2 rejected client credentials (HTTP ${resp.code})")
+                }
                 throw IllegalStateException("Azure OAuth2 HTTP ${resp.code}: $r")
             }
             r
@@ -322,6 +340,9 @@ class AzureVmClient : CloudProvider {
         val raw = http.newCall(req).execute().use { resp ->
             val r = resp.body?.string().orEmpty()
             if (!resp.isSuccessful) {
+                if (resp.code == 401 || resp.code == 403) {
+                    throw CloudAuthException("Azure token rejected (HTTP ${resp.code}): ${tryAzureError(r) ?: resp.message}")
+                }
                 throw IllegalStateException("Azure HTTP ${resp.code}: ${tryAzureError(r) ?: resp.message}")
             }
             r

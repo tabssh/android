@@ -45,7 +45,13 @@ class GcpComputeClient : CloudProvider {
         .callTimeout(60, TimeUnit.SECONDS)
         .build()
 
-    /** Cached instances from the last fetchLiveInstances call; used to resolve zone for power actions. */
+    /**
+     * Cached instances from the last fetchLiveInstances call; used to resolve
+     * zone for power actions. Volatile because fetchLiveInstances and the
+     * power-action methods can run on different IO threads when the caller
+     * reuses one client instance across operations.
+     */
+    @Volatile
     private var cachedInstances: List<CloudInstanceState> = emptyList()
 
     override suspend fun fetchInventory(
@@ -89,6 +95,9 @@ class GcpComputeClient : CloudProvider {
                     val msg = try {
                         JSONObject(raw).optJSONObject("error")?.optString("message") ?: resp.message
                     } catch (_: Exception) { resp.message }
+                    if (resp.code == 401 || resp.code == 403) {
+                        throw CloudAuthException("GCP token rejected (HTTP ${resp.code}): $msg")
+                    }
                     throw IllegalStateException("GCP API HTTP ${resp.code}: $msg")
                 }
                 raw
@@ -223,7 +232,12 @@ class GcpComputeClient : CloudProvider {
             .header("Authorization", "Bearer $accessToken")
             .post(body)
             .build()
-        http.newCall(req).execute().use { resp -> resp.isSuccessful }
+        http.newCall(req).execute().use { resp ->
+            if (resp.code == 401 || resp.code == 403) {
+                throw CloudAuthException("GCP power action rejected (HTTP ${resp.code})")
+            }
+            resp.isSuccessful
+        }
     }
 
     private fun exchangeJwtForAccessToken(
@@ -259,6 +273,9 @@ class GcpComputeClient : CloudProvider {
         val raw = http.newCall(req).execute().use { resp ->
             val r = resp.body?.string().orEmpty()
             if (!resp.isSuccessful) {
+                if (resp.code == 401 || resp.code == 403) {
+                    throw CloudAuthException("GCP OAuth2 rejected service-account credentials (HTTP ${resp.code})")
+                }
                 throw IllegalStateException("GCP OAuth2 exchange HTTP ${resp.code}: $r")
             }
             r

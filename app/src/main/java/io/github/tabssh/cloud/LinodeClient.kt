@@ -135,7 +135,12 @@ class LinodeClient : CloudProvider {
             .get()
             .build()
         val body = http.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) throw IllegalStateException("Linode API HTTP ${resp.code}: ${resp.message}")
+            if (!resp.isSuccessful) {
+                if (resp.code == 401 || resp.code == 403) {
+                    throw CloudAuthException("Linode token rejected (HTTP ${resp.code})")
+                }
+                throw IllegalStateException("Linode API HTTP ${resp.code}: ${resp.message}")
+            }
             resp.body?.string().orEmpty()
         }
         return JSONObject(body)
@@ -151,6 +156,9 @@ class LinodeClient : CloudProvider {
                 .post(body)
                 .build()
             http.newCall(req).execute().use { resp ->
+                if (resp.code == 401 || resp.code == 403) {
+                    throw CloudAuthException("Linode token rejected (HTTP ${resp.code})")
+                }
                 resp.code == 200 || resp.isSuccessful
             }
         }

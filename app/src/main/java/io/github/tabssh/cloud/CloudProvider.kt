@@ -87,3 +87,14 @@ fun CloudProviderType.newClient(): CloudProvider = when (this) {
     CloudProviderType.AZURE -> AzureVmClient()
     CloudProviderType.OCI -> OciCloudClient()
 }
+
+/**
+ * Typed cloud-API failure surfaced to the UI so it can distinguish between
+ * "the user's stored token is bad — re-add the account" (401/403) and
+ * "transient server / network error — try again" (5xx, timeouts, parse).
+ *
+ * The cloud clients raise [CloudAuthException] only on HTTP 401/403 from the
+ * provider — anything else still throws IllegalStateException so the existing
+ * "Load failed: …" toast continues to surface the underlying message.
+ */
+class CloudAuthException(message: String) : RuntimeException(message)

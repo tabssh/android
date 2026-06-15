@@ -13,7 +13,9 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.cloud.CloudAuthException
 import io.github.tabssh.cloud.CloudInstanceState
+import io.github.tabssh.cloud.CloudProvider
 import io.github.tabssh.cloud.CloudProviderType
 import io.github.tabssh.cloud.OciCloudClient
 import io.github.tabssh.cloud.newClient
@@ -55,6 +57,27 @@ class CloudAccountManagerActivity : AppCompatActivity() {
     private lateinit var adapter: CloudInstanceAdapter
     private var account: CloudAccount? = null
     private var cachedInstances: List<CloudInstanceState> = emptyList()
+
+    /**
+     * Single CloudProvider client instance reused across loadInstances and
+     * power/restart actions for this activity's lifetime. GCP and Azure cache
+     * zone / resource-group lookups on the client between fetchLiveInstances
+     * and *Instance() calls; creating a fresh client per action would empty
+     * the cache and silently fail those providers. The instance is keyed by
+     * provider tag so a token-edit / provider-switch via Edit resets it.
+     */
+    private var providerClient: CloudProvider? = null
+    private var providerClientTag: String? = null
+
+    private fun providerClientFor(tag: String): CloudProvider? {
+        val type = CloudProviderType.fromTag(tag) ?: return null
+        val current = providerClient
+        if (current != null && providerClientTag == tag) return current
+        val fresh = type.newClient()
+        providerClient = fresh
+        providerClientTag = tag
+        return fresh
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -120,19 +143,24 @@ class CloudAccountManagerActivity : AppCompatActivity() {
                 return@launch
             }
 
-            val providerType = CloudProviderType.fromTag(acct.provider)
-            if (providerType == null) {
+            val client = providerClientFor(acct.provider)
+            if (client == null) {
                 binding.progressLoading.visibility = View.GONE
                 Toast.makeText(this@CloudAccountManagerActivity,
                     "Unknown provider: ${acct.provider}", Toast.LENGTH_LONG).show()
                 return@launch
             }
 
-            val client = providerType.newClient()
             val instances = try {
                 withContext(Dispatchers.IO) {
                     client.fetchLiveInstances(token)
                 }
+            } catch (e: CloudAuthException) {
+                Logger.e(TAG, "fetchLiveInstances auth failed for ${acct.name}", e)
+                binding.progressLoading.visibility = View.GONE
+                Toast.makeText(this@CloudAccountManagerActivity,
+                    "Token invalid — re-add account (${e.message})", Toast.LENGTH_LONG).show()
+                return@launch
             } catch (e: Exception) {
                 Logger.e(TAG, "fetchLiveInstances failed for ${acct.name}", e)
                 binding.progressLoading.visibility = View.GONE
@@ -177,14 +205,18 @@ class CloudAccountManagerActivity : AppCompatActivity() {
                 return@launch
             }
 
-            val providerType = CloudProviderType.fromTag(acct.provider) ?: return@launch
-            val client = providerType.newClient()
+            val client = providerClientFor(acct.provider) ?: return@launch
 
             val success = try {
                 withContext(Dispatchers.IO) {
                     if (isRunning) client.stopInstance(token, inst.id)
                     else client.startInstance(token, inst.id)
                 }
+            } catch (e: CloudAuthException) {
+                Logger.e(TAG, "Power action auth failed for ${inst.name}", e)
+                Toast.makeText(this@CloudAccountManagerActivity,
+                    "Token invalid — re-add account", Toast.LENGTH_LONG).show()
+                return@launch
             } catch (e: Exception) {
                 Logger.e(TAG, "Power action failed for ${inst.name}", e)
                 false
@@ -225,13 +257,17 @@ class CloudAccountManagerActivity : AppCompatActivity() {
                     "Token missing — re-add account", Toast.LENGTH_LONG).show()
                 return@launch
             }
-            val providerType = CloudProviderType.fromTag(acct.provider) ?: return@launch
-            val client = providerType.newClient()
+            val client = providerClientFor(acct.provider) ?: return@launch
             val success = try {
                 withContext(Dispatchers.IO) {
                     if (force) client.forceRestartInstance(token, inst.id)
                     else client.restartInstance(token, inst.id)
                 }
+            } catch (e: CloudAuthException) {
+                Logger.e(TAG, "Restart auth failed for ${inst.name}", e)
+                Toast.makeText(this@CloudAccountManagerActivity,
+                    "Token invalid — re-add account", Toast.LENGTH_LONG).show()
+                return@launch
             } catch (e: Exception) {
                 Logger.e(TAG, "Restart failed for ${inst.name}", e)
                 false

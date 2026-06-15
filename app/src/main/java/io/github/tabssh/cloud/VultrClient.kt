@@ -136,7 +136,12 @@ class VultrClient : CloudProvider {
             .get()
             .build()
         val body = http.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) throw IllegalStateException("Vultr API HTTP ${resp.code}: ${resp.message}")
+            if (!resp.isSuccessful) {
+                if (resp.code == 401 || resp.code == 403) {
+                    throw CloudAuthException("Vultr token rejected (HTTP ${resp.code})")
+                }
+                throw IllegalStateException("Vultr API HTTP ${resp.code}: ${resp.message}")
+            }
             resp.body?.string().orEmpty()
         }
         return JSONObject(body)
@@ -152,6 +157,9 @@ class VultrClient : CloudProvider {
                 .post(body)
                 .build()
             http.newCall(req).execute().use { resp ->
+                if (resp.code == 401 || resp.code == 403) {
+                    throw CloudAuthException("Vultr token rejected (HTTP ${resp.code})")
+                }
                 resp.code == 204 || resp.isSuccessful
             }
         }
