@@ -220,7 +220,9 @@ class HypervisorsFragment : Fragment() {
             .setTitle("Delete Hypervisor")
             .setMessage("Are you sure you want to delete '${hypervisor.name}'?")
             .setPositiveButton("Delete") { _, _ ->
-                lifecycleScope.launch {
+                // viewLifecycleOwner: scope must end at onDestroyView so the
+                // toast/UI updates below can't fire against a dead view tree.
+                viewLifecycleOwner.lifecycleScope.launch {
                     try {
                         val ctx = context ?: return@launch
                         withContext(Dispatchers.IO) {
@@ -261,13 +263,20 @@ class HypervisorsFragment : Fragment() {
     }
 
     private fun refreshHypervisorStatus(hypervisor: HypervisorProfile) {
-        lifecycleScope.launch {
+        if (!isAdded) return
+        // Capture ctx on the main thread before the IO switch — requireContext()
+        // is unsafe to call from a background dispatcher once the fragment has
+        // been detached, and the LibvirtApiClient ctor takes a Context.
+        val ctx = requireContext()
+        // viewLifecycleOwner: scope ends at onDestroyView so the toast below
+        // cannot fire against a dead view tree.
+        viewLifecycleOwner.lifecycleScope.launch {
             val reachable = withContext(kotlinx.coroutines.Dispatchers.IO) {
                 try {
                     if (hypervisor.type == io.github.tabssh.storage.database.entities.HypervisorType.LIBVIRT) {
                         // SSH-based — attempt connect/disconnect using LibvirtApiClient
                         val client = io.github.tabssh.hypervisor.libvirt.LibvirtApiClient(
-                            requireContext(), hypervisor
+                            ctx, hypervisor
                         )
                         client.connect()
                         client.disconnect()

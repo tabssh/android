@@ -498,13 +498,6 @@ class PerformanceFragment : Fragment() {
             else -> requireContext().getColor(android.R.color.holo_green_dark)
         })
         
-        // Color code load1 (warning if > 1.0, critical if > 2.0)
-        textLoad1min.setTextColor(when {
-            metrics.loadAverage.load1min >= 2.0 -> requireContext().getColor(android.R.color.holo_red_dark)
-            metrics.loadAverage.load1min >= 1.0 -> requireContext().getColor(android.R.color.holo_orange_dark)
-            else -> requireContext().getColor(android.R.color.holo_green_dark)
-        })
-        
         // Add to history
         metricsHistory.addCpuMetric(metrics.timestamp, metrics.cpuUsage.totalPercent)
         metricsHistory.addMemoryMetric(metrics.timestamp, metrics.memoryUsage.usedPercent)

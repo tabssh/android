@@ -816,16 +816,17 @@ class ConnectionsFragment : Fragment() {
         groupOptions.addAll(allGroups.filter { it.groupType.isEmpty() }.map { it.name })
         dropdownGroup.setAdapter(ArrayAdapter(ctx, android.R.layout.simple_dropdown_item_1line, groupOptions))
 
-        // Identity dropdown — populated async from Room flow.
-        // viewLifecycleOwner.lifecycleScope cancels when the view is destroyed
-        // (e.g. config change) so we never call setAdapter on a detached view.
+        // Identity dropdown — one-shot fetch (not a continuous collect).
+        // A continuous Flow collect would overwrite the adapter on every
+        // identity-table emission while the dialog is open, potentially
+        // resetting the user's in-progress selection. viewLifecycleOwner
+        // scope still cancels the in-flight first() if the view is destroyed.
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                app.database.identityDao().getAllIdentities().collect { identities ->
-                    allIdentities = identities
-                    val opts = mutableListOf("(Clear identity)").also { it.addAll(identities.map { i -> i.name }) }
-                    dropdownIdentity.setAdapter(ArrayAdapter(ctx, android.R.layout.simple_dropdown_item_1line, opts))
-                }
+                val identities = app.database.identityDao().getAllIdentities().first()
+                allIdentities = identities
+                val opts = mutableListOf("(Clear identity)").also { it.addAll(identities.map { i -> i.name }) }
+                dropdownIdentity.setAdapter(ArrayAdapter(ctx, android.R.layout.simple_dropdown_item_1line, opts))
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {

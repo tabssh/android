@@ -1,5 +1,24 @@
 # What's New
 
+## Wave 54 — Fragments deep-dive audit
+
+- **Performance screen no longer paints the 1-minute load colour
+  twice per metrics tick** — a duplicated block was running the
+  same green/orange/red color decision back-to-back. Removed the
+  dead duplicate. No visible change other than slightly less work
+  per refresh.
+- **Hypervisor delete and "Refresh Status" tied to the visible
+  screen** — both were running in the older Fragment-wide scope, so
+  a slow delete or a slow status probe could still try to show a
+  Toast against a screen you had already navigated away from.
+  Both are now scoped to the visible view and capture the screen
+  context up-front, so navigating away mid-operation is safe.
+- **Bulk-edit identity dropdown no longer resets while you are
+  using it** — the identity picker in the bulk-edit dialog was
+  being rebuilt every time the identity table emitted a change
+  (which could happen mid-edit if a background sync ran). It is
+  now populated exactly once when the dialog opens.
+
 ## Wave 53 — Keyboard & tabs deep-dive audit
 
 - **Friendlier tab-limit message** — opening a new SSH tab when you

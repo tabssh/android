@@ -7,6 +7,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **PerformanceFragment no longer paints `textLoad1min` twice per frame** — two identical `setTextColor(when { … })` blocks (lines 495-499 and 501-506) ran back-to-back on every metrics tick; the second was exact dead code with the same comment and same branches, removed it
+- **HypervisorsFragment delete and refresh-status now bound to view lifecycle** — both used the Fragment-scoped `lifecycleScope`, so a coroutine that survived `onDestroyView` could still call `requireContext()` / `Toast.makeText` against a dead view tree; switched both to `viewLifecycleOwner.lifecycleScope` and captured `requireContext()` on the main thread before the IO probe so `LibvirtApiClient` no longer receives a context fetched from a background dispatcher
+- **Bulk-edit identity dropdown no longer wipes user selection on identity-table changes** — the dropdown adapter was being rebuilt on every emission of `identityDao().getAllIdentities()` while the dialog was open; replaced the continuous `.collect { … }` with a one-shot `.first()` so the adapter is set exactly once when the dialog opens
+
 ### Removed
 
 - **Orphan `CustomKeyboardView` removed** — the legacy single-row keyboard view and its `view_custom_keyboard.xml` layout had zero callers; `MultiRowKeyboardView` is the only active keyboard surface, used by both `activity_tab_terminal.xml` and `activity_vm_console.xml`

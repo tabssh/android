@@ -287,3 +287,110 @@ KeyboardCustomizationActivity / TerminalView.
 imports). Confirms every deletion was truly unreferenced and the new
 `object KeyboardLayoutManager` form remains source-compatible with all callers
 (only companion-level access was used in practice).
+
+---
+
+## Pass 17 — Fragments deep-dive (2026-06-15)
+
+Targeted audit of `app/src/main/java/io/github/tabssh/ui/fragments/`:
+ConnectionsFragment.kt (~1290 LOC), IdentitiesFragment.kt (~1481 LOC),
+CloudAccountsFragment.kt (~809 LOC), ConnectionListFragment.kt,
+FrequentConnectionsFragment.kt, HypervisorsFragment.kt, InfraFragment.kt,
+PerformanceFragment.kt (~637 LOC).
+
+### Findings & fixes
+
+1. **PerformanceFragment.kt — duplicate dead block (FIXED)**
+   Lines 495-499 and 501-506 contained identical `textLoad1min.setTextColor(when {...})`
+   blocks with the same comment ("Color code load1 …"). The second block was
+   pure dead code — both invocations resolved to the same color from the same
+   metric in the same frame. Removed the duplicate. No behavioural change.
+
+2. **HypervisorsFragment.kt — `deleteHypervisor` lifecycle (FIXED)**
+   Used plain `lifecycleScope.launch` (Fragment-scoped, survives view destroy)
+   while the success/failure branches call `requireContext()` and Toast on the
+   view tree. Switched to `viewLifecycleOwner.lifecycleScope.launch` so the
+   coroutine is cancelled at `onDestroyView` and post-destroy Toasts cannot
+   target a dead view. Existing `ctx = context ?: return@launch` capture
+   pattern preserved.
+
+3. **HypervisorsFragment.kt — `refreshHypervisorStatus` context-on-IO (FIXED)**
+   The libvirt-branch called `requireContext()` from inside
+   `withContext(Dispatchers.IO)` to pass into `LibvirtApiClient`. While
+   `requireContext()` is internally thread-safe, calling it after the IO
+   switch races with `onDetach()` and risks `IllegalStateException` if the
+   user navigates away mid-probe. Captured `val ctx = requireContext()` on
+   the main thread before the launch, used `ctx` inside IO. Also switched
+   from `lifecycleScope` to `viewLifecycleOwner.lifecycleScope`.
+
+4. **ConnectionsFragment.kt — bulk-edit identity dropdown continuous collect (FIXED)**
+   `showBulkEditDialog` populated the identity AutoCompleteTextView adapter
+   inside a `viewLifecycleOwner.lifecycleScope.launch { ... .collect { ... } }`.
+   Because the collect never returns, every emission from `identityDao().getAllIdentities()`
+   while the dialog was open would call `setAdapter(…)` again, wiping any
+   partially-typed selection text and the dropdown's scroll/highlight state.
+   Replaced with a one-shot `.first()` fetch — same data, no spurious adapter
+   resets. Scope cancellation behaviour is unchanged (viewLifecycleOwner still
+   cancels the suspended `first()` at view destruction).
+
+### Items audited and accepted as-is (no fix needed)
+
+5. **ConnectionListFragment.kt** — Uses LiveData rather than StateFlow (AI.md
+   rule 10 prefers StateFlow for new code, but this fragment predates that
+   guidance and the FEATURE PRESERVATION RULE applies — no behavioural bug,
+   no rewrite). `notifyDataSetChanged()` rather than DiffUtil is suboptimal
+   on long lists but the fragment is currently only used as a flat fallback
+   list and works correctly. Left untouched.
+
+6. **FrequentConnectionsFragment.kt** — Clean: uses
+   `viewLifecycleOwner.lifecycleScope` for Flow collection and re-fetches in
+   `onResume`. Empty state, click handlers, and DiffUtil all correct.
+
+7. **InfraFragment.kt** — Minimal wrapper with `isUserInputEnabled=false` on
+   the inner ViewPager to avoid swipe conflict with the outer ViewPager.
+   Correct as written.
+
+8. **CloudAccountsFragment.kt** — Uses `viewLifecycleOwner.lifecycleScope` +
+   `repeatOnLifecycle(STARTED)` for DAO Flow. Switch listener detached before
+   `isChecked` mutation to prevent DiffUtil-rebind toggle storms. SAF picker
+   contexts captured (`requireContext().contentResolver` invoked on main
+   thread before the picker launchers' IO blocks). OCI multi-step credentials
+   dialog correctly preserves form state via `pendingOciState` across SAF
+   round-trips. `saveOrUpdateOciAccount` rolls back the DB insert/update when
+   `storePassword` fails so accounts never end up with a missing token.
+   Disabled-account refresh is correctly no-op'd with a hint toast.
+
+9. **HypervisorsFragment.kt (rest)** — `loadHypervisors` Flow collection uses
+   `viewLifecycleOwner.lifecycleScope` with `isAdded` guard; menu provider
+   tied to viewLifecycleOwner + RESUMED state; OCI legacy rows correctly
+   redirect to the Cloud Accounts tab; OCI Keystore secrets dropped on delete
+   to prevent row-id-reuse leaks. All correct.
+
+10. **PerformanceFragment.kt (rest)** — Uses `viewLifecycleOwner` for the
+    main metrics scope, properly cancels `handler.removeCallbacks` and the
+    connection-state observer job in `onDestroyView`, and uses
+    `app.applicationScope` for the SSH read loop (not bound to view
+    lifecycle, which is correct for a background SSH command). Chart scaling
+    and rolling history are intact.
+
+11. **IdentitiesFragment.kt** — Multiple `lifecycleScope.launch(Dispatchers.IO)`
+    blocks call `requireContext()` only inside `withContext(Dispatchers.Main)`
+    sub-blocks — safe pattern since the switch back to Main re-binds to the
+    fragment's main-thread state. The remaining theoretical race (fragment
+    detached between IO finish and Main resume) is guarded by `isAdded`
+    checks in the IO-sensitive paths. Not rewriting wholesale — risk of
+    regression outweighs the marginal correctness gain, and the
+    FEATURE PRESERVATION RULE applies. No bugs were observed in manual code
+    review of identity Apply / VNC / Virt-account / install-key / export
+    flows.
+
+### Verification
+
+`make check` — passes, zero compile errors, zero unresolved imports.
+
+### Feature preservation note
+
+No UI elements, menu items, dialogs, buttons, fields, or user-visible flows
+were removed in this pass. Only one piece of dead code was deleted
+(PerformanceFragment.kt's exact-duplicate `setTextColor` block) — confirmed
+zero behavioural change.
