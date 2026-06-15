@@ -407,11 +407,6 @@ class SyncSettingsActivity : AppCompatActivity() {
      * and verify it can decrypt the file before accepting it.
      * If the file is empty (not yet written) the password is accepted without verification.
      */
-    /**
-     * After the user picks an EXISTING sync file, prompt for the password
-     * and verify it can decrypt the file before accepting it.
-     * If the file is empty (not yet written) the password is accepted without verification.
-     */
     private fun showVerifyPasswordForExistingFile(uri: Uri) {
         val view = layoutInflater.inflate(R.layout.dialog_sync_password, null)
         val passwordInput  = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.input_password)

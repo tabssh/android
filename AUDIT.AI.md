@@ -616,3 +616,140 @@ screen and no bookmarks system anywhere in the codebase. All real
 features — select-all (now actually working), clear-completed, upload,
 download, SCP fallback, chmod, rename, delete, properties, edit, multi-tab —
 are preserved and improved.
+
+## Pass 20 — 2026-06-15 — Activities deep-dive (12 manager / settings / main)
+
+Scope: every file in
+`app/src/main/java/io/github/tabssh/ui/activities/`
+that the prompt enumerated:
+LibvirtManager, OciManager, ProxmoxManager, VMwareManager,
+SyncSettings, ClusterCommand, KeyboardCustomization,
+PortForwarding, GroupManagement, ThemeEditor, SnippetManager,
+MainActivity. All 12 read in full.
+
+### What was checked (and how)
+
+Per-file audit followed the prompt's nine numbered areas — wiring
+gaps, error propagation, polling cancellation, empty states,
+lifecycle leaks, input validation, crash paths, dead-code (only
+where `grep -rn` confirms zero callers), and preservation of
+every advertised UI element.
+
+Each manager (Libvirt / OCI / Proxmox / VMware) was traced end to
+end: `connectAndRefresh()` → `loadVMs()` → button handlers →
+state transitions. All four cancel in-flight HTTP via
+`currentClient?.cancelAll()` on `onDestroy()`, persist captured
+TLS pins via `HypervisorPasswordStore.persistCapturedPinIfAny`,
+re-query VM list 2 s after a power action so the row reflects
+the new state, and guard "not connected yet" Refresh taps with
+a Toast instead of crashing.
+
+`ClusterCommandActivity` — Pass 11's cancel-button fix
+(`executor.cancelAll()`) is still in place, per-host progress text
+and result aggregation render correctly, and the snippet picker
+and history chips (10 stored / 5 shown) match the spec.
+
+`PortForwardingActivity` — the TOFU dead-end retry dialog still
+offers "Open Terminal" as an escape hatch, the HTTP auto-detect
+probe still offers "Open in browser", and Local / Remote /
+Dynamic forward dialogs all CRUD against `PortForwardDao`.
+
+`ThemeEditorActivity` — the colour picker rebuilds the preview
+on every hex / HSV change. WCAG-AA contrast validation and
+`importTheme()` / `exportTheme()` are wired in `SettingsActivity`
+(grep confirmed lines 341, 456, 468, 490, 495), not in the editor
+itself — the editor's job is colour editing, not validation /
+import-export.
+
+`SnippetManagerActivity` — full CRUD plus copy-to-clipboard;
+variable parsing `{?name:default|hint}` is performed at insertion
+time in `TabTerminalActivity.insertSnippet()` /
+`showVariablesDialog()` (lines 3564, 3594), which is correct —
+the manager screen would never know what terminal to send into.
+
+`MainActivity` — drawer items, FAB-per-tab visibility,
+`start_tab` extra (including `onNewIntent` re-delivery),
+`general_startup_behavior` pref, exit-confirm dialog, log-copy
+size cap, hypervisor type → manager routing, and Quick Connect
+(SSH + VNC, save-permanent + transient) all wired.
+
+### Findings
+
+Three issues found across the 12 files. Two are fixed in this
+pass; the third is documented for posterity and left untouched
+per the preservation rule.
+
+1. **`SyncSettingsActivity.kt` — duplicate KDoc block above
+   `showVerifyPasswordForExistingFile`** (cosmetic).
+   Lines 405–414 contained the same 4-line block comment twice
+   back-to-back. Compiler ignores it but linters and code review
+   tools flag it. Fixed.
+2. **`KeyboardCustomizationActivity.kt` — no "Reset to default"
+   action wired** (genuine wiring gap, explicitly called out by
+   the audit prompt).
+   `MultiRowKeyboardView.getDefaultRowLayouts(n)` is the source
+   of truth for the factory layout — the editor used it on first
+   load but offered no way for the user to get back to it. The
+   layout XML had no reset button and no menu existed.
+   **Fix:** added `res/menu/menu_keyboard_customization.xml` with
+   a single "Reset to default" item, inflated it in
+   `onCreateOptionsMenu`, and added `confirmResetToDefault()`
+   which dialogs the user, rebuilds `keyboardLayout` from
+   `MultiRowKeyboardView.getDefaultRowLayouts(rowCount)`,
+   resets the active row, calls `rebuildSurface()` and
+   `refreshAvailableKeys()`, and toasts. Critical: the reset
+   ONLY updates the in-memory editor; the user must still tap
+   the Save FAB to persist via `preferencesManager.setKeyboardLayout()`
+   — same model as every other change in this activity.
+3. **`MainActivity.showLogsDialog()` (lines 868–896) — zero
+   callers**. `grep -rn "showLogsDialog\b" app/src/main/` returns
+   only the declaration. The two log paths the drawer wires
+   (`R.id.nav_copy_app_log` and `R.id.nav_copy_debug_logs`) call
+   `copyAppLog()` / `copyDebugLogs()`, which both route through
+   `offerLogShareOrCopy()` — a richer, sanitized, size-capped
+   path. `showLogsDialog()` reads `Logger.getRecentLogs()` (the
+   in-memory ring of 500 entries) which is a distinct dataset
+   from `Logger.getAppLog()` / `Logger.getAllLogs()` and may be
+   useful for a future "Recent activity" menu item. Per the
+   preservation rule ("when in doubt: keep it, fix it, or note
+   it in AUDIT.AI.md") this is left in place and noted here.
+
+### What was NOT changed (and why)
+
+- **Every manager activity** — Libvirt / OCI / Proxmox / VMware
+  read clean end to end. Hard-reset confirms, group-id
+  nullification on hypervisor deletion (see Pass 18 for that
+  one), TLS pin capture, parallel-IP fetch via
+  `coroutineScope { async }.awaitAll()`, button-row visibility
+  by state, and SSH-fallback for VMware (no Android VMRC).
+  No bugs to fix.
+- **`ClusterCommandActivity`** — Pass 11's executor cancel is
+  intact and the cancel button still calls `executor.cancelAll()`.
+- **`GroupManagementActivity`** — `performDelete()` already
+  uses `app.database.withTransaction { … }` to reassign
+  connections AND nullify VNC host group-ids AND delete the group
+  atomically (Pass 18 added this). Drag-to-reorder persists via
+  `updateGroupSortOrder()`.
+- **`ThemeEditorActivity`** — see "What was checked" above.
+  Import / export / WCAG-AA validation are in `SettingsActivity`
+  and `ThemeValidator`, not the editor.
+- **`SnippetManagerActivity`** — variable parsing happens at
+  insertion time in `TabTerminalActivity`, which is correct.
+  The `onSnippetDelete` adapter parameter is unused inside the
+  adapter (deletion happens via the edit dialog's neutral
+  button), but it's part of a public constructor signature and
+  removing it would change the adapter's contract for any
+  future refactor — left as-is.
+
+### Verification
+
+`make check` — passes, zero compile errors, zero unresolved
+imports, zero lint complaints introduced by this pass.
+
+### Feature preservation note
+
+Nothing user-visible was removed. One feature was ADDED: a
+"Reset to default" action on the Keyboard Layout Editor that
+the prompt explicitly called out as missing. All other UI
+elements, menu items, buttons, dialogs, and user-visible
+behaviour across the 12 activities remain exactly as they were.

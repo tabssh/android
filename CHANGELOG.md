@@ -7,6 +7,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Keyboard Layout Editor now has a "Reset to default" menu action** — the editor let you drag-reorder and add / remove keys, but offered no way back to the factory layout if you got lost in your edits; tapping the overflow > "Reset to default" now prompts to confirm and restores `MultiRowKeyboardView.getDefaultRowLayouts(n)` for the currently selected row count, then waits for you to tap Save (the FAB) before persisting — same save model as every other change in this screen
+
 ### Fixed
 
 - **SFTP "Select All Local" / "Select All Remote" menu items now actually select files** — both menu items were declared in `menu/sftp_menu.xml` with titles but their `onOptionsItemSelected` branches contained only a comment and returned `true`; added `selectAllLocal()` / `selectAllRemote()` on `FileAdapter` and wired the menu items, so taps now populate the selection set with every non-directory row and toast the count

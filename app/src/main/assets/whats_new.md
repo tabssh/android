@@ -1,5 +1,16 @@
 # What's New
 
+## Wave 57 — Activities deep-dive audit
+
+- **Keyboard Layout Editor now has a "Reset to default"
+  action** — open the editor, tap the overflow menu in the
+  top bar, choose "Reset to default", and the layout snaps
+  back to the factory rows. The change is shown in the
+  preview immediately but is not saved until you tap the
+  Save button (the floppy-disk icon at the bottom-right) —
+  same as every other change in this screen, so an
+  accidental tap will not overwrite your real layout.
+
 ## Wave 56 — SFTP activity audit
 
 - **"Select All Local" and "Select All Remote" now actually

@@ -13,6 +13,7 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.GridLayoutManager
@@ -436,9 +437,46 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
 
     override fun onSupportNavigateUp(): Boolean { finish(); return true }
 
+    override fun onCreateOptionsMenu(menu: android.view.Menu): Boolean {
+        menuInflater.inflate(R.menu.menu_keyboard_customization, menu)
+        return true
+    }
+
     override fun onOptionsItemSelected(item: android.view.MenuItem) = when (item.itemId) {
         android.R.id.home -> { finish(); true }
+        R.id.menu_reset_default -> { confirmResetToDefault(); true }
         else -> super.onOptionsItemSelected(item)
+    }
+
+    /**
+     * Confirm and reset the working keyboard layout to the built-in default
+     * rows. The change is applied to the editor surface immediately; the user
+     * must still tap Save (the FAB) to persist it.
+     */
+    private fun confirmResetToDefault() {
+        AlertDialog.Builder(this)
+            .setTitle("Reset to default?")
+            .setMessage("Discard the current edits and restore the default keyboard layout. You will still need to tap Save to keep the change.")
+            .setPositiveButton("Reset") { _, _ ->
+                val rowCount = keyboardLayout.size.coerceIn(1, 5).takeIf { it > 0 } ?: 3
+                keyboardLayout.clear()
+                keyboardLayout.addAll(
+                    MultiRowKeyboardView.getDefaultRowLayouts(rowCount).map { it.toMutableList() }
+                )
+                when (keyboardLayout.size) {
+                    1 -> binding.toggleRowCount.check(R.id.btn_row_1)
+                    2 -> binding.toggleRowCount.check(R.id.btn_row_2)
+                    3 -> binding.toggleRowCount.check(R.id.btn_row_3)
+                    4 -> binding.toggleRowCount.check(R.id.btn_row_4)
+                    5 -> binding.toggleRowCount.check(R.id.btn_row_5)
+                }
+                activeRow = 0
+                rebuildSurface()
+                refreshAvailableKeys()
+                Toast.makeText(this, "Reset to default layout", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     // ─── Available-keys RecyclerView adapter ──────────────────────────────────
