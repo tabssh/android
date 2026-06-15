@@ -5,7 +5,6 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import io.github.tabssh.databinding.ItemConnectionBinding
 import io.github.tabssh.storage.database.entities.ConnectionProfile
-import io.github.tabssh.utils.logging.Logger
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -38,17 +37,6 @@ class ConnectionAdapter(
         onItemLongClickListener = listener
     }
 
-    // Alternative constructor for more detailed event handling
-    constructor(
-        connections: List<ConnectionProfile>,
-        onConnectionClick: (ConnectionProfile) -> Unit,
-        onConnectionLongClick: (ConnectionProfile) -> Unit,
-        onConnectionEdit: (ConnectionProfile) -> Unit,
-        onConnectionDelete: (ConnectionProfile) -> Unit
-    ) : this(onConnectionClick) {
-        submitList(connections)
-    }
-    
     private val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
     
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ConnectionViewHolder {

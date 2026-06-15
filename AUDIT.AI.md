@@ -114,3 +114,31 @@ Reviewed and intentionally NOT changed:
 - DAOs/entities (19 entities, 19 DAOs) — KSP + Kotlin compile (`make check`) round-trips the schema vs `app/schemas/3.json`; any column-name or projection mismatch fails the build. Build is green after all fixes.
 
 Build verification: `make check` (kspDebugKotlin + compileDebugKotlin) — passes.
+
+---
+
+## Pass 14 — UI deep-dive (targeted, partial)
+
+Scope: `app/src/main/java/io/github/tabssh/ui/` minus `TabTerminalActivity` (Pass 7) and `SettingsActivity` (Pass 10). Categories: lifecycle, empty states, input validation, Material 3 consistency, navigation/back-stack/rotation, DiffUtil, IME chains, dead UI, accessibility (contentDescription, 48dp targets), dialog correctness.
+
+Scope completed in this pass: all of `ui/utils/`, `ui/models/`, `ui/adapters/`, `ui/dialogs/` (modulo `ReportIssueDialog.kt` already known clean). Deferred to subsequent passes: `ui/keyboard/`, `ui/tabs/`, remaining `ui/views/`, `ui/fragments/`, `ui/activities/` — these total ~30K LOC and warrant their own dedicated pass to avoid context loss mid-audit.
+
+Fixed:
+- `ui/utils/UIHelper.kt` — removed unused `import androidx.core.content.ContextCompat`.
+- `ui/adapters/ConnectionAdapter.kt` — removed unused `import io.github.tabssh.utils.logging.Logger`. Removed the dead alternative `constructor(connections, onConnectionClick, onConnectionLongClick, onConnectionEdit, onConnectionDelete)` — no caller passed the edit/longClick/delete callbacks; the primary constructor with `onConnectionClick` is the only path actually invoked. Carrying unreachable callback slots gives the next contributor a false menu of options that don't fire.
+- `ui/adapters/GroupedConnectionAdapter.kt` — removed `onConnectionEdit` and `onConnectionDelete` constructor params. They were never invoked anywhere inside the adapter even though `ConnectionsFragment` was wiring real `editConnection` / `deleteConnection` lambdas into them — those lambdas would have silently never fired. Edit/delete is genuinely reached via `showConnectionMenu` triggered by `onConnectionLongClick`, so user-facing behaviour is unchanged. Updated the two call sites (`fragments/ConnectionListFragment.kt`, `fragments/ConnectionsFragment.kt`) to match.
+- `ui/adapters/GroupedConnectionAdapter.kt` — density-conversion bug at the indent calculation. `indentLevel * 32 * itemView.resources.displayMetrics.density.toInt()` truncated fractional densities (1.5x mdpi, 2.625x mdpi, etc.) to an integer BEFORE multiplication, producing wrong indent widths on most real devices. Corrected to `(indentLevel * 32 * itemView.resources.displayMetrics.density).toInt()` — single conversion at the end of the chain.
+- `ui/adapters/SnippetAdapter.kt` — deleted. Zero external imports (grep across `app/src` confirmed). `SnippetManagerActivity` has its own private nested `SnippetAdapter` class at line 384 and never imports `io.github.tabssh.ui.adapters.SnippetAdapter`, so the top-level file was unreferenced. Two RecyclerView adapters sharing a name and nearly identical responsibility is a maintenance hazard — kept the nested one because it is the actually-used implementation.
+- `ui/dialogs/AuthenticationDialog.kt` — deleted. Zero external callers (grep confirmed only self-references). Also carried an unused `import android.content.DialogInterface`. Real authentication prompts in the codebase are handled by `AuthenticationManager` + `BiometricPrompt` flows, not this dialog.
+- `ui/dialogs/HostKeyChangedDialog.kt` — deleted. Zero external callers (grep across `app/src` confirmed only self-references; SSH connection code does not reflect into it). Three latent problems made shipping the file dangerous: (1) the `showManageHostKeys()` "Clear All" confirmation button never invoked the `onRemove` callback — it just dismissed and logged, so the destructive action that looks wired in the layout would have silently no-op'd; (2) `showAndWait` blocked the calling thread with `Object.lock.wait()` — a guaranteed ANR if ever called from the main thread; (3) the unencrypted-vs-encrypted-thread-bridge `CountDownLatch` semantics weren't consistent with the rest of the SSH stack. Rather than rebuild the file, deleted it — real host-key changes are surfaced through `SSHKeyHostManager` and a regular MaterialAlertDialogBuilder inline at the connect site.
+
+Reviewed and intentionally NOT changed (clean):
+- `ui/utils/DialogUtils.kt` — `isContextDead` guard already prevents Activity-leaked dialogs after configuration change.
+- `ui/utils/ConnectionLauncher.kt`, `ui/utils/ConnectionListBuilder.kt` — single-responsibility helpers, no side-effects on UI state.
+- `ui/models/ConnectionListItem.kt` — sealed class hierarchy, no mutable shared state.
+- `ui/adapters/AuditLogAdapter.kt`, `ui/adapters/ActiveSessionAdapter.kt`, `ui/adapters/CloudInstanceAdapter.kt`, `ui/adapters/FileAdapter.kt`, `ui/adapters/HypervisorAccountAdapter.kt`, `ui/adapters/HypervisorAdapter.kt`, `ui/adapters/IdentityAdapter.kt`, `ui/adapters/KeyboardKeyAdapter.kt`, `ui/adapters/MainPagerAdapter.kt`, `ui/adapters/StoredKeyAdapter.kt`, `ui/adapters/TerminalPagerAdapter.kt`, `ui/adapters/TranscriptAdapter.kt`, `ui/adapters/TransferAdapter.kt`, `ui/adapters/TunnelAdapter.kt` — adapters use DiffUtil where appropriate, position bounds-checked, no leaking listeners.
+- `ui/dialogs/ConflictResolutionDialog.kt`, `ui/dialogs/ReportIssueDialog.kt` — DialogFragment lifecycle correct, positive button correctly gated, no main-thread blocking.
+
+Deferred (NOT in this pass): `ui/keyboard/` (5 files, ~1417 LOC), `ui/tabs/` (2 files, ~1405 LOC), `ui/views/PaletteDialog.kt|PerformanceOverlayView.kt|VncView.kt`, `ui/fragments/` (8 files), `ui/activities/` (35 files, including ConnectionEditActivity 1979, MultiHostDashboardActivity 1411, VMConsoleActivity 1452, XCPngManagerActivity 1298, ConnectionsFragment 1292, IdentitiesFragment 1481). Documented here so the next pass has a clean starting point and the audit log records exactly what has and has not been covered.
+
+Build verification: `make check` after fixes — pending in this pass.

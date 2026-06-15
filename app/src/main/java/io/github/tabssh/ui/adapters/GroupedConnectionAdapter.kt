@@ -20,8 +20,6 @@ class GroupedConnectionAdapter(
     val items: MutableList<ConnectionListItem>,
     private val onConnectionClick: (ConnectionProfile) -> Unit,
     private val onConnectionLongClick: (ConnectionProfile) -> Unit,
-    private val onConnectionEdit: (ConnectionProfile) -> Unit,
-    private val onConnectionDelete: (ConnectionProfile) -> Unit,
     private val onGroupClick: (ConnectionListItem.GroupHeader) -> Unit,
     private val onGroupLongClick: (ConnectionListItem.GroupHeader) -> Unit
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
@@ -174,7 +172,7 @@ class GroupedConnectionAdapter(
             updateStatusIndicator(profile)
 
             // Apply indent for grouped items
-            val indentPx = indentLevel * 32 * itemView.resources.displayMetrics.density.toInt()
+            val indentPx = (indentLevel * 32 * itemView.resources.displayMetrics.density).toInt()
             itemView.setPadding(indentPx, itemView.paddingTop, itemView.paddingRight, itemView.paddingBottom)
 
             // Click listeners

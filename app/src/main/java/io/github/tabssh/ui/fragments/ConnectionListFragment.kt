@@ -48,8 +48,6 @@ class ConnectionListFragment : Fragment() {
             items = mutableListOf(),
             onConnectionClick = { connection -> onConnectionSelected(connection) },
             onConnectionLongClick = { _ -> },
-            onConnectionEdit = { _ -> },
-            onConnectionDelete = { _ -> },
             onGroupClick = { _ -> },
             onGroupLongClick = { _ -> }
         )

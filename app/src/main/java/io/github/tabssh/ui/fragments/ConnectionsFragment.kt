@@ -1179,8 +1179,6 @@ class ConnectionsFragment : Fragment() {
                 items = items.toMutableList(),
                 onConnectionClick = { connection -> openConnection(connection) },
                 onConnectionLongClick = { connection -> showConnectionMenu(connection); },
-                onConnectionEdit = { connection -> editConnection(connection) },
-                onConnectionDelete = { connection -> deleteConnection(connection) },
                 onGroupClick = { groupHeader -> toggleGroupExpanded(groupHeader) },
                 onGroupLongClick = { groupHeader -> showGroupMenu(groupHeader) }
             )
