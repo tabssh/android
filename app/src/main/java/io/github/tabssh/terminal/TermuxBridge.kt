@@ -43,6 +43,11 @@ class TermuxBridge(
         private const val READ_BUFFER_SIZE = 8192
         private const val PASTE_CHUNK_SIZE = 4096
 
+        // Hard cap on tracked OSC 8 hyperlink spans. A long-running session that
+        // tails a log file emitting OSC 8 sequences would otherwise grow the list
+        // unbounded; once we hit this number we drop the oldest span on insert.
+        private const val OSC8_LINK_CAP = 200
+
         /**
          * When false (default), keystroke writes log only `Sent N bytes to SSH`.
          * When true, the first ≤16 bytes are also dumped via `toBriefHex()`.
@@ -315,9 +320,19 @@ class TermuxBridge(
             val endCol = em.cursorCol
 
             if (url.isNotBlank()) {
-                osc8Links.add(Osc8Link(url, startRow, startCol, endRow, endCol))
                 // Cap the list to prevent unbounded growth across a long session.
-                while (osc8Links.size > 200) osc8Links.removeAt(0)
+                // CopyOnWriteArrayList.removeAt(0) is O(N) because it allocates
+                // a fresh backing array each call; on a flood that produces 200+
+                // links in one append this becomes O(N^2). Swap the whole list
+                // in one allocation when the cap is reached so the cost stays
+                // bounded and readers (UI thread) still see a consistent snapshot.
+                val newLink = Osc8Link(url, startRow, startCol, endRow, endCol)
+                if (osc8Links.size >= OSC8_LINK_CAP) {
+                    val keep = osc8Links.subList(osc8Links.size - OSC8_LINK_CAP + 1, osc8Links.size).toList()
+                    osc8Links = CopyOnWriteArrayList<Osc8Link>(keep).apply { add(newLink) }
+                } else {
+                    osc8Links.add(newLink)
+                }
             }
 
             pos = match.range.last + 1

@@ -34,8 +34,6 @@ class TerminalEmulator(private val buffer: TerminalBuffer) {
     private val ansiParser = ANSIParser(buffer)
 
     private var currentCharset = Charset.forName("UTF-8")
-    private var cursorX = 0
-    private var cursorY = 0
     private var _terminalType = "xterm-256color"
 
     // State tracking
@@ -59,10 +57,6 @@ class TerminalEmulator(private val buffer: TerminalBuffer) {
     fun processInput(data: ByteArray) {
         // Use ANSIParser for proper escape sequence handling
         ansiParser.processInput(data)
-
-        // Update cursor position from buffer (ANSIParser updates it)
-        cursorX = buffer.getCursorCol()
-        cursorY = buffer.getCursorRow()
     }
 
     /**
@@ -119,72 +113,6 @@ class TerminalEmulator(private val buffer: TerminalBuffer) {
         }
     }
 
-    private fun processChar(char: Char) {
-        when {
-            char.code < 32 -> processControlChar(char)
-            else -> writeChar(char)
-        }
-    }
-
-    private fun writeChar(char: Char) {
-        if (cursorX >= buffer.getCols()) {
-            cursorX = 0
-            cursorY++
-            if (cursorY >= buffer.getRows()) {
-                buffer.scrollUp()
-                cursorY = buffer.getRows() - 1
-            }
-        }
-
-        buffer.setChar(cursorY, cursorX, char, 7, 0, false, false, false)
-        cursorX++
-    }
-
-    private fun processControlChar(char: Char) {
-        when (char.code) {
-            10 -> { // LF - Line Feed
-                cursorY++
-                if (cursorY >= buffer.getRows()) {
-                    buffer.scrollUp()
-                    cursorY = buffer.getRows() - 1
-                }
-            }
-            13 -> cursorX = 0 // CR - Carriage Return
-        }
-    }
-
-    /**
-     * Handle key press events
-     */
-    fun handleKeyPress(keyCode: Int, isCtrl: Boolean = false, isAlt: Boolean = false, isShift: Boolean = false) {
-        // Convert key press to appropriate terminal input
-        val bytes = when {
-            isCtrl -> handleControlKey(keyCode)
-            isAlt -> handleAltKey(keyCode)
-            else -> handleNormalKey(keyCode)
-        }
-        processInput(bytes)
-    }
-
-    private fun handleControlKey(keyCode: Int): ByteArray {
-        // Generate control sequences
-        return when (keyCode) {
-            65 -> byteArrayOf(1) // Ctrl+A
-            67 -> byteArrayOf(3) // Ctrl+C
-            68 -> byteArrayOf(4) // Ctrl+D
-            else -> byteArrayOf()
-        }
-    }
-
-    private fun handleAltKey(keyCode: Int): ByteArray {
-        // Generate alt sequences
-        return byteArrayOf(27, keyCode.toByte())
-    }
-
-    private fun handleNormalKey(keyCode: Int): ByteArray {
-        return byteArrayOf(keyCode.toByte())
-    }
-
     /**
      * Resize terminal
      */
@@ -197,8 +125,6 @@ class TerminalEmulator(private val buffer: TerminalBuffer) {
      */
     fun clearScreen() {
         buffer.clear()
-        cursorX = 0
-        cursorY = 0
     }
 
     /**
@@ -371,15 +297,6 @@ class TerminalEmulator(private val buffer: TerminalBuffer) {
 
         Logger.d("TerminalEmulator", "Disconnected from I/O streams")
     }
-
-    /**
-     * Send key press to terminal
-     */
-    fun sendKeyPress(keyCode: Int, isCtrl: Boolean = false, isAlt: Boolean = false, isShift: Boolean = false) {
-        // Implementation would convert key press to terminal input
-        Logger.d("TerminalEmulator", "Key pressed: $keyCode")
-    }
-
 
     /**
      * Add listener

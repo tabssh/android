@@ -141,9 +141,6 @@ class TerminalView @JvmOverloads constructor(
     // Input method handling
     private val inputMethodManager = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
 
-    // Accessibility
-    private var accessibilityHelper: TerminalAccessibilityHelper? = null
-
     // URL detection
     //
     // Covers: http/https/ftp/ftps/ssh/git/svn/file schemes, www. bare prefix,
@@ -170,16 +167,13 @@ class TerminalView @JvmOverloads constructor(
     var onUrlDetected: ((String) -> Unit)? = null
 
     // Performance optimization: dirty region tracking
-    private var dirtyRows = java.util.BitSet(256) // Track which rows need redrawing
-    private var fullRedrawNeeded = true // Force full redraw on first draw or after resize
-    private var lastRenderedRows = 0 // Track row count changes
-    private var lastRenderedCols = 0 // Track column count changes
-    private var lastCursorRow = -1 // Track cursor position changes
-    private var lastCursorCol = -1
-
-    // Performance: text drawing cache
-    private val rowTextBuilder = StringBuilder(256) // Reusable StringBuilder
-    private val clipRect = RectF() // Reusable clip rect
+    // dirtyRows is kept for future on-canvas clip-rect optimisation; today
+    // invalidateDirtyRows() always falls through to a full View.invalidate()
+    // because invalidate(left,top,right,bottom) is deprecated and ignored
+    // on modern Android (composer always invalidates the whole view).
+    private var dirtyRows = java.util.BitSet(256)
+    // Force full redraw on first draw or after resize
+    private var fullRedrawNeeded = true
 
     // Context menu callback for long press on text
     var onContextMenuRequested: ((x: Float, y: Float) -> Unit)? = null
@@ -1983,8 +1977,14 @@ class TerminalView @JvmOverloads constructor(
                 info.className = "Terminal"
                 info.contentDescription = "SSH Terminal"
 
-                terminalBuffer?.let { buffer ->
-                    info.text = buffer.getVisibleText()
+                // Prefer the live Termux screen when a remote session is
+                // attached — `terminalBuffer` only holds content on the
+                // legacy in-memory emulator path and is null for SSH tabs,
+                // which would otherwise leave TalkBack with an empty node.
+                val text = termuxBridge?.getScreenContent()?.takeIf { it.isNotEmpty() }
+                    ?: terminalBuffer?.getVisibleText()
+                if (!text.isNullOrEmpty()) {
+                    info.text = text
                 }
             }
         })
@@ -2612,55 +2612,6 @@ class TerminalView @JvmOverloads constructor(
         // final size is forwarded to the SSH server via SIGWINCH.
         private const val RESIZE_DEBOUNCE_MS = 80L
     }
-}
-
-/**
- * Helper class for comprehensive accessibility support
- * Provides TalkBack integration, high contrast modes, and accessibility actions
- */
-private class TerminalAccessibilityHelper(private val terminalView: TerminalView) {
-
-    /**
-     * Announce terminal output changes to accessibility services
-     */
-    fun announceOutputChange(text: String) {
-        if (text.isNotBlank()) {
-            terminalView.announceForAccessibility(text)
-        }
-    }
-
-    /**
-     * Get terminal content description for accessibility
-     */
-    fun getContentDescription(buffer: io.github.tabssh.terminal.emulator.TerminalBuffer): String {
-        return buildString {
-            append("Terminal window. ")
-            append("${buffer.getRows()} rows by ${buffer.getCols()} columns. ")
-
-            val visibleText = buffer.getVisibleText()
-            if (visibleText.isNotBlank()) {
-                append("Current content: ")
-                append(visibleText.take(200)) // Limit for accessibility
-                if (visibleText.length > 200) {
-                    append("... and more")
-                }
-            }
-        }
-    }
-
-    /**
-     * Get accessibility actions for terminal
-     */
-    fun getAccessibilityActions(): List<AccessibilityAction> {
-        return listOf(
-            AccessibilityAction("Scroll up", "Scroll terminal output up"),
-            AccessibilityAction("Scroll down", "Scroll terminal output down"),
-            AccessibilityAction("Clear screen", "Clear terminal screen"),
-            AccessibilityAction("Copy text", "Copy terminal text to clipboard")
-        )
-    }
-
-    data class AccessibilityAction(val label: String, val description: String)
 }
 
 /**
