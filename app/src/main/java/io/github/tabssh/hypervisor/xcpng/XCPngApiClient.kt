@@ -78,8 +78,8 @@ class XCPngApiClient(
                 <methodCall>
                     <methodName>session.login_with_password</methodName>
                     <params>
-                        <param><value>$username</value></param>
-                        <param><value>$password</value></param>
+                        <param><value>${xmlEscape(username)}</value></param>
+                        <param><value>${xmlEscape(password)}</value></param>
                     </params>
                 </methodCall>
             """.trimIndent()
@@ -223,19 +223,40 @@ class XCPngApiClient(
 
     private fun buildXmlRequest(method: String, params: List<String>): String {
         val paramsXml = params.joinToString("") { param ->
-            "<param><value>$param</value></param>"
+            "<param><value>${xmlEscape(param)}</value></param>"
         }
-        
+
         return """
             <?xml version="1.0"?>
             <methodCall>
-                <methodName>$method</methodName>
+                <methodName>${xmlEscape(method)}</methodName>
                 <params>
-                    <param><value>$sessionId</value></param>
+                    <param><value>${xmlEscape(sessionId.orEmpty())}</value></param>
                     $paramsXml
                 </params>
             </methodCall>
         """.trimIndent()
+    }
+
+    // XML-RPC values must be escaped: a bare '&', '<', or '>' inside a value
+    // breaks the parser server-side (XML well-formedness violation) and an
+    // attacker-controlled password containing "</value><value>OpaqueRef:..."
+    // could otherwise smuggle a forged session id past the auth call. Apply
+    // to every user-supplied or response-derived string interpolated into
+    // request bodies.
+    private fun xmlEscape(s: String): String {
+        val sb = StringBuilder(s.length)
+        for (ch in s) {
+            when (ch) {
+                '&'  -> sb.append("&amp;")
+                '<'  -> sb.append("&lt;")
+                '>'  -> sb.append("&gt;")
+                '"'  -> sb.append("&quot;")
+                '\'' -> sb.append("&apos;")
+                else -> sb.append(ch)
+            }
+        }
+        return sb.toString()
     }
 
     private fun xmlRpcCall(xml: String): String {
@@ -267,7 +288,19 @@ class XCPngApiClient(
     private fun parseStringResponse(xml: String): String {
         val start = xml.indexOf("<value>") + 7
         val end = xml.indexOf("</value>", start)
-        return if (start > 6 && end > start) xml.substring(start, end) else ""
+        return if (start > 6 && end > start) xmlUnescape(xml.substring(start, end)) else ""
+    }
+
+    // Inverse of xmlEscape — convert XML entity references back to their literal
+    // characters. Required because XAPI returns string values with the same
+    // entity encoding that we send (e.g. a VM named "A & B" arrives as "A &amp; B").
+    private fun xmlUnescape(s: String): String {
+        if (s.indexOf('&') < 0) return s
+        return s.replace("&apos;", "'")
+            .replace("&quot;", "\"")
+            .replace("&gt;", ">")
+            .replace("&lt;", "<")
+            .replace("&amp;", "&")
     }
 
     private fun parseIntResponse(xml: String): Long {
