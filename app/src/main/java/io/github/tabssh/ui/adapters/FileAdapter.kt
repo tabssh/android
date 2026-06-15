@@ -60,6 +60,26 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
     }
     
     /**
+     * Select every visible file in the current mode (local or remote).
+     * Directories are excluded — only file rows are added to the selection
+     * so multi-upload / multi-download skips the noise of selecting folders
+     * that would be filtered out at transfer time anyway.
+     */
+    fun selectAllLocal() {
+        if (isRemote) return
+        selectedLocalFiles.clear()
+        selectedLocalFiles.addAll(localFiles.filter { !it.isDirectory })
+        notifyItemRangeChanged(0, itemCount)
+    }
+
+    fun selectAllRemote() {
+        if (!isRemote) return
+        selectedRemoteFiles.clear()
+        selectedRemoteFiles.addAll(remoteFiles.filter { !it.isDirectory })
+        notifyItemRangeChanged(0, itemCount)
+    }
+
+    /**
      * Toggle file selection
      */
     fun toggleSelection(file: File) {

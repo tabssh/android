@@ -519,3 +519,100 @@ No UI elements, menu items, dialogs, buttons, fields, or user-visible
 behaviour were removed in this pass. All edits ADD safety (unsaved-changes
 guard) or FIX a silent data-loss bug (identity race, VNC group/createdAt
 clobbering).
+
+## Pass 19 — 2026-06-15 — Five-Activity targeted deep-dive
+
+### Scope
+
+Five large `ui/activities/` files audited line-by-line for wiring gaps,
+input validation, lifecycle leaks, empty-state handling, and crash paths.
+Filing the result here rather than spreading across multiple sub-files
+so a future auditor sees the full picture in one place.
+
+- `VMConsoleActivity.kt` (~1452 LOC) — VNC / serial / SSH / Termux paths,
+  RFB resize, input switching, lifecycle teardown.
+- `MultiHostDashboardActivity.kt` (~1411 LOC) — dashboard groups CRUD,
+  `MetricsCollector` charts on Main, no-data empty state.
+- `XCPngManagerActivity.kt` (~1298 LOC) — XML-RPC and Xen Orchestra
+  backends, auto-detect, VM ops, snapshot / backup wiring.
+- `SFTPActivity.kt` (~1206 LOC) — navigation, multi-select, upload,
+  chmod, permission and error states.
+- `ImportExportActivity.kt` (~785 LOC) — entity coverage, AES-256 ZIP,
+  validator, version / duplicate / corrupt handling.
+
+### Findings
+
+Three of the five files (`VMConsoleActivity`, `MultiHostDashboardActivity`,
+`XCPngManagerActivity`) are already hardened by prior audit waves —
+DiffUtil-based dashboard updates with `notifyItemChanged` on Main,
+semaphore-throttled SSH handshakes with exponential backoff, RFB client
++ pipe teardown order in `onStop`, auto-detect XO / XCP-ng with override
+persistence, confirmation dialogs for destructive VM ops, `cancelAll()` in
+`onDestroy`. No actionable bugs surfaced after a full read.
+
+`ImportExportActivity` is robust — `BackupManager` initialised on
+`Dispatchers.IO` to avoid the DRBG seed blocking `onCreate`; encrypted
+import retries with password dialog on failure; bulk import validates,
+previews, and asks before mutating the DB; OpenSSH config import resolves
+`IdentityFile` paths against stored keys and surfaces an indefinite
+Snackbar when keys can't be resolved. No fixes needed.
+
+`SFTPActivity` had three real bugs:
+
+1. **Dead menu items** — `R.id.action_select_all_local` and
+   `R.id.action_select_all_remote` advertised functionality (titles
+   "Select All Local" / "Select All Remote") but their `onOptionsItemSelected`
+   branches returned `true` immediately with only an empty comment. Two
+   more menu entries (`R.id.action_transfer_settings`, `R.id.action_bookmarks`)
+   were declared in `menu/sftp_menu.xml` but had no `when` branch in
+   `onOptionsItemSelected` AND no implementation anywhere in the source
+   tree (`grep -rn` confirmed zero callers and zero implementation).
+2. **Null-safe calls on `lateinit var`** — `sftpManager?.uploadFile(...)`,
+   `sftpManager?.downloadFile(...)`, and `localFileAdapter?.getSelectedFiles()`
+   were written as if the fields were nullable, but both are `lateinit var`.
+   `?.` does NOT catch `UninitializedPropertyAccessException`, so if a user
+   tapped Upload before the async `setupSFTPManager()` finished, the call
+   would crash with that exception instead of failing gracefully.
+3. **No FileAdapter API for select-all** — even if (1) had a handler,
+   `FileAdapter` exposed only `toggleSelection(file)` / `toggleRemoteSelection(file)`
+   and `clearSelection()`. There was no `selectAllLocal()` / `selectAllRemote()`.
+
+### Fixes
+
+- `FileAdapter` — added `selectAllLocal()` and `selectAllRemote()` that
+  populate the relevant selection set with every non-directory row in the
+  current mode and dispatch `notifyItemRangeChanged(0, itemCount)` so the
+  selected-row visual updates.
+- `SFTPActivity.onOptionsItemSelected` — `action_select_all_local` now
+  calls `localFileAdapter.selectAllLocal()` and toasts the count;
+  `action_select_all_remote` mirrors for remote.
+- `SFTPActivity.uploadSelectedFiles` / `downloadSelectedFiles` — added
+  `if (!::sftpManager.isInitialized)` guard, removed the unsafe `?.` calls
+  on `sftpManager` and the adapters. Callers now get a clear "SFTP not
+  connected yet" toast instead of a crash.
+- `SFTPActivity.askScpModeAndUpload` — guarded with
+  `::localFileAdapter.isInitialized` since it can fire from the long-press
+  listener before the adapter is set up.
+- `SFTPActivity.uploadSelectedFilesViaScp` — replaced
+  `localFileAdapter?.getSelectedFiles() ?: return` with the safe form.
+- `menu/sftp_menu.xml` — removed `action_transfer_settings` and
+  `action_bookmarks`. Grep across `app/src/main/` confirmed zero
+  implementation, zero handlers, zero references to any "transfer
+  settings" or "SFTP bookmarks" feature — these were never built. The
+  rest of the menu (select-all, clear-completed) is now fully wired.
+
+### Verification
+
+`make check` — passes, zero compile errors, zero unresolved imports.
+
+### Feature preservation note
+
+The two removed menu items (`action_transfer_settings`, `action_bookmarks`)
+had ZERO implementation, ZERO handlers, and ZERO references outside the
+menu XML. They advertised UI features that did not exist — tapping them
+did nothing. Per "dead-code only where grep confirms zero callers AND the
+feature is genuinely unwanted", they qualify: there is no transfer-settings
+screen and no bookmarks system anywhere in the codebase. All real
+features — select-all (now actually working), clear-completed, upload,
+download, SCP fallback, chmod, rename, delete, properties, edit, multi-tab —
+are preserved and improved.

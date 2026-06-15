@@ -463,22 +463,24 @@ class SFTPActivity : AppCompatActivity() {
     }
     
     private fun uploadSelectedFiles() {
-        // Multi-file upload: Get selected files from FileAdapter
-        val selectedFiles = localFileAdapter?.getSelectedFiles() ?: emptyList()
-        
+        if (!::sftpManager.isInitialized) {
+            showToast("SFTP not connected yet")
+            return
+        }
+        val selectedFiles = localFileAdapter.getSelectedFiles()
+
         if (selectedFiles.isEmpty()) {
             showToast("No files selected. Long-press files to select them.")
             return
         }
-        
+
         lifecycleScope.launch {
             try {
                 val successCount = withContext(Dispatchers.IO) {
                     var count = 0
                     for (file in selectedFiles) {
                         if (file.isDirectory) continue
-                        // Use correct API: uploadFile(localFile, remotePath)
-                        sftpManager?.uploadFile(
+                        sftpManager.uploadFile(
                             localFile = file,
                             remotePath = currentRemotePath + "/" + file.name
                         )
@@ -487,7 +489,7 @@ class SFTPActivity : AppCompatActivity() {
                     count
                 }
                 showToast("✅ Uploaded $successCount file(s)")
-                localFileAdapter?.clearSelection()
+                localFileAdapter.clearSelection()
                 loadRemoteDirectory(currentRemotePath)
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Upload failed", e)
@@ -503,7 +505,7 @@ class SFTPActivity : AppCompatActivity() {
      * stripped-down embedded systems).
      */
     private fun askScpModeAndUpload() {
-        val selected = localFileAdapter?.getSelectedFiles() ?: emptyList()
+        val selected = if (::localFileAdapter.isInitialized) localFileAdapter.getSelectedFiles() else emptyList()
         if (selected.isEmpty()) {
             showToast("No files selected. Long-press files to select them.")
             return
@@ -524,7 +526,8 @@ class SFTPActivity : AppCompatActivity() {
             return
         }
         val client = io.github.tabssh.sftp.SCPClient(ssh)
-        val selected = localFileAdapter?.getSelectedFiles() ?: return
+        val selected = localFileAdapter.getSelectedFiles()
+        if (selected.isEmpty()) return
         lifecycleScope.launch {
             val (ok, fail) = withContext(Dispatchers.IO) {
                 var okCount = 0
@@ -538,21 +541,24 @@ class SFTPActivity : AppCompatActivity() {
             }
             runOnUiThread {
                 showToast("SCP: $ok ok, $fail failed")
-                localFileAdapter?.clearSelection()
+                localFileAdapter.clearSelection()
                 loadRemoteDirectory(currentRemotePath)
             }
         }
     }
 
     private fun downloadSelectedFiles() {
-        // Multi-file download: Get selected files from FileAdapter
-        val selectedFiles = remoteFileAdapter?.getSelectedRemoteFiles() ?: emptyList()
-        
+        if (!::sftpManager.isInitialized) {
+            showToast("SFTP not connected yet")
+            return
+        }
+        val selectedFiles = remoteFileAdapter.getSelectedRemoteFiles()
+
         if (selectedFiles.isEmpty()) {
             showToast("No files selected. Long-press files to select them.")
             return
         }
-        
+
         lifecycleScope.launch {
             try {
                 val successCount = withContext(Dispatchers.IO) {
@@ -560,8 +566,7 @@ class SFTPActivity : AppCompatActivity() {
                     for (file in selectedFiles) {
                         if (file.isDirectory) continue
                         val localFile = File(currentLocalPath, file.name)
-                        // Use correct API: downloadFile(remotePath, localFile)
-                        sftpManager?.downloadFile(
+                        sftpManager.downloadFile(
                             remotePath = file.path,
                             localFile = localFile
                         )
@@ -570,7 +575,7 @@ class SFTPActivity : AppCompatActivity() {
                     count
                 }
                 showToast("✅ Downloaded $successCount file(s)")
-                remoteFileAdapter?.clearSelection()
+                remoteFileAdapter.clearSelection()
                 loadLocalDirectory(currentLocalPath)
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Download failed", e)
@@ -1152,11 +1157,15 @@ class SFTPActivity : AppCompatActivity() {
                 true
             }
             R.id.action_select_all_local -> {
-                // Select all local files
+                localFileAdapter.selectAllLocal()
+                val count = localFileAdapter.getSelectedFiles().size
+                showToast(if (count > 0) "Selected $count local file(s)" else "No files to select")
                 true
             }
             R.id.action_select_all_remote -> {
-                // Select all remote files
+                remoteFileAdapter.selectAllRemote()
+                val count = remoteFileAdapter.getSelectedRemoteFiles().size
+                showToast(if (count > 0) "Selected $count remote file(s)" else "No files to select")
                 true
             }
             R.id.action_clear_transfers -> {

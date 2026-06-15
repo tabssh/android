@@ -1,5 +1,22 @@
 # What's New
 
+## Wave 56 — SFTP activity audit
+
+- **"Select All Local" and "Select All Remote" now actually
+  work** — the two SFTP menu items were stubs that did nothing
+  when tapped. They now select every file in the current pane
+  (folders are skipped) and confirm with a toast like "Selected
+  12 local file(s)" so you can immediately upload or download
+  the whole listing.
+- **Tapping Upload / Download before the SFTP session has
+  finished connecting no longer crashes the app** — instead you
+  get a clean "SFTP not connected yet" message and the activity
+  stays open.
+- **Two SFTP menu entries that did nothing were removed** —
+  "Transfer Settings" and "Bookmarks" were placeholders that
+  led nowhere. They are no longer in the menu so the only
+  options shown are ones that work.
+
 ## Wave 55 — Edit-activity deep-dive audit
 
 - **Editing a connection no longer silently forgets its

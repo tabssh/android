@@ -9,6 +9,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **SFTP "Select All Local" / "Select All Remote" menu items now actually select files** — both menu items were declared in `menu/sftp_menu.xml` with titles but their `onOptionsItemSelected` branches contained only a comment and returned `true`; added `selectAllLocal()` / `selectAllRemote()` on `FileAdapter` and wired the menu items, so taps now populate the selection set with every non-directory row and toast the count
+- **SFTP upload / download no longer crashes when the user taps the button before the connection is ready** — `uploadSelectedFiles()` and `downloadSelectedFiles()` were calling `sftpManager?.uploadFile(...)` on a `lateinit var`, but `?.` does NOT catch `UninitializedPropertyAccessException`, so racing the async `setupSFTPManager()` crashed the app; both now check `::sftpManager.isInitialized` first and show "SFTP not connected yet" instead
+
+### Removed
+
+- **Two dead SFTP menu entries removed** — `R.id.action_transfer_settings` and `R.id.action_bookmarks` were declared in `menu/sftp_menu.xml` but had ZERO handlers in `onOptionsItemSelected` AND ZERO implementation anywhere in the source tree (grep across `app/src/main/` confirmed no transfer-settings screen and no bookmarks system); tapping either did nothing — they advertised UI features that were never built
+
+### Fixed
+
 - **Identity dropdown on the connection editor no longer silently resets to "No Identity" when editing an identity-bound profile** — `populateFields()` was firing the spinner restore synchronously while `loadSshIdentities()` was still fetching on `Dispatchers.IO`, so `availableIdentities` was always empty at the moment `restoreSshIdentitySpinner()` ran; the editor now awaits the identity list and rebuilds the adapter before restoring the selection
 - **Editing a VNC host no longer removes it from its group or rewrites its creation time** — `VncHostEditActivity.saveHost()` was hardcoding `groupId = null`, rewriting `createdAt = now`, and calling `vncHostDao.insert()` (whose `OnConflictStrategy.REPLACE` masked the bug by overwriting the row); the editor now preserves the loaded record's `groupId` and `createdAt` and dispatches to `update()` for edits and `insert()` only for new records
 - **PerformanceFragment no longer paints `textLoad1min` twice per frame** — two identical `setTextColor(when { … })` blocks (lines 495-499 and 501-506) ran back-to-back on every metrics tick; the second was exact dead code with the same comment and same branches, removed it
