@@ -13,7 +13,9 @@ import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.ui.adapters.AuditLogAdapter
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Activity to view audit log history
@@ -220,26 +222,35 @@ class AuditLogViewerActivity : AppCompatActivity() {
             try {
                 val logs = app.database.auditLogDao().getRecent(1000)
                 
-                // Create CSV content
+                // Build RFC-4180 compliant CSV. Every field is quoted and any
+                // embedded double-quotes are doubled — otherwise a command or
+                // output that contains '"' would terminate the field early and
+                // produce an unparseable file.
+                fun csvField(value: String?): String {
+                    val v = value ?: ""
+                    return "\"" + v.replace("\"", "\"\"") + "\""
+                }
                 val csv = buildString {
                     append("Timestamp,Connection,Session,EventType,Command,Output\n")
                     logs.forEach { log ->
-                        append("${log.timestamp},")
-                        append("${log.connectionId},")
-                        append("${log.sessionId},")
-                        append("${log.eventType},")
-                        append("\"${log.command ?: ""}\",")
-                        append("\"${log.output ?: ""}\"\n")
+                        append(csvField(log.timestamp.toString())).append(",")
+                        append(csvField(log.connectionId)).append(",")
+                        append(csvField(log.sessionId)).append(",")
+                        append(csvField(log.eventType)).append(",")
+                        append(csvField(log.command)).append(",")
+                        append(csvField(log.output)).append("\n")
                     }
                 }
-                
-                // Save to file
+
                 val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
                     .format(java.util.Date())
                 val filename = "audit_logs_$timestamp.csv"
-                
-                val file = java.io.File(getExternalFilesDir(null), filename)
-                file.writeText(csv)
+
+                // Disk write off Main — a few thousand rows can take noticeable
+                // time on cheap eMMC.
+                withContext(Dispatchers.IO) {
+                    java.io.File(getExternalFilesDir(null), filename).writeText(csv)
+                }
                 
                 android.widget.Toast.makeText(
                     this@AuditLogViewerActivity,

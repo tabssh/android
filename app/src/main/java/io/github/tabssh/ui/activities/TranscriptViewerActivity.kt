@@ -100,9 +100,26 @@ class TranscriptViewerActivity : AppCompatActivity() {
             .setTitle("Delete Transcript")
             .setMessage("Delete ${transcript.name}?")
             .setPositiveButton("Delete") { _, _ ->
-                if (TranscriptManager.deleteTranscript(transcript)) {
-                    android.widget.Toast.makeText(this, "Transcript deleted", android.widget.Toast.LENGTH_SHORT).show()
-                    loadTranscripts()
+                // File deletion runs off Main — TranscriptManager.deleteTranscript
+                // walks the filesystem and can block on slow storage.
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val ok = TranscriptManager.deleteTranscript(transcript)
+                    withContext(Dispatchers.Main) {
+                        if (ok) {
+                            android.widget.Toast.makeText(
+                                this@TranscriptViewerActivity,
+                                "Transcript deleted",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                            loadTranscripts()
+                        } else {
+                            android.widget.Toast.makeText(
+                                this@TranscriptViewerActivity,
+                                "Failed to delete transcript",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
                 }
             }
             .setNegativeButton("Cancel", null)

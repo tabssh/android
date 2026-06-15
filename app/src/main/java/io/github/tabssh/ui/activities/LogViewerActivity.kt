@@ -12,7 +12,9 @@ import androidx.recyclerview.widget.RecyclerView
 import io.github.tabssh.R
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.replaceAllWithDiff
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
@@ -126,19 +128,20 @@ class LogViewerActivity : AppCompatActivity() {
     private fun loadLogs() {
         lifecycleScope.launch {
             try {
-                val collected = mutableListOf<LogEntry>()
-
-                // Read from log file if it exists
-                val logFile = File(filesDir, "tabssh.log")
-                if (logFile.exists()) {
-                    logFile.readLines().forEach { line ->
-                        parseLogLine(line)?.let { collected.add(it) }
+                // Disk reads must be off Main — readLines() on a multi-MB
+                // tabssh.log on slow flash would block the UI thread.
+                val collected = withContext(Dispatchers.IO) {
+                    val acc = mutableListOf<LogEntry>()
+                    val logFile = File(filesDir, "tabssh.log")
+                    if (logFile.exists()) {
+                        logFile.useLines { seq ->
+                            seq.forEach { line ->
+                                parseLogLine(line)?.let { acc.add(it) }
+                            }
+                        }
                     }
-                }
-
-                // Also get recent in-memory logs from Logger
-                Logger.getRecentLogs().forEach { log ->
-                    collected.add(log)
+                    Logger.getRecentLogs().forEach { acc.add(it) }
+                    acc
                 }
 
                 adapter.replaceAllWithDiff(
@@ -259,16 +262,20 @@ class LogViewerActivity : AppCompatActivity() {
                     .format(java.util.Date())
                 val filename = "tabssh_logs_$timestamp.txt"
                 
-                val file = File(getExternalFilesDir(null), filename)
-                file.writeText(buildString {
+                val payload = buildString {
                     append("TabSSH Application Logs\n")
                     append("Exported: $timestamp\n")
                     append("=".repeat(80) + "\n\n")
-                    
+
                     logEntries.forEach { log ->
                         append("${log.timestamp} [${log.level}] ${log.tag}: ${log.message}\n")
                     }
-                })
+                }
+                // File I/O off the main thread — writing a multi-MB log to
+                // external storage on the UI thread risked an ANR.
+                withContext(Dispatchers.IO) {
+                    File(getExternalFilesDir(null), filename).writeText(payload)
+                }
                 
                 android.widget.Toast.makeText(
                     this@LogViewerActivity,

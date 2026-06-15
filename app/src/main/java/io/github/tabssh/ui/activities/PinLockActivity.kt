@@ -47,7 +47,23 @@ class PinLockActivity : AppCompatActivity() {
         const val MODE_VERIFY = "verify"
         const val PREF_PIN_HASH = "app_lock_pin_hash"
         const val PREF_PIN_ENABLED = "app_lock_enabled"
+        // Failed-attempt counter is persisted so a brute-force attacker can't
+        // simply rotate the activity (rotate device / kill task) to reset it.
+        private const val PREF_PIN_FAIL_COUNT = "app_lock_pin_fail_count"
         private const val MAX_ATTEMPTS = 5
+
+        /**
+         * Constant-time comparison of two SHA-256 hex strings — short-circuit
+         * equality on the PIN hash would leak whether the first byte matched
+         * via timing. Strings are already fixed length (64 hex chars) so a
+         * length mismatch fails fast and is not a timing concern.
+         */
+        private fun constantTimeEquals(a: String, b: String): Boolean {
+            if (a.length != b.length) return false
+            var diff = 0
+            for (i in a.indices) diff = diff or (a[i].code xor b[i].code)
+            return diff == 0
+        }
 
         fun verifyIntent(context: Context): Intent =
             Intent(context, PinLockActivity::class.java).putExtra(EXTRA_MODE, MODE_VERIFY)
@@ -74,6 +90,11 @@ class PinLockActivity : AppCompatActivity() {
         window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         app = application as TabSSHApplication
         mode = intent.getStringExtra(EXTRA_MODE) ?: MODE_VERIFY
+        // Restore the persisted failed-attempt count so a relaunch can't reset
+        // the brute-force budget. MODE_SET starts fresh.
+        attempts = if (mode == MODE_VERIFY)
+            app.preferencesManager.getInt(PREF_PIN_FAIL_COUNT, 0)
+        else 0
 
         // Modern back-press: in MODE_VERIFY we eat the back press
         // (don't let the user dismiss the gate); otherwise let the
@@ -157,9 +178,11 @@ class PinLockActivity : AppCompatActivity() {
             status.text = "PINs didn't match. Start over."
             return
         }
-        // Match — persist.
+        // Match — persist. Also reset the failed-attempt counter; setting a
+        // new PIN should give the user a full retry budget on next unlock.
         app.preferencesManager.setString(PREF_PIN_HASH, hashPin(pin))
         app.preferencesManager.setBoolean(PREF_PIN_ENABLED, true)
+        app.preferencesManager.setInt(PREF_PIN_FAIL_COUNT, 0)
         Toast.makeText(this, "App lock PIN set", Toast.LENGTH_SHORT).show()
         Logger.i(TAG, "PIN configured")
         setResult(Activity.RESULT_OK)
@@ -175,12 +198,21 @@ class PinLockActivity : AppCompatActivity() {
             finish()
             return
         }
-        if (hashPin(pin) == expected) {
+        if (constantTimeEquals(hashPin(pin), expected)) {
+            // Successful unlock clears the persisted fail counter so a future
+            // session starts fresh.
+            app.preferencesManager.setInt(PREF_PIN_FAIL_COUNT, 0)
+            attempts = 0
             setResult(Activity.RESULT_OK)
             finish()
             return
         }
-        attempts++
+        // Persist the attempt counter so killing/relaunching the activity does
+        // not reset the brute-force budget — load → increment → store on every
+        // failed entry.
+        val persisted = app.preferencesManager.getInt(PREF_PIN_FAIL_COUNT, 0) + 1
+        app.preferencesManager.setInt(PREF_PIN_FAIL_COUNT, persisted)
+        attempts = persisted
         pinInput.setText("")
         if (attempts >= MAX_ATTEMPTS) {
             status.text = "Too many wrong attempts."

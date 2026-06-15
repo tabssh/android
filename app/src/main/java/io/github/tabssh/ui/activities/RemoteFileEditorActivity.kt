@@ -61,6 +61,10 @@ class RemoteFileEditorActivity : AppCompatActivity() {
     private var remotePath: String = ""
     private var dirty: Boolean = false
     private var originalText: String = ""
+    // Guard against double-save: tapping the Save action twice before the first
+    // upload completes would race two concurrent SFTP writes against the same
+    // path and overwrite the second with whatever finished last.
+    private var isSaving: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -155,7 +159,7 @@ class RemoteFileEditorActivity : AppCompatActivity() {
     }
 
     override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        menu.findItem(1)?.isEnabled = dirty
+        menu.findItem(1)?.isEnabled = dirty && !isSaving
         return super.onPrepareOptionsMenu(menu)
     }
 
@@ -249,6 +253,14 @@ class RemoteFileEditorActivity : AppCompatActivity() {
 
     private fun saveFile(onComplete: (() -> Unit)? = null) {
         val mgr = sftp ?: return
+        // Reject re-entry while an upload is already in flight — otherwise two
+        // concurrent uploads race and the second clobbers the first.
+        if (isSaving) {
+            Toast.makeText(this, "Save already in progress…", Toast.LENGTH_SHORT).show()
+            return
+        }
+        isSaving = true
+        invalidateOptionsMenu()
         val text = editor.text?.toString().orEmpty()
         val tmpFile = File(cacheDir, "save_${System.currentTimeMillis()}_${File(remotePath).name}")
         progress.visibility = android.view.View.VISIBLE
@@ -288,6 +300,10 @@ class RemoteFileEditorActivity : AppCompatActivity() {
                 }
             } finally {
                 tmpFile.delete()
+                runOnUiThread {
+                    isSaving = false
+                    invalidateOptionsMenu()
+                }
             }
         }
     }

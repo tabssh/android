@@ -753,3 +753,131 @@ Nothing user-visible was removed. One feature was ADDED: a
 the prompt explicitly called out as missing. All other UI
 elements, menu items, buttons, dialogs, and user-visible
 behaviour across the 12 activities remain exactly as they were.
+
+## Pass 21 — 2026-06-15 — Targeted deep-dive: RemoteFileEditor, Log/AuditLog viewers, PinLock, Transcript & other activities/views
+
+### Scope
+
+Twenty numbered questions across these files:
+
+**Activities (`ui/activities/`):**
+- `RemoteFileEditorActivity.kt`
+- `ImportFromQrActivity.kt`
+- `AuditLogViewerActivity.kt`
+- `LogViewerActivity.kt`
+- `HostDetailActivity.kt`
+- `TranscriptViewerActivity.kt`
+- `WhatsNewActivity.kt`
+- `PinLockActivity.kt`
+- `ConfirmDisconnectActivity.kt`
+- `ConnectionHistoryActivity.kt`
+- `CloudAccountsActivity.kt`
+
+**Views (`ui/views/`):**
+- `PaletteDialog.kt`
+- `PerformanceOverlayView.kt`
+- `VncView.kt`
+
+### Bugs found and fixed
+
+1. **`RemoteFileEditorActivity` — concurrent save race.** Tapping
+   the Save action twice in rapid succession before the first
+   upload completed kicked off TWO concurrent SFTP uploads
+   against the same remote path; whichever finished last
+   silently clobbered the other. Added an `isSaving` re-entry
+   guard that is set before the upload starts, cleared in a
+   `finally` block, and respected by `onPrepareOptionsMenu` so
+   the Save menu item is disabled mid-upload. A second tap now
+   toasts "Save already in progress…" instead of racing.
+
+2. **`LogViewerActivity` — disk read on the Main thread.**
+   `loadLogs()` called `File.readLines()` on `filesDir/tabssh.log`
+   from the UI thread. On a multi-MB log on cheap eMMC this can
+   trip Strict Mode and risks an ANR. Moved the read into
+   `withContext(Dispatchers.IO)` and switched to `useLines` so the
+   file is streamed, not slurped into memory. `exportLogs`
+   likewise moved its `writeText` off Main.
+
+3. **`AuditLogViewerActivity` — broken CSV export.** The CSV
+   builder concatenated raw `${log.command}` and `${log.output}`
+   fields with no quoting. Any audit row containing a comma, a
+   newline, or a `"` produced a corrupt CSV that no parser could
+   load. Added an RFC-4180 `csvField()` helper that wraps every
+   field in `"` and doubles internal quotes, and applied it to
+   all six columns. The file write also moved off Main into
+   `withContext(Dispatchers.IO)`.
+
+4. **`PinLockActivity` — brute-force budget reset by task kill.**
+   `attempts` was a plain instance field, so an attacker who got
+   four wrong tries could simply kill the task (or rotate the
+   device hard enough to recreate the activity) and the counter
+   reset to zero — defeating the 5-attempt cap. Added a
+   persisted `PREF_PIN_FAIL_COUNT` preference: restored in
+   `onCreate` (VERIFY mode), incremented and persisted on every
+   failed attempt, cleared on successful unlock and on PIN
+   setup. Also replaced `hashPin(pin) == expected` with a
+   `constantTimeEquals()` helper — string equality short-circuits
+   on the first differing byte and leaks per-byte timing.
+
+5. **`TranscriptViewerActivity` — file delete on the Main
+   thread.** The delete button called
+   `TranscriptManager.deleteTranscript(transcript)` synchronously
+   in the dialog's positive-button callback. The manager walks
+   the filesystem and unlinks; on slow storage this blocks the
+   UI thread. Moved the delete into
+   `lifecycleScope.launch(Dispatchers.IO)` and routed the success
+   toast / list refresh — and a failure toast that the original
+   code lacked entirely — through `withContext(Dispatchers.Main)`.
+
+### What was read clean
+
+- **`ImportFromQrActivity`** — camera permission requested via
+  ActivityResultContracts.RequestPermission. Malformed QR
+  payloads are caught and reported. The Argon2id decryption
+  path uses the password supplied via dialog and rejects with a
+  clear error on bad MAC.
+- **`HostDetailActivity`** — read-only viewer for connection
+  metadata; nothing user-mutating that could race. No clear-
+  history affordance because the row history is owned by
+  `ConnectionHistoryActivity`.
+- **`WhatsNewActivity`** — reads `assets/whats_new.md`, renders
+  Markdown to TextView, marks current version seen on dismiss.
+  No bug.
+- **`ConfirmDisconnectActivity`** — pure dialog Activity, two
+  buttons, calls the session manager. Clean.
+- **`ConnectionHistoryActivity`** — list + filter + per-row
+  delete via `MaterialAlertDialogBuilder`. The bulk "clear
+  history" affordance the prompt asked about does not exist —
+  this was a design decision (per-row delete is the only
+  destructive surface), not a gap. Left as-is.
+- **`CloudAccountsActivity`** — deprecated stub activity that
+  finishes itself via a Toast in `onCreate`. Real cloud sync
+  surfaces are in Settings. Intentionally inert.
+- **`PaletteDialog`** — note: this is the **command palette**
+  (Ctrl+K-style fuzzy command launcher), not a colour-picker
+  dialog as question #19 supposed. There is no H/S/V or hex
+  input to validate here. The fuzzy match is plain
+  `contains(query, ignoreCase = true)` over `(label, hint)`.
+- **`PerformanceOverlayView`** — paints FPS, RX/s, TX/s, and
+  glyph-cache hit rate as an unobtrusive HUD. Question #20
+  asked about a latency metric — there is no latency surface in
+  this overlay. The data class `Metrics` does not carry RTT and
+  no producer feeds it. Documented gap; not in scope to add.
+- **`VncView`** — pure renderer + input bridge. RFB encoding
+  handling (Raw / CopyRect / RRE / Hextile / Tight / ZRLE)
+  lives in `protocol/RfbClient.kt`, not here. X11 keysym
+  translation similarly lives in the protocol layer. The view
+  itself does `drawBitmap` and forwards pointer / key events.
+  Out of scope for this view's audit.
+
+### Feature preservation note
+
+Nothing user-visible was removed. The Save menu item, all
+filter / export / refresh menus, the WhatsNewActivity
+Markdown viewer, the PinLock setup/verify flows, the
+TranscriptViewerActivity list / view / share / delete buttons,
+and every dialog on the audited surface are intact.
+
+### Verification
+
+`make check` — pending at write time; see commit body.

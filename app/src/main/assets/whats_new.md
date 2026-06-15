@@ -1,5 +1,37 @@
 # What's New
 
+## Wave 58 — Editor / log viewer / PIN lock audit
+
+- **Remote file editor no longer double-saves the same file** —
+  tapping the Save action twice in quick succession used to fire
+  two concurrent uploads against the same path, with whichever
+  finished last silently clobbering the other. The Save menu
+  item now disables itself while an upload is in flight, and a
+  second tap shows "Save already in progress…" instead of
+  racing.
+- **Application Logs and Audit Logs no longer freeze the UI on
+  large logs** — opening the Application Logs viewer used to read
+  the entire `tabssh.log` file on the UI thread, which on slow
+  storage could stutter or trigger an Application Not Responding
+  warning. Both the log read and the export-to-file write now run
+  in the background and stream the file line-by-line.
+- **Exported Audit Log CSV files are now correctly quoted** —
+  the CSV exporter wrote unquoted fields, so any command or
+  output containing a comma, a newline, or a double-quote
+  produced a corrupt file that no spreadsheet could open
+  cleanly. Every field is now wrapped in quotes and internal
+  quotes are doubled as the CSV standard requires.
+- **PIN lock brute-force budget now survives force-stop** — the
+  failed-attempt counter used to live in memory, so anyone who
+  burned four wrong guesses could simply kill the app to reset
+  the budget. The count is now saved to disk and restored when
+  the lock screen reopens, and a successful unlock or a fresh
+  PIN setup clears it.
+- **Deleting a session transcript no longer briefly freezes the
+  list** — transcript delete used to walk the filesystem on the
+  UI thread; it now runs in the background and reports success
+  or failure when it finishes.
+
 ## Wave 57 — Activities deep-dive audit
 
 - **Keyboard Layout Editor now has a "Reset to default"
