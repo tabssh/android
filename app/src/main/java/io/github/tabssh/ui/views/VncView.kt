@@ -202,11 +202,8 @@ class VncView @JvmOverloads constructor(
         }
 
         override fun onClipboardText(text: String) {
-            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE)
-                as android.content.ClipboardManager
-            clipboard.setPrimaryClip(
-                android.content.ClipData.newPlainText("VNC clipboard", text)
-            )
+            // Route through ClipboardHelper so VNC server clipboard events cancel any pending sensitive clear.
+            io.github.tabssh.utils.ClipboardHelper.copy(context, label = "VNC clipboard", text = text, sensitive = false)
         }
 
         override fun onError(message: String) {

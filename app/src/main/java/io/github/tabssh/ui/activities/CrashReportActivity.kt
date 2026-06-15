@@ -1,7 +1,5 @@
 package io.github.tabssh.ui.activities
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Intent
 import android.os.Bundle
 import android.widget.TextView
@@ -68,8 +66,8 @@ class CrashReportActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.text_stacktrace).text = stackTrace
 
         findViewById<MaterialButton>(R.id.btn_copy).setOnClickListener {
-            val cm = getSystemService(ClipboardManager::class.java)
-            cm?.setPrimaryClip(ClipData.newPlainText("Crash", stackTrace))
+            // Route through ClipboardHelper so a crash-report copy cancels any pending sensitive clear.
+            io.github.tabssh.utils.ClipboardHelper.copy(this, label = "Crash", text = stackTrace, sensitive = false)
             Toast.makeText(this, "Copied to clipboard", Toast.LENGTH_SHORT).show()
         }
 

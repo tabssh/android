@@ -367,10 +367,8 @@ class SnippetManagerActivity : AppCompatActivity() {
         // Show toast
         Toast.makeText(this, "Snippet copied: ${snippet.name}", Toast.LENGTH_SHORT).show()
         
-        // Copy to clipboard
-        val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        val clip = android.content.ClipData.newPlainText("Snippet", snippet.command)
-        clipboard.setPrimaryClip(clip)
+        // Route through ClipboardHelper so a snippet copy cancels any pending sensitive clear.
+        io.github.tabssh.utils.ClipboardHelper.copy(this, label = "Snippet", text = snippet.command, sensitive = false)
     }
 
     override fun onSupportNavigateUp(): Boolean {

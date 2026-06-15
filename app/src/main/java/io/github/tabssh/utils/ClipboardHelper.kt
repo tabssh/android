@@ -10,67 +10,129 @@ import androidx.preference.PreferenceManager
 import io.github.tabssh.utils.logging.Logger
 
 /**
- * Centralized clipboard writer with optional auto-clear.
+ * Centralized clipboard writer with sensitive-only auto-clear.
  *
- * The `security_clear_clipboard_timeout` pref (seconds; 0 = never)
- * lets users wipe whatever was copied from the terminal after a delay,
- * so a stray screenshot or another app peeking at the clipboard later
- * can't recover it. Only the *current* primary clip is cleared, and
- * only if it still matches what we wrote — so if the user copied
- * something else in the meantime we leave their clipboard alone.
+ * ## Sensitive vs non-sensitive copies
  *
- * On API 33+ we also set the "sensitive content" extra so the system
- * doesn't surface the value in clipboard preview chips.
+ * Pass `sensitive = true` only for content the user explicitly asked to copy
+ * from TabSSH's own credential surfaces (passwords, private key passphrases,
+ * etc.). Terminal text selections, snippets, URLs, crash reports, and log
+ * content are all `sensitive = false`.
+ *
+ * ## Auto-clear (sensitive only)
+ *
+ * When `security_clear_clipboard_timeout` is set to N seconds and
+ * `sensitive = true`, a delayed runnable is posted to clear the clip after N
+ * seconds. The runnable verifies the clip description label still matches the
+ * unique token we stamped at write time before clearing — so:
+ *
+ * - Another app (browser, notes, etc.) writing to the clipboard after us
+ *   produces a different label → we leave it alone.
+ * - A subsequent non-sensitive copy via this helper cancels the pending clear
+ *   immediately, so we never wipe content the user intentionally copied.
+ *
+ * The token is embedded in the `ClipDescription.label` field, which is
+ * readable by any app but is not surfaced to users in any Android UI. It does
+ * not leak the secret value — only a non-guessable identifier that lets us
+ * claim ownership.
+ *
+ * On API 33+ the `IS_SENSITIVE` extra is set so the system hides the value
+ * from IME clipboard previews and suggestion chips.
  */
 object ClipboardHelper {
 
     private val handler = Handler(Looper.getMainLooper())
     private var pendingClear: Runnable? = null
 
-    fun copy(context: Context, label: String, text: String, sensitive: Boolean = true) {
-        // Use applicationContext for the system service AND the delayed clear
-        // runnable so we never retain an Activity context past the timeout
-        // window (configurable up to minutes). Activities passed in here are
-        // often callers from terminal views and would otherwise leak via the
-        // Handler queue.
+    private const val SENSITIVE_LABEL_PREFIX = "tabssh-secure-"
+
+    // Label we stamped on the last sensitive clip; null when no sensitive clip is pending.
+    private var lastSensitiveLabel: String? = null
+
+    /**
+     * Copy [text] to the system clipboard.
+     *
+     * @param label Human-readable label for non-sensitive clips (shown in some
+     *              system clipboard UIs). Ignored for sensitive clips — the
+     *              label is replaced with an internal ownership token.
+     * @param sensitive When true, schedules auto-clear and marks the clip as
+     *                  sensitive on API 33+. Use only for passwords and other
+     *                  app-originated credentials, not for terminal output or
+     *                  general text.
+     */
+    fun copy(context: Context, label: String, text: String, sensitive: Boolean = false) {
+        // Use applicationContext so we never retain an Activity context across
+        // the potentially multi-minute auto-clear window.
         val appCtx = context.applicationContext
         try {
             val cm = appCtx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            val clip = ClipData.newPlainText(label, text)
+
+            val clipLabel: String
+            if (sensitive) {
+                // Stamp a unique token into the clip label so we can prove we
+                // were the last writer when the auto-clear fires. If the user
+                // or another app wrote anything after us the label won't match
+                // and we leave the clipboard alone.
+                val token = java.util.UUID.randomUUID().toString()
+                clipLabel = "$SENSITIVE_LABEL_PREFIX$token"
+                lastSensitiveLabel = clipLabel
+            } else {
+                // Non-sensitive write: cancel any pending clear immediately so
+                // we never auto-wipe content the user just intentionally copied.
+                cancelPendingClear()
+                clipLabel = label
+            }
+
+            val clip = ClipData.newPlainText(clipLabel, text)
             if (sensitive && Build.VERSION.SDK_INT >= 33) {
                 clip.description.extras = android.os.PersistableBundle().apply {
                     putBoolean("android.content.extra.IS_SENSITIVE", true)
                 }
             }
             cm.setPrimaryClip(clip)
-            scheduleClearIfRequested(appCtx, text)
+
+            if (sensitive) {
+                scheduleClearIfRequested(appCtx, clipLabel)
+            }
         } catch (e: Exception) {
             Logger.w("ClipboardHelper", "copy failed: ${e.message}")
         }
     }
 
-    private fun scheduleClearIfRequested(context: Context, justCopied: String) {
+    private fun cancelPendingClear() {
+        pendingClear?.let { handler.removeCallbacks(it) }
+        pendingClear = null
+        lastSensitiveLabel = null
+    }
+
+    private fun scheduleClearIfRequested(context: Context, sensitiveLabel: String) {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
-        val timeoutStr = prefs.getString("security_clear_clipboard_timeout", "0") ?: "0"
-        val timeoutSec = timeoutStr.toIntOrNull() ?: 0
+        val timeoutSec = prefs.getString("security_clear_clipboard_timeout", "0")
+            ?.toIntOrNull() ?: 0
         if (timeoutSec <= 0) return
 
-        // Only one pending clear at a time — newest wins.
+        // Cancel any previously-scheduled clear; newest sensitive copy wins.
         pendingClear?.let { handler.removeCallbacks(it) }
+
         val task = Runnable {
+            pendingClear = null
             try {
                 val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val current = cm.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString()
-                if (current == justCopied) {
-                    // clearPrimaryClip() (API 28+) removes the clip silently.
-                    // setPrimaryClip(empty) triggers the Android 13+ system
-                    // "Text copied" popup even for blank content, so we avoid it.
+                // Verify ownership by label — NOT by content. Content-matching would
+                // incorrectly wipe a clip another app wrote with the same text.
+                val currentLabel = cm.primaryClip?.description?.label?.toString()
+                if (currentLabel == sensitiveLabel) {
+                    // clearPrimaryClip() (API 28+) removes the clip without triggering
+                    // the Android 13+ "Text copied" system popup that setPrimaryClip("")
+                    // would produce.
                     if (Build.VERSION.SDK_INT >= 28) {
                         cm.clearPrimaryClip()
                     } else {
                         cm.setPrimaryClip(ClipData.newPlainText("", ""))
                     }
-                    Logger.d("ClipboardHelper", "Auto-cleared clipboard after ${timeoutSec}s")
+                    Logger.d("ClipboardHelper", "Auto-cleared sensitive clipboard after ${timeoutSec}s")
+                } else {
+                    Logger.d("ClipboardHelper", "Clipboard changed since sensitive copy — not clearing (external write detected)")
                 }
             } catch (e: Exception) {
                 Logger.w("ClipboardHelper", "auto-clear failed: ${e.message}")

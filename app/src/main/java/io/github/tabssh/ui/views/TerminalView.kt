@@ -2529,7 +2529,7 @@ class TerminalView @JvmOverloads constructor(
             val copyOnSelect = prefs.getBoolean("terminal_copy_on_select", true)
             if (copyOnSelect) {
                 io.github.tabssh.utils.ClipboardHelper.copy(
-                    context, label = "Selected Text", text = word, sensitive = true
+                    context, label = "Selected Text", text = word, sensitive = false
                 )
             }
             Logger.d("TerminalView", "Double-tap selected word: $word (copied=$copyOnSelect)")
