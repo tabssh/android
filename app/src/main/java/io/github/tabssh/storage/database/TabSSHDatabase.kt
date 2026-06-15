@@ -13,9 +13,14 @@ import io.github.tabssh.utils.logging.Logger
 /**
  * Main Room database for TabSSH.
  *
- * Current version: 3 (all alpha installs were reset at v3; data is now preserved across updates).
- * Every future version bump MUST include a corresponding Migration object
- * registered via addMigrations() — do NOT add fallbackToDestructiveMigration.
+ * Current version: 3.
+ * Versions 1 and 2 never shipped with persisted user data (alpha installs were
+ * wiped on every upgrade before v3 stabilised). To avoid an IllegalStateException
+ * at first open on any leftover v1/v2 install, those versions use
+ * `fallbackToDestructiveMigrationFrom(1, 2)` — they will be re-created on first
+ * open after upgrade. From v3 onward every version bump MUST register a real
+ * Migration object via addMigrations(); never add additional destructive
+ * fallbacks to that list once real user data is in play.
  */
 @Database(
     entities = [
@@ -80,6 +85,9 @@ abstract class TabSSHDatabase : RoomDatabase() {
                 )
                 .addCallback(DatabaseCallback())
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
+                // Pre-v3 alpha installs were wiped on every upgrade — see kdoc.
+                // Real migrations must be added here for every bump from v3 onward.
+                .fallbackToDestructiveMigrationFrom(1, 2)
                 .build()
                 INSTANCE = instance
                 instance

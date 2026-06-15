@@ -70,12 +70,17 @@ class SecurePasswordManager(private val context: Context) {
     // SupervisorJob so a failed biometric coroutine doesn't cancel siblings.
     private val managerScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
-    // Security policy settings
+    // Security policy settings.
+    //
+    // `defaultStorageLevel` is the only field actually consulted at runtime —
+    // it selects whether savePassword() falls back to SESSION_ONLY when the
+    // Keystore is unavailable. The other policy knobs from a prior design
+    // (TTL, biometric-required, failed-attempt limit, auto-delete) were never
+    // wired into any read path; they are accepted by setSecurityPolicy() for
+    // API/test compatibility but otherwise ignored. Persisted policy lives in
+    // PreferenceManager (e.g. passwordTTLHours) — that is the source of truth
+    // consumed by the rest of the app.
     private var defaultStorageLevel = StorageLevel.ENCRYPTED
-    private var passwordTTL = 24 * 60 * 60 * 1000L // 24 hours
-    private var requireBiometricForSensitive = true
-    private var maxFailedAttempts = 3
-    private var autoDeleteOnFailure = true
     
     private var isInitialized = false
     
@@ -544,8 +549,14 @@ class SecurePasswordManager(private val context: Context) {
     }
     
     /**
-     * Set security policy
+     * Set security policy.
+     *
+     * Only `defaultLevel` is honoured at runtime — the remaining parameters are
+     * accepted for API stability (callers and tests pass them) but have no
+     * runtime effect here. Persist policy in `PreferenceManager` instead so the
+     * rest of the app can read it.
      */
+    @Suppress("UNUSED_PARAMETER")
     fun setSecurityPolicy(
         defaultLevel: StorageLevel = StorageLevel.ENCRYPTED,
         passwordTTLHours: Int = 24,
@@ -554,12 +565,7 @@ class SecurePasswordManager(private val context: Context) {
         autoDelete: Boolean = true
     ) {
         defaultStorageLevel = defaultLevel
-        passwordTTL = passwordTTLHours * 60 * 60 * 1000L
-        requireBiometricForSensitive = requireBiometric
-        maxFailedAttempts = maxAttempts
-        autoDeleteOnFailure = autoDelete
-        
-        Logger.d("SecurePasswordManager", "Security policy updated: level=$defaultLevel, ttl=${passwordTTLHours}h")
+        Logger.d("SecurePasswordManager", "Security policy updated: level=$defaultLevel (other knobs ignored — see PreferenceManager)")
     }
     
     /**

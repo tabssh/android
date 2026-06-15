@@ -19,9 +19,11 @@ enum class KeyType(
     ),
     
     DSA(
-        algorithmName = "DSA", 
+        algorithmName = "DSA",
         defaultKeySize = 2048,
-        supportedKeySizes = listOf(1024, 2048, 3072),
+        // 1024-bit DSA is cryptographically broken (~80-bit security) and is
+        // rejected by current OpenSSH; we expose 2048+ only.
+        supportedKeySizes = listOf(2048, 3072),
         description = "DSA keys - legacy, not recommended",
         securityLevel = SecurityLevel.LEGACY
     ),

@@ -17,9 +17,6 @@ import java.security.*
 import java.security.interfaces.ECPublicKey
 import java.security.interfaces.RSAPublicKey
 import java.security.spec.ECGenParameterSpec
-import javax.crypto.Cipher
-import javax.crypto.spec.IvParameterSpec
-import javax.crypto.spec.SecretKeySpec
 
 /**
  * SSH key generator supporting all major key types
@@ -233,7 +230,18 @@ object SSHKeyGenerator {
     }
 
     /**
-     * Export key pair in OpenSSH private key format
+     * Export key pair in OpenSSH private key format.
+     *
+     * Passphrase-protected export: the OpenSSH v1 binary format requires
+     * `bcrypt_pbkdf` key derivation, which we do not ship a verified
+     * implementation of. To avoid producing files that look correct in the
+     * `aes256-cbc`/`kdf=bcrypt` header but are unreadable by every other SSH
+     * client, an encrypted export is automatically routed through the
+     * standard PKCS#8 PEM path (handled by BouncyCastle's
+     * `JcePEMEncryptorBuilder`, which produces an OpenSSL-compatible
+     * `-----BEGIN ENCRYPTED PRIVATE KEY-----` PEM that OpenSSH, PuTTY,
+     * and ssh-keygen all read natively). Unencrypted export stays on the
+     * native OpenSSH v1 binary path.
      */
     fun exportOpenSSHPrivateKey(
         privateKey: PrivateKey,
@@ -241,30 +249,21 @@ object SSHKeyGenerator {
         comment: String = "",
         passphrase: String? = null
     ): String {
+        if (!passphrase.isNullOrEmpty()) {
+            // PEM-encrypted PKCS#8 — BouncyCastle's JcePEMEncryptorBuilder
+            // produces output OpenSSH reads natively.
+            return exportPrivateKeyPEM(privateKey, passphrase)
+        }
         val buffer = java.io.ByteArrayOutputStream()
 
         // Magic bytes
         buffer.write("openssh-key-v1\u0000".toByteArray(StandardCharsets.UTF_8))
 
-        // Cipher name
-        val cipherName = if (passphrase != null && passphrase.isNotEmpty()) "aes256-cbc" else "none"
-        writeString(buffer, cipherName.toByteArray(StandardCharsets.UTF_8))
-
-        // KDF name
-        val kdfName = if (passphrase != null && passphrase.isNotEmpty()) "bcrypt" else "none"
-        writeString(buffer, kdfName.toByteArray(StandardCharsets.UTF_8))
-
-        // KDF options (salt + rounds for bcrypt)
-        if (passphrase != null && passphrase.isNotEmpty()) {
-            val kdfOptions = java.io.ByteArrayOutputStream()
-            val salt = ByteArray(16)
-            SecureRandom().nextBytes(salt)
-            writeString(kdfOptions, salt)
-            kdfOptions.write(ByteBuffer.allocate(4).putInt(16).array()) // rounds
-            writeString(buffer, kdfOptions.toByteArray())
-        } else {
-            writeString(buffer, ByteArray(0))
-        }
+        // Unencrypted export only — encrypted exports are routed to the PEM
+        // branch above. cipher / kdf / kdf-options are therefore all "none" / empty.
+        writeString(buffer, "none".toByteArray(StandardCharsets.UTF_8))
+        writeString(buffer, "none".toByteArray(StandardCharsets.UTF_8))
+        writeString(buffer, ByteArray(0))
 
         // Number of keys
         buffer.write(ByteBuffer.allocate(4).putInt(1).array())
@@ -273,14 +272,9 @@ object SSHKeyGenerator {
         val publicKeyBytes = encodePublicKeyForOpenSSH(publicKey)
         writeString(buffer, publicKeyBytes)
 
-        // Private key section
+        // Private key section (unencrypted — see kdoc).
         val privateKeySection = encodePrivateKeySectionForOpenSSH(privateKey, publicKey, comment)
-        val encryptedPrivateKey = if (passphrase != null && passphrase.isNotEmpty()) {
-            encryptOpenSSHPrivateKey(privateKeySection, passphrase)
-        } else {
-            privateKeySection
-        }
-        writeString(buffer, encryptedPrivateKey)
+        writeString(buffer, privateKeySection)
 
         // Base64 encode the entire structure
         val encoded = Base64.encodeToString(buffer.toByteArray(), Base64.NO_WRAP)
@@ -429,21 +423,6 @@ object SSHKeyGenerator {
         }
 
         return buffer.toByteArray()
-    }
-
-    private fun encryptOpenSSHPrivateKey(data: ByteArray, passphrase: String): ByteArray {
-        // Simplified encryption - full implementation would use bcrypt KDF
-        val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding", "BC")
-        val keySpec = SecretKeySpec(passphrase.toByteArray().copyOf(32), "AES")
-        val iv = ByteArray(16)
-        SecureRandom().nextBytes(iv)
-        cipher.init(Cipher.ENCRYPT_MODE, keySpec, IvParameterSpec(iv))
-
-        val encrypted = cipher.doFinal(data)
-        val result = ByteArray(iv.size + encrypted.size)
-        System.arraycopy(iv, 0, result, 0, iv.size)
-        System.arraycopy(encrypted, 0, result, iv.size, encrypted.size)
-        return result
     }
 
     private fun encodeECPoint(point: java.security.spec.ECPoint, bitLength: Int): ByteArray {

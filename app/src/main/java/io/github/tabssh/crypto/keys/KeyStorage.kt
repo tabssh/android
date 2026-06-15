@@ -1008,35 +1008,15 @@ Error: ${e.javaClass.simpleName}: ${e.message}"""
     }
     
     private fun parsePuttyKey(keyContent: String, passphrase: String?): ParseResult {
-        // PuTTY key format (.ppk files) parsing
-        // Format contains: PuTTY-User-Key-File-2: ssh-rsa, Encryption, Comment, Public-Lines, Private-Lines, etc.
+        // Delegates to SSHKeyParser, which implements full .ppk v2 (SHA-1 KDF +
+        // HMAC-SHA1 MAC verification) and rejects v3 / Argon2-encrypted keys with
+        // a clear error.
         return try {
-            Logger.d("KeyStorage", "Parsing PuTTY private key format")
-
-            // PuTTY format is proprietary and complex
-            // It includes: key type, encryption type, comment, public key blob, private key blob, and MAC
-            // Full implementation would require:
-            // 1. Parse the structured text format
-            // 2. Decrypt private key if encrypted (using passphrase with AES-256-CBC)
-            // 3. Verify MAC
-            // 4. Reconstruct key pair
-
-            val lines = keyContent.lines()
-            val keyType = lines.find { it.startsWith("PuTTY-User-Key-File") }
-                ?.substringAfter(":")
-                ?.trim()
-
-            Logger.i("KeyStorage", "Detected PuTTY key type: $keyType")
-
-            // For now, provide helpful error with conversion instructions
-            ParseResult.Error(
-                "PuTTY key format not yet supported.\n" +
-                "Convert to OpenSSH format using PuTTYgen:\n" +
-                "1. Open PuTTYgen\n" +
-                "2. Load your .ppk file\n" +
-                "3. Conversions -> Export OpenSSH key\n" +
-                "OR use puttygen command: puttygen key.ppk -O private-openssh -o key_openssh"
-            )
+            Logger.d("KeyStorage", "Parsing PuTTY (.ppk) private key via SSHKeyParser")
+            val parsed = io.github.tabssh.crypto.SSHKeyParser.parse(keyContent, passphrase)
+            val privateKey = parsed.privateKey
+                ?: return ParseResult.Error("PuTTY key parse returned no private key")
+            ParseResult.Success(KeyPair(parsed.publicKey, privateKey), parsed.comment)
         } catch (e: Exception) {
             Logger.e("KeyStorage", "Failed to parse PuTTY key", e)
             ParseResult.Error("PuTTY key parsing failed: ${e.message}")
@@ -1135,18 +1115,15 @@ Error: ${e.javaClass.simpleName}: ${e.message}"""
     }
     
     /**
-     * Extract comment from PEM file content
+     * Extract a comment from PEM-encoded private key content.
+     *
+     * PEM (RFC 7468) has no standard comment convention — `#`-prefixed lines are
+     * not part of the format and were never written by ssh-keygen, openssl, or
+     * BouncyCastle. The previous implementation looked for `#` lines and would
+     * always return an empty string for real PEM keys. Return empty unconditionally;
+     * callers should populate the comment field from the file path or user input.
      */
-    private fun extractCommentFromPEM(pemContent: String): String {
-        // Look for comment lines in PEM (lines starting with #)
-        val lines = pemContent.lines()
-        val commentLines = lines.filter { it.trim().startsWith("#") }
-        return if (commentLines.isNotEmpty()) {
-            commentLines.joinToString(" ") { it.trim().removePrefix("#").trim() }
-        } else {
-            ""
-        }
-    }
+    private fun extractCommentFromPEM(pemContent: String): String = ""
     
     private fun formatPublicKey(publicKey: PublicKey, keyType: String, comment: String?): String {
         return try {

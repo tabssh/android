@@ -322,16 +322,39 @@ object SSHKeyParser {
             }
         }
 
-        val keyType = headers["PuTTY-User-Key-File-2"] ?: headers["PuTTY-User-Key-File-3"]
-            ?: throw IllegalArgumentException("Invalid PuTTY key format")
+        // V3 keys use Argon2 for KDF and a different MAC derivation; we don't ship
+        // an Argon2 implementation for the parser, so V3 is rejected here. V2 is
+        // fully supported.
+        val keyType: String
+        val puttyVersion: Int
+        when {
+            headers.containsKey("PuTTY-User-Key-File-2") -> {
+                keyType = headers["PuTTY-User-Key-File-2"]!!
+                puttyVersion = 2
+            }
+            headers.containsKey("PuTTY-User-Key-File-3") -> {
+                keyType = headers["PuTTY-User-Key-File-3"]!!
+                puttyVersion = 3
+            }
+            else -> throw IllegalArgumentException("Invalid PuTTY key format — missing PuTTY-User-Key-File-{2,3} header")
+        }
 
         val encryption = headers["Encryption"] ?: "none"
         val comment = headers["Comment"] ?: ""
+        val storedMac = headers["Private-MAC"]
+            ?: throw IllegalArgumentException("Invalid PuTTY key — missing Private-MAC header")
 
         val publicBlob = Base64.decode(publicLines.joinToString(""), Base64.DEFAULT)
         val privateBlob = Base64.decode(privateLines.joinToString(""), Base64.DEFAULT)
 
-        // Decrypt private blob if needed
+        if (puttyVersion == 3 && encryption != "none") {
+            throw IllegalArgumentException(
+                "Encrypted PuTTY v3 (.ppk v3) keys use Argon2 which is not supported on import. " +
+                "Re-export the key as unencrypted v3 or as PuTTY v2 from PuTTYgen."
+            )
+        }
+
+        // Decrypt private blob if needed (v2 only — v3 encrypted is rejected above).
         val decryptedPrivateBlob = if (encryption != "none") {
             if (passphrase == null) {
                 throw IllegalArgumentException("Passphrase required for encrypted key")
@@ -339,6 +362,29 @@ object SSHKeyParser {
             decryptPuTTYPrivateBlob(privateBlob, passphrase, encryption)
         } else {
             privateBlob
+        }
+
+        // Verify the Private-MAC before trusting the decrypted bytes. PuTTY v2 uses
+        // HMAC-SHA-1 with key = SHA-1("putty-private-key-file-mac-key" || passphrase).
+        // For v3, the MAC key is HMAC-SHA-256 derived via Argon2 — since v3 is plain
+        // here (encryption == none) the spec defines MAC key = empty-string SHA-256;
+        // we implement that branch directly.
+        if (puttyVersion == 2) {
+            val macInput = puttyV2MacInput(keyType, encryption, comment, publicBlob, decryptedPrivateBlob)
+            val macKey = sha1("putty-private-key-file-mac-key".toByteArray(StandardCharsets.UTF_8) +
+                (passphrase?.toByteArray(StandardCharsets.UTF_8) ?: ByteArray(0)))
+            val expected = hmacHex("HmacSHA1", macKey, macInput)
+            if (!constantTimeEquals(expected.lowercase(), storedMac.lowercase())) {
+                throw IllegalArgumentException("PuTTY key MAC verification failed — wrong passphrase or tampered key")
+            }
+        } else {
+            // v3 unencrypted: MAC key = SHA-256(empty), HMAC-SHA-256 over the same input layout.
+            val macInput = puttyV2MacInput(keyType, encryption, comment, publicBlob, decryptedPrivateBlob)
+            val macKey = java.security.MessageDigest.getInstance("SHA-256").digest(ByteArray(0))
+            val expected = hmacHex("HmacSHA256", macKey, macInput)
+            if (!constantTimeEquals(expected.lowercase(), storedMac.lowercase())) {
+                throw IllegalArgumentException("PuTTY v3 key MAC verification failed — tampered key")
+            }
         }
 
         // Parse based on key type
@@ -639,55 +685,101 @@ object SSHKeyParser {
         }
     }
 
-    // Simple bcrypt_pbkdf implementation (OpenSSH KDF)
+    // bcrypt_pbkdf is intentionally unimplemented.
+    //
+    // OpenSSH's bcrypt_pbkdf uses a custom 32-byte bcrypt-hash core
+    // ("OxychromaticBlowfishSwatDynamite" magic, little-endian output) that
+    // BouncyCastle 1.79 does not expose. Hand-rolling Blowfish + EksBlowfishSetup
+    // for a key-import path is a high-risk crypto liability we refuse to ship.
+    //
+    // The previous PBKDF2-WithHmacSHA256 fallback produced garbage key material and
+    // would never have decrypted a real OpenSSH-encrypted key — it only masked the
+    // missing feature with a misleading error. Surface a clear, actionable error
+    // instead: instruct the user to convert the key to an unencrypted PEM
+    // (`ssh-keygen -p -m PEM -f keyfile`) before importing.
     private fun bcryptPbkdf(password: ByteArray, salt: ByteArray, rounds: Int, keyLen: Int): ByteArray {
-        // Simplified implementation - for production, use proper bcrypt_pbkdf library
-        // For now, fallback to PBKDF2 (less secure but functional)
-        Logger.w("SSHKeyParser", "Using PBKDF2 fallback for OpenSSH key decryption (bcrypt_pbkdf not available)")
-        val factory = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256", "BC")
-        val spec = javax.crypto.spec.PBEKeySpec(
-            String(password).toCharArray(),
-            salt,
-            rounds,
-            keyLen * 8
+        throw UnsupportedOperationException(
+            "Encrypted OpenSSH (openssh-key-v1, bcrypt KDF) keys are not supported on import. " +
+            "Convert the key to unencrypted PEM with " +
+            "`ssh-keygen -p -m PEM -N \"\" -f /path/to/key` and re-import."
         )
-        return factory.generateSecret(spec).encoded
     }
 
     private fun decryptPuTTYPrivateBlob(blob: ByteArray, passphrase: String, encryption: String): ByteArray {
         try {
             when (encryption) {
                 "aes256-cbc" -> {
-                    // PuTTY uses MD5-based key derivation
-                    val md = java.security.MessageDigest.getInstance("MD5")
-                    
-                    // Derive key (32 bytes for AES-256)
-                    val hash1 = md.digest((0.toString() + passphrase).toByteArray())
-                    md.reset()
-                    val hash2 = md.digest((1.toString() + passphrase).toByteArray())
-                    val key = hash1 + hash2 // 32 bytes
-                    
-                    // PuTTY uses zero IV
+                    // PuTTY v2 KDF (per docs/sshpubk.but in the PuTTY source):
+                    //   key = SHA-1(0x00000000 || passphrase) || SHA-1(0x00000001 || passphrase)
+                    // The counter is a 4-byte BIG-ENDIAN integer — NOT the ASCII characters
+                    // "0" / "1" the previous code used. MD5 is also wrong; PuTTY v2 uses SHA-1.
+                    val pass = passphrase.toByteArray(StandardCharsets.UTF_8)
+                    val sha1 = java.security.MessageDigest.getInstance("SHA-1")
+                    fun derive(counter: Int): ByteArray {
+                        sha1.reset()
+                        sha1.update(byteArrayOf(0, 0, 0, counter.toByte()))
+                        sha1.update(pass)
+                        return sha1.digest()
+                    }
+                    val keyMaterial = derive(0) + derive(1)
+                    // AES-256 wants 32 bytes; SHA-1 || SHA-1 = 40 bytes — truncate to first 32.
+                    val key = keyMaterial.copyOf(32)
                     val iv = ByteArray(16)
-                    
-                    // Decrypt
                     val cipher = javax.crypto.Cipher.getInstance("AES/CBC/NoPadding", "BC")
                     val secretKey = javax.crypto.spec.SecretKeySpec(key, "AES")
                     val ivSpec = javax.crypto.spec.IvParameterSpec(iv)
                     cipher.init(javax.crypto.Cipher.DECRYPT_MODE, secretKey, ivSpec)
-                    
                     return cipher.doFinal(blob)
                 }
-                "none" -> {
-                    // Unencrypted
-                    return blob
-                }
+                "none" -> return blob
                 else -> throw IllegalArgumentException("Unsupported PuTTY encryption: $encryption")
             }
+        } catch (e: IllegalArgumentException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("SSHKeyParser", "Failed to decrypt PuTTY private key", e)
             throw IllegalArgumentException("Failed to decrypt PuTTY key (wrong passphrase?): ${e.message}", e)
         }
+    }
+
+    // PuTTY v2/v3 Private-MAC input layout:
+    //   string keytype | string encryption | string comment | string public-blob | string private-blob
+    // where `string` = 4-byte big-endian length || bytes.
+    private fun puttyV2MacInput(
+        keyType: String,
+        encryption: String,
+        comment: String,
+        publicBlob: ByteArray,
+        privateBlob: ByteArray
+    ): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        fun put(b: ByteArray) {
+            out.write(ByteBuffer.allocate(4).putInt(b.size).array())
+            out.write(b)
+        }
+        put(keyType.toByteArray(StandardCharsets.UTF_8))
+        put(encryption.toByteArray(StandardCharsets.UTF_8))
+        put(comment.toByteArray(StandardCharsets.UTF_8))
+        put(publicBlob)
+        put(privateBlob)
+        return out.toByteArray()
+    }
+
+    private fun sha1(data: ByteArray): ByteArray =
+        java.security.MessageDigest.getInstance("SHA-1").digest(data)
+
+    private fun hmacHex(algo: String, key: ByteArray, data: ByteArray): String {
+        val mac = javax.crypto.Mac.getInstance(algo)
+        mac.init(javax.crypto.spec.SecretKeySpec(key, algo))
+        val digest = mac.doFinal(data)
+        return digest.joinToString("") { "%02x".format(it) }
+    }
+
+    private fun constantTimeEquals(a: String, b: String): Boolean {
+        if (a.length != b.length) return false
+        var diff = 0
+        for (i in a.indices) diff = diff or (a[i].code xor b[i].code)
+        return diff == 0
     }
 
     private fun derivePublicKey(privateKey: PrivateKey): PublicKey {
