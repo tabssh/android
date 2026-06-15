@@ -14,6 +14,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **SSH bytes-transferred counter now reports real traffic** — `ConnectionStats.bytesTransferred` and the `bytesTransferred` StateFlow on every `SSHConnection` were declared and exposed but never written, so every consumer (session snapshots, dashboards, persistence) reported a constant `0 B`; `getInputStream()` / `getOutputStream()` now return cached counting wrappers that increment the counter on every successful read/write
 - **`Confirm on exit` setting now works** — the toggle in Settings → General was previously saved but never read; `MainActivity`'s back-press handler now reads `confirm_exit` and shows an "Exit TabSSH?" prompt when enabled
 - **SSH Agent Forwarding default toggle wired to the connection layer** — Settings → Security used preference key `ssh_agent_forwarding` while `SSHConnection.applyForwardingFlags()` read `agent_forwarding_default`; the user toggle had no effect on any actual connection; XML key realigned to `agent_forwarding_default` so the visible switch now governs the default the SSH session reads
 - **`Debug Log Level` setting now filters log output** — the `debug_log_level` ListPreference (Verbose / Debug / Info / Warning / Error) was previously cosmetic; `Logger` now caches the level on init and reapplies it live via `updateMinLevelFromPrefs()` when SettingsActivity changes the value

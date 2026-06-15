@@ -1693,6 +1693,12 @@ class SSHConnection(
         }
         openChannels.clear()
         shellChannel = null
+        // Drop the cached counting-stream wrappers so the next session
+        // starts with fresh references and no stale raw-stream pointers.
+        countedInRef = null
+        countedInWrap = null
+        countedOutRef = null
+        countedOutWrap = null
 
         sftpChannel?.disconnect()
         sftpChannel = null
@@ -2069,12 +2075,62 @@ class SSHConnection(
         }
     }
 
-    fun getInputStream(): InputStream? = shellChannel?.inputStream
+    // Cached counting wrappers around the active shellChannel streams.
+    // Recreated whenever shellChannel changes so the underlying JSch pipe
+    // is always the live one. Wrapping at this single accessor point is
+    // sufficient because every shell I/O path in the app goes through
+    // getInputStream()/getOutputStream() (Termux bridge, SSHTab, exec).
+    private var countedInRef: InputStream? = null
+    private var countedInWrap: InputStream? = null
+    private var countedOutRef: OutputStream? = null
+    private var countedOutWrap: OutputStream? = null
+
+    @Synchronized
+    fun getInputStream(): InputStream? {
+        val raw = shellChannel?.inputStream ?: return null
+        if (countedInRef !== raw) {
+            countedInRef = raw
+            countedInWrap = object : InputStream() {
+                override fun read(): Int {
+                    val b = raw.read()
+                    if (b >= 0) _bytesTransferred.value = _bytesTransferred.value + 1L
+                    return b
+                }
+                override fun read(b: ByteArray, off: Int, len: Int): Int {
+                    val n = raw.read(b, off, len)
+                    if (n > 0) _bytesTransferred.value = _bytesTransferred.value + n.toLong()
+                    return n
+                }
+                override fun available(): Int = raw.available()
+                override fun close() = raw.close()
+            }
+        }
+        return countedInWrap
+    }
 
     /**
      * Get output stream for shell channel
      */
-    fun getOutputStream(): OutputStream? = shellChannel?.outputStream
+    @Synchronized
+    fun getOutputStream(): OutputStream? {
+        val raw = shellChannel?.outputStream ?: return null
+        if (countedOutRef !== raw) {
+            countedOutRef = raw
+            countedOutWrap = object : OutputStream() {
+                override fun write(b: Int) {
+                    raw.write(b)
+                    _bytesTransferred.value = _bytesTransferred.value + 1L
+                }
+                override fun write(b: ByteArray, off: Int, len: Int) {
+                    raw.write(b, off, len)
+                    if (len > 0) _bytesTransferred.value = _bytesTransferred.value + len.toLong()
+                }
+                override fun flush() = raw.flush()
+                override fun close() = raw.close()
+            }
+        }
+        return countedOutWrap
+    }
 
     /**
      * Last exit status reported by the remote shell channel, or -1 if

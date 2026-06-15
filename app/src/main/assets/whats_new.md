@@ -1,5 +1,13 @@
 # What's New
 
+## Wave 49 — SSH bytes-transferred counter actually counts
+
+The per-connection `bytesTransferred` figure shown in connection stats and
+session snapshots was always `0 B` regardless of how much traffic flowed
+through the session. The counter is now wired into the shell stream
+accessors and increments on every read/write — connection dashboards and
+session persistence finally show real numbers.
+
 ## Wave 48 — Settings that were silently broken now work
 
 Four settings that previously appeared to do nothing have been wired up to
