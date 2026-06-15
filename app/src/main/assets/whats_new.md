@@ -1,5 +1,27 @@
 # What's New
 
+## Wave 52 — Subsystems audit: orphan code removal
+
+- **Removed the orphan `accessibility/` package** — `AccessibilityManager`,
+  `HighContrastHelper`, `TalkBackHelper`, and `KeyboardNavigationHelper`
+  were never invoked from any Activity, Fragment, or View. The real
+  accessibility surface in TabSSH is the contentDescription / Material 3
+  default screen-reader path through the layouts.
+- **Removed orphan `ProxyManager`** — proxy support is genuinely wired
+  through `SSHConnection.setupHttpSocksProxy()` driven by per-host
+  profile fields; this parallel implementation had no callers.
+- **Removed orphan `MultiplexerManager`** — tmux / screen / zellij
+  auto-launch is the path through `SSHTab.buildMultiplexerCommand()` and
+  the gesture mapper; this older sibling was unused.
+- **Removed orphan `KeyboardHandler`, `PlatformManager`, and
+  `ValidationHelper`** — zero callers anywhere in the app.
+- **Dead theme parsers removed** — the iTerm scheme parser was a stub
+  that always returned null; the VSCode and TerminalSexy parsers were
+  unreachable. Only the JSON theme path remains, which is the one
+  `ThemeManager` actually uses.
+- No behaviour change visible to users — every removed file was
+  unreferenced; `make check` still passes cleanly.
+
 ## Wave 51 — SFTP + Backup audit fixes
 
 - **SFTP resume downloads no longer corrupt the file** — resuming a

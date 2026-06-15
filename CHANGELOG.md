@@ -7,6 +7,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Removed
+
+- **Orphan `accessibility/` package removed** — `AccessibilityManager` (stub bodies), `HighContrastHelper`, `TalkBackHelper`, and `KeyboardNavigationHelper` had zero callers across UI code; the real accessibility surface is the contentDescription/Material 3 default screen-reader path through the layouts, not this parallel subsystem
+- **Orphan `network/proxy/ProxyManager.kt` removed** — never called from any connect path; real per-host proxy is `SSHConnection.setupHttpSocksProxy()` driven by the per-profile proxy fields
+- **Orphan `terminal/MultiplexerManager.kt` removed** — multiplexer auto-launch is genuinely wired through `SSHTab.buildMultiplexerCommand()` + `GestureCommandMapper`; this file was a parallel/legacy implementation never reached
+- **Orphan `terminal/input/KeyboardHandler.kt` removed** — keyboard input is handled directly in `TerminalView` against the active emulator
+- **Orphan `platform/PlatformManager.kt` removed** — never instantiated anywhere; detection logic was scaffolding
+- **Orphan `utils/helpers/ValidationHelper.kt` removed** — zero callers across the codebase
+- **Dead theme parsers removed** — `ThemeParser` no longer carries `parseFromVSCodeTheme()`, `parseFromITermScheme()` (was half-implemented and always returned null), `parseFromTerminalSexy()`, or their `@Serializable` data classes; only `parseThemeFromJson` is reachable from `ThemeManager`
+
 ### Changed
 
 - **SEL key removed** — the legacy SEL key on the keyboard bar no longer exists; text selection is now entered exclusively via **"Select Text…"** in the clipboard menu (📋 → Select Text…); double-tap word-selection still works as before

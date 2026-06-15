@@ -142,3 +142,48 @@ Reviewed and intentionally NOT changed (clean):
 Deferred (NOT in this pass): `ui/keyboard/` (5 files, ~1417 LOC), `ui/tabs/` (2 files, ~1405 LOC), `ui/views/PaletteDialog.kt|PerformanceOverlayView.kt|VncView.kt`, `ui/fragments/` (8 files), `ui/activities/` (35 files, including ConnectionEditActivity 1979, MultiHostDashboardActivity 1411, VMConsoleActivity 1452, XCPngManagerActivity 1298, ConnectionsFragment 1292, IdentitiesFragment 1481). Documented here so the next pass has a clean starting point and the audit log records exactly what has and has not been covered.
 
 Build verification: `make check` after fixes — pending in this pass.
+
+---
+
+## Pass 15 — Targeted deep-dive: subsystems audit
+
+Scope: utils/, services/, automation/, background/, network/ (detection, portknock, proxy), pairing/, performance/, platform/, protocols/mosh/, themes/ (definitions, parser, validator), terminal/ (recording, gestures, input, renderer, search, root), audit/, widget/. Categories: foreground/wakelock correctness, Mosh wiring, theme parser/validator, recording atomicity, search, gestures, network handoff, port knock per-connect, proxy auth/IPv6, automation intent schema, accessibility actual invocation, widget PendingIntent flags, clipboard auto-clear, diagnostics completeness.
+
+Fixed (orphan removal — every line must be wired or gone):
+- `accessibility/` — deleted the entire package. `AccessibilityManager.kt` (stub bodies, zero callers), `accessibility/contrast/HighContrastHelper.kt` (single orphan method), `accessibility/talkback/TalkBackHelper.kt` (fully implemented, zero callers across UI), `accessibility/navigation/KeyboardNavigationHelper.kt` (zero callers). The user-facing accessibility story in TabSSH is the contentDescription/Material 3 default-screen-reader path through the layouts — this parallel subsystem was never wired into any Activity/Fragment/View.
+- `network/proxy/ProxyManager.kt` — deleted (parent dir removed). Zero callers across `app/src`. Real per-host proxy is `SSHConnection.setupHttpSocksProxy()` driven by `ConnectionProfile.proxyType/proxyHost/proxyPort/proxyUsername`. ProxyManager was a parallel/legacy implementation with no path to it.
+- `themes/parser/ThemeParser.kt` — removed `parseFromVSCodeTheme()`, `parseFromITermScheme()`, `parseFromTerminalSexy()`, helpers `convertVSCodeToTheme()` / `convertTerminalSexyToTheme()`, and the `VSCodeThemeData` / `TerminalSexyData` `@Serializable` data classes. `parseFromITermScheme` was half-implemented (built an empty `colors` map and always returned null). None were reachable from `ThemeManager` — only `parseThemeFromJson` is called.
+- `terminal/MultiplexerManager.kt` — deleted. Zero callers. Multiplexer auto-launch is genuinely implemented through `ui/tabs/SSHTab.buildMultiplexerCommand()` driven by `ConnectionProfile.multiplexerMode` / `multiplexerSessionName`, and gesture-side commands come from `terminal/gestures/GestureCommandMapper`. This file was a parallel/legacy implementation never reached.
+- `terminal/input/KeyboardHandler.kt` — deleted (parent dir removed). Zero callers. Keyboard input is handled in `ui/views/TerminalView` directly against the active terminal emulator.
+- `utils/helpers/ValidationHelper.kt` — deleted (parent dir removed). Zero callers across `app/src`.
+- `platform/PlatformManager.kt` — deleted (parent dir removed). Zero callers; never instantiated. Detection logic was orphaned scaffolding.
+
+Reviewed and intentionally NOT changed (genuinely wired and correct):
+- `services/SSHConnectionService.kt` — wakelock acquired in `startForegroundService` before any session work, released in `releaseWakeLock` only when `activeConnections` drops to zero. Per-host foreground anchor (`fgAnchorProfileId`) prevents stale notifications. 30s heartbeat-refresh loop keeps `setTimeoutAfter` from collapsing the notification. `START_NOT_STICKY` is the correct choice for SSH — restoring a dead session without auth context is meaningless.
+- `protocols/mosh/` — `MoshHandoff`, `MoshNativeClient`, `TermuxMoshLauncher` are honestly wired. `TabTerminalActivity` (lines ~1774–1826) checks for the bundled native `mosh-client` binary first and bootstraps + spawns natively when present; otherwise falls back to a Termux `RUN_COMMAND` intent. The code is honest about not implementing the SSP wire protocol itself.
+- `themes/validator/ThemeValidator.kt` — WCAG 2.1 AA threshold (4.5 contrast ratio). `ThemeManager.importTheme` blocks low-contrast custom themes at import time; `applyTheme` attempts the auto-fix path. Correctly invoked.
+- `themes/definitions/BuiltInThemes.kt` — 21 built-in themes (system × 3 + classic × 12 + popular × 6), all referenced by `ThemeManager`.
+- `network/detection/NetworkDetector.kt` — correct API-level branching: `allNetworks` on pre-M, `getNetworkCapabilities(activeNetwork)` on M+. Cell→WiFi handoff signal flows into NetworkAwareReconnector.
+- `network/NetworkAwareReconnector.kt` — exponential backoff (5s → 5min cap), 5-min poll fallback for missed `onAvailable` callbacks, pause/resume on offline/online, explicit `cancel()` API for user-initiated disconnect.
+- `network/portknock/PortKnocker.kt` — TCP + UDP knock with per-knock timeout; called from `SSHConnection.executePortKnockIfEnabled()` on every connect AND reconnect attempt (not just first connect).
+- `automation/TaskerActionReceiver.kt` + `TaskerWorker.kt` — broadcast → WorkManager handoff. Intent extras are validated and length-limited (8KB command, 1KB keys, 256B name) before crossing into WorkManager input data. Signature-level permission `io.github.tabssh.permission.TASKER` enforced in the manifest.
+- `background/` — `BatteryOptimizationHelper` (whitelist prompt), `HostAvailabilityWorker` (scheduled monitoring with 8 call sites), `MonitoringBootReceiver` (manifest-registered for `RECEIVE_BOOT_COMPLETED`), `SessionPersistenceManager` — all wired.
+- `pairing/` — full QR pairing path (`QrPayloadCodec` → `PairingPayload` → `PairingDecryptor` → `PairingImporter`) wired through the pairing import flow.
+- `performance/` — `MetricsCollector` (5 callers) feeds `PerformanceModels` data classes into `MultiHostDashboardActivity` for live charts. `utils/performance/PerformanceManager` is the on-device counterpart, surfacing into `PerformanceOverlayView`.
+- `audit/AuditLogManager.kt` — append-only audit log; `MdmRestrictionsReceiver` registered for managed-config broadcasts.
+- `widget/ConnectionWidgetProvider.kt` — every `PendingIntent.getActivity` call uses `FLAG_UPDATE_CURRENT or FLAG_IMMUTABLE`; immutability is required on API 31+ and harmless on older. Unique request codes per widget ID prevent collision.
+- `terminal/recording/SessionRecorder.kt` — per-line `flush()` after each `recordOutput`. Start path closes any partially-allocated FileWriter on the failure branch. Stop path always flips `isRecording=false` and nulls the writer before attempting the trailing write, so a write failure cannot leave the recorder in a stuck state.
+- `terminal/recording/TranscriptManager.kt` — transcripts persisted under `Transcripts/` in external files dir; deletion path checks file existence first.
+- `terminal/search/ScrollbackSearchController.kt` — TextWatcher-driven incremental search with prev/next stepping and live match counter; wired into `TabTerminalActivity`.
+- `terminal/gestures/` — `GestureCommandMapper` (4 callers) drives multiplexer-aware swipe→command translation; `PrefixParser` (3 callers) handles tmux/screen/zellij prefix tokens; `TerminalGestureHandler` (1 caller, the only one needed) wires into `TerminalView`.
+- `terminal/renderer/TerminalRenderer.kt` — used by `TerminalView`.
+- `utils/diagnostics/AnrWatchdog.kt` — main-thread responsiveness watchdog wired in `TabSSHApplication`.
+- `utils/logging/Logger.kt` — 147 references across the codebase; central log surface.
+- `utils/ClipboardHelper.kt` — clipboard writer with `security_clear_clipboard_timeout` pref (0 = never). Auto-clear only fires if the clipboard content has not changed in the interim, preventing stomping on another app's clipboard. Marks the clip with `EXTRA_IS_SENSITIVE` so the system does not preview the contents in IME chips.
+- `utils/paste/PasteProvider.kt` — interface used via `PasteProviderFactory` from `ReportIssueDialog` for paste-service selection.
+- `utils/NotificationHelper.kt` — 7 callers; centralised notification channel creation.
+- `utils/ActivityExtensions.kt` — `showError` / `showSuccess` / `showCopyable` extension functions used across many activities (extension-function call sites do not show up under a grep for the file name; they are referenced by their function names).
+- `utils/RecyclerViewExt.kt` — `replaceAllWithDiff` used in 11+ RecyclerView call sites.
+- `utils/FontManager.kt`, `utils/performance/PerformanceManager.kt` — wired into theme/font preferences and the on-device perf overlay respectively.
+
+Build verification: `make check` — passes after all deletions (zero compile errors, zero unresolved imports). Confirms that every removed file was truly unreferenced and that the project compiles cleanly without them.
