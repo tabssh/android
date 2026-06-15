@@ -23,8 +23,16 @@ Items are deleted when fully fixed and committed.
 ## Pass 6: Code Flow Trace
 - [ ] Cross-checked all XML preference keys against Kotlin consumers. Findings folded into Pass 3 above. Remaining XML keys with zero Kotlin consumers (other than the 4 fixed) are either PreferenceCategory headers or click-only Preferences whose handlers are wired in `SettingsActivity.onCreatePreferences()` — verified clean.
 
+## Pass 7: TabTerminalActivity Deep-Dive
+Targeted audit of `ui/activities/TabTerminalActivity.kt` (4154 lines) — read in full.
+All findings fixed in this commit; see Completed section below.
+
 ## Completed
 - `res/xml/preferences_general.xml` `confirm_exit` — wired into `MainActivity` `OnBackPressedCallback`; now shows an AlertDialog when enabled.
 - `res/xml/preferences_security.xml` `ssh_agent_forwarding` — XML key realigned to `agent_forwarding_default` so `SSHConnection.applyForwardingFlags()` / `PreferenceManager.isAgentForwardingDefault()` see the user's toggle.
 - `res/xml/preferences_logging.xml` `debug_log_level` — `Logger` now caches a `minLevel` from this pref on init and refreshes it live via `updateMinLevelFromPrefs()`; SettingsActivity calls the refresh on change. `d/i/w/e` log methods are gated by `shouldLog()`.
 - `res/xml/preferences_logging.xml` `host_log_max_size_mb` — `Logger.logHostEvent()` now reads the SeekBarPreference (1–10 MB) per write, replacing the hard-coded 1 MiB cap.
+- `ui/activities/TabTerminalActivity.kt` `sendKey("ctrl"|"alt")` — was a toast-only no-op; the `btn_ctrl` / `btn_alt` buttons in `activity_tab_terminal.xml` were wired but produced no terminal effect. Now toggles the existing `TerminalView.setPendingModifier()` latch (the same one-shot CTL/ALT mechanism already used by `MultiRowKeyboardView`), with toast feedback for arm/disarm states and a `null`-terminal guard. Honours auto-clear via `onModifierConsumed` to reset the multi-row keyboard's visual state.
+- `ui/activities/TabTerminalActivity.kt` `pasteFromClipboard()` — added `isFinishing || isDestroyed` guard before reading the system clipboard service; on a torn-down activity the subsequent `Toast.makeText(this, ...)` would throw `WindowManager.BadTokenException`. Also added a missing user-facing toast for the "no active terminal view" branch (previously silent log-only failure).
+- `ui/activities/TabTerminalActivity.kt` `showSnippetsPickerForActiveTab()` — removed; never called from anywhere in the codebase (grep confirmed). The live snippet picker is `showSnippetsDialog()` / `showAllSnippetsDialog()`. Dead code eliminated.
+- `ui/activities/TabTerminalActivity.kt` `setBottomPaneFocused(focus)` — UX inconsistency where the `true` branch showed a "Bottom pane focused" toast but `false` was silent (so tapping back to the top pane gave no feedback). Now announces both transitions ("Bottom pane focused" / "Top pane focused") and only when state actually changes, preventing duplicate toasts from repeated taps on the same pane.

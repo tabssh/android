@@ -1159,16 +1159,6 @@ class TabTerminalActivity : AppCompatActivity() {
             .show()
     }
 
-private fun showSnippetsPickerForActiveTab() {
-        // Defer to the existing Snippets activity if present, else inform.
-        try {
-            val cls = Class.forName("io.github.tabssh.ui.activities.SnippetManagerActivity")
-            startActivity(android.content.Intent(this, cls))
-        } catch (e: ClassNotFoundException) {
-            Toast.makeText(this, "Snippets unavailable", Toast.LENGTH_SHORT).show()
-        }
-    }
-
     /**
      * Find-in-scrollback: inflate the overlay bar on first use, then show it.
      * Subsequent calls just show the existing overlay (preserving any query).
@@ -2903,10 +2893,15 @@ private fun showSnippetsPickerForActiveTab() {
 
     private fun setBottomPaneFocused(focus: Boolean) {
         if (focus && splitTab == null) return
+        // Skip the toast (but still flip the focus flag) if we're moving
+        // focus off a pane that was never focused — avoids a spurious
+        // "Top pane focused" announcement on the first taps after split.
+        val changed = bottomPaneFocused != focus
         bottomPaneFocused = focus
         // No theme-aware tinting yet — just announce so user notices.
-        if (focus) {
-            Toast.makeText(this, "Bottom pane focused", Toast.LENGTH_SHORT).show()
+        if (changed) {
+            val msg = if (focus) "Bottom pane focused" else "Top pane focused"
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -3343,11 +3338,35 @@ private fun showSnippetsPickerForActiveTab() {
         val terminal = getActiveTerminalView()
         when (key) {
             "ctrl" -> {
-                // Toggle ctrl mode or show ctrl key menu
-                showToast("Ctrl key pressed")
+                // Toggle the one-shot CTL latch on the terminal. The next
+                // character (from IME, hardware, or custom-bar key) will be
+                // sent as a Ctrl chord via sendCharWithPendingModifier().
+                if (terminal == null) {
+                    showToast("No active session")
+                    return
+                }
+                if (terminal.isPendingCtrl()) {
+                    terminal.setPendingModifier(null)
+                    showToast("Ctrl off")
+                } else {
+                    terminal.setPendingModifier("CTL")
+                    terminal.onModifierConsumed = { binding.multiRowKeyboard.clearModifier() }
+                    showToast("Ctrl armed — next key")
+                }
             }
             "alt" -> {
-                showToast("Alt key pressed")
+                if (terminal == null) {
+                    showToast("No active session")
+                    return
+                }
+                if (terminal.isPendingAlt()) {
+                    terminal.setPendingModifier(null)
+                    showToast("Alt off")
+                } else {
+                    terminal.setPendingModifier("ALT")
+                    terminal.onModifierConsumed = { binding.multiRowKeyboard.clearModifier() }
+                    showToast("Alt armed — next key")
+                }
             }
             "esc" -> {
                 terminal?.sendKeySequence("\u001B")
@@ -3429,6 +3448,13 @@ private fun showSnippetsPickerForActiveTab() {
     }
 
     private fun pasteFromClipboard() {
+        // Guard against the activity being torn down between the menu tap and
+        // the system-service call. Accessing ClipboardManager / Toast on a
+        // destroyed activity throws BadTokenException.
+        if (isFinishing || isDestroyed) {
+            Logger.w("TabTerminalActivity", "pasteFromClipboard: activity finishing/destroyed; ignoring")
+            return
+        }
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
         // coerceToText() handles plain-text, HTML, and URI clipboard items; plain
         // .text only returns non-null for ClipData.newPlainText() clips, so it
@@ -3442,6 +3468,7 @@ private fun showSnippetsPickerForActiveTab() {
         val tv = getActiveTerminalView()
         if (tv == null) {
             Logger.w("TabTerminalActivity", "pasteFromClipboard: no active terminal view")
+            Toast.makeText(this, "No active session", Toast.LENGTH_SHORT).show()
             return
         }
         tv.pasteText(text)
