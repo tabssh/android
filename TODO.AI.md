@@ -41,14 +41,6 @@
 
 ---
 
-## 🛠️ Open Work — Scripts violations (from Audit Pass 1 / scripts deep-dive)
-
-- [ ] **41 script lint violations across 12 files in `scripts/`** — deferred from the
-  scripts deep-dive (original session). Run `script-lint` against every file in `scripts/`
-  to produce the current list and fix all violations before v1. Common categories expected:
-  UUOC, missing version stamps, inline comments (must be above), line length > 180 chars,
-  missing triple-sync anchors.
-
 ---
 
 ## 🔧 `advancedSettings` — SSH config directive status

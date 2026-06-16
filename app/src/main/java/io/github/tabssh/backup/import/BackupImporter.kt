@@ -511,9 +511,9 @@ class BackupImporter(
                 putString("monitoring_alert_cooldown_minutes", m.optString("monitoring_alert_cooldown_minutes", "60"))
                 // SeekBarPreference stores its value as Int — must restore as Int to avoid
                 // ClassCastException when the Preference UI inflates.
-                putInt("monitoring_default_cpu_threshold",     m.optInt("monitoring_default_cpu_threshold", 0))
-                putInt("monitoring_default_memory_threshold",  m.optInt("monitoring_default_memory_threshold", 0))
-                putInt("monitoring_default_disk_threshold",    m.optInt("monitoring_default_disk_threshold", 0))
+                putInt("monitoring_default_cpu_threshold",     m.optInt("monitoring_default_cpu_threshold",    85))
+                putInt("monitoring_default_memory_threshold",  m.optInt("monitoring_default_memory_threshold", 90))
+                putInt("monitoring_default_disk_threshold",    m.optInt("monitoring_default_disk_threshold",   80))
             }.apply()
         }
         root.optJSONObject("connection")?.let { c ->

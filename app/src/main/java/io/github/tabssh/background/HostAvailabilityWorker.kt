@@ -318,40 +318,40 @@ class HostAvailabilityWorker(
 
         if (!notificationsEnabled) return
 
+        // Resolve effective thresholds: per-host value when set; global Settings default otherwise.
+        val globalPrefs   = PreferenceManager.getDefaultSharedPreferences(appContext)
+        val effectiveCpu  = slot.cpuThreshold  ?: globalPrefs.getInt("monitoring_default_cpu_threshold",    85)
+        val effectiveMem  = slot.memoryThreshold ?: globalPrefs.getInt("monitoring_default_memory_threshold", 90)
+        val effectiveDisk = slot.diskThreshold  ?: globalPrefs.getInt("monitoring_default_disk_threshold",   80)
+
         // CPU threshold — uses 5-minute load average normalised by core count so
         // momentary spikes don't trigger alerts. load5min / coreCount × 100 gives
         // "what fraction of total CPU capacity was busy on average over 5 minutes."
-        slot.cpuThreshold?.let { threshold ->
-            val cores = metrics.cpuUsage.coreCount.coerceAtLeast(1)
-            val value = (metrics.loadAverage.load5min / cores) * 100f
-            if (value > threshold) {
-                NotificationHelper.notifyMetricThreshold(
-                    appContext, profile, "CPU (5 min avg)",
-                    "%.0f%%".format(value), "$threshold%"
-                )
-            }
+        val cores    = metrics.cpuUsage.coreCount.coerceAtLeast(1)
+        val cpuValue = (metrics.loadAverage.load5min / cores) * 100f
+        if (cpuValue > effectiveCpu) {
+            NotificationHelper.notifyMetricThreshold(
+                appContext, profile, "CPU (5 min avg)",
+                "%.0f%%".format(cpuValue), "$effectiveCpu%"
+            )
         }
 
         // Memory threshold
-        slot.memoryThreshold?.let { threshold ->
-            val value = metrics.memoryUsage.usedPercent
-            if (value > threshold) {
-                NotificationHelper.notifyMetricThreshold(
-                    appContext, profile, "Memory",
-                    "%.0f%%".format(value), "$threshold%"
-                )
-            }
+        val memValue = metrics.memoryUsage.usedPercent
+        if (memValue > effectiveMem) {
+            NotificationHelper.notifyMetricThreshold(
+                appContext, profile, "Memory",
+                "%.0f%%".format(memValue), "$effectiveMem%"
+            )
         }
 
         // Disk threshold
-        slot.diskThreshold?.let { threshold ->
-            val value = metrics.diskUsage.usedPercent
-            if (value > threshold) {
-                NotificationHelper.notifyMetricThreshold(
-                    appContext, profile, "Disk",
-                    "%.0f%%".format(value), "$threshold%"
-                )
-            }
+        val diskValue = metrics.diskUsage.usedPercent
+        if (diskValue > effectiveDisk) {
+            NotificationHelper.notifyMetricThreshold(
+                appContext, profile, "Disk",
+                "%.0f%%".format(diskValue), "$effectiveDisk%"
+            )
         }
 
         // Load average threshold

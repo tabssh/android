@@ -38,6 +38,7 @@ import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.background.BatteryOptimizationHelper
 import io.github.tabssh.storage.database.entities.MonitorSlot
 import io.github.tabssh.utils.logging.Logger
+import io.github.tabssh.storage.preferences.PreferenceManager as TabPreferenceManager
 import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.style.ForegroundColorSpan
@@ -230,16 +231,22 @@ class MultiHostDashboardActivity : AppCompatActivity() {
             }
             form.addView(cbPerf)
 
+            // Read global threshold defaults so per-host form pre-fills with them when no override is set
+            val globalPrefs = TabPreferenceManager(context)
+            val globalCpu  = globalPrefs.getInt("monitoring_default_cpu_threshold",    85)
+            val globalMem  = globalPrefs.getInt("monitoring_default_memory_threshold", 90)
+            val globalDisk = globalPrefs.getInt("monitoring_default_disk_threshold",   80)
+
             // CPU threshold
-            form.addView(label("CPU threshold (0 = disabled)"))
+            form.addView(label("CPU threshold (0 = use global default: $globalCpu%)"))
             val tvCpuVal = TextView(context).apply {
-                text = if (slot.cpuThreshold != null) "${slot.cpuThreshold}%" else "Disabled"
+                text = if (slot.cpuThreshold != null) "${slot.cpuThreshold}%" else "Global default ($globalCpu%)"
             }
             form.addView(tvCpuVal)
-            val sbCpu = SeekBar(context).apply { max = 100; progress = slot.cpuThreshold ?: 0 }
+            val sbCpu = SeekBar(context).apply { max = 100; progress = slot.cpuThreshold ?: globalCpu }
             sbCpu.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(sb: SeekBar, v: Int, f: Boolean) {
-                    tvCpuVal.text = if (v == 0) "Disabled" else "$v%"
+                    tvCpuVal.text = if (v == 0) "Global default ($globalCpu%)" else "$v%"
                 }
                 override fun onStartTrackingTouch(sb: SeekBar) {}
                 override fun onStopTrackingTouch(sb: SeekBar) {}
@@ -247,15 +254,15 @@ class MultiHostDashboardActivity : AppCompatActivity() {
             form.addView(sbCpu)
 
             // Memory threshold
-            form.addView(label("Memory threshold (0 = disabled)"))
+            form.addView(label("Memory threshold (0 = use global default: $globalMem%)"))
             val tvMemVal = TextView(context).apply {
-                text = if (slot.memoryThreshold != null) "${slot.memoryThreshold}%" else "Disabled"
+                text = if (slot.memoryThreshold != null) "${slot.memoryThreshold}%" else "Global default ($globalMem%)"
             }
             form.addView(tvMemVal)
-            val sbMem = SeekBar(context).apply { max = 100; progress = slot.memoryThreshold ?: 0 }
+            val sbMem = SeekBar(context).apply { max = 100; progress = slot.memoryThreshold ?: globalMem }
             sbMem.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(sb: SeekBar, v: Int, f: Boolean) {
-                    tvMemVal.text = if (v == 0) "Disabled" else "$v%"
+                    tvMemVal.text = if (v == 0) "Global default ($globalMem%)" else "$v%"
                 }
                 override fun onStartTrackingTouch(sb: SeekBar) {}
                 override fun onStopTrackingTouch(sb: SeekBar) {}
@@ -263,15 +270,15 @@ class MultiHostDashboardActivity : AppCompatActivity() {
             form.addView(sbMem)
 
             // Disk threshold
-            form.addView(label("Disk threshold (0 = disabled)"))
+            form.addView(label("Disk threshold (0 = use global default: $globalDisk%)"))
             val tvDiskVal = TextView(context).apply {
-                text = if (slot.diskThreshold != null) "${slot.diskThreshold}%" else "Disabled"
+                text = if (slot.diskThreshold != null) "${slot.diskThreshold}%" else "Global default ($globalDisk%)"
             }
             form.addView(tvDiskVal)
-            val sbDisk = SeekBar(context).apply { max = 100; progress = slot.diskThreshold ?: 0 }
+            val sbDisk = SeekBar(context).apply { max = 100; progress = slot.diskThreshold ?: globalDisk }
             sbDisk.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(sb: SeekBar, v: Int, f: Boolean) {
-                    tvDiskVal.text = if (v == 0) "Disabled" else "$v%"
+                    tvDiskVal.text = if (v == 0) "Global default ($globalDisk%)" else "$v%"
                 }
                 override fun onStartTrackingTouch(sb: SeekBar) {}
                 override fun onStopTrackingTouch(sb: SeekBar) {}
@@ -656,48 +663,54 @@ class MultiHostDashboardActivity : AppCompatActivity() {
         }
         form.addView(cbPerf)
 
-        form.addView(label("CPU threshold (0 = disabled)"))
+        // Read global threshold defaults so the group form pre-fills with them when no per-host override is set
+        val globalPrefsG = TabPreferenceManager(this)
+        val globalCpuG   = globalPrefsG.getInt("monitoring_default_cpu_threshold",    85)
+        val globalMemG   = globalPrefsG.getInt("monitoring_default_memory_threshold", 90)
+        val globalDiskG  = globalPrefsG.getInt("monitoring_default_disk_threshold",   80)
+
+        form.addView(label("CPU threshold (0 = use global default: $globalCpuG%)"))
         val tvCpuVal = TextView(this).apply {
             val v = firstSlot?.cpuThreshold
-            text = if (v != null && v > 0) "$v%" else "Disabled"
+            text = if (v != null && v > 0) "$v%" else "Global default ($globalCpuG%)"
         }
         form.addView(tvCpuVal)
-        val sbCpu = SeekBar(this).apply { max = 100; progress = firstSlot?.cpuThreshold ?: 0 }
+        val sbCpu = SeekBar(this).apply { max = 100; progress = firstSlot?.cpuThreshold ?: globalCpuG }
         sbCpu.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar, v: Int, f: Boolean) {
-                tvCpuVal.text = if (v == 0) "Disabled" else "$v%"
+                tvCpuVal.text = if (v == 0) "Global default ($globalCpuG%)" else "$v%"
             }
             override fun onStartTrackingTouch(sb: SeekBar) {}
             override fun onStopTrackingTouch(sb: SeekBar) {}
         })
         form.addView(sbCpu)
 
-        form.addView(label("Memory threshold (0 = disabled)"))
+        form.addView(label("Memory threshold (0 = use global default: $globalMemG%)"))
         val tvMemVal = TextView(this).apply {
             val v = firstSlot?.memoryThreshold
-            text = if (v != null && v > 0) "$v%" else "Disabled"
+            text = if (v != null && v > 0) "$v%" else "Global default ($globalMemG%)"
         }
         form.addView(tvMemVal)
-        val sbMem = SeekBar(this).apply { max = 100; progress = firstSlot?.memoryThreshold ?: 0 }
+        val sbMem = SeekBar(this).apply { max = 100; progress = firstSlot?.memoryThreshold ?: globalMemG }
         sbMem.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar, v: Int, f: Boolean) {
-                tvMemVal.text = if (v == 0) "Disabled" else "$v%"
+                tvMemVal.text = if (v == 0) "Global default ($globalMemG%)" else "$v%"
             }
             override fun onStartTrackingTouch(sb: SeekBar) {}
             override fun onStopTrackingTouch(sb: SeekBar) {}
         })
         form.addView(sbMem)
 
-        form.addView(label("Disk threshold (0 = disabled)"))
+        form.addView(label("Disk threshold (0 = use global default: $globalDiskG%)"))
         val tvDiskVal = TextView(this).apply {
             val v = firstSlot?.diskThreshold
-            text = if (v != null && v > 0) "$v%" else "Disabled"
+            text = if (v != null && v > 0) "$v%" else "Global default ($globalDiskG%)"
         }
         form.addView(tvDiskVal)
-        val sbDisk = SeekBar(this).apply { max = 100; progress = firstSlot?.diskThreshold ?: 0 }
+        val sbDisk = SeekBar(this).apply { max = 100; progress = firstSlot?.diskThreshold ?: globalDiskG }
         sbDisk.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar, v: Int, f: Boolean) {
-                tvDiskVal.text = if (v == 0) "Disabled" else "$v%"
+                tvDiskVal.text = if (v == 0) "Global default ($globalDiskG%)" else "$v%"
             }
             override fun onStartTrackingTouch(sb: SeekBar) {}
             override fun onStopTrackingTouch(sb: SeekBar) {}
