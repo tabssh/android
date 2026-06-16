@@ -460,11 +460,14 @@
                         android:checked="true"
                         android:tooltipText="Reduce bandwidth usage on slow connections" />
 
-                    <!-- Keep-alive toggle removed (Issue #166) — always on
-                         for mobile clients. Carrier NAT timeouts and Wi-Fi
-                         sleep silently kill idle SSH sockets; the trivial
-                         bandwidth cost of NOOP packets is preferable to
-                         finding the session dead on resume. -->
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/switch_keep_alive"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_md"
+                        android:text="Keep-Alive (recommended for mobile)"
+                        android:textColor="?android:attr/textColorPrimary"
+                        android:checked="true" />
 
                     <!-- Wave 2.X — X11 forwarding enabled (real JSch channel
                          forwarding to localhost:6000). Requires an X server
@@ -545,6 +548,69 @@
                             android:inputType="text" />
                     </com.google.android.material.textfield.TextInputLayout>
 
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/layout_encoding"
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_sm"
+                        android:hint="Character Encoding">
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                            android:id="@+id/spinner_encoding"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="none"
+                            android:text="UTF-8" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/layout_connect_timeout"
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_sm"
+                        android:hint="Connect Timeout (seconds)"
+                        app:helperText="1–600. Default: 15">
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/edit_connect_timeout"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="number"
+                            android:text="15" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/layout_read_timeout"
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_sm"
+                        android:hint="Read Timeout (seconds)"
+                        app:helperText="1–600. Default: 30">
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/edit_read_timeout"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="number"
+                            android:text="30" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/layout_server_alive_interval"
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_sm"
+                        android:hint="Server-Alive Interval (seconds)"
+                        app:helperText="0 = use global default (Settings → Connection)">
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/edit_server_alive_interval"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="number"
+                            android:text="0" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
                     <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/switch_port_knock"
                         android:layout_width="match_parent"
@@ -562,6 +628,23 @@
                         android:layout_marginTop="@dimen/space_sm"
                         android:text="Configure Knock Sequence"
                         android:visibility="gone" />
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/layout_port_knock_delay"
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_xs"
+                        android:hint="Post-knock delay (ms)"
+                        android:visibility="gone"
+                        app:helperText="Wait this long after the last knock before opening SSH. Default: 100 ms">
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/edit_port_knock_delay"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="number"
+                            android:text="100" />
+                    </com.google.android.material.textfield.TextInputLayout>
 
                 </LinearLayout>
 

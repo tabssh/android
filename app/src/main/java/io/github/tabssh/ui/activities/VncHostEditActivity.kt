@@ -61,6 +61,8 @@ class VncHostEditActivity : AppCompatActivity() {
     private lateinit var switchTlsVerify: SwitchMaterial
     private lateinit var editColorTag: TextInputEditText
     private lateinit var editNotes: TextInputEditText
+    private lateinit var layoutPassword: TextInputLayout
+    private lateinit var editPassword: TextInputEditText
     private lateinit var btnSave: MaterialButton
     private lateinit var btnCancel: MaterialButton
     private lateinit var btnDelete: MaterialButton
@@ -93,6 +95,8 @@ class VncHostEditActivity : AppCompatActivity() {
         switchTlsVerify = findViewById(R.id.switch_tls_verify)
         editColorTag = findViewById(R.id.edit_color_tag)
         editNotes = findViewById(R.id.edit_notes)
+        layoutPassword = findViewById(R.id.layout_password)
+        editPassword = findViewById(R.id.edit_password)
         btnSave = findViewById(R.id.btn_save)
         btnCancel = findViewById(R.id.btn_cancel)
         btnDelete = findViewById(R.id.btn_delete)
@@ -187,6 +191,13 @@ class VncHostEditActivity : AppCompatActivity() {
             switchTlsVerify.isChecked = host.tlsVerify
             if (host.colorTag != 0) editColorTag.setText(host.colorTag.toString(16))
             editNotes.setText(host.notes ?: "")
+
+            val storedPw = withContext(Dispatchers.IO) {
+                try { app.securePasswordManager.retrievePassword("vnc_host_$hostId") } catch (_: Exception) { null }
+            }
+            if (storedPw != null) {
+                layoutPassword.helperText = "Password saved — enter new to replace, leave blank to keep"
+            }
         }
     }
 
@@ -242,6 +253,14 @@ class VncHostEditActivity : AppCompatActivity() {
                         app.database.vncHostDao().update(vncHost)
                     } else {
                         app.database.vncHostDao().insert(vncHost)
+                    }
+                    val newPw = editPassword.text?.toString().orEmpty()
+                    if (newPw.isNotBlank()) {
+                        app.securePasswordManager.storePassword(
+                            "vnc_host_$id",
+                            newPw,
+                            io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.ENCRYPTED
+                        )
                     }
                 }
                 Toast.makeText(this@VncHostEditActivity, "Saved", Toast.LENGTH_SHORT).show()

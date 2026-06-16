@@ -49,6 +49,9 @@ interface ConnectionDao {
     
     @Query("SELECT COUNT(*) FROM connections")
     suspend fun getConnectionCount(): Int
+
+    @Query("SELECT * FROM connections WHERE host = :host AND port = :port AND username = :username AND id != :excludeId LIMIT 1")
+    suspend fun findDuplicate(host: String, port: Int, username: String, excludeId: String = ""): ConnectionProfile?
     
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertConnection(connection: ConnectionProfile): Long

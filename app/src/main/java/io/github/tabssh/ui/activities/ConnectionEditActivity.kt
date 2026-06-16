@@ -638,6 +638,12 @@ class ConnectionEditActivity : AppCompatActivity() {
         binding.editPort.addTextChangedListener(watcher)
         binding.editUsername.addTextChangedListener(watcher)
         binding.editPassword.addTextChangedListener(watcher)
+        binding.editConnectTimeout.addTextChangedListener(watcher)
+        binding.editReadTimeout.addTextChangedListener(watcher)
+        binding.editServerAliveInterval.addTextChangedListener(watcher)
+        binding.editPortKnockDelay.addTextChangedListener(watcher)
+        binding.spinnerEncoding.addTextChangedListener(watcher)
+        binding.switchKeepAlive.setOnCheckedChangeListener { _, _ -> hasUnsavedChanges = true }
 
         onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -797,6 +803,12 @@ class ConnectionEditActivity : AppCompatActivity() {
 
         binding.spinnerTerminalType.setText(profile.terminalType, false)
         binding.switchCompression.isChecked = profile.compression
+        binding.switchKeepAlive.isChecked = profile.keepAlive
+        binding.spinnerEncoding.setText(profile.encoding.ifBlank { "UTF-8" }, false)
+        binding.editConnectTimeout.setText(profile.connectTimeout.toString())
+        binding.editReadTimeout.setText(profile.readTimeout.toString())
+        binding.editServerAliveInterval.setText((profile.serverAliveInterval ?: 0).toString())
+        binding.editPortKnockDelay.setText(profile.portKnockDelayMs.toString())
         binding.switchX11Forwarding.isChecked = profile.x11Forwarding
         binding.spinnerMoshMode.setText(moshModeLabel(profile.moshMode), false)
         restoreMoshCommandDropdown(profile)
@@ -1078,44 +1090,70 @@ class ConnectionEditActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val profile = createConnectionProfile()
-
-                if (isEditMode && existingProfile != null) {
-                    app.database.connectionDao().updateConnection(profile)
-                    Logger.i("ConnectionEditActivity", "Updated connection: ${profile.name}")
-                    showToast("Connection updated")
-                } else {
-                    app.database.connectionDao().insertConnection(profile)
-                    Logger.i("ConnectionEditActivity", "Created connection: ${profile.name}")
-                    showToast("Connection saved")
+                val excludeId = existingProfile?.id ?: ""
+                val duplicate = withContext(Dispatchers.IO) {
+                    app.database.connectionDao().findDuplicate(profile.host, profile.port, profile.username, excludeId)
                 }
-
-                val authType = getSelectedAuthType()
-                if (authType == AuthType.PASSWORD || authType == AuthType.KEYBOARD_INTERACTIVE) {
-                    val password = binding.editPassword.text.toString()
-                    val savePassword = binding.switchSavePassword.isChecked
-                    if (password.isNotEmpty() && savePassword) {
-                        val storageLevel = if (app.securePasswordManager.requiresEnhancedSecurity(profile.host)) {
-                            io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.BIOMETRIC
-                        } else {
-                            io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.ENCRYPTED
+                if (duplicate != null && duplicate.id != existingProfile?.id) {
+                    com.google.android.material.dialog.MaterialAlertDialogBuilder(this@ConnectionEditActivity)
+                        .setTitle("Duplicate connection")
+                        .setMessage("A connection to ${profile.username}@${profile.host}:${profile.port} already exists (\"${duplicate.name}\"). What would you like to do?")
+                        .setPositiveButton("Save as New") { _, _ ->
+                            lifecycleScope.launch { doSave(profile) }
                         }
-                        app.securePasswordManager.storePassword(profile.id, password, storageLevel)
-                    } else if (!savePassword) {
-                        // User explicitly unchecked "Save Password" — revoke any previously
-                        // stored credential so it is not silently reused on the next connect.
-                        try { app.securePasswordManager.clearPassword(profile.id) } catch (_: Exception) {}
-                    }
+                        .setNeutralButton("Update Existing") { _, _ ->
+                            lifecycleScope.launch { doSave(profile.copy(id = duplicate.id)) }
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                    return@launch
                 }
-
-                // Save succeeded — clear the dirty flag so back/cancel don't
-                // prompt for discard on the way out.
-                hasUnsavedChanges = false
-                setResult(RESULT_OK)
-                finish()
+                doSave(profile)
             } catch (e: Exception) {
                 Logger.e("ConnectionEditActivity", "Failed to save connection", e)
                 showError("Failed to save connection: ${e.message}", "Error")
             }
+        }
+    }
+
+    private suspend fun doSave(profile: ConnectionProfile) {
+        try {
+            if (isEditMode && existingProfile != null) {
+                app.database.connectionDao().updateConnection(profile)
+                Logger.i("ConnectionEditActivity", "Updated connection: ${profile.name}")
+                showToast("Connection updated")
+            } else {
+                app.database.connectionDao().insertConnection(profile)
+                Logger.i("ConnectionEditActivity", "Created connection: ${profile.name}")
+                showToast("Connection saved")
+            }
+
+            val authType = getSelectedAuthType()
+            if (authType == AuthType.PASSWORD || authType == AuthType.KEYBOARD_INTERACTIVE) {
+                val password = binding.editPassword.text.toString()
+                val savePassword = binding.switchSavePassword.isChecked
+                if (password.isNotEmpty() && savePassword) {
+                    val storageLevel = if (app.securePasswordManager.requiresEnhancedSecurity(profile.host)) {
+                        io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.BIOMETRIC
+                    } else {
+                        io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.ENCRYPTED
+                    }
+                    app.securePasswordManager.storePassword(profile.id, password, storageLevel)
+                } else if (!savePassword) {
+                    // User explicitly unchecked "Save Password" — revoke any previously
+                    // stored credential so it is not silently reused on the next connect.
+                    try { app.securePasswordManager.clearPassword(profile.id) } catch (_: Exception) {}
+                }
+            }
+
+            // Save succeeded — clear the dirty flag so back/cancel don't
+            // prompt for discard on the way out.
+            hasUnsavedChanges = false
+            setResult(RESULT_OK)
+            finish()
+        } catch (e: Exception) {
+            Logger.e("ConnectionEditActivity", "Failed to save connection", e)
+            showError("Failed to save connection: ${e.message}", "Error")
         }
     }
 
@@ -1143,7 +1181,11 @@ class ConnectionEditActivity : AppCompatActivity() {
 
         val terminalType = binding.spinnerTerminalType.text.toString().takeIf { it.isNotBlank() } ?: "xterm-256color"
         val compression = binding.switchCompression.isChecked
-        val keepAlive = true
+        val keepAlive = binding.switchKeepAlive.isChecked
+        val encoding = binding.spinnerEncoding.text.toString().takeIf { it.isNotBlank() } ?: "UTF-8"
+        val connectTimeout = binding.editConnectTimeout.text.toString().toIntOrNull()?.coerceIn(1, 600) ?: 15
+        val readTimeout = binding.editReadTimeout.text.toString().toIntOrNull()?.coerceIn(1, 600) ?: 30
+        val serverAliveInterval = binding.editServerAliveInterval.text.toString().toIntOrNull()?.coerceIn(0, 3600)?.let { if (it == 0) null else it }
         val x11Forwarding = binding.switchX11Forwarding.isChecked
         val moshMode = readMoshModeFromUi()
         val moshCommandOverride = readMoshCommandFromUi()
@@ -1204,6 +1246,7 @@ class ConnectionEditActivity : AppCompatActivity() {
 
         val knockEnabled = binding.switchPortKnock.isChecked
         val knockSequence = if (knockEnabled) pendingKnockSequence else null
+        val portKnockDelayMs = if (knockEnabled) binding.editPortKnockDelay.text.toString().toIntOrNull()?.coerceIn(0, 10_000) ?: 100 else 100
 
         // Merge moshServerCommand (and optional desc) into the advancedSettings
         // JSON blob so it survives copy() without needing a new DB column.
@@ -1226,7 +1269,8 @@ class ConnectionEditActivity : AppCompatActivity() {
             proxyType = proxyType, proxyHost = proxyHost, proxyPort = proxyPort,
             proxyUsername = proxyUsername, proxyAuthType = proxyAuthType, proxyKeyId = proxyKeyId,
             colorTag = colorTag, notifSoundMode = notifSoundMode, notifVibrateMode = notifVibrateMode,
-            portKnockEnabled = knockEnabled, portKnockSequence = knockSequence,
+            portKnockEnabled = knockEnabled, portKnockSequence = knockSequence, portKnockDelayMs = portKnockDelayMs,
+            encoding = encoding, connectTimeout = connectTimeout, readTimeout = readTimeout, serverAliveInterval = serverAliveInterval,
             advancedSettings = mergedAdvancedSettings
         ) ?: ConnectionProfile(
             name = name, host = host, port = port, username = username,
@@ -1242,7 +1286,8 @@ class ConnectionEditActivity : AppCompatActivity() {
             proxyType = proxyType, proxyHost = proxyHost, proxyPort = proxyPort,
             proxyUsername = proxyUsername, proxyAuthType = proxyAuthType, proxyKeyId = proxyKeyId,
             notifSoundMode = notifSoundMode, notifVibrateMode = notifVibrateMode,
-            portKnockEnabled = knockEnabled, portKnockSequence = knockSequence,
+            portKnockEnabled = knockEnabled, portKnockSequence = knockSequence, portKnockDelayMs = portKnockDelayMs,
+            encoding = encoding, connectTimeout = connectTimeout, readTimeout = readTimeout, serverAliveInterval = serverAliveInterval,
             advancedSettings = mergedAdvancedSettings
         )
     }
@@ -1881,6 +1926,11 @@ class ConnectionEditActivity : AppCompatActivity() {
         val adapter = android.widget.ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, terminalTypes)
         binding.spinnerTerminalType.setAdapter(adapter)
         binding.spinnerTerminalType.setText("xterm-256color", false)
+
+        val encodings = arrayOf("UTF-8", "ISO-8859-1", "US-ASCII", "UTF-16")
+        val encodingAdapter = android.widget.ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, encodings)
+        binding.spinnerEncoding.setAdapter(encodingAdapter)
+        binding.spinnerEncoding.setText("UTF-8", false)
     }
 
     private fun setupMultiplexerSpinner() {
@@ -2014,6 +2064,7 @@ class ConnectionEditActivity : AppCompatActivity() {
     private fun setupPortKnockUI() {
         binding.switchPortKnock.setOnCheckedChangeListener { _, isChecked ->
             binding.btnConfigurePortKnock.visibility = if (isChecked) View.VISIBLE else View.GONE
+            binding.layoutPortKnockDelay.visibility = if (isChecked) View.VISIBLE else View.GONE
         }
         binding.btnConfigurePortKnock.setOnClickListener { showPortKnockConfigDialog() }
     }

@@ -630,7 +630,20 @@ class VMConsoleActivity : AppCompatActivity() {
         }
         val (password, username) = withContext(Dispatchers.IO) {
             val identityId = host.identityId
-            if (identityId != null) {
+            // Per-host password override always takes priority.
+            val hostPw = try {
+                app.securePasswordManager.retrievePassword("vnc_host_$vncHostId")
+            } catch (e: Exception) {
+                Logger.w(TAG, "Could not retrieve VNC host password: ${e.message}")
+                null
+            }
+            if (hostPw != null) {
+                // Host override present: use it; username still comes from identity if one is linked.
+                val identityUsername = if (identityId != null) {
+                    app.database.vncIdentityDao().getById(identityId)?.username
+                } else null
+                Pair(hostPw, identityUsername)
+            } else if (identityId != null) {
                 val identity = app.database.vncIdentityDao().getById(identityId)
                 val pw = try {
                     app.securePasswordManager.retrievePassword("vnc_identity_$identityId")
@@ -640,13 +653,7 @@ class VMConsoleActivity : AppCompatActivity() {
                 }
                 Pair(pw, identity?.username)
             } else {
-                val pw = try {
-                    app.securePasswordManager.retrievePassword("vnc_host_$vncHostId")
-                } catch (e: Exception) {
-                    Logger.w(TAG, "Could not retrieve VNC host password: ${e.message}")
-                    null
-                }
-                Pair(pw, null)
+                Pair(null, null)
             }
         }
         val (rfbClient, socket) = withContext(Dispatchers.IO) {

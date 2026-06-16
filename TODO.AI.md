@@ -1,6 +1,6 @@
 # TabSSH TODO
 
-**Last Updated:** 2026-05-31
+**Last Updated:** 2026-06-16
 **Version:** 0.9.1 (pinned via `release.txt` — DO NOT MODIFY without coordinated bump in `app/build.gradle` + F-Droid metadata)
 
 > **Usage rules for AI agents:**
@@ -38,6 +38,16 @@
 - **`64182c5fcd73`** 🐛 OCI credential persistence + import UX — `editor.apply()` → `editor.commit()` in `SecurePasswordManager`; `saveOrUpdateOciAccount` now checks `storePassword()` return and rolls back DB on Keystore failure; `ociConfigFilePicker`/`ociKeyFilePicker` re-show dialog on cancel/error instead of silently returning; `item_cloud_instance.xml` split into 2 rows of 2 buttons (row 3a: power+connect; row 3b: restart+force restart).
 - **`1f994257bd17`** ✨ RequestTTY directive wired — `SSHConnection.kt` reads `advancedSettings["requestTTY"]`; PTY allocated for exec channels only when value is `"yes"` or `"force"`; shell channel always gets PTY. Semantics match OpenSSH.
 - **`417d072`** ✨ Cloud Accounts Manager UI + Power Controls (A–H complete) — `CloudAccountManagerActivity`, `CloudInstanceAdapter`, 8 cloud client power actions, Start/Stop toggle, Restart/Force Restart, live instance state; OCI removed from Hypervisors spinner (stays in enum for DB compat); contextual connection failure toasts app-wide.
+
+---
+
+## 🛠️ Open Work — Scripts violations (from Audit Pass 1 / scripts deep-dive)
+
+- [ ] **41 script lint violations across 12 files in `scripts/`** — deferred from the
+  scripts deep-dive (original session). Run `script-lint` against every file in `scripts/`
+  to produce the current list and fix all violations before v1. Common categories expected:
+  UUOC, missing version stamps, inline comments (must be above), line length > 180 chars,
+  missing triple-sync anchors.
 
 ---
 
