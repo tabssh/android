@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
+##@Version YYYYMMDDHHMM-git
 # scripts/ui-test.sh — scriptable UI test runner for TabSSH on a live emulator/device.
 #
-# Resolves adb the same way android-emulator.sh does.  Each named test is a
+# Resolves __adb the same way android-emulator.sh does.  Each named test is a
 # small Bash function.  Ad-hoc sequences can be composed on the command line
 # with `run` + step flags — no new function needed.
 #
@@ -13,7 +14,7 @@
 #   --serial <serial>   ADB device serial (default: first connected device)
 #   --apk    <path>     APK to install before running tests (implies --install)
 #   --install           Install binaries/tabssh-android-x86.apk before running
-#   --verbose           Print every adb command
+#   --verbose           Print every __adb command
 #   --list              Print available named tests and exit
 #   --help              Print this help and exit
 #
@@ -92,13 +93,13 @@ RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'
 TEST_FAILS=0   # per-test assertion failure counter; reset by run_test / run_inline
 
-pass()  { echo -e "${GREEN}  ✅ $*${NC}"; }
-fail()  { echo -e "${RED}  ❌ $*${NC}"; TEST_FAILS=$((TEST_FAILS+1)); }
-info()  { echo -e "${BLUE}  ▸ $*${NC}"; }
-warn()  { echo -e "${YELLOW}  ⚠ $*${NC}"; }
-debug() { [[ ${VERBOSE:-0} -eq 1 ]] && echo -e "${CYAN}  $ $*${NC}" || true; }
+__pass()  { echo -e "${GREEN}  ✅ $*${NC}"; }
+__fail()  { echo -e "${RED}  ❌ $*${NC}"; TEST_FAILS=$((TEST_FAILS+1)); }
+__info()  { echo -e "${BLUE}  ▸ $*${NC}"; }
+__warn()  { echo -e "${YELLOW}  ⚠ $*${NC}"; }
+__debug() { [[ ${VERBOSE:-0} -eq 1 ]] && echo -e "${CYAN}  $ $*${NC}" || true; }
 
-# ── SDK / adb resolution ─────────────────────────────────────────────────────
+# ── SDK / __adb resolution ─────────────────────────────────────────────────────
 SDK=""
 for candidate in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" /opt/android /opt/android-sdk "$HOME/Android/Sdk"; do
     if [[ -n "$candidate" && -d "$candidate/platform-tools" ]]; then
@@ -119,8 +120,8 @@ INSTALL=0
 VERBOSE=0
 TESTS=()     # positional list of test names / "run" tokens
 
-usage() {
-    grep '^#' "$0" | grep -v '^#!/' | sed 's/^# \{0,1\}//'
+__usage() {
+    grep -E -- '^#' "$0" | grep -v -- '^#!/' | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -141,7 +142,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Use 'run STEPS…' for inline tests — see --help for step reference."
             exit 0 ;;
-        --help|-h)  usage 0 ;;
+        --help|-h)  __usage 0 ;;
         all)        TESTS+=(crash-dialog hypervisor-form settings-opens logging-navigation) ;;
         *)          TESTS+=("$1") ;;
     esac
@@ -150,12 +151,12 @@ done
 
 if [[ ${#TESTS[@]} -eq 0 ]]; then
     echo "No tests specified. Use --list or --help." >&2
-    usage 2
+    __usage 2
 fi
 
 # ── device selection ─────────────────────────────────────────────────────────
-adb() {
-    debug "adb ${SERIAL:+-s $SERIAL} $*"
+__adb() {
+    __debug "__adb ${SERIAL:+-s $SERIAL} $*"
     "$_ADB_BIN" ${SERIAL:+-s "$SERIAL"} "$@"
 }
 
@@ -169,7 +170,7 @@ fi
 info "Device: $SERIAL"
 
 # ── optional root elevation (emulators only) ─────────────────────────────────
-# Try `adb root` so ui_inject_crash_prefs can push directly to /data/data/.
+# Try `__adb root` so ui_inject_crash_prefs can push directly to /data/data/.
 # Silently ignored on real devices (root not available) and when already root.
 "$_ADB_BIN" ${SERIAL:+-s "$SERIAL"} root >/dev/null 2>&1 || true
 sleep 1
@@ -193,8 +194,8 @@ if [[ $INSTALL -eq 1 ]]; then
         [[ -f "$APK" ]] || APK="$REPO_ROOT/binaries/tabssh-android-universal.apk"
     fi
     [[ -f "$APK" ]] || { echo "❌ APK not found: $APK  (run 'make build' first)" >&2; exit 2; }
-    info "Installing $(basename "$APK")…"
-    adb install -r "$APK" | grep -E "Success|Failure|error" || true
+    __info "Installing $(basename "$APK")…"
+    __adb install -r "$APK" | grep -E -- "Success|Failure|error" || true
 fi
 
 # ── temp dir ─────────────────────────────────────────────────────────────────
@@ -208,11 +209,11 @@ SCREENSHOT_N=0
 # Dump the live UI tree into $UI_XML.  Retries up to 3 times when the
 # resulting file is empty — this happens when uiautomator fails to capture
 # the tree (e.g. during a transition or while an ANR dialog is mid-dismiss).
-ui_dump() {
+__ui_dump() {
     local i
     for i in 1 2 3; do
-        adb shell uiautomator dump /sdcard/ui_test_tmp.xml >/dev/null 2>&1
-        adb shell cat /sdcard/ui_test_tmp.xml > "$UI_XML" 2>/dev/null
+        __adb shell uiautomator dump /sdcard/ui_test_tmp.xml >/dev/null 2>&1
+        __adb shell cat /sdcard/ui_test_tmp.xml > "$UI_XML" 2>/dev/null
         [[ -s "$UI_XML" ]] && return 0
         sleep 1
     done
@@ -224,23 +225,23 @@ ui_dump() {
 # before the caller proceeds.  Call before each wait/assert to avoid false
 # failures on fresh-booted emulators where System UI takes a few seconds to
 # settle.
-ui_dismiss_anr() {
+__ui_dismiss_anr() {
     local i
     for i in 1 2 3; do
         ui_dump
-        ui_texts | grep -qF "isn't responding" || return 0
+        __ui_texts | grep -qF -- "isn't responding" || return 0
         local coords
         coords=$(ui_find_xy "Wait") || true
         [[ -n "$coords" ]] || return 0
         debug "ANR dialog detected — tapping Wait (attempt $i)"
-        adb shell input tap $coords
+        __adb shell input tap $coords
         sleep 6
     done
 }
 
 # Print every non-empty text= value currently visible.
-ui_texts() {
-    [[ -s "$UI_XML" ]] || { ui_dump; }
+__ui_texts() {
+    [[ -s "$UI_XML" ]] || { __ui_dump; }
     python3 - "$UI_XML" <<'PY'
 import sys, xml.etree.ElementTree as ET
 try:
@@ -258,7 +259,7 @@ PY
 
 # Emit the centre "x y" of the nearest clickable ancestor of a node matching
 # the given text.  Prints nothing if not found.
-ui_find_xy() {
+__ui_find_xy() {
     [[ -s "$UI_XML" ]] || ui_dump
     python3 - "$UI_XML" "$1" <<'PY'
 import sys, xml.etree.ElementTree as ET
@@ -290,7 +291,7 @@ PY
 
 # Get a named attribute from the node (or its clickable ancestor) matching text.
 # Usage: ui_get_attr "Switch label" "checked"
-ui_get_attr() {
+__ui_get_attr() {
     [[ -s "$UI_XML" ]] || ui_dump
     python3 - "$UI_XML" "$1" "$2" <<'PY'
 import sys, xml.etree.ElementTree as ET
@@ -317,7 +318,7 @@ PY
 }
 
 # Count how many nodes have the given text.
-ui_count_text() {
+__ui_count_text() {
     [[ -s "$UI_XML" ]] || ui_dump
     python3 - "$UI_XML" "$1" <<'PY'
 import sys, xml.etree.ElementTree as ET
@@ -334,24 +335,24 @@ PY
 # ── primitives: gestures ─────────────────────────────────────────────────────
 
 # Tap at exact screen coordinates.
-ui_tap_xy() {
+__ui_tap_xy() {
     local x="$1" y="$2"
     info "Tap ($x, $y)"
-    adb shell input tap "$x" "$y"
+    __adb shell input tap "$x" "$y"
     sleep 0.5
 }
 
 # Long-press at exact screen coordinates.
-ui_long_tap_xy() {
+__ui_long_tap_xy() {
     local x="$1" y="$2" ms="${3:-800}"
     info "Long-tap ($x, $y) for ${ms}ms"
-    adb shell input swipe "$x" "$y" "$x" "$y" "$ms"
+    __adb shell input swipe "$x" "$y" "$x" "$y" "$ms"
     sleep 0.5
 }
 
 # Swipe in a cardinal direction.
 # ui_swipe up|down|left|right [distance_px=800]
-ui_swipe() {
+__ui_swipe() {
     local dir="$1" dist="${2:-800}" ms="${3:-400}"
     local cx=540 cy=960   # centre of a 1080×1920 screen
     local x1=$cx y1=$cy x2=$cx y2=$cy
@@ -363,39 +364,39 @@ ui_swipe() {
         *) warn "Unknown swipe direction: $dir"; return ;;
     esac
     debug "swipe $dir (${x1},${y1})→(${x2},${y2})"
-    adb shell input swipe "$x1" "$y1" "$x2" "$y2" "$ms"
+    __adb shell input swipe "$x1" "$y1" "$x2" "$y2" "$ms"
     sleep 0.3
 }
 
 # Arbitrary swipe between two coordinates.
 # ui_swipe_xy x1 y1 x2 y2 [duration_ms=400]
-ui_swipe_xy() {
+__ui_swipe_xy() {
     local x1="$1" y1="$2" x2="$3" y2="$4" ms="${5:-400}"
     info "Swipe ($x1,$y1)→($x2,$y2)"
-    adb shell input swipe "$x1" "$y1" "$x2" "$y2" "$ms"
+    __adb shell input swipe "$x1" "$y1" "$x2" "$y2" "$ms"
     sleep 0.3
 }
 
 # ── primitives: keyboard ─────────────────────────────────────────────────────
 
-ui_press_back()  { adb shell input keyevent KEYCODE_BACK;  sleep 0.5; }
-ui_press_home()  { adb shell input keyevent KEYCODE_HOME;  sleep 0.5; }
-ui_press_enter() { adb shell input keyevent KEYCODE_ENTER; sleep 0.3; }
-ui_key()         { adb shell input keyevent "$1"; sleep 0.3; }
+__ui_press_back()  { __adb shell input keyevent KEYCODE_BACK;  sleep 0.5; }
+__ui_press_home()  { __adb shell input keyevent KEYCODE_HOME;  sleep 0.5; }
+__ui_press_enter() { __adb shell input keyevent KEYCODE_ENTER; sleep 0.3; }
+__ui_key()         { __adb shell input keyevent "$1"; sleep 0.3; }
 
 # Type text into the currently-focused field.
-ui_input_text() {
+__ui_input_text() {
     local text="$1"
-    # adb input text handles spaces as %s
-    adb shell input text "${text// /%s}"
+    # __adb input text handles spaces as %s
+    __adb shell input text "${text// /%s}"
     sleep 0.3
 }
 
 # Select-all then delete — clears the focused field.
-ui_clear_text() {
-    adb shell input keyevent --longpress KEYCODE_A   # select all
+__ui_clear_text() {
+    __adb shell input keyevent --longpress KEYCODE_A   # select all
     sleep 0.2
-    adb shell input keyevent KEYCODE_DEL
+    __adb shell input keyevent KEYCODE_DEL
     sleep 0.2
 }
 
@@ -403,12 +404,12 @@ ui_clear_text() {
 
 # Pull a screenshot from the device to $UITEST_TMP/.
 # ui_screenshot [label]
-ui_screenshot() {
+__ui_screenshot() {
     SCREENSHOT_N=$((SCREENSHOT_N+1))
     local label="${1:-screen}"
     local fname="${UITEST_TMP}/${SCREENSHOT_N}_${label}.png"
-    adb shell screencap -p /sdcard/ui_test_cap.png >/dev/null 2>&1
-    adb pull /sdcard/ui_test_cap.png "$fname" >/dev/null 2>&1
+    __adb shell screencap -p /sdcard/ui_test_cap.png >/dev/null 2>&1
+    __adb pull /sdcard/ui_test_cap.png "$fname" >/dev/null 2>&1
     info "Screenshot → $fname"
 }
 
@@ -416,32 +417,32 @@ ui_screenshot() {
 
 # Launch an activity and wait for it to settle.
 # Component: full (pkg/class) or short (.ClassName — PKG is prepended).
-ui_launch() {
+__ui_launch() {
     local component="$1"
     # Prepend PKG if caller passed a short form like ".ui.activities.Foo"
     [[ "$component" != *"/"* ]] && component="$PKG/$component"
     info "Launch $component"
-    adb shell am start -n "$component" >/dev/null
+    __adb shell am start -n "$component" >/dev/null
     sleep 2
     ui_dismiss_anr
     ui_dump
 }
 
 # Force-stop the app and wait for the process to fully die.
-ui_stop() {
+__ui_stop() {
     info "Stop $PKG"
-    adb shell am force-stop "$PKG" >/dev/null 2>&1 || true
+    __adb shell am force-stop "$PKG" >/dev/null 2>&1 || true
     sleep 2
 }
 
 # Scroll until text is visible (without tapping).  Returns 0 if found.
 # ui_scroll_to text [max_scrolls=8] [direction=up]
-ui_scroll_to() {
+__ui_scroll_to() {
     local text="$1" max="${2:-8}" dir="${3:-up}"
     local i
     for i in $(seq 1 "$max"); do
         ui_dismiss_anr
-        if ui_texts | grep -qF "$text"; then
+        if __ui_texts | grep -qF -- "$text"; then
             debug "scroll_to: found \"$text\" after $((i-1)) scroll(s)"
             return 0
         fi
@@ -455,7 +456,7 @@ ui_scroll_to() {
 
 # Tap the element with the given text, scrolling if needed.
 # ui_tap text [max_scrolls=5] [direction=up]
-ui_tap() {
+__ui_tap() {
     local text="$1" max="${2:-5}" dir="${3:-up}"
     local i
     for i in $(seq 1 "$max"); do
@@ -463,7 +464,7 @@ ui_tap() {
         local coords
         coords=$(ui_find_xy "$text") || true
         if [[ -n "$coords" ]]; then
-            adb shell input tap $coords
+            __adb shell input tap $coords
             sleep 1
             ui_dump
             return 0
@@ -475,7 +476,7 @@ ui_tap() {
 }
 
 # Long-press the element with the given text, scrolling if needed.
-ui_long_tap() {
+__ui_long_tap() {
     local text="$1" max="${2:-5}"
     for _ in $(seq 1 "$max"); do
         ui_dump
@@ -497,11 +498,11 @@ ui_long_tap() {
 # ── assertions ────────────────────────────────────────────────────────────────
 
 # Wait up to N seconds for text to appear; assert it arrives.
-ui_wait_for() {
+__ui_wait_for() {
     local text="$1" timeout="${2:-8}" waited=0
     while [[ $waited -lt $timeout ]]; do
         ui_dismiss_anr
-        if ui_texts | grep -qF "$text"; then
+        if __ui_texts | grep -qF -- "$text"; then
             pass "Found: \"$text\""
             return
         fi
@@ -509,15 +510,15 @@ ui_wait_for() {
         waited=$((waited+1))
     done
     fail "Timed out after ${timeout}s waiting for \"$text\""
-    info "Screen:"; ui_texts | sed 's/^/    /'
+    info "Screen:"; __ui_texts | sed 's/^/    /'
 }
 
 # Wait up to N seconds for text to disappear.
-ui_wait_gone() {
+__ui_wait_gone() {
     local text="$1" timeout="${2:-8}" waited=0
     while [[ $waited -lt $timeout ]]; do
         ui_dump
-        if ! ui_texts | grep -qF "$text"; then
+        if ! __ui_texts | grep -qF -- "$text"; then
             pass "Gone: \"$text\""
             return
         fi
@@ -528,35 +529,35 @@ ui_wait_gone() {
 }
 
 # Assert text is visible on the current screen (single dump).
-ui_assert_present() {
+__ui_assert_present() {
     local text="$1"
     ui_dismiss_anr
-    if ui_texts | grep -qF "$text"; then
+    if __ui_texts | grep -qF -- "$text"; then
         pass "Present: \"$text\""
     else
         fail "Expected \"$text\" — not on screen"
-        info "Screen:"; ui_texts | sed 's/^/    /'
+        info "Screen:"; __ui_texts | sed 's/^/    /'
     fi
 }
 
 # Scroll until text is visible, then assert it.  Use when the item may be
 # below the current viewport — safer than ui_assert_present for long screens.
-ui_assert_scroll() {
+__ui_assert_scroll() {
     local text="$1" max="${2:-6}"
     ui_dismiss_anr
     if ui_scroll_to "$text" "$max"; then
         pass "Found (scrolled): \"$text\""
     else
         fail "Not found after scrolling: \"$text\""
-        info "Screen:"; ui_texts | sed 's/^/    /'
+        info "Screen:"; __ui_texts | sed 's/^/    /'
     fi
 }
 
 # Assert text is NOT visible on the current screen.
-ui_assert_absent() {
+__ui_assert_absent() {
     local text="$1"
     ui_dump
-    if ui_texts | grep -qF "$text"; then
+    if __ui_texts | grep -qF -- "$text"; then
         fail "Unexpected \"$text\" — is on screen"
     else
         pass "Absent: \"$text\""
@@ -565,7 +566,7 @@ ui_assert_absent() {
 
 # Assert a node matching text has attribute=value.
 # e.g. ui_assert_attr "Enable Debug Logging" "checked" "true"
-ui_assert_attr() {
+__ui_assert_attr() {
     local text="$1" attr="$2" expected="$3"
     ui_dump
     local actual
@@ -578,7 +579,7 @@ ui_assert_attr() {
 }
 
 # Assert text appears exactly N times on the current screen.
-ui_assert_count() {
+__ui_assert_count() {
     local text="$1" expected="$2"
     ui_dump
     local actual
@@ -594,18 +595,18 @@ ui_assert_count() {
 
 # Write fake crash prefs so CrashReportActivity displays without a live crash.
 # Launches the app briefly first to ensure shared_prefs/ exists, then pushes the
-# XML directly via adb push (works on emulators with adbd running as root, which
+# XML directly via __adb push (works on emulators with adbd running as root, which
 # is the standard for AOSP/google_apis emulator images without Play Store).
-ui_inject_crash_prefs() {
+__ui_inject_crash_prefs() {
     local prefs_dir="/data/data/$PKG/shared_prefs"
     local prefs_path="$prefs_dir/tabssh_startup.xml"
     local ts
     ts=$(date +%s)000
 
     # Launch MainActivity briefly so Room can create the app data directory.
-    adb shell am start -n "$PKG/.ui.activities.MainActivity" >/dev/null
+    __adb shell am start -n "$PKG/.ui.activities.MainActivity" >/dev/null
     sleep 2
-    adb shell am force-stop "$PKG" >/dev/null 2>&1 || true
+    __adb shell am force-stop "$PKG" >/dev/null 2>&1 || true
     sleep 1
 
     # Write prefs XML to a local temp file and push it directly (requires root adb).
@@ -615,12 +616,12 @@ ui_inject_crash_prefs() {
         "$ts" > "$local_tmp"
 
     # Ensure the shared_prefs directory exists (it might not if the app never ran).
-    adb shell "mkdir -p $prefs_dir" >/dev/null 2>&1 || true
-    if adb push "$local_tmp" "$prefs_path" >/dev/null 2>&1; then
-        adb shell "chmod 660 $prefs_path" >/dev/null 2>&1 || true
+    __adb shell "mkdir -p $prefs_dir" >/dev/null 2>&1 || true
+    if __adb push "$local_tmp" "$prefs_path" >/dev/null 2>&1; then
+        __adb shell "chmod 660 $prefs_path" >/dev/null 2>&1 || true
         info "Crash prefs injected"
     else
-        fail "Could not inject crash prefs (adb push failed — emulator may not be rooted)"
+        fail "Could not inject crash prefs (__adb push failed — emulator may not be rooted)"
     fi
     rm -f "$local_tmp"
 }
@@ -629,7 +630,7 @@ ui_inject_crash_prefs() {
 # Parses a STEPS array and executes each step sequentially.
 # Called by the top-level argument loop when it sees "run".
 
-exec_run_steps() {
+__exec_run_steps() {
     local name="$1"; shift  # test label
     local steps=("$@")
     local i=0 n=${#steps[@]}
@@ -661,7 +662,7 @@ exec_run_steps() {
 }
 
 # Actually, simpler: re-implement inline step processing with a proper lookahead.
-run_inline() {
+__run_inline() {
     local name="${1:-inline}"; shift
     echo ""
     echo -e "${BLUE}━━━ Run: $name ━━━${NC}"
@@ -764,7 +765,7 @@ run_inline() {
 PASS_COUNT=0
 FAIL_COUNT=0
 
-run_test() {
+__run_test() {
     local name="$1"
     echo ""
     echo -e "${BLUE}━━━ Test: $name ━━━${NC}"
@@ -779,7 +780,7 @@ run_test() {
     fi
 }
 
-test_settings_opens() {
+__test_settings_opens() {
     ui_stop
     ui_launch "$PKG/.ui.activities.SettingsActivity"
     ui_wait_for       "Settings"
@@ -787,7 +788,7 @@ test_settings_opens() {
     ui_assert_present "Logging"
 }
 
-test_hypervisor_form() {
+__test_hypervisor_form() {
     ui_stop
     ui_launch "$PKG/.ui.activities.HypervisorEditActivity"
     # "Name" is a TextInputLayout hint that may be absent from the accessibility tree on
@@ -807,7 +808,7 @@ test_hypervisor_form() {
 # being checked — a single ui_scroll_to on the header is not enough because the
 # items lower in the section can still be off-screen.
 # Also confirms "Test crash dialog" is visible (debug build only behaviour).
-test_logging_navigation() {
+__test_logging_navigation() {
     ui_stop
     ui_launch "$PKG/.ui.activities.SettingsActivity"
     ui_wait_for "Settings"
@@ -870,7 +871,7 @@ test_logging_navigation() {
     ui_stop
 }
 
-test_crash_dialog() {
+__test_crash_dialog() {
     ui_stop
     info "Injecting crash prefs…"
     ui_inject_crash_prefs

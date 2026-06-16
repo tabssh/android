@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+##@Version YYYYMMDDHHMM-git
 # scripts/install-to-device.sh — install TabSSH APK to a connected device via ADB.
 
 echo "📱 TabSSH APK Installer"
@@ -19,7 +20,7 @@ if ! command -v adb &> /dev/null; then
 fi
 
 # Check for connected devices
-DEVICE_COUNT=$(adb devices | grep -v "List of devices" | grep -c "device$")
+DEVICE_COUNT=$(adb devices | grep -v -- "List of devices" | grep -c -- "device$")
 
 if [ "$DEVICE_COUNT" -eq 0 ]; then
     echo -e "${RED}❌ No Android devices connected${NC}"

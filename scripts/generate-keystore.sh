@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+##@Version YYYYMMDDHHMM-git
 # scripts/generate-keystore.sh — create a release signing keystore.
 # Prompts for a password rather than hardcoding one.
 #

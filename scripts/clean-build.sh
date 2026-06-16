@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+##@Version YYYYMMDDHHMM-git
 # scripts/clean-build.sh — full clean of build artefacts then rebuild.
 
 echo "🧹 TabSSH Clean Build"

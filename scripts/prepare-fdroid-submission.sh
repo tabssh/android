@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+##@Version YYYYMMDDHHMM-git
 # scripts/prepare-fdroid-submission.sh — bundle F-Droid submission artefacts.
 # Writes output to /tmp/tabssh-android/fdroid-submission/ (never the repo tree).
 #
@@ -24,7 +25,7 @@ for f in README.md CHANGELOG.md LICENSE.md; do
 done
 
 # Generate RFP stub
-VERSION="$(grep versionName "$ROOT/app/build.gradle" | head -1 | sed 's/.*"\(.*\)".*/\1/')"
+VERSION="$(grep -- versionName "$ROOT/app/build.gradle" | head -1 | sed 's/.*"\(.*\)".*/\1/')"
 
 cat > "$OUT/RFP_SUBMISSION.md" << EOF
 # F-Droid Request for Packaging (RFP)

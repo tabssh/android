@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+##@Version YYYYMMDDHHMM-git
 # scripts/notify-release.sh — post a release announcement to community channels.
 # Sends to any channel whose token/webhook env var is set; skips the rest silently.
 #

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+##@Version YYYYMMDDHHMM-git
 # scripts/android-emulator.sh — manage TabSSH test emulators.
 #
 # Usage:
@@ -66,7 +67,7 @@ EMU="$SDK/emulator/emulator"
 # ── type → device mapping ─────────────────────────────────────────────────
 # Hardware profile names are what `avdmanager list device -c` outputs. We
 # pick stable, ships-with-SDK options.
-device_for() {
+__device_for() {
   local type="$1" size="${2:-}"
   case "$type" in
     phone)
@@ -90,7 +91,7 @@ device_for() {
 }
 
 # AVD name encodes the type + size so we can keep multiple coexisting.
-avd_name_for() {
+__avd_name_for() {
   local type="$1" size="${2:-}"
   if [[ -n "$size" ]]; then
     echo "TabSSH_${type}_${size}"
@@ -100,11 +101,11 @@ avd_name_for() {
 }
 
 # ── helpers ───────────────────────────────────────────────────────────────
-list_tabssh_avds() {
-  "$AVDMGR" list avd 2>/dev/null | awk '/^    Name:/{print $2}' | grep -E "^TabSSH_" || true
+__list_tabssh_avds() {
+  "$AVDMGR" list avd 2>/dev/null | awk '/^    Name:/{print $2}' | grep -E -- "^TabSSH_" || true
 }
 
-ensure_sdk() {
+__ensure_sdk() {
   local missing=0
   [[ -x "$ADB" ]] || missing=1
   [[ -x "$EMU" ]] || missing=1
@@ -124,12 +125,12 @@ ensure_sdk() {
     "system-images;android-${API_LEVEL};google_apis;x86_64"
 }
 
-avd_exists() {
+__avd_exists() {
   local name="$1"
-  "$AVDMGR" list avd 2>/dev/null | grep -qE "^    Name: ${name}\$"
+  "$AVDMGR" list avd 2>/dev/null | grep -qE -- "^    Name: ${name}\$"
 }
 
-create_avd() {
+__create_avd() {
   local name="$1" device_id="$2"
   echo "🛠  Creating AVD $name (device=$device_id, api=$API_LEVEL)"
   echo no | "$AVDMGR" create avd \
@@ -140,7 +141,7 @@ create_avd() {
 }
 
 # Returns the ADB serial of a running emulator booted from `name`, or empty.
-running_serial_for() {
+__running_serial_for() {
   local target_name="$1"
   for serial in $("$ADB" devices 2>/dev/null | awk '/^emulator-/ {print $1}'); do
     local avd
@@ -152,7 +153,7 @@ running_serial_for() {
   done
 }
 
-start_avd() {
+__start_avd() {
   local type="$1" size="${2:-}"
   ensure_sdk
 
@@ -200,7 +201,7 @@ start_avd() {
   # zombie 5554 we'd attach to the wrong one. Forcing the port + waiting
   # against that specific serial avoids that.
   local emu_port=5554
-  while ss -tnl 2>/dev/null | awk '{print $4}' | grep -q ":$emu_port\$"; do
+  while ss -tnl 2>/dev/null | awk '{print $4}' | grep -q -- ":$emu_port\$"; do
     emu_port=$((emu_port + 2))
   done
   local serial="emulator-$emu_port"
@@ -219,7 +220,7 @@ start_avd() {
 
   echo -n "⏳ Waiting for $serial "
   for _ in $(seq 1 60); do
-    if "$ADB" -s "$serial" get-state 2>/dev/null | grep -q device; then break; fi
+    if "$ADB" -s "$serial" get-state 2>/dev/null | grep -q -- device; then break; fi
     echo -n "."; sleep 5
   done
   echo
@@ -243,7 +244,7 @@ start_avd() {
   echo "  $ADB -s $serial install -r ${PWD}/binaries/tabssh-android-amd64.apk"
 }
 
-stop_avd() {
+__stop_avd() {
   local type="${1:-}" size="${2:-}"
   if [[ -n "$type" ]]; then
     local name
@@ -268,7 +269,7 @@ stop_avd() {
   fi
 }
 
-delete_avd() {
+__delete_avd() {
   local type="${1:?delete needs a type}" size="${2:-}"
   local name
   name="$(avd_name_for "$type" "$size")"
@@ -281,7 +282,7 @@ delete_avd() {
   fi
 }
 
-clean_all() {
+__clean_all() {
   stop_avd
   for name in $(list_tabssh_avds); do
     "$AVDMGR" delete avd -n "$name" >/dev/null 2>&1
@@ -290,7 +291,7 @@ clean_all() {
   echo "✅ Clean complete."
 }
 
-list_avds() {
+__list_avds() {
   echo "TabSSH AVDs:"
   list_tabssh_avds | sed 's/^/  /'
   echo
@@ -322,7 +323,7 @@ case "$COMMAND" in
     list_avds
     ;;
   -h|--help|help)
-    sed -n '2,30p' "$0" | sed 's/^# *//'
+    sed -n '2,30p' "$0" | sed 's/^# *//' | head -27
     ;;
   *)
     # Implicit start: first arg is a type (e.g. `tablet`, `phone`, `fold`)

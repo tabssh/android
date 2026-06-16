@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+##@Version YYYYMMDDHHMM-git
 # scripts/fetch-mosh-binaries.sh — pull the latest mosh-client binaries
 # from the GitHub release `mosh-<version>` and place them as native libs.
 #
@@ -40,12 +41,11 @@ echo "🔍 Querying ${REPO} for latest mosh-* release..."
 if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
     tag=$(gh release list --repo "$REPO" --limit 50 \
             --json tagName --jq '.[].tagName' \
-            | grep -E '^mosh-[0-9]+\.[0-9]+\.[0-9]+$' \
+            | grep -E -- '^mosh-[0-9]+\.[0-9]+\.[0-9]+$' \
             | head -n1 || true)
 else
-    # Fall back to anonymous API (rate-limited, but works without gh login).
     tag=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases?per_page=50" \
-            | grep -oE '"tag_name":[[:space:]]*"mosh-[0-9]+\.[0-9]+\.[0-9]+"' \
+            | grep -oE -- '"tag_name":[[:space:]]*"mosh-[0-9]+\.[0-9]+\.[0-9]+"' \
             | head -n1 \
             | sed -E 's/.*"(mosh-[0-9]+\.[0-9]+\.[0-9]+)".*/\1/' || true)
 fi
