@@ -35,7 +35,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
     /** Full layout across all configured rows — preserved across orientation changes. */
     private var fullLayout: List<List<KeyboardKey>>? = null
 
-    /** Currently latched modifier ("CTL", "ALT") or null. FN is handled via row swap. */
+    /** Currently latched modifier ("CTL", "ALT", "SFT") or null. FN is handled via row swap. */
     private var currentModifier: String? = null
 
     /** Whether the FN row swap is currently active. */
@@ -271,7 +271,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
             "FN" -> {
                 if (fnMode) restoreFromFn() else enterFnMode()
             }
-            "CTL", "ALT" -> {
+            "CTL", "ALT", "SFT" -> {
                 val newMod = if (currentModifier == key.id) null else key.id
                 setCurrentModifier(newMod)
             }
@@ -395,7 +395,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
         this.onModifierChangedListener = listener
     }
 
-    /** Currently latched modifier ("CTL", "ALT") or null. */
+    /** Currently latched modifier ("CTL", "ALT", "SFT") or null. */
     fun getCurrentModifier(): String? = currentModifier
 
     /** Force-clear the latched modifier (e.g. after the terminal consumes it). */
@@ -467,6 +467,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
             val ent   = KeyboardKey("ENTER", "ENT",  "\r", widthMultiplier = 1.5f)
             val esc   = KeyboardKey("ESC",   "ESC",  "", widthMultiplier = 1.5f)
             val alt   = KeyboardKey("ALT",   "ALT",  "", KeyboardKey.KeyCategory.MODIFIER)
+            val sft   = KeyboardKey("SFT",   "SFT",  "", KeyboardKey.KeyCategory.MODIFIER)
             val fn    = KeyboardKey("FN",    "FN",   "", KeyboardKey.KeyCategory.MODIFIER)
             val up    = KeyboardKey("UP",    "↑",    "[A", KeyboardKey.KeyCategory.ARROW)
             val down  = KeyboardKey("DOWN",  "↓",    "[B", KeyboardKey.KeyCategory.ARROW)
@@ -484,8 +485,8 @@ class MultiRowKeyboardView @JvmOverloads constructor(
             // matching the user's "pinned left under ENT" spec.
             val prefix = KeyboardKey("PREFIX", "PRE", "", KeyboardKey.KeyCategory.ACTION, 2f)
 
-            // Row 1 (all layouts): CTL(2×) TAB(2×) ALT : / ↑ ↓ ← →
-            val row1 = listOf(ctl, tab, alt, colon, slash, up, down, left, right)
+            // Row 1 (all layouts): CTL(1.5×) TAB(1.5×) ALT SFT : / ↑ ↓ ← →
+            val row1 = listOf(ctl, tab, alt, sft, colon, slash, up, down, left, right)
 
             // Row 2 (layouts ≥ 2): ENT(2×) ESC(2×) HOME END PGUP PGDN FN
             val row2 = listOf(ent, esc, home, end, pgup, pgdn, fn)

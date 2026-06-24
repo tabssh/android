@@ -736,8 +736,9 @@ class TerminalView @JvmOverloads constructor(
     // would arrive as a literal letter. We therefore lift the modifier
     // state into TerminalView so onKeyDown() and the InputConnection paths
     // can both consume it.
-    private var pendingCtrl = false
-    private var pendingAlt = false
+    private var pendingCtrl  = false
+    private var pendingAlt   = false
+    private var pendingShift = false
 
     // PREFIX latch — exact parallel to pendingCtrl/pendingAlt. Bytes to
     // prepend before the NEXT user keystroke (set by TabTerminalActivity
@@ -771,19 +772,22 @@ class TerminalView @JvmOverloads constructor(
         android.os.Handler(android.os.Looper.getMainLooper()).post { onPrefixConsumed?.invoke() }
     }
 
-    /** Set/clear the pending one-shot modifier. */
+    /** Set/clear the pending one-shot modifier (CTL, ALT, or SFT from the bar). */
     fun setPendingModifier(modifier: String?) {
-        pendingCtrl = modifier == "CTL"
-        pendingAlt = modifier == "ALT"
+        pendingCtrl  = modifier == "CTL"
+        pendingAlt   = modifier == "ALT"
+        pendingShift = modifier == "SFT"
     }
 
-    fun isPendingCtrl(): Boolean = pendingCtrl
-    fun isPendingAlt(): Boolean = pendingAlt
+    fun isPendingCtrl(): Boolean  = pendingCtrl
+    fun isPendingAlt(): Boolean   = pendingAlt
+    fun isPendingShift(): Boolean = pendingShift
 
     private fun consumePendingModifier() {
-        if (pendingCtrl || pendingAlt) {
-            pendingCtrl = false
-            pendingAlt = false
+        if (pendingCtrl || pendingAlt || pendingShift) {
+            pendingCtrl  = false
+            pendingAlt   = false
+            pendingShift = false
             onModifierConsumed?.invoke()
         }
     }
@@ -814,6 +818,13 @@ class TerminalView @JvmOverloads constructor(
             }
             pendingAlt -> {
                 sendKeySequence("\u001b$c")
+                consumePendingModifier()
+                true
+            }
+            pendingShift -> {
+                // For printable chars from the bar (symbols, digits) shift just
+                // uppercases; IME handles capitalisation for letter keys directly.
+                sendText(c.uppercaseChar().toString())
                 consumePendingModifier()
                 true
             }

@@ -4132,11 +4132,40 @@ class TabTerminalActivity : AppCompatActivity() {
                     }
                 }
                 if (key.keySequence.isNotEmpty()) {
-                    // ARROW keys from the keyboard bar must respect DECCKM. When the
-                    // remote (e.g. vim) has set application cursor key mode (\033[?1h),
-                    // arrows must use SS3 (\033OA) not CSI (\033[A). TerminalView
-                    // exposes isApplicationCursorKeysMode() for exactly this query.
-                    val seq: String = if (key.category == io.github.tabssh.ui.keyboard.KeyboardKey.KeyCategory.ARROW &&
+                    // When SFT is latched, produce the standard xterm Shift+key
+                    // escape sequences for navigation and function keys. Single-char
+                    // keys fall through to sendCharWithPendingModifier below which
+                    // uppercases them. Shift+Arrow uses the CSI modifier-param form
+                    // even in DECCKM mode — xterm does the same.
+                    val shiftActive = terminal?.isPendingShift() == true
+                    val seq: String = if (shiftActive) {
+                        when (key.id) {
+                            "UP"    -> "[1;2A"
+                            "DOWN"  -> "[1;2B"
+                            "RIGHT" -> "[1;2C"
+                            "LEFT"  -> "[1;2D"
+                            "TAB"   -> "[Z"
+                            "HOME"  -> "[1;2H"
+                            "END"   -> "[1;2F"
+                            "PGUP"  -> "[5;2~"
+                            "PGDN"  -> "[6;2~"
+                            "F1"    -> "[1;2P"
+                            "F2"    -> "[1;2Q"
+                            "F3"    -> "[1;2R"
+                            "F4"    -> "[1;2S"
+                            "F5"    -> "[15;2~"
+                            "F6"    -> "[17;2~"
+                            "F7"    -> "[18;2~"
+                            "F8"    -> "[19;2~"
+                            "F9"    -> "[20;2~"
+                            "F10"   -> "[21;2~"
+                            "F11"   -> "[23;2~"
+                            "F12"   -> "[24;2~"
+                            else    -> key.keySequence
+                        }
+                    } else if (key.category == io.github.tabssh.ui.keyboard.KeyboardKey.KeyCategory.ARROW &&
+                        // ARROW keys must respect DECCKM: when application cursor key mode
+                        // is active (\033[?1h), arrows use SS3 (\033OA) not CSI (\033[A).
                         terminal?.isApplicationCursorKeysMode() == true) {
                         when (key.id) {
                             "UP"    -> "OA"
@@ -4148,7 +4177,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     } else {
                         key.keySequence
                     }
-                    // If the bar has CTL/ALT latched and the key is a single
+                    // If the bar has CTL/ALT/SFT latched and the key is a single
                     // ASCII character (typical for symbol/letter keys), apply
                     // the modifier here so chords like CTL+/ also work from
                     // the bar even without the IME path.

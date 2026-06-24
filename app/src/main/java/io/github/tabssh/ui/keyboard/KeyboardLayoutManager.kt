@@ -20,7 +20,7 @@ object KeyboardLayoutManager {
      * version is older and the user has not opted-in to a custom layout,
      * the saved JSON is discarded so the new default takes effect.
      */
-    const val CURRENT_DEFAULT_LAYOUT_VERSION = 2
+    const val CURRENT_DEFAULT_LAYOUT_VERSION = 3
 
     /**
      * Parse multi-row layout from JSON string.

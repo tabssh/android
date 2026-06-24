@@ -81,6 +81,7 @@ data class KeyboardKey(
             // Modifiers
             KeyboardKey("CTL", "CTL", "", KeyCategory.MODIFIER),
             KeyboardKey("ALT", "ALT", "", KeyCategory.MODIFIER),
+            KeyboardKey("SFT", "SFT", "", KeyCategory.MODIFIER),
             KeyboardKey("FN", "FN", "", KeyCategory.MODIFIER),
 
             // Actions
