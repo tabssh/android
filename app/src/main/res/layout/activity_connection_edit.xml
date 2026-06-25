@@ -10,7 +10,7 @@
     <com.google.android.material.appbar.AppBarLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar">
+        app:liftOnScroll="true">
 
         <androidx.appcompat.widget.Toolbar
             android:id="@+id/toolbar"
@@ -58,13 +58,15 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:hint="@string/connection_name_hint"
+                        app:errorEnabled="true"
                         style="@style/Widget.TabSSH.TextInputLayout">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/edit_name"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:inputType="text" />
+                            android:inputType="text"
+                            android:imeOptions="actionNext" />
 
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -73,13 +75,16 @@
                         android:layout_height="wrap_content"
                         android:hint="@string/connection_host_hint"
                         android:layout_marginTop="@dimen/space_sm"
+                        app:errorEnabled="true"
                         style="@style/Widget.TabSSH.TextInputLayout">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/edit_host"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:inputType="textUri" />
+                            android:inputType="textUri"
+                            android:imeOptions="actionNext"
+                            android:autofillHints="emailAddress" />
 
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -102,7 +107,8 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:entries="@array/protocol_options" />
+                            android:entries="@array/protocol_options"
+                            android:contentDescription="Connection protocol selector" />
 
                     </LinearLayout>
 
@@ -124,7 +130,8 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:entries="@array/ip_mode_entries" />
+                            android:entries="@array/ip_mode_entries"
+                            android:contentDescription="IP mode selector (IPv4, IPv6, or auto)" />
 
                     </LinearLayout>
 
@@ -140,6 +147,8 @@
                             android:layout_weight="1"
                             android:hint="@string/connection_port_hint"
                             android:layout_marginEnd="@dimen/space_sm"
+                            app:errorEnabled="true"
+                            app:helperText="1–65535"
                             style="@style/Widget.TabSSH.TextInputLayout">
 
                             <com.google.android.material.textfield.TextInputEditText
@@ -147,6 +156,8 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:inputType="number"
+                                android:imeOptions="actionNext"
+                                android:maxLength="5"
                                 android:text="22"
                                 android:tooltipText="Default SSH port is 22" />
 
@@ -158,13 +169,16 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="2"
                             android:hint="@string/connection_username_hint"
+                            app:errorEnabled="true"
                             style="@style/Widget.TabSSH.TextInputLayout">
 
                             <com.google.android.material.textfield.TextInputEditText
                                 android:id="@+id/edit_username"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:inputType="textPersonName" />
+                                android:inputType="textPersonName"
+                                android:imeOptions="actionNext"
+                                android:autofillHints="username" />
 
                         </com.google.android.material.textfield.TextInputLayout>
 
@@ -231,7 +245,8 @@
                             android:layout_width="24dp"
                             android:layout_height="24dp"
                             android:layout_marginEnd="@dimen/space_sm"
-                            android:background="@android:color/darker_gray" />
+                            android:background="?attr/colorOutline"
+                            android:contentDescription="Current connection color tag" />
 
                         <Button
                             android:id="@+id/btn_pick_color_tag"
@@ -498,7 +513,7 @@
                     <!-- Wave 10 — Mosh mode: Off / Auto (default) / On -->
                     <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/layout_mosh_mode"
-                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_sm"
@@ -513,7 +528,7 @@
                     <!-- Mosh server command picker — only visible when Mosh is enabled -->
                     <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/layout_mosh_command"
-                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_sm"
@@ -529,7 +544,7 @@
                     <!-- Custom command text field — visible only when "Custom…" is selected -->
                     <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/layout_mosh_custom_command"
-                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_xs"
@@ -540,13 +555,14 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="text|textNoSuggestions"
+                            android:imeOptions="actionNext"
                             android:fontFamily="monospace" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <!-- Custom description — optional; if blank the command text is used as label -->
                     <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/layout_mosh_custom_desc"
-                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_xs"
@@ -556,7 +572,8 @@
                             android:id="@+id/edit_mosh_custom_desc"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:inputType="text" />
+                            android:inputType="text"
+                            android:imeOptions="actionDone" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -587,6 +604,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="number"
+                            android:imeOptions="actionNext"
                             android:text="15" />
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -603,6 +621,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="number"
+                            android:imeOptions="actionNext"
                             android:text="30" />
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -619,6 +638,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="number"
+                            android:imeOptions="actionNext"
                             android:text="0" />
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -654,6 +674,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="number"
+                            android:imeOptions="actionNext"
                             android:text="100" />
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -691,7 +712,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Status notifications stay silent. Choose if connect/disconnect events should sound or vibrate — handy for long-running tasks where a non-zero exit means something went wrong."
-                        android:textSize="12sp"
+                        android:textAppearance="?attr/textAppearanceBodySmall"
                         android:textColor="?android:attr/textColorSecondary"
                         android:layout_marginBottom="@dimen/space_md" />
 
@@ -707,8 +728,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="none"
-                            android:textColor="?android:attr/textColorPrimary"
-                            tools:ignore="LabelFor" />
+                            android:textColor="?android:attr/textColorPrimary" />
 
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -723,8 +743,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="none"
-                            android:textColor="?android:attr/textColorPrimary"
-                            tools:ignore="LabelFor" />
+                            android:textColor="?android:attr/textColorPrimary" />
 
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -759,7 +778,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Auto-attach to tmux, screen, or zellij sessions"
-                        android:textSize="12sp"
+                        android:textAppearance="?attr/textAppearanceBodySmall"
                         android:textColor="?android:attr/textColorSecondary"
                         android:layout_marginBottom="@dimen/space_md" />
 
@@ -792,6 +811,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="text"
+                            android:imeOptions="actionNext"
                             android:tooltipText="Custom session name (e.g., main, dev). Leave empty to use default." />
 
                     </com.google.android.material.textfield.TextInputLayout>
@@ -851,6 +871,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="number"
+                            android:imeOptions="actionDone"
                             android:tooltipText="Font size in sp (8-32). Leave empty for default." />
 
                     </com.google.android.material.textfield.TextInputLayout>
@@ -932,6 +953,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="text"
+                            android:imeOptions="actionDone"
                             android:fontFamily="monospace" />
 
                     </com.google.android.material.textfield.TextInputLayout>
@@ -940,13 +962,13 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_xs"
-                        android:textSize="12sp"
+                        android:textAppearance="?attr/textAppearanceBodySmall"
                         android:textColor="?android:attr/textColorSecondary"
                         android:text="For most hosts leave this at the default. Some hosts (e.g. shell.sourceforge.net) require a specific command to spawn a shell." />
 
 
                     <!-- Wave 1.5: SSH agent forwarding -->
-                    <com.google.android.material.switchmaterial.SwitchMaterial
+                    <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/switch_agent_forwarding"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -1014,7 +1036,8 @@
                                 android:id="@+id/edit_proxy_host"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:inputType="textUri" />
+                                android:inputType="textUri"
+                                android:imeOptions="actionNext" />
 
                         </com.google.android.material.textfield.TextInputLayout>
 
@@ -1023,6 +1046,7 @@
                             android:layout_height="wrap_content"
                             android:hint="Proxy Port"
                             android:layout_marginTop="@dimen/space_sm"
+                            app:helperText="1–65535"
                             style="@style/Widget.TabSSH.TextInputLayout">
 
                             <com.google.android.material.textfield.TextInputEditText
@@ -1030,6 +1054,8 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:inputType="number"
+                                android:imeOptions="actionNext"
+                                android:maxLength="5"
                                 android:text="22" />
 
                         </com.google.android.material.textfield.TextInputLayout>
@@ -1053,7 +1079,9 @@
                                     android:id="@+id/edit_proxy_username"
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
-                                    android:inputType="textPersonName" />
+                                    android:inputType="textPersonName"
+                                    android:imeOptions="actionNext"
+                                    android:autofillHints="username" />
 
                             </com.google.android.material.textfield.TextInputLayout>
 

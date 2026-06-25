@@ -114,6 +114,11 @@ class ConnectionEditActivity : AppCompatActivity() {
     private var availableVncIdentities: List<VncIdentity> = emptyList()
     private var selectedVncIdentityId: String? = null
 
+    // Cached per-host VNC password loaded by populateVncFields(); restored into
+    // editVncPassword by restoreVncIdentitySpinner() when the spinner falls back
+    // to "No Identity" so the user does not lose their previously saved password.
+    private var loadedVncPassword: String? = null
+
     /** Wave 3.1 — current color tag in the editor (ARGB int; 0 = none). */
     private var currentColorTag: Int = 0
 
@@ -299,7 +304,11 @@ class ConnectionEditActivity : AppCompatActivity() {
                 autoSetPort("23", setOf("22", "5900"))
             }
             else -> { // "ssh"
-                binding.cardAuthentication.visibility = View.VISIBLE
+                // bug-22: ensure auth card is visible on protocol switch back to SSH;
+                // selectedIdentityId was just reset above, so user must enter creds.
+                if (selectedIdentityId == null) {
+                    binding.cardAuthentication.visibility = View.VISIBLE
+                }
                 binding.cardAdvancedSettings.visibility = View.VISIBLE
                 binding.cardNotificationsSection.visibility = View.VISIBLE
                 binding.cardMultiplexer.visibility = View.VISIBLE
@@ -363,7 +372,20 @@ class ConnectionEditActivity : AppCompatActivity() {
                     selectedIdentityId = identity.id
                     selectedVncIdentityId = null
                     binding.editUsername.setText(identity.username)
-                    binding.cardAuthentication.visibility = View.GONE
+                    // PUBLIC_KEY identities carry their own keyId — hide auth card.
+                    // PASSWORD/KEYBOARD_INTERACTIVE identities still require the
+                    // user to enter a per-connection password, so keep auth visible.
+                    if (identity.authType == AuthType.PUBLIC_KEY) {
+                        binding.cardAuthentication.visibility = View.GONE
+                    } else {
+                        binding.cardAuthentication.visibility = View.VISIBLE
+                        val authTypes = AuthType.getAvailableTypes()
+                        val idx = authTypes.indexOf(identity.authType)
+                        if (idx >= 0) {
+                            binding.spinnerAuthType.setText(authTypes[idx].displayName, false)
+                            updateAuthTypeUI(identity.authType)
+                        }
+                    }
                 } else {
                     selectedIdentityId = null
                     selectedVncIdentityId = null
@@ -400,6 +422,20 @@ class ConnectionEditActivity : AppCompatActivity() {
         binding.spinnerProxySshKey.setAdapter(
             ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, placeholder)
         )
+        // Proxy key click listener — reads availableKeys at click time so it
+        // continues to work after setupKeySpinner() swaps the adapter. Position 0
+        // is the "Select SSH Key..." sentinel and clears any prior selection.
+        binding.spinnerProxySshKey.setOnItemClickListener { _, _, position, _ ->
+            val names = listOf("Select SSH Key...") + availableKeys.map { it.getDisplayName() }
+            if (position >= names.size) return@setOnItemClickListener
+            if (position == 0) {
+                binding.spinnerProxySshKey.setText("", false)
+                pendingRestoreProxyKeyId = null
+            } else {
+                binding.spinnerProxySshKey.setText(names[position], false)
+            }
+            hasUnsavedChanges = true
+        }
     }
 
     /** Populate the identity spinner with SSH [Identity] rows. */
@@ -459,8 +495,12 @@ class ConnectionEditActivity : AppCompatActivity() {
         if (id != null) {
             val idx = availableIdentities.indexOfFirst { it.id == id }
             if (idx >= 0) {
-                binding.spinnerIdentity.setText(availableIdentities[idx].name, false)
-                binding.cardAuthentication.visibility = View.GONE
+                val identity = availableIdentities[idx]
+                binding.spinnerIdentity.setText(identity.name, false)
+                // Only PUBLIC_KEY identities self-contain credentials; password-based
+                // identities still need a per-connection password from the user.
+                binding.cardAuthentication.visibility =
+                    if (identity.authType == AuthType.PUBLIC_KEY) View.GONE else View.VISIBLE
                 return
             }
         }
@@ -482,6 +522,13 @@ class ConnectionEditActivity : AppCompatActivity() {
         // No identity found — ensure the per-host password field is visible so the
         // user can enter a VNC password without needing an identity record.
         binding.layoutVncPassword.visibility = View.VISIBLE
+        // Restore any previously loaded per-host password (bug-04) so falling back
+        // to "No Identity" does not silently wipe the saved credential.
+        loadedVncPassword?.let { pw ->
+            if (binding.editVncPassword.text.isNullOrEmpty()) {
+                binding.editVncPassword.setText(pw)
+            }
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -608,16 +655,15 @@ class ConnectionEditActivity : AppCompatActivity() {
         binding.spinnerProxyAuthType.setOnItemClickListener { _, _, position, _ ->
             updateProxyAuthTypeUI(authTypes[position])
         }
+        // Re-sync proxy auth UI when the user types directly instead of picking
+        // from the dropdown (bug-08) — mirrors the main spinnerAuthType handler.
+        binding.spinnerProxyAuthType.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) updateProxyAuthTypeUI(getSelectedProxyAuthType())
+        }
 
         // Proxy SSH key spinner adapter is built inside setupKeySpinner() once
-        // availableKeys is loaded, to avoid a race where this coroutine would
-        // see an empty list. Wire the click listener here with a stable reference.
-        binding.spinnerProxySshKey.setOnItemClickListener { _, _, position, _ ->
-            val names = listOf("Select SSH Key...") + availableKeys.map { it.getDisplayName() }
-            if (position < names.size) {
-                binding.spinnerProxySshKey.setText(names[position], false)
-            }
-        }
+        // availableKeys is loaded; click listener is set in bootstrapKeySpinner()
+        // and reads availableKeys at click time so it survives adapter swaps.
     }
 
     private fun updateProxyTypeUI(proxyType: String) {
@@ -625,6 +671,10 @@ class ConnectionEditActivity : AppCompatActivity() {
             "None" -> {
                 binding.layoutProxyConfig.visibility = View.GONE
                 binding.layoutJumpHostAuth.visibility = View.GONE
+                // Clear stale proxy data so it does not get persisted on save (bug-09).
+                binding.editProxyHost.text?.clear()
+                binding.editProxyPort.text?.clear()
+                binding.editProxyUsername.text?.clear()
             }
             "SSH Jump Host" -> {
                 binding.layoutProxyConfig.visibility = View.VISIBLE
@@ -677,6 +727,10 @@ class ConnectionEditActivity : AppCompatActivity() {
             binding.spinnerGroup.setOnItemClickListener { _, _, position, _ ->
                 selectedGroupId = if (position == 0) null else groups[position - 1].id
                 selectedGroupName = groupsList[position]
+                // Reflect the choice in the action-bar subtitle (bug-23): clear it
+                // when "No Group" is picked; otherwise show the group name.
+                supportActionBar?.subtitle = if (position == 0) null else groupsList[position]
+                hasUnsavedChanges = true
             }
 
             existingProfile?.groupId?.let { groupId ->
@@ -730,6 +784,14 @@ class ConnectionEditActivity : AppCompatActivity() {
         binding.editReadTimeout.addTextChangedListener(watcher)
         binding.editServerAliveInterval.addTextChangedListener(watcher)
         binding.editPortKnockDelay.addTextChangedListener(watcher)
+        // bug-15: track changes on proxy / mosh / remote-command custom fields
+        // so the unsaved-changes guard fires for every editable field on the form.
+        binding.editProxyHost.addTextChangedListener(watcher)
+        binding.editProxyPort.addTextChangedListener(watcher)
+        binding.editProxyUsername.addTextChangedListener(watcher)
+        binding.editMoshCustomCommand.addTextChangedListener(watcher)
+        binding.editMoshCustomDesc.addTextChangedListener(watcher)
+        binding.editRemoteCommandCustom.addTextChangedListener(watcher)
         binding.spinnerEncoding.addTextChangedListener(watcher)
         binding.switchKeepAlive.setOnCheckedChangeListener { _, _ -> hasUnsavedChanges = true }
 
@@ -1100,10 +1162,16 @@ class ConnectionEditActivity : AppCompatActivity() {
                 }
                 if (!stored.isNullOrEmpty()) {
                     binding.editVncPassword.setText(stored)
+                    // Cache for restoreVncIdentitySpinner() fallback (bug-04).
+                    loadedVncPassword = stored
                 }
+                // After population completes, clear the dirty flag so the back-press
+                // guard does not trigger on TextWatcher fires from setText (UX-13).
+                hasUnsavedChanges = false
             }
         } else {
             binding.layoutVncPassword.visibility = View.GONE
+            hasUnsavedChanges = false
         }
     }
 
@@ -1314,6 +1382,9 @@ class ConnectionEditActivity : AppCompatActivity() {
         val x11Forwarding = binding.switchX11Forwarding.isChecked
         val moshMode = readMoshModeFromUi()
         val moshCommandOverride = readMoshCommandFromUi()
+        // Persist the user-supplied description for Custom… mosh commands so it
+        // round-trips into the editor on next open (bug-10).
+        val moshDescOverride = readMoshDescFromUi()
 
         val modeEntries = resources.getStringArray(R.array.multiplexer_mode_entries)
         val modeValues = resources.getStringArray(R.array.multiplexer_mode_values)
@@ -1377,7 +1448,8 @@ class ConnectionEditActivity : AppCompatActivity() {
         // JSON blob so it survives copy() without needing a new DB column.
         val mergedAdvancedSettings = mergeAdvancedSettings(
             existing = existingProfile?.advancedSettings,
-            moshCommand = moshCommandOverride
+            moshCommand = moshCommandOverride,
+            moshDescription = moshDescOverride
         )
 
         return existingProfile?.copy(
@@ -1422,19 +1494,36 @@ class ConnectionEditActivity : AppCompatActivity() {
      * Preserves all other keys already in the blob (IdentityFile, cloudSource, etc.).
      * Removes the key if [moshCommand] is null (user chose Default — no override needed).
      */
-    private fun mergeAdvancedSettings(existing: String?, moshCommand: String?): String? {
+    private fun mergeAdvancedSettings(existing: String?, moshCommand: String?, moshDescription: String? = null): String? {
         val json = try {
             existing?.takeIf { it.isNotBlank() }?.let { org.json.JSONObject(it) } ?: org.json.JSONObject()
         } catch (_: Exception) { org.json.JSONObject() }
 
         if (moshCommand.isNullOrBlank()) {
             json.remove("moshServerCommand")
+            json.remove("moshServerDescription")
         } else {
             json.put("moshServerCommand", moshCommand)
+            if (moshDescription.isNullOrBlank()) {
+                json.remove("moshServerDescription")
+            } else {
+                json.put("moshServerDescription", moshDescription)
+            }
         }
 
         val result = json.toString()
         return if (result == "{}") null else result
+    }
+
+    /**
+     * Read the user-supplied description that pairs with a Custom… mosh command.
+     * Returns null when not in Custom mode or when the field is blank.
+     */
+    private fun readMoshDescFromUi(): String? {
+        val selectedLabel = binding.spinnerMoshCommand.text.toString()
+        val preset = MOSH_PRESETS.firstOrNull { it.description == selectedLabel }
+        if (preset != null && !preset.isCustom) return null
+        return binding.editMoshCustomDesc.text.toString().trim().takeIf { it.isNotBlank() }
     }
 
     // -------------------------------------------------------------------------
@@ -1497,6 +1586,12 @@ class ConnectionEditActivity : AppCompatActivity() {
         return authTypes.find { it.displayName == selectedText } ?: AuthType.PASSWORD
     }
 
+    private fun getSelectedProxyAuthType(): AuthType {
+        val authTypes = AuthType.getAvailableTypes()
+        val selectedText = binding.spinnerProxyAuthType.text.toString()
+        return authTypes.find { it.displayName == selectedText } ?: AuthType.PASSWORD
+    }
+
     // -------------------------------------------------------------------------
     // Field validation
     // -------------------------------------------------------------------------
@@ -1511,6 +1606,14 @@ class ConnectionEditActivity : AppCompatActivity() {
         if (currentProtocol == "ssh" && selectedIdentityId == null) {
             val authType = getSelectedAuthType()
             if (authType == AuthType.PUBLIC_KEY && !validateKeySelection()) isValid = false
+        } else if (currentProtocol == "ssh" && selectedIdentityId != null) {
+            // Identity is selected — if it claims PUBLIC_KEY auth but has no keyId,
+            // the save would silently produce an unusable connection (bug-05).
+            val identity = availableIdentities.find { it.id == selectedIdentityId }
+            if (identity != null && identity.authType == AuthType.PUBLIC_KEY && identity.keyId.isNullOrBlank()) {
+                showToast("Selected identity has no SSH key — pick a different identity")
+                isValid = false
+            }
         }
         return isValid
     }
@@ -1550,9 +1653,15 @@ class ConnectionEditActivity : AppCompatActivity() {
 
     private fun validateKeySelection(): Boolean {
         return if (selectedKeyIndex <= 0) {
+            // UX-04: inline error on the SSH key picker EditText so the user sees
+            // the problem in context, not just a toast. layout_ssh_key is a plain
+            // LinearLayout (no .error API); MaterialAutoCompleteTextView inherits
+            // from EditText and shows the error icon via its TextInputLayout wrapper.
+            binding.spinnerSshKey.error = "Select an SSH key for public-key authentication"
             showToast("Please select an SSH key for public key authentication")
             false
         } else {
+            binding.spinnerSshKey.error = null
             true
         }
     }
@@ -2068,6 +2177,17 @@ class ConnectionEditActivity : AppCompatActivity() {
             binding.layoutMultiplexerSessionName.visibility =
                 if (modeValues[position] != "OFF") View.VISIBLE else View.GONE
         }
+        // Re-sync session-name visibility when the user types directly instead of
+        // picking from the dropdown (bug-13).
+        binding.spinnerMultiplexerMode.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) {
+                val typed = binding.spinnerMultiplexerMode.text.toString()
+                val idx = modeEntries.indexOf(typed)
+                val value = if (idx >= 0) modeValues[idx] else "OFF"
+                binding.layoutMultiplexerSessionName.visibility =
+                    if (value != "OFF") View.VISIBLE else View.GONE
+            }
+        }
     }
 
     private fun setupConnectionThemeSpinner() {
@@ -2152,6 +2272,12 @@ class ConnectionEditActivity : AppCompatActivity() {
             binding.layoutMoshCustomCommand.visibility = View.VISIBLE
             binding.layoutMoshCustomDesc.visibility = View.VISIBLE
             binding.editMoshCustomCommand.setText(savedCmd)
+            // Restore the saved custom description (bug-10) so the round-trip is complete.
+            val savedDesc = try {
+                profile.advancedSettings?.let { org.json.JSONObject(it).optString("moshServerDescription") }
+                    .takeIf { !it.isNullOrBlank() }
+            } catch (_: Exception) { null }
+            savedDesc?.let { binding.editMoshCustomDesc.setText(it) }
         }
     }
 
