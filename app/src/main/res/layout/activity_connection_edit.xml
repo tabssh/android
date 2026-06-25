@@ -282,8 +282,9 @@
                             android:id="@+id/edit_vnc_password"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:inputType="textPassword"
+                            android:inputType="textPassword|textNoSuggestions"
                             android:imeOptions="actionDone"
+                            android:autofillHints="password"
                             android:contentDescription="VNC password for this host" />
 
                     </com.google.android.material.textfield.TextInputLayout>
@@ -293,11 +294,18 @@
             </com.google.android.material.card.MaterialCardView>
 
             <!-- Authentication Settings (hidden when Identity selected) -->
+            <!--
+              Visibility is explicitly "visible": for a new connection the
+              default identity is "No Identity", so this card must be shown.
+              Code paths in ConnectionEditActivity flip it to GONE when an
+              identity is picked. Do NOT change to "gone" here (rule 4).
+            -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/card_authentication"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="@dimen/space_md"
+                android:visibility="visible"
                 app:cardCornerRadius="@dimen/card_corner_radius">
 
                 <LinearLayout
@@ -350,7 +358,10 @@
                                 android:id="@+id/edit_password"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:inputType="textPassword" />
+                                android:inputType="textPassword|textNoSuggestions"
+                                android:imeOptions="actionNext"
+                                android:autofillHints="password"
+                                android:contentDescription="SSH password" />
 
                         </com.google.android.material.textfield.TextInputLayout>
 

@@ -92,8 +92,11 @@ class ConnectionEditActivity : AppCompatActivity() {
     private var editingVncHostId: String? = null
     private var isEditMode = false
 
-    // Protocol state — "ssh" | "vnc" | "telnet"
-    private var currentProtocol: String = "ssh"
+    // Protocol state — "ssh" | "vnc" | "telnet".
+    // Initialized to a sentinel so the first updateProtocolUI() call always runs
+    // its branch (loadSshIdentities / autoSetPort) instead of short-circuiting
+    // because currentProtocol already matched the new value.
+    private var currentProtocol: String = ""
 
     private var availableKeys: List<StoredKey> = emptyList()
     private var selectedKeyIndex: Int = -1
@@ -139,6 +142,11 @@ class ConnectionEditActivity : AppCompatActivity() {
         isEditMode = intent.getBooleanExtra(EXTRA_IS_EDIT_MODE, false)
 
         setupToolbar()
+        // Wire spinner adapters + listeners synchronously with a placeholder list
+        // BEFORE any async load can race the user (UX-01, rule 5). The async
+        // loaders below replace the adapter contents once the DB load returns.
+        bootstrapIdentitySpinner()
+        bootstrapKeySpinner()
         setupAuthTypeSpinner()
         setupKeySpinner()
         setupGroupSpinner()
@@ -243,7 +251,17 @@ class ConnectionEditActivity : AppCompatActivity() {
      */
     private fun updateProtocolUI(proto: String) {
         if (currentProtocol == proto) return
+        val previousProtocol = currentProtocol
         currentProtocol = proto
+
+        // Reset identity / key selections when switching protocols so a previously
+        // chosen SSH identity does not leak into a Telnet save (bug-06). The new
+        // protocol's loader will repopulate the spinner and restore state if any.
+        if (previousProtocol.isNotEmpty()) {
+            selectedIdentityId = null
+            selectedVncIdentityId = null
+            selectedKeyIndex = -1
+        }
 
         when (proto) {
             "vnc" -> {
@@ -310,6 +328,80 @@ class ConnectionEditActivity : AppCompatActivity() {
     // Identity spinner — protocol-aware
     // -------------------------------------------------------------------------
 
+    /**
+     * Wire the identity spinner with a synchronous placeholder adapter and
+     * click listener so taps work immediately, before the DB-backed
+     * [loadSshIdentities] / [loadVncIdentities] coroutines resume on the
+     * main thread (UX-01).
+     */
+    private fun bootstrapIdentitySpinner() {
+        val placeholder = listOf("No Identity")
+        binding.spinnerIdentity.setAdapter(
+            ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, placeholder)
+        )
+        binding.spinnerIdentity.setOnItemClickListener { _, _, position, _ ->
+            // Resolve current identity list (SSH or VNC) at click time so we
+            // always operate on the latest loaded data.
+            val items = listOf("No Identity") + when (currentProtocol) {
+                "vnc" -> availableVncIdentities.map { it.name }
+                else  -> availableIdentities.map { it.name }
+            }
+            if (position >= items.size) return@setOnItemClickListener
+            binding.spinnerIdentity.setText(items[position], false)
+            if (currentProtocol == "vnc") {
+                selectedVncIdentityId = if (position > 0) availableVncIdentities[position - 1].id else null
+                selectedIdentityId = null
+                if (selectedVncIdentityId == null) {
+                    binding.layoutVncPassword.visibility = View.VISIBLE
+                } else {
+                    binding.layoutVncPassword.visibility = View.GONE
+                    binding.editVncPassword.text?.clear()
+                }
+            } else {
+                if (position > 0) {
+                    val identity = availableIdentities[position - 1]
+                    selectedIdentityId = identity.id
+                    selectedVncIdentityId = null
+                    binding.editUsername.setText(identity.username)
+                    binding.cardAuthentication.visibility = View.GONE
+                } else {
+                    selectedIdentityId = null
+                    selectedVncIdentityId = null
+                    binding.cardAuthentication.visibility = View.VISIBLE
+                    val authTypes = AuthType.getAvailableTypes()
+                    val pwIdx = authTypes.indexOf(AuthType.PASSWORD)
+                    if (pwIdx >= 0) {
+                        binding.spinnerAuthType.setText(authTypes[pwIdx].displayName, false)
+                        updateAuthTypeUI(AuthType.PASSWORD)
+                    }
+                }
+            }
+            hasUnsavedChanges = true
+        }
+    }
+
+    /**
+     * Wire the SSH key + proxy SSH key spinners with placeholder adapters and
+     * click listeners synchronously so taps are responsive before the async
+     * [setupKeySpinner] coroutine completes (UX-01).
+     */
+    private fun bootstrapKeySpinner() {
+        val placeholder = listOf("Select SSH Key...")
+        binding.spinnerSshKey.setAdapter(
+            ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, placeholder)
+        )
+        binding.spinnerSshKey.setOnItemClickListener { _, _, position, _ ->
+            val keyNames = listOf("Select SSH Key...") + availableKeys.map { it.getDisplayName() }
+            if (position < keyNames.size) {
+                selectedKeyIndex = position
+                binding.spinnerSshKey.setText(keyNames[position], false)
+            }
+        }
+        binding.spinnerProxySshKey.setAdapter(
+            ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, placeholder)
+        )
+    }
+
     /** Populate the identity spinner with SSH [Identity] rows. */
     private fun loadSshIdentities() {
         lifecycleScope.launch {
@@ -325,30 +417,10 @@ class ConnectionEditActivity : AppCompatActivity() {
                     android.R.layout.simple_dropdown_item_1line,
                     items
                 )
+                // Listener was set synchronously by bootstrapIdentitySpinner() and reads
+                // availableIdentities at click time — do not re-set it here with a stale
+                // captured `items` list that would break if identities change mid-session.
                 binding.spinnerIdentity.setAdapter(adapter)
-                binding.spinnerIdentity.setOnItemClickListener { _, _, position, _ ->
-                    binding.spinnerIdentity.setText(items[position], false)
-                    if (position > 0) {
-                        val identity = availableIdentities[position - 1]
-                        selectedIdentityId = identity.id
-                        selectedVncIdentityId = null
-                        binding.editUsername.setText(identity.username)
-                        binding.cardAuthentication.visibility = View.GONE
-                    } else {
-                        selectedIdentityId = null
-                        selectedVncIdentityId = null
-                        binding.cardAuthentication.visibility = View.VISIBLE
-                        // Reset auth type to Password so the password field is immediately
-                        // visible and validation does not block save with a "select SSH key"
-                        // error when no identity is linked.
-                        val authTypes = AuthType.getAvailableTypes()
-                        val pwIdx = authTypes.indexOf(AuthType.PASSWORD)
-                        if (pwIdx >= 0) {
-                            binding.spinnerAuthType.setText(authTypes[pwIdx].displayName, false)
-                            updateAuthTypeUI(AuthType.PASSWORD)
-                        }
-                    }
-                }
                 restoreSshIdentitySpinner()
             } catch (e: Exception) {
                 Logger.e("ConnectionEditActivity", "Failed to load SSH identities", e)
@@ -371,19 +443,10 @@ class ConnectionEditActivity : AppCompatActivity() {
                     android.R.layout.simple_dropdown_item_1line,
                     items
                 )
+                // Listener was set synchronously by bootstrapIdentitySpinner() and reads
+                // availableVncIdentities at click time — do not re-set it here with a stale
+                // captured `items` list that would break if identities change mid-session.
                 binding.spinnerIdentity.setAdapter(adapter)
-                binding.spinnerIdentity.setOnItemClickListener { _, _, position, _ ->
-                    binding.spinnerIdentity.setText(items[position], false)
-                    selectedVncIdentityId = if (position > 0) availableVncIdentities[position - 1].id else null
-                    selectedIdentityId = null
-                    // Show per-host password only when no identity is selected
-                    if (selectedVncIdentityId == null) {
-                        binding.layoutVncPassword.visibility = View.VISIBLE
-                    } else {
-                        binding.layoutVncPassword.visibility = View.GONE
-                        binding.editVncPassword.text?.clear()
-                    }
-                }
                 restoreVncIdentitySpinner()
             } catch (e: Exception) {
                 Logger.e("ConnectionEditActivity", "Failed to load VNC identities", e)
@@ -487,11 +550,10 @@ class ConnectionEditActivity : AppCompatActivity() {
                     android.R.layout.simple_dropdown_item_1line,
                     keyNames
                 )
+                // Listener was set synchronously by bootstrapKeySpinner() and reads
+                // availableKeys at click time — do not override it here with a stale
+                // captured `keyNames` list.
                 binding.spinnerSshKey.setAdapter(adapter)
-                binding.spinnerSshKey.setOnItemClickListener { _, _, position, _ ->
-                    selectedKeyIndex = position
-                    binding.spinnerSshKey.setText(keyNames[position], false)
-                }
                 pendingRestoreKeyId?.let { keyId ->
                     pendingRestoreKeyId = null
                     val keyIndex = availableKeys.indexOfFirst { it.keyId == keyId }
