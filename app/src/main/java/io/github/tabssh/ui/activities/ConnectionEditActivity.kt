@@ -411,10 +411,14 @@ class ConnectionEditActivity : AppCompatActivity() {
             val idx = availableVncIdentities.indexOfFirst { it.id == id }
             if (idx >= 0) {
                 binding.spinnerIdentity.setText(availableVncIdentities[idx].name, false)
+                binding.layoutVncPassword.visibility = View.GONE
                 return
             }
         }
         binding.spinnerIdentity.setText("No Identity", false)
+        // No identity found — ensure the per-host password field is visible so the
+        // user can enter a VNC password without needing an identity record.
+        binding.layoutVncPassword.visibility = View.VISIBLE
     }
 
     // -------------------------------------------------------------------------
@@ -431,6 +435,12 @@ class ConnectionEditActivity : AppCompatActivity() {
         binding.spinnerAuthType.setAdapter(adapter)
         binding.spinnerAuthType.setOnItemClickListener { _, _, position, _ ->
             updateAuthTypeUI(authTypes[position])
+        }
+        // If the user types directly into the field instead of picking from the dropdown,
+        // onItemClickListener never fires and the field layout (password vs key) stays stale.
+        // Re-sync on focus loss so the visible fields always match the text.
+        binding.spinnerAuthType.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) updateAuthTypeUI(getSelectedAuthType())
         }
         if (authTypes.isNotEmpty()) {
             binding.spinnerAuthType.setText(authTypes[0].displayName, false)
@@ -558,6 +568,13 @@ class ConnectionEditActivity : AppCompatActivity() {
                 binding.layoutProxyConfig.visibility = View.VISIBLE
                 binding.layoutJumpHostAuth.visibility = View.VISIBLE
                 binding.editProxyPort.setText("22")
+                // Re-sync the proxy key picker visibility from the current proxy auth
+                // type selection. Without this, toggling proxy type away then back to
+                // SSH Jump Host leaves layoutProxyKey hidden even when PUBLIC_KEY is shown.
+                val authTypes = AuthType.getAvailableTypes()
+                val selectedText = binding.spinnerProxyAuthType.text.toString()
+                val currentProxyAuth = authTypes.find { it.displayName == selectedText } ?: AuthType.PASSWORD
+                updateProxyAuthTypeUI(currentProxyAuth)
             }
             "HTTP" -> {
                 binding.layoutProxyConfig.visibility = View.VISIBLE
@@ -965,7 +982,7 @@ class ConnectionEditActivity : AppCompatActivity() {
         }
     }
 
-    private fun populateVncFields(vncHost: VncHost) {
+    private suspend fun populateVncFields(vncHost: VncHost) {
         binding.editName.setText(vncHost.name)
         binding.editHost.setText(vncHost.host)
         binding.editPort.setText(vncHost.effectivePort.toString())
@@ -974,6 +991,21 @@ class ConnectionEditActivity : AppCompatActivity() {
         binding.spinnerProtocol.setSelection(1)
         // Set identity before restoring so restoreVncIdentitySpinner() can use it.
         selectedVncIdentityId = vncHost.identityId
+        // Synchronously fetch VNC identities before calling restore — same approach
+        // as populateFields() for SSH. Without this, restoreVncIdentitySpinner() runs
+        // while the async loadVncIdentities() coroutine is still in-flight and
+        // availableVncIdentities is empty, causing the spinner to always show
+        // "No Identity" and layoutVncPassword to stay hidden even when no identity exists.
+        availableVncIdentities = withContext(Dispatchers.IO) {
+            app.database.vncIdentityDao().getAllIdentitiesList()
+        }
+        run {
+            val items = listOf("No Identity") + availableVncIdentities.map { it.name }
+            binding.spinnerIdentity.setAdapter(
+                ArrayAdapter(this@ConnectionEditActivity,
+                    android.R.layout.simple_dropdown_item_1line, items)
+            )
+        }
         restoreVncIdentitySpinner()
         selectedGroupId = vncHost.groupId
         lifecycleScope.launch {
@@ -1030,6 +1062,12 @@ class ConnectionEditActivity : AppCompatActivity() {
     private fun saveVncHost() {
         lifecycleScope.launch {
             try {
+                // Defensive sync: if the identity spinner shows "No Identity" but
+                // selectedVncIdentityId is still non-null (e.g. async restore beat the
+                // synchronous fetch path), clear it so the DB column matches the UI.
+                if (binding.spinnerIdentity.text.toString() == "No Identity") {
+                    selectedVncIdentityId = null
+                }
                 val name = binding.editName.text.toString().trim()
                 val host = binding.editHost.text.toString().trim()
                 val port = binding.editPort.text.toString().toIntOrNull() ?: 5900
@@ -1185,6 +1223,15 @@ class ConnectionEditActivity : AppCompatActivity() {
             selectedIdentity.authType
         } else {
             getSelectedAuthType()
+        }
+
+        // Defensive sync: if the user typed directly into the SSH key AutoCompleteTextView
+        // instead of picking from the dropdown, onItemClickListener never fired and
+        // selectedKeyIndex is still -1. Try to resolve by matching the displayed text.
+        if (selectedKeyIndex <= 0) {
+            val typedText = binding.spinnerSshKey.text.toString()
+            val match = availableKeys.indexOfFirst { it.getDisplayName() == typedText }
+            if (match >= 0) selectedKeyIndex = match + 1
         }
 
         val keyId = if (selectedIdentity != null && selectedIdentity.authType == AuthType.PUBLIC_KEY) {
