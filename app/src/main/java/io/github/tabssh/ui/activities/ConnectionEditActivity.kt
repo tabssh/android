@@ -338,6 +338,15 @@ class ConnectionEditActivity : AppCompatActivity() {
                         selectedIdentityId = null
                         selectedVncIdentityId = null
                         binding.cardAuthentication.visibility = View.VISIBLE
+                        // Reset auth type to Password so the password field is immediately
+                        // visible and validation does not block save with a "select SSH key"
+                        // error when no identity is linked.
+                        val authTypes = AuthType.getAvailableTypes()
+                        val pwIdx = authTypes.indexOf(AuthType.PASSWORD)
+                        if (pwIdx >= 0) {
+                            binding.spinnerAuthType.setText(authTypes[pwIdx].displayName, false)
+                            updateAuthTypeUI(AuthType.PASSWORD)
+                        }
                     }
                 }
                 restoreSshIdentitySpinner()
@@ -1162,6 +1171,13 @@ class ConnectionEditActivity : AppCompatActivity() {
         val host = binding.editHost.text.toString().trim()
         val port = binding.editPort.text.toString().toIntOrNull() ?: 22
         val username = binding.editUsername.text.toString().trim()
+
+        // Defensive sync: if the spinner text is "No Identity" but selectedIdentityId
+        // is still non-null (click listener didn't fire, e.g. programmatic setText),
+        // clear it so the DB column matches what the UI shows.
+        if (binding.spinnerIdentity.text.toString() == "No Identity") {
+            selectedIdentityId = null
+        }
 
         val selectedIdentity = selectedIdentityId?.let { id -> availableIdentities.find { it.id == id } }
 
