@@ -1106,6 +1106,10 @@ class TermuxBridge(
         val envList = arrayOf(
             "MOSH_KEY=$moshKeyBase64",
             "TERM=xterm-256color",
+            // mosh-client checks nl_langinfo(CODESET) at startup and exits if not UTF-8;
+            // Android subprocess envs built from scratch don't inherit LANG from the app process.
+            "LANG=en_US.UTF-8",
+            "LC_ALL=en_US.UTF-8",
             "HOME=${context.filesDir.absolutePath}",
             "TMPDIR=${context.cacheDir.absolutePath}"
         )
