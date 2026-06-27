@@ -92,6 +92,23 @@ class TermuxBridge(
     var moshLastExitCode: Int = -1
         private set
 
+    /** Wall-clock ms at which the most recent mosh PTY session was started.
+     *  0 = no session has run yet. Used together with [moshLastExitCode] to
+     *  detect a "fast fail" (UDP blocked / server unreachable) so the UI can
+     *  offer an SSH fallback button. */
+    @Volatile
+    private var moshSessionStartMs: Long = 0L
+
+    /**
+     * True when the last mosh session exited abnormally within 120 s —
+     * the classic signature of a UDP-blocked "nothing received from server"
+     * failure. Checked by TabTerminalActivity to offer a "Try SSH instead"
+     * reconnect option.
+     */
+    val moshFailedFast: Boolean
+        get() = moshLastExitCode != 0 && moshLastExitCode != -1 &&
+                System.currentTimeMillis() - moshSessionStartMs < 120_000L
+
     // I/O streams from SSH.
     // @Volatile — assigned by connect()/disconnect() on the caller's
     // thread (often main) and read by the read loop on Dispatchers.IO
@@ -1114,6 +1131,8 @@ class TermuxBridge(
             "TMPDIR=${context.cacheDir.absolutePath}"
         )
 
+        moshSessionStartMs = System.currentTimeMillis()
+        moshLastExitCode = -1
         Logger.i(TAG, "Creating PTY TerminalSession for mosh-client $host:$port")
         val session = TerminalSession(
             binary.absolutePath,

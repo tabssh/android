@@ -49,9 +49,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Connection Details"
-                        android:textStyle="bold"
-                        android:textSize="@dimen/text_size_subtitle"
-                        android:textColor="?android:attr/textColorPrimary"
+                        android:textAppearance="?attr/textAppearanceLabelLarge"
                         android:layout_marginBottom="@dimen/space_md" />
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -82,9 +80,9 @@
                             android:id="@+id/edit_host"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:inputType="textUri"
+                            android:inputType="textUri|textNoSuggestions"
                             android:imeOptions="actionNext"
-                            android:autofillHints="emailAddress" />
+                            android:autofillHints="none" />
 
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -158,8 +156,7 @@
                                 android:inputType="number"
                                 android:imeOptions="actionNext"
                                 android:maxLength="5"
-                                android:text="22"
-                                android:tooltipText="Default SSH port is 22" />
+                                android:hint="22" />
 
                         </com.google.android.material.textfield.TextInputLayout>
 
@@ -205,9 +202,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Organization"
-                        android:textStyle="bold"
-                        android:textSize="@dimen/text_size_subtitle"
-                        android:textColor="?android:attr/textColorPrimary"
+                        android:textAppearance="?attr/textAppearanceLabelLarge"
                         android:layout_marginBottom="@dimen/space_md"
                         android:contentDescription="Organization settings section" />
 
@@ -333,9 +328,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Authentication"
-                        android:textStyle="bold"
-                        android:textSize="@dimen/text_size_subtitle"
-                        android:textColor="?android:attr/textColorPrimary"
+                        android:textAppearance="?attr/textAppearanceLabelLarge"
                         android:layout_marginBottom="@dimen/space_md" />
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -455,9 +448,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Advanced Settings"
-                        android:textStyle="bold"
-                        android:textSize="@dimen/text_size_subtitle"
-                        android:textColor="?android:attr/textColorPrimary"
+                        android:textAppearance="?attr/textAppearanceLabelLarge"
                         android:layout_marginBottom="@dimen/space_md" />
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -703,9 +694,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Notifications"
-                        android:textStyle="bold"
-                        android:textSize="@dimen/text_size_subtitle"
-                        android:textColor="?android:attr/textColorPrimary"
+                        android:textAppearance="?attr/textAppearanceLabelLarge"
                         android:layout_marginBottom="@dimen/space_sm" />
 
                     <TextView
@@ -769,9 +758,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Terminal Multiplexer"
-                        android:textStyle="bold"
-                        android:textSize="@dimen/text_size_subtitle"
-                        android:textColor="?android:attr/textColorPrimary"
+                        android:textAppearance="?attr/textAppearanceLabelLarge"
                         android:layout_marginBottom="@dimen/space_sm" />
 
                     <TextView
@@ -838,9 +825,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Appearance &amp; Scripts"
-                        android:textStyle="bold"
-                        android:textSize="@dimen/text_size_subtitle"
-                        android:textColor="?android:attr/textColorPrimary"
+                        android:textAppearance="?attr/textAppearanceLabelLarge"
                         android:layout_marginBottom="@dimen/space_md" />
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -998,9 +983,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Proxy / Jump Host"
-                        android:textStyle="bold"
-                        android:textSize="@dimen/text_size_subtitle"
-                        android:textColor="?android:attr/textColorPrimary"
+                        android:textAppearance="?attr/textAppearanceLabelLarge"
                         android:layout_marginBottom="@dimen/space_md" />
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -1036,7 +1019,7 @@
                                 android:id="@+id/edit_proxy_host"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:inputType="textUri"
+                                android:inputType="textUri|textNoSuggestions"
                                 android:imeOptions="actionNext" />
 
                         </com.google.android.material.textfield.TextInputLayout>

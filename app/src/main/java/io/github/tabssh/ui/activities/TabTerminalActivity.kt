@@ -2419,13 +2419,21 @@ class TabTerminalActivity : AppCompatActivity() {
      * network blip), keep the tab and show a Reconnect / Close dialog
      * instead of auto-destroying it. The user's scrollback stays visible
      * behind the dialog so they can read the last output before deciding.
+     *
+     * When mosh fails fast (UDP blocked — "nothing received from server on port"),
+     * a neutral "Try SSH instead" button is offered so the user can fall back
+     * without editing the profile.
      */
     private fun showReconnectDialog(tab: SSHTab) {
         if (isFinishing || isDestroyed) return
 
         val tabId = tab.tabId
         val profile = tab.profile
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        // Mosh "nothing received from server" exits quickly with a non-zero code.
+        // Offer SSH fallback only when mosh was actually attempted and failed fast.
+        val isMoshFastFail = tab.termuxBridge.moshFailedFast && profile.moshMode != "off"
+
+        val builder = androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Connection closed")
             .setMessage("${profile.getDisplayName()} disconnected.\nReconnect or close the tab?")
             .setCancelable(false)
@@ -2465,7 +2473,30 @@ class TabTerminalActivity : AppCompatActivity() {
                     if (tabManager.getTabCount() == 0) finish()
                 }
             }
-            .show()
+
+        if (isMoshFastFail) {
+            // UDP is likely blocked by the carrier. Offer a one-shot SSH reconnect
+            // without permanently changing the saved profile.
+            builder.setNeutralButton("Try SSH instead") { _, _ ->
+                Logger.i("TabTerminalActivity", "User chose SSH FALLBACK for mosh tab $tabId")
+                isReconnecting = true
+                val idx = tabManager.getAllTabs().indexOfFirst { it.tabId == tabId }
+                if (idx >= 0) tabManager.closeTab(idx)
+                lifecycleScope.launch {
+                    try {
+                        connectToProfile(profile.copy(moshMode = "off"), forceNew = true)
+                    } finally {
+                        isReconnecting = false
+                        if (!isFinishing && !isDestroyed && tabManager.getTabCount() == 0) {
+                            Logger.i("TabTerminalActivity", "SSH fallback produced no tabs — finishing activity")
+                            finish()
+                        }
+                    }
+                }
+            }
+        }
+
+        builder.show()
     }
 
     // Toolbar options menu removed - using bottom sheet menu instead

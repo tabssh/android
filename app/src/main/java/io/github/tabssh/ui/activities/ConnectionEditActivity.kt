@@ -98,6 +98,11 @@ class ConnectionEditActivity : AppCompatActivity() {
     // because currentProtocol already matched the new value.
     private var currentProtocol: String = ""
 
+    // UX-08: set to true while populateFields/populateVncFields are running so the
+    // async Spinner.setSelection() → onItemSelected → updateProtocolUI() callback
+    // does not reset selectedIdentityId that populateFields just restored.
+    private var isPopulatingFields = false
+
     private var availableKeys: List<StoredKey> = emptyList()
     private var selectedKeyIndex: Int = -1
     private var pendingRestoreKeyId: String? = null
@@ -230,6 +235,9 @@ class ConnectionEditActivity : AppCompatActivity() {
                     val values = resources.getStringArray(R.array.protocol_values)
                     val proto = values.getOrElse(position) { "ssh" }
                     updateProtocolUI(proto)
+                    // UX-08: clear the population guard so subsequent user-initiated
+                    // protocol switches are not mistakenly treated as programmatic ones.
+                    isPopulatingFields = false
                 }
                 override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
             }
@@ -262,7 +270,10 @@ class ConnectionEditActivity : AppCompatActivity() {
         // Reset identity / key selections when switching protocols so a previously
         // chosen SSH identity does not leak into a Telnet save (bug-06). The new
         // protocol's loader will repopulate the spinner and restore state if any.
-        if (previousProtocol.isNotEmpty()) {
+        // UX-08: skip reset during populateFields/populateVncFields — those functions
+        // restore the correct IDs immediately after setSelection(); resetting here
+        // (from the async Spinner callback) would clobber their work.
+        if (previousProtocol.isNotEmpty() && !isPopulatingFields) {
             selectedIdentityId = null
             selectedVncIdentityId = null
             selectedKeyIndex = -1
@@ -348,6 +359,26 @@ class ConnectionEditActivity : AppCompatActivity() {
         binding.spinnerIdentity.setAdapter(
             ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, placeholder)
         )
+        // UX-10: AutoCompleteTextView.setText() does not fire onItemClickListener.
+        // When code calls setText() programmatically (e.g. restoreSshIdentitySpinner),
+        // selectedIdentityId is already set correctly and the listener is not needed.
+        // But if the user manually types into the field without picking from the dropdown
+        // the listener also won't fire, leaving selectedIdentityId stale. Re-sync on
+        // focus loss so the displayed text always matches the saved ID.
+        binding.spinnerIdentity.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) {
+                val typed = binding.spinnerIdentity.text.toString()
+                if (currentProtocol == "vnc") {
+                    val match = availableVncIdentities.firstOrNull { it.name == typed }
+                    selectedVncIdentityId = match?.id
+                    selectedIdentityId = null
+                } else {
+                    val match = availableIdentities.firstOrNull { it.name == typed }
+                    selectedIdentityId = match?.id
+                    selectedVncIdentityId = null
+                }
+            }
+        }
         binding.spinnerIdentity.setOnItemClickListener { _, _, position, _ ->
             // Resolve current identity list (SSH or VNC) at click time so we
             // always operate on the latest loaded data.
@@ -895,7 +926,10 @@ class ConnectionEditActivity : AppCompatActivity() {
             else -> 0
         }
         // Setting selection fires onItemSelected → updateProtocolUI(); that in
-        // turn loads the right identity list and resets visibility.
+        // turn loads the right identity list and resets visibility. Guard with
+        // isPopulatingFields so the async callback skips the identity reset
+        // that would clobber the selectedIdentityId we restore below (UX-08).
+        isPopulatingFields = true
         binding.spinnerProtocol.setSelection(protocolIndex)
 
         // Set identity before restoring, so restoreSshIdentitySpinner() can use it.
@@ -1111,7 +1145,9 @@ class ConnectionEditActivity : AppCompatActivity() {
         binding.editHost.setText(vncHost.host)
         binding.editPort.setText(vncHost.effectivePort.toString())
         // Set protocol spinner to VNC (index 1) — triggers updateProtocolUI("vnc")
-        // which loads VNC identities and hides SSH-only cards.
+        // which loads VNC identities and hides SSH-only cards. Guard flag prevents
+        // the async callback from resetting selectedVncIdentityId (UX-08).
+        isPopulatingFields = true
         binding.spinnerProtocol.setSelection(1)
         // Set identity before restoring so restoreVncIdentitySpinner() can use it.
         selectedVncIdentityId = vncHost.identityId
@@ -1132,47 +1168,45 @@ class ConnectionEditActivity : AppCompatActivity() {
         }
         restoreVncIdentitySpinner()
         selectedGroupId = vncHost.groupId
-        lifecycleScope.launch {
-            val resolvedGroup = selectedGroupId?.let { gid ->
-                withContext(Dispatchers.IO) { app.database.connectionGroupDao().getGroupById(gid) }
-            }
-            if (resolvedGroup != null) {
-                selectedGroupName = resolvedGroup.name
-                binding.spinnerGroup.setText(resolvedGroup.name, false)
-                supportActionBar?.subtitle = resolvedGroup.name
-            } else {
-                selectedGroupId = null
-                selectedGroupName = "No Group"
-                binding.spinnerGroup.setText("No Group", false)
-                supportActionBar?.subtitle = null
-            }
+        // bug-14: nested lifecycleScope.launch inside a suspend fun creates fire-and-forget
+        // coroutines that race with hasUnsavedChanges = false at the end of each branch.
+        // Use inline withContext(IO) so the whole function is sequentially ordered.
+        val resolvedGroup = selectedGroupId?.let { gid ->
+            withContext(Dispatchers.IO) { app.database.connectionGroupDao().getGroupById(gid) }
+        }
+        if (resolvedGroup != null) {
+            selectedGroupName = resolvedGroup.name
+            binding.spinnerGroup.setText(resolvedGroup.name, false)
+            supportActionBar?.subtitle = resolvedGroup.name
+        } else {
+            selectedGroupId = null
+            selectedGroupName = "No Group"
+            binding.spinnerGroup.setText("No Group", false)
+            supportActionBar?.subtitle = null
         }
         currentColorTag = vncHost.colorTag
         renderColorTagPreview()
         // Pre-populate per-host password when no identity is linked
         if (vncHost.identityId == null) {
-            lifecycleScope.launch {
-                val stored = try {
-                    withContext(Dispatchers.IO) {
-                        app.securePasswordManager.retrievePassword("vnc_host_${vncHost.id}")
-                    }
-                } catch (e: Exception) {
-                    Logger.w("ConnectionEditActivity", "No stored VNC host password: ${e.message}")
-                    null
+            val stored = try {
+                withContext(Dispatchers.IO) {
+                    app.securePasswordManager.retrievePassword("vnc_host_${vncHost.id}")
                 }
-                if (!stored.isNullOrEmpty()) {
-                    binding.editVncPassword.setText(stored)
-                    // Cache for restoreVncIdentitySpinner() fallback (bug-04).
-                    loadedVncPassword = stored
-                }
-                // After population completes, clear the dirty flag so the back-press
-                // guard does not trigger on TextWatcher fires from setText (UX-13).
-                hasUnsavedChanges = false
+            } catch (e: Exception) {
+                Logger.w("ConnectionEditActivity", "No stored VNC host password: ${e.message}")
+                null
+            }
+            if (!stored.isNullOrEmpty()) {
+                binding.editVncPassword.setText(stored)
+                // Cache for restoreVncIdentitySpinner() fallback (bug-04).
+                loadedVncPassword = stored
             }
         } else {
             binding.layoutVncPassword.visibility = View.GONE
-            hasUnsavedChanges = false
         }
+        // After all fields are populated, clear the dirty flag so the back-press
+        // guard does not trigger on TextWatcher fires from setText (UX-13).
+        hasUnsavedChanges = false
     }
 
     // -------------------------------------------------------------------------
@@ -1276,7 +1310,11 @@ class ConnectionEditActivity : AppCompatActivity() {
                         .setTitle("Duplicate connection")
                         .setMessage("A connection to ${profile.username}@${profile.host}:${profile.port} already exists (\"${duplicate.name}\"). What would you like to do?")
                         .setPositiveButton("Save as New") { _, _ ->
-                            lifecycleScope.launch { doSave(profile) }
+                            // bug-16: profile.id still holds the existing ID when in edit mode;
+                            // forceInsert bypasses the isEditMode branch in doSave().
+                            lifecycleScope.launch {
+                                doSave(profile.copy(id = java.util.UUID.randomUUID().toString()), forceInsert = true)
+                            }
                         }
                         .setNeutralButton("Update Existing") { _, _ ->
                             lifecycleScope.launch { doSave(profile.copy(id = duplicate.id)) }
@@ -1293,9 +1331,9 @@ class ConnectionEditActivity : AppCompatActivity() {
         }
     }
 
-    private suspend fun doSave(profile: ConnectionProfile) {
+    private suspend fun doSave(profile: ConnectionProfile, forceInsert: Boolean = false) {
         try {
-            if (isEditMode && existingProfile != null) {
+            if (isEditMode && existingProfile != null && !forceInsert) {
                 app.database.connectionDao().updateConnection(profile)
                 Logger.i("ConnectionEditActivity", "Updated connection: ${profile.name}")
                 showToast("Connection updated")
@@ -1322,6 +1360,11 @@ class ConnectionEditActivity : AppCompatActivity() {
                     try { app.securePasswordManager.clearPassword(profile.id) } catch (_: Exception) {}
                 }
             }
+            // bug-21: switching to PUBLIC_KEY leaves a stale password in SecurePasswordManager
+            // that could be picked up by a future auth attempt as a fallback.
+            if (authType == AuthType.PUBLIC_KEY) {
+                try { app.securePasswordManager.clearPassword(profile.id) } catch (_: Exception) {}
+            }
 
             // Save succeeded — clear the dirty flag so back/cancel don't
             // prompt for discard on the way out.
@@ -1340,10 +1383,11 @@ class ConnectionEditActivity : AppCompatActivity() {
         val port = binding.editPort.text.toString().toIntOrNull() ?: 22
         val username = binding.editUsername.text.toString().trim()
 
-        // Defensive sync: if the spinner text is "No Identity" but selectedIdentityId
-        // is still non-null (click listener didn't fire, e.g. programmatic setText),
-        // clear it so the DB column matches what the UI shows.
-        if (binding.spinnerIdentity.text.toString() == "No Identity") {
+        // Defensive sync: if the displayed name doesn't match any available identity
+        // (e.g. the click listener didn't fire for a programmatic setText), clear the
+        // stale ID so the DB column matches what the UI shows (bug-18).
+        val spinnerIdentityText = binding.spinnerIdentity.text.toString()
+        if (availableIdentities.none { it.name == spinnerIdentityText }) {
             selectedIdentityId = null
         }
 
@@ -1442,7 +1486,9 @@ class ConnectionEditActivity : AppCompatActivity() {
 
         val knockEnabled = binding.switchPortKnock.isChecked
         val knockSequence = if (knockEnabled) pendingKnockSequence else null
-        val portKnockDelayMs = if (knockEnabled) binding.editPortKnockDelay.text.toString().toIntOrNull()?.coerceIn(0, 10_000) ?: 100 else 100
+        // bug-17: always read the delay field so a user-entered value is preserved even
+        // when knock is currently disabled (the switch can be toggled back on later).
+        val portKnockDelayMs = binding.editPortKnockDelay.text.toString().toIntOrNull()?.coerceIn(0, 10_000) ?: 100
 
         // Merge moshServerCommand (and optional desc) into the advancedSettings
         // JSON blob so it survives copy() without needing a new DB column.
@@ -1615,6 +1661,12 @@ class ConnectionEditActivity : AppCompatActivity() {
                 isValid = false
             }
         }
+        // bug-24: port knock enabled but sequence is empty → connecting would send no
+        // knock packets and the server's firewall would block the SSH connection.
+        if (binding.switchPortKnock.isChecked && pendingKnockSequence.isNullOrBlank()) {
+            showToast("Port knock is enabled but no sequence is configured — tap \"Configure Knock\"")
+            isValid = false
+        }
         return isValid
     }
 
@@ -1691,19 +1743,24 @@ class ConnectionEditActivity : AppCompatActivity() {
             try {
                 val profile = createConnectionProfile()
                 val authType = getSelectedAuthType()
-                if (!isEditMode &&
-                    (authType == AuthType.PASSWORD || authType == AuthType.KEYBOARD_INTERACTIVE)) {
+                // bug-19: in edit mode the profile may already have a persisted password that
+                // differs from what is currently shown in the form. Always use the form value
+                // for the test by storing it under a temporary ID and passing a profile copy
+                // with that ID to SSHConnection — the original stored credential is untouched.
+                val testProfile = if (authType == AuthType.PASSWORD || authType == AuthType.KEYBOARD_INTERACTIVE) {
                     val pw = binding.editPassword.text.toString()
                     if (pw.isNotEmpty()) {
+                        val testId = "test_${java.util.UUID.randomUUID()}"
                         app.securePasswordManager.storePassword(
-                            profile.id, pw,
+                            testId, pw,
                             io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.SESSION_ONLY
                         )
-                        tempProfileId = profile.id
-                    }
-                }
+                        tempProfileId = testId
+                        profile.copy(id = testId)
+                    } else profile
+                } else profile
                 connection = io.github.tabssh.ssh.connection.SSHConnection(
-                    profile, lifecycleScope, this@ConnectionEditActivity
+                    testProfile, lifecycleScope, this@ConnectionEditActivity
                 )
                 connection.newHostKeyCallback = app.sshSessionManager.newHostKeyCallback
                 connection.hostKeyChangedCallback = app.sshSessionManager.hostKeyChangedCallback
@@ -1966,11 +2023,17 @@ class ConnectionEditActivity : AppCompatActivity() {
                 is io.github.tabssh.crypto.keys.ImportResult.Success -> {
                     Logger.i("ConnectionEditActivity", "Key imported successfully: ${result.keyId}")
                     showToast("✅ SSH key imported successfully!")
-                    setupKeySpinner()
+                    // bug-20: setupKeySpinner() is a fire-and-forget coroutine; calling it
+                    // and then reading availableKeys immediately is a race. Load keys inline
+                    // with withContext(IO) so availableKeys is up-to-date before auto-select.
+                    availableKeys = withContext(Dispatchers.IO) { app.keyStorage.listStoredKeys() }
+                    val keyNames = listOf("Select SSH Key...") + availableKeys.map { it.getDisplayName() }
+                    val adapter = ArrayAdapter(this@ConnectionEditActivity, android.R.layout.simple_dropdown_item_1line, keyNames)
+                    binding.spinnerSshKey.setAdapter(adapter)
+                    binding.spinnerProxySshKey.setAdapter(adapter)
                     val importedKeyIndex = availableKeys.indexOfFirst { it.keyId == result.keyId }
                     if (importedKeyIndex >= 0) {
                         selectedKeyIndex = importedKeyIndex + 1
-                        val keyNames = listOf("Select SSH Key...") + availableKeys.map { it.getDisplayName() }
                         if (selectedKeyIndex < keyNames.size) {
                             binding.spinnerSshKey.setText(keyNames[selectedKeyIndex], false)
                         }
@@ -2012,11 +2075,15 @@ class ConnectionEditActivity : AppCompatActivity() {
                     is io.github.tabssh.crypto.keys.ImportResult.Success -> {
                         Logger.i("ConnectionEditActivity", "Encrypted key imported: ${result.keyId}")
                         showToast("✅ Encrypted SSH key imported successfully!")
-                        setupKeySpinner()
+                        // bug-20: load keys inline so availableKeys is up-to-date before auto-select.
+                        availableKeys = withContext(Dispatchers.IO) { app.keyStorage.listStoredKeys() }
+                        val keyNames = listOf("Select SSH Key...") + availableKeys.map { it.getDisplayName() }
+                        val adapter = ArrayAdapter(this@ConnectionEditActivity, android.R.layout.simple_dropdown_item_1line, keyNames)
+                        binding.spinnerSshKey.setAdapter(adapter)
+                        binding.spinnerProxySshKey.setAdapter(adapter)
                         val importedKeyIndex = availableKeys.indexOfFirst { it.keyId == result.keyId }
                         if (importedKeyIndex >= 0) {
                             selectedKeyIndex = importedKeyIndex + 1
-                            val keyNames = listOf("Select SSH Key...") + availableKeys.map { it.getDisplayName() }
                             if (selectedKeyIndex < keyNames.size) {
                                 binding.spinnerSshKey.setText(keyNames[selectedKeyIndex], false)
                             }
@@ -2298,9 +2365,12 @@ class ConnectionEditActivity : AppCompatActivity() {
     /**
      * Read the effective mosh command from the UI.
      * Returns null if the Default preset is selected (no override stored).
+     * NOTE: do NOT short-circuit when mode is "off" — the command must be
+     * preserved in advancedSettings so it round-trips when the user re-enables
+     * mosh later (bug-26: early return caused mergeAdvancedSettings to remove
+     * the key from the JSON blob whenever mode was saved as "off").
      */
     private fun readMoshCommandFromUi(): String? {
-        if (readMoshModeFromUi() == "off") return null
         val selectedLabel = binding.spinnerMoshCommand.text.toString()
         val preset = MOSH_PRESETS.firstOrNull { it.description == selectedLabel }
         return when {
