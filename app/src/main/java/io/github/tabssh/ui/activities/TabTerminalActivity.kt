@@ -20,6 +20,7 @@ import com.google.android.material.tabs.TabLayoutMediator
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flowOn
+import io.github.tabssh.network.ConnectionDiagnostic
 import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.ui.adapters.TerminalPagerAdapter
 import io.github.tabssh.ui.views.TerminalView
@@ -2435,7 +2436,7 @@ class TabTerminalActivity : AppCompatActivity() {
 
         val builder = androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Connection closed")
-            .setMessage("${profile.getDisplayName()} disconnected.\nReconnect or close the tab?")
+            .setMessage("${profile.getDisplayName()} disconnected.\nDiagnosing connection…")
             .setCancelable(false)
             .setPositiveButton("Reconnect") { _, _ ->
                 Logger.i("TabTerminalActivity", "User chose RECONNECT for tab $tabId")
@@ -2496,7 +2497,23 @@ class TabTerminalActivity : AppCompatActivity() {
             }
         }
 
-        builder.show()
+        val dialog = builder.show()
+
+        // Run the reachability ladder off the main thread and rewrite the
+        // dialog body with a specific reason (DNS / host down / SSH down /
+        // mosh UDP blocked) instead of leaving the user with the generic
+        // socket error JSch surfaced. The dialog stays interactive while
+        // the probe runs — worst case it finishes ~4 s later.
+        lifecycleScope.launch {
+            val result = ConnectionDiagnostic.diagnose(
+                host = profile.host,
+                sshPort = profile.port,
+                moshFailedFast = isMoshFastFail,
+            )
+            if (!isFinishing && !isDestroyed && dialog.isShowing) {
+                dialog.setMessage("${profile.getDisplayName()} disconnected.\n\n${result.userMessage}")
+            }
+        }
     }
 
     // Toolbar options menu removed - using bottom sheet menu instead
