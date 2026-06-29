@@ -109,11 +109,17 @@ class TabSSHApplication : Application() {
         Security.insertProviderAt(BouncyCastleProvider(), 1)
 
         // Logger init policy:
-        //   - debug builds (BuildConfig.DEBUG_MODE = true) auto-enable
-        //     debug-file logging — these are dev / daily / CI APKs and the
-        //     extra log spam is exactly what makes them useful for testing.
-        //   - release / fdroidRelease builds default OFF; users opt in via
-        //     Settings → Logging → "Enable Debug Logging" (pref key
+        //   - debug builds always have BuildConfig.DEBUG_MODE = true and
+        //     auto-enable debug-file logging.
+        //   - release / fdroidRelease builds compute DEBUG_MODE from the
+        //     versionName at configure time: a clean "x.x.x" semver (e.g.
+        //     "1.0.0", "0.9.2") is treated as a production release and gets
+        //     DEBUG_MODE = false; anything else ("0.9.1-beta", "1.0.0-rc1",
+        //     "1.2.3-devel") is a pre-production build and gets DEBUG_MODE
+        //     = true so testers and beta users have logs ready when filing
+        //     issues. See app/build.gradle :: isProductionRelease.
+        //   - Production users can still opt in manually via Settings →
+        //     Logging → "Enable Debug Logging" (pref key
         //     `debug_logging_enabled`).
         // The app log (sanitized for public sharing) is always on regardless
         // — it's safe and cheap and powers the Copy App Log menu item.

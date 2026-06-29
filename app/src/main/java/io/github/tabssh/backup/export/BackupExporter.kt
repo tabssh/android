@@ -1,6 +1,7 @@
 package io.github.tabssh.backup.export
 
 import io.github.tabssh.ssh.auth.AuthType
+import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.database.entities.CloudAccount
 import io.github.tabssh.storage.database.entities.ConnectionGroup
@@ -371,7 +372,10 @@ class BackupExporter(
                         bytes, android.util.Base64.NO_WRAP
                     )
                 } else {
-                    android.util.Log.w("BackupExporter",
+                    // Route through Logger so this lands in the sanitized app
+                    // log too, not just logcat — users who hit a partial backup
+                    // need this line in their bug report.
+                    Logger.w("BackupExporter",
                         "No JSch bytes for key ${key.keyId} (${key.name}) — skipped in backup")
                 }
             }
