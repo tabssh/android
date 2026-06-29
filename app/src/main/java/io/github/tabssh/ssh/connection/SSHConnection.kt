@@ -257,12 +257,25 @@ class SSHConnection(
                 // Use identity username if available and non-blank, otherwise profile username
                 val effectiveUsername = resolvedIdentity?.username?.takeIf { it.isNotBlank() } ?: profile.username
 
+                // Issue #12 — wall-clock timing so a slow-connect report shows
+                // exactly which phase ate the seconds (DNS, kex, auth, etc.).
+                // Each step logs delta-since-previous; the connect-end log
+                // includes total. Cheap enough to leave on permanently.
+                val t0 = System.currentTimeMillis()
+                var tPrev = t0
+                fun stepDone(step: String) {
+                    val now = System.currentTimeMillis()
+                    Logger.i("SSHConnection", "TIMING ${profile.host}: $step took ${now - tPrev} ms (total ${now - t0} ms)")
+                    tPrev = now
+                }
+
                 Logger.i("SSHConnection", "STEP 1: Starting connection to ${profile.host}:${profile.port} as $effectiveUsername")
                 Logger.logHostEvent(profile.id, effectiveUsername, profile.host, profile.port, "INFO", "Connecting")
 
                 // Execute port knock sequence if enabled
                 Logger.d("SSHConnection", "STEP 2: Checking port knock configuration")
                 executePortKnockIfEnabled()
+                stepDone("port-knock")
 
                 // Create JSch session with host key verification
                 Logger.d("SSHConnection", "STEP 3: Creating JSch session")
@@ -291,6 +304,7 @@ class SSHConnection(
                 // Setup jump host if configured
                 Logger.d("SSHConnection", "STEP 5: Checking jump host configuration")
                 val jumpHostPort = setupJumpHost(jsch)
+                stepDone("jump-host-setup")
 
                 // Create main session - connect through jump host if configured
                 Logger.d("SSHConnection", "STEP 6: Creating SSH session")
@@ -306,6 +320,7 @@ class SSHConnection(
                     Logger.i("SSHConnection", "Direct connection to $resolved (host=${profile.host}, ipMode=${profile.ipMode}):${profile.port} as $effectiveUsername")
                     jsch.getSession(effectiveUsername, resolved, profile.port)
                 }
+                stepDone("dns+session-create")
 
                 // Setup HTTP/SOCKS proxy if configured
                 Logger.d("SSHConnection", "STEP 7: Checking proxy configuration")
@@ -334,6 +349,7 @@ class SSHConnection(
                 notifyListeners { onAuthenticating(id) }
 
                 setupAuthentication(jsch, newSession)
+                stepDone("auth-setup (key load/decrypt)")
 
                 // Connect (this performs both connection AND authentication in one step).
                 //
@@ -351,6 +367,7 @@ class SSHConnection(
                 Logger.i("SSHConnection", "STEP 10: Calling session.connect()")
                 val activeSession = connectWithSilentRetry(jsch, newSession, jumpHostPort, effectiveUsername)
                 session = activeSession
+                stepDone("session.connect (TCP+kex+auth)")
 
                 Logger.i("SSHConnection", "Successfully connected and authenticated to ${profile.host}")
                 sessionStartMs = System.currentTimeMillis()
@@ -549,7 +566,37 @@ class SSHConnection(
         config["cipher.c2s"] = "aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr"
         config["mac.s2c"] = "hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com,hmac-sha2-256,hmac-sha2-512"
         config["mac.c2s"] = "hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com,hmac-sha2-256,hmac-sha2-512"
-        
+
+        // Issue #12 — JSch's default kex list leads with
+        // diffie-hellman-group-exchange-sha256, which forces the server to
+        // generate or look up a Sophie Germain prime per connect. On many
+        // servers this adds 5–20 s before the first prompt — the dominant
+        // share of the "30 s to connect" report. Pin Curve25519/ECDH first
+        // (sub-millisecond on both sides); fall back to fixed-group DH only
+        // if the server doesn't speak ECDH. Same fix ConnectBot and JuiceSSH
+        // apply by default. JSch falls through silently if the server lacks
+        // the leading algorithms, so this is purely a fast-path hint.
+        config["kex"] =
+            "curve25519-sha256," +
+                "curve25519-sha256@libssh.org," +
+                "ecdh-sha2-nistp256," +
+                "ecdh-sha2-nistp384," +
+                "ecdh-sha2-nistp521," +
+                "diffie-hellman-group14-sha256," +
+                "diffie-hellman-group16-sha512," +
+                "diffie-hellman-group18-sha512"
+        // Issue #12 — same logic for server host keys: lead with ed25519 /
+        // ecdsa (constant-time verify, no per-connect work) before rsa-sha2.
+        // If we don't pin this, JSch may retry kex after the server rejects
+        // its preferred host-key type, adding another full round-trip.
+        config["server_host_key"] =
+            "ssh-ed25519," +
+                "ecdsa-sha2-nistp256," +
+                "ecdsa-sha2-nistp384," +
+                "ecdsa-sha2-nistp521," +
+                "rsa-sha2-512," +
+                "rsa-sha2-256"
+
         session.setConfig(config)
 
         // Keepalive — always on; interval uses per-host override when set,
