@@ -592,6 +592,22 @@ class RfbClient(
         val name = String(nameBytes, Charsets.UTF_8)
         Logger.i(TAG, "Desktop name: $name")
 
+        // QEMU's built-in VNC server (also surfaced through Proxmox vncproxy)
+        // identifies itself as "QEMU (<vm-name>)".  Its std-vga / cirrus / text
+        // consoles are guest-controlled: the host cannot change the framebuffer
+        // dimensions via SetDesktopSize and the server responds with
+        // ExtendedDesktopSize reason=1 status=3, then closes the socket.  This
+        // produces a visible ~1.5 s disconnect/reconnect glitch on every
+        // connect.  Pre-emptively disable client-initiated resize for QEMU so
+        // the viewport-autodetect path becomes a clean no-op and we render at
+        // the server's native resolution from the first frame.  Servers that
+        // do support live resize (TigerVNC, libvirt with qxl/virtio-gpu
+        // attached directly) are unaffected.
+        if (name.startsWith("QEMU (")) {
+            canRequestResize = false
+            Logger.i(TAG, "QEMU server detected — disabling client-initiated resize")
+        }
+
         framebuffer = IntArray(fbWidth * fbHeight)
         pixelFormat = PixelFormat.PREFERRED
         decoder = RfbDecoder(pixelFormat)
