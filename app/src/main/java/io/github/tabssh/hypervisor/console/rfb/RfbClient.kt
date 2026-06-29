@@ -138,6 +138,16 @@ class RfbClient(
     var canRequestResize: Boolean = true
 
     /**
+     * Server-class profile, populated during [serverInit] from the ServerInit
+     * desktop name.  Defaults to an UNKNOWN profile with spec-default
+     * capabilities for the period between construction and successful
+     * handshake.  Read by [sendSetDesktopSize] and the keepalive loop; do
+     * not mutate after [serverInit] returns.
+     */
+    var serverProfile: VncServerProfile = VncServerProfile.detect("")
+        private set
+
+    /**
      * Set to true the first time the server sends an unsolicited
      * ExtendedDesktopSize rectangle (reason=0, status=0).  Until this flag
      * is set, [sendSetDesktopSize] is a no-op — sending SetDesktopSize before
@@ -592,20 +602,20 @@ class RfbClient(
         val name = String(nameBytes, Charsets.UTF_8)
         Logger.i(TAG, "Desktop name: $name")
 
-        // QEMU's built-in VNC server (also surfaced through Proxmox vncproxy)
-        // identifies itself as "QEMU (<vm-name>)".  Its std-vga / cirrus / text
-        // consoles are guest-controlled: the host cannot change the framebuffer
-        // dimensions via SetDesktopSize and the server responds with
-        // ExtendedDesktopSize reason=1 status=3, then closes the socket.  This
-        // produces a visible ~1.5 s disconnect/reconnect glitch on every
-        // connect.  Pre-emptively disable client-initiated resize for QEMU so
-        // the viewport-autodetect path becomes a clean no-op and we render at
-        // the server's native resolution from the first frame.  Servers that
-        // do support live resize (TigerVNC, libvirt with qxl/virtio-gpu
-        // attached directly) are unaffected.
-        if (name.startsWith("QEMU (")) {
+        // Build the server-class profile from the desktop name.  The profile
+        // is the single source of truth for vendor-specific protocol quirks
+        // (resize suppression, FBUR keepalive, TightPng support).  See
+        // [VncServerProfile] for the detection table and rationale.
+        serverProfile = VncServerProfile.detect(name)
+        Logger.i(TAG, "Server profile: vendor=${serverProfile.vendor}, " +
+                      "suppressResize=${serverProfile.suppressClientResize}")
+
+        if (serverProfile.suppressClientResize) {
+            // Vendor known to reject SetDesktopSize (QEMU std-vga, Proxmox
+            // vncproxy, etc.) — pre-emptively disable client-initiated resize
+            // so the viewport-autodetect path becomes a clean no-op and we
+            // render at the server's native resolution from the first frame.
             canRequestResize = false
-            Logger.i(TAG, "QEMU server detected — disabling client-initiated resize")
         }
 
         framebuffer = IntArray(fbWidth * fbHeight)
