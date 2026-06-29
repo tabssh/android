@@ -1433,7 +1433,7 @@ When modifying this codebase follow these rules:
 15. **Commit workflow — pre-commit sequence (required on every commit).**
 
     1. `git status --porcelain` + `git diff --stat` — see exactly what changed.
-    2. **Run `make check`** — compile + lint; never commit with violations or compile errors. (`make test` requires a connected device/emulator; run it when available, but `make check` is the mandatory gate.)
+    2. **Run `make check`** — compile + lint; never commit with violations or compile errors. This is the mandatory pre-commit gate (overrides the global `make test` rule; see `SPEC.md`).
     3. **Changelog gate** — for any commit that touches user-visible behaviour, confirm both `CHANGELOG.md` and `app/src/main/assets/whats_new.md` are staged (`git diff --stat` must list them); if either is absent, update it before continuing (see rule 17).
     4. Write `.git/COMMIT_MESS` from the `git diff --stat` output — describe every changed file; never write from memory.
     5. Re-read `COMMIT_MESS` and compare against the diff — rewrite if anything is missing or wrong.
