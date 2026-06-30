@@ -516,6 +516,11 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
 }
 
 class ConnectionSettingsFragment : PreferenceFragmentCompat() {
+    // Strong reference to the SharedPreferences listener — Android holds it
+    // via WeakReference, so without this field it would be garbage-collected
+    // and the Gesture Multiplexer Type summary would stop refreshing.
+    private var multiplexerPrefsListener: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
+
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences_connection, rootKey)
 
@@ -581,6 +586,67 @@ class ConnectionSettingsFragment : PreferenceFragmentCompat() {
         // are gone from preferences_connection.xml. SSH-layer keepalive is
         // unconditionally on at the mobile-default 10s interval (see
         // SSHConnection.configureSession).
+
+        // Gesture Multiplexer Type summary: show the *live* custom prefix
+        // (e.g. "tmux (C-Space)") instead of a hardcoded "(Ctrl+B)" — the
+        // displayed prefix must reflect what each multiplexer is actually
+        // configured to send, not the upstream default.
+        val multiplexerTypePref = findPreference<androidx.preference.ListPreference>("gesture_multiplexer_type")
+        val prefixKeyFor: (String?) -> String = { type ->
+            when (type) {
+                "screen" -> "multiplexer_custom_prefix_screen"
+                "zellij" -> "multiplexer_custom_prefix_zellij"
+                else -> "multiplexer_custom_prefix_tmux"
+            }
+        }
+        val defaultPrefixFor: (String?) -> String = { type ->
+            when (type) {
+                "screen" -> "C-a"
+                "zellij" -> "C-g"
+                else -> "C-b"
+            }
+        }
+        // SummaryProvider re-runs on every bind, so the displayed prefix
+        // always reflects the live custom value rather than the upstream
+        // default of the chosen multiplexer.
+        multiplexerTypePref?.summaryProvider = androidx.preference.Preference.SummaryProvider<androidx.preference.ListPreference> { pref ->
+            val type = pref.value ?: "tmux"
+            val sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
+            val custom = sp.getString(prefixKeyFor(type), null).orEmpty().trim()
+            val effective = if (custom.isNotEmpty()) custom else defaultPrefixFor(type)
+            "$type ($effective)"
+        }
+        // When the type changes OR any of the three custom prefixes change,
+        // re-bind the type pref so its SummaryProvider runs again. SetSummary
+        // is ignored while a SummaryProvider is attached (the provider takes
+        // precedence in Preference#getSummary), so we force re-evaluation by
+        // detaching and re-attaching the provider. SharedPreferences listener
+        // fires AFTER the value has been committed — onPreferenceChange fires
+        // before, so we'd read stale values from it.
+        val sharedPrefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "gesture_multiplexer_type" ||
+                key == "multiplexer_custom_prefix_tmux" ||
+                key == "multiplexer_custom_prefix_screen" ||
+                key == "multiplexer_custom_prefix_zellij") {
+                multiplexerTypePref?.let { p ->
+                    val sp = p.summaryProvider
+                    p.summaryProvider = null
+                    p.summaryProvider = sp
+                }
+            }
+        }
+        androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
+            .registerOnSharedPreferenceChangeListener(sharedPrefsListener)
+        multiplexerPrefsListener = sharedPrefsListener
+    }
+
+    override fun onDestroy() {
+        multiplexerPrefsListener?.let {
+            androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
+                .unregisterOnSharedPreferenceChangeListener(it)
+        }
+        multiplexerPrefsListener = null
+        super.onDestroy()
     }
 }
 

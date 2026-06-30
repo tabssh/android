@@ -479,14 +479,20 @@ class SSHConnection(
      * and surface a toast so the user knows ipMode was overridden.
      */
     private fun resolveHostForIpMode(host: String, mode: String): String {
-        if (mode == "auto") return host
+        // Auto-detect when the host string is already a literal IP address:
+        // ipv4 literal → force ipv4; ipv6 literal → force ipv6. This
+        // prevents accidental AAAA lookups on "1.2.3.4" and the inverse on
+        // bracketed IPv6 hosts, regardless of what mode the profile carries.
+        val literalMode = literalIpMode(host)
+        val effectiveMode = literalMode ?: mode
+        if (effectiveMode == "auto") return host
         val all = try {
             java.net.InetAddress.getAllByName(host)
         } catch (e: Exception) {
             Logger.w("SSHConnection", "DNS lookup failed for $host (ipMode=$mode), passing through: ${e.message}")
             return host
         }
-        val want4 = mode == "ipv4"
+        val want4 = effectiveMode == "ipv4"
         all.firstOrNull { (it is java.net.Inet4Address) == want4 }
             ?.hostAddress?.let { return it }
 
@@ -500,6 +506,33 @@ class SSHConnection(
             android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
         }
         return fallback
+    }
+
+    /**
+     * Returns "ipv4" / "ipv6" if [host] is already a literal IP address of
+     * the matching family, else null. Strips optional `[...]` brackets that
+     * users sometimes paste around IPv6 literals. Uses InetAddresses-style
+     * parsing via Inet4Address / Inet6Address to avoid accidental DNS.
+     */
+    private fun literalIpMode(host: String): String? {
+        val stripped = host.trim().removePrefix("[").removeSuffix("]")
+        if (stripped.isEmpty()) return null
+        // Avoid InetAddresses.parseNumericAddress (API 29+); minSdk is 21.
+        // IPv4 dotted-quad: four 0-255 octets separated by '.'.
+        val v4 = Regex("^(25[0-5]|2[0-4]\\d|1\\d{2}|[1-9]?\\d)(\\.(25[0-5]|2[0-4]\\d|1\\d{2}|[1-9]?\\d)){3}$")
+        if (v4.matches(stripped)) return "ipv4"
+        // IPv6: must contain ':' and parse via Inet6Address without triggering DNS.
+        // java.net.InetAddress.getByName on a numeric literal does not resolve;
+        // hostnames never contain ':' so this is safe.
+        if (stripped.contains(':')) {
+            return try {
+                val addr = java.net.InetAddress.getByName(stripped)
+                if (addr is java.net.Inet6Address) "ipv6" else null
+            } catch (_: java.net.UnknownHostException) {
+                null
+            }
+        }
+        return null
     }
 
     /**

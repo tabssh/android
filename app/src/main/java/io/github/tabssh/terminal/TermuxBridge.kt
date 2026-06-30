@@ -99,6 +99,11 @@ class TermuxBridge(
     @Volatile
     private var moshSessionStartMs: Long = 0L
 
+    /** Watchdog for fast mosh failure detection. Cancelled when the PTY
+     *  exits naturally; cancels itself after killing a hung mosh-client. */
+    @Volatile
+    private var moshWatchdog: Job? = null
+
     /**
      * True when the last mosh session exited abnormally within 120 s —
      * the classic signature of a UDP-blocked "nothing received from server"
@@ -496,6 +501,9 @@ class TermuxBridge(
         override fun onSessionFinished(finishedSession: TerminalSession) {
             val code = finishedSession.getExitStatus()
             moshLastExitCode = code
+            // Mosh PTY is gone — watchdog is no longer needed.
+            try { moshWatchdog?.cancel() } catch (_: Exception) {}
+            moshWatchdog = null
             Logger.i(TAG, "Session finished (exit=$code)")
             runOnMain {
                 listeners.forEach { it.onDisconnected() }
@@ -1145,7 +1153,58 @@ class TermuxBridge(
         )
 
         connectSession(session)
+        startMoshFailWatchdog()
         return true
+    }
+
+    /**
+     * Mosh fast-fail watchdog. mosh-client's built-in "Nothing received from
+     * server on UDP port" warning only appears after ~3 s, and the binary
+     * then hangs for another ~16 s before exiting on its own. To deliver the
+     * user-visible "< 3 s SSH fallback" target we watch the PTY screen
+     * ourselves: scan every 250 ms for the literal warning and kill the
+     * child on first sight, plus a hard 3000 ms ceiling that fires SIGHUP
+     * regardless. Either path triggers the existing onSessionFinished →
+     * moshFailedFast → silent SSH fallback in TabTerminalActivity.
+     */
+    private fun startMoshFailWatchdog() {
+        try { moshWatchdog?.cancel() } catch (_: Exception) {}
+        moshWatchdog = CoroutineScope(Dispatchers.IO).launch {
+            val startedAt = System.currentTimeMillis()
+            val hardCeilingMs = 3000L
+            val pollMs = 250L
+            try {
+                while (isActive) {
+                    val elapsed = System.currentTimeMillis() - startedAt
+                    val session = moshSession ?: return@launch
+                    if (!session.isRunning()) return@launch
+                    val screen = try { getScreenContent() } catch (_: Exception) { "" }
+                    val sawFailureString = screen.contains("Nothing received from server", ignoreCase = true)
+                    if (sawFailureString) {
+                        Logger.i(TAG, "Mosh watchdog: 'Nothing received from server' detected after ${elapsed}ms — killing PTY for fast SSH fallback")
+                        try { session.finishIfRunning() } catch (_: Exception) {}
+                        return@launch
+                    }
+                    if (elapsed >= hardCeilingMs) {
+                        // Treat a screen that already shows substantive non-mosh
+                        // content as a working session — bail out without killing.
+                        val nonWs = screen.count { !it.isWhitespace() }
+                        val looksConnected = nonWs > 40 &&
+                            !screen.contains("mosh-client", ignoreCase = true) &&
+                            !screen.contains("Nothing received", ignoreCase = true)
+                        if (looksConnected) {
+                            Logger.i(TAG, "Mosh watchdog: ${elapsed}ms — remote content visible, leaving session alone")
+                            return@launch
+                        }
+                        Logger.i(TAG, "Mosh watchdog: ${hardCeilingMs}ms ceiling reached with no remote handshake — killing PTY for SSH fallback")
+                        try { session.finishIfRunning() } catch (_: Exception) {}
+                        return@launch
+                    }
+                    kotlinx.coroutines.delay(pollMs)
+                }
+            } catch (_: Exception) {
+            }
+        }
     }
 
     /**
