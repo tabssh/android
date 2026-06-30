@@ -123,38 +123,47 @@ class HypervisorConsoleManager {
     ): ConsoleConnection? = withContext(Dispatchers.IO) {
         consoleListener = listener
 
-        // Phase 1: obtain a console ticket. Try termproxy; fall back to
-        // vncproxy when the VM has no serial interface.
+        // Phase 1: obtain a console ticket via an ordered strategy chain.
+        // termproxy first — text consoles are the mobile-friendly default;
+        // vncproxy second — every running VM has a graphical framebuffer
+        // even without a serial device.  Intermediate failures are silent
+        // (Logger.i inside the chain); only exhaustion surfaces to the user.
         Logger.i(TAG, "Connecting to Proxmox console: $vmName (vmid=$vmid)")
-        // Kotlin doesn't allow val re-assignment across try/catch branches, so
-        // wrap the fallback logic in a single expression that produces the pair.
+        val chain = ConsoleStrategyChain(listOf<ConsoleStrategy<Pair<ProxmoxApiClient.TermProxyResult, ConsoleWebSocketClient.ConsoleProtocol>>>(
+            object : ConsoleStrategy<Pair<ProxmoxApiClient.TermProxyResult, ConsoleWebSocketClient.ConsoleProtocol>> {
+                override val name = "proxmox-termproxy"
+                override suspend fun resolve() =
+                    client.getTermProxy(node, vmid, type) to ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_TERM
+            },
+            object : ConsoleStrategy<Pair<ProxmoxApiClient.TermProxyResult, ConsoleWebSocketClient.ConsoleProtocol>> {
+                override val name = "proxmox-vncproxy"
+                override suspend fun resolve(): Pair<ProxmoxApiClient.TermProxyResult, ConsoleWebSocketClient.ConsoleProtocol> {
+                    val vnc = client.getVNCProxy(node, vmid, type)
+                        ?: throw java.io.IOException("vncproxy returned no data")
+                    return vnc to ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_VNC
+                }
+            },
+        ))
         val (ticket, protocol) = try {
-            val t = client.getTermProxy(node, vmid, type)
-            Logger.d(TAG, "Got termproxy ticket for $vmName")
-            Pair(t, ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_TERM)
-        } catch (termEx: Exception) {
-            val msg = termEx.message ?: ""
-            val isSerialError = msg.contains("serial", ignoreCase = true) ||
-                msg.contains("unable to find", ignoreCase = true)
-            if (!isSerialError) {
-                // Unexpected failure (auth, network, …) — surface it directly.
-                Logger.e(TAG, "termproxy failed (non-serial): $msg")
-                listener?.onError(msg.ifBlank { "Connection failed" })
-                return@withContext null
-            }
-            Logger.i(TAG, "termproxy unavailable for $vmName ($msg) — falling back to vncproxy")
-            val vnc = client.getVNCProxy(node, vmid, type)
-            if (vnc == null) {
-                Logger.e(TAG, "vncproxy fallback also failed for $vmName (vmid=$vmid)")
-                listener?.onError(
+            chain.resolve()
+        } catch (e: Exception) {
+            Logger.e(TAG, "All Proxmox console strategies exhausted for $vmName (vmid=$vmid)", e)
+            // Final exception is whichever the last-tried strategy raised.
+            // If vncproxy was the last attempt (the usual case when termproxy
+            // had no serial device), show the actionable serial-port hint;
+            // otherwise pass the raw message through.
+            val msg = e.message ?: ""
+            val isVncFinal = msg.contains("vncproxy", ignoreCase = true) ||
+                             msg.contains("serial", ignoreCase = true)
+            listener?.onError(
+                if (isVncFinal)
                     "This VM has no serial console and the VNC fallback also failed.\n\n" +
                     "To enable serial console: open the VM in Proxmox → Hardware → " +
                     "Add → Serial Port → set to 'socket', then restart the VM."
-                )
-                return@withContext null
-            }
-            Logger.d(TAG, "Got vncproxy ticket for $vmName (fallback)")
-            Pair(vnc, ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_VNC)
+                else
+                    msg.ifBlank { "Connection failed" }
+            )
+            return@withContext null
         }
 
         // Store params for the WebSocket-level VNC fallback (in case Proxmox
