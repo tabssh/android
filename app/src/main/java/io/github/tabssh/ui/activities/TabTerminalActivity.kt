@@ -105,6 +105,16 @@ class TabTerminalActivity : AppCompatActivity() {
      */
     @Volatile private var isReconnecting = false
 
+    /**
+     * Profile IDs for which a silent mosh→SSH fallback has already been
+     * attempted in the current activity lifetime. Prevents a fallback loop
+     * if SSH itself also fails — the second failure goes to the normal
+     * reconnect dialog instead of looping back into another silent retry.
+     * In-memory only: a fresh activity (or app restart) gets a clean slate
+     * so the user can retry mosh later (e.g. after switching networks).
+     */
+    private val moshFallbackAttempted: MutableSet<String> = java.util.Collections.synchronizedSet(mutableSetOf())
+
     // True when this onCreate invocation is a config-change recreation (e.g. rotation).
     // Used to suppress "Reattached" toasts that would fire on every rotate.
     private var isRecreated = false
@@ -2433,6 +2443,33 @@ class TabTerminalActivity : AppCompatActivity() {
         // Mosh "nothing received from server" exits quickly with a non-zero code.
         // Offer SSH fallback only when mosh was actually attempted and failed fast.
         val isMoshFastFail = tab.termuxBridge.moshFailedFast && profile.moshMode != "off"
+
+        // Silent mosh→SSH fallback: when mosh exits fast (UDP blocked by carrier,
+        // host firewall, etc.) and we haven't already fallen back for this profile,
+        // transparently reconnect over plain SSH. Per the fallback-chain policy,
+        // intermediate failures are logged at INFO and never surfaced as errors —
+        // the user only sees a dialog if SSH *also* fails.
+        if (isMoshFastFail && !moshFallbackAttempted.contains(profile.id)) {
+            moshFallbackAttempted.add(profile.id)
+            Logger.i("TabTerminalActivity",
+                "Mosh failed fast for tab $tabId — silently falling back to SSH (UDP likely blocked)")
+            isReconnecting = true
+            val idx = tabManager.getAllTabs().indexOfFirst { it.tabId == tabId }
+            if (idx >= 0) tabManager.closeTab(idx)
+            lifecycleScope.launch {
+                try {
+                    connectToProfile(profile.copy(moshMode = "off"), forceNew = true)
+                } finally {
+                    isReconnecting = false
+                    if (!isFinishing && !isDestroyed && tabManager.getTabCount() == 0) {
+                        Logger.i("TabTerminalActivity",
+                            "Silent SSH fallback produced no tabs — finishing activity")
+                        finish()
+                    }
+                }
+            }
+            return
+        }
 
         val builder = androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Connection closed")
