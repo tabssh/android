@@ -314,15 +314,39 @@ class HypervisorConsoleManager {
         try {
             Logger.i(TAG, "Connecting to XCP-ng console: $vmName")
 
-            // Get console location from XenAPI
-            val consoleUrl = client.getConsoleUrl(vmRef)
-            if (consoleUrl == null) {
-                Logger.e(TAG, "Failed to get console URL")
-                listener?.onError("Failed to get console URL from XCP-ng")
+            // Strategy chain: graphical RFB first (so VMs with a desktop get
+            // the VNC experience), text vt100 second (works on every guest).
+            // Intermediate failures are silent — Logger.i only inside the chain.
+            val xcpChain = ConsoleStrategyChain(listOf<ConsoleStrategy<XCPngApiClient.ConsoleInfo>>(
+                object : ConsoleStrategy<XCPngApiClient.ConsoleInfo> {
+                    override val name = "xcpng-rfb"
+                    override suspend fun resolve() =
+                        client.getConsoleByProtocol(vmRef, "rfb")
+                            ?: throw java.io.IOException("no rfb console on VM")
+                },
+                object : ConsoleStrategy<XCPngApiClient.ConsoleInfo> {
+                    override val name = "xcpng-vt100"
+                    override suspend fun resolve(): XCPngApiClient.ConsoleInfo {
+                        client.getConsoleByProtocol(vmRef, "vt100")?.let { return it }
+                        // Last-ditch: pre-existing helper picks the first console
+                        // regardless of protocol — preserves the legacy code path.
+                        val url = client.getConsoleUrl(vmRef)
+                            ?: throw java.io.IOException("no console on VM")
+                        return XCPngApiClient.ConsoleInfo(url, "vt100")
+                    }
+                },
+            ))
+            val consoleInfo = try {
+                xcpChain.resolve()
+            } catch (e: Exception) {
+                Logger.e(TAG, "All XCP-ng console strategies exhausted for $vmName", e)
+                listener?.onError(e.message?.ifBlank { null } ?: "Failed to get console URL from XCP-ng")
                 return@withContext null
             }
+            val isRfb = consoleInfo.protocol == "rfb"
+            val consoleUrl = consoleInfo.url
 
-            Logger.d(TAG, "Got console URL: $consoleUrl")
+            Logger.d(TAG, "Got XCP-ng ${consoleInfo.protocol} console URL")
 
             // Create WebSocket client with XCP-ng protocol (raw bytes).
             // `verifySsl` + `pinnedCertSha256` from the caller; previously
@@ -374,12 +398,28 @@ class HypervisorConsoleManager {
                 return@withContext null
             }
 
-            ConsoleConnection.Text(
-                inputStream = inputStream,
-                outputStream = outputStream,
-                vmName = vmName,
-                hypervisorType = HypervisorType.XCPNG
-            )
+            if (isRfb) {
+                // XAPI authenticates via session_id in the URL — the RFB stream
+                // itself negotiates security type "None", so no VNC password is
+                // required.  consoleMode=false → ClientInit shared=1 for
+                // shared graphical access.
+                val rfbClient = RfbClient(inputStream, outputStream,
+                    vncPassword = "",
+                    consoleMode = false)
+                activeRfbClient = rfbClient
+                ConsoleConnection.Graphical(
+                    vmName = vmName,
+                    hypervisorType = HypervisorType.XCPNG,
+                    rfbClient = rfbClient
+                )
+            } else {
+                ConsoleConnection.Text(
+                    inputStream = inputStream,
+                    outputStream = outputStream,
+                    vmName = vmName,
+                    hypervisorType = HypervisorType.XCPNG
+                )
+            }
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to connect XCP-ng console", e)
             listener?.onError(e.message ?: "Connection failed")

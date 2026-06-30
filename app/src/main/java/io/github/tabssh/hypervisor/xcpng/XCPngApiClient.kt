@@ -388,6 +388,57 @@ class XCPngApiClient(
     }
 
     /**
+     * Resolved XCP-ng console handle: the wire URL plus the protocol the
+     * remote endpoint speaks once the WebSocket is open.
+     *
+     * XAPI consoles advertise one of `"rfb"` (graphical, RFB / VNC),
+     * `"vt100"` (text serial), or `"rdp"` (Windows guests with the XenServer
+     * tools installed).  `"rfb"` and `"vt100"` are the only ones this client
+     * currently consumes.
+     */
+    data class ConsoleInfo(val url: String, val protocol: String)
+
+    /**
+     * Find the first console on [vmRef] whose XAPI `protocol` field matches
+     * [protocol] (case-insensitive) and return its WebSocket URL.  Returns
+     * null when the VM exposes no console of that protocol — let the caller
+     * decide whether to fall back to a different protocol.
+     *
+     * Used by [io.github.tabssh.hypervisor.console.HypervisorConsoleManager]
+     * to assemble an "rfb first, vt100 second" strategy chain: VMs configured
+     * for graphical display get the VNC path automatically, headless / serial
+     * VMs fall through to the text console without any user-visible toast.
+     */
+    suspend fun getConsoleByProtocol(vmRef: String, protocol: String): ConsoleInfo? = withContext(Dispatchers.IO) {
+        try {
+            val consolesResponse = xmlRpcCall(buildXmlRequest("VM.get_consoles", listOf(vmRef)))
+            val consoleRefs = parseArrayResponse(consolesResponse)
+                .filter { it.startsWith("OpaqueRef:") }
+            for (ref in consoleRefs) {
+                val proto = parseStringResponse(
+                    xmlRpcCall(buildXmlRequest("console.get_protocol", listOf(ref)))
+                )
+                if (!proto.equals(protocol, ignoreCase = true)) continue
+                val location = parseStringResponse(
+                    xmlRpcCall(buildXmlRequest("console.get_location", listOf(ref)))
+                )
+                val url = when {
+                    location.startsWith("http://")  -> location.replace("http://",  "ws://")
+                    location.startsWith("https://") -> location.replace("https://", "wss://")
+                    location.isNotEmpty()           -> location
+                    else                            -> "wss://$host/console?ref=$ref&session_id=$sessionId"
+                }
+                Logger.i("XCPngAPI", "Resolved $proto console for VM: $url")
+                return@withContext ConsoleInfo(url, proto.lowercase())
+            }
+            null
+        } catch (e: Exception) {
+            Logger.w("XCPngAPI", "getConsoleByProtocol($protocol) failed: ${e.message}")
+            null
+        }
+    }
+
+    /**
      * Get VM reference by UUID
      */
     suspend fun getVMRefByUUID(uuid: String): String? = withContext(Dispatchers.IO) {
