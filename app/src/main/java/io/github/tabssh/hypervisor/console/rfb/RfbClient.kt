@@ -157,6 +157,15 @@ class RfbClient(
     private var serverSupportsExtendedDesktopSize = false
 
     /**
+     * Set to true the first time the server advertises [RfbConstants.ENC_CONTINUOUS_UPDATES]
+     * as a pseudo-rect, and we have replied with EnableContinuousUpdates for the
+     * full framebuffer.  Guards against re-enabling on every subsequent advertisement
+     * (TigerVNC re-sends the capability inside each FramebufferUpdate when the
+     * server is configured to do so).
+     */
+    private var continuousUpdatesEnabled = false
+
+    /**
      * Set to true when we just received an ExtendedDesktopSize rejection.
      * When the server closes the connection in that window (QEMU behaviour),
      * we treat it as a clean disconnect rather than a protocol error so the
@@ -687,6 +696,23 @@ class RfbClient(
         Logger.d(TAG, "SetDesktopSize sent: ${width}×$height")
     }
 
+    /**
+     * Send EnableContinuousUpdates (RFB extension, message type 150) for the
+     * given region.  Sent automatically once after the server advertises
+     * [RfbConstants.ENC_CONTINUOUS_UPDATES]; safe to call again to disable
+     * (enable=false) before requesting a different region.
+     */
+    fun sendEnableContinuousUpdates(enable: Boolean, x: Int, y: Int, w: Int, h: Int) {
+        synchronized(outLock) {
+            dout.writeByte(RfbConstants.C2S_ENABLE_CONTINUOUS_UPDATES)
+            dout.writeByte(if (enable) 1 else 0)
+            dout.writeShort(x); dout.writeShort(y)
+            dout.writeShort(w); dout.writeShort(h)
+            dout.flush()
+        }
+        Logger.d(TAG, "EnableContinuousUpdates enable=$enable region=${w}×${h}@($x,$y)")
+    }
+
     private fun sendFullUpdateRequest() {
         // Seed the keepalive timer so the 2-second window starts from first
         // request, not from object construction.
@@ -943,7 +969,13 @@ class RfbClient(
                     if (nameLen > 0) {
                         val nameBytes = ByteArray(nameLen)
                         din.readFully(nameBytes)
-                        Logger.d(TAG, "DesktopName: ${String(nameBytes, Charsets.UTF_8)}")
+                        val newName = String(nameBytes, Charsets.UTF_8)
+                        Logger.d(TAG, "DesktopName: $newName")
+                        // Notify the UI so it can refresh title bars / tabs /
+                        // notification text without requiring a reconnect.
+                        try { listener?.onDesktopNameChanged(newName) } catch (e: Exception) {
+                            Logger.w(TAG, "listener.onDesktopNameChanged threw: ${e.message}")
+                        }
                     }
                 }
                 RfbConstants.ENC_LED_STATE -> {
@@ -962,7 +994,19 @@ class RfbClient(
                 }
                 RfbConstants.ENC_CONTINUOUS_UPDATES -> {
                     // ContinuousUpdates capability advertisement: zero payload.
+                    // The server is telling us it understands EnableContinuousUpdates;
+                    // opt in for the full framebuffer so subsequent updates stream
+                    // without per-frame FBUR round-trips.  Only send once — re-sending
+                    // on every advertisement would flood the back-channel for no gain.
                     Logger.d(TAG, "ContinuousUpdates capability signal")
+                    if (!continuousUpdatesEnabled && fbWidth > 0 && fbHeight > 0) {
+                        try {
+                            sendEnableContinuousUpdates(true, 0, 0, fbWidth, fbHeight)
+                            continuousUpdatesEnabled = true
+                        } catch (e: Exception) {
+                            Logger.w(TAG, "EnableContinuousUpdates send failed: ${e.message}")
+                        }
+                    }
                 }
                 else -> {
                     val hexEnc = (encoding.toLong() and 0xFFFFFFFFL).toString(16).uppercase()
@@ -1395,4 +1439,13 @@ interface RfbListener {
      * [RfbClient.sendSetDesktopSize] here.  Default implementation is a no-op.
      */
     fun onExtendedDesktopSizeReady() {}
+
+    /**
+     * Server sent a [RfbConstants.ENC_DESKTOP_NAME] pseudo-rect after the
+     * initial handshake — the VM has renamed its desktop (X11 wmname change,
+     * Windows hostname change, hypervisor live-rename, etc.).  Default
+     * implementation is a no-op; UIs that show the desktop name in a title
+     * bar should override this to refresh.
+     */
+    fun onDesktopNameChanged(name: String) {}
 }

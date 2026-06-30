@@ -38,6 +38,15 @@ object RfbConstants {
     /** SetDesktopSize — client-initiated resize request (RFB extension §5.4). */
     const val C2S_SET_DESKTOP_SIZE: Int = 251
 
+    /**
+     * EnableContinuousUpdates — client opts into continuous-update mode for a
+     * region. Sent after the server advertises [ENC_CONTINUOUS_UPDATES]; the
+     * server then streams FramebufferUpdates for the named region without
+     * requiring a FramebufferUpdateRequest between each one (TigerVNC §1.4.7).
+     * Payload: U8 enable-flag, U16 x, U16 y, U16 width, U16 height.
+     */
+    const val C2S_ENABLE_CONTINUOUS_UPDATES: Int = 150
+
     // ── Server → Client message types ───────────────────────────────────────
     const val S2C_FRAMEBUFFER_UPDATE: Int = 0
     const val S2C_SET_COLOUR_MAP_ENTRIES: Int = 1
