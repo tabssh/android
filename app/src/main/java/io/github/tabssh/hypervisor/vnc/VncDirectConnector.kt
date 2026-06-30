@@ -2,6 +2,7 @@ package io.github.tabssh.hypervisor.vnc
 
 import android.content.Context
 import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.hypervisor.console.ConsoleWebSocketClient
 import io.github.tabssh.hypervisor.console.rfb.RfbClient
 import io.github.tabssh.storage.database.entities.VncHost
 import io.github.tabssh.utils.logging.Logger
@@ -70,5 +71,69 @@ object VncDirectConnector {
             try { socket.close() } catch (_: Exception) {}
             throw e
         }
+    }
+
+    /**
+     * Connect to a VNC server tunnelled over a (typically TLS-secured)
+     * WebSocket — websockify, noVNC-style endpoints, or any RFB-bearing
+     * `ws://` / `wss://` URL.
+     *
+     * RFB carries its own framing inside binary WebSocket frames; text
+     * frames are treated as protocol noise and dropped by
+     * [ConsoleWebSocketClient].  TLS (when `wss://`) is owned by OkHttp,
+     * so VeNCrypt TLS upgrade is intentionally NOT wired up here — the
+     * RFB stream we return is already on a secure transport.
+     *
+     * The caller owns lifecycle: start the [RfbClient] on a background
+     * thread, and call [ConsoleWebSocketClient.disconnect] when the
+     * session ends.  Returns [Pair] of `(RfbClient, ConsoleWebSocketClient)`
+     * mirroring the (RfbClient, Socket) shape of [connect].
+     */
+    suspend fun connectWss(
+        url: String,
+        password: String?,
+        headers: Map<String, String> = emptyMap(),
+        username: String? = null,
+        verifySsl: Boolean = false,
+        pinnedCertSha256: String? = null,
+        displayHost: String = "",
+        displayPort: Int = 0,
+        consoleMode: Boolean = false,
+        @Suppress("UNUSED_PARAMETER") context: Context
+    ): Pair<RfbClient, ConsoleWebSocketClient> = withContext(Dispatchers.IO) {
+        Logger.d(TAG, "Connecting RFB-over-WSS to $displayHost:$displayPort consoleMode=$consoleMode")
+        val ws = ConsoleWebSocketClient(
+            verifySsl = verifySsl,
+            protocol = ConsoleWebSocketClient.ConsoleProtocol.RFB_WSS,
+            pinnedCertSha256 = pinnedCertSha256,
+            displayHost = displayHost,
+            displayPort = displayPort
+        )
+        val ok = ws.connect(url = url, headers = headers, listener = null)
+        if (!ok) {
+            throw IllegalStateException("ConsoleWebSocketClient.connect returned false for $displayHost:$displayPort")
+        }
+        // ConsoleWebSocketClient creates the piped streams synchronously inside
+        // connect() (before returning), so getInputStream / getOutputStream are
+        // already non-null here — the RFB handshake will block on the input
+        // side until the server sends bytes, which is exactly what we want.
+        val input = ws.getInputStream()
+            ?: run { ws.disconnect(); throw IllegalStateException("WSS input stream unavailable") }
+        val output = ws.getOutputStream()
+            ?: run { ws.disconnect(); throw IllegalStateException("WSS output stream unavailable") }
+        val rfb = RfbClient(
+            inputStream = input,
+            outputStream = output,
+            vncPassword = password,
+            // No raw socket: TLS is owned by OkHttp, VeNCrypt TLS-upgrade unavailable.
+            rawSocket = null,
+            tlsHost = displayHost.takeIf { it.isNotEmpty() },
+            tlsPort = displayPort,
+            tlsVerify = verifySsl,
+            vncUsername = username,
+            consoleMode = consoleMode
+        )
+        Logger.d(TAG, "RFB-over-WSS established to $displayHost:$displayPort")
+        Pair(rfb, ws)
     }
 }

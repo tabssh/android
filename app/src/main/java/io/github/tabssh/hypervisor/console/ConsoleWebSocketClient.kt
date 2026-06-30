@@ -68,7 +68,13 @@ class ConsoleWebSocketClient(
         PROXMOX_VNC,   // Proxmox vncproxy - RFB protocol
         XCPNG,         // XCP-ng console - raw bytes
         XO,            // Xen Orchestra - raw bytes
-        VMWARE         // VMware VMRC - raw bytes
+        VMWARE,        // VMware VMRC - raw bytes
+        // Generic RFB tunnelled over a plain WebSocket (e.g. websockify,
+        // noVNC-style ws://host:port/websockify, or any VNC server fronted
+        // by a binary WS upgrader). Identical wire semantics to PROXMOX_VNC
+        // (text frames are protocol noise, binary frames are raw RFB), kept
+        // separate so logs and any future per-vendor quirks stay clean.
+        RFB_WSS
     }
 
     // WebSocket connection
@@ -304,13 +310,14 @@ class ConsoleWebSocketClient(
                                     return@onMessage
                                 }
                             }
-                            ConsoleProtocol.PROXMOX_VNC -> {
-                                // RFB is a binary-only protocol. Proxmox vncproxy may send
-                                // WebSocket text frames for protocol-level signalling (e.g.
-                                // auth acknowledgements) that must never enter the RFB byte
-                                // stream — writing them to the pipe would corrupt the RFB
-                                // handshake and produce a permanently black screen.
-                                Logger.d(TAG, "PROXMOX_VNC: ignoring text frame (RFB is binary-only): '${text.take(80)}'")
+                            ConsoleProtocol.PROXMOX_VNC, ConsoleProtocol.RFB_WSS -> {
+                                // RFB is a binary-only protocol. Any text frame on an
+                                // RFB-bearing WebSocket is protocol-level signalling
+                                // (auth acknowledgements, websockify status, etc.) that
+                                // must never enter the RFB byte stream — writing it to
+                                // the pipe would corrupt the RFB handshake and produce
+                                // a permanently black screen.
+                                Logger.d(TAG, "$protocol: ignoring text frame (RFB is binary-only): '${text.take(80)}'")
                                 return@onMessage
                             }
                             else -> text // Raw text for other protocols
