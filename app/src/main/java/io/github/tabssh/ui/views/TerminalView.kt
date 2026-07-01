@@ -1182,6 +1182,56 @@ class TerminalView @JvmOverloads constructor(
         // Draw all rows (plus one extra at the bottom when scrolling is fractional
         // so the translate gap is filled).
         val extraRow = if (fracOffset > 0f) 1 else 0
+
+        // Precompute wrap-aware URL underline ranges for the live-screen rows.
+        // Pass 3 draws underlines from this map, so a URL that spans a soft-wrap
+        // boundary gets underlined on every continuation row, not just the row
+        // where the scheme prefix happens to sit.
+        //
+        // Iterates 0..rows-1, coalesces soft-wrap segments via isRowSoftWrapped(),
+        // runs the URL regex once against the combined segment text, and maps each
+        // match offset back to (row, colRange). Scrollback rows are not populated
+        // here — they still use the per-row fallback below (Pass 3 also runs the
+        // legacy row-local scan for any externalRow the map does not cover).
+        val urlUnderlineByRow = HashMap<Int, MutableList<IntRange>>()
+        run {
+            var r = 0
+            while (r < rows) {
+                var segEnd = r
+                while (segEnd < rows - 1 && isRowSoftWrapped(segEnd)) segEnd++
+                val combined = buildWrappedWindowText(r, segEnd) ?: ""
+                if (combined.isNotEmpty()) {
+                    // Per-row char lengths inside `combined`. Soft-wrapped rows
+                    // contribute exactly `cols` chars (getSelectedText joins them
+                    // without '\n'); the terminating row contributes its trimmed
+                    // length. Sum must equal combined.length or offset math drifts.
+                    val nRows = segEnd - r + 1
+                    val perRowLen = IntArray(nRows)
+                    for (i in 0 until nRows) {
+                        val rr = r + i
+                        perRowLen[i] = if (rr < segEnd) cols else getRowText(rr).trimEnd().length
+                    }
+                    for (match in urlPattern.findAll(combined)) {
+                        val mStart = match.range.first
+                        val mEnd = match.range.last
+                        var acc = 0
+                        for (i in 0 until nRows) {
+                            val rowStart = acc
+                            val rowEnd = acc + perRowLen[i] - 1
+                            if (perRowLen[i] > 0 && mEnd >= rowStart && mStart <= rowEnd) {
+                                val colStart = maxOf(mStart, rowStart) - rowStart
+                                val colEnd = minOf(mEnd, rowEnd) - rowStart
+                                urlUnderlineByRow.getOrPut(r + i) { mutableListOf() }
+                                    .add(colStart..colEnd)
+                            }
+                            acc += perRowLen[i]
+                        }
+                    }
+                }
+                r = segEnd + 1
+            }
+        }
+
         for (row in 0 until rows + extraRow) {
             val rowTop = startY + row * cellHeight
             val rowBottom = startY + (row + 1) * cellHeight
@@ -1336,14 +1386,29 @@ class TerminalView @JvmOverloads constructor(
                     canvas.drawRect(ux, rowBottom - urlUnderlineH, ux + uw, rowBottom, urlUnderlinePaint)
                 }
             }
-            // Regex-detected URLs — scan the row text for scheme/www patterns.
-            val rowText = try {
-                buffer.getSelectedText(0, externalRow, cols, externalRow) ?: ""
-            } catch (_: Exception) { "" }
-            for (match in urlPattern.findAll(rowText)) {
-                val ux = startX + match.range.first * cellWidth
-                val uw = (match.range.last - match.range.first + 1) * cellWidth
-                canvas.drawRect(ux, rowBottom - urlUnderlineH, ux + uw, rowBottom, urlUnderlinePaint)
+            // Regex-detected URLs.
+            //
+            // For live-screen rows we use the wrap-aware urlUnderlineByRow map
+            // built above so a URL that spans a soft-wrap boundary is underlined
+            // on every continuation row. Scrollback rows (externalRow < 0) fall
+            // back to the per-row scan — they are not precomputed because
+            // isRowSoftWrapped/getRowText only cover the live screen.
+            val precomputed = urlUnderlineByRow[externalRow]
+            if (precomputed != null) {
+                for (range in precomputed) {
+                    val ux = startX + range.first * cellWidth
+                    val uw = (range.last - range.first + 1) * cellWidth
+                    canvas.drawRect(ux, rowBottom - urlUnderlineH, ux + uw, rowBottom, urlUnderlinePaint)
+                }
+            } else {
+                val rowText = try {
+                    buffer.getSelectedText(0, externalRow, cols, externalRow) ?: ""
+                } catch (_: Exception) { "" }
+                for (match in urlPattern.findAll(rowText)) {
+                    val ux = startX + match.range.first * cellWidth
+                    val uw = (match.range.last - match.range.first + 1) * cellWidth
+                    canvas.drawRect(ux, rowBottom - urlUnderlineH, ux + uw, rowBottom, urlUnderlinePaint)
+                }
             }
         }
 
