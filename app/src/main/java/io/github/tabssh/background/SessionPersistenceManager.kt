@@ -207,36 +207,31 @@ class SessionPersistenceManager(
             // This would trigger app lock mechanism
         }
         
-        // Clear clipboard if enabled
-        if (preferences.getClearClipboardTimeout() > 0) {
-            persistenceScope.launch {
-                delay(preferences.getClearClipboardTimeout() * 1000L)
-                clearClipboard()
-            }
-        }
-        
+        // Clipboard auto-clear is intentionally NOT handled here.
+        //
+        // The previous implementation scheduled an unconditional clear on
+        // every app-background whenever security_clear_clipboard_timeout
+        // was > 0. That violated two invariants:
+        //   1. We only own clips WE wrote — clearing arbitrary clipboard
+        //      contents copied from other apps is not our business.
+        //   2. Even for our own clips, only sensitive credentials
+        //      (passwords, passphrases) should auto-clear; terminal
+        //      selections, snippets, URLs, and log/crash-report copies
+        //      must persist so the user can paste them elsewhere.
+        //
+        // ClipboardHelper.copy(..., sensitive = true) already handles the
+        // correct case: it stamps a per-copy ownership token into the
+        // ClipDescription label, schedules a delayed clear, and verifies
+        // the label still matches before wiping — so an external app
+        // writing to the clipboard after us cancels the wipe.
+        //
+        // Nothing to do here beyond that.
+
         // Clear sensitive data from memory
         app.securePasswordManager.clearSensitiveData()
     }
-    
-    private fun clearClipboard() {
-        try {
-            val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE)
-                as android.content.ClipboardManager
-            // clearPrimaryClip() (API 28+) removes the clip silently.
-            // setPrimaryClip(empty) triggers the Android 13+ "Text copied" system
-            // popup even for blank content, which is confusing on app-background.
-            if (android.os.Build.VERSION.SDK_INT >= 28) {
-                clipboardManager.clearPrimaryClip()
-            } else {
-                clipboardManager.setPrimaryClip(android.content.ClipData.newPlainText("", ""))
-            }
-            Logger.d("SessionPersistenceManager", "Cleared clipboard for security")
-        } catch (e: Exception) {
-            Logger.e("SessionPersistenceManager", "Failed to clear clipboard", e)
-        }
-    }
-    
+
+
     /**
      * Save session state to database
      */
