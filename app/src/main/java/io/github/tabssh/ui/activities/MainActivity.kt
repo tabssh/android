@@ -323,21 +323,30 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
      * Show about dialog
      */
     private fun showAboutDialog() {
+        // Pull real version/build metadata from BuildConfig so devel/daily/beta
+        // builds are distinguishable — the About dialog previously showed a
+        // hard-coded "1.0.0 (Build 1)" which made every build look identical
+        // and left users unsure whether an update had actually landed.
+        val versionName = io.github.tabssh.BuildConfig.VERSION_NAME
+        val versionCode = io.github.tabssh.BuildConfig.VERSION_CODE
+        val commit = io.github.tabssh.BuildConfig.GIT_COMMIT_ID ?: "unknown"
+        val flavor = io.github.tabssh.BuildConfig.BUILD_TYPE
         val aboutText = """
         TabSSH
-        Version 1.0.0 (Build 1)
-        
+        Version $versionName (Build $versionCode)
+        Commit: $commit ($flavor)
+
         A modern, open-source SSH client for Android with browser-style tabs, Material Design 3, and comprehensive security features.
-        
+
         © 2024-2026 TabSSH Project
         Licensed under MIT License
-        
+
         Built with:
         • Kotlin 2.0.21
         • JSch (SSH library)
         • Material Design Components
         • MPAndroidChart
-        
+
         Credits:
         • Development: TabSSH Team
         • Icon Design: Material Icons
