@@ -358,16 +358,47 @@ class SSHTab(
             Logger.i("SSHTab", "=== CONNECTING TAB TERMINAL for ${profile.getDisplayName()} ===")
             connection = sshConnection
 
-            // Launch coroutine to observe connection state
+            // Launch coroutine to observe connection state.
+            //
+            // Auto-recovery path: NetworkAwareReconnector re-establishes the
+            // SSH Session at the connection layer after a network outage or
+            // silent drop, but the per-tab shell channel is a separate object
+            // — the old ChannelShell died with the old Session. If we only
+            // mirror the state flag here, the user sees "connected" but the
+            // terminal is inert.
+            //
+            // Watch for CONNECTED transitions that arrive AFTER we've
+            // successfully wired at least once, and if our own shell channel
+            // is dead, open a fresh one and re-wire TermuxBridge. This gives
+            // multiplexer profiles their auto-reattach for free (the
+            // post-connect script fires `tmux new -A -s name` which attaches
+            // to the still-running session), and gives raw-SSH tabs a working
+            // prompt again — no fake attempt to resurrect the dead shell.
             stateCollectorJob?.cancel()
             stateCollectorJob = connectionScope.launch {
+                var previousState: ConnectionState? = null
                 sshConnection.connectionState.collect { state ->
                     _connectionState.value = state
-                    updateTitleWithStatus(state)  // Update title with status indicator
+                    updateTitleWithStatus(state)
                     Logger.d("SSHTab", "Connection state changed to: $state")
                     if (state == ConnectionState.ERROR) {
                         _hasError.value = true
                     }
+                    val wasDown = previousState != null &&
+                        previousState != ConnectionState.CONNECTED
+                    val isChannelAlive = ownChannel?.isConnected == true
+                    if (state == ConnectionState.CONNECTED && wasDown && !isChannelAlive) {
+                        Logger.i("SSHTab",
+                            "Session reconnected — opening fresh shell channel for ${profile.getDisplayName()}")
+                        try {
+                            rewireShellChannel(sshConnection)
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Logger.w("SSHTab", "Auto-recovery shell open failed: ${e.message}")
+                        }
+                    }
+                    previousState = state
                 }
             }
 
@@ -432,6 +463,55 @@ class SSHTab(
             _hasError.value = true
             false
         }
+    }
+
+    /**
+     * Auto-recovery: open a fresh ChannelShell on an already-connected
+     * SSHConnection and rewire TermuxBridge to its streams. Used when
+     * NetworkAwareReconnector has re-established the Session after a
+     * network outage.
+     *
+     * The old ChannelShell died with the old Session — this creates a
+     * genuinely new interactive shell. For multiplexer profiles the
+     * post-connect script (`tmux new -A -s name`) will attach back to the
+     * still-running session on the server; for raw SSH the user gets a
+     * fresh prompt (state loss is inherent — see CLAUDE.md "Honesty over
+     * agreement").
+     */
+    private suspend fun rewireShellChannel(sshConnection: SSHConnection) {
+        val shellChannel = sshConnection.openShellChannel() ?: run {
+            Logger.w("SSHTab", "rewireShellChannel: openShellChannel returned null")
+            return
+        }
+        ownChannel = shellChannel
+        val inp = shellChannel.inputStream
+        val out = shellChannel.outputStream
+        if (inp == null || out == null) {
+            Logger.w("SSHTab", "rewireShellChannel: null streams on new channel")
+            return
+        }
+        termuxBridge.onResizeCallback = { cols, rows ->
+            ownChannel?.let { sshConnection.resizePtyOf(it, cols, rows) }
+        }
+        termuxBridge.connect(inp, out)
+
+        // Re-run post-connect (multiplexer auto-attach + user script) so
+        // the recovered tab lands back in the same tmux session for users
+        // who have that configured. The delay matches the initial connect
+        // path — remote shell needs time to print its greeting/PS1 before
+        // we inject commands.
+        connectionScope.launch {
+            try {
+                kotlinx.coroutines.delay(500)
+                runPostConnectCommands()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Logger.w("SSHTab", "post-connect script failed on rewire: ${e.message}")
+            }
+        }
+        Logger.i("SSHTab",
+            "=== TERMINAL REWIRED after reconnect for ${profile.getDisplayName()} ===")
     }
 
     /**
