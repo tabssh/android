@@ -1,5 +1,104 @@
 # What's New
 
+## Wave 59 — Network resilience, VNC console, connection polish
+
+- **Tabs recover on their own when the phone loses and regains
+  network** — a dropped Wi-Fi or cellular connection used to
+  leave every open tab stuck at a dead prompt. The app now
+  watches for the network coming back and reopens the shell
+  channel on the same SSH session automatically. Tabs running
+  under tmux or screen re-attach to the live session; raw
+  shells get a fresh prompt (the pre-drop scrollback is kept
+  in the buffer).
+- **A visible "Offline" banner appears on the Multi-Host
+  Dashboard** — when the phone is offline, host reachability
+  checks are paused. The dashboard now says so plainly at the
+  top of the screen, so a wall of grey "unreachable" hosts is
+  never mistaken for every server being down.
+- **Long URLs that wrap across two terminal rows are now fully
+  underlined and tappable** — before, only the first row of a
+  wrapped URL showed the tap-me underline; the continuation
+  row rendered as plain text even though tapping it did open
+  the full URL. The renderer now scans wrap segments as one
+  unit and underlines every continuation row.
+- **The clipboard is no longer wiped when it did not come from
+  TabSSH** — the auto-clear used to fire on any clipboard
+  content while a session was in the background, so text you
+  copied from another app could disappear. Auto-clear now
+  runs only for clips that TabSSH itself wrote AND marked as
+  sensitive (like a password copied via a secure-copy action);
+  everything else is left alone.
+- **The About dialog now shows the real version and the build
+  commit** — devel, daily, and beta builds used to all display
+  the same hardcoded "Version 1.0.0". The dialog now reads the
+  version, build number, commit hash, and build type straight
+  from the running binary, so you can tell at a glance which
+  build you are on.
+
+### VNC / graphical console
+
+- **XCP-ng hosts get a graphical VNC console** — pick an
+  XCP-ng / XenServer host, choose a running VM, and the built-in
+  VNC viewer opens against the hypervisor's console proxy. No
+  extra client needed.
+- **Direct VNC-over-WebSocket (websockify / noVNC)** — profiles
+  can now connect straight to a `wss://` VNC endpoint without a
+  side-channel proxy, so noVNC deployments and Kubernetes
+  ingress paths just work.
+- **QEMU consoles no longer break when the phone rotates** —
+  the client used to send a "resize the remote desktop"
+  request on every rotation, which QEMU rejects, producing a
+  black screen. The resize request is now suppressed for
+  servers that do not support it.
+- **Snappier VNC updates** — when the server supports it,
+  ContinuousUpdates is enabled automatically so the display
+  streams changes instead of round-tripping a request per
+  frame. The VM's own desktop name is also shown in the tab
+  title.
+
+### Multiplexer / mosh / connect speed
+
+- **tmux and screen are detected and offered on first connect**
+  — the app now probes the server at login time for tmux/screen
+  and asks whether you want to attach or start a new session,
+  instead of dumping you at a raw prompt.
+- **mosh sessions fail fast and fall back to SSH when UDP is
+  blocked** — the old behaviour was to hang for a full minute
+  on hotel or corporate Wi-Fi that blocks mosh's UDP port.
+  A short watchdog now cuts the wait and rolls the connection
+  to plain SSH automatically.
+- **mosh-client no longer crashes on Android with a "locale
+  not set" error** — a missing UTF-8 locale on the Android
+  runtime is now set up before mosh-client launches.
+- **SSH connects noticeably faster** — the client pins a small
+  set of fast key-exchange and host-key algorithms first, and
+  each connect phase is timed so slow steps are visible in the
+  Application Logs.
+- **Connection failures now tell you what actually went wrong**
+  — DNS failure, wrong port, refused connection, auth failure,
+  and host-key mismatch each get their own message instead of
+  the generic "socket error" that hid the real cause.
+
+### Connection editor
+
+- **Editing a connection is much more forgiving** — dozens of
+  small bugs and layout issues in the connection editor are
+  fixed: fields that reset while you were typing, spinners
+  that flashed the wrong option, race conditions that dropped
+  edits, accessibility labels missing on the auth pickers, and
+  the "No Identity" option that used to hide the password
+  field even though you needed it.
+- **VNC profiles can now override the host password** — set
+  a per-VM password without having to touch the parent host
+  entry.
+- **Shift (SFT) key added to the extra keyboard bar** — pair
+  it with any other key for capitals, symbols, or shortcuts
+  the on-screen keyboard cannot easily produce.
+- **Monitor dashboard alert thresholds respect your global
+  defaults** — new hosts used to inherit a 0% threshold,
+  meaning every metric alerted immediately. New hosts now
+  inherit the values you configured in Settings.
+
 ## Wave 58 — Editor / log viewer / PIN lock audit
 
 - **Remote file editor no longer double-saves the same file** —
