@@ -124,8 +124,8 @@ object DialogUtils {
      * Copies text to clipboard
      */
     private fun copyToClipboard(context: Context, text: String) {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newPlainText("TabSSH", text)
-        clipboard.setPrimaryClip(clip)
+        // Route through ClipboardHelper so this non-sensitive write cancels
+        // any pending sensitive auto-clear (see ClipboardHelper KDoc).
+        io.github.tabssh.utils.ClipboardHelper.copy(context, "TabSSH", text, sensitive = false)
     }
 }

@@ -237,8 +237,7 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
             resultUrl.text = url
             resultRow.visibility = View.VISIBLE
             copyBtn.setOnClickListener {
-                val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                cm.setPrimaryClip(ClipData.newPlainText("Paste URL", url))
+                io.github.tabssh.utils.ClipboardHelper.copy(ctx, "Paste URL", url, sensitive = false)
                 Toast.makeText(ctx, "URL copied", Toast.LENGTH_SHORT).show()
             }
         }

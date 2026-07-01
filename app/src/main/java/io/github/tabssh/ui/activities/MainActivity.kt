@@ -198,8 +198,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                 .setTitle("⚠️ Startup Warning")
                 .setMessage("Some components failed to initialize. The app may have reduced functionality.\n\n$error")
                 .setPositiveButton("Copy & Dismiss") { _, _ ->
-                    val clipboard = getSystemService(android.content.ClipboardManager::class.java)
-                    clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("TabSSH Error", error))
+                    io.github.tabssh.utils.ClipboardHelper.copy(this@MainActivity, "TabSSH Error", error, sensitive = false)
                     prefs.edit().remove(io.github.tabssh.TabSSHApplication.KEY_STARTUP_ERROR).apply()
                 }
                 .setNegativeButton("Dismiss") { _, _ ->
@@ -486,8 +485,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         }
 
         val copied = try {
-            val clipboard = getSystemService(android.content.ClipboardManager::class.java)
-            clipboard?.setPrimaryClip(android.content.ClipData.newPlainText(clipLabel, logs))
+            io.github.tabssh.utils.ClipboardHelper.copy(this, clipLabel, logs, sensitive = false)
             true
         } catch (e: Throwable) {
             // RemoteException / TransactionTooLargeException / OEM weirdness.

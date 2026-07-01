@@ -111,9 +111,7 @@ class LogViewerActivity : AppCompatActivity() {
             }
         }
 
-        val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        val clip = android.content.ClipData.newPlainText("TabSSH Logs", logsText)
-        clipboard.setPrimaryClip(clip)
+        io.github.tabssh.utils.ClipboardHelper.copy(this, "TabSSH Logs", logsText, sensitive = false)
 
         android.widget.Toast.makeText(
             this,

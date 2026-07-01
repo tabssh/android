@@ -1019,9 +1019,7 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
                     .setView(scrollView)
                     .setPositiveButton("Close", null)
                     .setNeutralButton("Copy") { _, _ ->
-                        val clipboard = requireContext().getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                        val clip = android.content.ClipData.newPlainText(title, displayContent)
-                        clipboard.setPrimaryClip(clip)
+                        io.github.tabssh.utils.ClipboardHelper.copy(requireContext(), title, displayContent, sensitive = false)
                         android.widget.Toast.makeText(requireContext(), "Log copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
                     }
                     .setNegativeButton("Paste / Issue") { _, _ ->
@@ -1084,9 +1082,7 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
                     .setView(scrollView)
                     .setPositiveButton("Close", null)
                     .setNeutralButton("Copy") { _, _ ->
-                        val clipboard = requireContext().getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                        val clip = android.content.ClipData.newPlainText(logFile.name, displayContent)
-                        clipboard.setPrimaryClip(clip)
+                        io.github.tabssh.utils.ClipboardHelper.copy(requireContext(), logFile.name, displayContent, sensitive = false)
                         android.widget.Toast.makeText(requireContext(), "Log copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
                     }
                     .show()

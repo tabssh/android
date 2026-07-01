@@ -352,9 +352,7 @@ class ClusterCommandActivity : AppCompatActivity() {
     }
 
     private fun copyToClipboard(text: String) {
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newPlainText("Cluster Command Output", text)
-        clipboard.setPrimaryClip(clip)
+        io.github.tabssh.utils.ClipboardHelper.copy(this, "Cluster Command Output", text, sensitive = false)
         Toast.makeText(this, "Output copied to clipboard", Toast.LENGTH_SHORT).show()
     }
 

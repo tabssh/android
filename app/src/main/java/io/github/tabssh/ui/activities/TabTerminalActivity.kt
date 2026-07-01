@@ -1066,9 +1066,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     }
                 }
                 
-                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                val clip = android.content.ClipData.newPlainText("SSH Error", fullError)
-                clipboard.setPrimaryClip(clip)
+                io.github.tabssh.utils.ClipboardHelper.copy(this, "SSH Error", fullError, sensitive = false)
                 Toast.makeText(this, "Error details copied to clipboard", Toast.LENGTH_SHORT).show()
             }
         
@@ -1213,10 +1211,7 @@ class TabTerminalActivity : AppCompatActivity() {
             Toast.makeText(this, "Nothing on screen to copy", Toast.LENGTH_SHORT).show()
             return
         }
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        clipboard.setPrimaryClip(
-            android.content.ClipData.newPlainText("Terminal", visible)
-        )
+        io.github.tabssh.utils.ClipboardHelper.copy(this, "Terminal", visible, sensitive = false)
         Toast.makeText(this, "Terminal screen copied", Toast.LENGTH_SHORT).show()
     }
 
@@ -1276,10 +1271,7 @@ class TabTerminalActivity : AppCompatActivity() {
                         if (text.isNullOrEmpty()) {
                             Toast.makeText(this@TabTerminalActivity, "Nothing selected", Toast.LENGTH_SHORT).show()
                         } else {
-                            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                            clipboard.setPrimaryClip(
-                                android.content.ClipData.newPlainText("Terminal selection", text)
-                            )
+                            io.github.tabssh.utils.ClipboardHelper.copy(this@TabTerminalActivity, "Terminal selection", text, sensitive = false)
                             Toast.makeText(this@TabTerminalActivity, "Copied", Toast.LENGTH_SHORT).show()
                         }
                         mode.finish()
@@ -3143,8 +3135,7 @@ class TabTerminalActivity : AppCompatActivity() {
                                     }
                                 }
                                 .setNeutralButton("Copy command") { _, _ ->
-                                    val cb = getSystemService(android.content.ClipboardManager::class.java)
-                                    cb?.setPrimaryClip(android.content.ClipData.newPlainText("mosh handoff", cmd))
+                                    io.github.tabssh.utils.ClipboardHelper.copy(this@TabTerminalActivity, "mosh handoff", cmd, sensitive = false)
                                     Toast.makeText(this@TabTerminalActivity, "Copied", Toast.LENGTH_SHORT).show()
                                 }
                                 .setNegativeButton("Close", null)
@@ -3157,8 +3148,7 @@ class TabTerminalActivity : AppCompatActivity() {
                                     "tap Mosh handoff again.\n\nMeanwhile, copy this command:\n$cmd"
                                 )
                                 .setPositiveButton("Copy command") { _, _ ->
-                                    val cb = getSystemService(android.content.ClipboardManager::class.java)
-                                    cb?.setPrimaryClip(android.content.ClipData.newPlainText("mosh handoff", cmd))
+                                    io.github.tabssh.utils.ClipboardHelper.copy(this@TabTerminalActivity, "mosh handoff", cmd, sensitive = false)
                                     Toast.makeText(this@TabTerminalActivity, "Copied", Toast.LENGTH_SHORT).show()
                                 }
                                 .setNegativeButton("Close", null)
@@ -3174,8 +3164,7 @@ class TabTerminalActivity : AppCompatActivity() {
                                     termuxLauncher.openTermuxListing(this@TabTerminalActivity)
                                 }
                                 .setNeutralButton("Copy command") { _, _ ->
-                                    val cb = getSystemService(android.content.ClipboardManager::class.java)
-                                    cb?.setPrimaryClip(android.content.ClipData.newPlainText("mosh handoff", cmd))
+                                    io.github.tabssh.utils.ClipboardHelper.copy(this@TabTerminalActivity, "mosh handoff", cmd, sensitive = false)
                                     Toast.makeText(this@TabTerminalActivity, "Copied", Toast.LENGTH_SHORT).show()
                                 }
                                 .setNegativeButton("Close", null)

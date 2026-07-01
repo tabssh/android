@@ -374,11 +374,7 @@ class VMConsoleActivity : AppCompatActivity() {
                     if (text.isNullOrEmpty()) {
                         Toast.makeText(this@VMConsoleActivity, "Nothing selected", Toast.LENGTH_SHORT).show()
                     } else {
-                        val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE)
-                            as android.content.ClipboardManager
-                        clipboard.setPrimaryClip(
-                            android.content.ClipData.newPlainText("VM Console selection", text)
-                        )
+                        io.github.tabssh.utils.ClipboardHelper.copy(this@VMConsoleActivity, "VM Console selection", text, sensitive = false)
                         Toast.makeText(this@VMConsoleActivity, "Copied ${text.length} chars", Toast.LENGTH_SHORT).show()
                     }
                     mode.finish()
@@ -418,11 +414,7 @@ class VMConsoleActivity : AppCompatActivity() {
             Toast.makeText(this, "Nothing on screen to copy", Toast.LENGTH_SHORT).show()
             return
         }
-        val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE)
-            as android.content.ClipboardManager
-        clipboard.setPrimaryClip(
-            android.content.ClipData.newPlainText("VM Console", text)
-        )
+        io.github.tabssh.utils.ClipboardHelper.copy(this, "VM Console", text, sensitive = false)
         Toast.makeText(this, "Console screen copied", Toast.LENGTH_SHORT).show()
     }
 

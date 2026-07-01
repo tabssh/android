@@ -1027,11 +1027,7 @@ class IdentitiesFragment : Fragment() {
                     Toast.makeText(requireContext(), "Failed to read public key", Toast.LENGTH_SHORT).show()
                     return@withContext
                 }
-                val clipboard = requireContext()
-                    .getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(
-                    android.content.ClipData.newPlainText("SSH public key", text)
-                )
+                io.github.tabssh.utils.ClipboardHelper.copy(requireContext(), "SSH public key", text, sensitive = false)
                 Toast.makeText(requireContext(), "Public key copied to clipboard", Toast.LENGTH_SHORT).show()
             }
         }
