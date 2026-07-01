@@ -386,6 +386,18 @@ class MultiHostDashboardActivity : AppCompatActivity() {
 
         binding.fabNewGroup.setOnClickListener { showAddGroupDialog() }
 
+        // Offline indicator — HostAvailabilityWorker already suspends probes
+        // when the phone has no validated internet (Gate 0), so a lack of
+        // network was silently making every card look stale. Surface it
+        // instead so the user knows checks are paused and not that hosts
+        // are down.
+        lifecycleScope.launch {
+            app.networkDetector.networkState.collect { state ->
+                binding.offlineBanner.visibility =
+                    if (state.isConnected) View.GONE else View.VISIBLE
+            }
+        }
+
         loadPersistedState()
     }
 

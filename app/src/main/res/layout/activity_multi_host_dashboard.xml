@@ -20,6 +20,23 @@
             app:titleTextColor="@color/white"
             app:popupTheme="@style/ThemeOverlay.Material3.Light" />
 
+        <TextView
+            android:id="@+id/offline_banner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/error"
+            android:paddingStart="@dimen/space_md"
+            android:paddingEnd="@dimen/space_md"
+            android:paddingTop="@dimen/space_sm"
+            android:paddingBottom="@dimen/space_sm"
+            android:textColor="@color/white"
+            android:textSize="14sp"
+            android:gravity="center_vertical"
+            android:drawablePadding="@dimen/space_sm"
+            android:contentDescription="Device is offline; host checks are suspended"
+            android:text="Offline — host checks paused until network returns"
+            android:visibility="gone" />
+
     </com.google.android.material.appbar.AppBarLayout>
 
     <androidx.recyclerview.widget.RecyclerView
