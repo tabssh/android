@@ -4157,10 +4157,27 @@ class TabTerminalActivity : AppCompatActivity() {
                     updatePrefixKeyVisual(type)
                     Logger.d("TabTerminalActivity", "PREFIX key: disarmed (second tap)")
                 } else if (type == null) {
-                    // No multiplexer detected — show the type picker so the user
-                    // can tell us which one is running. Sending a blind prefix to
-                    // a non-multiplexer session would inject a stray control byte.
-                    showMultiplexerPickerDialog()
+                    // No multiplexer detected yet — the 30 s periodic probe
+                    // may not have caught a multiplexer the user launched
+                    // after connect. Fire a one-shot fast probe (3 s cap)
+                    // before falling back to the picker dialog. If the probe
+                    // succeeds, activeMultiplexerTypeFlow updates and the
+                    // key visual flips to the detected type automatically —
+                    // the user re-taps PRE to arm the latch.
+                    val activeTab = tab
+                    if (activeTab != null) {
+                        lifecycleScope.launch {
+                            val detected = activeTab.probeMultiplexerNow(3000L)
+                            if (detected == null) {
+                                showMultiplexerPickerDialog()
+                            } else {
+                                Logger.i("TabTerminalActivity",
+                                    "PREFIX key: on-demand probe detected $detected")
+                            }
+                        }
+                    } else {
+                        showMultiplexerPickerDialog()
+                    }
                 } else {
                     // Arm the latch: push the prefix bytes into TerminalView so the
                     // NEXT keystroke (hardware key, IME text, or custom-bar key) will

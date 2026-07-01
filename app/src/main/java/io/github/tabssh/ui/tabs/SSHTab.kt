@@ -805,29 +805,71 @@ class SSHTab(
             while (true) {
                 val conn = connection
                 if (conn == null || !conn.isConnected()) break
-                try {
-                    val output = conn.executeCommand(
-                        // POSIX sh one-liner: no bashisms. Prints one word or nothing.
-                        "sh -c '" +
-                            "if [ -n \"\$TMUX\" ]; then echo tmux; " +
-                            "elif [ -n \"\$STY\" ]; then echo screen; " +
-                            "elif [ -n \"\$ZELLIJ_SESSION_NAME\" ]; then echo zellij; " +
-                            "fi'",
-                        timeoutMs = 5000
-                    ).trim()
-                    val detected = if (output in listOf("tmux", "screen", "zellij")) output else null
-                    if (detected != _activeMultiplexerType.value) {
-                        _activeMultiplexerType.value = detected
-                        if (detected != null)
-                            Logger.i("SSHTab", "Multiplexer attached: $detected")
-                        else
-                            Logger.i("SSHTab", "Multiplexer detached (none found in env)")
-                    }
-                } catch (_: Exception) {
-                    // Detection failure is non-fatal — PREFIX key shows "unknown" state.
-                }
+                probeMultiplexerOnce(conn)
                 delay(30_000)
             }
+        }
+    }
+
+    /**
+     * Run a single multiplexer probe and update state. Public so the PRE key
+     * handler can trigger a fresh probe on demand when the user first presses
+     * the key — the 30 s periodic loop may not have caught a newly-launched
+     * multiplexer yet.
+     *
+     * Returns the detected type ("tmux"/"screen"/"zellij") or null. Also
+     * updates `_activeMultiplexerType` as a side-effect so any collectors
+     * (e.g. the PREFIX key visual state) refresh.
+     */
+    suspend fun probeMultiplexerNow(timeoutMs: Long = 3000L): String? {
+        val conn = connection ?: return null
+        if (!conn.isConnected()) return null
+        return probeMultiplexerOnce(conn, timeoutMs)
+    }
+
+    private suspend fun probeMultiplexerOnce(
+        conn: SSHConnection,
+        timeoutMs: Long = 5000L
+    ): String? {
+        return try {
+            // SSH exec channels spawn a FRESH shell as a child of sshd —
+            // they never inherit $TMUX/$STY/$ZELLIJ from the user's
+            // interactive multiplexer session (that's a different process
+            // tree entirely). So env-var probing alone always returns
+            // nothing for a user who ran `tmux` in their interactive shell.
+            //
+            // Layered probe:
+            //   1. Env vars — cheap; catches the rare case where the
+            //      user's .profile re-exports $TMUX (or the exec channel
+            //      is somehow a child of tmux).
+            //   2. Live server check — `tmux ls`, `screen -ls`,
+            //      `zellij list-sessions`. If a server exists for the
+            //      user, they're almost certainly attached to it in the
+            //      interactive session. False positives are possible
+            //      (server running, user detached) but far less painful
+            //      than never detecting anything.
+            val output = conn.executeCommand(
+                "sh -c '" +
+                    "if [ -n \"\$TMUX\" ]; then echo tmux; exit 0; fi; " +
+                    "if [ -n \"\$STY\" ]; then echo screen; exit 0; fi; " +
+                    "if [ -n \"\$ZELLIJ_SESSION_NAME\" ]; then echo zellij; exit 0; fi; " +
+                    "if command -v tmux >/dev/null 2>&1 && tmux ls >/dev/null 2>&1; then echo tmux; exit 0; fi; " +
+                    "if command -v screen >/dev/null 2>&1 && screen -ls 2>/dev/null | grep -qE \"[0-9]+\\.[^[:space:]]+\"; then echo screen; exit 0; fi; " +
+                    "if command -v zellij >/dev/null 2>&1 && zellij list-sessions 2>/dev/null | grep -q .; then echo zellij; exit 0; fi'",
+                timeoutMs = timeoutMs
+            ).trim()
+            val detected = if (output in listOf("tmux", "screen", "zellij")) output else null
+            if (detected != _activeMultiplexerType.value) {
+                _activeMultiplexerType.value = detected
+                if (detected != null)
+                    Logger.i("SSHTab", "Multiplexer attached: $detected")
+                else
+                    Logger.i("SSHTab", "Multiplexer detached (none found in env)")
+            }
+            detected
+        } catch (_: Exception) {
+            // Detection failure is non-fatal — PREFIX key shows "unknown" state.
+            null
         }
     }
 
