@@ -73,6 +73,18 @@ android {
             abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64', 'x86'
         }
 
+        // Native build (SPICE client + JNI shim).
+        // Task #12 lands the harness only — the CMake file compiles a
+        // JNI stub when no SPICE prebuilts are present under
+        // libs/spice/<abi>/, so the AGP build stays green on a fresh
+        // clone. Real SPICE bindings land in tasks #13/#14.
+        externalNativeBuild {
+            cmake {
+                cppFlags ''
+                arguments '-DANDROID_STL=c++_static'
+            }
+        }
+
         // Build information - version, commit ID, and build date
         buildConfigField "String", "VERSION_NAME", "\"${versionName}\""
         buildConfigField "int", "VERSION_CODE", "${versionCode}"
@@ -239,6 +251,17 @@ android {
                 'x86'        : 'x86',
             ][abiName] ?: abiName
             outputFileName = "tabssh-android-${archTag}.apk"
+        }
+    }
+
+    // Point the AGP native build at the CMake harness. The CMakeLists
+    // gates the SPICE link chain behind a filesystem check for
+    // libs/spice/<abi>/lib/libspice-client-glib-2.0.a, so a fresh
+    // clone with no prebuilts still produces a working (stub) .so.
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.22.1"
         }
     }
 
