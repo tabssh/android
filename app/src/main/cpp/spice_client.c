@@ -64,7 +64,7 @@ void tabssh_spice_impl_stop(JNIEnv *env, jlong handle);
 void tabssh_spice_impl_destroy(JNIEnv *env, jlong handle);
 void tabssh_spice_impl_send_key(JNIEnv *env, jlong handle, jint scancode, jboolean down);
 void tabssh_spice_impl_send_pointer_move(JNIEnv *env, jlong handle, jint x, jint y, jint mask);
-void tabssh_spice_impl_send_pointer_button(JNIEnv *env, jlong handle, jint mask, jboolean down);
+void tabssh_spice_impl_send_pointer_button(JNIEnv *env, jlong handle, jint button, jint button_state, jboolean down);
 void tabssh_spice_impl_send_clipboard(JNIEnv *env, jlong handle, jstring text);
 #endif
 
@@ -167,12 +167,12 @@ Java_io_github_tabssh_hypervisor_spice_SpiceClient_nativeSendPointerMove(
 
 JNIEXPORT void JNICALL
 Java_io_github_tabssh_hypervisor_spice_SpiceClient_nativeSendPointerButton(
-    JNIEnv *env, jobject thiz, jlong handle, jint mask, jboolean down) {
+    JNIEnv *env, jobject thiz, jlong handle, jint button, jint button_state, jboolean down) {
     (void) thiz;
 #ifdef TABSSH_SPICE_AVAILABLE
-    tabssh_spice_impl_send_pointer_button(env, handle, mask, down);
+    tabssh_spice_impl_send_pointer_button(env, handle, button, button_state, down);
 #else
-    (void) env; (void) handle; (void) mask; (void) down;
+    (void) env; (void) handle; (void) button; (void) button_state; (void) down;
     log_unavailable_once("nativeSendPointerButton");
 #endif
 }

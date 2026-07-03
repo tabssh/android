@@ -156,14 +156,16 @@ class SpiceClient(
     }
 
     /**
-     * Report a pointer button transition. [buttonMask] identifies the
-     * button (same bit layout as [sendPointerMove]); [down] is true
-     * for press, false for release.
+     * Report a pointer button transition. [button] is the SPICE mouse
+     * button ID (see [SpiceConstants.BTN_LEFT] etc.); [buttonState] is
+     * the mask of buttons still held after this transition (same bit
+     * layout as [sendPointerMove]'s buttonMask); [down] is true for
+     * press, false for release.
      */
-    fun sendPointerButton(buttonMask: Int, down: Boolean) {
+    fun sendPointerButton(button: Int, buttonState: Int, down: Boolean) {
         val handle = nativeHandle
         if (handle == 0L) return
-        try { nativeSendPointerButton(handle, buttonMask, down) } catch (t: Throwable) {
+        try { nativeSendPointerButton(handle, button, buttonState, down) } catch (t: Throwable) {
             Logger.w(TAG, "nativeSendPointerButton threw", t)
         }
     }
@@ -265,6 +267,6 @@ class SpiceClient(
     private external fun nativeDestroySession(handle: Long)
     private external fun nativeSendKeyEvent(handle: Long, scancode: Int, down: Boolean)
     private external fun nativeSendPointerMove(handle: Long, x: Int, y: Int, buttonMask: Int)
-    private external fun nativeSendPointerButton(handle: Long, buttonMask: Int, down: Boolean)
+    private external fun nativeSendPointerButton(handle: Long, button: Int, buttonState: Int, down: Boolean)
     private external fun nativeSendClipboardText(handle: Long, text: String)
 }

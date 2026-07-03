@@ -549,20 +549,21 @@ static gboolean dispatch_pointer_button(gpointer user_data) {
     input_dispatch *d = (input_dispatch *)user_data;
     if (d->sess->inputs_channel) {
         if (d->flag) spice_inputs_channel_button_press(d->sess->inputs_channel,
-                                                        (gint)d->a, 0);
+                                                        (gint)d->a, (gint)d->b);
         else spice_inputs_channel_button_release(d->sess->inputs_channel,
-                                                   (gint)d->a, 0);
+                                                   (gint)d->a, (gint)d->b);
     }
     g_free(d);
     return G_SOURCE_REMOVE;
 }
 
-void tabssh_spice_impl_send_pointer_button(JNIEnv *env, jlong handle, jint mask, jboolean down) {
+void tabssh_spice_impl_send_pointer_button(JNIEnv *env, jlong handle, jint button,
+                                             jint button_state, jboolean down) {
     (void) env;
     tabssh_spice_session *sess = (tabssh_spice_session *)(uintptr_t)handle;
     if (!sess || !sess->main_ctx) return;
     input_dispatch *d = g_new0(input_dispatch, 1);
-    d->sess = sess; d->a = mask; d->flag = down;
+    d->sess = sess; d->a = button; d->b = button_state; d->flag = down;
     g_main_context_invoke(sess->main_ctx, dispatch_pointer_button, d);
 }
 
