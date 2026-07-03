@@ -136,6 +136,9 @@ local.properties
 !metadata/en-US/full_description.txt
 !metadata/en-US/short_description.txt
 !metadata/en-US/changelogs/*.txt
+# Native build entry points — CMakeLists.txt is source, not a log
+!**/CMakeLists.txt
+!CMakeLists.txt
 build-logs/
 # Android Studio generated files and folders
 captures/
