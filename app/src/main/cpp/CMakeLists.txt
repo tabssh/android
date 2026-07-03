@@ -10,10 +10,13 @@
 # ../../../libs/spice/README.md for the fetch + cross-compile workflow.
 #
 # When no prebuilts are present (the default state on a fresh clone),
-# this file compiles a single stub source that exports a no-op JNI
-# symbol so the AGP build stays green. The JNI layer refuses to load
-# any SPICE symbol at runtime unless the prebuilts are actually there —
-# see SpiceLoader.kt (task #13).
+# only spice_client.c is compiled — it exports every JNI entry point
+# the Kotlin SpiceClient / SpiceLoader classes reference, but each one
+# takes a "SPICE unavailable" branch that returns a clean failure. The
+# real libspice-client-glib bridge lives in spice_client_glib.c and is
+# added to the target only when SPICE_AVAILABLE is TRUE — that file
+# pulls in glib headers that we do not want to parse on scaffold-only
+# builds.
 
 cmake_minimum_required(VERSION 3.22.1)
 project(tabssh_native LANGUAGES C)
@@ -30,7 +33,12 @@ if(EXISTS "${SPICE_PREBUILT_ROOT}/lib/libspice-client-glib-2.0.a")
     set(SPICE_AVAILABLE TRUE)
 endif()
 
-add_library(tabssh_native SHARED spice_stub.c)
+set(TABSSH_NATIVE_SOURCES spice_client.c)
+if(SPICE_AVAILABLE)
+    list(APPEND TABSSH_NATIVE_SOURCES spice_client_glib.c)
+endif()
+
+add_library(tabssh_native SHARED ${TABSSH_NATIVE_SOURCES})
 
 target_compile_definitions(tabssh_native PRIVATE
     $<$<BOOL:${SPICE_AVAILABLE}>:TABSSH_SPICE_AVAILABLE=1>
