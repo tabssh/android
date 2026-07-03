@@ -509,11 +509,21 @@ class HypervisorConsoleManager {
                 return@withContext null
             }
 
-            ConsoleConnection.Text(
-                inputStream = inputStream,
-                outputStream = outputStream,
+            // Xen Orchestra's /api/console/{vmId} endpoint is a noVNC-style
+            // proxy that carries raw RFB (VNC) frames — the same wire format
+            // XCP-ng's `rfb` protocol delivers.  Auth for the console stream
+            // is by Bearer token in the HTTP-upgrade headers (already set
+            // above); the RFB handshake itself negotiates security type
+            // "None", so no VNC password is required.
+            // consoleMode=false → ClientInit shared=1 for shared graphical access.
+            val rfbClient = RfbClient(inputStream, outputStream,
+                vncPassword = "",
+                consoleMode = false)
+            activeRfbClient = rfbClient
+            ConsoleConnection.Graphical(
                 vmName = vmName,
-                hypervisorType = HypervisorType.XEN_ORCHESTRA
+                hypervisorType = HypervisorType.XEN_ORCHESTRA,
+                rfbClient = rfbClient
             )
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to connect XO console", e)
