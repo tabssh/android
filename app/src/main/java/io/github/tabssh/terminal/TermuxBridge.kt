@@ -1159,19 +1159,35 @@ class TermuxBridge(
 
     /**
      * Mosh fast-fail watchdog. mosh-client's built-in "Nothing received from
-     * server on UDP port" warning only appears after ~3 s, and the binary
-     * then hangs for another ~16 s before exiting on its own. To deliver the
-     * user-visible "< 3 s SSH fallback" target we watch the PTY screen
-     * ourselves: scan every 250 ms for the literal warning and kill the
-     * child on first sight, plus a hard 3000 ms ceiling that fires SIGHUP
-     * regardless. Either path triggers the existing onSessionFinished →
+     * server on UDP port" warning appears after ~3 s of no UDP response and
+     * is the *reliable* failure signal — we watch for it and kill the PTY
+     * within one poll (≤250 ms) of it appearing. On top of that we keep a
+     * generous 8000 ms hard ceiling as a defence-in-depth safety net: if
+     * mosh-client hangs silently (no failure string, no prompt) for that
+     * long, something is wrong and we fall back to SSH.
+     *
+     * Earlier revisions capped the ceiling at 3000 ms, which raced against
+     * legitimate handshakes on cellular/high-RTT links — first UDP round
+     * trip + remote shell startup + first prompt render frequently landed
+     * at 3–5 s and the watchdog would kill working sessions that had done
+     * nothing wrong. The reliable failure-string detector already fires at
+     * ~3 s when UDP really is broken, so raising the ceiling costs users
+     * nothing on the failure path and unblocks the success path.
+     *
+     * The "looks connected" bail-out also loosened: any non-whitespace
+     * content on screen that is not the mosh-client failure string is
+     * enough evidence the remote side is echoing something (banner, MOTD,
+     * prompt). The previous >40-non-whitespace-chars threshold rejected
+     * short prompts like `user@host:~$ `.
+     *
+     * Either kill path triggers the existing onSessionFinished →
      * moshFailedFast → silent SSH fallback in TabTerminalActivity.
      */
     private fun startMoshFailWatchdog() {
         try { moshWatchdog?.cancel() } catch (_: Exception) {}
         moshWatchdog = CoroutineScope(Dispatchers.IO).launch {
             val startedAt = System.currentTimeMillis()
-            val hardCeilingMs = 3000L
+            val hardCeilingMs = 8000L
             val pollMs = 250L
             try {
                 while (isActive) {
@@ -1185,17 +1201,17 @@ class TermuxBridge(
                         try { session.finishIfRunning() } catch (_: Exception) {}
                         return@launch
                     }
+                    // Cheap short-circuit: if the emulator has rendered
+                    // *anything* substantive that isn't the failure string,
+                    // the remote side is talking to us. Stop watching.
+                    val nonWs = screen.count { !it.isWhitespace() }
+                    val looksConnected = nonWs > 4 &&
+                        !screen.contains("Nothing received", ignoreCase = true)
+                    if (looksConnected) {
+                        Logger.i(TAG, "Mosh watchdog: ${elapsed}ms — remote content visible (${nonWs} chars), leaving session alone")
+                        return@launch
+                    }
                     if (elapsed >= hardCeilingMs) {
-                        // Treat a screen that already shows substantive non-mosh
-                        // content as a working session — bail out without killing.
-                        val nonWs = screen.count { !it.isWhitespace() }
-                        val looksConnected = nonWs > 40 &&
-                            !screen.contains("mosh-client", ignoreCase = true) &&
-                            !screen.contains("Nothing received", ignoreCase = true)
-                        if (looksConnected) {
-                            Logger.i(TAG, "Mosh watchdog: ${elapsed}ms — remote content visible, leaving session alone")
-                            return@launch
-                        }
                         Logger.i(TAG, "Mosh watchdog: ${hardCeilingMs}ms ceiling reached with no remote handshake — killing PTY for SSH fallback")
                         try { session.finishIfRunning() } catch (_: Exception) {}
                         return@launch
