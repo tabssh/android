@@ -1,4 +1,5 @@
 package io.github.tabssh.hypervisor.proxmox
+import io.github.tabssh.hypervisor.spice.SpiceConnectionParams
 import io.github.tabssh.utils.logging.Logger
 
 import kotlinx.coroutines.Dispatchers
@@ -419,6 +420,158 @@ class ProxmoxApiClient(
             }
         } catch (e: Exception) {
             Logger.e("ProxmoxAPI", "Failed to get vncproxy", e)
+            null
+        }
+    }
+
+    /**
+     * Result of a `/nodes/{node}/qemu/{vmid}/spiceproxy` call.
+     *
+     * Proxmox returns the same JSON that its web UI hands to `remote-viewer`
+     * (the `.vv` config, minus the INI serialisation). We hold on to every
+     * field that the SPICE client needs to open a session, plus the metadata
+     * that surfaces in the console UI title bar.
+     *
+     * The [caCert] byte array is the PEM-encoded PVE cluster CA cert that
+     * signed the SPICE server's TLS cert. Proxmox escapes the newlines as
+     * the literal two-character sequence `\n` — we un-escape before storing
+     * so the JNI layer can feed the bytes straight into `g_tls_certificate_new`.
+     *
+     * @property host SPICE endpoint hostname (Proxmox proxy host).
+     * @property port Plain-text SPICE port; may be 0 when Proxmox only
+     *   exposes TLS. Never both zero — that combination is rejected upstream.
+     * @property tlsPort TLS SPICE port; may be 0 when TLS is disabled.
+     * @property password Per-session SPICE ticket.
+     * @property caCert PEM bytes of the CA cert to verify [host] against,
+     *   or null when Proxmox did not return a `ca` field (extremely rare —
+     *   `spiceproxy` always issues one for standard clusters).
+     * @property hostSubject Expected cert subject line; feed straight to
+     *   libspice's `host-subject` property.
+     * @property title Human-readable session title (`title` field from the
+     *   API — usually `"VM <vmid> - <name>"`).
+     * @property proxy HTTP proxy URL for the SPICE session (the `proxy` field
+     *   from the API). libspice sends this over the main channel; on Android
+     *   we still forward the value even though the platform does not honour
+     *   HTTP_PROXY env vars — the SPICE server uses it internally to advertise
+     *   how remote-viewer should tunnel back.
+     */
+    data class SPICEProxyResult(
+        val host: String,
+        val port: Int,
+        val tlsPort: Int,
+        val password: String,
+        val caCert: ByteArray?,
+        val hostSubject: String?,
+        val title: String?,
+        val proxy: String?,
+    ) {
+        /**
+         * Convert to a [SpiceConnectionParams] ready for [io.github.tabssh
+         * .hypervisor.spice.SpiceClient]. Always sets `tlsVerify=true` — the
+         * PEM CA in [caCert] is trusted material issued by the same Proxmox
+         * cluster the user already authenticated against, so falling back
+         * to `tlsVerify=false` would silently downgrade a chain we have every
+         * reason to validate.
+         */
+        fun toConnectionParams(): SpiceConnectionParams = SpiceConnectionParams(
+            host = host,
+            port = port,
+            tlsPort = tlsPort,
+            password = password,
+            caCert = caCert,
+            hostSubject = hostSubject,
+            tlsVerify = true,
+        )
+
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is SPICEProxyResult) return false
+            return host == other.host && port == other.port &&
+                tlsPort == other.tlsPort && password == other.password &&
+                (caCert?.contentEquals(other.caCert) == true ||
+                    (caCert == null && other.caCert == null)) &&
+                hostSubject == other.hostSubject &&
+                title == other.title && proxy == other.proxy
+        }
+
+        override fun hashCode(): Int {
+            var r = host.hashCode()
+            r = 31 * r + port
+            r = 31 * r + tlsPort
+            r = 31 * r + password.hashCode()
+            r = 31 * r + (caCert?.contentHashCode() ?: 0)
+            r = 31 * r + (hostSubject?.hashCode() ?: 0)
+            r = 31 * r + (title?.hashCode() ?: 0)
+            r = 31 * r + (proxy?.hashCode() ?: 0)
+            return r
+        }
+    }
+
+    /**
+     * Fetch a SPICE proxy ticket for a QEMU guest.
+     *
+     * Only qemu type is supported — Proxmox does not offer SPICE for LXC.
+     * The Proxmox web UI passes the client's `Host:` header as the `proxy`
+     * form parameter so the returned `.vv` config points remote-viewer at
+     * the same address the user browsed to. We do the same: pass this API
+     * client's [host] value, which is the address the user configured for
+     * this hypervisor connection.
+     *
+     * Returns null on any failure (network, auth, VM configured without
+     * SPICE display). Error text is logged and swallowed to mirror the
+     * shape of [getVNCProxy] — the caller decides how to fall back.
+     */
+    suspend fun getSPICEProxy(node: String, vmid: Int): SPICEProxyResult? = withContext(Dispatchers.IO) {
+        try {
+            val json = apiPost(
+                "/nodes/$node/qemu/$vmid/spiceproxy",
+                mapOf("proxy" to host),
+            )
+            val data = json.optJSONObject("data")
+            if (data == null) {
+                Logger.e("ProxmoxAPI", "No data in spiceproxy response — VM $vmid likely not configured for SPICE")
+                return@withContext null
+            }
+            val respHost = data.optString("host").takeIf { it.isNotBlank() } ?: run {
+                Logger.e("ProxmoxAPI", "spiceproxy response missing host")
+                return@withContext null
+            }
+            val plainPort = data.optString("port").toIntOrNull() ?: 0
+            val tlsPort = data.optString("tls-port").toIntOrNull() ?: 0
+            if (plainPort == 0 && tlsPort == 0) {
+                Logger.e("ProxmoxAPI", "spiceproxy response has neither port nor tls-port")
+                return@withContext null
+            }
+            val password = data.optString("password").takeIf { it.isNotBlank() } ?: run {
+                Logger.e("ProxmoxAPI", "spiceproxy response missing password/ticket")
+                return@withContext null
+            }
+            /*
+             * Proxmox emits the CA PEM with literal backslash-n between
+             * lines rather than real newlines — it embeds the value in a
+             * .vv INI file for remote-viewer where a real newline would
+             * terminate the key. Un-escape before handing to libspice so
+             * the PEM decoder can find the BEGIN/END lines.
+             */
+            val caPem = data.optString("ca").takeIf { it.isNotBlank() }?.replace("\\n", "\n")
+            val caCert = caPem?.toByteArray(Charsets.US_ASCII)
+            val hostSubject = data.optString("host-subject").takeIf { it.isNotBlank() }
+            val title = data.optString("title").takeIf { it.isNotBlank() }
+            val proxy = data.optString("proxy").takeIf { it.isNotBlank() }
+            Logger.i("ProxmoxAPI",
+                "Got spiceproxy ticket for VM $vmid (host=$respHost, plain=$plainPort, tls=$tlsPort)")
+            SPICEProxyResult(
+                host = respHost,
+                port = plainPort,
+                tlsPort = tlsPort,
+                password = password,
+                caCert = caCert,
+                hostSubject = hostSubject,
+                title = title,
+                proxy = proxy,
+            )
+        } catch (e: Exception) {
+            Logger.e("ProxmoxAPI", "Failed to get spiceproxy", e)
             null
         }
     }
