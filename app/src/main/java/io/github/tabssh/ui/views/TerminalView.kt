@@ -989,6 +989,17 @@ class TerminalView @JvmOverloads constructor(
      */
     fun toggleKeyboard() {
         if (!hasWindowFocus()) return
+        // Issue #12 (follow-up) — copy mode locks the IME. Every tap inside
+        // selection mode used to fall through to `onSingleTapConfirmed`
+        // which called `toggleKeyboard()`, and the IME show/hide resized
+        // the viewport under the user's finger — the "screen jumps while
+        // selecting" symptom. Gate the toggle on any selection-related
+        // state so a tap-to-place-anchor, tap-to-move-focus, or
+        // tap-inside-highlight cannot flip the keyboard visibility.
+        if (selectionActive || selectionArmed || selectionArmRunnable != null) {
+            Logger.d("TerminalView", "Keyboard toggle suppressed — in selection mode")
+            return
+        }
         val visible = ViewCompat.getRootWindowInsets(this)
             ?.isVisible(WindowInsetsCompat.Type.ime()) == true
         if (visible) {
@@ -998,6 +1009,21 @@ class TerminalView @JvmOverloads constructor(
             requestFocus()
             inputMethodManager.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
             Logger.d("TerminalView", "Showing keyboard")
+        }
+    }
+
+    /**
+     * Force-hide the IME regardless of current selection state. Used at
+     * selection-mode entry so the viewport does not resize under the
+     * user's finger while they are placing the anchor.
+     */
+    private fun forceHideKeyboard() {
+        if (!hasWindowFocus()) return
+        val visible = ViewCompat.getRootWindowInsets(this)
+            ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+        if (visible) {
+            inputMethodManager.hideSoftInputFromWindow(windowToken, 0)
+            Logger.d("TerminalView", "Force-hiding keyboard for selection mode")
         }
     }
 
@@ -2271,6 +2297,13 @@ class TerminalView @JvmOverloads constructor(
         // key button steals focus when tapped; without this the keyboard is
         // visible but keystrokes go nowhere.
         requestFocus()
+        // Issue #12 (follow-up) — hide the IME on entry so the visible
+        // viewport is stable while the user is placing / dragging the
+        // selection. Otherwise the first tap that follows fires the
+        // gesture detector's `onSingleTapConfirmed` → toggleKeyboard,
+        // the IME animates in, the terminal rows below the anchor
+        // shift up, and the anchor lands nowhere near the intended cell.
+        forceHideKeyboard()
         invalidate()
         onSelectionStarted?.invoke()
     }
