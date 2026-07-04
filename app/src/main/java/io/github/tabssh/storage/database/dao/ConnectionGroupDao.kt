@@ -101,6 +101,42 @@ interface ConnectionGroupDao {
     suspend fun getGroupByName(name: String): ConnectionGroup?
 
     /**
+     * Natural-key lookup used by sync-apply to collapse groups that
+     * came from another device with a different UUID PK but the same
+     * (name, parent_id) coordinates.
+     *
+     * `parent_id` is nullable — for root-level groups the SQL literal
+     * `IS NULL` must be used, not `= NULL`. `COALESCE` handles both
+     * branches with one query. Case-insensitive on `name` because the
+     * duplication we see in the wild differs only in casing / whitespace
+     * variations across devices.
+     */
+    @Query("""
+        SELECT * FROM connection_groups
+        WHERE lower(trim(name)) = lower(trim(:name))
+          AND COALESCE(parent_id, '') = COALESCE(:parentId, '')
+          AND id != :excludeId
+        LIMIT 1
+    """)
+    suspend fun findByNaturalKey(name: String, parentId: String?, excludeId: String = ""): ConnectionGroup?
+
+    /**
+     * Bulk fetch used by the sync-apply dedup pass. Snapshotted once
+     * per applyAll() so we can group-by natural key in memory rather
+     * than hammering the DB per-row.
+     */
+    @Query("SELECT * FROM connection_groups")
+    suspend fun getAllGroupsList(): List<ConnectionGroup>
+
+    /**
+     * Repoint child connections from one group UUID to another. Called
+     * during the one-time in-place dedup pass when we collapse two
+     * duplicate group rows into a single survivor.
+     */
+    @Query("UPDATE connections SET group_id = :survivorId WHERE group_id = :duplicateId")
+    suspend fun repointConnectionsToGroup(duplicateId: String, survivorId: String)
+
+    /**
      * Clear all groups (for backup/restore)
      */
     @Query("DELETE FROM connection_groups")

@@ -6,6 +6,7 @@ import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.crypto.keys.KeyStorage
 import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.storage.database.TabSSHDatabase
+import io.github.tabssh.storage.database.entities.ConnectionGroup
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HostKeyEntry
 import io.github.tabssh.storage.database.entities.StoredKey
@@ -70,11 +71,62 @@ class SyncDataApplier {
         try {
             var appliedCount = 0
 
+            // Self-healing pass — collapse any pre-existing duplicate rows the
+            // user already accumulated before this fix landed. Cheap when there
+            // are none; O(n) scan when there are. Runs outside the sync
+            // transaction so the cleanup commits even if the payload apply
+            // fails downstream.
+            val collapsedGroups = collapseExistingDuplicateGroups()
+            val collapsedConns  = collapseExistingDuplicateConnections()
+            if (collapsedGroups > 0 || collapsedConns > 0) {
+                Logger.i(TAG, "Pre-apply dedup collapsed $collapsedGroups groups and $collapsedConns connections")
+            }
+
+            // Group UUID remap — populated as remote groups are matched to
+            // local rows by (name, parent_id). Used when inserting incoming
+            // connections so their group_id points at the surviving local
+            // group UUID, not the remote one.
+            val groupIdRemap = mutableMapOf<String, String>()
+
             database.withTransaction {
-            // Apply connections
+            // Apply groups FIRST — connection.groupId references depend on
+            // the remap this loop builds.
+            data.groups.forEach { g ->
+                try {
+                    val existing = database.connectionGroupDao()
+                        .findByNaturalKey(g.name, g.parentId, g.id)
+                    if (existing != null) {
+                        groupIdRemap[g.id] = existing.id
+                        val merged = mergeGroupFields(existing, g)
+                        if (merged != existing) {
+                            database.connectionGroupDao().updateGroup(merged)
+                        }
+                    } else {
+                        database.connectionGroupDao().insertGroup(g)
+                    }
+                    appliedCount++
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Failed to apply group: ${g.name}", e)
+                }
+            }
+
+            // Apply connections — natural-key match on (host, port, username)
+            // collapses records that were created independently on two devices
+            // with different UUIDs.
             data.connections.forEach { connection ->
                 try {
-                    database.connectionDao().insertConnection(connection)
+                    val remappedGroupId = connection.groupId?.let { groupIdRemap[it] ?: it }
+                    val incoming = if (remappedGroupId != connection.groupId)
+                        connection.copy(groupId = remappedGroupId)
+                    else connection
+                    val existing = database.connectionDao()
+                        .findDuplicate(incoming.host, incoming.port, incoming.username, incoming.id)
+                    if (existing != null) {
+                        val merged = mergeConnectionFields(existing, incoming)
+                        database.connectionDao().updateConnection(merged)
+                    } else {
+                        database.connectionDao().insertConnection(incoming)
+                    }
                     appliedCount++
                 } catch (e: Exception) {
                     Logger.w(TAG, "Failed to apply connection: ${connection.name}", e)
@@ -141,14 +193,8 @@ class SyncDataApplier {
                     Logger.w(TAG, "Failed to apply identity: ${id.name}", e)
                 }
             }
-            data.groups.forEach { g ->
-                try {
-                    database.connectionGroupDao().insertGroup(g)
-                    appliedCount++
-                } catch (e: Exception) {
-                    Logger.w(TAG, "Failed to apply group: ${g.name}", e)
-                }
-            }
+            // (Groups already applied at the top of the transaction so the
+            // connection loop above could see the natural-key remap.)
 
             // Wave 7.1 — hypervisors / trusted_certificates, REPLACE on PK conflict.
             data.hypervisors.forEach { h ->
@@ -346,9 +392,21 @@ class SyncDataApplier {
 
         result.added.forEach { connection ->
             try {
-                database.connectionDao().insertConnection(connection)
+                // Same natural-key guard as applyAll(). MergeEngine keys by
+                // UUID PK, so a remote row that semantically matches a local
+                // one but has a different UUID slips through as "added" — we
+                // catch it here and merge instead of inserting a duplicate.
+                val existing = database.connectionDao()
+                    .findDuplicate(connection.host, connection.port, connection.username, connection.id)
+                if (existing != null) {
+                    val merged = mergeConnectionFields(existing, connection)
+                    database.connectionDao().updateConnection(merged)
+                    Logger.d(TAG, "Merged connection into existing: ${connection.name}")
+                } else {
+                    database.connectionDao().insertConnection(connection)
+                    Logger.d(TAG, "Added connection: ${connection.name}")
+                }
                 count++
-                Logger.d(TAG, "Added connection: ${connection.name}")
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to add connection: ${connection.name}", e)
             }
@@ -1029,6 +1087,113 @@ class SyncDataApplier {
             Logger.w(TAG, "Failed to apply dashboard config: ${e.message}")
             0
         }
+    }
+
+    /**
+     * Merge an incoming connection into an existing local row when the pair
+     * matches by (host, port, username). Rules:
+     *   - keep the local UUID (`id`) so foreign references stay intact
+     *   - sum `connectionCount` — every device tracked its own local runs
+     *     independently, so the true total across devices is the sum
+     *   - take max of `lastConnected`, `lastSyncedAt`, `syncVersion`, `modifiedAt`
+     *   - for every other user-visible field, prefer whichever side has the
+     *     newer `modifiedAt` (last-write-wins, matching MergeEngine semantics)
+     */
+    private fun mergeConnectionFields(local: ConnectionProfile, remote: ConnectionProfile): ConnectionProfile {
+        val remoteNewer = remote.modifiedAt > local.modifiedAt
+        val winner = if (remoteNewer) remote else local
+        return winner.copy(
+            id              = local.id,
+            host            = local.host,
+            port            = local.port,
+            username        = local.username,
+            connectionCount = local.connectionCount + remote.connectionCount,
+            lastConnected   = maxOf(local.lastConnected,  remote.lastConnected),
+            lastSyncedAt    = maxOf(local.lastSyncedAt,   remote.lastSyncedAt),
+            syncVersion     = maxOf(local.syncVersion,    remote.syncVersion),
+            modifiedAt      = maxOf(local.modifiedAt,     remote.modifiedAt),
+            createdAt       = minOf(local.createdAt,      remote.createdAt),
+        )
+    }
+
+    /**
+     * Merge two ConnectionGroup rows that matched by (name, parent_id).
+     * Local UUID survives; sortOrder/isCollapsed/icon/color follow the
+     * newer `modifiedAt`. createdAt keeps the earlier value.
+     */
+    private fun mergeGroupFields(local: ConnectionGroup, remote: ConnectionGroup): ConnectionGroup {
+        val remoteNewer = remote.modifiedAt > local.modifiedAt
+        val winner = if (remoteNewer) remote else local
+        return winner.copy(
+            id           = local.id,
+            name         = local.name,
+            parentId     = local.parentId,
+            createdAt    = minOf(local.createdAt, remote.createdAt),
+            modifiedAt   = maxOf(local.modifiedAt, remote.modifiedAt),
+            lastSyncedAt = maxOf(local.lastSyncedAt, remote.lastSyncedAt),
+            syncVersion  = maxOf(local.syncVersion, remote.syncVersion),
+        )
+    }
+
+    /**
+     * One-time in-place cleanup of any duplicate connection rows already
+     * present in the local DB from a pre-fix sync sweep. Groups rows by
+     * (lower(host), port, lower(username)), keeps the row with the smallest
+     * `createdAt` (earliest survivor — its UUID is what foreign refs likely
+     * point at), aggregates counters into it, deletes the others.
+     *
+     * Returns the number of rows removed. Called at the top of every
+     * applyAll() — cheap when there are no duplicates, self-healing when
+     * the user hasn't opened a sync sweep since the pre-fix corruption.
+     */
+    private suspend fun collapseExistingDuplicateConnections(): Int {
+        var removed = 0
+        val all = database.connectionDao().getAllConnectionsList()
+        val groups = all.groupBy { Triple(it.host.trim().lowercase(), it.port, it.username.trim().lowercase()) }
+        database.withTransaction {
+            groups.values.forEach { rows ->
+                if (rows.size <= 1) return@forEach
+                val survivor = rows.minByOrNull { it.createdAt } ?: rows.first()
+                val duplicates = rows.filter { it.id != survivor.id }
+                var merged = survivor
+                duplicates.forEach { dup -> merged = mergeConnectionFields(merged, dup) }
+                if (merged != survivor) database.connectionDao().updateConnection(merged)
+                duplicates.forEach { dup ->
+                    database.connectionDao().deleteConnectionById(dup.id)
+                    removed++
+                }
+            }
+        }
+        return removed
+    }
+
+    /**
+     * Same shape as [collapseExistingDuplicateConnections] but for
+     * ConnectionGroup, keyed on (lower(trim(name)), parent_id). Before
+     * deleting a duplicate group we repoint any connections whose
+     * `group_id` points at that duplicate UUID over to the survivor's
+     * UUID so no connection ends up orphaned.
+     */
+    private suspend fun collapseExistingDuplicateGroups(): Int {
+        var removed = 0
+        val all = database.connectionGroupDao().getAllGroupsList()
+        val groups = all.groupBy { it.name.trim().lowercase() to (it.parentId ?: "") }
+        database.withTransaction {
+            groups.values.forEach { rows ->
+                if (rows.size <= 1) return@forEach
+                val survivor = rows.minByOrNull { it.createdAt } ?: rows.first()
+                val duplicates = rows.filter { it.id != survivor.id }
+                var merged = survivor
+                duplicates.forEach { dup -> merged = mergeGroupFields(merged, dup) }
+                if (merged != survivor) database.connectionGroupDao().updateGroup(merged)
+                duplicates.forEach { dup ->
+                    database.connectionGroupDao().repointConnectionsToGroup(dup.id, survivor.id)
+                    database.connectionGroupDao().deleteGroupById(dup.id)
+                    removed++
+                }
+            }
+        }
+        return removed
     }
 
     /**
