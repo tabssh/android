@@ -3489,12 +3489,45 @@ class TabTerminalActivity : AppCompatActivity() {
             imm.hideSoftInputFromWindow(terminalView.windowToken, 0)
             Logger.d("TabTerminalActivity", "IME hidden")
         } else {
+            if (hasHardwareKeyboard()) {
+                Logger.d("TabTerminalActivity", "IME show suppressed — hardware keyboard active")
+                return
+            }
             imm.showSoftInput(
                 terminalView,
                 android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT
             )
             Logger.d("TabTerminalActivity", "IME shown")
         }
+    }
+
+    /**
+     * True when a physical keyboard is attached and currently exposed
+     * (e.g. Bluetooth/USB keyboard connected, hardware keyboard slid out).
+     * Used to auto-hide both the soft IME and the custom on-screen key bar
+     * since neither is useful when the user is typing on real keys.
+     */
+    private fun hasHardwareKeyboard(): Boolean {
+        val cfg = resources.configuration
+        return cfg.keyboard != android.content.res.Configuration.KEYBOARD_NOKEYS &&
+            cfg.hardKeyboardHidden == android.content.res.Configuration.HARDKEYBOARDHIDDEN_NO
+    }
+
+    /**
+     * Reconcile the custom key bar's on-screen visibility with the current
+     * hardware-keyboard state. When a HW keyboard is attached, hide the bar
+     * regardless of the user's stored preference — the pref is preserved so
+     * the bar reappears once the HW keyboard is unplugged.
+     */
+    private fun applyHardwareKeyboardPolicy() {
+        val hw = hasHardwareKeyboard()
+        if (hw) {
+            binding.multiRowKeyboard.visibility = android.view.View.GONE
+        } else {
+            binding.multiRowKeyboard.visibility =
+                if (customKeyboardVisible) android.view.View.VISIBLE else android.view.View.GONE
+        }
+        Logger.d("TabTerminalActivity", "HW keyboard policy: hw=$hw pref=$customKeyboardVisible")
     }
 
     private fun openFileManager() {
@@ -3932,6 +3965,20 @@ class TabTerminalActivity : AppCompatActivity() {
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
         binding.multiRowKeyboard.notifyConfigurationChanged(newConfig)
+        // A HW keyboard being connected/disconnected fires
+        // onConfigurationChanged with a new `keyboard`/`hardKeyboardHidden`
+        // — reconcile bar visibility so the user does not see a redundant
+        // key bar while typing on real keys.
+        applyHardwareKeyboardPolicy()
+        // Also drop the soft IME if a HW keyboard just became active.
+        if (hasHardwareKeyboard()) {
+            val terminalView = getActiveTerminalView()
+            if (terminalView != null) {
+                val imm = getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
+                    as android.view.inputmethod.InputMethodManager
+                imm.hideSoftInputFromWindow(terminalView.windowToken, 0)
+            }
+        }
     }
 
     override fun onResume() {
@@ -4040,6 +4087,10 @@ class TabTerminalActivity : AppCompatActivity() {
         customKeyboardVisible = barVisible
         binding.multiRowKeyboard.visibility =
             if (barVisible) android.view.View.VISIBLE else android.view.View.GONE
+        // If a hardware keyboard is already attached at startup, override the
+        // stored pref visually — the pref is preserved so the bar reappears
+        // when the HW keyboard is disconnected.
+        applyHardwareKeyboardPolicy()
 
         // Wire listeners synchronously — these are cheap.
         binding.multiRowKeyboard.setOnKeyClickListener { key ->

@@ -1006,10 +1006,30 @@ class TerminalView @JvmOverloads constructor(
             inputMethodManager.hideSoftInputFromWindow(windowToken, 0)
             Logger.d("TerminalView", "Hiding keyboard")
         } else {
+            // When a hardware keyboard is connected and open, the soft IME is
+            // redundant — a single tap on the terminal should not raise it.
+            // Explicit user actions (toolbar button / palette) still route
+            // through the activity-level toggleKeyboard, which honours the
+            // user's intent.
+            if (hasHardwareKeyboard()) {
+                Logger.d("TerminalView", "Keyboard show suppressed — hardware keyboard active")
+                return
+            }
             requestFocus()
             inputMethodManager.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
             Logger.d("TerminalView", "Showing keyboard")
         }
+    }
+
+    /**
+     * True when a hardware keyboard is connected and currently exposed
+     * (physical keyboard attached, not folded away). When true, both the
+     * soft IME and the custom on-screen key bar are redundant.
+     */
+    private fun hasHardwareKeyboard(): Boolean {
+        val cfg = resources.configuration
+        return cfg.keyboard != android.content.res.Configuration.KEYBOARD_NOKEYS &&
+            cfg.hardKeyboardHidden == android.content.res.Configuration.HARDKEYBOARDHIDDEN_NO
     }
 
     /**
