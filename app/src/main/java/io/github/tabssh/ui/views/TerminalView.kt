@@ -1716,6 +1716,26 @@ class TerminalView @JvmOverloads constructor(
             selectionArmRunnable?.let { removeCallbacks(it); selectionArmRunnable = null }
         }
 
+        // While the SEL-arm runnable is still pending, we're in a
+        // limbo window between ACTION_DOWN (swallowed above) and the
+        // deferred `enterSelectionMode` call ~75ms later. ACTION_MOVE
+        // events that fire in this window must be swallowed too —
+        // otherwise they fall through to gestureDetector.onTouchEvent
+        // which never saw the ACTION_DOWN and interprets the MOVE as
+        // a scroll with a garbage delta, making the screen jerk right
+        // as the user is trying to place their selection anchor.
+        // ACTION_UP/CANCEL in this window means the user lifted before
+        // the runnable fired — cancel the pending selection so we
+        // don't enter selection mode after the finger is already gone.
+        if (selectionArmRunnable != null) {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    selectionArmRunnable?.let { removeCallbacks(it); selectionArmRunnable = null }
+                }
+            }
+            return true
+        }
+
         // Handle pinch-to-zoom first (multi-touch)
         if (event.pointerCount >= 2) {
             scaleGestureDetector.onTouchEvent(event)
