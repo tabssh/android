@@ -68,6 +68,37 @@ object Logger {
     private var hostCounter = 0
     private var userCounter = 0
 
+    // Issue #12 — jump-host registry so bastions render as jump1/jump2/…
+    // distinct from target hosts (server1/server2/…). Callers register the
+    // jump-host string BEFORE the first log line that mentions it; the
+    // sanitizer consults this set on every hostname/IP substitution and
+    // routes matching entries to a separate map/counter.
+    // Case-insensitive on hostnames; IP literals compared verbatim.
+    private val jumpHostSet = mutableSetOf<String>()
+    private val jumpHostMap = mutableMapOf<String, String>()
+    private var jumpHostCounter = 0
+
+    /**
+     * Register a host as a jump host so subsequent log lines mentioning it
+     * anonymize to `jump{N}` instead of `server{N}` / `IP{N}`. Idempotent.
+     * Must be called BEFORE any log line that includes the host string —
+     * the first sanitize pass caches the mapping.
+     */
+    fun registerJumpHost(host: String) {
+        synchronized(jumpHostSet) {
+            jumpHostSet.add(host.lowercase())
+        }
+    }
+
+    private fun anonForHost(host: String, fallback: () -> String): String {
+        val isJump = synchronized(jumpHostSet) { host.lowercase() in jumpHostSet }
+        return if (isJump) {
+            jumpHostMap.getOrPut(host) { "jump${++jumpHostCounter}" }
+        } else {
+            fallback()
+        }
+    }
+
     // ── Sanitization patterns — compiled ONCE at object load, never per-call ──
     // Inline Regex(...) inside sanitizeForPublic() was allocating a new pattern
     // object on every log write; pre-compiling here drops that cost to zero.
@@ -298,6 +329,12 @@ object Logger {
                     userMap.clear()
                     hostCounter = 0
                     userCounter = 0
+                    jumpHostMap.clear()
+                    jumpHostCounter = 0
+                    // NOTE: jumpHostSet is intentionally NOT cleared here.
+                    // The registry is populated at connect time by SSHConnection
+                    // and must survive log rotation so mid-session lines keep
+                    // resolving jump hosts to jump{N}. It resets in clearAppLog().
                 }
 
                 // Sanitize message for public sharing
@@ -417,7 +454,7 @@ object Logger {
                 match.value  // algorithm name / public domain — keep as-is
             } else {
                 val anonUser = userMap.getOrPut(match.groupValues[1]) { "user${++userCounter}" }
-                val anonHost = hostMap.getOrPut(host) { "server${++hostCounter}" }
+                val anonHost = anonForHost(host) { hostMap.getOrPut(host) { "server${++hostCounter}" } }
                 "$anonUser@$anonHost"
             }
         }
@@ -426,21 +463,21 @@ object Logger {
         // Bracket notation first so the surrounding [ ] are included in the
         // replacement; v4-mapped before bare IPv4 for the same reason.
         s = RE_IPV6_BRACKET.replace(s) { match ->
-            "[${hostMap.getOrPut(match.value) { "IP${++hostCounter}" }}]"
+            "[${anonForHost(match.value) { hostMap.getOrPut(match.value) { "IP${++hostCounter}" } }}]"
         }
         s = RE_IPV6_V4MAPPED.replace(s) { match ->
-            hostMap.getOrPut(match.value) { "IP${++hostCounter}" }
+            anonForHost(match.value) { hostMap.getOrPut(match.value) { "IP${++hostCounter}" } }
         }
         s = RE_IPV6_FULL.replace(s) { match ->
-            hostMap.getOrPut(match.value) { "IP${++hostCounter}" }
+            anonForHost(match.value) { hostMap.getOrPut(match.value) { "IP${++hostCounter}" } }
         }
         s = RE_IPV6_COMP.replace(s) { match ->
-            hostMap.getOrPut(match.value) { "IP${++hostCounter}" }
+            anonForHost(match.value) { hostMap.getOrPut(match.value) { "IP${++hostCounter}" } }
         }
 
         // ── IPv4 addresses → IP1, IP2, … ─────────────────────────────────
         s = RE_IPV4.replace(s) { match ->
-            hostMap.getOrPut(match.value) { "IP${++hostCounter}" }
+            anonForHost(match.value) { hostMap.getOrPut(match.value) { "IP${++hostCounter}" } }
         }
 
         // ── private hostnames → server1, server2, … ──────────────────────
@@ -453,7 +490,7 @@ object Logger {
                 SAFE_DOMAIN_KEYWORDS.any { host.contains(it) }) {
                 host
             } else {
-                hostMap.getOrPut(host) { "server${++hostCounter}" }
+                anonForHost(host) { hostMap.getOrPut(host) { "server${++hostCounter}" } }
             }
         }
 
@@ -643,6 +680,9 @@ object Logger {
         userMap.clear()
         hostCounter = 0
         userCounter = 0
+        jumpHostMap.clear()
+        jumpHostCounter = 0
+        synchronized(jumpHostSet) { jumpHostSet.clear() }
         i("Logger", "App log cleared by user")
     }
 

@@ -303,8 +303,14 @@ class SSHConnection(
 
                 // Setup jump host if configured
                 Logger.d("SSHConnection", "STEP 5: Checking jump host configuration")
-                val jumpHostPort = setupJumpHost(jsch)
-                stepDone("jump-host-setup")
+                // Issue #12 — pass stepDone through so setupJumpHost emits
+                // TIMING lines for its internal sub-phases (session-create,
+                // config, auth-prep, connect, port-forward-setup). Without
+                // this, a 13s jump-host connect showed up as a single opaque
+                // "jump-host-setup" line with no way to tell whether the
+                // bastion's kex, its auth, or the direct-tcpip channel to
+                // the target was the culprit.
+                val jumpHostPort = setupJumpHost(jsch) { step -> stepDone(step) }
 
                 // Create main session - connect through jump host if configured
                 Logger.d("SSHConnection", "STEP 6: Creating SSH session")
@@ -325,10 +331,12 @@ class SSHConnection(
                 // Setup HTTP/SOCKS proxy if configured
                 Logger.d("SSHConnection", "STEP 7: Checking proxy configuration")
                 setupHttpSocksProxy(newSession)
+                stepDone("http-socks-proxy-setup")
 
                 // Configure session
                 Logger.d("SSHConnection", "STEP 8: Configuring SSH session")
                 configureSession(newSession)
+                stepDone("configure-session")
 
                 // Set timeout
                 newSession.timeout = profile.connectTimeout * 1000
@@ -340,6 +348,7 @@ class SSHConnection(
                 // Setup UserInfo for host key verification prompts
                 Logger.d("SSHConnection", "STEP 8.5: Setting up UserInfo for host key prompts")
                 setupUserInfo(newSession)
+                stepDone("userinfo-setup")
 
                 // Setup authentication BEFORE connecting
                 Logger.i("SSHConnection", "STEP 9: Setting up authentication")
@@ -378,6 +387,7 @@ class SSHConnection(
                 // configs with `LocalForward` / `RemoteForward` / `DynamicForward`
                 // round-tripped fine but did nothing at connect time.
                 applyAdvancedSettings(activeSession)
+                stepDone("apply-advanced-settings")
 
                 _connectionState.value = ConnectionState.CONNECTED
                 hadSuccessfulConnect = true
@@ -1012,12 +1022,20 @@ class SSHConnection(
      * Setup SSH jump host (bastion) connection if configured
      * Returns local port number for forwarding, or null if no jump host
      */
-    private suspend fun setupJumpHost(jsch: JSch): Int? = withContext(Dispatchers.IO) {
+    private suspend fun setupJumpHost(
+        jsch: JSch,
+        stepDone: (String) -> Unit = {}
+    ): Int? = withContext(Dispatchers.IO) {
         if (profile.proxyType != "SSH" || profile.proxyHost == null) {
             return@withContext null
         }
 
         try {
+            // Issue #12 — register jump host with the sanitizer BEFORE the
+            // first log line mentions it so it renders as jump{N} rather
+            // than sharing the server{N} pool with the target host.
+            Logger.registerJumpHost(profile.proxyHost)
+
             Logger.i("SSHConnection", "Setting up SSH jump host: ${profile.proxyHost}:${profile.proxyPort}")
 
             val jumpHost = profile.proxyHost
@@ -1026,12 +1044,14 @@ class SSHConnection(
 
             // Create jump host session
             val jumpSession = jsch.getSession(jumpUsername, jumpHost, jumpPort)
+            stepDone("jump-session-create")
 
             // Configure jump host session
             val config = java.util.Properties()
             config["StrictHostKeyChecking"] = "ask"
             jumpSession.setConfig(config)
             jumpSession.timeout = profile.connectTimeout * 1000
+            stepDone("jump-config")
 
             // Authenticate to jump host
             when (profile.proxyAuthType) {
@@ -1078,10 +1098,12 @@ class SSHConnection(
                     }
                 }
             }
+            stepDone("jump-auth-prep")
 
             // Connect to jump host
             jumpSession.connect()
             jumpHostSession = jumpSession
+            stepDone("jump-connect (TCP+kex+auth)")
 
             Logger.i("SSHConnection", "Jump host connected successfully")
 
@@ -1099,6 +1121,7 @@ class SSHConnection(
             )
 
             jumpHostLocalPort = localPort
+            stepDone("jump-port-forward-setup")
 
             Logger.i("SSHConnection", "Jump host port forwarding established: localhost:$localPort -> ${profile.host}:${profile.port}")
 
