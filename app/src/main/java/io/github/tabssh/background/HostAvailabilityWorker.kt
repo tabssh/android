@@ -180,6 +180,11 @@ class HostAvailabilityWorker(
         // will sit between the global default and the per-host flag in precedence.)
         val globalNotificationsEnabled = prefs.getBoolean("monitoring_notifications_enabled", true)
 
+        // Dismiss any stale "monitoring suspended — no network" notification from
+        // a previous run that detected an outage. We're past the internet gate,
+        // so connectivity is restored and the stale row should disappear.
+        NotificationHelper.cancelNetworkDownNotification(appContext)
+
         val app = TabSSHApplication.get()
         val db = app.database
         val allSlots = db.monitorSlotDao().getEnabledSlots()
@@ -202,6 +207,12 @@ class HostAvailabilityWorker(
 
         Logger.i(TAG, "Checking ${dueSlots.size}/${allSlots.size} monitored host(s) (${allSlots.size - dueSlots.size} skipped, interval not elapsed)")
 
+        // Set to true if any probe failure was caused by the device losing internet
+        // mid-run rather than by the remote host going down. Used after awaitAll()
+        // to post a single "monitoring suspended" notification instead of one alert
+        // per host — WiFi off → 8 spam alerts is the problem this solves.
+        val networkWentDown = java.util.concurrent.atomic.AtomicBoolean(false)
+
         // Parallel TCP probes bounded by MAX_PARALLEL_PROBES.
         // supervisorScope ensures one probe failure does not cancel others.
         val semaphore = Semaphore(MAX_PARALLEL_PROBES)
@@ -220,6 +231,17 @@ class HostAvailabilityWorker(
                         val wasDown = slot.isCurrentlyDown
 
                         if (!isReachable) {
+                            // Re-check internet before attributing the failure to the host.
+                            // WiFi turning off mid-run causes ALL TCP probes to fail at once;
+                            // that's a network event, not a host-down event. Suppress per-host
+                            // alerts and let the caller post a single "monitoring suspended"
+                            // notification instead of flooding the user with one alert per host.
+                            if (!isInternetAvailable()) {
+                                networkWentDown.set(true)
+                                Logger.i(TAG, "${profile.host}: probe failed — no internet, suppressing per-host alert")
+                                return@withPermit
+                            }
+
                             val firstFailure = !wasDown
                             val cooldownMs = slot.alertCooldownMinutes * 60_000L
                             val cooldownExpired = probeTime - slot.lastNotifiedDownAt > cooldownMs
@@ -279,6 +301,14 @@ class HostAvailabilityWorker(
                     }
                 }
             }.awaitAll()
+        }
+
+        // If one or more probes were skipped because the device lost internet
+        // mid-run, post the single consolidated notification now. All per-host
+        // alerts were suppressed above; this one replaces them.
+        if (networkWentDown.get()) {
+            Logger.i(TAG, "Network outage detected during probe run — posting consolidated notification")
+            NotificationHelper.postNetworkDownNotification(appContext)
         }
 
         Logger.d(TAG, "Availability check complete")

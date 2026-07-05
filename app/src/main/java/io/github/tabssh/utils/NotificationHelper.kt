@@ -35,6 +35,7 @@ object NotificationHelper {
     // ── Notification IDs ──────────────────────────────────────────────────────
 
     const val NOTIFICATION_ID_SERVICE = 1001
+    const val NOTIFICATION_ID_NO_NETWORK = 1002
     const val NOTIFICATION_ID_FILE_TRANSFER = 3001
     const val NOTIFICATION_ID_ERROR = 4001
 
@@ -552,6 +553,52 @@ object NotificationHelper {
         nm.notify(alertId, builder.build())
     }
     
+    /**
+     * Post a single "monitoring suspended — no network" informational notification.
+     *
+     * Replaces per-host "unreachable" alerts when the device has lost internet
+     * connectivity so the user sees one calm status row instead of one high-
+     * importance alert per monitored host. Uses [CHANNEL_SERVICE] (low importance,
+     * silent) — this is informational status, not an actionable error.
+     *
+     * Dismissed automatically by the next successful [HostAvailabilityWorker] run
+     * once internet is restored.
+     */
+    fun postNetworkDownNotification(context: Context) {
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val tapIntent = Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        val pi = PendingIntent.getActivity(
+            context, 0, tapIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notif = NotificationCompat.Builder(context, CHANNEL_SERVICE)
+            .setContentTitle("Monitoring suspended")
+            .setContentText("No network — host checks will resume when connectivity returns")
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentIntent(pi)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setShowWhen(false)
+            .setOngoing(false)
+            .setAutoCancel(true)
+            .build()
+        nm.notify(NOTIFICATION_ID_NO_NETWORK, notif)
+    }
+
+    /**
+     * Dismiss the "monitoring suspended" notification posted by
+     * [postNetworkDownNotification]. Called at the start of a successful
+     * [HostAvailabilityWorker] run to clear any stale entry from the previous
+     * offline period.
+     */
+    fun cancelNetworkDownNotification(context: Context) {
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.cancel(NOTIFICATION_ID_NO_NETWORK)
+    }
+
     /**
      * Show connection error notification
      */
