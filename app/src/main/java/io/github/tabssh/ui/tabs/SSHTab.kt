@@ -410,8 +410,12 @@ class SSHTab(
 
                 ownChannel = shellChannel
 
-                val inputStream = shellChannel.inputStream
-                val outputStream = shellChannel.outputStream
+                // Read via SSHConnection's accessors, which return the piped
+                // streams captured BEFORE Channel.connect() — avoids JSch's
+                // "getInputStream() should be called before connect()" warning
+                // that fires on a second call to channel.getInputStream().
+                val inputStream = sshConnection.getInputStream()
+                val outputStream = sshConnection.getOutputStream()
 
                 Logger.i("SSHTab", "Stream check - Input: ${inputStream?.javaClass?.simpleName ?: "NULL"}, Output: ${outputStream?.javaClass?.simpleName ?: "NULL"}")
 

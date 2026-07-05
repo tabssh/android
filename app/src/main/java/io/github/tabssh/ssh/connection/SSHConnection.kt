@@ -89,6 +89,18 @@ class SSHConnection(
     // public `Channel` base type and dispatch on the concrete subclass at
     // call sites that need session-only methods (see `resizeActiveChannelPty`).
     private var shellChannel: Channel? = null
+
+    // Raw JSch piped streams for the active shellChannel, captured BEFORE
+    // Channel.connect() to satisfy JSch's ordering requirement. Every reader
+    // (Termux bridge, SSHTab wiring, remote exec pump) goes through
+    // getInputStream()/getOutputStream() below and receives the counting
+    // wrapper backed by these refs — so the raw stream is fetched exactly
+    // once per channel lifetime and JSch never emits the "getInputStream()
+    // should be called before connect()" warning on a second access.
+    @Volatile
+    private var shellChannelRawIn: InputStream? = null
+    @Volatile
+    private var shellChannelRawOut: OutputStream? = null
     // Last observed shell channel exit-status (0 = clean `exit`, -1 = no
     // exit-status message, e.g. abrupt drop). Captured at channel close
     // because `shellChannel` is nulled before the DISCONNECTED state
@@ -932,7 +944,10 @@ class SSHConnection(
             }
 
             override fun showMessage(message: String) {
-                Logger.i("SSHConnection", "Server message: $message")
+                // Intentionally silent. This callback receives the SSH_MSG_USERAUTH_BANNER
+                // (MOTD / legal banner). The banner text is already rendered to the user via
+                // the shell channel, and it bypasses the debug-log sanitizer so logging here
+                // leaks unredacted hostnames, IPs, and org-specific policy text.
             }
 
             // UIKeyboardInteractive — required for JSch to complete challenge-response auth.
@@ -1488,10 +1503,14 @@ class SSHConnection(
                 // JSch requires getInputStream/getOutputStream to be called BEFORE
                 // connect() to set up the piped stream infrastructure; accessing them
                 // after connect() triggers a warning and may return stale references.
-                @Suppress("UNUSED_VARIABLE") val _execIn  = exec.inputStream
-                @Suppress("UNUSED_VARIABLE") val _execOut = exec.outputStream
+                // Capture the pre-connect refs so getInputStream()/getOutputStream()
+                // below never has to touch the channel again.
+                val execIn  = exec.inputStream
+                val execOut = exec.outputStream
                 exec.connect()
                 shellChannel = exec
+                shellChannelRawIn = execIn
+                shellChannelRawOut = execOut
                 openChannels.add(exec)
                 Logger.i("SSHConnection", "Opened exec channel: ${remoteCmd.take(60)} (pty=$requestTTY)")
                 return@withContext exec
@@ -1514,12 +1533,16 @@ class SSHConnection(
                 applyForwardingFlags(currentSession, shell)
                 // JSch requires getInputStream/getOutputStream to be called BEFORE
                 // connect() — accessing after connect() triggers a warning and may
-                // return stale references.
-                @Suppress("UNUSED_VARIABLE") val _shellIn  = shell.inputStream
-                @Suppress("UNUSED_VARIABLE") val _shellOut = shell.outputStream
+                // return stale references. Capture the pre-connect refs so callers
+                // read them via getInputStream()/getOutputStream() below without
+                // touching the channel a second time.
+                val shellIn  = shell.inputStream
+                val shellOut = shell.outputStream
                 shell.connect()
 
                 shellChannel = shell
+                shellChannelRawIn = shellIn
+                shellChannelRawOut = shellOut
                 openChannels.add(shell)
                 Logger.d("SSHConnection", "Shell channel opened (total open: ${openChannels.size})")
                 return@withContext shell
@@ -1588,6 +1611,13 @@ class SSHConnection(
             // open channel or null out.
             if (shellChannel === channel) {
                 shellChannel = openChannels.toList().firstOrNull()
+                // The cached pre-connect streams belong to the channel we just
+                // closed. Drop them so getInputStream()/getOutputStream() fall
+                // back to the (possibly new) shellChannel's own accessors — the
+                // JSch warning may return on that fallback path, but preventing
+                // a stale-stream read is more important than log noise.
+                shellChannelRawIn = null
+                shellChannelRawOut = null
             }
             Logger.d("SSHConnection", "Channel closed (remaining: ${openChannels.size}, exit=$exit)")
         }
@@ -1796,6 +1826,8 @@ class SSHConnection(
         }
         openChannels.clear()
         shellChannel = null
+        shellChannelRawIn = null
+        shellChannelRawOut = null
         // Drop the cached counting-stream wrappers so the next session
         // starts with fresh references and no stale raw-stream pointers.
         countedInRef = null
@@ -2190,7 +2222,10 @@ class SSHConnection(
 
     @Synchronized
     fun getInputStream(): InputStream? {
-        val raw = shellChannel?.inputStream ?: return null
+        // Prefer the pre-connect raw ref captured in openShellChannel; fall back
+        // to the channel accessor only if the ref hasn't been set yet (defensive
+        // — every openShellChannel path stores it).
+        val raw = shellChannelRawIn ?: shellChannel?.inputStream ?: return null
         if (countedInRef !== raw) {
             countedInRef = raw
             countedInWrap = object : InputStream() {
@@ -2216,7 +2251,8 @@ class SSHConnection(
      */
     @Synchronized
     fun getOutputStream(): OutputStream? {
-        val raw = shellChannel?.outputStream ?: return null
+        // Same pre-connect ref preference as getInputStream() above.
+        val raw = shellChannelRawOut ?: shellChannel?.outputStream ?: return null
         if (countedOutRef !== raw) {
             countedOutRef = raw
             countedOutWrap = object : OutputStream() {
