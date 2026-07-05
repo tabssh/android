@@ -10,6 +10,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -48,6 +49,19 @@ class SSHConnectionService : Service() {
     //
     // Zero connections → released entirely; service self-stops shortly after.
     private var wakeLock: PowerManager.WakeLock? = null
+
+    // WiFi lock — keeps the WiFi radio out of power-saving mode while any
+    // SSH session is active. PARTIAL_WAKE_LOCK keeps the CPU awake but does
+    // not prevent the WiFi radio from sleeping; TCP connections drop when
+    // the radio sleeps even if the CPU is awake. The WiFi lock is held
+    // continuously (not cycled) because WiFi sleep/wake transitions take
+    // hundreds of milliseconds — longer than a keepalive window — meaning
+    // the radio could sleep between wake cycles and the TCP connection
+    // would drop before the next keepalive fires.
+    // Uses WIFI_MODE_FULL_LOW_LATENCY on API 29+ (best for interactive SSH;
+    // when screen is off it degrades gracefully to WIFI_MODE_FULL).
+    // Uses WIFI_MODE_FULL_HIGH_PERF on older APIs (canonical VoIP pattern).
+    private var wifiLock: WifiManager.WifiLock? = null
 
     // True when the device display is interactive (screen on / locked but lit).
     // Initialised from PowerManager.isInteractive() in onCreate so the first
@@ -204,6 +218,7 @@ class SSHConnectionService : Service() {
 
         serviceScope.cancel()
         releaseWakeLock()
+        releaseWifiLock()
         // Don't tear down the manager here — its lifecycle is the
         // Application's, not the service's. The service is allowed to
         // stop and restart (e.g. when there are zero active sessions),
@@ -219,6 +234,10 @@ class SSHConnectionService : Service() {
         // authenticating phase (aggressive power management on many OEMs can
         // cause TCP handshake or JSch kex to time out on screen-off).
         if (isScreenOn) acquireWakeLockIndefinite() else ensureBackgroundWakeCycleRunning()
+        // WiFi lock ensures the radio stays out of power-saving mode from the
+        // moment the service starts so the TCP handshake is never stalled by
+        // the radio waking up.
+        acquireWifiLock()
 
         // The foreground-service contract requires *some* notification
         // to be live before startForeground returns. If we already have
@@ -513,12 +532,16 @@ class SSHConnectionService : Service() {
             // immediately — the per-host "Disconnected" notifications
             // need their 30s timeout-after to actually display. The
             // delayed stop is scheduled in onAllConnectionsClosed; we
-            // just release the wake lock here.
+            // just release both locks here.
             backgroundWakeCycleJob?.cancel()
             backgroundWakeCycleJob = null
             releaseWakeLock()
+            releaseWifiLock()
             return
         }
+
+        // At least one live session — ensure the WiFi radio stays awake.
+        acquireWifiLock()
 
         // At least one live session. Wake-lock mode depends on screen state:
         //  Screen on  → indefinite PARTIAL_WAKE_LOCK (user is interacting)
@@ -646,6 +669,54 @@ class SSHConnectionService : Service() {
             Logger.w(TAG, "Failed to release wake lock", e)
         } finally {
             wakeLock = null
+        }
+    }
+
+    // ── WiFi lock helpers ─────────────────────────────────────────────────────
+
+    /**
+     * Acquire a WiFi lock to keep the radio out of power-saving mode.
+     *
+     * Uses [WifiManager.WIFI_MODE_FULL_LOW_LATENCY] on API 29+ — optimal for
+     * interactive SSH; degrades to WIFI_MODE_FULL automatically when the screen
+     * is off. On older APIs uses [WifiManager.WIFI_MODE_FULL_HIGH_PERF], the
+     * canonical VoIP/SSH pattern for keeping the radio fully awake.
+     *
+     * Idempotent: no-op if already held.
+     */
+    @Suppress("DEPRECATION")
+    private fun acquireWifiLock() {
+        if (wifiLock?.isHeld == true) return
+        try {
+            val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+            } else {
+                WifiManager.WIFI_MODE_FULL_HIGH_PERF
+            }
+            val wl = wm.createWifiLock(mode, "TabSSH:SshWifi")
+            wl.setReferenceCounted(false)
+            wl.acquire()
+            wifiLock = wl
+            Logger.i(TAG, "WiFi lock acquired")
+        } catch (e: Exception) {
+            Logger.w(TAG, "Failed to acquire WiFi lock", e)
+        }
+    }
+
+    /**
+     * Release the WiFi lock, allowing the radio to enter power-saving mode.
+     * Called when all connections close or the service is destroyed.
+     */
+    private fun releaseWifiLock() {
+        try {
+            val wl = wifiLock?.takeIf { it.isHeld } ?: return
+            wl.release()
+            Logger.i(TAG, "WiFi lock released")
+        } catch (e: Exception) {
+            Logger.w(TAG, "Failed to release WiFi lock", e)
+        } finally {
+            wifiLock = null
         }
     }
     
