@@ -60,6 +60,11 @@ class X11Proxy(
         private const val XSDL_PORT = 6000
         private const val XSERVER_CONNECT_TIMEOUT_MS = 500
         private const val RELAY_BUFFER_SIZE = 8192
+        // After XSDL refuses a connection, suppress further TCP probes for this
+        // long. A remote app that opens many X clients in quick succession would
+        // otherwise burn N × 500 ms of ECONNREFUSED serially. Termux:X11 (Unix
+        // socket) is still checked every time because that's a cheap file stat.
+        private const val XSDL_UNREACHABLE_BACKOFF_MS = 30_000L
     }
 
     /** The localhost port JSch should connect to. 0 until [start] is called. */
@@ -74,6 +79,11 @@ class X11Proxy(
 
     @Volatile
     private var noServerNotified = false
+
+    // Monotonic timestamp (System.currentTimeMillis) before which XSDL is
+    // considered unreachable and TCP probes are skipped. 0 = probe is allowed.
+    @Volatile
+    private var xsdlUnreachableUntil: Long = 0L
 
     private val executor = Executors.newCachedThreadPool { r ->
         Thread(r).apply {
@@ -190,14 +200,23 @@ class X11Proxy(
 
         // 2. XServer XSDL (TCP) — same hoist-and-close pattern as above to
         // avoid leaking the TCP Socket fd on a failed connect().
+        // Short-circuit if a recent probe already failed: sequential channel
+        // opens would otherwise pay 500 ms per attempt.
+        val now = System.currentTimeMillis()
+        if (now < xsdlUnreachableUntil) {
+            return null
+        }
         val tcp = Socket()
         try {
             tcp.connect(java.net.InetSocketAddress(XSDL_HOST, XSDL_PORT), XSERVER_CONNECT_TIMEOUT_MS)
             Logger.i(TAG, "Connected to XServer XSDL on $XSDL_HOST:$XSDL_PORT")
+            // Clear the backoff on success so a later disconnect still probes.
+            xsdlUnreachableUntil = 0L
             return TcpSocketConnection(tcp)
         } catch (e: Exception) {
             try { tcp.close() } catch (_: Exception) {}
-            Logger.d(TAG, "XServer XSDL not reachable: ${e.message}")
+            xsdlUnreachableUntil = System.currentTimeMillis() + XSDL_UNREACHABLE_BACKOFF_MS
+            Logger.d(TAG, "XServer XSDL not reachable: ${e.message} — suppressing probes for ${XSDL_UNREACHABLE_BACKOFF_MS}ms")
         }
 
         return null
