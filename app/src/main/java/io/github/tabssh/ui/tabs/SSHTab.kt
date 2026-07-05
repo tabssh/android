@@ -488,8 +488,13 @@ class SSHTab(
             return
         }
         ownChannel = shellChannel
-        val inp = shellChannel.inputStream
-        val out = shellChannel.outputStream
+        // Read via SSHConnection's accessors, which return the piped streams
+        // captured BEFORE Channel.connect() in openShellChannel(). Reading
+        // shellChannel.inputStream / outputStream here would be a second
+        // post-connect fetch and trip JSch's
+        // "getInputStream() should be called before connect()" warning.
+        val inp = sshConnection.getInputStream()
+        val out = sshConnection.getOutputStream()
         if (inp == null || out == null) {
             Logger.w("SSHTab", "rewireShellChannel: null streams on new channel")
             return
