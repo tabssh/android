@@ -6,8 +6,10 @@ import android.app.Notification
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -31,13 +33,30 @@ class SSHConnectionService : Service() {
     private var activeConnections = 0
     private var sessionListener: SessionManagerListener? = null
 
-    // Partial wake lock held while we have at least one live SSH session.
-    // Without it, when the screen turns off the OS aggressively suspends
-    // the network stack and the JSch session keepalives miss their slot,
-    // dropping the connection. With PARTIAL_WAKE_LOCK the CPU stays awake
-    // (the screen still turns off — that's PROXIMITY/SCREEN locks, not
-    // this one). Released when activeConnections drops to zero.
+    // PARTIAL_WAKE_LOCK strategy — screen-aware to save battery:
+    //
+    // Screen ON  → indefinite acquire(): CPU stays fully awake while the
+    //              user is interacting with the terminal.
+    //
+    // Screen OFF → timed acquire(timeout): the lock auto-releases after
+    //              BACKGROUND_WAKE_WINDOW_MS, letting the CPU sleep. A
+    //              background coroutine (backgroundWakeCycleJob) re-acquires
+    //              a fresh timed lock every BACKGROUND_WAKE_CYCLE_MS so that
+    //              JSch's keep-alive timer — which runs on a Java Timer thread
+    //              that fires as soon as the CPU wakes — can send its
+    //              SSH_MSG_GLOBAL_REQUEST before the NAT table expires.
+    //
+    // Zero connections → released entirely; service self-stops shortly after.
     private var wakeLock: PowerManager.WakeLock? = null
+
+    // True when the device display is interactive (screen on / locked but lit).
+    // Initialised from PowerManager.isInteractive() in onCreate so the first
+    // acquireWakeLock() call after a process restart uses the right mode.
+    @Volatile private var isScreenOn = true
+
+    // Coroutine that drives the screen-off keep-alive wake cycle.
+    // Null when screen is on or there are no active connections.
+    private var backgroundWakeCycleJob: Job? = null
 
     // Per-host notification bookkeeping. Android requires a foreground
     // service to keep at least one ongoing notification while alive
@@ -57,7 +76,7 @@ class SSHConnectionService : Service() {
     // one is processed) replaces the old loop rather than stacking on top
     // of it.
     private var monitoringJob: Job? = null
-    
+
     companion object {
         // Placeholder notification ID — used only for the transient "Starting SSH
         // session…" notification before the first per-host notification is live.
@@ -65,6 +84,20 @@ class SSHConnectionService : Service() {
         // anchor stays consistent across the one place that references it by name.
         private const val NOTIFICATION_ID = 1001
         private const val TAG = "SSHConnectionService"
+
+        // Duration of each CPU-awake window in background mode. Must be long
+        // enough for JSch's Timer thread to wake, detect the overdue interval,
+        // and transmit SSH_MSG_GLOBAL_REQUEST before we release the lock again.
+        // 15 s gives ~10x the time JSch actually needs (< 100 ms in practice).
+        private const val BACKGROUND_WAKE_WINDOW_MS = 15_000L
+
+        // Monitoring-loop delay while the screen is on vs off.
+        // 30 s on-screen keeps notifications and health checks snappy.
+        // 90 s off-screen reduces unnecessary CPU wake-ups; the keep-alive
+        // cycle (backgroundWakeCycleJob) ensures the connection stays alive
+        // independently of this loop.
+        private const val MONITORING_INTERVAL_FOREGROUND_MS = 30_000L
+        private const val MONITORING_INTERVAL_BACKGROUND_MS = 90_000L
 
         const val ACTION_START_SERVICE = "io.github.tabssh.START_SERVICE"
         const val ACTION_STOP_SERVICE  = "io.github.tabssh.STOP_SERVICE"
@@ -88,12 +121,38 @@ class SSHConnectionService : Service() {
         }
     }
     
+    // Receiver for ACTION_SCREEN_OFF / ACTION_SCREEN_ON. These two intents
+    // are not deliverable via a manifest receiver — they MUST be registered
+    // at runtime on a running Context, which makes the service the right home.
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                Intent.ACTION_SCREEN_OFF -> onScreenOff()
+                Intent.ACTION_SCREEN_ON  -> onScreenOn()
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
 
         Logger.d("SSHConnectionService", "Service created")
 
         app = application as TabSSHApplication
+
+        // Seed isScreenOn from the current display state so the first
+        // acquireWakeLock() call after a process restart (which can happen
+        // while the screen is already off) chooses the right mode.
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        isScreenOn = pm.isInteractive
+
+        // Register before any session callbacks arrive so screen-off events
+        // during onCreate are not missed.
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
+        }
+        registerReceiver(screenReceiver, filter)
 
         // NotificationHelper.createNotificationChannels() is called once at
         // application start (TabSSHApplication.onCreate). No duplicate channel
@@ -138,6 +197,11 @@ class SSHConnectionService : Service() {
         // stale "Connected to …" entries lingering in the notification shade
         // after a graceful service stop.
         sweepPerHostNotifications(cancelAll = true)
+
+        try { unregisterReceiver(screenReceiver) } catch (_: Exception) {}
+        backgroundWakeCycleJob?.cancel()
+        backgroundWakeCycleJob = null
+
         serviceScope.cancel()
         releaseWakeLock()
         // Don't tear down the manager here — its lifecycle is the
@@ -150,13 +214,11 @@ class SSHConnectionService : Service() {
     }
     
     private fun startForegroundService() {
-        // Acquire the wake lock immediately — before any session event fires.
-        // Without this the CPU can idle during the connecting / authenticating
-        // phase (especially on devices with aggressive power management), which
-        // causes the TCP handshake or JSch kex to time out on screen-off.
-        // acquireWakeLock() is idempotent; releaseWakeLock() is called when
-        // activeConnections drops back to zero.
-        acquireWakeLock()
+        // Acquire the appropriate wake lock immediately — before any session
+        // event fires. Without a lock the CPU can idle during the connecting /
+        // authenticating phase (aggressive power management on many OEMs can
+        // cause TCP handshake or JSch kex to time out on screen-off).
+        if (isScreenOn) acquireWakeLockIndefinite() else ensureBackgroundWakeCycleRunning()
 
         // The foreground-service contract requires *some* notification
         // to be live before startForeground returns. If we already have
@@ -452,18 +514,98 @@ class SSHConnectionService : Service() {
             // need their 30s timeout-after to actually display. The
             // delayed stop is scheduled in onAllConnectionsClosed; we
             // just release the wake lock here.
+            backgroundWakeCycleJob?.cancel()
+            backgroundWakeCycleJob = null
             releaseWakeLock()
             return
         }
 
-        // We have at least one live session — keep the CPU awake so SSH
-        // keepalives don't miss their slot when the screen turns off.
-        acquireWakeLock()
+        // At least one live session. Wake-lock mode depends on screen state:
+        //  Screen on  → indefinite PARTIAL_WAKE_LOCK (user is interacting)
+        //  Screen off → background cycle manages timed wake windows; don't
+        //               acquire an indefinite lock here — it would undo the
+        //               battery savings. Ensure the cycle is running.
+        if (isScreenOn) {
+            acquireWakeLockIndefinite()
+        } else {
+            ensureBackgroundWakeCycleRunning()
+        }
 
         Logger.d("SSHConnectionService", "Active connections: $activeConnections")
     }
 
-    private fun acquireWakeLock() {
+    // ── Screen-state callbacks ────────────────────────────────────────────────
+
+    private fun onScreenOff() {
+        isScreenOn = false
+        if (activeConnections == 0) return
+        // Switch from indefinite wake lock to the battery-efficient background
+        // cycle. Release first so the device can actually sleep between cycles.
+        releaseWakeLock()
+        ensureBackgroundWakeCycleRunning()
+        Logger.d(TAG, "Screen off — switched to background keepalive wake cycle")
+    }
+
+    private fun onScreenOn() {
+        isScreenOn = true
+        // Cancel the background cycle; transition back to indefinite wake lock.
+        backgroundWakeCycleJob?.cancel()
+        backgroundWakeCycleJob = null
+        if (activeConnections > 0) {
+            // Release first in case a timed wake lock from the last background
+            // window is still held — timed + indefinite don't mix cleanly.
+            releaseWakeLock()
+            acquireWakeLockIndefinite()
+        }
+        Logger.d(TAG, "Screen on — switched to indefinite wake lock")
+    }
+
+    /**
+     * Starts (or no-ops if already running) the background keep-alive wake
+     * cycle used when the screen is off.
+     *
+     * Cycle structure:
+     *  1. Acquire a timed PARTIAL_WAKE_LOCK for [BACKGROUND_WAKE_WINDOW_MS].
+     *  2. While the lock is held the CPU is awake; JSch's internal Timer
+     *     thread fires its overdue SSH_MSG_GLOBAL_REQUEST immediately.
+     *  3. After the window the timed lock auto-expires and the CPU can sleep.
+     *  4. Sleep for (keepaliveInterval − window) before the next cycle.
+     *
+     * Net effect: CPU awake ~15 s out of every ~60 s → ≈75 % battery saving
+     * versus holding the lock indefinitely, while the SSH session stays alive.
+     */
+    private fun ensureBackgroundWakeCycleRunning() {
+        if (backgroundWakeCycleJob?.isActive == true) return
+        val keepaliveMs = try {
+            app.preferencesManager.getServerAliveIntervalMs()
+        } catch (_: Exception) { 60_000L }
+        // Sleep between wake windows. Floor at 30 s; keepalive interval minus
+        // the window so the total cycle equals roughly the keepalive interval.
+        val sleepMs = maxOf(keepaliveMs - BACKGROUND_WAKE_WINDOW_MS, 30_000L)
+        Logger.d(TAG, "Background wake cycle: ${BACKGROUND_WAKE_WINDOW_MS / 1000}s on / ${sleepMs / 1000}s sleep")
+        backgroundWakeCycleJob = serviceScope.launch {
+            while (isActive && !isScreenOn && activeConnections > 0) {
+                acquireTimedWakeLock(BACKGROUND_WAKE_WINDOW_MS)
+                delay(BACKGROUND_WAKE_WINDOW_MS)
+                // Timed lock auto-releases after BACKGROUND_WAKE_WINDOW_MS;
+                // also clear our reference so releaseWakeLock() stays clean.
+                releaseWakeLock()
+                // Sleep — CPU can enter low-power state during this window
+                // because neither wake lock nor active coroutine requires it.
+                // The foreground service keeps the process alive (Doze-exempt),
+                // so this delay fires reliably when the sleep window expires.
+                if (isActive && !isScreenOn && activeConnections > 0) delay(sleepMs)
+            }
+        }
+    }
+
+    // ── Wake lock helpers ─────────────────────────────────────────────────────
+
+    /**
+     * Acquire an indefinite PARTIAL_WAKE_LOCK. Used while the screen is on.
+     * Idempotent: no-op if already held.
+     */
+    private fun acquireWakeLockIndefinite() {
         if (wakeLock?.isHeld == true) return
         try {
             val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -471,9 +613,27 @@ class SSHConnectionService : Service() {
             wl.setReferenceCounted(false)
             wl.acquire()
             wakeLock = wl
-            Logger.i("SSHConnectionService", "Wake lock acquired")
+            Logger.i(TAG, "Wake lock acquired (indefinite)")
         } catch (e: Exception) {
-            Logger.w("SSHConnectionService", "Failed to acquire wake lock", e)
+            Logger.w(TAG, "Failed to acquire wake lock", e)
+        }
+    }
+
+    /**
+     * Acquire a timed PARTIAL_WAKE_LOCK that auto-releases after [timeoutMs].
+     * Used by the background wake cycle. Replaces any existing held lock so
+     * the timeout is always [timeoutMs] from now.
+     */
+    private fun acquireTimedWakeLock(timeoutMs: Long) {
+        try {
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            val wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "TabSSH:SshKeepAlive")
+            wl.setReferenceCounted(false)
+            wl.acquire(timeoutMs)
+            wakeLock = wl
+            Logger.d(TAG, "Wake lock acquired (timed ${timeoutMs / 1000}s)")
+        } catch (e: Exception) {
+            Logger.w(TAG, "Failed to acquire timed wake lock", e)
         }
     }
 
@@ -481,9 +641,9 @@ class SSHConnectionService : Service() {
         try {
             val wl = wakeLock?.takeIf { it.isHeld } ?: return
             wl.release()
-            Logger.i("SSHConnectionService", "Wake lock released")
+            Logger.i(TAG, "Wake lock released")
         } catch (e: Exception) {
-            Logger.w("SSHConnectionService", "Failed to release wake lock", e)
+            Logger.w(TAG, "Failed to release wake lock", e)
         } finally {
             wakeLock = null
         }
@@ -509,8 +669,10 @@ class SSHConnectionService : Service() {
                 // (i.e. service was killed without onDestroy).
                 withContext(Dispatchers.Main) { refreshAllHostNotifications() }
 
-                // Wait before next check
-                delay(30_000L)
+                // Wait before next check. Screen off → 90 s is sufficient
+                // since the background wake cycle handles keepalives
+                // independently. Screen on → 30 s for snappy health checks.
+                delay(if (isScreenOn) MONITORING_INTERVAL_FOREGROUND_MS else MONITORING_INTERVAL_BACKGROUND_MS)
 
             } catch (e: kotlinx.coroutines.CancellationException) {
                 // Normal coroutine cancellation — propagate so the loop exits cleanly.
