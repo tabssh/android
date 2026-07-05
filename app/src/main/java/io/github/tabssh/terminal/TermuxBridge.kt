@@ -1188,6 +1188,12 @@ class TermuxBridge(
         moshWatchdog = CoroutineScope(Dispatchers.IO).launch {
             val startedAt = System.currentTimeMillis()
             val hardCeilingMs = 8000L
+            // Minimum age before the "Nothing received from server" screen string
+            // is treated as a real failure. mosh-client renders that phrase in its
+            // own initial UI within a few hundred ms of launch (503 ms observed in
+            // the field), long before UDP handshake could realistically fail. A
+            // sub-2 s trip means we killed a session that was still bootstrapping.
+            val minFailureAgeMs = 2000L
             val pollMs = 250L
             try {
                 while (isActive) {
@@ -1196,7 +1202,7 @@ class TermuxBridge(
                     if (!session.isRunning()) return@launch
                     val screen = try { getScreenContent() } catch (_: Exception) { "" }
                     val sawFailureString = screen.contains("Nothing received from server", ignoreCase = true)
-                    if (sawFailureString) {
+                    if (sawFailureString && elapsed >= minFailureAgeMs) {
                         Logger.i(TAG, "Mosh watchdog: 'Nothing received from server' detected after ${elapsed}ms — killing PTY for fast SSH fallback")
                         try { session.finishIfRunning() } catch (_: Exception) {}
                         return@launch
