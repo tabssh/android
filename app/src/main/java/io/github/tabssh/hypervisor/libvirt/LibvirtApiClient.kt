@@ -7,6 +7,8 @@ import com.jcraft.jsch.JSch
 import com.jcraft.jsch.Session
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.crypto.storage.HypervisorPasswordStore
+import io.github.tabssh.ssh.connection.HostKeyAction
+import io.github.tabssh.ssh.connection.HostKeyVerifier
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
@@ -66,10 +68,25 @@ class LibvirtApiClient(
         }
 
         val jsch = JSch()
+
+        // Wire the same database-backed TOFU host-key verification the regular
+        // SSH path uses, with accept-new semantics: the first key seen for a
+        // host is trusted and persisted to the shared known-hosts DB; a later
+        // CHANGED key is rejected and the handshake fails closed. This replaces
+        // the previous StrictHostKeyChecking=no, which defeated MITM protection
+        // on the hypervisor management channel. The console flow has no
+        // interactive host-key prompt, so new hosts are auto-accepted (TOFU)
+        // and changed keys are hard-rejected rather than surfacing a dialog —
+        // matching the accept-new default documented on HypervisorProfile.
+        val hostKeyVerifier = HostKeyVerifier(context)
+        hostKeyVerifier.setNewHostKeyCallback { HostKeyAction.ACCEPT_NEW_KEY }
+        hostKeyVerifier.setHostKeyChangedCallback { HostKeyAction.REJECT_CONNECTION }
+        jsch.hostKeyRepository = hostKeyVerifier
+
         val config = java.util.Properties()
-        // Disable strict host-key checking for hypervisor connections;
-        // the hypervisor UI handles its own TLS pinning separately.
-        config["StrictHostKeyChecking"] = "no"
+        // "ask" routes verification through hostKeyRepository.check() above;
+        // with no UserInfo set, a rejected (changed) key fails closed.
+        config["StrictHostKeyChecking"] = "ask"
         if (keyId != null) {
             // Load the SSH key. getJSchBytesWithFallback() returns JSch-native PEM bytes,
             // reconstructing them from stored PKCS#8 DER for generated keys that pre-date

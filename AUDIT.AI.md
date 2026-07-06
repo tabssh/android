@@ -30,7 +30,7 @@ not described in `IDEA.md`, per the user's note that IDEA.md is outdated) and
 | Sev | Count | Headline items |
 |-----|-------|----------------|
 | CRITICAL | 5 | Keystore password `tabssh123` in source · reverse-video broken (FIXED) · `getById(Long)` always null (FIXED) · libvirt shell injection (FIXED) · terminal copy ignores scroll offset (FIXED) |
-| HIGH | 12 | Backup `includePasswords` toggle → incomplete restores (C6, FIXED) · F-Droid reproducibility (BUILD_DATE) · F-Droid metadata stale · BouncyCastle R8 keep rules · reflection breaks under R8 · AWS SigV4 encoding · sync upload-only · libvirt `StrictHostKeyChecking=no` · lint `checkOnly` · alpha security-crypto |
+| HIGH | 12 | Backup `includePasswords` toggle → incomplete restores (C6, FIXED) · F-Droid reproducibility (BUILD_DATE) · F-Droid metadata stale · BouncyCastle R8 keep rules · reflection breaks under R8 · AWS SigV4 encoding · sync upload-only · libvirt `StrictHostKeyChecking=no` (H7, FIXED) · lint `checkOnly` · alpha security-crypto |
 | MEDIUM | ~14 | PIN unsalted SHA-256 (H10, FIXED) · `runBlocking` in JSch callback · host-key fingerprint format (H11, FIXED) · CI never compiles · OWASP plugin outdated · orphaned coroutine scopes |
 | LOW / NIT | ~10 | LiveData in new code · Gson+kotlinx dual · commented-out code · inline comments · `$(shell pwd)` · stale version strings |
 | OPT | ~8 | Per-char Paint allocation · OSC8 per-write parsing · duplicate DAO queries |
@@ -292,11 +292,15 @@ resolution." As implemented, a second device's changes are never ingested and ca
 be overwritten. **Fix:** implement the download+merge half, or document the
 limitation and rename the feature to "backup upload."
 
-## H7 — libvirt SSH uses `StrictHostKeyChecking=no`
-**`LibvirtApiClient.kt:72`** disables host-key verification for the hypervisor SSH
+## H7 — libvirt SSH uses `StrictHostKeyChecking=no` — FIXED
+**`LibvirtApiClient.kt:72`** disabled host-key verification for the hypervisor SSH
 connection, defeating TOFU and enabling MITM against hypervisor management —
-inconsistent with the app's own TOFU model everywhere else. **Fix:** use the same
-`HostKeyVerifier`/known-hosts path as regular SSH connections.
+inconsistent with the app's own TOFU model everywhere else. **Fix applied:** the
+hypervisor connection now wires the shared `HostKeyVerifier` (same known-hosts DB
+as regular SSH) with `StrictHostKeyChecking="ask"`. Accept-new TOFU semantics: an
+unknown host key is auto-trusted and persisted (new-host callback →
+`ACCEPT_NEW_KEY`); a changed key is hard-rejected (changed callback →
+`REJECT_CONNECTION`), and with no `UserInfo` set JSch fails closed on rejection.
 
 ## H8 — Lint `checkOnly` disables nearly all checks
 **`app/build.gradle:211`** — `checkOnly` *replaces* the enabled set with four IDs,
