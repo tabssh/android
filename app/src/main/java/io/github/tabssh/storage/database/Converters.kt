@@ -1,5 +1,6 @@
 package io.github.tabssh.storage.database
 
+import android.util.Base64
 import androidx.room.TypeConverter
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -77,12 +78,12 @@ class Converters {
 
     @TypeConverter
     fun fromByteArray(value: ByteArray?): String? {
-        return value?.let { Base64.getEncoder().encodeToString(it) }
+        return value?.let { Base64.encodeToString(it, Base64.NO_WRAP) }
     }
 
     @TypeConverter
     fun toByteArray(value: String?): ByteArray? {
-        return value?.let { Base64.getDecoder().decode(it) }
+        return value?.let { Base64.decode(it, Base64.DEFAULT) }
     }
 
     @TypeConverter

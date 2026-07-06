@@ -12,7 +12,7 @@ import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.first
-import java.util.Base64
+import android.util.Base64
 
 /**
  * Custom HostKeyRepository that integrates with TabSSH's database
@@ -54,7 +54,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
             // Generate fingerprint
             val fingerprint = generateFingerprint(key)
             val keyType = detectKeyType(key)
-            val publicKeyBase64 = Base64.getEncoder().encodeToString(key)
+            val publicKeyBase64 = Base64.encodeToString(key, Base64.NO_WRAP)
 
             Logger.i("HostKeyVerifier", "Checking host key for $hostname:$port ($keyType)")
             Logger.i("HostKeyVerifier", "Fingerprint: $fingerprint")
@@ -234,7 +234,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
                     hostname = hostname,
                     port = port,
                     keyType = hostkey.type,
-                    publicKey = Base64.getEncoder().encodeToString(hostkey.key as ByteArray),
+                    publicKey = Base64.encodeToString(hostkey.key as ByteArray, Base64.NO_WRAP),
                     fingerprint = fingerprint,
                     trustLevel = "ACCEPTED"
                 )
@@ -292,7 +292,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
                 val entries = hostKeyDao.getAllHostKeys().first()
                 entries.map { entry ->
                     val hostPort = "${entry.hostname}:${entry.port}"
-                    val keyBytes = Base64.getDecoder().decode(entry.publicKey)
+                    val keyBytes = Base64.decode(entry.publicKey, Base64.DEFAULT)
                     // JSch HostKey constructor: HostKey(String host, int type, byte[] key)
                     // The 'type' parameter is an integer constant
                     HostKey(hostPort, keyTypeToInt(entry.keyType), keyBytes)
@@ -315,7 +315,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
             runBlocking(Dispatchers.IO) {
                 val entry = hostKeyDao.getHostKey(hostname, port)
                 if (entry != null && (type == null || entry.keyType == type)) {
-                    val keyBytes = Base64.getDecoder().decode(entry.publicKey)
+                    val keyBytes = Base64.decode(entry.publicKey, Base64.DEFAULT)
                     // JSch HostKey constructor: HostKey(String host, int type, byte[] key)
                     // The 'type' parameter is an integer constant
                     arrayOf(HostKey(host, keyTypeToInt(entry.keyType), keyBytes))

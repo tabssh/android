@@ -14,7 +14,7 @@ import java.net.URLEncoder
 import java.security.KeyFactory
 import java.security.Signature
 import java.security.spec.PKCS8EncodedKeySpec
-import java.util.Base64
+import android.util.Base64
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -293,7 +293,10 @@ class GcpComputeClient : CloudProvider {
         val sig = Signature.getInstance("SHA256withRSA")
         sig.initSign(privateKey)
         sig.update(data.toByteArray(Charsets.UTF_8))
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(sig.sign())
+        return Base64.encodeToString(
+            sig.sign(),
+            Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP
+        )
     }
 
     /**
@@ -308,11 +311,14 @@ class GcpComputeClient : CloudProvider {
             .replace(pemHeader, "")
             .replace(pemFooter, "")
             .replace("\\s".toRegex(), "")
-        return Base64.getDecoder().decode(cleaned)
+        return Base64.decode(cleaned, Base64.DEFAULT)
     }
 
     private fun b64UrlNoPad(s: String): String =
-        Base64.getUrlEncoder().withoutPadding().encodeToString(s.toByteArray(Charsets.UTF_8))
+        Base64.encodeToString(
+            s.toByteArray(Charsets.UTF_8),
+            Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP
+        )
 
     private fun parseInstances(json: String, projectId: String, accountName: String): List<ImportCandidate> {
         val out = mutableListOf<ImportCandidate>()

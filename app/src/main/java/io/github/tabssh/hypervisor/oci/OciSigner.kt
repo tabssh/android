@@ -10,7 +10,7 @@ import okio.Buffer
 import java.security.MessageDigest
 import java.security.Signature
 import java.text.SimpleDateFormat
-import java.util.Base64
+import android.util.Base64
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
@@ -90,7 +90,7 @@ class OciSigner(
     /** SHA-256 of the body, base64-encoded — `x-content-sha256` header. */
     fun bodySha256Base64(body: ByteArray): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(body)
-        return Base64.getEncoder().encodeToString(digest)
+        return Base64.encodeToString(digest, Base64.NO_WRAP)
     }
 
     /**
@@ -151,7 +151,7 @@ class OciSigner(
         val sig = Signature.getInstance("SHA256withRSA")
         sig.initSign(keyMaterial.privateKey)
         sig.update(data.toByteArray(Charsets.UTF_8))
-        return Base64.getEncoder().encodeToString(sig.sign())
+        return Base64.encodeToString(sig.sign(), Base64.NO_WRAP)
     }
 
     private fun hasBody(method: String): Boolean = when (method.uppercase(Locale.US)) {

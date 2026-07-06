@@ -356,10 +356,15 @@ format change would have flagged every previously-trusted host as `CHANGED_KEY`
 host's true identity; the fingerprint is a derived display of it) and self-heals
 a stale-format stored fingerprint in place on the next successful verify.
 
-> **Related latent bug (not H11, flag separately):** `HostKeyVerifier.kt` uses
-> `java.util.Base64` (API 26) at lines ~57/237/295/318 under `minSdk 21` with no
-> core-library desugaring — a `NoClassDefFoundError` on Android 5.0–7.1. The
-> codebase mixes this with the correct `android.util.Base64` (API 1) elsewhere.
+> **Related latent bug — FIXED:** `java.util.Base64` (API 26) was used under
+> `minSdk 21` with no core-library desugaring — a guaranteed
+> `NoClassDefFoundError` on Android 5.0–7.1 the moment any of these paths ran.
+> Swept every occurrence to `android.util.Base64` (API 1): `HostKeyVerifier.kt`
+> (host-key encode/decode), `OciSigner.kt` (OCI request signing), `GcpComputeClient.kt`
+> (GCP JWT — URL-safe/no-pad preserved via `URL_SAFE or NO_PADDING or NO_WRAP`),
+> and `Converters.kt` (Room byte-array TypeConverter, reached via `import java.util.*`).
+> Encodings preserved: standard→`NO_WRAP`, url-safe→`URL_SAFE or NO_PADDING or NO_WRAP`,
+> decode→`DEFAULT`, so on-disk/wire formats are unchanged and existing DB rows decode.
 
 ---
 
