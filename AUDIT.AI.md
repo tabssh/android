@@ -31,7 +31,7 @@ not described in `IDEA.md`, per the user's note that IDEA.md is outdated) and
 |-----|-------|----------------|
 | CRITICAL | 5 | Keystore password `tabssh123` in source · reverse-video broken (FIXED) · `getById(Long)` always null (FIXED) · libvirt shell injection (FIXED) · terminal copy ignores scroll offset (FIXED) |
 | HIGH | 12 | Backup `includePasswords` toggle → incomplete restores (C6, FIXED) · F-Droid reproducibility (BUILD_DATE) · F-Droid metadata stale · BouncyCastle R8 keep rules · reflection breaks under R8 · AWS SigV4 encoding · sync upload-only · libvirt `StrictHostKeyChecking=no` · lint `checkOnly` · alpha security-crypto |
-| MEDIUM | ~14 | PIN unsalted SHA-256 · `runBlocking` in JSch callback · host-key fingerprint format · CI never compiles · OWASP plugin outdated · orphaned coroutine scopes |
+| MEDIUM | ~14 | PIN unsalted SHA-256 · `runBlocking` in JSch callback · host-key fingerprint format (H11, FIXED) · CI never compiles · OWASP plugin outdated · orphaned coroutine scopes |
 | LOW / NIT | ~10 | LiveData in new code · Gson+kotlinx dual · commented-out code · inline comments · `$(shell pwd)` · stale version strings |
 | OPT | ~8 | Per-char Paint allocation · OSC8 per-write parsing · duplicate DAO queries |
 
@@ -318,11 +318,25 @@ per-device random salt (Argon2id — already a dependency via `PairingDecryptor`
 or `PBKDF2` with a high iteration count). *(Cross-listed HIGH/MEDIUM; treated HIGH
 because it protects app-lock.)*
 
-## H11 — Host-key fingerprint uses non-standard hex:colon format
-**`HostKeyVerifier.kt`** displays fingerprints as colon-separated hex instead of
+## H11 — Host-key fingerprint uses non-standard hex:colon format — FIXED
+**`HostKeyVerifier.kt`** displayed fingerprints as colon-separated hex instead of
 the OpenSSH `SHA256:<base64>` form users verify against. Users cannot cross-check
 the TOFU prompt against `ssh-keygen -l` output, undermining the verification's
-purpose. **Fix:** render `SHA256:<base64>` (strip padding) to match OpenSSH.
+purpose. **Fix applied:** `generateFingerprint` now renders `SHA256:` + unpadded
+base64 of the raw SHA-256 digest via `android.util.Base64` (`NO_PADDING or
+NO_WRAP`) — API-1 safe, unlike `java.util.Base64` (API 26) which is a latent
+minSdk-21 crash pervasive elsewhere in this file (see note below).
+**Migration hazard fixed alongside:** `HostKeyDao.verifyHostKey` previously
+matched on `publicKey == publicKey && fingerprint == fingerprint`, so a naive
+format change would have flagged every previously-trusted host as `CHANGED_KEY`
+(false security alarm). Verification now matches on the public key alone (the
+host's true identity; the fingerprint is a derived display of it) and self-heals
+a stale-format stored fingerprint in place on the next successful verify.
+
+> **Related latent bug (not H11, flag separately):** `HostKeyVerifier.kt` uses
+> `java.util.Base64` (API 26) at lines ~57/237/295/318 under `minSdk 21` with no
+> core-library desugaring — a `NoClassDefFoundError` on Android 5.0–7.1. The
+> codebase mixes this with the correct `android.util.Base64` (API 1) elsewhere.
 
 ---
 

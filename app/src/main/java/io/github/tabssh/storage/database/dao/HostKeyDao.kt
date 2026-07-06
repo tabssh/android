@@ -72,8 +72,23 @@ interface HostKeyDao {
         
         return when {
             existingKey == null -> HostKeyVerificationResult.NEW_HOST
-            existingKey.publicKey == publicKey && existingKey.fingerprint == fingerprint -> {
-                updateLastVerified(existingKey.id)
+            // The public key is the host's true identity; the fingerprint is a
+            // derived display of it. Match on the key alone so a fingerprint
+            // format change (e.g. hex → OpenSSH base64) never triggers a false
+            // CHANGED_KEY alarm against previously-trusted hosts.
+            existingKey.publicKey == publicKey -> {
+                // Self-heal a stale-format fingerprint in place, otherwise just
+                // bump last-verified.
+                if (existingKey.fingerprint != fingerprint) {
+                    insertOrUpdateHostKey(
+                        existingKey.copy(
+                            fingerprint = fingerprint,
+                            lastVerified = System.currentTimeMillis()
+                        )
+                    )
+                } else {
+                    updateLastVerified(existingKey.id)
+                }
                 HostKeyVerificationResult.ACCEPTED
             }
             else -> HostKeyVerificationResult.CHANGED_KEY

@@ -359,10 +359,15 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
             val digest = java.security.MessageDigest.getInstance("SHA-256")
             val hash = digest.digest(key)
 
-            // Format as SHA256:hex format (like OpenSSH)
-            "SHA256:" + hash.joinToString(":") { byte ->
-                String.format("%02x", byte)
-            }
+            // OpenSSH SHA256 fingerprint: "SHA256:" + unpadded base64 of the
+            // raw digest, matching `ssh-keygen -l` so users can cross-check.
+            // Use android.util.Base64 (API 1) — java.util.Base64 is API 26 and
+            // this module targets minSdk 21 with no core-library desugaring.
+            val b64 = android.util.Base64.encodeToString(
+                hash,
+                android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP
+            )
+            "SHA256:$b64"
         } catch (e: Exception) {
             Logger.e("HostKeyVerifier", "Error generating fingerprint", e)
             "UNKNOWN"
