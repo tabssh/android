@@ -106,6 +106,37 @@ class LibvirtApiClient(
         Logger.i(TAG, "SSH session established to ${profile.host}:${profile.port}")
     }
 
+    // ── Shell-safety helpers ───────────────────────────────────────────────────
+
+    /**
+     * POSIX single-quote-escape [value] for safe interpolation into a shell
+     * command string. Wraps the value in single quotes and renders any embedded
+     * single quote as the `'\''` sequence, so no shell metacharacter in [value]
+     * can break out of the argument. This is the injection barrier for domain
+     * names, which may originate from imported profiles or the remote host —
+     * e.g. a VM named `x; rm -rf ~` is passed as one literal argument.
+     */
+    private fun shQuote(value: String): String =
+        "'" + value.replace("'", "'\\''") + "'"
+
+    /**
+     * Reject domain names that are empty or contain whitespace or a NUL byte.
+     * libvirt domain names never contain these, and the `virsh list` parser
+     * splits on whitespace so a space would corrupt enumeration anyway.
+     * Single-quoting already neutralises shell
+     * metacharacters; this is a defence-in-depth guard that fails fast with a
+     * clear message rather than sending a malformed command to the host.
+     */
+    private fun requireValidDomain(domain: String): String {
+        if (domain.isBlank()) {
+            throw LibvirtException("Domain name is empty")
+        }
+        if (domain.any { it.isWhitespace() || it == '\u0000' }) {
+            throw LibvirtException("Domain name contains illegal whitespace or control characters")
+        }
+        return domain
+    }
+
     // ── virsh commands ────────────────────────────────────────────────────────
 
     /**
@@ -152,7 +183,8 @@ class LibvirtApiClient(
      * Throws [LibvirtException] if virsh reports an error.
      */
     suspend fun startDomain(domain: String) = withContext(Dispatchers.IO) {
-        val output = runCommand("virsh start $domain 2>&1").trim()
+        requireValidDomain(domain)
+        val output = runCommand("virsh start ${shQuote(domain)} 2>&1").trim()
         if (!output.contains("started") && !output.contains("Domain '$domain' started")) {
             // virsh exit code is not surfaced via JSch exec channel exit status
             // reliably on all distros; check stdout instead.
@@ -169,7 +201,8 @@ class LibvirtApiClient(
      * The domain transitions to "shut off" synchronously from libvirt's view.
      */
     suspend fun destroyDomain(domain: String) = withContext(Dispatchers.IO) {
-        val output = runCommand("virsh destroy $domain 2>&1").trim()
+        requireValidDomain(domain)
+        val output = runCommand("virsh destroy ${shQuote(domain)} 2>&1").trim()
         if (output.contains("error:") || output.contains("failed")) {
             throw LibvirtException("virsh destroy failed: $output")
         }
@@ -182,7 +215,8 @@ class LibvirtApiClient(
      * a reliable stop is needed.
      */
     suspend fun shutdownDomain(domain: String) = withContext(Dispatchers.IO) {
-        val output = runCommand("virsh shutdown $domain 2>&1").trim()
+        requireValidDomain(domain)
+        val output = runCommand("virsh shutdown ${shQuote(domain)} 2>&1").trim()
         if (output.contains("error:") || output.contains("failed")) {
             throw LibvirtException("virsh shutdown failed: $output")
         }
@@ -193,7 +227,8 @@ class LibvirtApiClient(
      * Gracefully reboot a running domain via `virsh reboot <domain>`.
      */
     suspend fun rebootDomain(domain: String) = withContext(Dispatchers.IO) {
-        val output = runCommand("virsh reboot $domain 2>&1").trim()
+        requireValidDomain(domain)
+        val output = runCommand("virsh reboot ${shQuote(domain)} 2>&1").trim()
         if (output.contains("error:") || output.contains("failed")) {
             throw LibvirtException("virsh reboot failed: $output")
         }
@@ -205,7 +240,8 @@ class LibvirtApiClient(
      * `virsh reset <domain>`. Use only when graceful reboot is unresponsive.
      */
     suspend fun resetDomain(domain: String) = withContext(Dispatchers.IO) {
-        val output = runCommand("virsh reset $domain 2>&1").trim()
+        requireValidDomain(domain)
+        val output = runCommand("virsh reset ${shQuote(domain)} 2>&1").trim()
         if (output.contains("error:") || output.contains("failed")) {
             throw LibvirtException("virsh reset failed: $output")
         }
@@ -223,7 +259,8 @@ class LibvirtApiClient(
      */
     suspend fun getVmIpAddress(domain: String): String? = withContext(Dispatchers.IO) {
         try {
-            val output = runCommand("virsh domifaddr $domain 2>/dev/null")
+            requireValidDomain(domain)
+            val output = runCommand("virsh domifaddr ${shQuote(domain)} 2>/dev/null")
             // Expected line: "vnet0  52:54:00:xx:xx:xx  ipv4  192.168.1.100/24"
             Regex("""(\d{1,3}(?:\.\d{1,3}){3})""").find(output)?.groupValues?.get(1)
         } catch (e: Exception) {
@@ -238,7 +275,8 @@ class LibvirtApiClient(
      * Throws [LibvirtException] if the domain has no VNC display configured.
      */
     suspend fun getVncDisplay(domain: String): Int = withContext(Dispatchers.IO) {
-        val output = runCommand("virsh vncdisplay $domain").trim()
+        requireValidDomain(domain)
+        val output = runCommand("virsh vncdisplay ${shQuote(domain)}").trim()
         // Expected formats: ":1", "localhost:1", "127.0.0.1:1"
         val match = Regex("(?:.*:)(\\d+)").find(output)
             ?: throw LibvirtException("VNC not configured for domain '$domain' — enable display in VM XML")

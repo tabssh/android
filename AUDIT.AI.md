@@ -29,7 +29,7 @@ not described in `IDEA.md`, per the user's note that IDEA.md is outdated) and
 
 | Sev | Count | Headline items |
 |-----|-------|----------------|
-| CRITICAL | 5 | Keystore password `tabssh123` in source · reverse-video broken (FIXED) · `getById(Long)` always null (FIXED) · libvirt shell injection · terminal copy ignores scroll offset (FIXED) |
+| CRITICAL | 5 | Keystore password `tabssh123` in source · reverse-video broken (FIXED) · `getById(Long)` always null (FIXED) · libvirt shell injection (FIXED) · terminal copy ignores scroll offset (FIXED) |
 | HIGH | 12 | Backup `includePasswords` toggle → incomplete restores (C6, FIXED) · F-Droid reproducibility (BUILD_DATE) · F-Droid metadata stale · BouncyCastle R8 keep rules · reflection breaks under R8 · AWS SigV4 encoding · sync upload-only · libvirt `StrictHostKeyChecking=no` · lint `checkOnly` · alpha security-crypto |
 | MEDIUM | ~14 | PIN unsalted SHA-256 · `runBlocking` in JSch callback · host-key fingerprint format · CI never compiles · OWASP plugin outdated · orphaned coroutine scopes |
 | LOW / NIT | ~10 | LiveData in new code · Gson+kotlinx dual · commented-out code · inline comments · `$(shell pwd)` · stale version strings |
@@ -110,17 +110,18 @@ duplicate). The live String-keyed lookups `getConnectionById` / `getConnection`
 (`ConnectionDao.kt`) remain; consolidating those two into one is tracked as
 optimization **O3** (separate, non-breaking refactor).
 
-## C5 — Shell injection via unquoted VM name in libvirt/virsh path
+## C5 — Shell injection via unquoted VM name in libvirt/virsh path — FIXED
 **`LibvirtApiClient.kt:154-213`**
 The domain (VM) name is interpolated into a `virsh` command string sent over SSH
 without quoting or validation. A VM named e.g. `x; rm -rf ~` (or any name the
 remote host or an imported profile can influence) executes arbitrary commands on
 the hypervisor host with the connecting user's privileges.
 
-**Fix:** never build shell strings by concatenation. Pass the domain name as a
-single-quoted, escaped argument, or use the libvirt API/`virsh` with an argument
-vector that does not go through a shell. Validate names against
-`^[A-Za-z0-9._-]+$` before use.
+**Fix (DONE):** added `shQuote()` (POSIX single-quote escaping: wraps in `'…'`
+and renders embedded quotes as `'\''`) and `requireValidDomain()` (rejects blank
+names, whitespace, and NUL). Every `virsh <cmd> $domain` call now validates then
+interpolates `${shQuote(domain)}`, so a name like `x; rm -rf ~` is passed as a
+single literal argument. Verified: `make check` compiles clean.
 
 ## C6 — `includePasswords` toggle breaks the backup fidelity invariant (incomplete restores) — FIXED
 **Severity: HIGH (data-fidelity defect — was mis-scoped as a credential leak).**
