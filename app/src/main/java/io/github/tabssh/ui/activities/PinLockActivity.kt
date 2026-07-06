@@ -15,16 +15,23 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.setPadding
+import androidx.lifecycle.lifecycleScope
 import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.pairing.PairingDecryptor
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.security.MessageDigest
+import java.security.SecureRandom
 
 /**
  * Wave 3.2 — PIN code app lock.
  *
  * Two modes selected via [EXTRA_MODE]:
- *  - "set"    — first-time setup. Asks for PIN twice; on match, stores
- *               SHA-256 hex in `app_lock_pin_hash` preference and enables
+ *  - "set"    — first-time setup. Asks for PIN twice; on match, stores a
+ *               salted Argon2id hash (`v2:<salt>:<hash>`) in the
+ *               `app_lock_pin_hash` preference and enables
  *               `app_lock_enabled = true`. Returns RESULT_OK.
  *  - "verify" — gate. Asks for PIN; on match, returns RESULT_OK. On 5
  *               failed attempts, finishes with RESULT_CANCELED (caller
@@ -33,10 +40,13 @@ import java.security.MessageDigest
  * Coexists with biometric — this is a *supplement*, not a replacement.
  * Biometric flows in `SecurePasswordManager` are unaffected.
  *
- * No PIN history / strength meter / lockout backoff in this MVP. SHA-256
- * is plenty for a 4-8 digit PIN that gates a local app; a real attacker
- * with the device cleared past biometric and decrypted Keystore is not
- * the threat model here.
+ * The PIN hash is salted Argon2id (per-device random salt, 64 MiB / t=3
+ * via the pairing subsystem's tuned KDF) so a leaked hash — from a backup
+ * or a rooted device — is not trivially rainbow-tableable the way a bare
+ * unsalted SHA-256 of a 4–8 digit PIN would be. The ~1s derivation also
+ * rate-limits on-device brute force, complementing the 5-attempt lockout.
+ * PINs set under the old unsalted-SHA-256 scheme are upgraded transparently
+ * on the next successful unlock. No PIN history / strength meter / backoff.
  */
 class PinLockActivity : AppCompatActivity() {
 
@@ -71,8 +81,29 @@ class PinLockActivity : AppCompatActivity() {
         fun setupIntent(context: Context): Intent =
             Intent(context, PinLockActivity::class.java).putExtra(EXTRA_MODE, MODE_SET)
 
-        /** SHA-256 hex of [pin] for storage / comparison. */
-        fun hashPin(pin: String): String =
+        // Storage format for the app-lock PIN hash. "v2:" is salted Argon2id
+        // ("v2:<saltB64>:<hashB64>"); a bare 64-char SHA-256 hex string is the
+        // legacy scheme, kept only for transparent upgrade on next unlock.
+        private const val PIN_SCHEME_V2_PREFIX = "v2:"
+        private const val PIN_SALT_BYTES = 16
+        private const val B64_FLAGS = android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP
+
+        private fun newSalt(): ByteArray =
+            ByteArray(PIN_SALT_BYTES).also { SecureRandom().nextBytes(it) }
+
+        // Salted, memory-hard Argon2id hash of [pin]. Reuses the pairing
+        // subsystem's tuned Argon2id (64 MiB, t=3) — intentionally ~1s, so it
+        // must run off the UI thread. Returns "v2:<saltB64>:<hashB64>".
+        fun hashPinV2(pin: String, salt: ByteArray = newSalt()): String {
+            val digest = PairingDecryptor.deriveKey(pin, salt)
+            val saltB64 = android.util.Base64.encodeToString(salt, B64_FLAGS)
+            val hashB64 = android.util.Base64.encodeToString(digest, B64_FLAGS)
+            return "$PIN_SCHEME_V2_PREFIX$saltB64:$hashB64"
+        }
+
+        // Legacy unsalted single-round SHA-256 hex — verify-only, for migrating
+        // PINs set before the Argon2id scheme landed.
+        private fun legacyHashPin(pin: String): String =
             MessageDigest.getInstance("SHA-256").digest(pin.toByteArray(Charsets.UTF_8))
                 .joinToString("") { "%02x".format(it) }
     }
@@ -83,6 +114,9 @@ class PinLockActivity : AppCompatActivity() {
     private var firstPin: String? = null
     private var attempts = 0
     private var mode: String = MODE_VERIFY
+    // Guards against re-entrant submits while an Argon2id derivation (~1s) is
+    // running on a background thread.
+    private var busy = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -154,6 +188,7 @@ class PinLockActivity : AppCompatActivity() {
     }
 
     private fun onSubmit() {
+        if (busy) return
         val pin = pinInput.text.toString().trim()
         if (pin.length !in 4..8) {
             status.text = "PIN must be 4–8 digits"
@@ -163,6 +198,12 @@ class PinLockActivity : AppCompatActivity() {
             MODE_SET -> handleSetSubmit(pin)
             MODE_VERIFY -> handleVerifySubmit(pin)
         }
+    }
+
+    // Toggle the input's interactivity while a background derivation runs.
+    private fun setBusy(value: Boolean) {
+        busy = value
+        pinInput.isEnabled = !value
     }
 
     private fun handleSetSubmit(pin: String) {
@@ -178,15 +219,22 @@ class PinLockActivity : AppCompatActivity() {
             status.text = "PINs didn't match. Start over."
             return
         }
-        // Match — persist. Also reset the failed-attempt counter; setting a
-        // new PIN should give the user a full retry budget on next unlock.
-        app.preferencesManager.setString(PREF_PIN_HASH, hashPin(pin))
-        app.preferencesManager.setBoolean(PREF_PIN_ENABLED, true)
-        app.preferencesManager.setInt(PREF_PIN_FAIL_COUNT, 0)
-        Toast.makeText(this, "App lock PIN set", Toast.LENGTH_SHORT).show()
-        Logger.i(TAG, "PIN configured")
-        setResult(Activity.RESULT_OK)
-        finish()
+        // Match — derive the salted Argon2id hash off the UI thread (~1s),
+        // then persist. Also reset the failed-attempt counter; setting a new
+        // PIN should give the user a full retry budget on next unlock.
+        setBusy(true)
+        status.text = "Saving…"
+        lifecycleScope.launch {
+            val stored = withContext(Dispatchers.Default) { hashPinV2(pin) }
+            app.preferencesManager.setString(PREF_PIN_HASH, stored)
+            app.preferencesManager.setBoolean(PREF_PIN_ENABLED, true)
+            app.preferencesManager.setInt(PREF_PIN_FAIL_COUNT, 0)
+            setBusy(false)
+            Toast.makeText(this@PinLockActivity, "App lock PIN set", Toast.LENGTH_SHORT).show()
+            Logger.i(TAG, "PIN configured")
+            setResult(Activity.RESULT_OK)
+            finish()
+        }
     }
 
     private fun handleVerifySubmit(pin: String) {
@@ -198,29 +246,60 @@ class PinLockActivity : AppCompatActivity() {
             finish()
             return
         }
-        if (constantTimeEquals(hashPin(pin), expected)) {
-            // Successful unlock clears the persisted fail counter so a future
-            // session starts fresh.
-            app.preferencesManager.setInt(PREF_PIN_FAIL_COUNT, 0)
-            attempts = 0
-            setResult(Activity.RESULT_OK)
-            finish()
-            return
+        // Derive/compare off the UI thread (Argon2id is intentionally ~1s).
+        setBusy(true)
+        status.text = "Checking…"
+        lifecycleScope.launch {
+            val ok = withContext(Dispatchers.Default) { verifyPin(pin, expected) }
+            setBusy(false)
+            if (ok) {
+                // Successful unlock clears the persisted fail counter so a future
+                // session starts fresh.
+                app.preferencesManager.setInt(PREF_PIN_FAIL_COUNT, 0)
+                attempts = 0
+                setResult(Activity.RESULT_OK)
+                finish()
+                return@launch
+            }
+            // Persist the attempt counter so killing/relaunching the activity
+            // does not reset the brute-force budget — load → increment → store
+            // on every failed entry.
+            val persisted = app.preferencesManager.getInt(PREF_PIN_FAIL_COUNT, 0) + 1
+            app.preferencesManager.setInt(PREF_PIN_FAIL_COUNT, persisted)
+            attempts = persisted
+            pinInput.setText("")
+            if (attempts >= MAX_ATTEMPTS) {
+                status.text = "Too many wrong attempts."
+                Toast.makeText(this@PinLockActivity, "Too many wrong attempts — closing app", Toast.LENGTH_LONG).show()
+                finishAffinity()
+                return@launch
+            }
+            status.text = "Incorrect — try again (${MAX_ATTEMPTS - attempts} left)"
         }
-        // Persist the attempt counter so killing/relaunching the activity does
-        // not reset the brute-force budget — load → increment → store on every
-        // failed entry.
-        val persisted = app.preferencesManager.getInt(PREF_PIN_FAIL_COUNT, 0) + 1
-        app.preferencesManager.setInt(PREF_PIN_FAIL_COUNT, persisted)
-        attempts = persisted
-        pinInput.setText("")
-        if (attempts >= MAX_ATTEMPTS) {
-            status.text = "Too many wrong attempts."
-            Toast.makeText(this, "Too many wrong attempts — closing app", Toast.LENGTH_LONG).show()
-            finishAffinity()
-            return
+    }
+
+    // Verify [pin] against the [stored] hash. Handles both the salted Argon2id
+    // "v2:" scheme and the legacy unsalted SHA-256 hex, transparently upgrading
+    // a matched legacy hash to Argon2id in place. Runs on a background thread.
+    private fun verifyPin(pin: String, stored: String): Boolean {
+        if (stored.startsWith(PIN_SCHEME_V2_PREFIX)) {
+            val parts = stored.removePrefix(PIN_SCHEME_V2_PREFIX).split(":")
+            if (parts.size != 2) return false
+            val salt = try {
+                android.util.Base64.decode(parts[0], B64_FLAGS)
+            } catch (_: IllegalArgumentException) {
+                return false
+            }
+            val candidate = hashPinV2(pin, salt)
+            return constantTimeEquals(candidate, stored)
         }
-        status.text = "Incorrect — try again (${MAX_ATTEMPTS - attempts} left)"
+        // Legacy unsalted SHA-256 — verify, then upgrade the stored hash to the
+        // salted Argon2id scheme so the weak form is never persisted again.
+        if (constantTimeEquals(legacyHashPin(pin), stored)) {
+            app.preferencesManager.setString(PREF_PIN_HASH, hashPinV2(pin))
+            return true
+        }
+        return false
     }
 
     private fun dp(value: Int): Int =

@@ -31,7 +31,7 @@ not described in `IDEA.md`, per the user's note that IDEA.md is outdated) and
 |-----|-------|----------------|
 | CRITICAL | 5 | Keystore password `tabssh123` in source · reverse-video broken (FIXED) · `getById(Long)` always null (FIXED) · libvirt shell injection (FIXED) · terminal copy ignores scroll offset (FIXED) |
 | HIGH | 12 | Backup `includePasswords` toggle → incomplete restores (C6, FIXED) · F-Droid reproducibility (BUILD_DATE) · F-Droid metadata stale · BouncyCastle R8 keep rules · reflection breaks under R8 · AWS SigV4 encoding · sync upload-only · libvirt `StrictHostKeyChecking=no` · lint `checkOnly` · alpha security-crypto |
-| MEDIUM | ~14 | PIN unsalted SHA-256 · `runBlocking` in JSch callback · host-key fingerprint format (H11, FIXED) · CI never compiles · OWASP plugin outdated · orphaned coroutine scopes |
+| MEDIUM | ~14 | PIN unsalted SHA-256 (H10, FIXED) · `runBlocking` in JSch callback · host-key fingerprint format (H11, FIXED) · CI never compiles · OWASP plugin outdated · orphaned coroutine scopes |
 | LOW / NIT | ~10 | LiveData in new code · Gson+kotlinx dual · commented-out code · inline comments · `$(shell pwd)` · stale version strings |
 | OPT | ~8 | Per-char Paint allocation · OSC8 per-write parsing · duplicate DAO queries |
 
@@ -310,12 +310,18 @@ more; the `enable 'ContentDescription', ...` on line 217 is dead. **Fix:** use
 encrypted credential storage and carries a fragile Tink/ProGuard story. **Fix:**
 pin to stable `1.0.0`, or document why the alpha is required.
 
-## H10 — PIN stored as unsalted single-round SHA-256
-**`PinLockActivity.kt:74-77,183`** — the app-lock PIN is hashed with a single
+## H10 — PIN stored as unsalted single-round SHA-256 — FIXED
+**`PinLockActivity.kt:74-77,183`** — the app-lock PIN was hashed with a single
 unsalted SHA-256. A 4–6 digit PIN is trivially reversible from a rainbow table if
-the hash leaks (backup, rooted device). **Fix:** use a memory-hard KDF with a
-per-device random salt (Argon2id — already a dependency via `PairingDecryptor` —
-or `PBKDF2` with a high iteration count). *(Cross-listed HIGH/MEDIUM; treated HIGH
+the hash leaks (backup, rooted device). **Fix applied:** PIN hash is now salted
+Argon2id (per-device 16-byte random salt) stored as `v2:<saltB64>:<hashB64>`,
+reusing the pairing subsystem's tuned `PairingDecryptor.deriveKey` (64 MiB, t=3,
+~1s — which also rate-limits on-device brute force alongside the 5-attempt
+lockout). Derivation runs on `Dispatchers.Default` via `lifecycleScope` to keep it
+off the UI thread, with a `busy` re-entrancy guard. **Migration:** PINs stored
+under the legacy bare-SHA-256 scheme are verified against the old hash and then
+transparently re-hashed to Argon2id in place on the next successful unlock, so the
+weak form is never persisted again. *(Cross-listed HIGH/MEDIUM; treated HIGH
 because it protects app-lock.)*
 
 ## H11 — Host-key fingerprint uses non-standard hex:colon format — FIXED
