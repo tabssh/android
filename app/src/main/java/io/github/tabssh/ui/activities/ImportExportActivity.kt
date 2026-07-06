@@ -632,24 +632,23 @@ class ImportExportActivity : AppCompatActivity() {
             .setTitle("⚠️ Unencrypted Backup")
             .setMessage(
                 "This backup will be saved as plain, unencrypted JSON.\n\n" +
-                "Anyone who can read the file will see all your host addresses, " +
-                "usernames, ports, and configuration details.\n\n" +
-                "Saved passwords and private keys are always excluded from " +
-                "unencrypted backups to reduce risk, but the remaining data " +
-                "is still sensitive.\n\n" +
-                "For full protection — including the ability to restore passwords " +
-                "and keys — use an encrypted backup with a strong password."
+                "A backup always contains everything — including your saved " +
+                "passwords and private keys — so that a restore reproduces the " +
+                "exact state of the app.\n\n" +
+                "Because this file is unencrypted, anyone who can read it will " +
+                "see all of that. Store it somewhere only you can access.\n\n" +
+                "For protection at rest, use an encrypted backup with a strong " +
+                "password instead."
             )
             .setPositiveButton("Export Without Encryption") { _, _ ->
-                performExport(uri, includePasswords = false, password = null)
+                performExport(uri, password = null)
             }
             .setNegativeButton("Cancel", null)
             .show()
     }
 
     /**
-     * Collect a password (with confirmation) and an optional "include passwords" flag
-     * before kicking off an encrypted export.
+     * Collect a password (with confirmation) before kicking off an encrypted export.
      */
     private fun showExportPasswordDialog(uri: android.net.Uri) {
         val passwordInput = com.google.android.material.textfield.TextInputEditText(this).apply {
@@ -662,11 +661,6 @@ class ImportExportActivity : AppCompatActivity() {
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
 
-        val includePasswordsCheckbox = android.widget.CheckBox(this).apply {
-            text = "Include saved passwords (encrypted)"
-            isChecked = false
-        }
-
         val layout = android.widget.LinearLayout(this).apply {
             orientation = android.widget.LinearLayout.VERTICAL
             setPadding(64, 32, 64, 0)
@@ -677,22 +671,15 @@ class ImportExportActivity : AppCompatActivity() {
                     android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
                 ).apply { topMargin = 16 }
             })
-            addView(includePasswordsCheckbox.apply {
-                layoutParams = android.widget.LinearLayout.LayoutParams(
-                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { topMargin = 16 }
-            })
         }
 
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Encrypt Backup")
-            .setMessage("Enter a password to encrypt your backup.")
+            .setMessage("Enter a password to encrypt your backup. The backup always includes everything; the password protects the file at rest.")
             .setView(layout)
             .setPositiveButton("Export") { _, _ ->
                 val password = passwordInput.text.toString()
                 val confirm = confirmInput.text.toString()
-                val includePasswords = includePasswordsCheckbox.isChecked
 
                 when {
                     password.isBlank() -> {
@@ -705,7 +692,7 @@ class ImportExportActivity : AppCompatActivity() {
                         Toast.makeText(this, "Password too short (minimum 4 characters)", Toast.LENGTH_SHORT).show()
                     }
                     else -> {
-                        performExport(uri, includePasswords, password)
+                        performExport(uri, password)
                     }
                 }
             }
@@ -716,7 +703,7 @@ class ImportExportActivity : AppCompatActivity() {
     /**
      * Write the backup ZIP to [uri] with the chosen encryption settings.
      */
-    private fun performExport(uri: android.net.Uri, includePasswords: Boolean, password: String?) {
+    private fun performExport(uri: android.net.Uri, password: String?) {
         lifecycleScope.launch {
             try {
                 val bm = backupManager ?: run {
@@ -725,7 +712,6 @@ class ImportExportActivity : AppCompatActivity() {
                 }
                 val result = bm.createBackup(
                     outputUri = uri,
-                    includePasswords = includePasswords,
                     encryptBackup = password != null,
                     password = password
                 )

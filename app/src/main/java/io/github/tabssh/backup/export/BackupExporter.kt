@@ -70,7 +70,7 @@ class BackupExporter(
     private val context: android.content.Context,
     private val database: TabSSHDatabase,
     private val preferenceManager: PreferenceManager,
-    /** Non-null only when [collectBackupData] is called with includeSecrets=true. */
+    /** Required for [collectBackupData] to gather stored credentials into the backup. */
     private val securePasswordManager: SecurePasswordManager? = null,
     private val keyStorage: KeyStorage? = null
 ) {
@@ -121,21 +121,16 @@ class BackupExporter(
      * Collect every backed-up table as a name→JSON map. Caller (BackupManager)
      * decides whether to encrypt and how to write to disk.
      *
-     * @param includePasswords Legacy flag — SSH connection passwords are included
-     *   in the `connections.json` sidecar when true. Superseded by [includeSecrets]
-     *   which covers all credential types; when [includeSecrets] is true this flag
-     *   is implicitly treated as true so the two paths are consistent.
-     * @param includeSecrets   When true, all credentials (Keystore passwords, tokens,
-     *   OCI keys, SSH key bytes, connection passwords) are gathered into [FILE_SECRETS].
-     *   Always true in [BackupManager.createBackup] — the user controls encryption.
+     * A backup always contains absolutely everything, unencrypted at the content
+     * level: restoring must reproduce the exact app state at capture time. All
+     * credentials (Keystore passwords, tokens, OCI keys, SSH key bytes, connection
+     * passwords) are always gathered — encryption is a file-level option the user
+     * controls, never a content choice.
      */
-    suspend fun collectBackupData(
-        includePasswords: Boolean,
-        includeSecrets: Boolean = false
-    ): Map<String, String> = withContext(Dispatchers.IO) {
+    suspend fun collectBackupData(): Map<String, String> = withContext(Dispatchers.IO) {
         val out = mutableMapOf<String, String>()
 
-        out[FILE_CONNECTIONS]      = exportConnections(includePasswords || includeSecrets)
+        out[FILE_CONNECTIONS]      = exportConnections(includePasswords = true)
         out[FILE_KEYS]             = exportKeys()
         out[FILE_PREFERENCES]      = exportPreferences()
         out[FILE_THEMES]           = exportThemes()
@@ -153,7 +148,7 @@ class BackupExporter(
         out[FILE_VNC_HOSTS]        = exportVncHosts()
         out[FILE_VNC_IDENTITIES]   = exportVncIdentities()
         out[FILE_DASHBOARD]        = exportDashboardConfig()
-        if (includeSecrets) out[FILE_SECRETS] = exportSecrets()
+        out[FILE_SECRETS]          = exportSecrets()
 
         out
     }

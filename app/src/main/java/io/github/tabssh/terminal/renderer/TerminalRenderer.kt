@@ -49,22 +49,36 @@ class TerminalRenderer(
                 val x = offsetX + (col * cellWidth)
                 val char = line[col]
 
-                // Draw character background if different from default
-                if (char.bgColor != 0) {
-                    val bgPaint = Paint().apply {
-                        color = if (char.bgColor < defaultColors.size) {
-                            defaultColors[char.bgColor]
-                        } else Color.BLACK
-                    }
+                // Resolve effective foreground colour from the 16-colour palette
+                var fgInt = if (char.fgColor in defaultColors.indices) {
+                    defaultColors[char.fgColor]
+                } else Color.WHITE
+
+                // Resolve effective background; index 0 means the terminal's base background
+                var bgInt = when {
+                    char.bgColor == 0 -> backgroundPaint.color
+                    char.bgColor in defaultColors.indices -> defaultColors[char.bgColor]
+                    else -> Color.BLACK
+                }
+
+                // Reverse video (SGR 7): swap foreground and background
+                if (char.reverse) {
+                    val tempColor = fgInt
+                    fgInt = bgInt
+                    bgInt = tempColor
+                }
+
+                // Draw the cell background whenever it differs from the base background
+                // (covers explicit bgColor and reversed cells, including reversed spaces)
+                if (bgInt != backgroundPaint.color) {
+                    val bgPaint = Paint().apply { color = bgInt }
                     canvas.drawRect(x, y, x + cellWidth, y + cellHeight, bgPaint)
                 }
 
                 // Draw character
                 if (char.char != ' ') {
                     val charPaint = Paint(textPaint).apply {
-                        color = if (char.fgColor < defaultColors.size) {
-                            defaultColors[char.fgColor]
-                        } else Color.WHITE
+                        color = fgInt
 
                         // Apply formatting
                         if (char.bold) {
@@ -72,13 +86,6 @@ class TerminalRenderer(
                         }
                         if (char.underline) {
                             isUnderlineText = true
-                        }
-                        if (char.reverse) {
-                            // Swap colors for reverse
-                            val tempColor = color
-                            color = if (char.bgColor < defaultColors.size) {
-                                defaultColors[char.bgColor]
-                            } else Color.BLACK
                         }
                     }
 

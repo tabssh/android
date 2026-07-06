@@ -2418,13 +2418,24 @@ class TerminalView @JvmOverloads constructor(
         if (!selectionActive) return null
         val buffer = termuxBridge?.getScreen() ?: termuxBuffer ?: return null
         val (startRow, startCol, endRow, endCol) = normalisedSelection()
+        // selectionAnchorRow / selectionFocusRow are stored as VISUAL (viewport)
+        // rows — pixelToCell() sets them from the touch Y with no scroll offset,
+        // and drawSelectionOverlay() draws the highlight at the same visual rows.
+        // Termux's getSelectedText() indexes EXTERNAL buffer rows, where the
+        // renderer maps visual→external as (row - scrollRows) (see renderTermuxBuffer:
+        // `externalRow = row - scrollRows`). Without this shift, a selection made
+        // while scrolled back into the transcript copies rows scrollRows too far
+        // down (newer) than the highlighted region.
+        val scrollRows = if (cellHeight > 0f) (scrollYInt / cellHeight).toInt() else 0
+        val extStartRow = startRow - scrollRows
+        val extEndRow = endRow - scrollRows
         return try {
             // Termux's getSelectedText takes (col1, row1, col2, row2) and
             // reads line-by-line through the rectangle. We pass through
             // the user-visible cells; +1 on the trailing column / row
             // would over-include, so use the same inclusive convention
             // the existing scrollback-extraction path uses.
-            buffer.getSelectedText(startCol, startRow, endCol, endRow)
+            buffer.getSelectedText(startCol, extStartRow, endCol, extEndRow)
         } catch (e: Exception) {
             Logger.w("TerminalView", "getSelectedText failed: ${e.message}")
             null

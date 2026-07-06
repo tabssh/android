@@ -82,20 +82,17 @@ class BackupManager(private val context: Context) {
      */
     suspend fun createBackup(
         outputUri: Uri,
-        includePasswords: Boolean = false,
         encryptBackup: Boolean = true,
         password: String? = null
     ): BackupResult = withContext(Dispatchers.IO) {
         try {
             Logger.i("BackupManager", "Creating backup...")
 
-            // Collect all data to backup, including all credentials.
-            // includeSecrets is always true — the user controls whether to
-            // encrypt the backup with a password; that is their security
-            // tradeoff to make. Requiring encryption to get secrets would
-            // silently produce incomplete restores on unencrypted backups.
-            val includeSecrets = true
-            val backupData = exporter.collectBackupData(includePasswords, includeSecrets)
+            // A backup always contains absolutely everything, including all
+            // credentials. Encryption is a file-level option the user controls;
+            // it never changes what the backup contains. This guarantees a
+            // restore reproduces the exact app state at capture time.
+            val backupData = exporter.collectBackupData()
 
             // Create metadata
             val metadata = createBackupMetadata(backupData)

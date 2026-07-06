@@ -17,9 +17,6 @@ interface ConnectionDao {
     @Query("SELECT * FROM connections ORDER BY sort_order, name")
     fun getAllConnectionsLiveData(): LiveData<List<ConnectionProfile>>
     
-    @Query("SELECT * FROM connections WHERE id = :id")
-    suspend fun getById(id: Long): ConnectionProfile?
-    
     @Query("SELECT * FROM connections WHERE name = :name LIMIT 1")
     suspend fun getByName(name: String): ConnectionProfile?
 
