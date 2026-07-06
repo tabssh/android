@@ -94,6 +94,12 @@ android {
     }
 
     signingConfigs {
+        // Credentials are read from the environment first and only fall back to
+        // the legacy "tabssh123" when unset/empty (Groovy treats "" as falsy, so
+        // an empty CI secret also triggers the fallback). Migration path: add
+        // KEYSTORE_PASSWORD / KEY_PASSWORD as CI secrets and the env value takes
+        // over automatically with no code change. Until then the fallback keeps
+        // release.yml and dev-builds.yml building against the current keystore.
         release {
             storeFile file("../keystore.jks")
             storePassword System.getenv("KEYSTORE_PASSWORD") ?: "tabssh123"
@@ -110,7 +116,7 @@ android {
             minifyEnabled false
             buildConfigField "boolean", "DEBUG_MODE", "true"
             buildConfigField "String", "BUILD_TYPE", '"debug"'
-            
+
             // Use the same keystore as release for consistent signing
             signingConfig signingConfigs.release
         }

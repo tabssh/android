@@ -29,7 +29,7 @@ not described in `IDEA.md`, per the user's note that IDEA.md is outdated) and
 
 | Sev | Count | Headline items |
 |-----|-------|----------------|
-| CRITICAL | 5 | Keystore password `tabssh123` in source · reverse-video broken (FIXED) · `getById(Long)` always null (FIXED) · libvirt shell injection (FIXED) · terminal copy ignores scroll offset (FIXED) |
+| CRITICAL | 5 | Keystore password `tabssh123` in source (C1, PARTIAL — migration wired, re-key deferred to maintainer) · reverse-video broken (FIXED) · `getById(Long)` always null (FIXED) · libvirt shell injection (FIXED) · terminal copy ignores scroll offset (FIXED) |
 | HIGH | 12 | Backup `includePasswords` toggle → incomplete restores (C6, FIXED) · F-Droid reproducibility (BUILD_DATE) · F-Droid metadata stale · BouncyCastle R8 keep rules · reflection breaks under R8 · AWS SigV4 encoding · sync upload-only · libvirt `StrictHostKeyChecking=no` (H7, FIXED) · lint `checkOnly` · alpha security-crypto |
 | MEDIUM | ~14 | PIN unsalted SHA-256 (H10, FIXED) · `runBlocking` in JSch callback · host-key fingerprint format (H11, FIXED) · CI never compiles · OWASP plugin outdated · orphaned coroutine scopes |
 | LOW / NIT | ~10 | LiveData in new code · Gson+kotlinx dual · commented-out code · inline comments · `$(shell pwd)` · stale version strings |
@@ -39,22 +39,35 @@ not described in `IDEA.md`, per the user's note that IDEA.md is outdated) and
 
 # CRITICAL
 
-## C1 — Hardcoded keystore password `tabssh123` in source
+## C1 — Hardcoded keystore password `tabssh123` in source — PARTIAL (migration wired)
 **`app/build.gradle:99,101`**
 ```
 storePassword System.getenv("KEYSTORE_PASSWORD") ?: "tabssh123"
 keyPassword   System.getenv("KEY_PASSWORD")       ?: "tabssh123"
 ```
 The signing fallback password is committed in plaintext. `release.yml` decodes
-`KEYSTORE_BASE64` → `keystore.jks` but the visible signing step does not export
+`KEYSTORE_BASE64` → `keystore.jks` but the visible signing step did not export
 `KEYSTORE_PASSWORD` / `KEY_PASSWORD`, so a CI release build falls back to the
-literal `tabssh123`. If that is the password on the real production key, the
-production signing key's password is public. Anyone with repo read access has it.
+literal `tabssh123`. Confirmed with the maintainer: the repo has only the
+`KEYSTORE_BASE64` secret, so `tabssh123` **is** the live production key password.
 
-**Fix:** remove both `?: "tabssh123"` fallbacks; if the env var is unset, fail the
-build (`throw new GradleException(...)`). Confirm the real key's password is not
-`tabssh123`; if it is, the key must be rotated and all published APKs re-signed.
-Verified against source.
+**Practical severity — reassessed to LOW/MEDIUM:** the password alone is useless
+without the `keystore.jks` file, which is held as the `KEYSTORE_BASE64` GitHub
+secret (not in source). Exploitation requires *both* the secret keystore and the
+password. A full fix (rotate the key to a strong password, re-sign published APKs)
+is a maintainer infra decision, deliberately deferred.
+
+**Fix applied (migration groundwork, non-breaking):** `release.yml` and
+`dev-builds.yml` now pass `secrets.KEYSTORE_PASSWORD` / `secrets.KEY_PASSWORD`
+through as env on their build steps. When those secrets are absent GitHub expands
+them to an empty string and Groovy's `?:` (empty = falsy) falls back to the
+current password — so nothing breaks today. The moment the maintainer adds a
+strong `KEYSTORE_PASSWORD` secret it takes over automatically with **no code
+change**. The `dev-builds.yml` ephemeral-keystore generator was updated to use the
+same `${KEYSTORE_PW:-tabssh123}` so the generated keystore and gradle never drift.
+**Remaining (deferred to maintainer):** rotate the keystore password off
+`tabssh123`, upload the re-keyed `KEYSTORE_BASE64`, add the `KEYSTORE_PASSWORD`
+secret, then drop the `?: "tabssh123"` fallbacks entirely. Verified against source.
 
 ## C2 — Bracketed-paste ESC byte — FALSE POSITIVE (withdrawn)
 **`TermuxBridge.kt:738,745`**

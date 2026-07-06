@@ -69,6 +69,10 @@ jobs:
     - name: Decode and setup keystore
       env:
         KEYSTORE_B64: ${{ secrets.KEYSTORE_BASE64 }}
+        # Default to the legacy password so the ephemeral keystore matches the
+        # build.gradle fallback; if a KEYSTORE_PASSWORD secret is later added it
+        # is used for both, keeping the generated keystore and gradle in sync.
+        KEYSTORE_PW: ${{ secrets.KEYSTORE_PASSWORD }}
       run: |
         # KEYSTORE_BASE64 is optional for dev builds. When set, decode it
         # so APKs are signed with the real release key (required for OTA
@@ -81,14 +85,15 @@ jobs:
           echo "✅ Keystore decoded from KEYSTORE_BASE64 secret"
         else
           echo "⚠️  KEYSTORE_BASE64 not set — generating ephemeral self-signed keystore for dev build"
+          EPHEMERAL_PW="${KEYSTORE_PW:-tabssh123}"
           keytool -genkeypair \
             -keystore keystore.jks \
             -alias tabssh \
             -keyalg RSA \
             -keysize 2048 \
             -validity 365 \
-            -storepass tabssh123 \
-            -keypass tabssh123 \
+            -storepass "$EPHEMERAL_PW" \
+            -keypass "$EPHEMERAL_PW" \
             -dname "CN=TabSSH Dev Build, OU=Dev, O=TabSSH, L=Unknown, ST=Unknown, C=US" \
             -noprompt
           echo "✅ Ephemeral debug keystore generated"
@@ -137,6 +142,13 @@ jobs:
 
     - name: Build debug APKs
       run: ./gradlew assembleDebug --no-daemon
+      env:
+        # Passed through so a future KEYSTORE_PASSWORD / KEY_PASSWORD secret is
+        # picked up automatically. When absent GitHub expands to an empty string
+        # and build.gradle falls back to the current password — which matches the
+        # ephemeral keystore generated in the "Decode and setup keystore" step.
+        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
     - name: Rename APKs with -dev suffix
       run: |

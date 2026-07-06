@@ -113,6 +113,11 @@ jobs:
       run: ./gradlew assembleRelease
       env:
         RELEASE_BUILD: true
+        # Passed through so a future KEYSTORE_PASSWORD / KEY_PASSWORD secret is
+        # picked up automatically. When the secret is absent GitHub expands it to
+        # an empty string and build.gradle falls back to the current password.
+        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         
     - name: Process multi-architecture APKs
       run: |
