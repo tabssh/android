@@ -191,6 +191,17 @@ class RfbClient(
     private var keepaliveThread: Thread? = null
 
     /**
+     * When true, all FramebufferUpdateRequests are suspended (both the reader
+     * thread's ~60fps incremental driver and the keepalive thread) without
+     * tearing down the transport. RFB is request-driven, so once no FBUR is
+     * outstanding the server stops sending FramebufferUpdates and the reader
+     * thread blocks harmlessly on the next read — no pipe writes, no busy loop.
+     * Used to hold a connection open while the app is backgrounded. See
+     * [pause] / [resume].
+     */
+    private val paused = AtomicBoolean(false)
+
+    /**
      * Timestamp (epoch ms) of the most recent FramebufferUpdate received from
      * the server, or 0 before the first update arrives.  Written only on the
      * reader thread; read from the keepalive thread — AtomicLong for visibility.
@@ -243,6 +254,49 @@ class RfbClient(
         // before the connection completes) to prevent UninitializedPropertyAccessException.
         if (::decoder.isInitialized) decoder.reset()
     }
+
+    /**
+     * Suspend framebuffer streaming while keeping the TCP transport open.
+     *
+     * Sets [paused] so both FBUR drivers stop issuing requests; the server
+     * drains any outstanding request, sends its last update, then goes quiet.
+     * The reader thread blocks on the next read until [resume] is called.
+     *
+     * No-op if the client is not running. Note: a paused-but-open socket is
+     * still subject to Android Doze — the caller must hold wake/wifi locks to
+     * keep it alive in the background.
+     */
+    fun pause() {
+        if (!running.get()) return
+        if (paused.compareAndSet(false, true)) {
+            Logger.d(TAG, "RFB paused — framebuffer-update requests suspended")
+        }
+    }
+
+    /**
+     * Resume framebuffer streaming after a [pause].
+     *
+     * Clears [paused] and sends one non-incremental FramebufferUpdateRequest so
+     * the server repaints the full screen (repairing any pixels that changed
+     * while paused); the reader thread then re-enters the normal incremental
+     * loop. No-op if not running or not currently paused.
+     */
+    fun resume() {
+        if (!running.get()) return
+        if (!paused.compareAndSet(true, false)) return
+        Logger.d(TAG, "RFB resumed — requesting full framebuffer refresh")
+        try {
+            if (fbWidth > 0 && fbHeight > 0) {
+                sendUpdateRequest(0, 0, fbWidth, fbHeight, incremental = false)
+                lastUpdateTimeMs.set(System.currentTimeMillis())
+            }
+        } catch (e: Exception) {
+            if (running.get()) Logger.w(TAG, "RFB resume refresh failed: ${e.message}")
+        }
+    }
+
+    /** True while [pause] is in effect. */
+    val isPaused: Boolean get() = paused.get()
 
     // ── Protocol state machine ────────────────────────────────────────────
 
@@ -759,6 +813,11 @@ class RfbClient(
         } catch (_: InterruptedException) { return }
 
         while (running.get()) {
+            // Suspend keepalive FBURs while paused so the server stays quiet.
+            if (paused.get()) {
+                try { Thread.sleep(halfInterval) } catch (_: InterruptedException) { break }
+                continue
+            }
             val last = lastUpdateTimeMs.get()
             val now  = System.currentTimeMillis()
             if (last > 0 && now - last >= KEEPALIVE_MS && fbWidth > 0 && fbHeight > 0) {
@@ -1048,7 +1107,10 @@ class RfbClient(
         // another update, etc. The resulting pipe writes (to feed the
         // terminal bridge) outpace the consumer when the activity is in the
         // background, filling the pipe buffer and blocking the I/O thread.
-        if (running.get()) {
+        // While paused (app backgrounded) skip driving the next request so the
+        // server goes quiet and the reader thread blocks harmlessly on read;
+        // resume() re-primes the loop with a full request.
+        if (running.get() && !paused.get()) {
             Thread.sleep(16) // ~60 FPS ceiling
             sendUpdateRequest(0, 0, fbWidth, fbHeight, incremental = true)
         }
