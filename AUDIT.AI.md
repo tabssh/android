@@ -30,7 +30,7 @@ not described in `IDEA.md`, per the user's note that IDEA.md is outdated) and
 | Sev | Count | Headline items |
 |-----|-------|----------------|
 | CRITICAL | 5 | Keystore password `tabssh123` in source (C1, PARTIAL — migration wired, re-key deferred to maintainer) · reverse-video broken (FIXED) · `getById(Long)` always null (FIXED) · libvirt shell injection (FIXED) · terminal copy ignores scroll offset (FIXED) |
-| HIGH | 12 | Backup `includePasswords` toggle → incomplete restores (C6, FIXED) · F-Droid reproducibility (BUILD_DATE) (H1, FIXED) · F-Droid metadata stale (H2, FIXED) · BouncyCastle R8 keep rules (H3, FIXED) · reflection breaks under R8 (H4, FIXED) · AWS SigV4 encoding (H5, FIXED) · sync upload-only · libvirt `StrictHostKeyChecking=no` (H7, FIXED) · lint `checkOnly` (H8, FIXED — + 53 NewApi crashes fixed, minSdk→24) · alpha security-crypto |
+| HIGH | 12 | Backup `includePasswords` toggle → incomplete restores (C6, FIXED) · F-Droid reproducibility (BUILD_DATE) (H1, FIXED) · F-Droid metadata stale (H2, FIXED) · BouncyCastle R8 keep rules (H3, FIXED) · reflection breaks under R8 (H4, FIXED) · AWS SigV4 encoding (H5, FIXED) · sync upload-only · libvirt `StrictHostKeyChecking=no` (H7, FIXED) · lint `checkOnly` (H8, FIXED — + 53 NewApi crashes fixed, minSdk→24) · alpha security-crypto (H9, FIXED — removed as unused) |
 | MEDIUM | ~14 | PIN unsalted SHA-256 (H10, FIXED) · `runBlocking` in JSch callback · host-key fingerprint format (H11, FIXED) · CI never compiles · OWASP plugin outdated · orphaned coroutine scopes |
 | LOW / NIT | ~10 | LiveData in new code · Gson+kotlinx dual · commented-out code · inline comments · `$(shell pwd)` · stale version strings |
 | OPT | ~8 | Per-char Paint allocation · OSC8 per-write parsing · duplicate DAO queries |
@@ -387,10 +387,24 @@ will fail the build.
 > RemoteViews cannot use `app:tint`); 6 `MissingTranslation` (`mdm_desc_*` added to
 > de/fr/es).
 
-## H9 — Alpha security library on the credential path
+## H9 — Alpha security library on the credential path (FIXED)
 **`androidx.security:security-crypto:1.1.0-alpha06`** (alpha since 2023) guards
 encrypted credential storage and carries a fragile Tink/ProGuard story. **Fix:**
 pin to stable `1.0.0`, or document why the alpha is required.
+
+**FIXED (premise corrected):** The finding assumed `security-crypto` was on the
+credential path — it is not. An exhaustive search (`security.crypto`,
+`EncryptedSharedPreferences`, `EncryptedFile`, `MasterKey`,
+`com.google.crypto.tink`) found **zero references** anywhere in `app/src`. Actual
+credential encryption is `AndroidKeyStore` + AES/GCM `Cipher` used directly in
+`crypto/storage/SecurePasswordManager.kt` (and `HypervisorPasswordStore.kt`).
+The alpha dependency was declared but never used, so the correct fix is neither
+pinning nor documenting — it is **removal**. Dropped the
+`androidx.security:security-crypto:1.1.0-alpha06` line, eliminating the alpha
+Tink/ProGuard surface entirely with no behavioral change. `jsr305` is retained
+(its comment previously mis-attributed it to Tink) because it supplies the
+`javax.annotation.*` types OkHttp references — comment corrected accordingly.
+`make check` clean after removal, confirming nothing compiled against it.
 
 ## H10 — PIN stored as unsalted single-round SHA-256 — FIXED
 **`PinLockActivity.kt:74-77,183`** — the app-lock PIN was hashed with a single

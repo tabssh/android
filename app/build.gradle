@@ -341,10 +341,14 @@ dependencies {
     implementation 'com.github.mwiede:jsch:2.27.7'
     
     // Security
+    // Credential encryption uses AndroidKeyStore + AES/GCM directly
+    // (SecurePasswordManager); androidx.security:security-crypto was declared
+    // but never referenced, so it is intentionally omitted — removing its
+    // alpha Tink dependency off the credential path.
     implementation 'androidx.biometric:biometric:1.1.0'
-    implementation 'androidx.security:security-crypto:1.1.0-alpha06'
 
-    // JSR-305 annotations (required for Tink/R8)
+    // JSR-305 annotations — supply javax.annotation.* referenced by OkHttp so
+    // R8 does not warn (see the -dontwarn/-keep javax.annotation rules).
     implementation 'com.google.code.findbugs:jsr305:3.0.2'
     
     // Cryptography - BouncyCastle for comprehensive PEM parsing

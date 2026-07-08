@@ -56,14 +56,9 @@
 -keep @androidx.room.Entity class *
 -keep @androidx.room.Dao class *
 
-# Keep security classes
--keep class androidx.security.crypto.** { *; }
-
-# Keep Tink crypto library classes
--keep class com.google.crypto.tink.** { *; }
--dontwarn com.google.crypto.tink.**
-
-# Keep JSR-305 annotations for Tink
+# JSR-305 annotations — OkHttp references javax.annotation.* at compile time;
+# keep them and suppress R8 warnings. (androidx.security-crypto / Tink rules
+# were removed with that unused dependency.)
 -dontwarn javax.annotation.**
 -dontwarn javax.annotation.concurrent.**
 -keep class javax.annotation.** { *; }
