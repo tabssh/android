@@ -30,7 +30,7 @@ not described in `IDEA.md`, per the user's note that IDEA.md is outdated) and
 | Sev | Count | Headline items |
 |-----|-------|----------------|
 | CRITICAL | 5 | Keystore password `tabssh123` in source (C1, PARTIAL — migration wired, re-key deferred to maintainer) · reverse-video broken (FIXED) · `getById(Long)` always null (FIXED) · libvirt shell injection (FIXED) · terminal copy ignores scroll offset (FIXED) |
-| HIGH | 12 | Backup `includePasswords` toggle → incomplete restores (C6, FIXED) · F-Droid reproducibility (BUILD_DATE) · F-Droid metadata stale · BouncyCastle R8 keep rules (H3, FIXED) · reflection breaks under R8 (H4, FIXED) · AWS SigV4 encoding · sync upload-only · libvirt `StrictHostKeyChecking=no` (H7, FIXED) · lint `checkOnly` (H8, FIXED — + 53 NewApi crashes fixed, minSdk→24) · alpha security-crypto |
+| HIGH | 12 | Backup `includePasswords` toggle → incomplete restores (C6, FIXED) · F-Droid reproducibility (BUILD_DATE) (H1, FIXED) · F-Droid metadata stale (H2, FIXED) · BouncyCastle R8 keep rules (H3, FIXED) · reflection breaks under R8 (H4, FIXED) · AWS SigV4 encoding · sync upload-only · libvirt `StrictHostKeyChecking=no` (H7, FIXED) · lint `checkOnly` (H8, FIXED — + 53 NewApi crashes fixed, minSdk→24) · alpha security-crypto |
 | MEDIUM | ~14 | PIN unsalted SHA-256 (H10, FIXED) · `runBlocking` in JSch callback · host-key fingerprint format (H11, FIXED) · CI never compiles · OWASP plugin outdated · orphaned coroutine scopes |
 | LOW / NIT | ~10 | LiveData in new code · Gson+kotlinx dual · commented-out code · inline comments · `$(shell pwd)` · stale version strings |
 | OPT | ~8 | Per-char Paint allocation · OSC8 per-write parsing · duplicate DAO queries |
@@ -263,18 +263,28 @@ negative external rows so scrollback taps resolve at all.
 
 # HIGH
 
-## H1 — `BUILD_DATE` baked at configure time breaks F-Droid reproducibility
-**`app/build.gradle:92`** — `defaultConfig` sets `BUILD_DATE` from `new Date()`,
+## H1 — `BUILD_DATE` baked at configure time breaks F-Droid reproducibility — FIXED
+**`app/build.gradle`** — `defaultConfig` set `BUILD_DATE` from `new Date()`,
 which flows into `fdroidRelease`. A wall-clock timestamp makes bit-for-bit
-reproducible builds impossible; F-Droid will never match. **Fix:** drop
-`BUILD_DATE`, or derive it from `SOURCE_DATE_EPOCH` and have `fdroidRelease`
-override it to a fixed value. Verified against source.
+reproducible builds impossible; F-Droid will never match. **Fix applied:** added
+`resolveBuildEpochSeconds` — resolves a stable timestamp from `SOURCE_DATE_EPOCH`
+(the reproducible-builds standard, which F-Droid sets) → the last commit's author
+timestamp (`git log -1 --format=%ct`, deterministic per checkout) → `0` as an
+offline last resort. `BUILD_DATE` now formats that epoch with the same display
+pattern **in UTC** (a second reproducibility trap fixed: `SimpleDateFormat`
+previously used the default timezone). `providers.exec` keeps it config-cache
+compatible. Verified: `make check` configures + compiles clean.
 
-## H2 — F-Droid metadata pinned to a stale version/commit
-**`metadata/io.github.tabssh.yml:118-120`** declares `versionName 0.0.9 /
-versionCode 9 / commit v0.0.9`, but the tree is `0.9.1 / 10`. F-Droid builds the
-metadata's `commit`, so the current release will never ship on F-Droid. **Fix:**
-bump metadata to `0.9.1 / 10 / v0.9.1`. Verified against source.
+## H2 — F-Droid metadata pinned to a stale version/commit — FIXED
+**`metadata/io.github.tabssh.yml`** declared `versionName 0.0.9 / versionCode 9 /
+commit v0.0.9`, but the tree is `0.9.1 / 10`. F-Droid builds the metadata's
+`commit`, so the current release would never ship on F-Droid. **Fix applied:**
+brought the file to parity with the already-correct `fdroid-submission/` recipe —
+bumped to `0.9.1 / 10 / v0.9.1`, added the `prebuild` local.properties steps, and
+added `AutoUpdateMode: Version` + `UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$`
++ `CurrentVersion`/`CurrentVersionCode`. The missing `UpdateCheckMode` was the
+root cause of the staleness (no auto-detection of new version tags), so adding it
+prevents recurrence. Verified against the sibling submission file.
 
 ## H3 — BouncyCastle JCA provider has no R8 keep rules — FIXED
 **`app/proguard-rules.pro`** (BC registered at `TabSSHApplication.kt:109`). BC

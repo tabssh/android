@@ -40,6 +40,28 @@ def resolveGitCommit = {
     return "unknown"
 }
 
+// Deterministic build timestamp (seconds since epoch) for F-Droid reproducible
+// builds. A wall-clock `new Date()` makes bit-for-bit reproduction impossible,
+// so resolve a stable source instead:
+//   1. SOURCE_DATE_EPOCH — the reproducible-builds standard; F-Droid sets it.
+//   2. the last commit's author timestamp — deterministic for a given checkout.
+//   3. 0 (1970-01-01 UTC) — last resort for a git-less, env-less tarball build;
+//      still reproducible.
+// providers.exec keeps this configuration-cache compatible (same as resolveGitCommit).
+def resolveBuildEpochSeconds = {
+    def sde = System.getenv("SOURCE_DATE_EPOCH")
+    if (sde != null && sde.isLong()) return sde.toLong()
+    try {
+        def execResult = providers.exec {
+            commandLine 'git', 'log', '-1', '--format=%ct'
+            ignoreExitValue = true
+        }
+        def s = execResult.standardOutput.asText.get().trim()
+        if (s && s.isLong()) return s.toLong()
+    } catch (Exception ignored) {}
+    return 0L
+}
+
 android {
     namespace 'io.github.tabssh'
     compileSdk 34
@@ -95,7 +117,11 @@ android {
         buildConfigField "String", "VERSION_NAME", "\"${versionName}\""
         buildConfigField "int", "VERSION_CODE", "${versionCode}"
         buildConfigField "String", "GIT_COMMIT_ID", "\"${resolveGitCommit()}\""
-        buildConfigField "String", "BUILD_DATE", "\"" + new java.text.SimpleDateFormat("MM/dd/yyyy 'at' HH:mm:ss", java.util.Locale.US).format(new java.util.Date()) + "\""
+        buildConfigField "String", "BUILD_DATE", "\"" + { ->
+            def fmt = new java.text.SimpleDateFormat("MM/dd/yyyy 'at' HH:mm:ss", java.util.Locale.US)
+            fmt.setTimeZone(java.util.TimeZone.getTimeZone("UTC"))
+            fmt.format(new java.util.Date(resolveBuildEpochSeconds() * 1000L))
+        }() + "\""
         buildConfigField "String", "FULL_VERSION", "\"${versionName} (${versionCode})\""
     }
 

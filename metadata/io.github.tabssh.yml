@@ -115,9 +115,18 @@ Description: |
 RequiresRoot: false
 
 Builds:
-  - versionName: '0.0.9'
-    versionCode: 9
-    commit: v0.0.9
+  - versionName: '0.9.1'
+    versionCode: 10
+    commit: v0.9.1
     subdir: .
     gradle:
       - fdroidRelease
+    prebuild:
+      - echo "sdk.dir=$$SDK$$" > local.properties
+      - echo "ndk.dir=$$NDK$$" >> local.properties
+      - echo "org.gradle.project.fdroidBuild=true" >> gradle.properties
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$
+CurrentVersion: '0.9.1'
+CurrentVersionCode: 10
