@@ -107,7 +107,14 @@ object MoshNativeClient {
             }
         }
 
-        fun isAlive(): Boolean = process.isAlive
+        // Process#isAlive is API 26; probing exitValue() is the all-API
+        // equivalent — a running process throws IllegalThreadStateException.
+        fun isAlive(): Boolean = try {
+            process.exitValue()
+            false
+        } catch (_: IllegalThreadStateException) {
+            true
+        }
 
         fun exitValue(): Int? = try { process.exitValue() } catch (_: IllegalThreadStateException) { null }
 
@@ -118,7 +125,7 @@ object MoshNativeClient {
             try { process.inputStream.close() } catch (_: Exception) {}
             try { process.errorStream.close() } catch (_: Exception) {}
             try {
-                if (process.isAlive) process.destroy()
+                if (isAlive()) process.destroy()
             } catch (_: Exception) {}
         }
     }

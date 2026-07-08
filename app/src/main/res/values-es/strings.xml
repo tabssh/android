@@ -212,4 +212,12 @@
     <string name="sync_password_mismatch">Las contraseñas no coinciden</string>
     <string name="sync_password_too_short">Mínimo 8 caracteres</string>
 
+    <!-- MDM / configuración gestionada -->
+    <string name="mdm_desc_audit_enabled">Forzar el registro de auditoría (activado o desactivado). Cuando se establece, anula la preferencia del usuario en la aplicación.</string>
+    <string name="mdm_desc_audit_log_commands">Registrar cada comando escrito en una sesión de terminal.</string>
+    <string name="mdm_desc_audit_log_output">Registrar la salida del terminal (aumenta considerablemente el tamaño del registro).</string>
+    <string name="mdm_desc_audit_retention_days">Número de días para conservar las entradas de auditoría antes de su eliminación automática.</string>
+    <string name="mdm_desc_syslog_host">Nombre de host o dirección IP de un receptor de syslog UDP (RFC 5424). Dejar en blanco para desactivar el reenvío.</string>
+    <string name="mdm_desc_syslog_port">Puerto UDP del receptor de syslog.</string>
+
 </resources>

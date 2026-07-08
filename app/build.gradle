@@ -58,7 +58,13 @@ android {
 
     defaultConfig {
         applicationId "io.github.tabssh"
-        minSdk 21  // Android 5.0 (covers 99%+ of devices)
+        // Android 7.0. Raised from 21 to eliminate a class of latent
+        // NewApi crashes: dozens of API 22-24 calls (ThreadLocal.withInitial,
+        // ConcurrentHashMap.newKeySet, SNIHostName, KeyGenParameterSpec,
+        // Context#getColor, the 'X' date pattern, removeIf) were invoked
+        // unguarded under minSdk 21 and would throw NoSuchMethodError on
+        // Android 5.0-6.0. minSdk 24 still covers ~96% of active devices.
+        minSdk 24
         targetSdk 34
         versionCode 10
         versionName "0.9.1"
@@ -212,10 +218,17 @@ android {
         abortOnError true
         checkReleaseBuilds true
         disable 'InvalidPackage'
-        
-        // Security-focused lint checks
-        checkOnly 'SecureRandom', 'TrustAllX509TrustManager', 'BadHostnameVerifier', 'SSLCertificateSocketFactoryCreateSocket'
-        
+
+        // NOTE: do NOT use `checkOnly` here. `checkOnly` *replaces* the entire
+        // default check set with only the listed IDs, which silently disabled
+        // NewApi (the check that would have caught java.util.Base64 under
+        // minSdk 21) and hundreds of others. The full default set must run;
+        // `enable` below only *adds* the security and accessibility checks that
+        // are off or advisory by default.
+
+        // Security-focused lint checks — promoted so they always run.
+        enable 'SecureRandom', 'TrustAllX509TrustManager', 'BadHostnameVerifier', 'SSLCertificateSocketFactoryCreateSocket'
+
         // Accessibility checks. `TouchTargetSize` is not a real lint
         // issue id — it was removed in AGP 8.x. Was emitting an
         // [UnknownIssueId] warning. Real touch-target sizing is now

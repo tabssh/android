@@ -31,7 +31,7 @@
         <item name="android:statusBarColor">@color/primary_600</item>
         <item name="android:navigationBarColor">@color/surface</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">true</item>
 
         <!-- Anchor the legacy textColor* attrs so layouts that reference
              ?android:attr/textColorPrimary etc. always get our verified
@@ -87,7 +87,7 @@
         <item name="android:statusBarColor">@color/surface_dark</item>
         <item name="android:navigationBarColor">@color/surface_dark</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">false</item>
 
         <!-- Anchor textColor* for the dark theme too (Issue #35). -->
         <item name="android:textColorPrimary">@color/on_surface_dark</item>

@@ -29,7 +29,7 @@
             android:layout_width="20dp"
             android:layout_height="20dp"
             android:src="@drawable/ic_search"
-            android:tint="?attr/colorOnSurfaceVariant"
+            app:tint="?attr/colorOnSurfaceVariant"
             android:layout_marginEnd="8dp"
             android:contentDescription="@null" />
 
@@ -69,7 +69,7 @@
             android:src="@drawable/ic_arrow_up"
             android:contentDescription="Previous match"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:tint="?attr/colorOnSurface" />
+            app:tint="?attr/colorOnSurface" />
 
         <!-- Next match -->
         <ImageButton
@@ -79,7 +79,7 @@
             android:src="@drawable/ic_arrow_down"
             android:contentDescription="Next match"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:tint="?attr/colorOnSurface" />
+            app:tint="?attr/colorOnSurface" />
 
         <!-- Case-sensitive toggle — tint changes to colorPrimary when active -->
         <com.google.android.material.button.MaterialButton
@@ -102,7 +102,7 @@
             android:src="@drawable/ic_close"
             android:contentDescription="Close search"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:tint="?attr/colorOnSurface" />
+            app:tint="?attr/colorOnSurface" />
 
     </LinearLayout>
 

@@ -212,4 +212,12 @@
     <string name="sync_password_mismatch">Les mots de passe ne correspondent pas</string>
     <string name="sync_password_too_short">Minimum 8 caractères</string>
 
+    <!-- MDM / configuration gérée -->
+    <string name="mdm_desc_audit_enabled">Forcer la journalisation d\'audit (activée ou désactivée). Ce réglage remplace la préférence de l\'utilisateur dans l\'application.</string>
+    <string name="mdm_desc_audit_log_commands">Enregistrer chaque commande saisie dans une session de terminal.</string>
+    <string name="mdm_desc_audit_log_output">Enregistrer la sortie du terminal (augmente considérablement la taille des journaux).</string>
+    <string name="mdm_desc_audit_retention_days">Nombre de jours de conservation des entrées d\'audit avant leur suppression automatique.</string>
+    <string name="mdm_desc_syslog_host">Nom d\'hôte ou adresse IP d\'un récepteur syslog UDP (RFC 5424). Laisser vide pour désactiver le transfert.</string>
+    <string name="mdm_desc_syslog_port">Port UDP du récepteur syslog.</string>
+
 </resources>

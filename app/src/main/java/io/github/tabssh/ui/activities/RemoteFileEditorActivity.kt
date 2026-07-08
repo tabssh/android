@@ -165,7 +165,7 @@ class RemoteFileEditorActivity : AppCompatActivity() {
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
-            android.R.id.home -> { handleBackPressedSafely(); true }
+            android.R.id.home -> { onBackPressed(); true }
             1 -> { saveFile(); true }
             else -> super.onOptionsItemSelected(item)
         }
@@ -173,14 +173,14 @@ class RemoteFileEditorActivity : AppCompatActivity() {
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        handleBackPressedSafely()
-    }
-
-    private fun handleBackPressedSafely() {
         if (!dirty) {
-            finish()
+            super.onBackPressed()
             return
         }
+        promptUnsavedChanges()
+    }
+
+    private fun promptUnsavedChanges() {
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Unsaved changes")
             .setMessage("Save before closing?")

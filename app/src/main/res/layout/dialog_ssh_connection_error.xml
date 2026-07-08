@@ -17,7 +17,7 @@
             android:layout_gravity="center_horizontal"
             android:layout_marginBottom="16dp"
             android:src="@drawable/ic_error"
-            android:tint="?colorError"
+            app:tint="?colorError"
             android:contentDescription="Error icon" />
 
         <!-- Connection Details -->

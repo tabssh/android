@@ -354,10 +354,14 @@ class AwsEc2Client : CloudProvider {
     }
 
     // SigV4 timestamps must be UTC.
-    private val AMZ_DATE_FMT = ThreadLocal.withInitial<SimpleDateFormat> {
-        SimpleDateFormat("yyyyMMdd'T'HHmmss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
+    // ThreadLocal.withInitial is API 26; the anonymous-subclass form works on
+    // all API levels and is behaviourally identical.
+    private val AMZ_DATE_FMT = object : ThreadLocal<SimpleDateFormat>() {
+        override fun initialValue(): SimpleDateFormat =
+            SimpleDateFormat("yyyyMMdd'T'HHmmss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
     }
-    private val DATE_FMT = ThreadLocal.withInitial<SimpleDateFormat> {
-        SimpleDateFormat("yyyyMMdd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
+    private val DATE_FMT = object : ThreadLocal<SimpleDateFormat>() {
+        override fun initialValue(): SimpleDateFormat =
+            SimpleDateFormat("yyyyMMdd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
     }
 }

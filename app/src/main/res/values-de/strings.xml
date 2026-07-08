@@ -215,4 +215,12 @@
     <string name="sync_password_mismatch">Passwörter stimmen nicht überein</string>
     <string name="sync_password_too_short">Mindestens 8 Zeichen</string>
 
+    <!-- MDM / verwaltete Konfiguration -->
+    <string name="mdm_desc_audit_enabled">Audit-Protokollierung erzwingen (ein oder aus). Bei Aktivierung wird die In-App-Einstellung des Benutzers überschrieben.</string>
+    <string name="mdm_desc_audit_log_commands">Jeden in einer Terminalsitzung eingegebenen Befehl aufzeichnen.</string>
+    <string name="mdm_desc_audit_log_output">Terminalausgabe aufzeichnen (erhöht die Protokollgröße erheblich).</string>
+    <string name="mdm_desc_audit_retention_days">Anzahl der Tage, die Audit-Einträge vor der automatischen Löschung aufbewahrt werden.</string>
+    <string name="mdm_desc_syslog_host">Hostname oder IP-Adresse eines UDP-Syslog-Empfängers (RFC 5424). Leer lassen, um die Weiterleitung zu deaktivieren.</string>
+    <string name="mdm_desc_syslog_port">UDP-Port des Syslog-Empfängers.</string>
+
 </resources>

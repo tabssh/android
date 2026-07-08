@@ -30,7 +30,7 @@ not described in `IDEA.md`, per the user's note that IDEA.md is outdated) and
 | Sev | Count | Headline items |
 |-----|-------|----------------|
 | CRITICAL | 5 | Keystore password `tabssh123` in source (C1, PARTIAL — migration wired, re-key deferred to maintainer) · reverse-video broken (FIXED) · `getById(Long)` always null (FIXED) · libvirt shell injection (FIXED) · terminal copy ignores scroll offset (FIXED) |
-| HIGH | 12 | Backup `includePasswords` toggle → incomplete restores (C6, FIXED) · F-Droid reproducibility (BUILD_DATE) · F-Droid metadata stale · BouncyCastle R8 keep rules · reflection breaks under R8 · AWS SigV4 encoding · sync upload-only · libvirt `StrictHostKeyChecking=no` (H7, FIXED) · lint `checkOnly` · alpha security-crypto |
+| HIGH | 12 | Backup `includePasswords` toggle → incomplete restores (C6, FIXED) · F-Droid reproducibility (BUILD_DATE) · F-Droid metadata stale · BouncyCastle R8 keep rules · reflection breaks under R8 · AWS SigV4 encoding · sync upload-only · libvirt `StrictHostKeyChecking=no` (H7, FIXED) · lint `checkOnly` (H8, FIXED — + 53 NewApi crashes fixed, minSdk→24) · alpha security-crypto |
 | MEDIUM | ~14 | PIN unsalted SHA-256 (H10, FIXED) · `runBlocking` in JSch callback · host-key fingerprint format (H11, FIXED) · CI never compiles · OWASP plugin outdated · orphaned coroutine scopes |
 | LOW / NIT | ~10 | LiveData in new code · Gson+kotlinx dual · commented-out code · inline comments · `$(shell pwd)` · stale version strings |
 | OPT | ~8 | Per-char Paint allocation · OSC8 per-write parsing · duplicate DAO queries |
@@ -315,12 +315,46 @@ unknown host key is auto-trusted and persisted (new-host callback →
 `ACCEPT_NEW_KEY`); a changed key is hard-rejected (changed callback →
 `REJECT_CONNECTION`), and with no `UserInfo` set JSch fails closed on rejection.
 
-## H8 — Lint `checkOnly` disables nearly all checks
-**`app/build.gradle:211`** — `checkOnly` *replaces* the enabled set with four IDs,
+## H8 — Lint `checkOnly` disables nearly all checks — FIXED
+**`app/build.gradle:211`** — `checkOnly` *replaced* the enabled set with four IDs,
 silently disabling `NewApi`, `MissingTranslation`, `WrongConstant`, and hundreds
-more; the `enable 'ContentDescription', ...` on line 217 is dead. **Fix:** use
-`enable` for the security checks and drop `checkOnly`, or move false positives to a
-`disable` list.
+more; the `enable 'ContentDescription', ...` on the next line was dead. **Fix
+applied:** dropped `checkOnly`; the security checks (`SecureRandom`,
+`TrustAllX509TrustManager`, `BadHostnameVerifier`,
+`SSLCertificateSocketFactoryCreateSocket`) and the a11y checks
+(`ContentDescription`, `ClickableViewAccessibility`) are now `enable`d *on top of*
+the full default set, and the non-existent `TouchTargetSize` id was removed.
+**Consequence handled in the same batch:** restoring the default set surfaced 67
+real Error-severity issues that `abortOnError true` would fail on. Rather than
+grandfather them with a baseline, all 67 were fixed (see below), so lint now runs
+the full check set and passes clean — a future `NewApi`/`Base64`-class regression
+will fail the build.
+
+> **Latent NewApi crash class — FIXED (surfaced by H8):** correcting the lint
+> config exposed 53 `NewApi` violations — API 23/24/26/28/30 calls invoked
+> unguarded under `minSdk 21`, the same crash family as the `java.util.Base64`
+> bug (a missing-API call throws `NoSuchMethodError`/`NoClassDefFoundError`, which
+> the surrounding `catch (Exception)` blocks do **not** catch → hard crash on
+> Android 5.0–8.x). **Fix applied — two-pronged:**
+> - **`minSdk` raised 21 → 24** (`app/build.gradle`), clearing every API 22–24
+>   call in one move (ThreadLocal.withInitial-adjacent, `ConcurrentHashMap.newKeySet`,
+>   `SNIHostName`, `KeyGenParameterSpec` API-23 builder, `Context#getColor`, the
+>   `'X'` ISO-8601 date pattern, `Collection#removeIf`, `startDragAndDrop`,
+>   `AtomicInteger#updateAndGet`, `KeyguardManager#isDeviceSecure`,
+>   `windowLightStatusBar`). Still covers ~96% of active devices.
+> - **The 8 remaining API ≥ 26 sites guarded/replaced with all-API-safe forms:**
+>   `AwsEc2Client` `ThreadLocal.withInitial` → anonymous `ThreadLocal` subclass;
+>   `MoshNativeClient` `Process#isAlive` → `exitValue()` probe; `Logger`
+>   `getLongVersionCode` → `SDK_INT >= P` guard with `versionCode` fallback;
+>   `SecurePasswordManager` `setUserAuthenticationParameters` (API 30) →
+>   `SDK_INT >= R` guard with `setUserAuthenticationValidityDurationSeconds(0)`
+>   fallback; `themes.xml` `windowLightNavigationBar` (API 27) → `tools:targetApi`.
+>
+> **Other Error-severity fixes in the batch:** `RemoteFileEditorActivity.onBackPressed`
+> `MissingSuperCall` (clean-exit path now calls `super`); 8 `UseAppTint`
+> (`android:tint` → `app:tint` in AppCompat layouts; widget `tools:ignore`d as
+> RemoteViews cannot use `app:tint`); 6 `MissingTranslation` (`mdm_desc_*` added to
+> de/fr/es).
 
 ## H9 — Alpha security library on the credential path
 **`androidx.security:security-crypto:1.1.0-alpha06`** (alpha since 2023) guards
@@ -454,10 +488,11 @@ that copies a password/key (SFTP, key export, snippet vars) schedules the clear;
 audit flagged this as under-verified across the many copy sites. **Fix:** route all
 sensitive copies through one helper that always schedules the timed clear.
 
-## M14 — `checkOnly` masks accessibility checks that IDEA.md requires
-Because H8's `checkOnly` disables `ContentDescription`/`ClickableViewAccessibility`
-enforcement, the TalkBack content-description requirement (`IDEA.md:74`) is not
-lint-gated. **Fix:** covered by H8 — restore `enable` for the a11y checks.
+## M14 — `checkOnly` masks accessibility checks that IDEA.md requires — FIXED
+Because H8's `checkOnly` disabled `ContentDescription`/`ClickableViewAccessibility`
+enforcement, the TalkBack content-description requirement (`IDEA.md:74`) was not
+lint-gated. **Fix applied:** covered by H8 — both a11y checks are now `enable`d and
+the full default set runs, so the requirement is enforced.
 
 ---
 

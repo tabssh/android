@@ -104,7 +104,7 @@
         android:contentDescription="Disconnect"
         android:padding="6dp"
         android:src="@android:drawable/ic_menu_close_clear_cancel"
-        android:tint="#CCFFFFFF" />
+        app:tint="#CCFFFFFF" />
 
     <Button
         android:id="@+id/btn_reconnect"

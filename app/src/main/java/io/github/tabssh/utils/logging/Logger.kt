@@ -1,6 +1,7 @@
 package io.github.tabssh.utils.logging
 
 import android.content.Context
+import android.os.Build
 import android.util.Log
 import java.io.File
 import java.io.FileWriter
@@ -203,7 +204,15 @@ object Logger {
     private fun getAppVersion(context: Context): String {
         return try {
             val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-            "${pInfo.versionName} (${pInfo.longVersionCode})"
+            // PackageInfo#longVersionCode is API 28; fall back to the
+            // deprecated versionCode on older devices.
+            val code = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                pInfo.longVersionCode
+            } else {
+                @Suppress("DEPRECATION")
+                pInfo.versionCode.toLong()
+            }
+            "${pInfo.versionName} ($code)"
         } catch (e: Exception) {
             "unknown"
         }

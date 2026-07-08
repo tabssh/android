@@ -1,6 +1,7 @@
 package io.github.tabssh.crypto.storage
 
 import android.content.Context
+import android.os.Build
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -520,7 +521,15 @@ class SecurePasswordManager(private val context: Context) {
             .apply {
                 if (requiresBiometric && isBiometricAvailable()) {
                     setUserAuthenticationRequired(true)
-                    setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG) // Require auth for each use
+                    // setUserAuthenticationParameters is API 30; on 24-29 the
+                    // deprecated validity-duration form gives the same
+                    // "require auth for every use" semantics (duration 0).
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        setUserAuthenticationValidityDurationSeconds(0)
+                    }
                 }
             }
             .build()
