@@ -345,8 +345,16 @@ class VncConsoleChannel(private val rfbClient: RfbClient) {
 
     private fun sendCharDirect(ch: Char) {
         val keysym = charToKeysym(ch)
+        // Assert Shift_L around characters that require it on a US layout so
+        // servers that reverse-map keysym→keycode (QEMU/libvirt) emit the
+        // shifted glyph instead of the base key (e.g. '@' instead of '2').
+        // The hardware-key path already sends Shift via collectModifiers, so
+        // this only affects the text/on-screen-keyboard paths.
+        val needsShift = charNeedsShift(ch)
+        if (needsShift) rfbClient.sendKeyEvent(RfbConstants.KEY_SHIFT_L, true)
         rfbClient.sendKeyEvent(keysym, true)
         rfbClient.sendKeyEvent(keysym, false)
+        if (needsShift) rfbClient.sendKeyEvent(RfbConstants.KEY_SHIFT_L, false)
     }
 
     private fun sendSequenceDirect(seq: String) {
@@ -559,5 +567,22 @@ class VncConsoleChannel(private val rfbClient: RfbClient) {
             val cp = ch.code
             return if (cp <= 0xFF) cp.toLong() else 0x01000000L or cp.toLong()
         }
+
+        /**
+         * True when [ch] is produced with Shift on a US QWERTY layout: the
+         * uppercase letters and the shifted-punctuation set.
+         *
+         * Some VNC servers (notably QEMU/libvirt) reverse-map an incoming
+         * keysym to a physical keycode and, if no Shift is asserted, emit the
+         * unshifted glyph — so '@' (keysym 0x40) arrives as '2', '#' as '3',
+         * 'A' as 'a', and so on. Bracketing these characters with a synthetic
+         * Shift_L makes them arrive correctly and is harmless on servers that
+         * resolve the keysym themselves. This mirrors what noVNC and Guacamole
+         * do. Heuristic is US-layout: it matches the default en-us QEMU keymap;
+         * a server configured for a different keymap may still mis-map exotic
+         * punctuation, which is a server-side keymap concern.
+         */
+        fun charNeedsShift(ch: Char): Boolean =
+            ch in 'A'..'Z' || ch in "~!@#$%^&*()_+{}|:\"<>?"
     }
 }
