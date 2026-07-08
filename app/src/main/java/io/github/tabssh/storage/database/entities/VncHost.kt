@@ -63,6 +63,16 @@ data class VncHost(
     @ColumnInfo(name = "pinned_cert_sha256")
     val pinnedCertSha256: String? = null,
 
+    /**
+     * When true, this VNC session is kept alive while the app is backgrounded —
+     * the TCP socket is held open and framebuffer-update requests are paused —
+     * instead of the default drop-on-background / reconnect-on-resume behavior.
+     * Off by default: a held-open VNC stream keeps the CPU/WiFi awake and
+     * consumes battery and data continuously, unlike a cheap SSH keepalive.
+     */
+    @ColumnInfo(name = "keep_alive_in_background")
+    val keepAliveInBackground: Boolean = false,
+
     /** FK to connection_groups — optional folder assignment. */
     @ColumnInfo(name = "group_id")
     val groupId: String? = null,

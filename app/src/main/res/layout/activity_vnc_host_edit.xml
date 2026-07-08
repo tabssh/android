@@ -169,6 +169,22 @@
                 android:layout_marginBottom="12dp"
                 android:text="Verify TLS certificate" />
 
+            <!-- Keep VNC session alive while the app is backgrounded -->
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/switch_keep_alive_in_background"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="4dp"
+                android:text="Keep alive in background" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:text="Holds the connection open when backgrounded instead of reconnecting. Uses more battery and data."
+                android:textAppearance="?attr/textAppearanceCaption"
+                android:textColor="?android:attr/textColorSecondary" />
+
             <!-- Color tag -->
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/layout_color_tag"

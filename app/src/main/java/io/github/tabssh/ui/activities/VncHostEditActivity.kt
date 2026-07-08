@@ -59,6 +59,7 @@ class VncHostEditActivity : AppCompatActivity() {
     private lateinit var dropdownIdentity: AutoCompleteTextView
     private lateinit var dropdownSecurity: AutoCompleteTextView
     private lateinit var switchTlsVerify: SwitchMaterial
+    private lateinit var switchKeepAlive: SwitchMaterial
     private lateinit var editColorTag: TextInputEditText
     private lateinit var editNotes: TextInputEditText
     private lateinit var layoutPassword: TextInputLayout
@@ -93,6 +94,7 @@ class VncHostEditActivity : AppCompatActivity() {
         dropdownIdentity = findViewById(R.id.dropdown_identity)
         dropdownSecurity = findViewById(R.id.dropdown_security)
         switchTlsVerify = findViewById(R.id.switch_tls_verify)
+        switchKeepAlive = findViewById(R.id.switch_keep_alive_in_background)
         editColorTag = findViewById(R.id.edit_color_tag)
         editNotes = findViewById(R.id.edit_notes)
         layoutPassword = findViewById(R.id.layout_password)
@@ -189,6 +191,7 @@ class VncHostEditActivity : AppCompatActivity() {
                 ?: SECURITY_TYPE_LABELS[0].first
             dropdownSecurity.setText(secLabel, false)
             switchTlsVerify.isChecked = host.tlsVerify
+            switchKeepAlive.isChecked = host.keepAliveInBackground
             if (host.colorTag != 0) editColorTag.setText(host.colorTag.toString(16))
             editNotes.setText(host.notes ?: "")
 
@@ -240,6 +243,7 @@ class VncHostEditActivity : AppCompatActivity() {
             identityId = selectedIdentityId,
             securityType = secType,
             tlsVerify = switchTlsVerify.isChecked,
+            keepAliveInBackground = switchKeepAlive.isChecked,
             groupId = existing?.groupId,
             colorTag = colorTag,
             notes = editNotes.text?.toString()?.trim()?.takeIf { it.isNotBlank() },

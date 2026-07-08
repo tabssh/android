@@ -3,6 +3,7 @@ package io.github.tabssh.storage.database
 import android.content.Context
 import androidx.room.*
 import androidx.room.RoomDatabase.JournalMode
+import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import io.github.tabssh.storage.database.dao.*
 import io.github.tabssh.storage.database.entities.*
@@ -44,7 +45,7 @@ import io.github.tabssh.utils.logging.Logger
         VncHost::class,
         VncIdentity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -76,6 +77,24 @@ abstract class TabSSHDatabase : RoomDatabase() {
 
         const val DATABASE_NAME = "tabssh_database"
 
+        /**
+         * v3 → v4: add `vnc_hosts.keep_alive_in_background` (per-host opt-in to
+         * keep the VNC session alive while the app is backgrounded). Additive
+         * ADD COLUMN with a NOT NULL DEFAULT 0 — no data transform, existing
+         * rows default to the current drop-on-background behavior.
+         *
+         * NOTE: this migration is not yet covered by a MigrationTestHelper test;
+         * add one (v3 → v4) so the schema change is verified on real upgrades.
+         */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE vnc_hosts ADD COLUMN keep_alive_in_background " +
+                        "INTEGER NOT NULL DEFAULT 0"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): TabSSHDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -88,6 +107,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
                 // Pre-v3 alpha installs were wiped on every upgrade — see kdoc.
                 // Real migrations must be added here for every bump from v3 onward.
                 .fallbackToDestructiveMigrationFrom(1, 2)
+                .addMigrations(MIGRATION_3_4)
                 .build()
                 INSTANCE = instance
                 instance
