@@ -24,6 +24,33 @@
 -keep class com.jcraft.jsch.** { *; }
 -dontwarn com.jcraft.jsch.**
 
+# ----------------------------------------------------------------------------
+# BouncyCastle JCA provider (H3)
+#
+# BouncyCastleProvider (TabSSHApplication.kt / OciKeyMaterial.kt) registers its
+# algorithm implementations by fully-qualified string name in the provider
+# constructor. R8 full mode has no static reference to those classes, so it
+# strips them; the provider then fails to instantiate the algorithm and PEM /
+# PKCS8 / OpenSSL key parsing (OciKeyMaterial, KeyStorage) throws on release
+# builds only. Keep the whole provider tree and silence the optional-dep warns.
+# ----------------------------------------------------------------------------
+-keep class org.bouncycastle.** { *; }
+-dontwarn org.bouncycastle.**
+
+# ----------------------------------------------------------------------------
+# Reflection into SSHConnection.session (H4)
+#
+# HistoryFetcher, MoshHandoff, PortForwardingManager and SCPClient all reach the
+# underlying JSch Session via `sshConnection.javaClass.getDeclaredField("session")`.
+# R8 renames/strips that private field in release builds, so the lookup throws
+# NoSuchFieldException and port forwarding / SCP / Mosh handoff / history fetch
+# break. Keep the field under its source name. (The reflected JSch setEnv method
+# in SSHConnection is already covered by the com.jcraft.jsch keep rule above.)
+# ----------------------------------------------------------------------------
+-keepclassmembers class io.github.tabssh.ssh.connection.SSHConnection {
+    private com.jcraft.jsch.Session session;
+}
+
 # Keep Room database classes
 -keep class * extends androidx.room.RoomDatabase
 -keep @androidx.room.Entity class *

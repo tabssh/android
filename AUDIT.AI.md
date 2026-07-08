@@ -30,7 +30,7 @@ not described in `IDEA.md`, per the user's note that IDEA.md is outdated) and
 | Sev | Count | Headline items |
 |-----|-------|----------------|
 | CRITICAL | 5 | Keystore password `tabssh123` in source (C1, PARTIAL — migration wired, re-key deferred to maintainer) · reverse-video broken (FIXED) · `getById(Long)` always null (FIXED) · libvirt shell injection (FIXED) · terminal copy ignores scroll offset (FIXED) |
-| HIGH | 12 | Backup `includePasswords` toggle → incomplete restores (C6, FIXED) · F-Droid reproducibility (BUILD_DATE) · F-Droid metadata stale · BouncyCastle R8 keep rules · reflection breaks under R8 · AWS SigV4 encoding · sync upload-only · libvirt `StrictHostKeyChecking=no` (H7, FIXED) · lint `checkOnly` (H8, FIXED — + 53 NewApi crashes fixed, minSdk→24) · alpha security-crypto |
+| HIGH | 12 | Backup `includePasswords` toggle → incomplete restores (C6, FIXED) · F-Droid reproducibility (BUILD_DATE) · F-Droid metadata stale · BouncyCastle R8 keep rules (H3, FIXED) · reflection breaks under R8 (H4, FIXED) · AWS SigV4 encoding · sync upload-only · libvirt `StrictHostKeyChecking=no` (H7, FIXED) · lint `checkOnly` (H8, FIXED — + 53 NewApi crashes fixed, minSdk→24) · alpha security-crypto |
 | MEDIUM | ~14 | PIN unsalted SHA-256 (H10, FIXED) · `runBlocking` in JSch callback · host-key fingerprint format (H11, FIXED) · CI never compiles · OWASP plugin outdated · orphaned coroutine scopes |
 | LOW / NIT | ~10 | LiveData in new code · Gson+kotlinx dual · commented-out code · inline comments · `$(shell pwd)` · stale version strings |
 | OPT | ~8 | Per-char Paint allocation · OSC8 per-write parsing · duplicate DAO queries |
@@ -276,20 +276,28 @@ versionCode 9 / commit v0.0.9`, but the tree is `0.9.1 / 10`. F-Droid builds the
 metadata's `commit`, so the current release will never ship on F-Droid. **Fix:**
 bump metadata to `0.9.1 / 10 / v0.9.1`. Verified against source.
 
-## H3 — BouncyCastle JCA provider has no R8 keep rules
+## H3 — BouncyCastle JCA provider has no R8 keep rules — FIXED
 **`app/proguard-rules.pro`** (BC registered at `TabSSHApplication.kt:109`). BC
 registers algorithm classes by string name in its provider constructor; R8 full
 mode strips them, silently breaking PEM/OCI key parsing (`OciKeyMaterial.kt`) on
-release builds. Tink has keep rules; BC has none. **Fix:** add
-`-keep class org.bouncycastle.** { *; }` and `-dontwarn org.bouncycastle.**`.
+release builds. Tink has keep rules; BC has none. **Fix applied:** added
+`-keep class org.bouncycastle.** { *; }` and `-dontwarn org.bouncycastle.**` to
+`proguard-rules.pro`. Verified: `minifyFdroidReleaseWithR8` (real minified build)
+runs BUILD SUCCESSFUL — R8 parses and applies the rules with no errors.
 
-## H4 — Reflection breaks under R8 minification
-**`PortForwardingManager.kt:389`** (`getDeclaredField("session")`) and
-**`SSHConnection.kt:588`** (`getMethod("setEnv", ...)`). Field/method names are
-resolved reflectively; R8 renames them in release builds, so port forwarding and
-`setEnv` throw at runtime. **Fix:** add targeted keep rules for the referenced
-members, or replace reflection with direct API calls if the JSch fork exposes them.
-Verified against source.
+## H4 — Reflection breaks under R8 minification — FIXED
+The audit named two sites; the tree actually has **four** reflective reads of the
+private `session` field on `io.github.tabssh.ssh.connection.SSHConnection`
+(`HistoryFetcher.kt:65`, `MoshHandoff.kt:128`, `PortForwardingManager.kt:389`,
+`SCPClient.kt:56`), all via `sshConnection.javaClass.getDeclaredField("session")`.
+R8 renames/strips that private field in release builds, so the lookup throws
+`NoSuchFieldException` and port forwarding / SCP / Mosh handoff / history fetch all
+break. **Fix applied:** added a `-keepclassmembers` rule pinning
+`SSHConnection.session` (`com.jcraft.jsch.Session`) under its source name. The
+`SSHConnection.kt:588` `getMethod("setEnv", …)` site needs **no** new rule — the
+JSch `Channel` method is already preserved by the pre-existing
+`-keep class com.jcraft.jsch.** { *; }`. Verified on the same
+`minifyFdroidReleaseWithR8` build.
 
 ## H5 — AWS SigV4 canonical query string not percent-encoding values
 **`AwsEc2Client.kt:326`** builds `canonicalQueryString` without percent-encoding
