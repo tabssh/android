@@ -76,8 +76,10 @@ class AwsEc2Client : CloudProvider {
             val query = buildString {
                 append("Action=DescribeInstances&Version=2016-11-15")
                 if (nextToken != null) {
+                    // Append the raw cursor; canonicalQueryString applies the
+                    // single RFC-3986 encoding used for both signing and URL.
                     append("&NextToken=")
-                    append(java.net.URLEncoder.encode(nextToken, "UTF-8"))
+                    append(nextToken)
                 }
             }
             val xml = awsGetXml(accessKey, secretKey, region, query)
@@ -102,8 +104,10 @@ class AwsEc2Client : CloudProvider {
                 val query = buildString {
                     append("Action=DescribeInstances&Version=2016-11-15")
                     if (nextToken != null) {
+                        // Append the raw cursor; canonicalQueryString applies
+                        // the single RFC-3986 encoding for signing and URL.
                         append("&NextToken=")
-                        append(java.net.URLEncoder.encode(nextToken, "UTF-8"))
+                        append(nextToken)
                     }
                 }
                 val xml = awsGetXml(accessKey, secretKey, region, query)
@@ -324,10 +328,46 @@ class AwsEc2Client : CloudProvider {
     // ── SigV4 helpers ──────────────────────────────────────────────────────
 
     private fun canonicalQueryString(rawQuery: String): String {
-        // For our two static params (Action=… & Version=…) the order is
-        // already alphabetical. Generic implementation: split, percent-
-        // encode, sort, rejoin.
-        return rawQuery.split('&').sortedBy { it.substringBefore('=') }.joinToString("&")
+        // SigV4 requires every parameter name and value to be RFC-3986
+        // percent-encoded, then the pairs sorted by encoded name. The raw
+        // query carries unencoded values (notably a NextToken cursor that can
+        // contain +, /, = characters); encode them here so the signed
+        // canonical string matches the request URL and the signature verifies.
+        // Split key from value on the first '=' only — a value may itself
+        // contain '=' (base64 padding).
+        return rawQuery.split('&')
+            .filter { it.isNotEmpty() }
+            .map { pair ->
+                val eq = pair.indexOf('=')
+                if (eq < 0) {
+                    rfc3986Encode(pair) to ""
+                } else {
+                    rfc3986Encode(pair.substring(0, eq)) to rfc3986Encode(pair.substring(eq + 1))
+                }
+            }
+            .sortedBy { it.first }
+            .joinToString("&") { "${it.first}=${it.second}" }
+    }
+
+    // RFC-3986 unreserved characters are never encoded: A-Z a-z 0-9 - _ . ~
+    // Everything else is percent-encoded with uppercase hex — including space
+    // as %20 (not the '+' that form-encoding / URLEncoder would emit), which
+    // is what AWS SigV4 canonicalization demands.
+    private fun rfc3986Encode(value: String): String {
+        val sb = StringBuilder(value.length)
+        for (byte in value.toByteArray(Charsets.UTF_8)) {
+            val c = byte.toInt() and 0xFF
+            val unreserved = c in 'A'.code..'Z'.code ||
+                c in 'a'.code..'z'.code ||
+                c in '0'.code..'9'.code ||
+                c == '-'.code || c == '_'.code || c == '.'.code || c == '~'.code
+            if (unreserved) {
+                sb.append(c.toChar())
+            } else {
+                sb.append('%').append("%02X".format(c))
+            }
+        }
+        return sb.toString()
     }
 
     private fun deriveSigningKey(secret: String, dateStamp: String, region: String, service: String): ByteArray {

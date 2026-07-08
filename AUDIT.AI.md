@@ -30,7 +30,7 @@ not described in `IDEA.md`, per the user's note that IDEA.md is outdated) and
 | Sev | Count | Headline items |
 |-----|-------|----------------|
 | CRITICAL | 5 | Keystore password `tabssh123` in source (C1, PARTIAL — migration wired, re-key deferred to maintainer) · reverse-video broken (FIXED) · `getById(Long)` always null (FIXED) · libvirt shell injection (FIXED) · terminal copy ignores scroll offset (FIXED) |
-| HIGH | 12 | Backup `includePasswords` toggle → incomplete restores (C6, FIXED) · F-Droid reproducibility (BUILD_DATE) (H1, FIXED) · F-Droid metadata stale (H2, FIXED) · BouncyCastle R8 keep rules (H3, FIXED) · reflection breaks under R8 (H4, FIXED) · AWS SigV4 encoding · sync upload-only · libvirt `StrictHostKeyChecking=no` (H7, FIXED) · lint `checkOnly` (H8, FIXED — + 53 NewApi crashes fixed, minSdk→24) · alpha security-crypto |
+| HIGH | 12 | Backup `includePasswords` toggle → incomplete restores (C6, FIXED) · F-Droid reproducibility (BUILD_DATE) (H1, FIXED) · F-Droid metadata stale (H2, FIXED) · BouncyCastle R8 keep rules (H3, FIXED) · reflection breaks under R8 (H4, FIXED) · AWS SigV4 encoding (H5, FIXED) · sync upload-only · libvirt `StrictHostKeyChecking=no` (H7, FIXED) · lint `checkOnly` (H8, FIXED — + 53 NewApi crashes fixed, minSdk→24) · alpha security-crypto |
 | MEDIUM | ~14 | PIN unsalted SHA-256 (H10, FIXED) · `runBlocking` in JSch callback · host-key fingerprint format (H11, FIXED) · CI never compiles · OWASP plugin outdated · orphaned coroutine scopes |
 | LOW / NIT | ~10 | LiveData in new code · Gson+kotlinx dual · commented-out code · inline comments · `$(shell pwd)` · stale version strings |
 | OPT | ~8 | Per-char Paint allocation · OSC8 per-write parsing · duplicate DAO queries |
@@ -309,12 +309,25 @@ JSch `Channel` method is already preserved by the pre-existing
 `-keep class com.jcraft.jsch.** { *; }`. Verified on the same
 `minifyFdroidReleaseWithR8` build.
 
-## H5 — AWS SigV4 canonical query string not percent-encoding values
+## H5 — AWS SigV4 canonical query string not percent-encoding values (FIXED)
 **`AwsEc2Client.kt:326`** builds `canonicalQueryString` without percent-encoding
 parameter values. Any request whose query carries characters needing encoding —
 notably the `NextToken` pagination cursor — produces a signature mismatch and
 `SignatureDoesNotMatch`, so EC2 listings silently stop at the first page. **Fix:**
 RFC-3986 percent-encode each key and value, then sort by encoded key.
+
+**FIXED:** Rewrote `canonicalQueryString` to split each pair on the first `=`
+only (a base64 `NextToken` value can itself contain `=`), RFC-3986 percent-encode
+both key and value, sort by encoded key, and rejoin. Added `rfc3986Encode` helper
+that encodes everything except the unreserved set `A-Za-z0-9-_.~` with uppercase
+hex and space as `%20` (not the `+` that form-encoding emits). Also removed the
+two `java.net.URLEncoder.encode(nextToken, "UTF-8")` calls at the DescribeInstances
+builder sites — `URLEncoder` uses `application/x-www-form-urlencoded` rules
+(space→`+`, leaves `*` unencoded, encodes `~`), which disagree with SigV4 and
+double-encoded against the new canonicalizer. The raw cursor is now appended and
+the canonicalizer applies the single correct encoding used for both the signed
+canonical request and the request URL (`.url(".../?$canonicalQuery")`), keeping
+them byte-identical so the signature verifies. Pagination beyond page 1 now works.
 
 ## H6 — Background sync is upload-only (never merges or downloads)
 **`SyncWorker.kt:46-50`** only pushes local state; it never pulls or merges remote
