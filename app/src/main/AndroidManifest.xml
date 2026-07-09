@@ -346,6 +346,14 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- Keeps the process alive while VNC sessions opted into
+             "keep alive in background" are parked in VncBackgroundSessionStore -->
+        <service
+            android:name=".services.VncKeepAliveService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
         <!-- Tasker integration entry point. Gated on the signature-level
              permission declared above so only same-signature callers can
              reach it. Receiver enqueues a TaskerWorker (WorkManager) —

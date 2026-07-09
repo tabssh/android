@@ -21,8 +21,10 @@ import io.github.tabssh.hypervisor.console.HypervisorConsoleManager
 import io.github.tabssh.hypervisor.console.rfb.RfbClient
 import io.github.tabssh.hypervisor.console.rfb.RfbConstants
 import io.github.tabssh.hypervisor.proxmox.ProxmoxApiClient
+import io.github.tabssh.hypervisor.vnc.VncBackgroundSessionStore
 import io.github.tabssh.hypervisor.vnc.VncDirectConnector
 import io.github.tabssh.hypervisor.vnc.VncStreamHolder
+import io.github.tabssh.services.VncKeepAliveService
 import io.github.tabssh.hypervisor.vnc.console.VncConsoleChannel
 import io.github.tabssh.hypervisor.xcpng.XCPngApiClient
 import io.github.tabssh.hypervisor.xcpng.XenOrchestraApiClient
@@ -149,6 +151,22 @@ class VMConsoleActivity : AppCompatActivity() {
      * use console mode (VncConsoleChannel) rather than raw VncView input.
      */
     private var vncConsoleChannel: VncConsoleChannel? = null
+
+    /**
+     * For a direct [VncHost] connection (Path 2): the host id (store key), whether
+     * the host opted into background persistence, and the current resize-suppression
+     * state. Cached in [connectVncHost] so [onStop] can park the live client in
+     * [VncBackgroundSessionStore] instead of tearing it down.
+     */
+    private var vncHostId: String? = null
+    private var vncHostKeepAlive = false
+    private var vncDisableResize = false
+    /**
+     * True while the current RFB client is parked in [VncBackgroundSessionStore]
+     * (handed off in [onStop]). Prevents [onDestroy] from stopping a client the
+     * store now owns.
+     */
+    private var parkedInBackground = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -477,7 +495,15 @@ class VMConsoleActivity : AppCompatActivity() {
                 // Path 2: Direct VncHost connection by ID.
                 val vncHostId = intent.getStringExtra(EXTRA_VNC_HOST_ID)
                 if (vncHostId != null) {
-                    connectVncHost(vncHostId)
+                    // If a keep-alive session for this host is parked in the
+                    // process-scoped store (activity was destroyed while the
+                    // background service held the process alive), re-attach to
+                    // it instead of opening a fresh connection.
+                    if (VncBackgroundSessionStore.contains(vncHostId)) {
+                        reattachVncHost(vncHostId)
+                    } else {
+                        connectVncHost(vncHostId)
+                    }
                     return@launch
                 }
 
@@ -620,6 +646,12 @@ class VMConsoleActivity : AppCompatActivity() {
             showError("VNC host not found (id=$vncHostId)")
             return
         }
+        // Cache background-persistence state so onStop can decide whether to
+        // park this session in VncBackgroundSessionStore instead of tearing
+        // it down. disableResize accumulates across resize-rejection reconnects.
+        this.vncHostId = vncHostId
+        this.vncHostKeepAlive = host.keepAliveInBackground
+        this.vncDisableResize = disableResize
         val (password, username) = withContext(Dispatchers.IO) {
             val identityId = host.identityId
             // Per-host password override always takes priority.
@@ -662,6 +694,42 @@ class VMConsoleActivity : AppCompatActivity() {
             app.database.vncHostDao().updateLastConnected(vncHostId, System.currentTimeMillis())
         }
         switchToGraphical(connection)
+    }
+
+    /**
+     * Re-attach to a VncHost session that was parked in [VncBackgroundSessionStore]
+     * while the app was backgrounded. The RFB client is already handshaked and
+     * running (paused); ownership transfers back to this activity via
+     * [VncBackgroundSessionStore.take]. Because [RfbListener.onConnected] fires
+     * only once during the original handshake, [switchToGraphical] rebuilds the
+     * framebuffer view from the client's retained state and calls
+     * [RfbClient.resume] rather than [RfbClient.start].
+     */
+    private suspend fun reattachVncHost(hostId: String) {
+        val parked = VncBackgroundSessionStore.take(hostId)
+        if (parked == null) {
+            // Lost the race (discarded or taken between contains() and here) —
+            // fall back to a fresh connection.
+            connectVncHost(hostId)
+            return
+        }
+        Logger.i(TAG, "Re-attaching parked VNC session $hostId")
+        this.vncHostId = hostId
+        this.vncHostKeepAlive = true
+        this.vncDisableResize = parked.disableResize
+        directVncSocket = parked.socket
+        val rfb = parked.rfbClient
+        if (parked.disableResize) rfb.canRequestResize = false
+        val connection = HypervisorConsoleManager.ConsoleConnection.Graphical(
+            vmName = parked.vmName,
+            hypervisorType = HypervisorConsoleManager.HypervisorType.PROXMOX,
+            rfbClient = rfb
+        )
+        withContext(Dispatchers.Main) { switchToGraphical(connection, reattach = true) }
+        // No other parked sessions → the keep-alive service can release the process.
+        if (VncBackgroundSessionStore.isEmpty) {
+            VncKeepAliveService.stopService(this@VMConsoleActivity)
+        }
     }
 
     private suspend fun connectProxmox(vmId: String, vmName: String): HypervisorConsoleManager.ConsoleConnection? {
@@ -797,8 +865,11 @@ class VMConsoleActivity : AppCompatActivity() {
      * Called both from [connectToConsole] (direct VNC connection) and from
      * [createConsoleListener]'s [onSwitchToGraphical] (Proxmox fallback).
      */
-    private fun switchToGraphical(connection: HypervisorConsoleManager.ConsoleConnection.Graphical) {
-        Logger.i(TAG, "Switching to VNC console mode for ${connection.vmName}")
+    private fun switchToGraphical(
+        connection: HypervisorConsoleManager.ConsoleConnection.Graphical,
+        reattach: Boolean = false
+    ) {
+        Logger.i(TAG, "Switching to VNC console mode for ${connection.vmName}${if (reattach) " (re-attach)" else ""}")
         isGraphicalMode = true
         isConnected = true
 
@@ -962,7 +1033,21 @@ class VMConsoleActivity : AppCompatActivity() {
             channel.resizeToPixels(vncView.width, vncView.height)
         }
 
-        rfb.start()
+        if (reattach) {
+            // The client already completed its handshake and is running (it was
+            // paused while parked in the background store). onConnected will NOT
+            // re-fire, so rebuild the framebuffer view from the client's retained
+            // state, then resume framebuffer-update requests. resume() issues a
+            // full non-incremental refresh so the view repaints immediately.
+            val w = rfb.framebufferWidth
+            val h = rfb.framebufferHeight
+            if (w > 0 && h > 0) {
+                rfb.listener?.onConnected(w, h, rfb.serverDesktopName, rfb.framebufferPixels)
+            }
+            rfb.resume()
+        } else {
+            rfb.start()
+        }
 
         runOnUiThread {
             // Hide the text-console keyboard bar; show the VNC-specific toolbar.
@@ -1374,6 +1459,22 @@ class VMConsoleActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        // If a connect / re-attach is already in flight (e.g. onCreate →
+        // connectToConsole on a fresh recreation), don't start a second one —
+        // that would double-take the parked session or open a duplicate socket.
+        if (connectionJob?.isActive == true) return
+
+        // Re-attach a parked keep-alive session if one exists for this host.
+        // This is the stop→resume path (activity was NOT destroyed, so onCreate
+        // and connectToConsole did not run again). The recreation path re-attaches
+        // via the connectToConsole intercept instead.
+        val parkedHostId = intent.getStringExtra(EXTRA_VNC_HOST_ID)
+        if (parkedHostId != null && !isConnected && VncBackgroundSessionStore.contains(parkedHostId)) {
+            shouldReconnectOnResume = false
+            connectionJob = lifecycleScope.launch { reattachVncHost(parkedHostId) }
+            return
+        }
+
         // Auto-reconnect when returning from background if onStop() tore down
         // an active session.  shouldReconnectOnResume is set only in onStop(),
         // so this is a no-op on the very first onResume() after onCreate().
@@ -1394,6 +1495,52 @@ class VMConsoleActivity : AppCompatActivity() {
         // (they only cancel at DESTROYED), so an explicit cancel is needed.
         connectionJob?.cancel()
         connectionJob = null
+
+        // Keep-alive park path: if this VNC host opted into
+        // keepAliveInBackground, hand the live RFB client to the process-scoped
+        // store instead of tearing it down, and start the foreground service so
+        // the OS keeps the process (socket + reader thread) alive. onResume() /
+        // the connectToConsole intercept reclaims it on return.
+        val rfb = activeRfbClient
+        val hostId = vncHostId
+        if (vncHostKeepAlive && hostId != null && rfb != null && isGraphicalMode && !isFinishing) {
+            // Pause BEFORE detaching the listener: pause() stops the reader and
+            // keepalive loops from requesting framebuffer updates, so no update
+            // can be dispatched to the (about-to-be-null) listener.
+            rfb.pause()
+            rfb.listener = null
+            VncBackgroundSessionStore.park(
+                VncBackgroundSessionStore.ParkedSession(
+                    key = hostId,
+                    vmName = intent.getStringExtra(EXTRA_VM_NAME) ?: hostId,
+                    rfbClient = rfb,
+                    socket = directVncSocket,
+                    disableResize = vncDisableResize
+                )
+            )
+            VncKeepAliveService.startService(this)
+            parkedInBackground = true
+
+            // The store now owns the client + socket — drop our references so
+            // the teardown below (and onDestroy) cannot stop/close them.
+            activeRfbClient = null
+            directVncSocket = null
+
+            // Tear down UI-only state. Do NOT reconnect on resume — we re-attach.
+            shouldReconnectOnResume = false
+            clearArmedModifierButtons()
+            vncConsoleChannel?.close()
+            vncConsoleChannel = null
+            vncView.onPointerEvent = null
+            vncView.onKeyEvent = null
+            vncView.onTextInput = null
+            vncView.onBackspace = null
+            vncView.onViewSizeReady = null
+            isGraphicalMode = false
+            isConnected = false
+            return
+        }
+        parkedInBackground = false
 
         // Remember that the user was actively connected so onResume() can
         // re-establish the session automatically when the activity comes back.
@@ -1436,6 +1583,15 @@ class VMConsoleActivity : AppCompatActivity() {
         super.onDestroy()
         connectionJob?.cancel()
         connectionJob = null
+        // If a keep-alive session was parked in onStop(), the store owns the
+        // RFB client + socket and activeRfbClient/directVncSocket are already
+        // null — the teardown below is a no-op for them. The parked session is
+        // deliberately left in the store so it survives this destruction; the
+        // foreground service keeps the process alive until it is reclaimed or
+        // explicitly discarded. Nothing to do here beyond the normal teardown.
+        if (parkedInBackground) {
+            Logger.d(TAG, "onDestroy with a parked keep-alive VNC session; leaving it in the store")
+        }
         activeRfbClient?.stop()
         activeRfbClient = null
         clearArmedModifierButtons()

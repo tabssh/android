@@ -212,6 +212,19 @@ class RfbClient(
     private var fbWidth = 0
     private var fbHeight = 0
     private var framebuffer = IntArray(0)
+    private var desktopName = ""
+
+    /**
+     * Current framebuffer geometry and pixels, exposed read-only so a re-attaching
+     * activity can rebuild its VncView from an already-connected (paused) client
+     * without waiting for a fresh [RfbListener.onConnected] — which never fires
+     * again on a session that is resumed rather than reconnected. Read on the UI
+     * thread during handoff; the reader thread is paused at that point.
+     */
+    val framebufferWidth: Int get() = fbWidth
+    val framebufferHeight: Int get() = fbHeight
+    val framebufferPixels: IntArray get() = framebuffer
+    val serverDesktopName: String get() = desktopName
     private lateinit var decoder: RfbDecoder
     private lateinit var pixelFormat: PixelFormat
 
@@ -663,6 +676,7 @@ class RfbClient(
         val nameLen = din.readInt()
         val nameBytes = ByteArray(nameLen); din.readFully(nameBytes)
         val name = String(nameBytes, Charsets.UTF_8)
+        desktopName = name
         Logger.i(TAG, "Desktop name: $name")
 
         // Build the server-class profile from the desktop name.  The profile
