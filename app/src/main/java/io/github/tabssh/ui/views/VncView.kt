@@ -162,10 +162,27 @@ class VncView @JvmOverloads constructor(
         override fun onConnected(width: Int, height: Int, name: String, framebuffer: IntArray) {
             Logger.i(TAG, "VNC connected: ${width}×$height '$name'")
             synchronized(fbLock) {
-                bitmap?.recycle()
-                bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-                fbWidth = width
-                fbHeight = height
+                val dimsMatch = bitmap != null && fbWidth == width && fbHeight == height
+                // Reuse the existing bitmap when the geometry is unchanged so the
+                // last decoded frame stays on screen while a reconnect is in
+                // flight (toggle-OFF path). Recreating would blank the view to
+                // black until the server's first full update paints — the flash
+                // this seamless-reconnect polish exists to avoid.
+                if (!dimsMatch) {
+                    bitmap?.recycle()
+                    bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                    fbWidth = width
+                    fbHeight = height
+                }
+                // A fresh connect passes an all-zero framebuffer (real pixels
+                // arrive later via onFramebufferUpdate), so skip painting it and
+                // keep whatever was there. A re-attach after a background park
+                // passes the client's retained, non-blank framebuffer — paint it
+                // now so the frame is visible immediately, before resume()'s
+                // refresh lands.
+                if (framebuffer.size == width * height && framebuffer.any { it != 0 }) {
+                    bitmap?.setPixels(framebuffer, 0, width, 0, 0, width, height)
+                }
             }
             post {
                 recomputeFitScale()
