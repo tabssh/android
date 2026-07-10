@@ -1872,10 +1872,16 @@ class TerminalView @JvmOverloads constructor(
             }
         }
 
-        // Handle Alt+letter combinations (send ESC + letter)
+        // Handle Alt+char combinations (send ESC + char). xterm's
+        // metaSendsEscape prefixes ESC before ANY printable character, not just
+        // letters/digits — readline binds M-. (Alt+period, insert-last-arg),
+        // M-/ (complete), M-- and others, and tmux/emacs use Alt+punctuation
+        // freely. We ESC-prefix any single printable char and let non-printing
+        // keys (Alt+arrow, Alt+F-key: unicodeChar 0) fall through to their own
+        // modifier-aware handlers below.
         if (isAlt && !isCtrl) {
             val char = event.unicodeChar.toChar()
-            if (char.isLetterOrDigit() || char in "!@#$%^&*()") {
+            if (char.code != 0 && !Character.isISOControl(char)) {
                 sendKeySequence("\u001b$char")
                 consumePendingModifier()
                 return true
@@ -1884,7 +1890,10 @@ class TerminalView @JvmOverloads constructor(
 
         when (keyCode) {
             // Basic keys
-            KeyEvent.KEYCODE_ENTER -> {
+            KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                // Numpad Enter on hardware keyboards (BT/USB/OTG) produces a
+                // distinct keycode with no unicodeChar; without this it fell
+                // through to super and did nothing. Both submit the line.
                 sendText("\r")
                 return true
             }
@@ -1959,55 +1968,24 @@ class TerminalView @JvmOverloads constructor(
             KeyEvent.KEYCODE_PAGE_DOWN -> { sendKeySequence(tildeSeq(6, isShift, isAlt, isCtrl)); return true }
             KeyEvent.KEYCODE_INSERT -> { sendKeySequence(tildeSeq(2, isShift, isAlt, isCtrl)); return true }
 
-            // Function keys F1-F12
-            KeyEvent.KEYCODE_F1 -> {
-                sendKeySequence("\u001bOP")
-                return true
-            }
-            KeyEvent.KEYCODE_F2 -> {
-                sendKeySequence("\u001bOQ")
-                return true
-            }
-            KeyEvent.KEYCODE_F3 -> {
-                sendKeySequence("\u001bOR")
-                return true
-            }
-            KeyEvent.KEYCODE_F4 -> {
-                sendKeySequence("\u001bOS")
-                return true
-            }
-            KeyEvent.KEYCODE_F5 -> {
-                sendKeySequence("\u001b[15~")
-                return true
-            }
-            KeyEvent.KEYCODE_F6 -> {
-                sendKeySequence("\u001b[17~")
-                return true
-            }
-            KeyEvent.KEYCODE_F7 -> {
-                sendKeySequence("\u001b[18~")
-                return true
-            }
-            KeyEvent.KEYCODE_F8 -> {
-                sendKeySequence("\u001b[19~")
-                return true
-            }
-            KeyEvent.KEYCODE_F9 -> {
-                sendKeySequence("\u001b[20~")
-                return true
-            }
-            KeyEvent.KEYCODE_F10 -> {
-                sendKeySequence("\u001b[21~")
-                return true
-            }
-            KeyEvent.KEYCODE_F11 -> {
-                sendKeySequence("\u001b[23~")
-                return true
-            }
-            KeyEvent.KEYCODE_F12 -> {
-                sendKeySequence("\u001b[24~")
-                return true
-            }
+            // Function keys F1-F12 - xterm modifier propagation, matching the
+            // custom keyboard bar. Plain F1-F4 use SS3 (\eOP..\eOS); with any
+            // modifier they switch to the parameterised CSI form \e[1;<mod>P.
+            // F5-F12 use the \e[N~ family whose modifier form is \e[N;<mod>~
+            // (exactly tildeSeq). mod = 1 + (1=Shift, 2=Alt, 4=Ctrl). This lets
+            // tmux/vim read Shift+F-key, Ctrl+F-key etc. from hardware keyboards.
+            KeyEvent.KEYCODE_F1 -> { sendKeySequence(ss3FkeySeq('P', isShift, isAlt, isCtrl)); return true }
+            KeyEvent.KEYCODE_F2 -> { sendKeySequence(ss3FkeySeq('Q', isShift, isAlt, isCtrl)); return true }
+            KeyEvent.KEYCODE_F3 -> { sendKeySequence(ss3FkeySeq('R', isShift, isAlt, isCtrl)); return true }
+            KeyEvent.KEYCODE_F4 -> { sendKeySequence(ss3FkeySeq('S', isShift, isAlt, isCtrl)); return true }
+            KeyEvent.KEYCODE_F5 -> { sendKeySequence(tildeSeq(15, isShift, isAlt, isCtrl)); return true }
+            KeyEvent.KEYCODE_F6 -> { sendKeySequence(tildeSeq(17, isShift, isAlt, isCtrl)); return true }
+            KeyEvent.KEYCODE_F7 -> { sendKeySequence(tildeSeq(18, isShift, isAlt, isCtrl)); return true }
+            KeyEvent.KEYCODE_F8 -> { sendKeySequence(tildeSeq(19, isShift, isAlt, isCtrl)); return true }
+            KeyEvent.KEYCODE_F9 -> { sendKeySequence(tildeSeq(20, isShift, isAlt, isCtrl)); return true }
+            KeyEvent.KEYCODE_F10 -> { sendKeySequence(tildeSeq(21, isShift, isAlt, isCtrl)); return true }
+            KeyEvent.KEYCODE_F11 -> { sendKeySequence(tildeSeq(23, isShift, isAlt, isCtrl)); return true }
+            KeyEvent.KEYCODE_F12 -> { sendKeySequence(tildeSeq(24, isShift, isAlt, isCtrl)); return true }
         }
 
         // Handle text input
@@ -2065,6 +2043,17 @@ class TerminalView @JvmOverloads constructor(
     private fun tildeSeq(num: Int, shift: Boolean, alt: Boolean, ctrl: Boolean): String {
         val mod = modifierCode(shift, alt, ctrl)
         return if (mod == 1) "\u001b[$num~" else "\u001b[$num;$mod~"
+    }
+
+    /**
+     * F1-F4 sequence. Plain form is SS3 (\eOP..\eOS), which xterm-256color
+     * terminfo defines as kf1..kf4. With any modifier there is no SS3 form, so
+     * xterm switches to the parameterised CSI form \e[1;<mod>P..S — matching the
+     * arrow-key modifier convention. finalChar is P/Q/R/S for F1/F2/F3/F4.
+     */
+    private fun ss3FkeySeq(finalChar: Char, shift: Boolean, alt: Boolean, ctrl: Boolean): String {
+        val mod = modifierCode(shift, alt, ctrl)
+        return if (mod == 1) "\u001bO$finalChar" else "\u001b[1;$mod$finalChar"
     }
 
     /**
@@ -2794,6 +2783,15 @@ class TerminalView @JvmOverloads constructor(
  */
 private class TerminalInputConnection(private val terminalView: TerminalView) : InputConnection {
 
+    // Last provisional composing string. A terminal has no editable buffer and
+    // cannot un-send bytes, so composing text must NOT be forwarded on every
+    // setComposingText() update (CJK/pinyin, glide typing and predictive IMEs
+    // call it repeatedly with the growing partial word — sending each update
+    // duplicated every character). We hold the composition here and emit it only
+    // when the IME finalises it: commitText() replaces the composition with its
+    // own text, finishComposingText() accepts the composition as-is.
+    private var composingText: String = ""
+
     override fun getHandler(): android.os.Handler? = null
 
     override fun getTextBeforeCursor(n: Int, flags: Int): CharSequence = ""
@@ -2818,13 +2816,22 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
     }
 
     override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
-        text?.let { terminalView.sendText(it.toString()) }
+        // Track the provisional text only; do not forward it (see composingText).
+        composingText = text?.toString() ?: ""
         return true
     }
 
     override fun setComposingRegion(start: Int, end: Int): Boolean = false
 
-    override fun finishComposingText(): Boolean = true
+    override fun finishComposingText(): Boolean {
+        // The IME accepted the composition as final (no commitText). Emit it now,
+        // converting newline to CR for shell submit, then clear.
+        if (composingText.isNotEmpty()) {
+            terminalView.sendText(composingText.replace("\n", "\r"))
+            composingText = ""
+        }
+        return true
+    }
 
     override fun setSelection(start: Int, end: Int): Boolean = false
 
@@ -2856,6 +2863,10 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
     override fun performPrivateCommand(action: String?, data: Bundle?): Boolean = false
 
     override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
+        // A commit replaces any active composition with this text, so the tracked
+        // provisional string is superseded and must not be re-emitted on a later
+        // finishComposingText().
+        composingText = ""
         text?.let {
             // Convert newline to carriage return for SSH compatibility
             val converted = it.toString().replace("\n", "\r")

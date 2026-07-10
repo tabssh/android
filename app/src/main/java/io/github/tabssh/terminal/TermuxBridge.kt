@@ -1158,42 +1158,51 @@ class TermuxBridge(
     }
 
     /**
-     * Mosh fast-fail watchdog. mosh-client's built-in "Nothing received from
-     * server on UDP port" warning appears after ~3 s of no UDP response and
-     * is the *reliable* failure signal — we watch for it and kill the PTY
-     * within one poll (≤250 ms) of it appearing. On top of that we keep a
-     * generous 8000 ms hard ceiling as a defence-in-depth safety net: if
-     * mosh-client hangs silently (no failure string, no prompt) for that
-     * long, something is wrong and we fall back to SSH.
+     * Mosh fast-fail watchdog — an *optional latency optimisation*, never the
+     * source of truth. We fast-fail to SSH ONLY when mosh-client itself has
+     * reported a real error on screen; we never kill a session on a blind
+     * timeout with no evidence of failure.
      *
-     * Earlier revisions capped the ceiling at 3000 ms, which raced against
-     * legitimate handshakes on cellular/high-RTT links — first UDP round
-     * trip + remote shell startup + first prompt render frequently landed
-     * at 3–5 s and the watchdog would kill working sessions that had done
-     * nothing wrong. The reliable failure-string detector already fires at
-     * ~3 s when UDP really is broken, so raising the ceiling costs users
-     * nothing on the failure path and unblocks the success path.
+     * mosh-client is its own authority on the UDP path (verified against the
+     * upstream `stmclient.cc` / `mosh-client.cc`):
+     *  - On a blocked/firewalled UDP path it paints
+     *    "Nothing received from server on UDP port N." within ~1 s of launch.
+     *  - Failing that, at 15 s it paints "Timed out waiting for server...",
+     *    begins its own shutdown, and exits non-zero on its own — which the
+     *    existing onSessionFinished → moshFailedFast → silent SSH fallback in
+     *    TabTerminalActivity already handles without any help from us.
      *
-     * The "looks connected" bail-out also loosened: any non-whitespace
-     * content on screen that is not the mosh-client failure string is
-     * enough evidence the remote side is echoing something (banner, MOTD,
-     * prompt). The previous >40-non-whitespace-chars threshold rejected
-     * short prompts like `user@host:~$ `.
+     * So the ONLY thing this watchdog adds is speed: when mosh-client's own
+     * failure string is visible on screen we can fall back in ~2–3 s instead
+     * of waiting out mosh-client's ~15–20 s self-timeout. Both strings are
+     * unambiguous, mosh-reported errors — the exact "real errors" we are
+     * allowed to fast-fail on (UDP blocked / firewalled / server unreachable).
      *
-     * Either kill path triggers the existing onSessionFinished →
-     * moshFailedFast → silent SSH fallback in TabTerminalActivity.
+     * What this watchdog must NOT do is kill a silent, still-bootstrapping
+     * session. A blank screen at N seconds is not evidence of failure — a
+     * slow or high-RTT link can render its first frame several seconds in, and
+     * a genuinely-dead link is already covered by mosh-client's own non-zero
+     * self-exit above. An earlier revision killed at a blind 8000 ms ceiling;
+     * that fired before mosh-client's own verdict and tore down working links,
+     * so it has been removed. When we reach the stop-watching boundary with no
+     * mosh-reported error and no visible content, we simply stop watching and
+     * leave the outcome to mosh-client.
      */
     private fun startMoshFailWatchdog() {
         try { moshWatchdog?.cancel() } catch (_: Exception) {}
         moshWatchdog = CoroutineScope(Dispatchers.IO).launch {
             val startedAt = System.currentTimeMillis()
-            val hardCeilingMs = 8000L
-            // Minimum age before the "Nothing received from server" screen string
-            // is treated as a real failure. mosh-client renders that phrase in its
-            // own initial UI within a few hundred ms of launch (503 ms observed in
-            // the field), long before UDP handshake could realistically fail. A
-            // sub-2 s trip means we killed a session that was still bootstrapping.
+            // Minimum age before an on-screen failure string is trusted.
+            // mosh-client can paint bits of its own initial UI within a few
+            // hundred ms of launch, long before a UDP handshake could really
+            // have failed; a sub-2 s trip would mean killing a session that
+            // was still bootstrapping.
             val minFailureAgeMs = 2000L
+            // Point at which we stop watching WITHOUT killing. By here
+            // mosh-client has painted its 15 s "Timed out waiting for server"
+            // notice and started its own non-zero self-exit if UDP is dead —
+            // it owns the outcome from here, so we never kill at this boundary.
+            val stopWatchingMs = 16000L
             val pollMs = 250L
             try {
                 while (isActive) {
@@ -1201,9 +1210,14 @@ class TermuxBridge(
                     val session = moshSession ?: return@launch
                     if (!session.isRunning()) return@launch
                     val screen = try { getScreenContent() } catch (_: Exception) { "" }
-                    val sawFailureString = screen.contains("Nothing received from server", ignoreCase = true)
-                    if (sawFailureString && elapsed >= minFailureAgeMs) {
-                        Logger.i(TAG, "Mosh watchdog: 'Nothing received from server' detected after ${elapsed}ms — killing PTY for fast SSH fallback")
+                    // Real, mosh-reported UDP failures. Either string is proof
+                    // the server can't be reached — the only case we fast-fail.
+                    val sawRealError = elapsed >= minFailureAgeMs && (
+                        screen.contains("Nothing received from server", ignoreCase = true) ||
+                        screen.contains("Timed out waiting for server", ignoreCase = true)
+                    )
+                    if (sawRealError) {
+                        Logger.i(TAG, "Mosh watchdog: mosh-client reported a UDP failure on screen after ${elapsed}ms — killing PTY for fast SSH fallback")
                         try { session.finishIfRunning() } catch (_: Exception) {}
                         return@launch
                     }
@@ -1217,9 +1231,13 @@ class TermuxBridge(
                         Logger.i(TAG, "Mosh watchdog: ${elapsed}ms — remote content visible (${nonWs} chars), leaving session alone")
                         return@launch
                     }
-                    if (elapsed >= hardCeilingMs) {
-                        Logger.i(TAG, "Mosh watchdog: ${hardCeilingMs}ms ceiling reached with no remote handshake — killing PTY for SSH fallback")
-                        try { session.finishIfRunning() } catch (_: Exception) {}
+                    if (elapsed >= stopWatchingMs) {
+                        // No mosh-reported error and no visible content. This is
+                        // NOT a failure — do not kill. mosh-client keeps
+                        // ownership; if UDP really is dead it has already begun
+                        // its own timed shutdown and its non-zero exit drives
+                        // the SSH fallback.
+                        Logger.i(TAG, "Mosh watchdog: ${elapsed}ms with no mosh-reported error — leaving the verdict to mosh-client")
                         return@launch
                     }
                     kotlinx.coroutines.delay(pollMs)
