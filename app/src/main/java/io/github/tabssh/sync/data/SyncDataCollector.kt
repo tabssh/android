@@ -11,9 +11,12 @@ import io.github.tabssh.storage.database.entities.HostKeyEntry
 import io.github.tabssh.storage.database.entities.StoredKey
 import io.github.tabssh.storage.database.entities.ThemeDefinition
 import io.github.tabssh.storage.preferences.PreferenceManager
+import io.github.tabssh.storage.database.entities.SyncShadow
+import io.github.tabssh.storage.database.entities.SyncTombstone
 import io.github.tabssh.sync.metadata.SyncMetadataManager
 import io.github.tabssh.sync.models.SyncDataPackage
 import io.github.tabssh.sync.models.SyncItemCounts
+import io.github.tabssh.sync.tombstone.TombstoneRecorder
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -141,8 +144,9 @@ class SyncDataCollector {
 
         val metadata = metadataManager.createSyncMetadata(itemCounts)
         val secrets = collectSecrets()
+        val tombstones = collectTombstones()
 
-        Logger.d(TAG, "Collected ${itemCounts.total()} items for sync")
+        Logger.d(TAG, "Collected ${itemCounts.total()} items + ${tombstones.size} tombstones for sync")
 
         SyncDataPackage(
             connections        = connections,
@@ -164,7 +168,8 @@ class SyncDataCollector {
             vncIdentities      = vncIdentities,
             cloudAccounts      = cloudAccounts,
             dashboardConfig    = dashboardConfig,
-            secrets            = secrets
+            secrets            = secrets,
+            tombstones         = tombstones
         )
     }
 
@@ -387,8 +392,12 @@ class SyncDataCollector {
 
         val metadata = metadataManager.createSyncMetadata(itemCounts)
         val secrets = collectSecrets()
+        // Tombstones are never delta-filtered: a deletion must propagate on
+        // every sync until every peer has seen it, and rows are purged by age
+        // (purgeOlderThan), not by "changed since last sync".
+        val tombstones = collectTombstones()
 
-        Logger.d(TAG, "Collected ${itemCounts.total()} changed items")
+        Logger.d(TAG, "Collected ${itemCounts.total()} changed items + ${tombstones.size} tombstones")
 
         SyncDataPackage(
             connections        = connections,
@@ -410,8 +419,131 @@ class SyncDataCollector {
             vncIdentities      = vncIdentities,
             cloudAccounts      = cloudAccounts,
             dashboardConfig    = dashboardConfig,
-            secrets            = secrets
+            secrets            = secrets,
+            tombstones         = tombstones
         )
+    }
+
+    // ---------------------------------------------------------------------
+    // H6 — soft-delete tombstones
+    //
+    // A deletion only propagates if the peer applying our payload is told the
+    // row is gone; the upload-only union would otherwise resurrect it. Two
+    // sources feed the payload:
+    //   1. Explicit tombstones recorded at each delete site (TombstoneRecorder).
+    //   2. A diff-at-collect backstop that compares current live keys against
+    //      the sync_shadow baseline and tombstones anything that vanished
+    //      without an explicit record (best-effort safety net).
+    // Only sync-enabled categories contribute — a disabled category is never
+    // tombstoned. The shadow baseline is refreshed by snapshotState() AFTER a
+    // successful apply, never mid-cycle.
+    // ---------------------------------------------------------------------
+
+    /** All 16 tombstone-eligible entity types, paired with their sync toggle. */
+    private fun enabledTombstoneTypes(): Set<String> {
+        val out = mutableSetOf<String>()
+        if (preferenceManager.isSyncConnectionsEnabled())        out += TombstoneRecorder.CONNECTION
+        if (preferenceManager.isSyncKeysEnabled())               out += TombstoneRecorder.KEY
+        if (preferenceManager.isSyncThemesEnabled())             out += TombstoneRecorder.THEME
+        if (preferenceManager.isSyncHostKeysEnabled())           out += TombstoneRecorder.HOST_KEY
+        if (preferenceManager.isSyncWorkspacesEnabled())         out += TombstoneRecorder.WORKSPACE
+        if (preferenceManager.isSyncSnippetsEnabled())           out += TombstoneRecorder.SNIPPET
+        if (preferenceManager.isSyncIdentitiesEnabled())         out += TombstoneRecorder.IDENTITY
+        if (preferenceManager.isSyncGroupsEnabled())             out += TombstoneRecorder.GROUP
+        if (preferenceManager.isSyncHypervisorsEnabled())        out += TombstoneRecorder.HYPERVISOR
+        if (preferenceManager.isSyncCertificatesEnabled())       out += TombstoneRecorder.CERTIFICATE
+        if (preferenceManager.isSyncMacrosEnabled())             out += TombstoneRecorder.MACRO
+        if (preferenceManager.isSyncMonitorSlotsEnabled())       out += TombstoneRecorder.MONITOR_SLOT
+        if (preferenceManager.isSyncHypervisorAccountsEnabled()) out += TombstoneRecorder.HYPERVISOR_ACCOUNT
+        if (preferenceManager.isSyncVncHostsEnabled())           out += TombstoneRecorder.VNC_HOST
+        if (preferenceManager.isSyncVncIdentitiesEnabled())      out += TombstoneRecorder.VNC_IDENTITY
+        if (preferenceManager.isSyncCloudAccountsEnabled())      out += TombstoneRecorder.CLOUD_ACCOUNT
+        return out
+    }
+
+    /** Current stable cross-device keys for one entity type. Matches the keys
+     *  used by TombstoneRecorder at the delete sites so live/shadow/tombstone
+     *  all speak the same key space. */
+    private suspend fun liveKeys(type: String): List<String> = when (type) {
+        TombstoneRecorder.CONNECTION        -> collectConnections().map { it.id }
+        TombstoneRecorder.KEY               -> collectKeys().map { it.keyId }
+        TombstoneRecorder.THEME             -> collectThemes().map { it.themeId }
+        TombstoneRecorder.HOST_KEY          -> collectHostKeys().map { it.id }
+        TombstoneRecorder.WORKSPACE         -> collectWorkspaces().map { it.id }
+        TombstoneRecorder.SNIPPET           -> collectSnippets().map { it.id }
+        TombstoneRecorder.IDENTITY          -> collectIdentities().map { it.id }
+        TombstoneRecorder.GROUP             -> collectGroups().map { it.id }
+        TombstoneRecorder.HYPERVISOR        -> collectHypervisors().map { TombstoneRecorder.naturalKey(it) }
+        TombstoneRecorder.CERTIFICATE       -> collectCertificates().map { it.id }
+        TombstoneRecorder.MACRO             -> collectMacros().map { it.id }
+        TombstoneRecorder.MONITOR_SLOT      -> collectMonitorSlots().map { it.id }
+        TombstoneRecorder.HYPERVISOR_ACCOUNT -> collectHypervisorAccounts().map { TombstoneRecorder.naturalKey(it) }
+        TombstoneRecorder.VNC_HOST          -> collectVncHosts().map { it.id }
+        TombstoneRecorder.VNC_IDENTITY      -> collectVncIdentities().map { it.id }
+        TombstoneRecorder.CLOUD_ACCOUNT     -> collectCloudAccounts().map { it.id }
+        else -> emptyList()
+    }
+
+    /** Backstop: for each enabled type, tombstone any key present in the shadow
+     *  baseline but no longer live. Uses recordIfAbsent so an accurate explicit
+     *  tombstone (correct deletedAt) is never clobbered. Does NOT refresh the
+     *  shadow — that happens post-apply via snapshotState(). */
+    private suspend fun runBackstop(enabled: Set<String>) {
+        val tombDao = database.syncTombstoneDao()
+        val shadowDao = database.syncShadowDao()
+        val deviceId = metadataManager.getDeviceId()
+        val now = System.currentTimeMillis()
+        for (type in enabled) {
+            try {
+                val live = liveKeys(type).toSet()
+                val shadow = shadowDao.getKeys(type).toSet()
+                val vanished = shadow - live
+                for (key in vanished) {
+                    tombDao.recordIfAbsent(SyncTombstone(type, key, now, deviceId))
+                }
+                if (vanished.isNotEmpty()) {
+                    Logger.d(TAG, "Backstop tombstoned ${vanished.size} vanished $type row(s)")
+                }
+            } catch (e: Exception) {
+                Logger.w(TAG, "Backstop failed for type=$type: ${e.message}")
+            }
+        }
+    }
+
+    /** Run the backstop, then return every tombstone for a sync-enabled type. */
+    private suspend fun collectTombstones(): List<SyncTombstone> {
+        return try {
+            val enabled = enabledTombstoneTypes()
+            runBackstop(enabled)
+            database.syncTombstoneDao().getAll().filter { it.entityType in enabled }
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to collect tombstones", e)
+            emptyList()
+        }
+    }
+
+    /** Refresh the shadow baseline to the current live keys for ALL 16 types.
+     *  MUST be called only AFTER a successful merge+apply, so the next backstop
+     *  diff is taken against post-apply reality. Never call mid-cycle. */
+    suspend fun snapshotState() = withContext(Dispatchers.IO) {
+        val shadowDao = database.syncShadowDao()
+        val allTypes = listOf(
+            TombstoneRecorder.CONNECTION, TombstoneRecorder.KEY, TombstoneRecorder.THEME,
+            TombstoneRecorder.HOST_KEY, TombstoneRecorder.WORKSPACE, TombstoneRecorder.SNIPPET,
+            TombstoneRecorder.IDENTITY, TombstoneRecorder.GROUP, TombstoneRecorder.HYPERVISOR,
+            TombstoneRecorder.CERTIFICATE, TombstoneRecorder.MACRO, TombstoneRecorder.MONITOR_SLOT,
+            TombstoneRecorder.HYPERVISOR_ACCOUNT, TombstoneRecorder.VNC_HOST,
+            TombstoneRecorder.VNC_IDENTITY, TombstoneRecorder.CLOUD_ACCOUNT
+        )
+        for (type in allTypes) {
+            try {
+                val rows = liveKeys(type).map { SyncShadow(type, it) }
+                shadowDao.clearType(type)
+                if (rows.isNotEmpty()) shadowDao.putAll(rows)
+            } catch (e: Exception) {
+                Logger.w(TAG, "snapshotState failed for type=$type: ${e.message}")
+            }
+        }
     }
 
     /**

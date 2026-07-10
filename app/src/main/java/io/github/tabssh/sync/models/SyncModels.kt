@@ -172,7 +172,13 @@ data class SyncDataPackage(
      *  SSH private key material is base64-encoded JSch bytes under key
      *  `"ssh_key_{keyId}"`. All other entries are password/token strings.
      *  Default empty so old sync files (without this field) deserialize cleanly. */
-    val secrets: Map<String, String> = emptyMap()
+    val secrets: Map<String, String> = emptyMap(),
+    /** H6 — soft-delete tombstones. Each row records that a synced entity was
+     *  deleted (entity_type + stable cross-device key + deletedAt + device_id),
+     *  so a peer applying this payload removes its own copy instead of the
+     *  upload-only union resurrecting it. Default empty so old sync files
+     *  (without this field) deserialize cleanly. */
+    val tombstones: List<io.github.tabssh.storage.database.entities.SyncTombstone> = emptyList()
 )
 
 /**
