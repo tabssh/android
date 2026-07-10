@@ -1,5 +1,7 @@
 package io.github.tabssh.ui.activities
 
+import io.github.tabssh.sync.tombstone.TombstoneRecorder
+
 import android.os.Bundle
 import android.view.MenuItem
 import android.view.View
@@ -289,7 +291,11 @@ class VncHostEditActivity : AppCompatActivity() {
     private fun deleteHost(hostId: String) {
         lifecycleScope.launch {
             try {
-                withContext(Dispatchers.IO) { app.database.vncHostDao().deleteById(hostId) }
+                withContext(Dispatchers.IO) {
+                    app.database.vncHostDao().deleteById(hostId)
+                    // H6 — record the deletion so it propagates and is not resurrected.
+                    TombstoneRecorder.record(app, TombstoneRecorder.VNC_HOST, hostId)
+                }
                 Toast.makeText(this@VncHostEditActivity, "Deleted", Toast.LENGTH_SHORT).show()
                 finish()
             } catch (e: Exception) {

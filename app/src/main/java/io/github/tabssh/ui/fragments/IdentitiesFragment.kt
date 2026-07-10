@@ -1,5 +1,6 @@
 package io.github.tabssh.ui.fragments
 
+import io.github.tabssh.sync.tombstone.TombstoneRecorder
 import android.content.ClipboardManager
 import android.content.Context
 import android.net.Uri
@@ -316,7 +317,11 @@ class IdentitiesFragment : Fragment() {
             .setMessage("\"${identity.name}\" will be removed. Any VNC hosts using it will lose their credential link.")
             .setPositiveButton("Delete") { _, _ ->
                 lifecycleScope.launch {
-                    withContext(Dispatchers.IO) { app.database.vncIdentityDao().deleteById(identity.id) }
+                    withContext(Dispatchers.IO) {
+                        app.database.vncIdentityDao().deleteById(identity.id)
+                        // H6 — record the deletion so it propagates and is not resurrected.
+                        TombstoneRecorder.record(app, TombstoneRecorder.VNC_IDENTITY, identity.id)
+                    }
                     try {
                         app.securePasswordManager.clearPassword("vnc_identity_${identity.id}")
                     } catch (e: Exception) {
@@ -731,6 +736,8 @@ class IdentitiesFragment : Fragment() {
             app.database.withTransaction {
                 app.database.connectionDao().removeIdentityFromAllConnections(identity.id)
                 app.database.identityDao().delete(identity)
+                // H6 — record the deletion so it propagates and is not resurrected.
+                TombstoneRecorder.record(app, TombstoneRecorder.IDENTITY, identity.id)
             }
             try { app.securePasswordManager.clearPassword("identity_${identity.id}") } catch (_: Exception) {}
             withContext(Dispatchers.Main) {
@@ -851,6 +858,8 @@ class IdentitiesFragment : Fragment() {
                     if (linked > 0) return@setPositiveButton
                     lifecycleScope.launch {
                         app.database.hypervisorAccountDao().delete(account)
+                        // H6 — Long PK is device-local; tombstone by natural key.
+                        TombstoneRecorder.record(app, TombstoneRecorder.HYPERVISOR_ACCOUNT, TombstoneRecorder.naturalKey(account))
                         HypervisorPasswordStore.clearAccountPassword(requireContext(), account.id)
                         Logger.i(TAG, "Deleted VM credential id=${account.id} (${account.name})")
                     }
@@ -1435,6 +1444,8 @@ class IdentitiesFragment : Fragment() {
                 app.database.connectionDao().clearProxyKeyFromConnections(key.keyId)
                 app.database.identityDao().clearKeyFromIdentities(key.keyId)
                 app.database.keyDao().deleteKey(key)
+                // H6 — record the deletion so it propagates and is not resurrected.
+                TombstoneRecorder.record(app, TombstoneRecorder.KEY, key.keyId)
             }
             try { app.securePasswordManager.clearPassword("key_passphrase_${key.keyId}") } catch (_: Exception) {}
             withContext(Dispatchers.Main) {

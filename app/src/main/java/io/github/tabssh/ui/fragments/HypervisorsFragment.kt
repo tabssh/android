@@ -1,5 +1,6 @@
 package io.github.tabssh.ui.fragments
 
+import io.github.tabssh.sync.tombstone.TombstoneRecorder
 import android.content.Intent
 import android.os.Bundle
 import android.view.*
@@ -227,6 +228,8 @@ class HypervisorsFragment : Fragment() {
                         val ctx = context ?: return@launch
                         withContext(Dispatchers.IO) {
                             app.database.hypervisorDao().delete(hypervisor)
+                            // H6 — Long PK is device-local; tombstone by natural key.
+                            TombstoneRecorder.record(app, TombstoneRecorder.HYPERVISOR, TombstoneRecorder.naturalKey(hypervisor))
                             // P1: also drop the Keystore-backed password so the
                             // alias doesn't dangle if the row id ever gets reused.
                             // clear() / clearOciSecrets() do Keystore operations — must be on IO.

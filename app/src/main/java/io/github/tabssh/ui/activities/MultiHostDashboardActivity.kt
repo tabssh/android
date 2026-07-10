@@ -1,5 +1,7 @@
 package io.github.tabssh.ui.activities
 
+import io.github.tabssh.sync.tombstone.TombstoneRecorder
+
 import android.content.Context
 import android.graphics.Color
 import android.os.Bundle
@@ -320,6 +322,8 @@ class MultiHostDashboardActivity : AppCompatActivity() {
                     if (existing != null) {
                         app.applicationScope.launch(Dispatchers.IO) {
                             app.database.monitorSlotDao().delete(existing)
+                            // H6 — record the deletion so it propagates and is not resurrected.
+                            TombstoneRecorder.record(app, TombstoneRecorder.MONITOR_SLOT, existing.id)
                             withContext(Dispatchers.Main) { onSaved(existing.copy(enabled = false)) }
                         }
                     }

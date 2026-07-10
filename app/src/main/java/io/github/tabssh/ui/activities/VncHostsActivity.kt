@@ -1,5 +1,7 @@
 package io.github.tabssh.ui.activities
 
+import io.github.tabssh.sync.tombstone.TombstoneRecorder
+
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -138,7 +140,11 @@ class VncHostsActivity : AppCompatActivity() {
             .setPositiveButton("Delete") { _, _ ->
                 lifecycleScope.launch {
                     try {
-                        withContext(Dispatchers.IO) { app.database.vncHostDao().deleteById(host.id) }
+                        withContext(Dispatchers.IO) {
+                            app.database.vncHostDao().deleteById(host.id)
+                            // H6 — record the deletion so it propagates and is not resurrected.
+                            TombstoneRecorder.record(app, TombstoneRecorder.VNC_HOST, host.id)
+                        }
                         Logger.d(TAG, "Deleted VNC host: ${host.name}")
                     } catch (e: Exception) {
                         Logger.e(TAG, "Failed to delete VNC host", e)

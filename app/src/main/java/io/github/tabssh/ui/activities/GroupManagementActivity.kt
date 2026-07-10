@@ -1,5 +1,6 @@
 package io.github.tabssh.ui.activities
 
+import io.github.tabssh.sync.tombstone.TombstoneRecorder
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -299,6 +300,8 @@ class GroupManagementActivity : AppCompatActivity() {
 
                     // Delete the group
                     app.database.connectionGroupDao().deleteGroup(group)
+                    // H6 — record the deletion so it propagates and is not resurrected.
+                    TombstoneRecorder.record(app, TombstoneRecorder.GROUP, group.id)
                 }
 
                 runOnUiThread {

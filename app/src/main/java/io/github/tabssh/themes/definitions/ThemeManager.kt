@@ -1,5 +1,7 @@
 package io.github.tabssh.themes.definitions
 
+import io.github.tabssh.sync.tombstone.TombstoneRecorder
+
 import android.content.Context
 import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.database.entities.ThemeDefinition
@@ -335,6 +337,8 @@ class ThemeManager(private val context: Context) {
         
         return try {
             database.themeDao().deleteThemeById(themeId)
+            // H6 — record the deletion so it propagates and is not resurrected.
+            TombstoneRecorder.record(context, TombstoneRecorder.THEME, themeId)
             themeCache.remove(themeId)
             
             // Reload themes

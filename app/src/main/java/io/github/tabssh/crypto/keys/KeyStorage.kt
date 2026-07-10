@@ -1,5 +1,7 @@
 package io.github.tabssh.crypto.keys
 
+import io.github.tabssh.sync.tombstone.TombstoneRecorder
+
 import android.content.Context
 import android.net.Uri
 import android.security.keystore.KeyGenParameterSpec
@@ -741,6 +743,8 @@ class KeyStorage(private val context: Context) {
         // deleteKey() call will succeed since the Keystore entry is gone.
         return@withContext try {
             database.keyDao().deleteKeyById(keyId)
+            // H6 — record the deletion so it propagates and is not resurrected.
+            TombstoneRecorder.record(context, TombstoneRecorder.KEY, keyId)
             Logger.i("KeyStorage", "Deleted SSH key: $keyId")
             true
         } catch (e: Exception) {

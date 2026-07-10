@@ -1,5 +1,7 @@
 package io.github.tabssh.ui.activities
 
+import io.github.tabssh.sync.tombstone.TombstoneRecorder
+
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -341,6 +343,8 @@ class SnippetManagerActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 app.database.snippetDao().deleteSnippet(snippet)
+                // H6 — record the deletion so it propagates and is not resurrected.
+                TombstoneRecorder.record(app, TombstoneRecorder.SNIPPET, snippet.id)
 
                 runOnUiThread {
                     Toast.makeText(this@SnippetManagerActivity, "Snippet deleted", Toast.LENGTH_SHORT).show()

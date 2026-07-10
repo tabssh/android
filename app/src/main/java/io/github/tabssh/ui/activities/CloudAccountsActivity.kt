@@ -1,5 +1,7 @@
 package io.github.tabssh.ui.activities
 
+import io.github.tabssh.sync.tombstone.TombstoneRecorder
+
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.MenuItem
@@ -420,6 +422,8 @@ class CloudAccountsActivity : AppCompatActivity() {
                     try {
                         withContext(Dispatchers.IO) {
                             app.database.cloudAccountDao().delete(account)
+                            // H6 — record the deletion so it propagates and is not resurrected.
+                            TombstoneRecorder.record(app, TombstoneRecorder.CLOUD_ACCOUNT, account.id)
                             app.securePasswordManager.clearPassword("cloud_token_${account.id}")
                         }
                     } catch (e: Exception) {

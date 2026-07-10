@@ -1,4 +1,6 @@
 package io.github.tabssh.ui.activities
+
+import io.github.tabssh.sync.tombstone.TombstoneRecorder
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -2816,7 +2818,11 @@ class TabTerminalActivity : AppCompatActivity() {
                 val ws = all[which]
                 lifecycleScope.launch {
                     try {
-                        withContext(Dispatchers.IO) { app.database.workspaceDao().delete(ws) }
+                        withContext(Dispatchers.IO) {
+                            app.database.workspaceDao().delete(ws)
+                            // H6 — record the deletion so it propagates and is not resurrected.
+                            TombstoneRecorder.record(app, TombstoneRecorder.WORKSPACE, ws.id)
+                        }
                         runOnUiThread {
                             Toast.makeText(this@TabTerminalActivity, "Deleted '${ws.name}'", Toast.LENGTH_SHORT).show()
                         }

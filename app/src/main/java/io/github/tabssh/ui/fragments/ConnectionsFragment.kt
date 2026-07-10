@@ -1,5 +1,6 @@
 package io.github.tabssh.ui.fragments
 
+import io.github.tabssh.sync.tombstone.TombstoneRecorder
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -445,6 +446,8 @@ class ConnectionsFragment : Fragment() {
                     try {
                         withContext(Dispatchers.IO) {
                             app.database.connectionDao().deleteConnection(connection)
+                            // H6 — record the deletion so it propagates and is not resurrected.
+                            TombstoneRecorder.record(app, TombstoneRecorder.CONNECTION, connection.id)
                             // Clean up orphan soft-FK references left by this connection.
                             app.database.monitorSlotDao().deleteByConnectionId(connection.id)
                             app.database.hypervisorDao().clearLinkedConnectionId(connection.id)
@@ -543,6 +546,8 @@ class ConnectionsFragment : Fragment() {
                             app.database.vncHostDao().nullifyGroupId(group.id)
                             // Delete the group row
                             app.database.connectionGroupDao().deleteGroup(group)
+                            // H6 — record the deletion so it propagates and is not resurrected.
+                            TombstoneRecorder.record(app, TombstoneRecorder.GROUP, group.id)
                         }
                         Toast.makeText(requireContext(), "Group '${group.name}' deleted", Toast.LENGTH_SHORT).show()
                     } catch (e: Exception) {
@@ -664,6 +669,8 @@ class ConnectionsFragment : Fragment() {
                         try {
                             withContext(Dispatchers.IO) {
                                 app.database.connectionDao().deleteConnection(c)
+                                // H6 — record the deletion so it propagates and is not resurrected.
+                                TombstoneRecorder.record(app, TombstoneRecorder.CONNECTION, c.id)
                                 // Clean up orphan soft-FK references left by this connection.
                                 app.database.monitorSlotDao().deleteByConnectionId(c.id)
                                 app.database.hypervisorDao().clearLinkedConnectionId(c.id)
