@@ -329,12 +329,34 @@ the canonicalizer applies the single correct encoding used for both the signed
 canonical request and the request URL (`.url(".../?$canonicalQuery")`), keeping
 them byte-identical so the signature verifies. Pagination beyond page 1 now works.
 
-## H6 — Background sync is upload-only (never merges or downloads)
+## H6 — Background sync is upload-only (never merges or downloads) — IN PROGRESS
 **`SyncWorker.kt:46-50`** only pushes local state; it never pulls or merges remote
 changes. `IDEA.md` requires "cross-device merge with per-entity conflict
 resolution." As implemented, a second device's changes are never ingested and can
-be overwritten. **Fix:** implement the download+merge half, or document the
-limitation and rename the feature to "backup upload."
+be overwritten. Additionally there are NO tombstones, so a naive download→merge
+would resurrect deletions on the next peer upload.
+
+**Approved fix (full merge w/ tombstones):** single `sync_tombstones` table +
+per-entity LWW; all 19 synced entities; Hybrid recording (explicit delete-site
+helper + diff-at-collect backstop). Implemented in slices:
+- **Slice 1 — DONE:** `SyncTombstone`/`SyncShadow` entities + DAOs; registered in
+  `TabSSHDatabase` (v4→v5, `MIGRATION_4_5` creates both tables additively); schema
+  `5.json` exported; compiles clean (`make check`).
+- Slice 2 — `TombstoneRecorder` helper + ~20 delete-site instrumentation (pending).
+- Slice 3 — collector: emit tombstones + diff-at-collect backstop (pending).
+- Slice 4 — applier: apply remote tombstones + resurrection suppression (pending).
+- Slice 5 — rewire `performSync` + `SyncWorker` to download→merge→apply→upload (pending).
+- Slice 6 — v4→v5 MigrationTestHelper test (pending).
+- **Ceiling (honesty):** timestamp-less entities (HypervisorProfile,
+  TrustedCertificate, MonitorSlot) have no LWW signal → tombstone always wins for
+  them. Sync/VNC behavior cannot be runtime-verified here (no device).
+
+## H6b — `MigrationTest.kt` is stale and cannot compile against the live schema
+**`app/src/androidTest/.../MigrationTest.kt`** references `MIGRATION_32_33`…
+`MIGRATION_36_37` and schema versions v32–v37, but the live DB is v4 (now v5) with
+only `MIGRATION_3_4`/`MIGRATION_4_5`, and `app/schemas/` holds only 3/4/5.json.
+These symbols do not exist, so the instrumented test cannot build. **Fix:** rewrite
+self-consistently for the real migration set; the v4→v5 test lands in H6 Slice 6.
 
 ## H7 — libvirt SSH uses `StrictHostKeyChecking=no` — FIXED
 **`LibvirtApiClient.kt:72`** disabled host-key verification for the hypervisor SSH

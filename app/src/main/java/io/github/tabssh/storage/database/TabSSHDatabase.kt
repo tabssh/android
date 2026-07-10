@@ -14,7 +14,7 @@ import io.github.tabssh.utils.logging.Logger
 /**
  * Main Room database for TabSSH.
  *
- * Current version: 3.
+ * Current version: 5.
  * Versions 1 and 2 never shipped with persisted user data (alpha installs were
  * wiped on every upgrade before v3 stabilised). To avoid an IllegalStateException
  * at first open on any leftover v1/v2 install, those versions use
@@ -43,9 +43,11 @@ import io.github.tabssh.utils.logging.Logger
         io.github.tabssh.storage.database.entities.HypervisorAccount::class,
         MonitorSlot::class,
         VncHost::class,
-        VncIdentity::class
+        VncIdentity::class,
+        SyncTombstone::class,
+        SyncShadow::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -70,6 +72,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
     abstract fun monitorSlotDao(): MonitorSlotDao
     abstract fun vncHostDao(): VncHostDao
     abstract fun vncIdentityDao(): VncIdentityDao
+    abstract fun syncTombstoneDao(): SyncTombstoneDao
+    abstract fun syncShadowDao(): SyncShadowDao
 
     companion object {
         @Volatile
@@ -95,6 +99,35 @@ abstract class TabSSHDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v4 → v5 (H6 — soft-delete tombstones): add two additive tables so
+         * deletions propagate across devices instead of being resurrected by the
+         * next peer upload.
+         *
+         * `sync_tombstones` records deleted synced entities (type + stable key +
+         * deletedAt + deviceId) and travels in the sync payload. `sync_shadow`
+         * is local-only bookkeeping for the diff-at-collect backstop. Both are
+         * new tables — no existing row is touched and no existing query changes.
+         */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `sync_tombstones` (" +
+                        "`entity_type` TEXT NOT NULL, " +
+                        "`entity_key` TEXT NOT NULL, " +
+                        "`deleted_at` INTEGER NOT NULL, " +
+                        "`device_id` TEXT NOT NULL, " +
+                        "PRIMARY KEY(`entity_type`, `entity_key`))"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `sync_shadow` (" +
+                        "`entity_type` TEXT NOT NULL, " +
+                        "`entity_key` TEXT NOT NULL, " +
+                        "PRIMARY KEY(`entity_type`, `entity_key`))"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): TabSSHDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -107,7 +140,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
                 // Pre-v3 alpha installs were wiped on every upgrade — see kdoc.
                 // Real migrations must be added here for every bump from v3 onward.
                 .fallbackToDestructiveMigrationFrom(1, 2)
-                .addMigrations(MIGRATION_3_4)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5)
                 .build()
                 INSTANCE = instance
                 instance
