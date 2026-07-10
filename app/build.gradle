@@ -209,6 +209,17 @@ android {
     }
 
     packaging {
+        jniLibs {
+            // The mosh client ships as app/src/main/jniLibs/*/libmosh-client.so
+            // and is exec()'d from applicationInfo.nativeLibraryDir at runtime
+            // (MoshNativeClient.resolveBinary). With AGP 8 + minSdk 24,
+            // android:extractNativeLibs defaults to false, so .so files stay
+            // mmap'd inside the APK and never land on disk as executable files
+            // — resolveBinary() then returns null and we fall back to the
+            // "install termux/mosh" handoff. useLegacyPackaging=true forces
+            // extraction to nativeLibraryDir so the built-in binary is usable.
+            useLegacyPackaging = true
+        }
         resources {
             excludes += [
                 'META-INF/DEPENDENCIES',

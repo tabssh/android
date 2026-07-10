@@ -42,6 +42,15 @@
             android:summary="Swipe left/right to switch between SSH sessions"
             android:defaultValue="true" />
 
+        <ListPreference
+            android:key="tab_swipe_edge_dp"
+            android:title="Tab Swipe Edge Zone"
+            android:summary="Restrict tab swiping to a strip along each side so mid-screen gestures reach the terminal (vim, tmux, text selection). %s"
+            android:dependency="swipe_between_tabs"
+            android:defaultValue="48"
+            android:entries="@array/tab_swipe_edge_entries"
+            android:entryValues="@array/tab_swipe_edge_values" />
+
         <!-- Wave 3.7 — bottom nav visibility -->
         <SwitchPreferenceCompat
             android:key="show_bottom_nav"

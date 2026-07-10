@@ -131,6 +131,16 @@ class TabTerminalActivity : AppCompatActivity() {
     private var pagerAdapter: TerminalPagerAdapter? = null
     private var tabLayoutMediator: TabLayoutMediator? = null
     private var swipeEnabled: Boolean = true
+    // Edge-zone swipe: when > 0, a horizontal tab swipe only starts if the
+    // finger goes down within this many pixels of the left or right edge;
+    // touches that begin in the middle fall through to the terminal (so
+    // vim/tmux horizontal gestures and text selection aren't hijacked). 0
+    // disables the gate (swipe from anywhere, legacy behaviour). Set from
+    // the "tab_swipe_edge_dp" preference in setupTerminalView().
+    private var tabSwipeEdgePx: Int = 0
+    // True only while text selection is active — fully suspends swipe
+    // regardless of where the finger goes down (see edge-zone listener).
+    private var swipeSuspendedForSelection: Boolean = false
     // Set to true while updateViewPagerAdapter() is swapping the adapter.
     // ViewPager2 fires onPageSelected(0) when a new adapter is assigned
     // (it resets to page 0), and setCurrentItem() fires onPageSelected for
@@ -806,9 +816,62 @@ class TabTerminalActivity : AppCompatActivity() {
         })
     }
     
+    // Install the edge-zone gate on the ViewPager2's inner RecyclerView.
+    // Runs once, right after the adapter is first assigned. See the call
+    // site and tabSwipeEdgePx for the rationale.
+    private fun attachEdgeSwipeGate() {
+        val pager = viewPager ?: return
+        val rv = pager.getChildAt(0) as? androidx.recyclerview.widget.RecyclerView ?: return
+        rv.addOnItemTouchListener(object : androidx.recyclerview.widget.RecyclerView.OnItemTouchListener {
+            override fun onInterceptTouchEvent(
+                recycler: androidx.recyclerview.widget.RecyclerView,
+                e: android.view.MotionEvent
+            ): Boolean {
+                when (e.actionMasked) {
+                    android.view.MotionEvent.ACTION_DOWN -> {
+                        val allowed = when {
+                            swipeSuspendedForSelection -> false
+                            tabSwipeEdgePx <= 0 -> true
+                            else -> {
+                                val w = recycler.width
+                                e.x <= tabSwipeEdgePx || e.x >= w - tabSwipeEdgePx
+                            }
+                        }
+                        viewPager?.isUserInputEnabled = allowed
+                    }
+                    android.view.MotionEvent.ACTION_UP,
+                    android.view.MotionEvent.ACTION_CANCEL -> {
+                        // Reset to enabled so programmatic paging and the next
+                        // gesture's own DOWN check start from a known state —
+                        // unless a text selection is actively suspending swipe.
+                        if (!swipeSuspendedForSelection) viewPager?.isUserInputEnabled = true
+                    }
+                }
+                // Never consume — this listener only gates, RecyclerView still
+                // handles the event normally.
+                return false
+            }
+
+            override fun onTouchEvent(
+                recycler: androidx.recyclerview.widget.RecyclerView,
+                e: android.view.MotionEvent
+            ) {}
+
+            override fun onRequestDisallowInterceptTouchEvent(disallow: Boolean) {}
+        })
+    }
+
     private fun setupTerminalView() {
         // Check if swipe is enabled
         swipeEnabled = app.preferencesManager.getBoolean("swipe_between_tabs", true)
+
+        // Edge-zone width for tab swiping. 0 dp = swipe from anywhere on the
+        // page (legacy). A positive value restricts the swipe start to a strip
+        // of this width at each side. Default 48 dp = one Material touch
+        // target, wide enough to hit reliably yet leaving the page body free
+        // for terminal gestures.
+        val edgeDp = app.preferencesManager.getStringAsInt("tab_swipe_edge_dp", 48)
+        tabSwipeEdgePx = if (edgeDp <= 0) 0 else (edgeDp * resources.displayMetrics.density).toInt()
 
         if (swipeEnabled) {
             // Use ViewPager2 for swipeable tabs
@@ -1313,6 +1376,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 view.exitSelectionMode()
                 if (selectionActionMode === mode) selectionActionMode = null
                 // Re-enable swipe now that text selection is done.
+                swipeSuspendedForSelection = false
                 viewPager?.isUserInputEnabled = true
             }
         }
@@ -1323,6 +1387,7 @@ class TabTerminalActivity : AppCompatActivity() {
         }
         // Disable swipe while the user is selecting text so a horizontal
         // drag does not accidentally switch tabs mid-selection.
+        swipeSuspendedForSelection = true
         viewPager?.isUserInputEnabled = false
     }
 
@@ -2126,6 +2191,14 @@ class TabTerminalActivity : AppCompatActivity() {
             // when the layout frame fires.
             isUpdatingAdapter = true
             viewPager?.adapter = pagerAdapter
+
+            // Edge-zone swipe gate. ViewPager2 wraps a RecyclerView; an
+            // OnItemTouchListener sees each gesture's ACTION_DOWN before the
+            // pager's own drag detection runs, so toggling isUserInputEnabled
+            // there decides — per gesture — whether this swipe is allowed to
+            // switch tabs. Only gestures that start within tabSwipeEdgePx of a
+            // side edge are; middle touches fall through to the terminal.
+            attachEdgeSwipeGate()
 
             // Jump to the tab that was active before this activity was created.
             val activeIdx = tabManager.getActiveTabIndex().coerceIn(0, (allTabs.size - 1).coerceAtLeast(0))
@@ -4310,6 +4383,17 @@ class TabTerminalActivity : AppCompatActivity() {
                             "F11"   -> "[23;2~"
                             "F12"   -> "[24;2~"
                             else    -> key.keySequence
+                        }
+                    } else if (terminal?.isApplicationCursorKeysMode() == true &&
+                        (key.id == "HOME" || key.id == "END")) {
+                        // HOME/END must respect DECCKM just like the arrows: the
+                        // xterm-256color terminfo defines khome=\EOH / kend=\EOF
+                        // (SS3), so vim/less only recognise the SS3 form when they
+                        // have enabled application cursor keys (\033[?1h).
+                        when (key.id) {
+                            "HOME" -> "OH"
+                            "END"  -> "OF"
+                            else   -> key.keySequence
                         }
                     } else if (key.category == io.github.tabssh.ui.keyboard.KeyboardKey.KeyCategory.ARROW &&
                         // ARROW keys must respect DECCKM: when application cursor key mode

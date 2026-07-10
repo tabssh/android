@@ -19,7 +19,8 @@ import kotlinx.serialization.Serializable
  * primary key. For the 14 UUID-keyed entities it is the UUID. For the two
  * Long-autoincrement entities (HypervisorProfile, HypervisorAccount) the Long
  * id is meaningless across devices, so [entityKey] is a natural key
- * (`name|type`, `name|providerType`) — see [io.github.tabssh.sync.tombstone.TombstoneRecorder].
+ * (HypervisorProfile: `name|type`; HypervisorAccount: `name|authType|username`)
+ * — see [io.github.tabssh.sync.tombstone.TombstoneRecorder].
  */
 @Serializable
 @Entity(

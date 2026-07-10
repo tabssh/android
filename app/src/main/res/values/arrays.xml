@@ -1,5 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Tab swipe edge-zone width (dp) for TabTerminalActivity. Value "0"
+         means swipe from anywhere (legacy). Keep entries/values in lockstep
+         and aligned with tabSwipeEdgePx handling. -->
+    <string-array name="tab_swipe_edge_entries">
+        <item>Anywhere on tab</item>
+        <item>Narrow (24 dp)</item>
+        <item>Standard (48 dp)</item>
+        <item>Wide (64 dp)</item>
+        <item>Extra wide (96 dp)</item>
+    </string-array>
+    <string-array name="tab_swipe_edge_values">
+        <item>0</item>
+        <item>24</item>
+        <item>48</item>
+        <item>64</item>
+        <item>96</item>
+    </string-array>
+
     <!-- Wave 2.3 / Wave 13 — protocol options for ConnectionEditActivity.
          Index 0=SSH, 1=VNC, 2=Telnet.  Keep in sync with
          ConnectionEditActivity.updateProtocolUI(). -->

@@ -1938,8 +1938,23 @@ class TerminalView @JvmOverloads constructor(
             // Navigation keys — same modifier wrapping for HOME/END;
             // PAGE_UP/PAGE_DOWN/INS use the `\e[N~` family which has its
             // own modifier form `\e[N;<mod>~`.
-            KeyEvent.KEYCODE_MOVE_HOME -> { sendKeySequence(arrowSeq('H', isShift, isAlt, isCtrl)); return true }
-            KeyEvent.KEYCODE_MOVE_END -> { sendKeySequence(arrowSeq('F', isShift, isAlt, isCtrl)); return true }
+            //
+            // HOME/END must honour DECCKM exactly like the arrow keys: the
+            // xterm-256color terminfo defines khome=\EOH and kend=\EOF (SS3),
+            // and vim/less enable application cursor keys (\033[?1h). Sending
+            // the CSI form (\033[H) unconditionally is why Home/End did not
+            // work inside vim. With any modifier the parameterised CSI form is
+            // used (SS3 has no modifier extension), matching ss3ArrowSeq.
+            KeyEvent.KEYCODE_MOVE_HOME -> {
+                val appMode = isApplicationCursorKeysMode()
+                sendKeySequence(if (appMode) ss3ArrowSeq('H', isShift, isAlt, isCtrl) else arrowSeq('H', isShift, isAlt, isCtrl))
+                return true
+            }
+            KeyEvent.KEYCODE_MOVE_END -> {
+                val appMode = isApplicationCursorKeysMode()
+                sendKeySequence(if (appMode) ss3ArrowSeq('F', isShift, isAlt, isCtrl) else arrowSeq('F', isShift, isAlt, isCtrl))
+                return true
+            }
             KeyEvent.KEYCODE_PAGE_UP -> { sendKeySequence(tildeSeq(5, isShift, isAlt, isCtrl)); return true }
             KeyEvent.KEYCODE_PAGE_DOWN -> { sendKeySequence(tildeSeq(6, isShift, isAlt, isCtrl)); return true }
             KeyEvent.KEYCODE_INSERT -> { sendKeySequence(tildeSeq(2, isShift, isAlt, isCtrl)); return true }
