@@ -1,5 +1,32 @@
 # What's New
 
+## Wave 60 — Hardware keyboards, correct keys, mosh reliability
+
+- **Full hardware-keyboard support (Bluetooth, USB, OTG)** — the
+  terminal now handles physical keyboards properly. Numpad Enter
+  submits the line (it used to do nothing), and Shift/Alt/Ctrl
+  combined with the F1–F12 keys are sent through correctly, so
+  vim and tmux see modified function keys from a real keyboard.
+- **Alt sends the right escape for every key** — Alt combined
+  with any printable character (not just letters and digits) now
+  sends the standard terminal escape, so bash/readline shortcuts
+  like Alt+. (insert last argument) and Alt+/ (complete), plus
+  emacs and tmux Alt+punctuation bindings, work as expected on
+  both the on-screen and hardware keyboards.
+- **No more doubled characters when typing with predictive or
+  CJK input** — glide typing, pinyin, and other predictive
+  keyboards used to duplicate each character as the word was
+  being composed. The terminal now waits for the input method
+  to finalise the word before sending it, so what you type is
+  what arrives.
+- **Mosh no longer gives up on a working connection** — a short
+  internal timer could abort a mosh session that was simply slow
+  to draw its first screen (common on high-latency links),
+  falling back to plain SSH for no reason. Mosh now falls back
+  only on a genuine failure it actually reports — UDP blocked, a
+  firewall in the way, or mosh-server not installed — and
+  otherwise lets the session connect at its own pace.
+
 ## Wave 59 — Network resilience, VNC console, connection polish
 
 - **Tabs recover on their own when the phone loses and regains
