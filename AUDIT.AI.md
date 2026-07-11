@@ -342,10 +342,25 @@ helper + diff-at-collect backstop). Implemented in slices:
 - **Slice 1 — DONE:** `SyncTombstone`/`SyncShadow` entities + DAOs; registered in
   `TabSSHDatabase` (v4→v5, `MIGRATION_4_5` creates both tables additively); schema
   `5.json` exported; compiles clean (`make check`).
-- Slice 2 — `TombstoneRecorder` helper + ~20 delete-site instrumentation (pending).
-- Slice 3 — collector: emit tombstones + diff-at-collect backstop (pending).
-- Slice 4 — applier: apply remote tombstones + resurrection suppression (pending).
-- Slice 5 — rewire `performSync` + `SyncWorker` to download→merge→apply→upload (pending).
+- **Slice 2 — DONE:** `TombstoneRecorder` helper + delete-site instrumentation
+  across 13 files (connections, groups, keys, themes, identities, snippets,
+  macros, VNC, cloud, hypervisor, monitor slots).
+- **Slice 3 — DONE:** collector emits tombstones (`collectTombstones`) via the
+  diff-at-collect backstop (`runBackstop`, shadow − live); `collectAll` includes
+  them in the payload.
+- **Slice 4 — PARTIAL (forward half DONE):** `SyncDataApplier.applyTombstones`
+  applies remote tombstones on download — deletes each tombstoned local row
+  unless a strictly-newer local copy exists (LWW; the 3 timestamp-less entities
+  always delete), then re-records surviving tombstones via `recordIfAbsent` for
+  transitive 3-device propagation; called at the end of `applyAll`. Remaining:
+  reverse-half upsert suppression (a local tombstone suppresses re-adding an
+  older incoming row) — a 3-device/re-download refinement, separate commit.
+  NOTE: the standalone `MergeEngine` (523 lines) and `collectChangedSince` are
+  verified dead code (zero callers) — the real merge is `applyAll`'s inline LWW;
+  `MergeEngine` is redundant and will NOT be wired in.
+- **Slice 5 — pending:** rewire `performSync` + `SyncWorker` to
+  download→apply→upload, and call `SyncDataCollector.snapshotState()` after a
+  successful apply (never called today, so the backstop shadow is always empty).
 - Slice 6 — v4→v5 MigrationTestHelper test (pending).
 - **Ceiling (honesty):** timestamp-less entities (HypervisorProfile,
   TrustedCertificate, MonitorSlot) have no LWW signal → tombstone always wins for
