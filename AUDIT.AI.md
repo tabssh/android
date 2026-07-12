@@ -564,10 +564,14 @@ the old numbering and upgrades will hit the destructive fallback and lose data.
 numbering; if one did, add a real `Migration` for it instead of destructive
 fallback. Verified `version = 3` directly.
 
-## M7 — `-printseeds/-printusage/-printmapping` write to module root
+## M7 — `-printseeds/-printusage/-printmapping` write to module root — FIXED
 **`proguard-fdroid.pro:22-24`** — relative paths drop `seeds.txt`/`usage.txt`/
 `mapping.txt` next to `app/build.gradle` (the CI workspace), risking accidental
-commit. **Fix:** point them into `build/outputs/mapping/fdroidRelease/`.
+commit. **Fix applied:** paths redirected into
+`build/outputs/mapping/fdroidRelease/`. Verified via the R8 minify gate
+(`:app:minifyFdroidReleaseWithR8`, BUILD SUCCESSFUL): `seeds.txt`/`usage.txt`/
+`mapping.txt` now land in the module build-output tree alongside R8's own
+mapping; no stray files remain in the app module root.
 
 ## M8 — AI.md documents a release artifact set that doesn't ship — FIXED
 **`AI.md:1195`** claimed "10 APKs (5 release + 5 fdroid)"; `release.yml` uploads 5
