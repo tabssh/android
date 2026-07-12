@@ -614,11 +614,27 @@ Beyond H4's release-build break, `getDeclaredField("session")`
 across fork versions with no compile-time signal. **Fix:** prefer a public API;
 if none exists, pin the JSch fork version and add a smoke test.
 
-## M13 — Clipboard auto-clear coverage
-`IDEA.md` requires "clipboard auto-clear for sensitive pastes." Confirm every path
-that copies a password/key (SFTP, key export, snippet vars) schedules the clear;
-audit flagged this as under-verified across the many copy sites. **Fix:** route all
-sensitive copies through one helper that always schedules the timed clear.
+## M13 — Clipboard auto-clear coverage — VERIFIED (no change)
+`IDEA.md` requires "clipboard auto-clear for sensitive pastes." Audited all 25
+clipboard write sites (`grep ClipboardHelper.copy` + `grep setPrimaryClip`):
+- **Single-helper invariant holds.** Every write routes through
+  `ClipboardHelper.copy`; there is *zero* raw `setPrimaryClip` bypass anywhere
+  in `app/src/main/java`. The helper already implements label-owned,
+  sensitive-only auto-clear correctly (verifies the stamped `ClipDescription`
+  token before clearing, cancels on any newer non-sensitive copy, uses
+  `applicationContext` to avoid Activity leaks, sets `IS_SENSITIVE` on API 33+).
+- **No app-credential copy site exists.** Nothing copies a stored password,
+  passphrase, or private key to the clipboard — so nothing needs
+  `sensitive = true` today. The nearest sites are SSH *public* keys
+  (`IdentitiesFragment`, not secret), remote VNC/SPICE clipboard sync
+  (`VncView`/`SpiceView`, remote-origin), and snippet command text
+  (`SnippetManagerActivity`). Snippets are a deliberate `sensitive = false`
+  call — auto-wiping them would destroy legitimate command snippets the user
+  copied on purpose; the helper's KDoc documents this.
+**Honest caveat:** the `sensitive = true` path is therefore currently unexercised.
+It is not dead — it is the correct hook for any *future* "copy password/key"
+affordance — but there is no compile-time guard forcing such a future feature to
+use it. That is a process risk, not a present defect. No code change warranted.
 
 ## M14 — `checkOnly` masks accessibility checks that IDEA.md requires — FIXED
 Because H8's `checkOnly` disabled `ContentDescription`/`ClickableViewAccessibility`
