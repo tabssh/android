@@ -141,6 +141,13 @@ class TermuxBridge(
     // Coroutine scope for write operations (IO thread)
     private val writeScope = CoroutineScope(Dispatchers.IO + Job())
 
+    // Session-lifecycle scope for the read loop and Mosh watchdog. Both used to
+    // launch on ad-hoc CoroutineScope(Dispatchers.IO) instances whose root Job
+    // was never cancelled — cancelling readJob/moshWatchdog stopped the child
+    // coroutine but leaked the enclosing scope's Job across reconnects. Rooting
+    // them here means cleanup() tears every straggler down in one cancel.
+    private val sessionScope = CoroutineScope(Dispatchers.IO + Job())
+
     /**
      * Serializes ALL writes to the SSH OutputStream. JSch's
      * ChannelOutputStream maintains an internal buffer that is NOT safe
@@ -626,7 +633,7 @@ class TermuxBridge(
     private fun startReadLoop() {
         readJob?.cancel()
 
-        readJob = CoroutineScope(Dispatchers.IO).launch {
+        readJob = sessionScope.launch {
             val buffer = ByteArray(READ_BUFFER_SIZE)
 
             Logger.d(TAG, "Read loop started")
@@ -1058,6 +1065,13 @@ class TermuxBridge(
         } catch (e: Exception) {
             Logger.w(TAG, "Error cancelling writeScope", e)
         }
+        // Terminal teardown: cancel the read loop / Mosh watchdog scope too, so
+        // no straggler coroutine outlives the bridge holding a stream reference.
+        try {
+            sessionScope.coroutineContext[Job]?.cancel()
+        } catch (e: Exception) {
+            Logger.w(TAG, "Error cancelling sessionScope", e)
+        }
     }
 
     /**
@@ -1190,7 +1204,7 @@ class TermuxBridge(
      */
     private fun startMoshFailWatchdog() {
         try { moshWatchdog?.cancel() } catch (_: Exception) {}
-        moshWatchdog = CoroutineScope(Dispatchers.IO).launch {
+        moshWatchdog = sessionScope.launch {
             val startedAt = System.currentTimeMillis()
             // Minimum age before an on-screen failure string is trusted.
             // mosh-client can paint bits of its own initial UI within a few

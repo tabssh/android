@@ -532,11 +532,15 @@ only fails later in `release.yml`. **Fix:** add
 release CVE gate reports stale/empty data. **Fix:** bump to ≥10.x and supply an
 `nvd.api.key`.
 
-## M4 — Orphaned coroutine scopes
+## M4 — Orphaned coroutine scopes — FIXED
 **`TermuxBridge.kt:629`** (readJob scope) and **`TermuxBridge.kt:1188`** (Mosh
-watchdog) create `CoroutineScope`s that are never cancelled on session teardown —
-leaked coroutines/threads across reconnects. **Fix:** tie each scope to the
-session lifecycle and cancel on close. Verified locations.
+watchdog) created `CoroutineScope(Dispatchers.IO)` instances whose root `Job` was
+never cancelled — cancelling `readJob`/`moshWatchdog` stopped the child coroutine
+but leaked the enclosing scope's Job across reconnects. **Fix applied:** added a
+class-level `sessionScope = CoroutineScope(Dispatchers.IO + Job())`; both the read
+loop and the Mosh watchdog now `sessionScope.launch { }`, and `cleanup()` cancels
+`sessionScope`'s Job alongside `writeScope` at terminal teardown. `make check`
+clean.
 
 ## M5 — Six stub verification tasks report success unconditionally
 **`app/build.gradle:383-440`** — `detectSecrets`, `checkFDroidCompliance`,
@@ -561,10 +565,12 @@ fallback. Verified `version = 3` directly.
 `mapping.txt` next to `app/build.gradle` (the CI workspace), risking accidental
 commit. **Fix:** point them into `build/outputs/mapping/fdroidRelease/`.
 
-## M8 — AI.md documents a release artifact set that doesn't ship
-**`AI.md:1195`** claims "10 APKs (5 release + 5 fdroid)"; `release.yml` uploads 5
-release APKs + `mapping.txt` (F-Droid APKs are smoke-built, not published).
-**Fix:** correct AI.md.
+## M8 — AI.md documents a release artifact set that doesn't ship — FIXED
+**`AI.md:1195`** claimed "10 APKs (5 release + 5 fdroid)"; `release.yml` uploads 5
+release APKs + `mapping.txt` + checksums, and `assembleFdroidRelease` is an
+explicit "sanity check, not uploaded" smoke build (F-Droid signs/publishes its
+own). **Fix applied:** AI.md row corrected to the real artifact set — 5 release
+APKs + mapping + checksums, F-Droid build smoke-only and never uploaded.
 
 ## M9 — CHANGELOG not cut for 0.9.1
 **`CHANGELOG.md`** has `[Unreleased]` fixes but no `[0.9.1]` block, though the

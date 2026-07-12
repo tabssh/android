@@ -1192,7 +1192,7 @@ The Docker run wrapper bind-mounts the repo to `/workspace`, sets `ANDROID_HOME=
 |---|---|---|
 | `ci.yml` | push to `main`/`develop`, PR to `main` | structure + metadata + security + feature + docs validation |
 | `dev-builds.yml` | push to `main`/`master`/`devel`/`develop` | `assembleDebug`, rename APKs to `tabssh-*-dev.apk`, generate SHA-256 + release notes, publish prerelease tagged `development` |
-| `release.yml` | tag `v*` | tests + `dependencyCheckAnalyze` + JaCoCo, then `assembleRelease` and `assembleFdroidRelease`, rename to versioned APKs, generate notes + checksums + mapping, create GitHub Release with 10 APKs (5 release + 5 fdroid), prepare F-Droid submission directory, run `scripts/notify-release.sh` (Matrix / Mastodon) |
+| `release.yml` | tag `v*` | tests + `dependencyCheckAnalyze` + JaCoCo, then `assembleRelease` and `assembleFdroidRelease`, rename to versioned APKs, generate notes + checksums + mapping, create GitHub Release with 5 release APKs (arm64/arm/amd64/x86/universal) + `mapping.txt` + checksums; `assembleFdroidRelease` is a smoke build only (F-Droid signs and publishes its own APKs, so ours are never uploaded), prepare F-Droid submission directory, run `scripts/notify-release.sh` (Matrix / Mastodon) |
 | `mosh-binaries.yml` | manual / scheduled | Cross-compiles `mosh-client` binaries for `arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86`, packages and publishes them as a separate release the Android build consumes via `make fetch-mosh`. |
 
 Keystore is decoded from the `KEYSTORE_BASE64` secret. Gradle cache key is `${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}`.
