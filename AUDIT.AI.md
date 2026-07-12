@@ -521,11 +521,15 @@ query. Under bulk reconnect, a saturated IO pool can deadlock (blocked thread
 waiting on a coroutine that can't be scheduled). **Fix:** pre-cache known-hosts
 before connect, or use a dedicated single-thread dispatcher.
 
-## M2 — CI "validation" never compiles the project
-**`.github/workflows/ci.yml`** installs JDK 17 but never runs `./gradlew`; every
-step is `test -f`/`grep`. Broken code (compile/KSP/test failures) passes CI and
-only fails later in `release.yml`. **Fix:** add
-`./gradlew kspDebugKotlin compileDebugKotlin --no-daemon` (≈ `make check`).
+## M2 — CI "validation" never compiles the project — FIXED
+**`.github/workflows/ci.yml`** installed JDK 17 but never ran `./gradlew`; every
+step was `test -f`/`grep`. Broken code (compile/KSP/test failures) passed CI and
+only failed later in `release.yml`. **Fix applied:** added a real compile gate —
+Setup Android SDK (api 34 / build-tools 34.0.0, same pinned action as
+`release.yml`) + Gradle cache + `./gradlew kspDebugKotlin compileDebugKotlin
+--no-daemon` (mirrors `make check`), inserted before the structural checks.
+`act --list -W ci.yml` parses clean; all actions reuse `release.yml`'s
+already-SHA-pinned versions.
 
 ## M3 — OWASP dependency-check plugin two majors behind
 **`org.owasp.dependencycheck:8.4.0`** relies on the retired NVD legacy feed, so the
