@@ -329,7 +329,7 @@ the canonicalizer applies the single correct encoding used for both the signed
 canonical request and the request URL (`.url(".../?$canonicalQuery")`), keeping
 them byte-identical so the signature verifies. Pagination beyond page 1 now works.
 
-## H6 — Background sync is upload-only (never merges or downloads) — IN PROGRESS
+## H6 — Background sync is upload-only (never merges or downloads) — FIXED
 **`SyncWorker.kt:46-50`** only pushes local state; it never pulls or merges remote
 changes. `IDEA.md` requires "cross-device merge with per-entity conflict
 resolution." As implemented, a second device's changes are never ingested and can
@@ -366,17 +366,40 @@ helper + diff-at-collect backstop). Implemented in slices:
   so the tombstone backstop diffs against the real last-synced baseline (it was
   never called before, so the shadow was always empty and the backstop never
   fired).
-- Slice 6 — v4→v5 MigrationTestHelper test (pending).
+- **Slice 6 — DONE:** `MigrationTest.kt` rewritten for the real migration set
+  (v3→v4→v5): `migrate3To4_columnAdded` asserts `keep_alive_in_background` on
+  `vnc_hosts`, `migrate4To5_syncTablesCreated` asserts `sync_tombstones` and
+  `sync_shadow` are created additively, plus a `migrateChain3To5` full-chain
+  `runMigrationsAndValidate`. androidTest sources compile clean; the instrumented
+  test itself needs a device/emulator to execute (unavailable here — documented
+  ceiling), but Room's `validateDroppedTables`/schema validator runs inside it.
 - **Ceiling (honesty):** timestamp-less entities (HypervisorProfile,
   TrustedCertificate, MonitorSlot) have no LWW signal → tombstone always wins for
   them. Sync/VNC behavior cannot be runtime-verified here (no device).
 
-## H6b — `MigrationTest.kt` is stale and cannot compile against the live schema
-**`app/src/androidTest/.../MigrationTest.kt`** references `MIGRATION_32_33`…
+## H6b — `MigrationTest.kt` is stale and cannot compile against the live schema — FIXED
+**`app/src/androidTest/.../MigrationTest.kt`** referenced `MIGRATION_32_33`…
 `MIGRATION_36_37` and schema versions v32–v37, but the live DB is v4 (now v5) with
 only `MIGRATION_3_4`/`MIGRATION_4_5`, and `app/schemas/` holds only 3/4/5.json.
-These symbols do not exist, so the instrumented test cannot build. **Fix:** rewrite
-self-consistently for the real migration set; the v4→v5 test lands in H6 Slice 6.
+These symbols did not exist, so the instrumented test could not build. **Fix
+applied:** rewritten self-consistently for the real migration set (v3→v4→v5) in
+H6 Slice 6; androidTest sources now compile clean.
+
+## H6c — `MainActivityTest.kt` is dead and blocked the whole androidTest source set — FIXED
+Surfaced while verifying H6b: compiling `compileDebugAndroidTestKotlin` also pulls
+in `app/src/androidTest/java/com/tabssh/ui/MainActivityTest.kt` (note the stale
+`com/tabssh` path under an `io.github.tabssh.ui` package). It drove a "quick
+connect" inline form on MainActivity that no longer exists — 7 of its 8 referenced
+view IDs (`edit_quick_host/port/username`, `btn_quick_connect`,
+`fab_add_connection`, `text_empty_connections`, `text_welcome`) are absent from
+`res/` (only `toolbar` survives), plus an unimported `containsString`. It has not
+compiled since that UI was removed, so it silently broke the entire androidTest
+source set (including the new `MigrationTest`). **Fix applied:** removed the dead
+test rather than fabricate assertions against invented IDs; it exercised a deleted
+feature and cannot be runtime-verified here anyway (no device). `MigrationTest`
+also updated to the Room 2.6.1 `MigrationTestHelper(instrumentation, Class)`
+constructor (the deprecated `(name, AssetManager, factory)` overload no longer
+resolves under 2.6.1).
 
 ## H7 — libvirt SSH uses `StrictHostKeyChecking=no` — FIXED
 **`LibvirtApiClient.kt:72`** disabled host-key verification for the hypervisor SSH
