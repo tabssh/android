@@ -348,13 +348,15 @@ helper + diff-at-collect backstop). Implemented in slices:
 - **Slice 3 — DONE:** collector emits tombstones (`collectTombstones`) via the
   diff-at-collect backstop (`runBackstop`, shadow − live); `collectAll` includes
   them in the payload.
-- **Slice 4 — PARTIAL (forward half DONE):** `SyncDataApplier.applyTombstones`
-  applies remote tombstones on download — deletes each tombstoned local row
-  unless a strictly-newer local copy exists (LWW; the 3 timestamp-less entities
-  always delete), then re-records surviving tombstones via `recordIfAbsent` for
-  transitive 3-device propagation; called at the end of `applyAll`. Remaining:
-  reverse-half upsert suppression (a local tombstone suppresses re-adding an
-  older incoming row) — a 3-device/re-download refinement, separate commit.
+- **Slice 4 — DONE:** forward half — `SyncDataApplier.applyTombstones` applies
+  remote tombstones on download: deletes each tombstoned local row unless a
+  strictly-newer local copy exists (LWW; the 3 timestamp-less entities always
+  delete), then re-records surviving tombstones via `recordIfAbsent` for
+  transitive 3-device propagation; called at the end of `applyAll`. Reverse half
+  — a `suppressed()` guard on all 16 upsert loops skips re-adding an incoming
+  row that a local tombstone covers (3-device/re-download resurrection); an
+  incoming row strictly newer than the delete is a legit resurrection and clears
+  the stale tombstone.
   NOTE: the standalone `MergeEngine` (523 lines) and `collectChangedSince` are
   verified dead code (zero callers) — the real merge is `applyAll`'s inline LWW;
   `MergeEngine` is redundant and will NOT be wired in.

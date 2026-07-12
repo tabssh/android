@@ -90,11 +90,31 @@ class SyncDataApplier {
             // group UUID, not the remote one.
             val groupIdRemap = mutableMapOf<String, String>()
 
+            // H6 reverse half — a local tombstone suppresses re-adding an
+            // incoming row that an out-of-date peer still carries (3-device /
+            // re-download resurrection). Keyed by (entityType, entityKey) ->
+            // deletedAt. An incoming row strictly newer than our delete is a
+            // legitimate resurrection: it proceeds and its stale tombstone is
+            // cleared so we stop re-suppressing and re-propagating the delete.
+            val localTombstones = database.syncTombstoneDao().getAll()
+                .associate { (it.entityType to it.entityKey) to it.deletedAt }
+                .toMutableMap()
+            suspend fun suppressed(type: String, key: String, incomingTs: Long?): Boolean {
+                val deletedAt = localTombstones[type to key] ?: return false
+                if (incomingTs != null && incomingTs > deletedAt) {
+                    database.syncTombstoneDao().clear(type, key)
+                    localTombstones.remove(type to key)
+                    return false
+                }
+                return true
+            }
+
             database.withTransaction {
             // Apply groups FIRST — connection.groupId references depend on
             // the remap this loop builds.
             data.groups.forEach { g ->
                 try {
+                    if (suppressed(TombstoneRecorder.GROUP, g.id, g.modifiedAt)) return@forEach
                     val existing = database.connectionGroupDao()
                         .findByNaturalKey(g.name, g.parentId, g.id)
                     if (existing != null) {
@@ -117,6 +137,7 @@ class SyncDataApplier {
             // with different UUIDs.
             data.connections.forEach { connection ->
                 try {
+                    if (suppressed(TombstoneRecorder.CONNECTION, connection.id, connection.modifiedAt)) return@forEach
                     val remappedGroupId = connection.groupId?.let { groupIdRemap[it] ?: it }
                     val incoming = if (remappedGroupId != connection.groupId)
                         connection.copy(groupId = remappedGroupId)
@@ -138,6 +159,7 @@ class SyncDataApplier {
             // Apply keys
             data.keys.forEach { key ->
                 try {
+                    if (suppressed(TombstoneRecorder.KEY, key.keyId, key.modifiedAt)) return@forEach
                     database.keyDao().insertKey(key)
                     appliedCount++
                 } catch (e: Exception) {
@@ -148,6 +170,7 @@ class SyncDataApplier {
             // Apply themes
             data.themes.forEach { theme ->
                 try {
+                    if (suppressed(TombstoneRecorder.THEME, theme.themeId, theme.modifiedAt)) return@forEach
                     database.themeDao().insertTheme(theme)
                     appliedCount++
                 } catch (e: Exception) {
@@ -158,6 +181,7 @@ class SyncDataApplier {
             // Apply host keys
             data.hostKeys.forEach { hostKey ->
                 try {
+                    if (suppressed(TombstoneRecorder.HOST_KEY, hostKey.id, hostKey.modifiedAt)) return@forEach
                     database.hostKeyDao().insertHostKey(hostKey)
                     appliedCount++
                 } catch (e: Exception) {
@@ -171,6 +195,7 @@ class SyncDataApplier {
             // Wave 5.3 — apply workspaces (last-write-wins via REPLACE).
             data.workspaces.forEach { ws ->
                 try {
+                    if (suppressed(TombstoneRecorder.WORKSPACE, ws.id, ws.modifiedAt)) return@forEach
                     database.workspaceDao().upsert(ws)
                     appliedCount++
                 } catch (e: Exception) {
@@ -181,6 +206,7 @@ class SyncDataApplier {
             // Wave 5.4 — snippets / identities / groups, REPLACE on PK conflict.
             data.snippets.forEach { s ->
                 try {
+                    if (suppressed(TombstoneRecorder.SNIPPET, s.id, s.modifiedAt)) return@forEach
                     database.snippetDao().insertSnippet(s)
                     appliedCount++
                 } catch (e: Exception) {
@@ -189,6 +215,7 @@ class SyncDataApplier {
             }
             data.identities.forEach { id ->
                 try {
+                    if (suppressed(TombstoneRecorder.IDENTITY, id.id, id.modifiedAt)) return@forEach
                     database.identityDao().insert(id)
                     appliedCount++
                 } catch (e: Exception) {
@@ -201,6 +228,7 @@ class SyncDataApplier {
             // Wave 7.1 — hypervisors / trusted_certificates, REPLACE on PK conflict.
             data.hypervisors.forEach { h ->
                 try {
+                    if (suppressed(TombstoneRecorder.HYPERVISOR, TombstoneRecorder.naturalKey(h), null)) return@forEach
                     database.hypervisorDao().upsertForSync(h)
                     appliedCount++
                 } catch (e: Exception) {
@@ -209,6 +237,7 @@ class SyncDataApplier {
             }
             data.certificates.forEach { c ->
                 try {
+                    if (suppressed(TombstoneRecorder.CERTIFICATE, c.id, null)) return@forEach
                     database.certificateDao().insertCertificate(c)
                     appliedCount++
                 } catch (e: Exception) {
@@ -219,6 +248,7 @@ class SyncDataApplier {
             // Wave 11 — macros / monitor_slots, REPLACE on PK conflict.
             data.macros.forEach { m ->
                 try {
+                    if (suppressed(TombstoneRecorder.MACRO, m.id, m.modifiedAt)) return@forEach
                     database.macroDao().insertMacro(m)
                     appliedCount++
                 } catch (e: Exception) {
@@ -227,6 +257,7 @@ class SyncDataApplier {
             }
             data.monitorSlots.forEach { slot ->
                 try {
+                    if (suppressed(TombstoneRecorder.MONITOR_SLOT, slot.id, null)) return@forEach
                     database.monitorSlotDao().insertOrReplace(slot)
                     appliedCount++
                 } catch (e: Exception) {
@@ -240,6 +271,7 @@ class SyncDataApplier {
             // HypervisorProfile; documented in AI.md §9.4.
             data.hypervisorAccounts.forEach { a ->
                 try {
+                    if (suppressed(TombstoneRecorder.HYPERVISOR_ACCOUNT, TombstoneRecorder.naturalKey(a), a.modifiedAt)) return@forEach
                     val existing = database.hypervisorAccountDao().getById(a.id)
                     if (existing == null) {
                         database.hypervisorAccountDao().insert(a)
@@ -255,6 +287,7 @@ class SyncDataApplier {
             // Wave 13 — VNC hosts (last-write-wins REPLACE on UUID PK).
             data.vncHosts.forEach { h ->
                 try {
+                    if (suppressed(TombstoneRecorder.VNC_HOST, h.id, h.modifiedAt)) return@forEach
                     database.vncHostDao().insert(h)
                     appliedCount++
                 } catch (e: Exception) {
@@ -264,6 +297,7 @@ class SyncDataApplier {
             // Wave 13 — VNC identity metadata (password not in row; Keystore-bound on each device).
             data.vncIdentities.forEach { vi ->
                 try {
+                    if (suppressed(TombstoneRecorder.VNC_IDENTITY, vi.id, vi.modifiedAt)) return@forEach
                     database.vncIdentityDao().insert(vi)
                     appliedCount++
                 } catch (e: Exception) {
@@ -275,6 +309,7 @@ class SyncDataApplier {
             // secrets mechanism (cloud_token_{id}) and is applied outside the tx.
             data.cloudAccounts.forEach { ca ->
                 try {
+                    if (suppressed(TombstoneRecorder.CLOUD_ACCOUNT, ca.id, ca.modifiedAt)) return@forEach
                     database.cloudAccountDao().upsert(ca)
                     appliedCount++
                 } catch (e: Exception) {
