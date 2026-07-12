@@ -594,11 +594,19 @@ terminal surface. Per `IDEA.md:50`, screenshot prevention on the terminal is
 user opt-out, and confirm PIN/auth screens do enforce it unconditionally. *(Framed
 as recommendation, not defect.)*
 
-## M11 — OSC-8 hyperlink parsing runs on every write
-**`TermuxBridge.kt:288,298,309-315`** re-scans output for OSC-8 sequences on each
-write regardless of whether any are present. On high-throughput output (e.g. `cat`
-of a large file) this is measurable overhead. **Fix:** fast-path a byte check for
-`ESC ]8` before entering the parser. *(Also an OPT item.)*
+## M11 — OSC-8 hyperlink parsing runs on every write — FIXED
+**`TermuxBridge.kt`** re-scanned output for OSC-8 sequences on each write
+regardless of whether any were present — a per-write UTF-8 `String` allocation,
+a regex `findAll`, and two `lastIndexOf` calls even for plain bulk output.
+**Fix applied:** `appendWithOsc8Tracking` now byte-scans the raw buffer for the
+ESC byte (0x1B) first. Every sequence it intercepts — OSC 8 anchors
+(`ESC ]8;…`) and the bracketed-paste toggles (`ESC [?2004h/l`) — begins with
+ESC, so a buffer with no ESC byte makes the decode, regex, and both
+bracketed-paste searches provably no-ops; those are skipped and the raw bytes
+appended directly (the common case for `cat` of a text file, which carries no
+escape sequences). Behavior is identical: the ESC scan is a strict superset of
+what the parser could ever match. `make check` clean. *(Also closes the OPT
+item.)*
 
 ## M12 — Reflection-based session access is fragile beyond R8
 Beyond H4's release-build break, `getDeclaredField("session")`

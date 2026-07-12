@@ -292,6 +292,35 @@ class TermuxBridge(
      * indices are adjusted downward to stay aligned with screen coordinates.
      */
     private fun appendWithOsc8Tracking(em: TerminalEmulator, data: ByteArray, length: Int) {
+        // Fast path: every sequence intercepted below — OSC 8 anchors and the
+        // bracketed-paste mode toggles — begins with ESC (0x1B). If the buffer
+        // holds no ESC byte, the UTF-8 decode, the regex scan, and both
+        // bracketed-paste searches are guaranteed no-ops, so append the raw
+        // bytes directly. This is the common case for bulk output (e.g. cat of
+        // a large text file), which carries no escape sequences at all.
+        // Scroll-adjust logic here mirrors appendAndAdjust below (the canonical
+        // copy); keep the two in sync.
+        var hasEsc = false
+        for (i in 0 until length) {
+            if ((data[i].toInt() and 0xFF) == 0x1B) { hasEsc = true; break }
+        }
+        if (!hasEsc) {
+            if (length == 0) return
+            val prevTranscript = em.screen?.activeTranscriptRows ?: 0
+            em.append(data, length)
+            val scrolled = (em.screen?.activeTranscriptRows ?: 0) - prevTranscript
+            if (scrolled > 0) {
+                osc8Links = CopyOnWriteArrayList(
+                    osc8Links.mapNotNull { link ->
+                        val newEnd = link.endRow - scrolled
+                        if (newEnd < 0) null
+                        else link.copy(startRow = link.startRow - scrolled, endRow = newEnd)
+                    }
+                )
+            }
+            return
+        }
+
         val text = String(data, 0, length, Charsets.UTF_8)
 
         // Track DEC private mode ?2004 (bracketed paste).  When both enable and
