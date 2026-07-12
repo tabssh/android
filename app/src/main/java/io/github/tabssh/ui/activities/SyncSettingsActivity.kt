@@ -483,8 +483,19 @@ class SyncSettingsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val (payload, ok) = withContext(Dispatchers.IO) {
-                    val p = SyncDataCollector(this@SyncSettingsActivity).collectAll()
-                    p to syncManager.upload(p)
+                    // H6 — two-way: pull and merge the peer state before
+                    // re-uploading so remote changes are ingested and remote
+                    // deletes are not resurrected by the union upload.
+                    val collector = SyncDataCollector(this@SyncSettingsActivity)
+                    val remote = syncManager.download()
+                    if (remote != null) {
+                        SyncDataApplier(this@SyncSettingsActivity).applyAll(remote)
+                    }
+                    val p = collector.collectAll()
+                    val uploaded = syncManager.upload(p)
+                    // Refresh the shadow baseline only on a successful upload.
+                    if (uploaded) collector.snapshotState()
+                    p to uploaded
                 }
                 withContext(Dispatchers.Main) {
                     progressSync.visibility = View.GONE
@@ -510,7 +521,13 @@ class SyncSettingsActivity : AppCompatActivity() {
             try {
                 val payload = withContext(Dispatchers.IO) { syncManager.download() }
                 if (payload != null) {
-                    withContext(Dispatchers.IO) { SyncDataApplier(this@SyncSettingsActivity).applyAll(payload) }
+                    withContext(Dispatchers.IO) {
+                        SyncDataApplier(this@SyncSettingsActivity).applyAll(payload)
+                        // Refresh the shadow baseline so the deletes just
+                        // applied are not re-detected as local deletions by the
+                        // next collect's tombstone backstop.
+                        SyncDataCollector(this@SyncSettingsActivity).snapshotState()
+                    }
                     withContext(Dispatchers.Main) {
                         progressSync.visibility = View.GONE
                         refresh()

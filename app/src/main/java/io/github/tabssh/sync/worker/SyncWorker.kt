@@ -5,6 +5,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import io.github.tabssh.sync.SAFSyncManager
 import io.github.tabssh.sync.SyncFileStatus
+import io.github.tabssh.sync.data.SyncDataApplier
 import io.github.tabssh.sync.data.SyncDataCollector
 import io.github.tabssh.utils.logging.Logger
 
@@ -41,14 +42,30 @@ class SyncWorker(
                 return Result.failure()
             }
 
-            // Collect local data
             val collector = SyncDataCollector(applicationContext)
+
+            // H6 — two-way sync: pull the peer state and merge it locally
+            // BEFORE re-uploading. Without the download+apply step the worker
+            // was upload-only, so a second device's changes were never ingested
+            // and its deletes were resurrected on the next union upload.
+            val remote = syncManager.download()
+            if (remote != null) {
+                SyncDataApplier(applicationContext).applyAll(remote)
+                Logger.d(TAG, "Applied remote sync state")
+            }
+
+            // Collect the merged local state. collectAll runs the tombstone
+            // backstop against the shadow captured at the last successful sync,
+            // so deletions since then are emitted in this payload.
             val payload = collector.collectAll()
 
-            // Upload
+            // Upload the merged result.
             val success = syncManager.upload(payload)
 
             if (success) {
+                // Refresh the shadow baseline only after a successful upload so
+                // the next backstop diffs against what we actually persisted.
+                collector.snapshotState()
                 Logger.d(TAG, "Background sync completed successfully")
                 Result.success()
             } else {

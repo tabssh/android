@@ -360,9 +360,12 @@ helper + diff-at-collect backstop). Implemented in slices:
   NOTE: the standalone `MergeEngine` (523 lines) and `collectChangedSince` are
   verified dead code (zero callers) — the real merge is `applyAll`'s inline LWW;
   `MergeEngine` is redundant and will NOT be wired in.
-- **Slice 5 — pending:** rewire `performSync` + `SyncWorker` to
-  download→apply→upload, and call `SyncDataCollector.snapshotState()` after a
-  successful apply (never called today, so the backstop shadow is always empty).
+- **Slice 5 — DONE:** `SyncWorker.doWork` and `performSync` are now two-way —
+  download→apply→collect→upload; `performDownload` applies then snapshots. Each
+  path calls `SyncDataCollector.snapshotState()` after a successful apply/upload
+  so the tombstone backstop diffs against the real last-synced baseline (it was
+  never called before, so the shadow was always empty and the backstop never
+  fired).
 - Slice 6 — v4→v5 MigrationTestHelper test (pending).
 - **Ceiling (honesty):** timestamp-less entities (HypervisorProfile,
   TrustedCertificate, MonitorSlot) have no LWW signal → tombstone always wins for
