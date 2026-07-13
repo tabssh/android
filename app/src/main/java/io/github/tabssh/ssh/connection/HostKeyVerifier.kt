@@ -9,7 +9,7 @@ import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.database.dao.HostKeyVerificationResult
 import io.github.tabssh.storage.database.entities.HostKeyEntry
 import io.github.tabssh.utils.logging.Logger
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.first
 import android.util.Base64
@@ -59,9 +59,11 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
             Logger.i("HostKeyVerifier", "Checking host key for $hostname:$port ($keyType)")
             Logger.i("HostKeyVerifier", "Fingerprint: $fingerprint")
 
-            // Verify against database - use Dispatchers.IO to prevent deadlock
+            // Verify against database on the dedicated host-key DB thread
+            // (hostKeyDbDispatcher) so a bulk reconnect cannot starve the
+            // shared IO pool — see the companion-object kdoc.
             Logger.d("HostKeyVerifier", "Querying database for existing host key...")
-            val result = runBlocking(Dispatchers.IO) {
+            val result = runBlocking(hostKeyDbDispatcher) {
                 hostKeyDao.verifyHostKey(hostname, port, publicKeyBase64, fingerprint)
             }
             Logger.i("HostKeyVerifier", "Database verification result: $result")
@@ -101,7 +103,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
 
                     return when (action) {
                         HostKeyAction.ACCEPT_NEW_KEY -> {
-                            runBlocking(Dispatchers.IO) {
+                            runBlocking(hostKeyDbDispatcher) {
                                 val hostKeyEntry = HostKeyEntry(
                                     id = HostKeyEntry.createId(hostname, port),
                                     hostname = hostname,
@@ -133,7 +135,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
                     Logger.w("HostKeyVerifier", "WARNING:HOST KEY HAS CHANGED for $hostname:$port")
 
                     // Get existing key for comparison
-                    val existingKey = runBlocking(Dispatchers.IO) {
+                    val existingKey = runBlocking(hostKeyDbDispatcher) {
                         hostKeyDao.getHostKey(hostname, port)
                     }
 
@@ -172,7 +174,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
 
                         return when (action) {
                             HostKeyAction.ACCEPT_NEW_KEY -> {
-                                runBlocking(Dispatchers.IO) {
+                                runBlocking(hostKeyDbDispatcher) {
                                     // Replace old key with new key
                                     val updatedEntry = HostKeyEntry(
                                         id = HostKeyEntry.createId(hostname, port),
@@ -228,7 +230,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
             // Use our own fingerprint generator since JSch's method signature may vary
             val fingerprint = generateFingerprint(hostkey.key as ByteArray)
 
-            runBlocking(Dispatchers.IO) {
+            runBlocking(hostKeyDbDispatcher) {
                 val entry = HostKeyEntry(
                     id = HostKeyEntry.createId(hostname, port),
                     hostname = hostname,
@@ -252,7 +254,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
     override fun remove(host: String, type: String?) {
         try {
             val (hostname, port) = parseHostPort(host)
-            runBlocking(Dispatchers.IO) {
+            runBlocking(hostKeyDbDispatcher) {
                 if (type != null) {
                     // Remove specific key type for host
                     val existing = hostKeyDao.getHostKey(hostname, port)
@@ -288,7 +290,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
      */
     override fun getHostKey(): Array<HostKey> {
         return try {
-            runBlocking(Dispatchers.IO) {
+            runBlocking(hostKeyDbDispatcher) {
                 val entries = hostKeyDao.getAllHostKeys().first()
                 entries.map { entry ->
                     val hostPort = "${entry.hostname}:${entry.port}"
@@ -312,7 +314,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
 
         return try {
             val (hostname, port) = parseHostPort(host)
-            runBlocking(Dispatchers.IO) {
+            runBlocking(hostKeyDbDispatcher) {
                 val entry = hostKeyDao.getHostKey(hostname, port)
                 if (entry != null && (type == null || entry.keyType == type)) {
                     val keyBytes = Base64.decode(entry.publicKey, Base64.DEFAULT)
@@ -333,7 +335,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
      * Clear all host keys from database
      */
     fun clearAllHostKeys() {
-        runBlocking(Dispatchers.IO) {
+        runBlocking(hostKeyDbDispatcher) {
             hostKeyDao.deleteAllHostKeys()
             Logger.i("HostKeyVerifier", "Cleared all host keys")
         }
@@ -574,6 +576,24 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
         /** Hard timeout for the host-key prompt dialogs — see kdoc on
          *  showBlockingHostDialog. */
         private const val DIALOG_TIMEOUT_SECONDS: Long = 30
+
+        // Dedicated single-thread dispatcher for all host-key DB access.
+        // JSch invokes check()/add()/remove() synchronously on its handshake
+        // thread, so each Room query must block that thread via runBlocking.
+        // Routing those through the shared Dispatchers.IO pool means a bulk
+        // reconnect (many handshakes at once) competes with every other app IO
+        // task for the same ~64 threads: a handshake thread blocked in
+        // runBlocking can end up waiting on a dispatch that cannot get a free
+        // IO slot. One app-lifetime thread decouples host-key checks from that
+        // pool entirely. The queries are tiny, so serializing them here is
+        // cheap, and the calls are sequential (never nested) so a single
+        // thread cannot self-deadlock. The executor lives for the process
+        // lifetime by design; it is a single daemon thread, so it is never
+        // shut down.
+        private val hostKeyDbDispatcher =
+            java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+                Thread(r, "tabssh-hostkey-db").apply { isDaemon = true }
+            }.asCoroutineDispatcher()
     }
 
 }

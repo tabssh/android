@@ -514,12 +514,17 @@ a stale-format stored fingerprint in place on the next successful verify.
 
 # MEDIUM
 
-## M1 — `runBlocking` inside JSch host-key callback (deadlock risk)
+## M1 — `runBlocking` inside JSch host-key callback (deadlock risk) — FIXED
 **`HostKeyVerifier.kt:64,104,136,175,231,255,291,315,336`** — the JSch handshake
 thread calls `check()`, which uses `runBlocking(Dispatchers.IO)` to run a Room
 query. Under bulk reconnect, a saturated IO pool can deadlock (blocked thread
-waiting on a coroutine that can't be scheduled). **Fix:** pre-cache known-hosts
-before connect, or use a dedicated single-thread dispatcher.
+waiting on a coroutine that can't be scheduled). **Fix applied:** added a
+dedicated single-thread dispatcher `hostKeyDbDispatcher` (daemon thread,
+app-lifetime, decoupled from the shared `Dispatchers.IO` pool) in the companion
+object; all nine `runBlocking(Dispatchers.IO)` callback sites now run on it. The
+calls are sequential and non-nested, so a single thread cannot self-deadlock, and
+the shared IO pool can no longer be exhausted out from under the handshake thread.
+Removed the now-unused `Dispatchers` import; `make check` clean.
 
 ## M2 — CI "validation" never compiles the project — FIXED
 **`.github/workflows/ci.yml`** installed JDK 17 but never ran `./gradlew`; every
