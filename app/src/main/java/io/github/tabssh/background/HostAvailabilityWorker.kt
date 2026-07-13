@@ -207,108 +207,134 @@ class HostAvailabilityWorker(
 
         Logger.i(TAG, "Checking ${dueSlots.size}/${allSlots.size} monitored host(s) (${allSlots.size - dueSlots.size} skipped, interval not elapsed)")
 
-        // Set to true if any probe failure was caused by the device losing internet
-        // mid-run rather than by the remote host going down. Used after awaitAll()
-        // to post a single "monitoring suspended" notification instead of one alert
-        // per host — WiFi off → 8 spam alerts is the problem this solves.
-        val networkWentDown = java.util.concurrent.atomic.AtomicBoolean(false)
-
-        // Parallel TCP probes bounded by MAX_PARALLEL_PROBES.
-        // supervisorScope ensures one probe failure does not cancel others.
+        // Phase 1 — probe every due host concurrently, collecting results ONLY.
+        // No notifications or DB writes happen here: whether a failure is a
+        // genuine host outage or a device-side network outage can only be
+        // decided once every result is in (see phase 2). supervisorScope ensures
+        // one probe failure never cancels its siblings; the semaphore bounds the
+        // number of simultaneously-open sockets.
         val semaphore = Semaphore(MAX_PARALLEL_PROBES)
-        supervisorScope {
+        val outcomes = supervisorScope {
             dueSlots.map { slot ->
                 async(Dispatchers.IO) {
                     semaphore.withPermit {
                         val profile = db.connectionDao().getConnectionById(slot.connectionId)
                         if (profile == null) {
                             Logger.w(TAG, "Slot ${slot.id}: profile ${slot.connectionId} not found, skipping")
-                            return@withPermit
+                            return@withPermit null
                         }
-
                         val probeTime = System.currentTimeMillis()
-                        val isReachable = tcpProbe(profile.host, profile.port)
-                        val wasDown = slot.isCurrentlyDown
-
-                        if (!isReachable) {
-                            // Re-check internet before attributing the failure to the host.
-                            // WiFi turning off mid-run causes ALL TCP probes to fail at once;
-                            // that's a network event, not a host-down event. Suppress per-host
-                            // alerts and let the caller post a single "monitoring suspended"
-                            // notification instead of flooding the user with one alert per host.
-                            if (!isInternetAvailable()) {
-                                networkWentDown.set(true)
-                                Logger.i(TAG, "${profile.host}: probe failed — no internet, suppressing per-host alert")
-                                return@withPermit
-                            }
-
-                            val firstFailure = !wasDown
-                            val cooldownMs = slot.alertCooldownMinutes * 60_000L
-                            val cooldownExpired = probeTime - slot.lastNotifiedDownAt > cooldownMs
-
-                            val stampDown = (firstFailure || cooldownExpired) && slot.alertOnDown
-                            db.monitorSlotDao().updateProbeResult(
-                                slotId = slot.id,
-                                now = probeTime,
-                                isDown = true,
-                                stampDown = stampDown,
-                                stampUp = false
-                            )
-
-                            // Notification precedence: global default → per-host flag.
-                            // (Group-level setting is a planned future addition between
-                            // these two tiers.) Both must be true for a notification to fire.
-                            if (globalNotificationsEnabled && slot.alertOnDown) {
-                                when {
-                                    firstFailure -> {
-                                        Logger.i(TAG, "${profile.host}: went down (first failure)")
-                                        NotificationHelper.notifyHostDown(appContext, profile)
-                                    }
-                                    cooldownExpired -> {
-                                        val failures = slot.consecutiveFailures + 1
-                                        Logger.i(TAG, "${profile.host}: still down ($failures failures)")
-                                        NotificationHelper.notifyHostStillDown(appContext, profile, failures)
-                                    }
-                                }
-                            }
-                        } else {
-                            val justRecovered = wasDown
-
-                            db.monitorSlotDao().updateProbeResult(
-                                slotId = slot.id,
-                                now = probeTime,
-                                isDown = false,
-                                stampDown = false,
-                                stampUp = justRecovered && slot.alertOnRecovery
-                            )
-
-                            // Notification precedence: global default → per-host flag.
-                            if (globalNotificationsEnabled && justRecovered && slot.alertOnRecovery) {
-                                Logger.i(TAG, "${profile.host}: recovered")
-                                NotificationHelper.notifyHostRecovered(appContext, profile)
-                            }
-
-                            // Optional SSH metrics check — only if user opted in AND a
-                            // live session already exists (no new connections from background).
-                            if (slot.enablePerformanceChecks) {
-                                checkMetrics(app, slot.copy(
-                                    lastCheckedAt = probeTime,
-                                    isCurrentlyDown = false,
-                                    consecutiveFailures = 0
-                                ), profile, globalNotificationsEnabled)
-                            }
-                        }
+                        ProbeOutcome(slot, profile, tcpProbe(profile.host, profile.port), probeTime)
                     }
                 }
             }.awaitAll()
+        }.filterNotNull()
+
+        if (outcomes.isEmpty()) {
+            Logger.d(TAG, "No probeable slots this run")
+            return Result.success()
         }
 
-        // If one or more probes were skipped because the device lost internet
-        // mid-run, post the single consolidated notification now. All per-host
-        // alerts were suppressed above; this one replaces them.
-        if (networkWentDown.get()) {
-            Logger.i(TAG, "Network outage detected during probe run — posting consolidated notification")
+        // Phase 2 — network-outage vs host-outage decision.
+        //
+        // Two signals collapse a flood of per-host alerts into one calm
+        // "monitoring suspended" row:
+        //   1. Android reports no validated internet on the post-probe re-check, OR
+        //   2. EVERY probed host failed in this single run (with 2+ hosts).
+        //
+        // Signal (2) is the real-world case the screenshot exposed: when Wi-Fi
+        // drops, NET_CAPABILITY_VALIDATED can lag reality and still read "true",
+        // so signal (1) alone misses it — but all hosts failing at once is
+        // overwhelmingly a device/uplink problem, not N independent servers
+        // dying in the same 15-minute tick. Ceiling: with a single monitored
+        // host we cannot distinguish "my network died" from "that one host died",
+        // so the all-down collapse only applies to 2+ hosts; a lone host still
+        // reports as an ordinary host-down.
+        val reachableCount = outcomes.count { it.isReachable }
+        val everyHostDown = reachableCount == 0 && outcomes.size >= 2
+        val validatedInternet = isInternetAvailable()
+        val networkOutage = !validatedInternet || everyHostDown
+
+        if (networkOutage) {
+            // Suppress every per-host alert AND leave slot state untouched — no
+            // down-stamp now (so nothing spams), and no state change (so no burst
+            // of "recovered" alerts when the network returns). last_checked_at is
+            // left as-is, so isDue() keeps these slots eligible and the next tick
+            // re-probes them while we're still offline.
+            Logger.i(TAG, "Network outage (validated-internet=$validatedInternet, ${outcomes.size} host(s), $reachableCount reachable) — suspending per-host alerts")
             NotificationHelper.postNetworkDownNotification(appContext)
+            Logger.d(TAG, "Availability check complete")
+            return Result.success()
+        }
+
+        // Normal run — apply per-host down / recovery / metrics handling.
+        for (outcome in outcomes) {
+            val slot = outcome.slot
+            val profile = outcome.profile
+            val probeTime = outcome.probeTime
+            val wasDown = slot.isCurrentlyDown
+
+            if (!outcome.isReachable) {
+                val firstFailure = !wasDown
+                val cooldownMs = slot.alertCooldownMinutes * 60_000L
+                val cooldownExpired = probeTime - slot.lastNotifiedDownAt > cooldownMs
+                val stampDown = (firstFailure || cooldownExpired) && slot.alertOnDown
+
+                db.monitorSlotDao().updateProbeResult(
+                    slotId = slot.id,
+                    now = probeTime,
+                    isDown = true,
+                    stampDown = stampDown,
+                    stampUp = false
+                )
+
+                // Notification precedence: global default → per-host flag.
+                // (Group-level setting is a planned future addition between
+                // these two tiers.) Both must be true for a notification to fire.
+                if (globalNotificationsEnabled && slot.alertOnDown) {
+                    when {
+                        firstFailure -> {
+                            Logger.i(TAG, "${profile.host}: went down (first failure)")
+                            NotificationHelper.notifyHostDown(appContext, profile)
+                        }
+                        cooldownExpired -> {
+                            val failures = slot.consecutiveFailures + 1
+                            Logger.i(TAG, "${profile.host}: still down ($failures failures)")
+                            NotificationHelper.notifyHostStillDown(appContext, profile, failures)
+                        }
+                    }
+                }
+            } else {
+                val justRecovered = wasDown
+
+                db.monitorSlotDao().updateProbeResult(
+                    slotId = slot.id,
+                    now = probeTime,
+                    isDown = false,
+                    stampDown = false,
+                    stampUp = justRecovered && slot.alertOnRecovery
+                )
+
+                // Notification precedence: global default → per-host flag.
+                if (globalNotificationsEnabled && justRecovered && slot.alertOnRecovery) {
+                    Logger.i(TAG, "${profile.host}: recovered")
+                    NotificationHelper.notifyHostRecovered(appContext, profile)
+                }
+
+                // Optional SSH metrics check — only if user opted in AND a
+                // live session already exists (no new connections from background).
+                // Runs on the IO dispatcher because collectMetrics() does blocking
+                // SSH command I/O (doWork itself runs on Dispatchers.Default).
+                if (slot.enablePerformanceChecks) {
+                    withContext(Dispatchers.IO) {
+                        checkMetrics(app, slot.copy(
+                            lastCheckedAt = probeTime,
+                            isCurrentlyDown = false,
+                            consecutiveFailures = 0
+                        ), profile, globalNotificationsEnabled)
+                    }
+                }
+            }
         }
 
         Logger.d(TAG, "Availability check complete")
@@ -396,3 +422,15 @@ class HostAvailabilityWorker(
         }
     }
 }
+
+/**
+ * Result of a single Phase-1 TCP probe. Collected for every due slot before
+ * any notification or DB write happens, so Phase 2 can distinguish a genuine
+ * host outage from a device-side network outage (see doWork).
+ */
+private data class ProbeOutcome(
+    val slot: io.github.tabssh.storage.database.entities.MonitorSlot,
+    val profile: io.github.tabssh.storage.database.entities.ConnectionProfile,
+    val isReachable: Boolean,
+    val probeTime: Long
+)
