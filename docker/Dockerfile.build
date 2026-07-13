@@ -29,11 +29,18 @@ RUN mkdir -p ${ANDROID_SDK_ROOT} && \
     mv /tmp/cmdline-tools-raw/cmdline-tools ${ANDROID_SDK_ROOT}/cmdline-tools/latest && \
     rm -rf /tmp/cmdline-tools.zip /tmp/cmdline-tools-raw
 
+# CMake and the NDK are baked in (not lazily downloaded by Gradle at build
+# time). configureCMakeDebug/Release pull cmake;3.22.1 and ndk;26.1.10909125
+# — the same versions pinned in app/build.gradle. Installing them here makes
+# the native (JNI/SPICE) build deterministic and immune to the corrupt
+# mid-build sdkmanager downloads that flaked CI on stock runners.
 RUN yes | sdkmanager --licenses > /dev/null 2>&1 || true && \
     sdkmanager \
         "platform-tools" \
         "platforms;android-34" \
         "build-tools;34.0.0" \
+        "cmake;3.22.1" \
+        "ndk;26.1.10909125" \
     > /dev/null 2>&1
 
 # ── Gradle wrapper pre-warm ────────────────────────────────────────────────────

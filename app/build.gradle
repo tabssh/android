@@ -66,6 +66,12 @@ android {
     namespace 'io.github.tabssh'
     compileSdk 34
 
+    // Pin the NDK so the CMake/JNI build resolves the same toolchain in CI
+    // (the ghcr.io/tabssh/android:build image bakes this exact version) and in
+    // F-Droid reproducible builds, instead of letting AGP pick — and lazily
+    // download — whatever its default happens to be at build time.
+    ndkVersion '26.1.10909125'
+
     // Production-release detection. A clean semver "x.x.x" (e.g. "1.0.0",
     // "1.2.3") is a production release — debug logging stays off so end users
     // don't pay the I/O cost or risk leaking diagnostic detail. Anything else

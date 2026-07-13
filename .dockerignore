@@ -1,0 +1,38 @@
+# .dockerignore created on 07/12/26 at 21:37
+
+# version control
+.git/
+.gitignore
+.gitattributes
+
+# local and secret config
+.env
+app.env
+default.env
+.claude/
+.android-keystore/
+*.keystore
+*.jks
+
+# build artifacts
+binaries/
+releases/
+app/build/
+build/
+.gradle/
+
+# fetched assets (re-fetched at build time, never baked in)
+app/src/main/assets/fonts/
+app/src/main/jniLibs/
+
+# runtime volume data (never in image)
+volumes/
+docker/volumes/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# docs and meta (not needed in image)
+*.md
+LICENSE*

@@ -90,7 +90,7 @@ test-install: ## Build, install, then run UI tests
 
 image: ## Build Docker image
 	@echo -e "$(BLUE)🐳 Building image...$(NC)"
-	@docker build -t $(BUILD_IMAGE) -f docker/Dockerfile .
+	@docker build -t $(BUILD_IMAGE) -f docker/Dockerfile.build .
 	@echo -e "$(GREEN)✅ Built: $(BUILD_IMAGE)$(NC)"
 
 _ensure-image:

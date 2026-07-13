@@ -1,0 +1,61 @@
+name: Build Toolchain Image
+
+# ─────────────────────────────────────────────────────────────────────────
+# Builds and publishes the CI toolchain image {owner}/{repo}:build used by
+# ci.yml, dev-builds.yml, and release.yml as their `container:`.
+#
+# The image (docker/Dockerfile.build) bakes in the full Android toolchain —
+# SDK, platform-tools, build-tools, CMake, NDK — plus pre-warmed Gradle
+# caches, so consumer workflows never provision the SDK per run and never
+# lazily download cmake/ndk mid-Gradle-build (the corrupt-download flake this
+# replaces).
+#
+# Rebuilt monthly so the toolchain (and its base image security patches) stay
+# current, plus manual dispatch for forced refreshes.
+# ─────────────────────────────────────────────────────────────────────────
+
+on:
+  schedule:
+    # 1st of each month at 04:00 UTC
+    - cron: '0 4 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+# A toolchain push must not be interrupted mid-push.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and publish toolchain image
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4.1.0
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and push toolchain image
+      uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+      with:
+        context: .
+        file: docker/Dockerfile.build
+        platforms: linux/amd64,linux/arm64
+        push: true
+        provenance: false
+        tags: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:build
