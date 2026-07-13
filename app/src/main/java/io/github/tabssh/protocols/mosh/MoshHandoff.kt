@@ -122,14 +122,5 @@ object MoshHandoff {
         }
     }
 
-    /** Reflect into SSHConnection to get the JSch Session — same trick the
-     *  rest of the codebase uses (HistoryFetcher, SCPClient, …). */
-    private fun grabSession(ssh: SSHConnection): Session? = try {
-        val f = ssh.javaClass.getDeclaredField("session")
-        f.isAccessible = true
-        f.get(ssh) as? Session
-    } catch (e: Exception) {
-        Logger.w(TAG, "Couldn't grab JSch session: ${e.message}")
-        null
-    }
+    private fun grabSession(ssh: SSHConnection): Session? = ssh.jschSession()
 }

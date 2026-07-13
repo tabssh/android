@@ -80,6 +80,16 @@ class SSHConnection(
         try { metadataChangedCallback?.invoke() } catch (_: Exception) {}
     }
     private var session: Session? = null
+
+    // In-module accessor for the underlying JSch session. Collaborators that
+    // must open their own channels on the same authenticated connection
+    // (SCPClient, HistoryFetcher, MoshHandoff, PortForwardingManager) reach the
+    // session through this instead of reflecting on the private field — the old
+    // getDeclaredField("session") trick silently returned null under R8 field
+    // renaming in release builds and had no compile-time signal if the field
+    // was renamed. `internal` keeps it off the public API surface.
+    internal fun jschSession(): Session? = session
+
     // Issue #37 — May hold either a `ChannelShell` (the default — login
     // shell) or a `ChannelExec` (when `profile.remoteCommand` is set, for
     // hosts like shell.sourceforge.net that need an explicit `create`).

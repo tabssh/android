@@ -381,19 +381,7 @@ class PortForwardingManager(private val sshConnection: SSHConnection) {
         return@withContext -1 // No available ports found
     }
     
-    private fun getSSHSession(): Session? {
-        // Get the JSch Session from the SSH connection
-        // This uses Java reflection to access the internal session since
-        // SSHConnection doesn't expose it directly in the public API
-        return try {
-            val sessionField = sshConnection.javaClass.getDeclaredField("session")
-            sessionField.isAccessible = true
-            sessionField.get(sshConnection) as? Session
-        } catch (e: Exception) {
-            Logger.e("PortForwardingManager", "Failed to get SSH session for port forwarding", e)
-            null
-        }
-    }
+    private fun getSSHSession(): Session? = sshConnection.jschSession()
     
     private fun generateTunnelId(): String = java.util.UUID.randomUUID().toString()
     

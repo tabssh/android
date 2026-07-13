@@ -50,16 +50,9 @@ class SCPClient(private val sshConnection: SSHConnection) {
             return@withContext false
         }
 
-        val session = try {
-            // Reuse SSHConnection's underlying JSch session via reflection — it's the
-            // same object SFTPManager opens its channel on.
-            val sessionField = sshConnection.javaClass.getDeclaredField("session")
-            sessionField.isAccessible = true
-            sessionField.get(sshConnection) as? com.jcraft.jsch.Session
-        } catch (e: Exception) {
-            Logger.e(TAG, "Couldn't grab JSch session reference", e)
-            null
-        }
+        // Reuse SSHConnection's underlying JSch session — it's the same object
+        // SFTPManager opens its channel on.
+        val session = sshConnection.jschSession()
         if (session == null || !session.isConnected) {
             Logger.e(TAG, "Underlying SSH session not connected")
             return@withContext false

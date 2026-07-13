@@ -61,14 +61,7 @@ class HistoryFetcher(private val sshConnection: SSHConnection) {
         return if (semi > 0 && semi + 1 < line.length) line.substring(semi + 1) else line
     }
 
-    private fun grabSession(): Session? = try {
-        val f = sshConnection.javaClass.getDeclaredField("session")
-        f.isAccessible = true
-        f.get(sshConnection) as? Session
-    } catch (e: Exception) {
-        Logger.w(TAG, "Couldn't grab JSch session: ${e.message}")
-        null
-    }
+    private fun grabSession(): Session? = sshConnection.jschSession()
 
     private fun runRemote(session: Session, command: String): String? {
         if (!session.isConnected) return null

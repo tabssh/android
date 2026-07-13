@@ -613,11 +613,18 @@ escape sequences). Behavior is identical: the ESC scan is a strict superset of
 what the parser could ever match. `make check` clean. *(Also closes the OPT
 item.)*
 
-## M12 — Reflection-based session access is fragile beyond R8
+## M12 — Reflection-based session access is fragile beyond R8 — FIXED
 Beyond H4's release-build break, `getDeclaredField("session")`
 (`PortForwardingManager.kt:389`) couples to a private JSch internal that can change
-across fork versions with no compile-time signal. **Fix:** prefer a public API;
-if none exists, pin the JSch fork version and add a smoke test.
+across fork versions with no compile-time signal. **Correction:** the reflection
+targeted `SSHConnection`'s *own* private `session` field — not a JSch internal —
+so the finding's "private JSch internal" premise was inaccurate; the real hazard
+was R8 renaming that field to null out the lookup in release builds, plus zero
+compile-time signal. **Fix applied:** added an `internal fun jschSession(): Session?`
+accessor on `SSHConnection` and replaced all four reflection sites
+(`PortForwardingManager.kt`, `HistoryFetcher.kt`, `MoshHandoff.kt`, `SCPClient.kt`)
+with a direct call. `internal` keeps it off the public API surface while giving
+every in-module collaborator a compile-checked, R8-safe path. `make check` clean.
 
 ## M13 — Clipboard auto-clear coverage — VERIFIED (no change)
 `IDEA.md` requires "clipboard auto-clear for sensitive pastes." Audited all 25
