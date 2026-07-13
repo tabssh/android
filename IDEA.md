@@ -88,6 +88,12 @@ repository: https://github.com/tabssh/android
 - Works fully offline (no cloud account required to use the app)
 - No feature gating — all functionality available to all users
 
+### Build toolchain
+- The project maintains its own build image `ghcr.io/tabssh/android:build`, built from `docker/Dockerfile.build` and refreshed monthly by `build-toolchain.yml`. This is the declared build image for the project.
+- The image bakes the full Android toolchain — SDK, platform-tools, build-tools, CMake 3.22.1, and the pinned NDK 26.1.10909125 — plus the GitHub CLI and pre-warmed Gradle caches, so CI and local `make` never provision or lazily download the toolchain per run.
+- All CI (`ci.yml`, `dev-builds.yml`, `release.yml`) and the Makefile build and test inside this image; no toolchain is installed inline in a workflow step.
+- The generic `casjaysdev/android` maintained image does not exist yet; until it does, this project-declared image is the toolchain. If that image is later published, the build image may be rebased `FROM casjaysdev/android` (extend, never replace).
+
 ### What the app must never do
 - Store raw passwords or PEM keys in the Room database
 - Embed cloud provider SDKs or require a cloud account for sync
