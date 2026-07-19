@@ -15,6 +15,10 @@
   links that wrap across two or three lines (like a CLI device-login
   URL) used to open a cut-off link when tapped on the first line.
   Fixed.
+- **Creating or closing a tab no longer permanently breaks
+  swipe-to-switch-tabs** — if you had text selected on the terminal
+  when a tab was added or closed, swiping between tabs could stop
+  working until you left and reopened the screen. Fixed.
 
 ## Wave 60 — Hardware keyboards, correct keys, mosh reliability
 

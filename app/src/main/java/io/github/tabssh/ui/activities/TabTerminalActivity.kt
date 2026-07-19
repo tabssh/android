@@ -2143,6 +2143,14 @@ class TabTerminalActivity : AppCompatActivity() {
      * Update ViewPager2 adapter with current tabs
      */
     private fun updateViewPagerAdapter() {
+        // Finish any in-flight text-selection ActionMode before the adapter
+        // swap below recycles its anchor TerminalView — a detached
+        // TYPE_FLOATING ActionMode is not guaranteed by the framework to
+        // fire onDestroyActionMode, which would otherwise leave
+        // swipeSuspendedForSelection stuck true forever (permanently
+        // disabling tab-switch swipes until the activity is recreated).
+        selectionActionMode?.finish()
+
         val allTabs = tabManager.getAllTabs()
 
         // Get font preferences
