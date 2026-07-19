@@ -838,13 +838,18 @@ class TabTerminalActivity : AppCompatActivity() {
                             }
                         }
                         viewPager?.isUserInputEnabled = allowed
+                        Logger.d("TabTerminalActivity", "edgeSwipeGate ACTION_DOWN — swipeSuspendedForSelection=$swipeSuspendedForSelection, isUserInputEnabled=$allowed")
                     }
                     android.view.MotionEvent.ACTION_UP,
                     android.view.MotionEvent.ACTION_CANCEL -> {
                         // Reset to enabled so programmatic paging and the next
                         // gesture's own DOWN check start from a known state —
                         // unless a text selection is actively suspending swipe.
-                        if (!swipeSuspendedForSelection) viewPager?.isUserInputEnabled = true
+                        if (!swipeSuspendedForSelection) {
+                            viewPager?.isUserInputEnabled = true
+                        } else {
+                            Logger.d("TabTerminalActivity", "edgeSwipeGate ACTION_UP/CANCEL — swipe stays suspended (selection active)")
+                        }
                     }
                 }
                 // Never consume — this listener only gates, RecyclerView still
@@ -1378,6 +1383,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 // Re-enable swipe now that text selection is done.
                 swipeSuspendedForSelection = false
                 viewPager?.isUserInputEnabled = true
+                Logger.d("TabTerminalActivity", "onDestroyActionMode — swipeSuspendedForSelection=false, isUserInputEnabled=true")
             }
         }
         selectionActionMode = if (android.os.Build.VERSION.SDK_INT >= 23) {
@@ -1390,6 +1396,7 @@ class TabTerminalActivity : AppCompatActivity() {
             // drag does not accidentally switch tabs mid-selection.
             swipeSuspendedForSelection = true
             viewPager?.isUserInputEnabled = false
+            Logger.d("TabTerminalActivity", "startActionMode succeeded — swipeSuspendedForSelection=true, isUserInputEnabled=false")
         } else {
             // startActionMode() can transiently return null (e.g. window
             // losing focus mid-gesture). Without a live ActionMode there is

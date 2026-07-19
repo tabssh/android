@@ -26,6 +26,16 @@
   only on a genuine failure it actually reports — UDP blocked, a
   firewall in the way, or mosh-server not installed — and
   otherwise lets the session connect at its own pace.
+- **Swipe up/down now scrolls full-screen programs and vim/less/
+  man/htop** — swiping while an alt-screen program was running
+  used to do nothing, because those programs have no client-side
+  scrollback to scroll through. Swipes are now forwarded as
+  Up/Down key presses instead, which these programs already
+  understand as navigation. Multiplexers (tmux, zellij) already
+  scroll their own history via swipe when the multiplexer's
+  mouse mode is on (tmux: `set -g mouse on`; zellij has it on by
+  default) — that part isn't new here, and GNU screen has no
+  mouse-scroll support to hook into regardless of configuration.
 
 ## Wave 59 — Network resilience, VNC console, connection polish
 

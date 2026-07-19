@@ -105,6 +105,12 @@ class TerminalView @JvmOverloads constructor(
     var reverseScrollDirection: Boolean = false
     /** Accumulated scroll pixels for mouse-wheel forwarding (sub-cell precision). */
     private var mouseScrollAccum = 0f
+    /**
+     * Accumulated scroll pixels for arrow-key forwarding (sub-cell precision).
+     * Used when the alternate screen buffer is active without mouse tracking —
+     * see TerminalGestureListener.onScroll() for why this path exists.
+     */
+    private var keyScrollAccum = 0f
 
     // Reusable buffer for drawText — avoids one String allocation per glyph per frame.
     private val charBuf = CharArray(2)
@@ -2161,9 +2167,47 @@ class TerminalView @JvmOverloads constructor(
                         com.termux.terminal.TerminalEmulator.MOUSE_WHEELDOWN_BUTTON
                     repeat(Math.abs(ticks)) { termuxEmulator.sendMouseEvent(button, col, row, true) }
                 }
+                keyScrollAccum = 0f
                 return true
             }
-            // No remote mouse mode — scroll the local scrollback buffer.
+            // Alternate screen buffer active (vim, less, man, htop — and this is
+            // also what tmux/screen/zellij panes switch to whenever the program
+            // running inside them uses it) without mouse tracking. The alt screen
+            // has no client-side scrollback (activeTranscriptRows is always 0
+            // there, by design — see maxScrollYPx()), so falling through to the
+            // local-scrollback path below would silently do nothing: that was the
+            // "swipe stops scrolling" symptom. Forward the swipe as Up/Down key
+            // presses instead — the standard fallback full-screen terminal apps
+            // already know how to interpret as navigation.
+            //
+            // NOTE: this only reaches programs that consume arrow keys directly
+            // (vim, less, man, htop...). It does NOT reach tmux/screen/zellij's
+            // OWN scrollback view (their copy-mode) when the user is sitting at a
+            // plain shell prompt with no alt-screen program running — that only
+            // has a client-detectable trigger via mouse-tracking mode. Getting
+            // that working zero-config requires the multiplexer to have mouse
+            // mode enabled (tmux: `set -g mouse on`; zellij defaults to mouse
+            // mode on already; GNU screen has no equivalent mouse-scroll support
+            // at all, with or without config).
+            if (termuxEmulator != null && termuxEmulator.isAlternateBufferActive()) {
+                val scrollDeltaKey = if (reverseScrollDirection) -distanceY else distanceY
+                keyScrollAccum += scrollDeltaKey
+                val cellH = if (cellHeight > 0f) cellHeight else 20f
+                val ticks = (keyScrollAccum / cellH).toInt()
+                if (ticks != 0) {
+                    keyScrollAccum -= ticks * cellH
+                    val appMode = termuxEmulator.isCursorKeysApplicationMode()
+                    val up = if (appMode) "OA".toByteArray() else "[A".toByteArray()
+                    val down = if (appMode) "OB".toByteArray() else "[B".toByteArray()
+                    // ticks > 0 == swipe toward older content == Up arrow.
+                    val key = if (ticks > 0) up else down
+                    repeat(Math.abs(ticks)) { termuxBridge?.write(key) }
+                }
+                mouseScrollAccum = 0f
+                return true
+            }
+            keyScrollAccum = 0f
+            // No remote mouse mode, no alt screen — scroll the local scrollback buffer.
             // distanceY > 0 when the finger moved UP (Android GestureDetector
             // convention: prevY - currY). Standard mobile convention matches
             // JuiceSSH/Termux: swipe UP → see older content (distanceY > 0
@@ -2205,6 +2249,14 @@ class TerminalView @JvmOverloads constructor(
             val termuxEmulator = termuxBridge?.getEmulator()
             if (termuxEmulator != null && termuxEmulator.isMouseTrackingActive()) {
                 mouseScrollAccum = 0f
+                return true
+            }
+            // Same for the alt-screen key-forwarding path — a keystroke has no
+            // velocity either. Consume so it doesn't fall through to the
+            // local-scrollback fling below, which would fling against a
+            // zero-height buffer (see onScroll's isAlternateBufferActive branch).
+            if (termuxEmulator != null && termuxEmulator.isAlternateBufferActive()) {
+                keyScrollAccum = 0f
                 return true
             }
             // velocityY < 0 = finger was moving UP. Standard convention: swipe UP →
