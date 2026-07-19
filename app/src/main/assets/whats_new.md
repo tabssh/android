@@ -8,6 +8,9 @@
 - **More reliable tmux/screen/zellij auto-detection** — the PRE key
   now correctly detects which multiplexer is running in more cases,
   including tmux sessions with a custom socket location.
+- **Long-press PRE to manually pick your multiplexer** — if
+  auto-detection ever gets it wrong, long-press the PRE key to open
+  the same picker shown on first connect and choose the right one.
 
 ## Wave 60 — Hardware keyboards, correct keys, mosh reliability
 

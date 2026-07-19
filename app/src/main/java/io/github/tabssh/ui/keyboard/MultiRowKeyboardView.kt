@@ -27,6 +27,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
     private var onKeyClickListener: ((KeyboardKey) -> Unit)? = null
     private var onToggleClickListener: (() -> Unit)? = null
     private var onModifierChangedListener: ((String?) -> Unit)? = null
+    private var onKeyLongClickListener: ((KeyboardKey) -> Unit)? = null
     private var numberOfRows = DEFAULT_ROWS
 
     /** User's configured row count (portrait baseline). */
@@ -224,6 +225,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
             val row = KeyboardRowView(context)
             row.setOnKeyClickListener { key -> handleRowKey(key) }
             row.setOnToggleClickListener { onToggleClickListener?.invoke() }
+            row.setOnKeyLongClickListener { key -> onKeyLongClickListener?.invoke(key) }
             keyboardRows.add(row)
             addView(row)
         }
@@ -393,6 +395,15 @@ class MultiRowKeyboardView @JvmOverloads constructor(
      */
     fun setOnModifierChangedListener(listener: (String?) -> Unit) {
         this.onModifierChangedListener = listener
+    }
+
+    /**
+     * Long-press escape hatch on any key — used by PRE to open the
+     * multiplexer picker and manually override an auto-detected type,
+     * even when detection already reported one (possibly wrong).
+     */
+    fun setOnKeyLongClickListener(listener: (KeyboardKey) -> Unit) {
+        this.onKeyLongClickListener = listener
     }
 
     /** Currently latched modifier ("CTL", "ALT", "SFT") or null. */

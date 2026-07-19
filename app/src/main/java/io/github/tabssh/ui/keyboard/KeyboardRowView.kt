@@ -37,6 +37,7 @@ class KeyboardRowView @JvmOverloads constructor(
     private var pinnedCount = 0
     private var onKeyClickListener: ((KeyboardKey) -> Unit)? = null
     private var onToggleClickListener: (() -> Unit)? = null
+    private var onKeyLongClickListener: ((KeyboardKey) -> Unit)? = null
 
     /** Buttons keyed by modifier id (CTL/ALT/FN) so the parent can highlight. */
     private val modifierButtons = mutableMapOf<String, KeyButton>()
@@ -181,6 +182,15 @@ class KeyboardRowView @JvmOverloads constructor(
         }
 
         btn.setOnClickListener { handleKeyClick(key) }
+        btn.setOnLongClickListener {
+            val listener = onKeyLongClickListener
+            if (listener != null) {
+                listener.invoke(key)
+                true
+            } else {
+                false
+            }
+        }
         return btn
     }
 
@@ -194,6 +204,12 @@ class KeyboardRowView @JvmOverloads constructor(
 
     fun setOnKeyClickListener(listener: (KeyboardKey) -> Unit) {
         this.onKeyClickListener = listener
+    }
+
+    /** Long-press escape hatch — e.g. PRE long-press opens the multiplexer
+     *  picker to manually override an auto-detected (possibly wrong) type. */
+    fun setOnKeyLongClickListener(listener: (KeyboardKey) -> Unit) {
+        this.onKeyLongClickListener = listener
     }
 
     fun setOnToggleClickListener(listener: () -> Unit) {

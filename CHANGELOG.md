@@ -7,6 +7,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **PRE key long-press now opens the multiplexer picker to manually override the detected type** — even with the detection fixes below, auto-detection can't be 100% certain (e.g. a user with both tmux and zellij installed but only tmux attached); long-pressing PRE now opens the same picker dialog shown when detection first fails, letting you override it at any time instead of only when nothing was auto-detected
+
 ### Fixed
 
 - **Swipe up/down stopped scrolling the terminal scrollback whenever an alt-screen program (vim, less, man, htop, or a full-screen multiplexer pane) was active** — `TerminalView.maxScrollYPx()` reads `TerminalBuffer.activeTranscriptRows`, which Termux always reports as `0` while the alternate screen buffer is active (by design — alt-screen apps have no client-side scrollback), so the local-scrollback swipe path silently became a permanent no-op the moment any such program ran; `TerminalGestureListener.onScroll()`/`onFling()` in `TerminalView.kt` now detect `TerminalEmulator.isAlternateBufferActive()` and forward the swipe as repeated Up/Down arrow-key escape sequences instead (respecting DECCKM application-cursor-keys mode and the existing `reverseScrollDirection` preference), which is the standard fallback full-screen terminal apps already interpret as navigation; this is in addition to, and mutually exclusive with, the pre-existing mouse-wheel-event forwarding used when the remote program has mouse tracking enabled (tmux with `set -g mouse on`, zellij's default mouse mode, vim's `:set mouse=a`, etc.) — note this does not reach tmux/screen/zellij's own native scrollback (copy-mode) at a plain shell prompt with no alt-screen program running and no mouse mode enabled, which has no client-detectable trigger; GNU screen has no mouse-scroll mechanism at all, with or without config

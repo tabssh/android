@@ -4194,6 +4194,30 @@ class TabTerminalActivity : AppCompatActivity() {
             handleCustomKeyPress(key)
         }
 
+        // Long-press escape hatch — PRE long-press opens the multiplexer
+        // picker so the user can manually override an auto-detected (and
+        // possibly wrong) type, even when detection already reported one.
+        binding.multiRowKeyboard.setOnKeyLongClickListener { key ->
+            if (key.id == "PREFIX") {
+                Logger.d("TabTerminalActivity", "PREFIX key long-press — opening multiplexer picker override")
+                // Cancel any armed latch first so a stale prefix doesn't
+                // fire after the user picks a (possibly different) type —
+                // mirrors the second-tap disarm path above.
+                if (prefixArmed) {
+                    val tab = tabManager.getActiveTab()
+                    val type = tab?.activeMultiplexerType
+                    prefixArmed = false
+                    prefixArmedType = null
+                    getActiveTerminalView()?.let { tv ->
+                        tv.setPendingPrefix(null)
+                        tv.onPrefixConsumed = null
+                    }
+                    updatePrefixKeyVisual(type)
+                }
+                showMultiplexerPickerDialog()
+            }
+        }
+
         binding.multiRowKeyboard.setOnToggleClickListener {
             toggleCustomKeyboard()
         }
