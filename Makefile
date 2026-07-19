@@ -3,7 +3,7 @@
 
 # === Configuration ===
 PROJECT := tabssh
-VERSION := $(shell grep versionName app/build.gradle | head -1 | sed 's/.*"\(.*\)".*/\1/')
+VERSION := $(shell grep -- versionName app/build.gradle | head -1 | sed 's/.*"\(.*\)".*/\1/')
 BUILD_IMAGE := ghcr.io/tabssh/android:build
 
 # Directories
@@ -17,9 +17,12 @@ GRADLE_CACHE ?= $(HOME)/.gradle
 # ANDROID_HOME is already set correctly in the image; no override needed.
 # Mount the host Gradle cache so dependency downloads persist between image
 # rebuilds and don't need to be re-fetched from Maven Central every run.
-DOCKER_RUN := docker run --rm --network=host \
-	-v $(shell pwd):/workspace \
-	-v $(shell pwd)/.android-keystore:/root/.android \
+# Recursively expanded (=) so the random container name regenerates on every
+# use; each container is --rm and named $(PROJECT)-XXXX per the naming rule.
+DOCKER_RUN = docker run --rm --network=host \
+	--name $(PROJECT)-$(shell tr -dc 'a-z0-9' </dev/urandom | head -c8) \
+	-v $(PWD):/workspace \
+	-v $(PWD)/.android-keystore:/root/.android \
 	-v $(GRADLE_CACHE):/root/.gradle \
 	-w /workspace
 
@@ -36,12 +39,12 @@ NC := \033[0m
 help: ## Show available targets
 	@echo -e "$(GREEN)TabSSH Android v$(VERSION)$(NC)"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(BLUE)%-10s$(NC) %s\n", $$1, $$2}'
+	@grep -E -- '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(BLUE)%-10s$(NC) %s\n", $$1, $$2}'
 
 build: _ensure-image fetch-mosh fetch-fonts ## Build debug APKs
 	@echo -e "$(GREEN)🚀 Building TabSSH v$(VERSION)...$(NC)"
 	@mkdir -p $(GRADLE_CACHE)
-	@$(DOCKER_RUN) $(BUILD_IMAGE) ./gradlew clean assembleDebug --no-daemon --build-cache -q
+	@$(DOCKER_RUN) $(BUILD_IMAGE) ./gradlew clean assembleDebug --no-daemon --build-cache
 	@mkdir -p $(BINARIES)
 	@cp $(DEBUG_DIR)/*.apk $(BINARIES)/ 2>/dev/null || true
 	@echo -e "$(GREEN)✅ Done$(NC)"
@@ -56,7 +59,7 @@ fetch-fonts: ## Fetch Nerd Fonts (skip-if-present, --force to refresh)
 check: _ensure-image ## Check for errors (KSP + compile, mirrors GH build)
 	@mkdir -p $(GRADLE_CACHE)
 	@$(DOCKER_RUN) $(BUILD_IMAGE) ./gradlew kspDebugKotlin compileDebugKotlin \
-		--no-daemon --build-cache -q \
+		--no-daemon --build-cache \
 		&& echo -e "$(GREEN)✅ No errors$(NC)" \
 		|| { echo -e "$(YELLOW)❌ Errors found$(NC)"; exit 1; }
 
@@ -80,7 +83,7 @@ install: ## Install APK to device
 	@$(ADB) install -r $(BINARIES)/tabssh-android-universal.apk
 
 logs: ## View device logs
-	@$(ADB) logcat | grep -E "TabSSH|tabssh"
+	@$(ADB) logcat | grep -E -- "TabSSH|tabssh"
 
 test: ## Run UI tests on connected device/emulator (TEST=name or all)
 	@scripts/ui-test.sh --serial $(shell $(ADB) devices | awk '/\tdevice$$/{print $$1; exit}') $(if $(TEST),$(TEST),all)
