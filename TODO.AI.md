@@ -1,6 +1,6 @@
 # TabSSH TODO
 
-**Last Updated:** 2026-06-16
+**Last Updated:** 2026-07-19
 **Version:** 0.9.1 (pinned via `release.txt` — DO NOT MODIFY without coordinated bump in `app/build.gradle` + F-Droid metadata)
 
 > **Usage rules for AI agents:**
@@ -14,6 +14,38 @@
 ---
 
 ## ✅ Recently Shipped
+
+- **`6e549c327987`** 🐛 Fix tab create/close permanently disabling swipe-to-switch — `TabTerminalActivity.updateViewPagerAdapter()` now calls `selectionActionMode?.finish()` before rebuilding the adapter, so a stale floating ActionMode from a prior selection no longer leaves swipe permanently disabled.
+- **`95220a1c92b3`** 🐛 Fix tapping a wrapped URL opening a truncated link — fixed `detectUrlAtPosition()` fast-path short-circuit in `TerminalView.kt` that returned before checking the word-wrap-joined row.
+- **`2704c7dd9d85`** ✨ Add PRE long-press to override detected multiplexer — long-press on the PRE key now opens the multiplexer-picker dialog at any time, not just on auto-detect failure.
+- **`238151ab40e4`** 🐛 Fix multiplexer auto-detection false-positives/misses — excluded zellij's "No active sessions" false-positive boilerplate; added a pgrep-based process fallback in `SSHTab.kt`.
+- **`88c134645183`** 🐛 Fix tab-switch swipes leaking arrow keys into terminal — added a dominant-axis guard (`abs(distanceX) > abs(distanceY)`) to `TerminalGestureListener.onScroll()` so horizontal tab-switch drags no longer leak vertical arrow-key bytes.
+- **`ff4bc0645fa7`** 🐛 Fix swipe-scroll no-op on alt-screen programs — `TerminalView.kt` now forwards swipe as Up/Down arrow-key escape sequences when alt-screen is active without mouse tracking (vim/less/man/htop/multiplexer full-screen panes).
+- **`33219ec8eedc`** 🐛 Fix permanent swipe lockup when `startActionMode()` returns null — guarded the swipe-disable in `TabTerminalActivity.kt` on `selectionActionMode != null`.
+- **`3396e569ef4a`** 🔧 Fix CI failures from containerized workflow migration — added `git config --global --add safe.directory` and `defaults.run.shell: bash` to fix "dubious ownership" and array-syntax failures.
+- **`da60b2a27696`** 👷 Run CI workflows inside the project build image — `ci.yml`/`dev-builds.yml`/`release.yml` now run inside `ghcr.io/tabssh/android:build` via `container:`, with a pull-only `ensure-build-image` gate job.
+- **`bf77b33f01ef`** 📝 Note side-tab-switching bug in `TODO.md` — human-owned-file violation; item is now resolved and removed from `TODO.md` (see the swipe fixes above).
+- **`9a90ce742785`** 🔧 Bring Makefile into line with global Docker/grep rules — `DOCKER_RUN` switched to `$(PWD)` + `--name`; `grep` calls got `--`; removed `-q` from gradlew invocations so build errors surface.
+- **`1d374e675888`** 👷 Bake GitHub CLI into build image and declare it in IDEA.md — installed `gh` via the official apt repo in `Dockerfile.build`; IDEA.md now declares the project-owned image as the build toolchain.
+- **`19db46a45e13`** 👷 Bake full Android toolchain into self-updating build image — `docker/Dockerfile` renamed to `docker/Dockerfile.build`; added `cmake;3.22.1` and `ndk;26.1.10909125`; new monthly `build-toolchain.yml` publishes `ghcr.io/tabssh/android:build`.
+- **`373aa8980268`** 🐛 Collapse per-host alert flood into one network-down notice — `HostAvailabilityWorker.doWork()` restructured into collect-phase + decide-phase; suppresses per-host alerts and posts one "Monitoring suspended / No network" notice when Android reports no validated internet or all probed hosts fail.
+- **`a53324a3f00c`** 👷 Pre-install CMake in dev-builds to fix flaky APK builds — added `cmake: 3.22.1` to `dev-builds.yml`'s SDK setup, matching ci.yml/release.yml, fixing intermittent "Archive is not a ZIP archive" CMake download failures.
+- **`bfeae0d0d6f3`** ♻️ Replace session-field reflection with an internal accessor — M12: added `internal fun jschSession(): Session?` on `SSHConnection.kt`; `PortForwardingManager`, `HistoryFetcher`, `MoshHandoff`, `SCPClient` call it directly instead of reflecting on the private `session` field (R8-unsafe).
+- **`150fac3591c9`** 🐛 Fix host-key callback deadlock risk under bulk reconnect — M1: dedicated single-thread `hostKeyDbDispatcher` in `HostKeyVerifier.kt`; all nine `runBlocking(Dispatchers.IO)` host-key DB calls now route through it instead of the shared IO pool.
+- **`1104b797b10c`** 📝 Record M13 clipboard auto-clear audit as verified — audited all 25 clipboard write sites, confirmed all route through `ClipboardHelper.copy`; no code change needed.
+- **`66490fd760fc`** ⚡ Skip OSC-8 parse on writes with no escape bytes — M11: `appendWithOsc8Tracking` byte-scans for ESC (0x1B) first and fast-paths buffers with none.
+- **`92e0489e82bf`** 🔧 Redirect R8 report files out of app module root — M7: `-printseeds/-printusage/-printmapping` now point into `app/build/outputs/mapping/fdroidRelease/`.
+- **`374c60bfa551`** 👷 Make CI actually compile the project — M2: `ci.yml` previously only ran file-existence grep checks; added real Android SDK setup + Gradle cache + `./gradlew kspDebugKotlin compileDebugKotlin --no-daemon` compile gate mirroring `make check`.
+- **`fd987481ddae`** 🐛 Root read loop and Mosh watchdog in a cancellable session scope — M4: class-level `sessionScope` (Dispatchers.IO + Job()) in `TermuxBridge.kt` replaces per-launch fresh `CoroutineScope` that leaked root Jobs; `cleanup()` now cancels it. Also M8: corrected AI.md's release-artifact row.
+- **`dde3e98f4764`** ✅ Fix stale migration tests for real v3→v5 schema — H6 Slice 6 (+H6b/H6c): rewrote `MigrationTest.kt` for the real v3→v4→v5 migration set using Room 2.6.1 `MigrationTestHelper(instrumentation, Class)`; deleted dead `MainActivityTest.kt` (exercised removed quick-connect UI, blocked the whole androidTest source set). Completes H6.
+
+> **Gap notice (hygiene backfill, 2026-07-19):** this file went stale for far longer than
+> one session — 244 commits landed between `95bd7c4d07ec` (last entry below before this
+> backfill) and HEAD. The 23 entries above cover everything from `dde3e98f4764` onward in
+> full detail; the ~220 commits between `95bd7c4d07ec` and `4db21560d029` were never logged
+> here and are not reconstructed retroactively (see `git log --oneline 95bd7c4d07ec..4db21560d029`
+> and `CHANGELOG.md` for that period). Going forward: update this section every session, not
+> in a backfill batch.
 
 - **`95bd7c4d07ec`** 🐛 Swipe-to-switch freeze — `ReportIssueDialog.create()` stored full log string (up to 2+ MB) in fragment arguments Bundle; Android IPC's ~1 MB transaction limit caused `TransactionTooLargeException` on any state-save event including swipe; fix: truncate to `MAX_CONTENT_BYTES` (100 KB) before `putString`, consistent with the existing upload cap in `preparedContent()`.
 
