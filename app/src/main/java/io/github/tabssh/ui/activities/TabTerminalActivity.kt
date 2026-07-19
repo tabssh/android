@@ -1385,10 +1385,21 @@ class TabTerminalActivity : AppCompatActivity() {
         } else {
             view.startActionMode(callback)
         }
-        // Disable swipe while the user is selecting text so a horizontal
-        // drag does not accidentally switch tabs mid-selection.
-        swipeSuspendedForSelection = true
-        viewPager?.isUserInputEnabled = false
+        if (selectionActionMode != null) {
+            // Disable swipe while the user is selecting text so a horizontal
+            // drag does not accidentally switch tabs mid-selection.
+            swipeSuspendedForSelection = true
+            viewPager?.isUserInputEnabled = false
+        } else {
+            // startActionMode() can transiently return null (e.g. window
+            // losing focus mid-gesture). Without a live ActionMode there is
+            // no onDestroyActionMode to ever flip swipeSuspendedForSelection
+            // back — leaving it unset here would permanently disable swipe
+            // for the rest of the activity's lifetime. Bail out of the
+            // selection attempt instead.
+            Logger.w("TabTerminalActivity", "startActionMode returned null — aborting selection, swipe stays enabled")
+            view.exitSelectionMode()
+        }
     }
 
     /**
