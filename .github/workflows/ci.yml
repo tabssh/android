@@ -11,37 +11,53 @@ concurrency:
   group: validate-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  packages: read
+
 jobs:
+  # Pull-only, fail-fast gate: every other job runs inside this image, so if it
+  # is missing we stop immediately rather than provisioning a toolchain inline.
+  ensure-build-image:
+    name: Ensure build image
+    runs-on: ubuntu-latest
+    permissions:
+      packages: read
+    outputs:
+      image: ${{ steps.pull.outputs.image }}
+    steps:
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - id: pull
+      name: Pull build image (fail fast if missing)
+      run: |
+        IMAGE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:build"
+        if ! docker pull "$IMAGE"; then
+          echo "::error::Build image $IMAGE not found."
+          echo "::error::Trigger the 'Build Toolchain Image' workflow (workflow_dispatch) to create it."
+          echo "::error::Never rely on ci.yml before the build image exists in the registry."
+          exit 1
+        fi
+        echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
   validate:
     name: Code Validation & Tests
+    needs: ensure-build-image
     runs-on: ubuntu-latest
-    
+    container:
+      image: ${{ needs.ensure-build-image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
     steps:
     - name: Checkout code
       uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4 (node24-ready)
-    
-    - name: Set up JDK 17
-      uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
-      with:
-        api-level: 34
-        build-tools: 34.0.0
-        cmake: 3.22.1
-
-    - name: Cache Gradle packages
-      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-      with:
-        path: |
-          ~/.gradle/caches
-          ~/.gradle/wrapper
-        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-        restore-keys: |
-          ${{ runner.os }}-gradle-
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
@@ -67,14 +83,14 @@ jobs:
         test -f "app/src/main/java/io/github/tabssh/ui/activities/MainActivity.kt" && echo "✅ Main activity exists"
 
         echo "✅ Project structure validation passed"
-        
+
     - name: Validate F-Droid metadata
       run: |
         echo "📦 Validating F-Droid metadata..."
-        
+
         if [ -f "metadata/io.github.tabssh.yml" ]; then
           echo "✅ F-Droid metadata exists"
-          
+
           # Check essential metadata fields
           if grep -q "Categories:" metadata/io.github.tabssh.yml && \
              grep -q "License: MIT" metadata/io.github.tabssh.yml && \
@@ -88,7 +104,7 @@ jobs:
           echo "❌ F-Droid metadata missing"
           exit 1
         fi
-        
+
     - name: Security validation
       run: |
         echo "🔒 Running security validation..."
@@ -101,28 +117,28 @@ jobs:
         else
           echo "✅ No hardcoded passwords found"
         fi
-        
+
         # Check for secure defaults
         if grep -q "StrictHostKeyChecking.*yes" app/src/main/java/io/github/tabssh/ssh/connection/SSHConnection.kt; then
           echo "✅ Secure SSH defaults found"
         fi
-        
+
         echo "✅ Security validation passed"
-        
+
     - name: Feature validation
       run: |
         echo "🎯 Validating feature implementation..."
-        
+
         # Count implementation files
         KOTLIN_FILES=$(find app/src/main/java -name "*.kt" | wc -l)
         TEST_FILES=$(find app/src/test -name "*.kt" | wc -l)
         RESOURCE_FILES=$(find app/src/main/res -name "*.xml" | wc -l)
-        
+
         echo "📊 Implementation stats:"
         echo "   Kotlin files: $KOTLIN_FILES"
-        echo "   Test files: $TEST_FILES"  
+        echo "   Test files: $TEST_FILES"
         echo "   Resource files: $RESOURCE_FILES"
-        
+
         # Validate critical components exist
         REQUIRED_FILES=(
           "app/src/main/java/io/github/tabssh/TabSSHApplication.kt"
@@ -134,7 +150,7 @@ jobs:
           "app/src/main/java/io/github/tabssh/themes/definitions/ThemeManager.kt"
           "app/src/main/java/io/github/tabssh/sftp/SFTPManager.kt"
         )
-        
+
         MISSING_COUNT=0
         for file in "${REQUIRED_FILES[@]}"; do
           if [ -f "$file" ]; then
@@ -144,23 +160,23 @@ jobs:
             MISSING_COUNT=$((MISSING_COUNT + 1))
           fi
         done
-        
+
         if [ $MISSING_COUNT -eq 0 ]; then
           echo "✅ All critical components implemented"
         else
           echo "❌ $MISSING_COUNT critical files missing"
           exit 1
         fi
-        
+
     - name: Documentation validation
       run: |
         echo "📚 Validating documentation..."
-        
+
         # Check documentation files
         test -f "README.md" && echo "✅ README.md exists"
         test -f "CHANGELOG.md" && echo "✅ CHANGELOG.md exists"
         test -f "SPEC.md" && echo "✅ SPEC.md exists"
-        
+
         # Check README content
         if grep -q "TabSSH" README.md && \
            grep -q "Features" README.md && \
@@ -170,9 +186,9 @@ jobs:
           echo "❌ README.md incomplete"
           exit 1
         fi
-        
+
         echo "✅ Documentation validation passed"
-        
+
     - name: Final validation summary
       run: |
         echo ""

@@ -32,37 +32,52 @@ permissions:
   contents: write
 
 jobs:
+  # Pull-only, fail-fast gate: the build runs inside this image, so if it is
+  # missing we stop immediately rather than provisioning a toolchain inline.
+  ensure-build-image:
+    name: Ensure build image
+    runs-on: ubuntu-latest
+    permissions:
+      packages: read
+    outputs:
+      image: ${{ steps.pull.outputs.image }}
+    steps:
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - id: pull
+      name: Pull build image (fail fast if missing)
+      run: |
+        IMAGE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:build"
+        if ! docker pull "$IMAGE"; then
+          echo "::error::Build image $IMAGE not found."
+          echo "::error::Trigger the 'Build Toolchain Image' workflow (workflow_dispatch) to create it."
+          exit 1
+        fi
+        echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
   build-devel:
     name: Build Development APKs
+    needs: ensure-build-image
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: read
+    container:
+      image: ${{ needs.ensure-build-image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
     - name: Checkout code
       uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4 (node24-ready)
       with:
         fetch-depth: 0
-
-    - name: Set up JDK 17
-      uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
-      with:
-        packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
-        cmake: 3.22.1
-
-    - name: Cache Gradle packages
-      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-      with:
-        path: |
-          ~/.gradle/caches
-          ~/.gradle/wrapper
-        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-        restore-keys: |
-          ${{ runner.os }}-gradle-
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew

@@ -30,38 +30,53 @@ concurrency:
 
 permissions:
   contents: write
+  packages: read
 
 jobs:
+  # Pull-only, fail-fast gate: the release runs inside this image, so if it is
+  # missing we stop immediately rather than provisioning a toolchain inline.
+  ensure-build-image:
+    name: Ensure build image
+    runs-on: ubuntu-latest
+    permissions:
+      packages: read
+    outputs:
+      image: ${{ steps.pull.outputs.image }}
+    steps:
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - id: pull
+      name: Pull build image (fail fast if missing)
+      run: |
+        IMAGE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:build"
+        if ! docker pull "$IMAGE"; then
+          echo "::error::Build image $IMAGE not found."
+          echo "::error::Trigger the 'Build Toolchain Image' workflow (workflow_dispatch) to create it."
+          exit 1
+        fi
+        echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
   release:
     name: Build & Publish Release
+    needs: ensure-build-image
     runs-on: ubuntu-latest
-    
+    permissions:
+      contents: write
+      packages: read
+    container:
+      image: ${{ needs.ensure-build-image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
     steps:
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4 (node24-ready)
-    
-    - name: Set up JDK 17
-      uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-    
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
-      with:
-        api-level: 34
-        build-tools: 34.0.0
-        cmake: 3.22.1
-        
-    - name: Cache Gradle packages
-      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-      with:
-        path: |
-          ~/.gradle/caches
-          ~/.gradle/wrapper
-        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-        restore-keys: |
-          ${{ runner.os }}-gradle-
-    
+
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
@@ -69,16 +84,16 @@ jobs:
       run: |
         echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
         echo "✅ Keystore decoded and ready"
-        
+
     - name: Run all tests
       run: ./gradlew test --no-daemon
-      
+
     - name: Run security scan
       run: ./gradlew dependencyCheckAnalyze --no-daemon
-      
+
     - name: Verify test coverage
       run: ./gradlew jacocoTestReport jacocoTestCoverageVerification --no-daemon
-      
+
     - name: Get release version
       id: version
       run: |
@@ -92,7 +107,7 @@ jobs:
 
         echo "📦 Building release for tag: $TAG_NAME"
         echo "📦 Version: $VERSION"
-        
+
     - name: Fetch latest mosh-client binaries
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -118,7 +133,7 @@ jobs:
         # an empty string and build.gradle falls back to the current password.
         KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        
+
     - name: Process multi-architecture APKs
       run: |
         cd app/build/outputs/apk/release/
@@ -130,7 +145,7 @@ jobs:
         # No version suffix in the filename — the GitHub release tag
         # carries the version, and assets-by-tag are unique per release.
         ls -lh tabssh-android-*.apk
-        
+
     - name: Build F-Droid compatible APK (sanity check, not uploaded)
       run: |
         # Smoke test: ensure proguard-fdroid.pro and the fdroidRelease build
@@ -157,7 +172,7 @@ jobs:
         echo "- **tabssh-android-universal.apk** - Universal (works on any device)" >> RELEASE_NOTES.md
         echo "" >> RELEASE_NOTES.md
         cat CHANGELOG.md >> RELEASE_NOTES.md
-        
+
     - name: Generate SHA checksums
       run: |
         echo "🔐 Generating SHA256 checksums for security verification..."
@@ -205,7 +220,7 @@ jobs:
         generate_release_notes: false
         prerelease: false
         draft: false
-        
+
     - name: Prepare F-Droid submission package
       run: |
         # F-Droid clones the source and builds on its own infrastructure;
@@ -220,7 +235,7 @@ jobs:
         cp CHANGELOG.md fdroid-submission/
         echo "F-Droid submission package ready in fdroid-submission/"
         echo "Manual F-Droid submission required - package prepared."
-        
+
     - name: Notify community
       run: |
         # Send release notifications
