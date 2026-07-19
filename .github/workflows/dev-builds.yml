@@ -72,12 +72,23 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+    # Actions can't detect bash inside a container image and falls back to
+    # `sh -e` for every `run:` step unless told otherwise.
+    defaults:
+      run:
+        shell: bash
 
     steps:
     - name: Checkout code
       uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4 (node24-ready)
       with:
         fetch-depth: 0
+
+    - name: Trust the checked-out workspace inside the container
+      # The container runs as a different UID than whatever created
+      # the mounted checkout, so git refuses it as "dubious ownership"
+      # the moment a later step runs `git rev-parse`/`git log`.
+      run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew

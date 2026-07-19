@@ -54,6 +54,11 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+    # Actions can't detect bash inside a container image and falls back to
+    # `sh -e`, which breaks the bash-array syntax used below.
+    defaults:
+      run:
+        shell: bash
 
     steps:
     - name: Checkout code
