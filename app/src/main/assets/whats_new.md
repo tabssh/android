@@ -1,5 +1,11 @@
 # What's New
 
+## Wave 61 — Swipe and multiplexer-detection fixes
+
+- **Tab-switch swipes no longer leak arrow keys into the terminal** —
+  swiping left/right to change tabs could, in rare cases, send stray
+  Down-arrow presses to the remote session. Fixed.
+
 ## Wave 60 — Hardware keyboards, correct keys, mosh reliability
 
 - **Full hardware-keyboard support (Bluetooth, USB, OTG)** — the

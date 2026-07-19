@@ -2148,6 +2148,19 @@ class TerminalView @JvmOverloads constructor(
     private inner class TerminalGestureListener : GestureDetector.SimpleOnGestureListener() {
 
         override fun onScroll(e1: MotionEvent?, e2: MotionEvent, distanceX: Float, distanceY: Float): Boolean {
+            // A primarily-horizontal drag is a tab-switch swipe, not a scroll
+            // gesture — GestureDetector still calls onScroll for it (it fires
+            // on any drag, not just vertical ones). Forwarding its incidental
+            // vertical component as mouse-wheel clicks or arrow keys would
+            // leak real input into the remote session mid-swipe (reported:
+            // swiping tabs sent literal Down-arrow bytes to the shell).
+            // Bail out before touching any accumulator or forwarding path —
+            // ViewPager2's own touch handling owns horizontal drags.
+            if (Math.abs(distanceX) > Math.abs(distanceY)) {
+                mouseScrollAccum = 0f
+                keyScrollAccum = 0f
+                return false
+            }
             val termuxEmulator = termuxBridge?.getEmulator()
             if (termuxEmulator != null && termuxEmulator.isMouseTrackingActive()) {
                 // Remote app (e.g. tmux with mouse on) owns scroll — forward as
