@@ -11,6 +11,10 @@
 - **Long-press PRE to manually pick your multiplexer** — if
   auto-detection ever gets it wrong, long-press the PRE key to open
   the same picker shown on first connect and choose the right one.
+- **Tapping a wrapped login link now opens the whole URL** — long
+  links that wrap across two or three lines (like a CLI device-login
+  URL) used to open a cut-off link when tapped on the first line.
+  Fixed.
 
 ## Wave 60 — Hardware keyboards, correct keys, mosh reliability
 

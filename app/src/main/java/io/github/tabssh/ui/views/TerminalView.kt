@@ -1688,10 +1688,20 @@ class TerminalView @JvmOverloads constructor(
         termuxBridge?.getOsc8UrlAt(row, col)?.let { return it }
         terminalBuffer?.getUrlAt(row, col)?.let { return it }
 
-        // Fast path: URL starts and ends on the tapped row.
+        // Fast path: URL starts and ends on the tapped row. Skipped when the
+        // match runs to the end of a soft-wrapped row — the URL path segment
+        // class has no length limit, so a match against a single truncated
+        // row happily "succeeds" on just the visible prefix of a longer URL
+        // that continues onto the next row (e.g. a login link's "https://"
+        // scheme is what's naturally tapped, and it sits on the first wrap
+        // row). Falling through lets the wrap-aware reconstruction below
+        // return the full URL instead of a cut-off fragment.
         val rowText = getRowText(row)
-        urlPattern.findAll(rowText).firstOrNull { col in it.range }
-            ?.let { return normaliseUrl(it.value) }
+        val rowTrimmedLen = rowText.trimEnd().length
+        urlPattern.findAll(rowText).firstOrNull { col in it.range }?.let { match ->
+            val touchesWrapBoundary = match.range.last >= rowTrimmedLen - 1 && isRowSoftWrapped(row)
+            if (!touchesWrapBoundary) return normaliseUrl(match.value)
+        }
 
         // Walk backward to find the first row of the soft-wrap segment containing `row`.
         // A row r is part of this segment when row r-1 soft-wraps into r.
