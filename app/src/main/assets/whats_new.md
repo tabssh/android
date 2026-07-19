@@ -5,6 +5,9 @@
 - **Tab-switch swipes no longer leak arrow keys into the terminal** —
   swiping left/right to change tabs could, in rare cases, send stray
   Down-arrow presses to the remote session. Fixed.
+- **More reliable tmux/screen/zellij auto-detection** — the PRE key
+  now correctly detects which multiplexer is running in more cases,
+  including tmux sessions with a custom socket location.
 
 ## Wave 60 — Hardware keyboards, correct keys, mosh reliability
 

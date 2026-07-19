@@ -937,16 +937,46 @@ class SSHTab(
             //      interactive session. False positives are possible
             //      (server running, user detached) but far less painful
             //      than never detecting anything.
-            val output = conn.executeCommand(
+            // Each branch is tagged with which check matched (":env", ":live-socket",
+            // ":live-proc") so a misdetection is diagnosable from a debug-log capture
+            // alone — without this, "zellij" in the log doesn't say whether
+            // $ZELLIJ_SESSION_NAME was (wrongly) set, whether `zellij list-sessions`
+            // found a stray/leftover session, or whether `tmux ls` failed to see a
+            // genuinely running tmux server.
+            //
+            // `tmux ls` / `screen -ls` look for the server's socket under
+            // $TMUX_TMPDIR/tmux-$UID (default /tmp/tmux-$UID) or $SCREENDIR — but an
+            // SSH exec channel is a fresh non-interactive, non-login shell that does
+            // NOT source ~/.bashrc or ~/.profile, so a $TMUX_TMPDIR/$SCREENDIR/custom
+            // -S socket path set only there is invisible here. That makes the socket
+            // check silently fail to find a genuinely running server, falling through
+            // to a later (wrong) branch. A `pgrep` process check has no socket-path
+            // dependency at all, so it's tried as a fallback after each socket check.
+            val rawOutput = conn.executeCommand(
                 "sh -c '" +
-                    "if [ -n \"\$TMUX\" ]; then echo tmux; exit 0; fi; " +
-                    "if [ -n \"\$STY\" ]; then echo screen; exit 0; fi; " +
-                    "if [ -n \"\$ZELLIJ_SESSION_NAME\" ]; then echo zellij; exit 0; fi; " +
-                    "if command -v tmux >/dev/null 2>&1 && tmux ls >/dev/null 2>&1; then echo tmux; exit 0; fi; " +
-                    "if command -v screen >/dev/null 2>&1 && screen -ls 2>/dev/null | grep -qE \"[0-9]+\\.[^[:space:]]+\"; then echo screen; exit 0; fi; " +
-                    "if command -v zellij >/dev/null 2>&1 && zellij list-sessions 2>/dev/null | grep -q .; then echo zellij; exit 0; fi'",
+                    "if [ -n \"\$TMUX\" ]; then echo tmux:env; exit 0; fi; " +
+                    "if [ -n \"\$STY\" ]; then echo screen:env; exit 0; fi; " +
+                    "if [ -n \"\$ZELLIJ_SESSION_NAME\" ]; then echo zellij:env; exit 0; fi; " +
+                    "if command -v tmux >/dev/null 2>&1 && tmux ls >/dev/null 2>&1; then echo tmux:live-socket; exit 0; fi; " +
+                    "if command -v screen >/dev/null 2>&1 && screen -ls 2>/dev/null | grep -qE \"[0-9]+\\.[^[:space:]]+\"; then echo screen:live-socket; exit 0; fi; " +
+                    // `zellij list-sessions` prints "No active zellij sessions found."
+                    // to STDOUT with exit 0 when nothing is running — a bare
+                    // `grep -q .` false-positives on that boilerplate on any server
+                    // with zellij installed, regardless of whether a session exists.
+                    // Exclude lines containing "No active" to require a real session line.
+                    "if command -v zellij >/dev/null 2>&1 && zellij list-sessions 2>/dev/null | grep -v \"No active\" | grep -q .; then echo zellij:live-socket; exit 0; fi; " +
+                    "if pgrep -u \"\$(id -u)\" -x tmux >/dev/null 2>&1; then echo tmux:live-proc; exit 0; fi; " +
+                    "if pgrep -u \"\$(id -u)\" -x screen >/dev/null 2>&1; then echo screen:live-proc; exit 0; fi; " +
+                    "if pgrep -u \"\$(id -u)\" -x zellij >/dev/null 2>&1; then echo zellij:live-proc; exit 0; fi'",
                 timeoutMs = timeoutMs
             ).trim()
+            // Log the raw tagged probe output on every run (not just on state change) so
+            // a misdetection is visible in a debug-log capture even when the wrong value
+            // is being detected repeatedly and never triggers the "state changed" branch
+            // below (e.g. reporting zellij:live for a tmux-only session, meaning `tmux ls`
+            // failed to see a genuinely running tmux server over the exec channel).
+            Logger.d("SSHTab", "Multiplexer probe raw output: '$rawOutput'")
+            val output = rawOutput.substringBefore(':')
             val detected = if (output in listOf("tmux", "screen", "zellij")) output else null
             if (detected != _activeMultiplexerType.value) {
                 _activeMultiplexerType.value = detected
