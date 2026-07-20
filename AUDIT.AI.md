@@ -536,10 +536,26 @@ Setup Android SDK (api 34 / build-tools 34.0.0, same pinned action as
 `act --list -W ci.yml` parses clean; all actions reuse `release.yml`'s
 already-SHA-pinned versions.
 
-## M3 — OWASP dependency-check plugin two majors behind
-**`org.owasp.dependencycheck:8.4.0`** relies on the retired NVD legacy feed, so the
-release CVE gate reports stale/empty data. **Fix:** bump to ≥10.x and supply an
+## M3 — OWASP dependency-check plugin two majors behind — FIXED (partial, see note)
+**`org.owasp.dependencycheck:8.4.0`** relied on the retired NVD legacy feed, so the
+release CVE gate reported stale/empty data. **Fix:** bump to ≥10.x and supply an
 `nvd.api.key`.
+
+**Applied:** bumped to `12.2.2` (current latest; upstream release notes call an
+upgrade to 12.1.0+ "mandatory" due to NVD API compatibility changes). Added an
+`nvd { apiKey = ... }` block in `build.gradle`, read from the `NVD_API_KEY` env
+var — never hardcoded — and only set when present, so local builds without the
+var keep working exactly as before (unauthenticated/throttled NVD access).
+Wired `NVD_API_KEY: ${{ secrets.NVD_API_KEY }}` into the `release.yml`
+"Run security scan" step. Verified `make check` (containerized KSP + compile)
+passes with the new plugin version.
+
+**Not fully closed — requires maintainer action:** an actual NVD API key must
+be requested at https://nvd.nist.gov/developers/request-an-api-key and added
+as the `NVD_API_KEY` repository secret in GitHub. I cannot obtain or set that
+key myself. Until it's added, `dependencyCheckAnalyze` in CI still runs
+unauthenticated and may be throttled — the code-level fix (current plugin,
+correct config wiring) is done; the credential provisioning is not.
 
 ## M4 — Orphaned coroutine scopes — FIXED
 **`TermuxBridge.kt:629`** (readJob scope) and **`TermuxBridge.kt:1188`** (Mosh

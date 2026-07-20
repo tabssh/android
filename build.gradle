@@ -12,7 +12,7 @@ buildscript {
 }
 
 plugins {
-    id 'org.owasp.dependencycheck' version '8.4.0'
+    id 'org.owasp.dependencycheck' version '12.2.2'
     // KSP — replaces Kapt for Room codegen. The version suffix
     // (`-1.0.25`) is the KSP release; the prefix (`2.0.21`) MUST
     // match `kotlin_version` above. If you bump Kotlin, bump this.
@@ -30,7 +30,20 @@ dependencyCheck {
     format = 'ALL'
     suppressionFile = 'config/dependency-check-suppressions.xml'
     failBuildOnCVSS = 7.0
-    
+
+    // The legacy NVD feed was retired; the NVD API now requires a key
+    // (https://nvd.nist.gov/developers/request-an-api-key) or lookups get
+    // throttled to the point of failing CI. Never hardcode the key — read
+    // it from the NVD_API_KEY env var (set as a repo secret in CI). Left
+    // unset locally/without the secret, the plugin falls back to its
+    // unauthenticated (throttled) NVD access, same as before this change.
+    def nvdApiKey = System.getenv('NVD_API_KEY')
+    if (nvdApiKey) {
+        nvd {
+            apiKey = nvdApiKey
+        }
+    }
+
     analyzers {
         experimentalEnabled = true
         archiveEnabled = true
