@@ -3,7 +3,7 @@ package io.github.tabssh.background
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import androidx.preference.PreferenceManager
+import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.utils.logging.Logger
 
 /**
@@ -40,8 +40,7 @@ class MonitoringBootReceiver : BroadcastReceiver() {
         when (intent.action) {
             Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_MY_PACKAGE_REPLACED -> {
-                val prefs = PreferenceManager.getDefaultSharedPreferences(context)
-                val monitoringOn = prefs.getBoolean("monitoring_enabled", true)
+                val monitoringOn = TabSSHApplication.get().preferencesManager.isMonitoringEnabled()
                 if (monitoringOn) {
                     Logger.i(TAG, "Rescheduling host-availability worker after ${intent.action}")
                     HostAvailabilityWorker.schedule(context)

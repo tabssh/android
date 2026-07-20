@@ -3,20 +3,20 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <PreferenceCategory
-        android:title="Connection Defaults"
+        android:title="SSH Defaults"
         android:key="category_connection_defaults">
 
         <EditTextPreference
             android:key="default_username"
             android:title="Default Username"
-            android:summary="Username for new connections and quick connect"
+            android:summary="Username for new SSH/Mosh connections and quick connect (not used for VNC)"
             android:defaultValue="root"
             app:useSimpleSummaryProvider="true" />
 
         <EditTextPreference
             android:key="default_port"
             android:title="Default Port"
-            android:summary="SSH port number"
+            android:summary="Port number for new SSH/Mosh connections"
             android:defaultValue="22"
             android:inputType="number"
             app:useSimpleSummaryProvider="true" />
@@ -24,7 +24,7 @@
         <EditTextPreference
             android:key="connect_timeout"
             android:title="Connection Timeout"
-            android:summary="Seconds to wait for connection"
+            android:summary="Seconds to wait for a connection (SSH/Mosh)"
             android:defaultValue="15"
             android:inputType="number"
             app:useSimpleSummaryProvider="true" />
@@ -32,7 +32,7 @@
     </PreferenceCategory>
 
     <PreferenceCategory
-        android:title="Connection Behavior"
+        android:title="SSH Behavior"
         android:key="category_connection_behavior">
 
         <!-- Keep-alive is always on at the SSH layer (10s ServerAliveInterval,

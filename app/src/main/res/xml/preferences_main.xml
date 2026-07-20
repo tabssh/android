@@ -1,66 +1,93 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <Preference
-        android:key="general_settings"
-        android:title="General"
-        android:summary="App theme and language"
-        android:icon="@android:drawable/ic_menu_preferences"
-        android:fragment="io.github.tabssh.ui.activities.GeneralSettingsFragment" />
+    <PreferenceCategory
+        android:title="App">
 
-    <Preference
-        android:key="security_settings"
-        android:title="App Security"
-        android:summary="Lock, biometrics, and SSH security"
-        android:icon="@android:drawable/ic_lock_lock"
-        android:fragment="io.github.tabssh.ui.activities.SecuritySettingsFragment" />
+        <Preference
+            android:key="general_settings"
+            android:title="General"
+            android:summary="App theme, language, tab behavior, and notifications"
+            android:icon="@android:drawable/ic_menu_preferences"
+            android:fragment="io.github.tabssh.ui.activities.GeneralSettingsFragment" />
 
-    <Preference
-        android:key="terminal_settings"
-        android:title="Terminal"
-        android:summary="Theme, font, and terminal behavior"
-        android:icon="@android:drawable/ic_menu_edit"
-        android:fragment="io.github.tabssh.ui.activities.TerminalSettingsFragment" />
+        <Preference
+            android:key="security_settings"
+            android:title="App Security"
+            android:summary="App lock, biometrics, and SSH/Mosh host-key security"
+            android:icon="@android:drawable/ic_lock_lock"
+            android:fragment="io.github.tabssh.ui.activities.SecuritySettingsFragment" />
 
-    <Preference
-        android:key="connection_settings"
-        android:title="Connection"
-        android:summary="Default connection settings"
-        android:icon="@android:drawable/stat_sys_data_bluetooth"
-        android:fragment="io.github.tabssh.ui.activities.ConnectionSettingsFragment" />
+        <Preference
+            android:key="terminal_settings"
+            android:title="Terminal"
+            android:summary="Theme, font, and terminal behavior for SSH &amp; Mosh sessions — not used for VNC/console tabs"
+            android:icon="@android:drawable/ic_menu_edit"
+            android:fragment="io.github.tabssh.ui.activities.TerminalSettingsFragment" />
 
-    <Preference
-        android:key="sync_settings"
-        android:title="Sync"
-        android:summary="Sync data across devices (Google Drive, WebDAV, Nextcloud)"
-        android:icon="@android:drawable/ic_menu_rotate" />
+    </PreferenceCategory>
 
-    <Preference
-        android:key="monitoring_settings"
-        android:title="Monitoring"
-        android:summary="Background host availability checks and performance alerts"
-        android:icon="@android:drawable/ic_menu_compass"
-        android:fragment="io.github.tabssh.ui.activities.MonitoringSettingsFragment" />
-    
-    <Preference
-        android:key="logging_settings"
-        android:title="Logging"
-        android:summary="Debug, host, error, and audit logging"
-        android:icon="@android:drawable/ic_menu_recent_history"
-        android:fragment="io.github.tabssh.ui.activities.LoggingSettingsFragment" />
+    <PreferenceCategory
+        android:title="Connectivity">
 
-    <Preference
-        android:key="tasker_settings"
-        android:title="Tasker Integration"
-        android:summary="Automate SSH with Tasker"
-        android:icon="@android:drawable/ic_menu_manage"
-        android:fragment="io.github.tabssh.ui.activities.TaskerSettingsFragment" />
+        <Preference
+            android:key="connection_settings"
+            android:title="Connection"
+            android:summary="Default username/port/timeout for SSH &amp; Mosh, plus SSH-only options (compression, X11/agent forwarding)"
+            android:icon="@android:drawable/stat_sys_data_bluetooth"
+            android:fragment="io.github.tabssh.ui.activities.ConnectionSettingsFragment" />
 
-    <Preference
-        android:key="import_export"
-        android:title="Import / Export"
-        android:summary="Backup, restore, SSH config, and bulk import"
-        android:icon="@android:drawable/ic_menu_upload" />
+        <Preference
+            android:key="monitoring_settings"
+            android:title="Monitoring"
+            android:summary="Background host availability checks and performance alerts"
+            android:icon="@android:drawable/ic_menu_compass"
+            android:fragment="io.github.tabssh.ui.activities.MonitoringSettingsFragment" />
+
+        <Preference
+            android:key="sync_settings"
+            android:title="Sync"
+            android:summary="Sync data across devices (Google Drive, WebDAV, Nextcloud)"
+            android:icon="@android:drawable/ic_menu_rotate" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="Automation &amp; Data">
+
+        <Preference
+            android:key="tasker_settings"
+            android:title="Tasker"
+            android:summary="Automate SSH connections with Tasker"
+            android:icon="@android:drawable/ic_menu_manage"
+            android:fragment="io.github.tabssh.ui.activities.TaskerSettingsFragment" />
+
+        <Preference
+            android:key="import_export"
+            android:title="Import / Export"
+            android:summary="Backup, restore, SSH config, and bulk import"
+            android:icon="@android:drawable/ic_menu_upload" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="Diagnostics">
+
+        <Preference
+            android:key="logging_settings"
+            android:title="Logging"
+            android:summary="Debug, host, and error logging"
+            android:icon="@android:drawable/ic_menu_recent_history"
+            android:fragment="io.github.tabssh.ui.activities.LoggingSettingsFragment" />
+
+        <Preference
+            android:key="audit_settings"
+            android:title="Audit Log"
+            android:summary="Security audit trail — authentication, commands, file transfers"
+            android:icon="@android:drawable/ic_lock_lock"
+            android:fragment="io.github.tabssh.ui.activities.AuditSettingsFragment" />
+
+    </PreferenceCategory>
 
     <PreferenceCategory
         android:title="About">

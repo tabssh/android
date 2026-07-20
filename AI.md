@@ -1061,9 +1061,9 @@ Package `cloud/` (separate from `hypervisor/`). Manages SSH-accessible cloud VM 
 |---|---|---|
 | `preferences_main.xml` | `SettingsMainFragment` | nav hub |
 | `preferences_general.xml` | `GeneralSettingsFragment` | theme, language, behavior, notifications |
-| `preferences_terminal.xml` | `TerminalSettingsFragment` | terminal theme, font, cursor, scrollback, gestures, keyboard, recording |
-| `preferences_security.xml` | `SecuritySettingsFragment` | lock, biometric, host-key strict, port-knock default |
-| `preferences_connection.xml` | `ConnectionSettingsFragment` | default user/port, timeouts, compression, mosh (keep-alive is always-on at the SSH layer — no toggle) |
+| `preferences_terminal.xml` | `TerminalSettingsFragment` | terminal theme, font, cursor, scrollback, gestures, keyboard, recording — applies to SSH &amp; Mosh tabs (both run through `SSHTab`/`TabTerminalActivity`), not VNC (`VncView`, no shared prefs) |
+| `preferences_security.xml` | `SecuritySettingsFragment` | app lock, biometric; SSH/Mosh host-key strict checking + port-knock default (Mosh bootstraps over SSH, so host-key prefs apply to it too) |
+| `preferences_connection.xml` | `ConnectionSettingsFragment` | default user/port/timeout apply to both SSH and Mosh new-connection prefill; compression/X11/agent-forwarding are SSH-only (keep-alive is always-on at the SSH layer — no toggle) |
 | `preferences_sync.xml` | `SyncSettingsFragment` (in `SyncSettingsActivity`) | SAF location, password, frequency, per-entity toggles |
 | `preferences_audit.xml` | embedded | command auditing |
 | `preferences_logging.xml` | `LoggingSettingsFragment` | debug / host / error / audit logging |

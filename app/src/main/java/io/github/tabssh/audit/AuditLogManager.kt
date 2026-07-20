@@ -54,14 +54,6 @@ class AuditLogManager(
     @Volatile private var mdmBundle: Bundle? = null
 
     companion object {
-        // User-preference keys (shared with preferences_audit.xml)
-        const val PREF_AUDIT_ENABLED        = "audit_log_enabled"
-        const val PREF_AUDIT_MAX_SIZE_MB    = "audit_log_max_size_mb"
-        const val PREF_AUDIT_MAX_AGE_DAYS   = "audit_log_max_age_days"
-        const val PREF_AUDIT_LOG_COMMANDS   = "audit_log_commands"
-        const val PREF_AUDIT_LOG_OUTPUT     = "audit_log_output"
-        const val PREF_AUDIT_AUTO_CLEANUP   = "audit_log_auto_cleanup"
-
         // MDM managed-config keys (must match res/xml/app_restrictions.xml)
         const val MDM_AUDIT_ENABLED         = "mdm_audit_enabled"
         const val MDM_AUDIT_LOG_COMMANDS    = "mdm_audit_log_commands"
@@ -70,8 +62,6 @@ class AuditLogManager(
         const val MDM_SYSLOG_HOST           = "mdm_syslog_host"
         const val MDM_SYSLOG_PORT           = "mdm_syslog_port"
 
-        const val DEFAULT_MAX_SIZE_MB   = 100L
-        const val DEFAULT_MAX_AGE_DAYS  = 30
         const val MDM_DEFAULT_RET_DAYS  = 90
         const val MDM_DEFAULT_SYSLOG_PORT = 514
 
@@ -116,7 +106,7 @@ class AuditLogManager(
         if (mdm != null && mdm.containsKey(MDM_AUDIT_ENABLED)) {
             return mdm.getBoolean(MDM_AUDIT_ENABLED, false)
         }
-        return preferencesManager.getBoolean(PREF_AUDIT_ENABLED, false)
+        return preferencesManager.isAuditLogEnabled()
     }
 
     private fun shouldLogCommands(): Boolean {
@@ -124,7 +114,7 @@ class AuditLogManager(
         if (mdm != null && mdm.containsKey(MDM_AUDIT_LOG_COMMANDS)) {
             return mdm.getBoolean(MDM_AUDIT_LOG_COMMANDS, true)
         }
-        return preferencesManager.getBoolean(PREF_AUDIT_LOG_COMMANDS, true)
+        return preferencesManager.isAuditLogCommandsEnabled()
     }
 
     private fun shouldLogOutput(): Boolean {
@@ -132,7 +122,7 @@ class AuditLogManager(
         if (mdm != null && mdm.containsKey(MDM_AUDIT_LOG_OUTPUT)) {
             return mdm.getBoolean(MDM_AUDIT_LOG_OUTPUT, false)
         }
-        return preferencesManager.getBoolean(PREF_AUDIT_LOG_OUTPUT, false)
+        return preferencesManager.isAuditLogOutputEnabled()
     }
 
     private fun retentionDays(): Int {
@@ -140,7 +130,7 @@ class AuditLogManager(
         if (mdm != null && mdm.containsKey(MDM_AUDIT_RETENTION_DAYS)) {
             return mdm.getInt(MDM_AUDIT_RETENTION_DAYS, MDM_DEFAULT_RET_DAYS)
         }
-        return preferencesManager.getInt(PREF_AUDIT_MAX_AGE_DAYS, DEFAULT_MAX_AGE_DAYS)
+        return preferencesManager.getAuditLogMaxAgeDays()
     }
 
     // ── Session lifecycle ────────────────────────────────────────────────────
@@ -441,7 +431,7 @@ class AuditLogManager(
 
     suspend fun checkAndCleanup() {
         withContext(Dispatchers.IO) {
-            val maxSizeMB  = preferencesManager.getLong(PREF_AUDIT_MAX_SIZE_MB, DEFAULT_MAX_SIZE_MB)
+            val maxSizeMB  = preferencesManager.getAuditLogMaxSizeMb().toLong()
             val currentSize = auditDao.getTotalSize() ?: 0L
             if (currentSize > maxSizeMB * 1024 * 1024) {
                 auditDao.deleteOldest(100)

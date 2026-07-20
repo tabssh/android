@@ -5,7 +5,6 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.PowerManager
-import androidx.preference.PreferenceManager
 import androidx.work.*
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.performance.MetricsCollector
@@ -154,19 +153,19 @@ class HostAvailabilityWorker(
             return Result.success()
         }
 
+        val preferencesManager = TabSSHApplication.get().preferencesManager
+
         // Gate 1: battery saver mode.
         val pm = appContext.getSystemService(Context.POWER_SERVICE) as PowerManager
         if (pm.isPowerSaveMode) {
-            val prefs = PreferenceManager.getDefaultSharedPreferences(appContext)
-            if (!prefs.getBoolean("monitoring_run_in_battery_saver", false)) {
+            if (!preferencesManager.isMonitoringRunInBatterySaverEnabled()) {
                 Logger.d(TAG, "Skipping run: battery saver active and pref not set")
                 return Result.success()
             }
         }
 
         // Gate 2: master monitoring switch.
-        val prefs = PreferenceManager.getDefaultSharedPreferences(appContext)
-        if (!prefs.getBoolean("monitoring_enabled", true)) {
+        if (!preferencesManager.isMonitoringEnabled()) {
             Logger.d(TAG, "Skipping run: monitoring_enabled = false")
             return Result.success()
         }
@@ -177,8 +176,13 @@ class HostAvailabilityWorker(
         // effect when this is true — they can suppress individual hosts below the
         // global level, but cannot enable notifications above it.
         // (Group-level notification settings are a planned future addition that
-        // will sit between the global default and the per-host flag in precedence.)
-        val globalNotificationsEnabled = prefs.getBoolean("monitoring_notifications_enabled", true)
+        // will sit between the global default and the per-host flag in precedence.
+        // No PreferenceManager method exists for this key yet — it has no backing
+        // XML preference, so it is read raw via the framework's SharedPreferences
+        // helper until a real UI toggle is added.)
+        val globalNotificationsEnabled = androidx.preference.PreferenceManager
+            .getDefaultSharedPreferences(appContext)
+            .getBoolean("monitoring_notifications_enabled", true)
 
         // Dismiss any stale "monitoring suspended — no network" notification from
         // a previous run that detected an outage. We're past the internet gate,
@@ -375,10 +379,10 @@ class HostAvailabilityWorker(
         if (!notificationsEnabled) return
 
         // Resolve effective thresholds: per-host value when set; global Settings default otherwise.
-        val globalPrefs   = PreferenceManager.getDefaultSharedPreferences(appContext)
-        val effectiveCpu  = slot.cpuThreshold  ?: globalPrefs.getInt("monitoring_default_cpu_threshold",    85)
-        val effectiveMem  = slot.memoryThreshold ?: globalPrefs.getInt("monitoring_default_memory_threshold", 90)
-        val effectiveDisk = slot.diskThreshold  ?: globalPrefs.getInt("monitoring_default_disk_threshold",   80)
+        val preferencesManager = app.preferencesManager
+        val effectiveCpu  = slot.cpuThreshold  ?: preferencesManager.getMonitoringDefaultCpuThreshold()
+        val effectiveMem  = slot.memoryThreshold ?: preferencesManager.getMonitoringDefaultMemoryThreshold()
+        val effectiveDisk = slot.diskThreshold  ?: preferencesManager.getMonitoringDefaultDiskThreshold()
 
         // CPU threshold — uses 5-minute load average normalised by core count so
         // momentary spikes don't trigger alerts. load5min / coreCount × 100 gives

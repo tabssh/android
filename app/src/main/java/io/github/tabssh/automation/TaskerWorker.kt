@@ -63,12 +63,12 @@ class TaskerWorker(
     override suspend fun doWork(): Result {
         // Tasker-disabled / device-locked gates — same behaviour as
         // the old JobIntentService.
-        if (!app.preferencesManager.getBoolean("tasker_enabled", true)) {
+        if (!app.preferencesManager.isTaskerEnabled()) {
             Logger.w(TAG, "Tasker integration is disabled")
             broadcastError("Tasker integration is disabled in settings")
             return Result.success()
         }
-        if (app.preferencesManager.getBoolean("tasker_require_unlock", false)) {
+        if (app.preferencesManager.isTaskerRequireUnlockEnabled()) {
             val km = applicationContext.getSystemService(Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager
             if (km != null && km.isDeviceSecure && km.isKeyguardLocked) {
                 val action = inputData.getString(KEY_ACTION) ?: "unknown"
@@ -100,19 +100,18 @@ class TaskerWorker(
     }
 
     private fun isConnectionAllowed(profileId: String): Boolean {
-        val allowed = app.preferencesManager.getStringSet("tasker_allowed_connections")
+        val allowed = app.preferencesManager.getTaskerAllowedConnections()
         if (allowed.isEmpty()) return true
         return allowed.contains(profileId)
     }
 
     private fun logTaskerEvent(event: String, detail: String) {
-        if (!app.preferencesManager.getBoolean("tasker_log_events", true)) return
+        if (!app.preferencesManager.isTaskerLogEventsEnabled()) return
         Logger.i(TAG, "[tasker] $event: $detail")
     }
 
     private fun defaultCommandTimeoutMs(): Long {
-        val raw = app.preferencesManager.getString("tasker_command_timeout", DEFAULT_TIMEOUT_MS.toString())
-        return raw.toLongOrNull()?.coerceAtLeast(1000L) ?: DEFAULT_TIMEOUT_MS
+        return app.preferencesManager.getTaskerCommandTimeoutMs().toLong().coerceAtLeast(1000L)
     }
 
     private suspend fun resolveProfile(): ConnectionProfile? {

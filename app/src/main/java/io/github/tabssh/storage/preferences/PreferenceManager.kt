@@ -132,6 +132,43 @@ class PreferenceManager(private val context: Context) {
         private const val KEY_MULTIPLEXER_PREFIX_SCREEN = "multiplexer_custom_prefix_screen"
         private const val KEY_MULTIPLEXER_PREFIX_ZELLIJ = "multiplexer_custom_prefix_zellij"
 
+        // Audit log preferences — keys MUST match preferences_audit.xml.
+        // audit_log_max_size_mb / audit_log_max_age_days are EditTextPreference
+        // (String-backed in SharedPreferences) so they route through
+        // getStringAsInt(), same pattern as getMaxTabs()/getDefaultPort().
+        private const val KEY_AUDIT_LOG_ENABLED = "audit_log_enabled"
+        private const val KEY_AUDIT_LOG_MAX_SIZE_MB = "audit_log_max_size_mb"
+        private const val KEY_AUDIT_LOG_MAX_AGE_DAYS = "audit_log_max_age_days"
+        private const val KEY_AUDIT_LOG_COMMANDS = "audit_log_commands"
+        private const val KEY_AUDIT_LOG_OUTPUT = "audit_log_output"
+
+        // Monitoring preferences — keys MUST match preferences_monitoring.xml.
+        private const val KEY_MONITORING_ENABLED = "monitoring_enabled"
+        private const val KEY_MONITORING_NOTIFY_DOWN = "monitoring_notify_down"
+        private const val KEY_MONITORING_NOTIFY_RECOVERY = "monitoring_notify_recovery"
+        private const val KEY_MONITORING_ALERT_COOLDOWN_MINUTES = "monitoring_alert_cooldown_minutes"
+        private const val KEY_MONITORING_DEFAULT_CPU_THRESHOLD = "monitoring_default_cpu_threshold"
+        private const val KEY_MONITORING_DEFAULT_MEMORY_THRESHOLD = "monitoring_default_memory_threshold"
+        private const val KEY_MONITORING_DEFAULT_DISK_THRESHOLD = "monitoring_default_disk_threshold"
+        private const val KEY_MONITORING_RUN_IN_BATTERY_SAVER = "monitoring_run_in_battery_saver"
+
+        // Tasker preferences — keys MUST match preferences_tasker.xml.
+        // tasker_command_timeout is EditTextPreference (String-backed), routed
+        // through getStringAsInt(). tasker_allowed_connections is a
+        // MultiSelectListPreference (String set), routed through getStringSet().
+        private const val KEY_TASKER_ENABLED = "tasker_enabled"
+        private const val KEY_TASKER_REQUIRE_UNLOCK = "tasker_require_unlock"
+        private const val KEY_TASKER_ALLOWED_CONNECTIONS = "tasker_allowed_connections"
+        private const val KEY_TASKER_LOG_EVENTS = "tasker_log_events"
+        private const val KEY_TASKER_COMMAND_TIMEOUT = "tasker_command_timeout"
+
+        // Logging preferences — keys MUST match preferences_logging.xml.
+        private const val KEY_DEBUG_LOGGING_ENABLED = "debug_logging_enabled"
+        private const val KEY_DEBUG_LOG_LEVEL = "debug_log_level"
+        private const val KEY_LOG_KEYSTROKE_BYTES = "log_keystroke_bytes"
+        private const val KEY_HOST_LOGGING_ENABLED = "host_logging_enabled"
+        private const val KEY_HOST_LOG_MAX_SIZE_MB = "host_log_max_size_mb"
+
         // Defaults
         const val DEFAULT_PREFIX_TMUX = "C-b"     // tmux default
         const val DEFAULT_PREFIX_SCREEN = "C-a"   // screen default
@@ -670,4 +707,88 @@ class PreferenceManager(private val context: Context) {
 
     fun getPastebinApiKey(): String = getString("paste_pastebin_api_key", "")
     fun setPastebinApiKey(key: String) = setString("paste_pastebin_api_key", key)
+
+    // --- Audit log ---
+
+    fun isAuditLogEnabled(): Boolean = getBoolean(KEY_AUDIT_LOG_ENABLED, false)
+    fun setAuditLogEnabled(enabled: Boolean) = setBoolean(KEY_AUDIT_LOG_ENABLED, enabled)
+
+    fun getAuditLogMaxSizeMb(): Int = getStringAsInt(KEY_AUDIT_LOG_MAX_SIZE_MB, 100)
+    fun setAuditLogMaxSizeMb(sizeMb: Int) = setString(KEY_AUDIT_LOG_MAX_SIZE_MB, sizeMb.toString())
+
+    fun getAuditLogMaxAgeDays(): Int = getStringAsInt(KEY_AUDIT_LOG_MAX_AGE_DAYS, 30)
+    fun setAuditLogMaxAgeDays(days: Int) = setString(KEY_AUDIT_LOG_MAX_AGE_DAYS, days.toString())
+
+    fun isAuditLogCommandsEnabled(): Boolean = getBoolean(KEY_AUDIT_LOG_COMMANDS, true)
+    fun setAuditLogCommandsEnabled(enabled: Boolean) = setBoolean(KEY_AUDIT_LOG_COMMANDS, enabled)
+
+    fun isAuditLogOutputEnabled(): Boolean = getBoolean(KEY_AUDIT_LOG_OUTPUT, false)
+    fun setAuditLogOutputEnabled(enabled: Boolean) = setBoolean(KEY_AUDIT_LOG_OUTPUT, enabled)
+
+    // --- Monitoring ---
+
+    fun isMonitoringEnabled(): Boolean = getBoolean(KEY_MONITORING_ENABLED, true)
+    fun setMonitoringEnabled(enabled: Boolean) = setBoolean(KEY_MONITORING_ENABLED, enabled)
+
+    fun isMonitoringNotifyDownEnabled(): Boolean = getBoolean(KEY_MONITORING_NOTIFY_DOWN, true)
+    fun setMonitoringNotifyDownEnabled(enabled: Boolean) = setBoolean(KEY_MONITORING_NOTIFY_DOWN, enabled)
+
+    fun isMonitoringNotifyRecoveryEnabled(): Boolean = getBoolean(KEY_MONITORING_NOTIFY_RECOVERY, true)
+    fun setMonitoringNotifyRecoveryEnabled(enabled: Boolean) = setBoolean(KEY_MONITORING_NOTIFY_RECOVERY, enabled)
+
+    // ListPreference backed by @array/monitoring_cooldown_values (String entries).
+    fun getMonitoringAlertCooldownMinutes(): Int = getStringAsInt(KEY_MONITORING_ALERT_COOLDOWN_MINUTES, 60)
+    fun setMonitoringAlertCooldownMinutes(minutes: Int) =
+        setString(KEY_MONITORING_ALERT_COOLDOWN_MINUTES, minutes.toString())
+
+    fun getMonitoringDefaultCpuThreshold(): Int = getInt(KEY_MONITORING_DEFAULT_CPU_THRESHOLD, 85)
+    fun setMonitoringDefaultCpuThreshold(percent: Int) = setInt(KEY_MONITORING_DEFAULT_CPU_THRESHOLD, percent)
+
+    fun getMonitoringDefaultMemoryThreshold(): Int = getInt(KEY_MONITORING_DEFAULT_MEMORY_THRESHOLD, 90)
+    fun setMonitoringDefaultMemoryThreshold(percent: Int) = setInt(KEY_MONITORING_DEFAULT_MEMORY_THRESHOLD, percent)
+
+    fun getMonitoringDefaultDiskThreshold(): Int = getInt(KEY_MONITORING_DEFAULT_DISK_THRESHOLD, 80)
+    fun setMonitoringDefaultDiskThreshold(percent: Int) = setInt(KEY_MONITORING_DEFAULT_DISK_THRESHOLD, percent)
+
+    fun isMonitoringRunInBatterySaverEnabled(): Boolean = getBoolean(KEY_MONITORING_RUN_IN_BATTERY_SAVER, false)
+    fun setMonitoringRunInBatterySaverEnabled(enabled: Boolean) =
+        setBoolean(KEY_MONITORING_RUN_IN_BATTERY_SAVER, enabled)
+
+    // --- Tasker ---
+
+    fun isTaskerEnabled(): Boolean = getBoolean(KEY_TASKER_ENABLED, true)
+    fun setTaskerEnabled(enabled: Boolean) = setBoolean(KEY_TASKER_ENABLED, enabled)
+
+    fun isTaskerRequireUnlockEnabled(): Boolean = getBoolean(KEY_TASKER_REQUIRE_UNLOCK, false)
+    fun setTaskerRequireUnlockEnabled(enabled: Boolean) = setBoolean(KEY_TASKER_REQUIRE_UNLOCK, enabled)
+
+    // Empty set = all connections allowed (see preferences_tasker.xml summary).
+    fun getTaskerAllowedConnections(): Set<String> = getStringSet(KEY_TASKER_ALLOWED_CONNECTIONS, emptySet())
+    fun setTaskerAllowedConnections(connectionIds: Set<String>) {
+        preferences.edit().putStringSet(KEY_TASKER_ALLOWED_CONNECTIONS, connectionIds).apply()
+    }
+
+    fun isTaskerLogEventsEnabled(): Boolean = getBoolean(KEY_TASKER_LOG_EVENTS, true)
+    fun setTaskerLogEventsEnabled(enabled: Boolean) = setBoolean(KEY_TASKER_LOG_EVENTS, enabled)
+
+    fun getTaskerCommandTimeoutMs(): Int = getStringAsInt(KEY_TASKER_COMMAND_TIMEOUT, 30000)
+    fun setTaskerCommandTimeoutMs(timeoutMs: Int) = setString(KEY_TASKER_COMMAND_TIMEOUT, timeoutMs.toString())
+
+    // --- Logging ---
+
+    fun isDebugLoggingEnabled(): Boolean = getBoolean(KEY_DEBUG_LOGGING_ENABLED, false)
+    fun setDebugLoggingEnabled(enabled: Boolean) = setBoolean(KEY_DEBUG_LOGGING_ENABLED, enabled)
+
+    fun getDebugLogLevel(): String = getString(KEY_DEBUG_LOG_LEVEL, "debug")
+    fun setDebugLogLevel(level: String) = setString(KEY_DEBUG_LOG_LEVEL, level)
+
+    fun isLogKeystrokeBytesEnabled(): Boolean = getBoolean(KEY_LOG_KEYSTROKE_BYTES, false)
+    fun setLogKeystrokeBytesEnabled(enabled: Boolean) = setBoolean(KEY_LOG_KEYSTROKE_BYTES, enabled)
+
+    fun isHostLoggingEnabled(): Boolean = getBoolean(KEY_HOST_LOGGING_ENABLED, false)
+    fun setHostLoggingEnabled(enabled: Boolean) = setBoolean(KEY_HOST_LOGGING_ENABLED, enabled)
+
+    // SeekBarPreference — Int-backed natively, no String round-trip needed.
+    fun getHostLogMaxSizeMb(): Int = getInt(KEY_HOST_LOG_MAX_SIZE_MB, 1)
+    fun setHostLogMaxSizeMb(sizeMb: Int) = setInt(KEY_HOST_LOG_MAX_SIZE_MB, sizeMb)
 }

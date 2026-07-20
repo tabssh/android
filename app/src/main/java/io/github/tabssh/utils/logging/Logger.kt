@@ -168,8 +168,7 @@ object Logger {
         // Read user-selected verbosity from `debug_log_level` ListPreference;
         // re-read on every log call would be wasteful, so we cache and let
         // updateMinLevelFromPrefs() refresh when SettingsActivity changes it.
-        val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
-        minLevel = levelFromPref(prefs.getString("debug_log_level", "debug"))
+        minLevel = levelFromPref(io.github.tabssh.TabSSHApplication.get().preferencesManager.getDebugLogLevel())
 
         // Always enable app log (sanitized for public sharing)
         appLogFile = File(context.filesDir, APP_LOG_FILE_NAME)
@@ -224,9 +223,8 @@ object Logger {
      * new threshold takes effect immediately without restarting the app.
      */
     fun updateMinLevelFromPrefs() {
-        val ctx = appContext ?: return
-        val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(ctx)
-        minLevel = levelFromPref(prefs.getString("debug_log_level", "debug"))
+        appContext ?: return
+        minLevel = levelFromPref(io.github.tabssh.TabSSHApplication.get().preferencesManager.getDebugLogLevel())
     }
 
     fun d(tag: String, message: String, throwable: Throwable? = null) {
@@ -862,14 +860,13 @@ object Logger {
 
     // ── Per-host log ─────────────────────────────────────────────────────────
 
-    // Default rotation cap when the host_log_max_size_mb preference is unset.
-    // The user-visible SeekBarPreference (preferences_logging.xml, range 1–10 MB)
-    // overrides this at runtime — see resolveHostLogMaxSize().
-    private const val HOST_LOG_MAX_SIZE_DEFAULT_MB = 1
+    // Rotation cap comes from the host_log_max_size_mb preference (default 1 MB),
+    // set via the user-visible SeekBarPreference (preferences_logging.xml, range
+    // 1–10 MB) — see resolveHostLogMaxSize().
     private const val ONE_MB_BYTES = 1024L * 1024L
 
-    private fun resolveHostLogMaxSize(prefs: android.content.SharedPreferences): Long {
-        val mb = prefs.getInt("host_log_max_size_mb", HOST_LOG_MAX_SIZE_DEFAULT_MB)
+    private fun resolveHostLogMaxSize(): Long {
+        val mb = io.github.tabssh.TabSSHApplication.get().preferencesManager.getHostLogMaxSizeMb()
             .coerceIn(1, 10)
         return mb * ONE_MB_BYTES
     }
@@ -889,9 +886,8 @@ object Logger {
      */
     fun logHostEvent(connectionId: String, username: String, host: String, port: Int, level: String, message: String) {
         val ctx = appContext ?: return
-        val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(ctx)
-        if (!prefs.getBoolean("host_logging_enabled", false)) return
-        val maxBytes = resolveHostLogMaxSize(prefs)
+        if (!io.github.tabssh.TabSSHApplication.get().preferencesManager.isHostLoggingEnabled()) return
+        val maxBytes = resolveHostLogMaxSize()
         executor.execute {
             try {
                 val logsDir = File(ctx.filesDir, "host_logs")

@@ -44,6 +44,15 @@
             android:defaultValue="false"
             android:dependency="debug_logging_enabled" />
 
+        <!-- Debug-build only: triggers a test crash to verify the crash
+             reporting dialog. Hidden at runtime when BuildConfig.DEBUG_MODE
+             is false so it never appears in release builds. -->
+        <Preference
+            android:key="test_crash"
+            android:title="Test crash dialog"
+            android:summary="Throw a RuntimeException to verify crash reporting (debug only)"
+            android:icon="@drawable/ic_error" />
+
     </PreferenceCategory>
 
     <!-- Per-host Session Logs -->
@@ -124,15 +133,6 @@
             android:title="Clear Logs"
             android:summary="Delete app log and all host log files (cannot be undone)"
             android:icon="@android:drawable/ic_menu_delete" />
-
-        <!-- Debug-build only: triggers a test crash to verify the crash
-             reporting dialog. Hidden at runtime when BuildConfig.DEBUG_MODE
-             is false so it never appears in release builds. -->
-        <Preference
-            android:key="test_crash"
-            android:title="Test crash dialog"
-            android:summary="Throw a RuntimeException to verify crash reporting (debug only)"
-            android:icon="@drawable/ic_error" />
 
     </PreferenceCategory>
 

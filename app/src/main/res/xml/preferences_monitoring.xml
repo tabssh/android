@@ -1,26 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Master on/off switch for the background availability worker. -->
-    <SwitchPreferenceCompat
-        android:key="monitoring_enabled"
-        android:title="Background monitoring"
-        android:summary="Periodically probe all monitored hosts for reachability"
-        android:defaultValue="true" />
+    <PreferenceCategory android:title="Status">
 
-    <!-- Battery optimization exemption status + action button. -->
-    <Preference
-        android:key="monitoring_battery_status"
-        android:title="Battery optimization"
-        android:summary="Checking…"
-        android:icon="@android:drawable/ic_menu_info_details" />
+        <!-- Master on/off switch for the background availability worker. -->
+        <SwitchPreferenceCompat
+            android:key="monitoring_enabled"
+            android:title="Background monitoring"
+            android:summary="Periodically probe all monitored hosts for reachability"
+            android:defaultValue="true" />
 
-    <!-- OEM-specific battery settings shortcut (Samsung, Xiaomi, etc.). -->
-    <Preference
-        android:key="monitoring_oem_battery"
-        android:title="Device battery settings"
-        android:summary="Open your device's battery management screen to allow background activity"
-        android:icon="@android:drawable/ic_menu_manage" />
+        <!-- Battery optimization exemption status + action button. -->
+        <Preference
+            android:key="monitoring_battery_status"
+            android:title="Battery optimization"
+            android:summary="Checking…"
+            android:icon="@android:drawable/ic_menu_info_details" />
+
+        <!-- OEM-specific battery settings shortcut (Samsung, Xiaomi, etc.). -->
+        <Preference
+            android:key="monitoring_oem_battery"
+            android:title="Device battery settings"
+            android:summary="Open your device's battery management screen to allow background activity"
+            android:icon="@android:drawable/ic_menu_manage" />
+
+    </PreferenceCategory>
 
     <PreferenceCategory android:title="Notification alerts">
 

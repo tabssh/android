@@ -164,6 +164,13 @@
         android:title="Custom Keyboard"
         android:key="category_custom_keyboard">
 
+        <!-- Wave 3.7 — bottom nav visibility -->
+        <SwitchPreferenceCompat
+            android:key="show_bottom_nav"
+            android:title="Show bottom nav bar"
+            android:summary="Adds a 48dp Kbd · Snip · Files · Paste · Menu bar between the custom keyboard and the Android keyboard. Off by default — most actions live in the terminal long-press menu."
+            android:defaultValue="false" />
+
         <ListPreference
             android:key="keyboard_row_count"
             android:title="Keyboard Rows"

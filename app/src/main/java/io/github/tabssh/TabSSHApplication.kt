@@ -123,16 +123,14 @@ class TabSSHApplication : Application() {
         //     `debug_logging_enabled`).
         // The app log (sanitized for public sharing) is always on regardless
         // — it's safe and cheap and powers the Copy App Log menu item.
-        val defaultPrefs = androidx.preference.PreferenceManager
-            .getDefaultSharedPreferences(this)
-        val savedDebug = defaultPrefs.getBoolean("debug_logging_enabled", false)
+        val savedDebug = preferencesManager.isDebugLoggingEnabled()
         val debugLoggingActive = BuildConfig.DEBUG_MODE || savedDebug
         // Sync the toggle pref to match the actual active state. On debug
         // builds DEBUG_MODE forces logging on regardless of what the user
         // last set; without this sync the Settings → Logging toggle shows
         // "Off" even though the logger is running — misleading.
         if (BuildConfig.DEBUG_MODE && !savedDebug) {
-            defaultPrefs.edit().putBoolean("debug_logging_enabled", true).apply()
+            preferencesManager.setDebugLoggingEnabled(true)
         }
         Logger.initialize(this, debugLoggingActive)
         setupExceptionHandler()
@@ -147,7 +145,7 @@ class TabSSHApplication : Application() {
         // because users who enable debug logs for protocol triage don't
         // necessarily want their typed sudo/ssh passwords in those logs.
         io.github.tabssh.terminal.TermuxBridge.logKeystrokeBytes =
-            preferencesManager.getBoolean("log_keystroke_bytes", false)
+            preferencesManager.isLogKeystrokeBytesEnabled()
 
         // Stamp the source-of-truth commit into the log exactly once per
         // commit-id change (install / update). Lets users grepping their

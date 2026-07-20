@@ -51,23 +51,10 @@
             android:entries="@array/tab_swipe_edge_entries"
             android:entryValues="@array/tab_swipe_edge_values" />
 
-        <!-- Wave 3.7 — bottom nav visibility -->
-        <SwitchPreferenceCompat
-            android:key="show_bottom_nav"
-            android:title="Show bottom nav bar"
-            android:summary="Adds a 48dp Kbd · Snip · Files · Paste · Menu bar between the custom keyboard and the Android keyboard. Off by default — most actions live in the terminal long-press menu."
-            android:defaultValue="false" />
-
         <SwitchPreferenceCompat
             android:key="confirm_exit"
             android:title="Confirm on exit"
             android:summary="Ask for confirmation before exiting"
-            android:defaultValue="false" />
-
-        <SwitchPreferenceCompat
-            android:key="keep_screen_on"
-            android:title="Keep screen on"
-            android:summary="Prevent screen from sleeping during connections"
             android:defaultValue="false" />
 
         <ListPreference
@@ -92,6 +79,12 @@
             android:defaultValue="20"
             android:inputType="number"
             app:useSimpleSummaryProvider="true" />
+
+        <SwitchPreferenceCompat
+            android:key="keep_screen_on"
+            android:title="Keep screen on"
+            android:summary="Prevent the screen from sleeping in any connection (SSH, Mosh, or VNC)"
+            android:defaultValue="false" />
 
     </PreferenceCategory>
 

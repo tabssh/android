@@ -422,7 +422,7 @@ class TabTerminalActivity : AppCompatActivity() {
         // bar sandwiched between the custom multi-row keyboard and the Android
         // keyboard felt redundant — same actions are reachable from the
         // terminal long-press menu. Users who liked it can re-enable it in
-        // Settings → General → Show bottom nav bar.
+        // Settings → Terminal → Custom Keyboard → Show bottom nav bar.
         val persistent = app.preferencesManager.getBoolean("show_bottom_nav", false)
         binding.bottomActionBar.visibility = if (persistent) View.VISIBLE else View.GONE
 

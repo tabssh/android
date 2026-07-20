@@ -69,24 +69,24 @@
     </PreferenceCategory>
 
     <PreferenceCategory
-        android:title="SSH Security"
+        android:title="SSH &amp; Mosh Security"
         android:key="category_ssh_security">
 
         <Preference
             android:key="clear_known_hosts"
             android:title="Clear known hosts"
-            android:summary="Wipe previously seen host keys/fingerprints" />
+            android:summary="Wipe previously seen host keys/fingerprints (SSH and Mosh, which bootstraps over SSH)" />
 
         <SwitchPreferenceCompat
             android:key="strict_host_key_checking"
             android:title="Strict Host Key Checking"
-            android:summary="Always verify host keys"
+            android:summary="Always verify host keys — applies to Mosh too, since Mosh connects via SSH first"
             android:defaultValue="true" />
 
         <SwitchPreferenceCompat
             android:key="port_knock_enabled_default"
             android:title="Enable Port Knocking by Default"
-            android:summary="Execute port knock sequences for new connections (Default: OFF)"
+            android:summary="Execute port knock sequences for new SSH/Mosh connections (Default: OFF)"
             android:defaultValue="false" />
 
     </PreferenceCategory>
