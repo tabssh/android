@@ -624,10 +624,22 @@ explicit "sanity check, not uploaded" smoke build (F-Droid signs/publishes its
 own). **Fix applied:** AI.md row corrected to the real artifact set — 5 release
 APKs + mapping + checksums, F-Droid build smoke-only and never uploaded.
 
-## M9 — CHANGELOG not cut for 0.9.1
-**`CHANGELOG.md`** has `[Unreleased]` fixes but no `[0.9.1]` block, though the
-build and `release.txt` are at 0.9.1; F-Droid/fastlane metadata references it.
+## M9 — CHANGELOG not cut for 0.9.1 — FIXED
+**`CHANGELOG.md`** had `[Unreleased]` fixes but no `[0.9.1]` block, though the
+build and `release.txt` were at 0.9.1; F-Droid/fastlane metadata referenced it.
 **Fix:** cut a `[0.9.1]` section.
+
+**Verified as resolved:** `CHANGELOG.md:277` now has a `## [0.9.1] -
+2026-06-04` section, added by commit `63bedd72e01d`. No code change needed;
+audit entry corrected to match reality.
+
+**Separate, newer situation (not part of this finding's original scope):**
+`[Unreleased]` has since grown large again (269 lines of shipped fixes/adds
+as of this audit pass) while `defaultConfig.versionName` in
+`app/build.gradle` is still `"0.9.1"` — the same version already published
+below it. Cutting a new version section (e.g. `[0.9.2]`) and bumping
+`versionName`/`versionCode`/`release.txt` is a release-management decision
+for the maintainer, not something to invent unprompted as part of M9.
 
 ## M10 — FLAG_SECURE default-off on the terminal (hardening, with caveat)
 **`TabTerminalActivity`** — screenshot prevention is not enabled by default on the
