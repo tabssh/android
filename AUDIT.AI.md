@@ -641,7 +641,7 @@ below it. Cutting a new version section (e.g. `[0.9.2]`) and bumping
 `versionName`/`versionCode`/`release.txt` is a release-management decision
 for the maintainer, not something to invent unprompted as part of M9.
 
-## M10 — FLAG_SECURE default-off on the terminal (hardening, with caveat)
+## M10 — FLAG_SECURE default-off on the terminal (hardening, with caveat) — REVIEWED, CONFIRMED BY DESIGN
 **`TabTerminalActivity`** — screenshot prevention is not enabled by default on the
 terminal surface. Per `IDEA.md:50`, screenshot prevention on the terminal is
 *"configurable"* (only PIN and auth screens are *"always enforced"*), so this is
@@ -649,6 +649,21 @@ terminal surface. Per `IDEA.md:50`, screenshot prevention on the terminal is
 `FLAG_SECURE` on for the terminal (a live SSH session can display secrets) with a
 user opt-out, and confirm PIN/auth screens do enforce it unconditionally. *(Framed
 as recommendation, not defect.)*
+
+**Decision (confirmed with maintainer): keep default-off, global app-wide
+toggle, no per-screen-type logic.** `TabSSHApplication.applyWindowSecurityFlags()`
+already implements exactly this — one global `security_prevent_screenshots`
+pref (default `false`), applied uniformly to every activity (terminal, VNC,
+cloud, hypervisor, …), with `PinLockActivity` separately hardcoding
+`FLAG_SECURE` unconditionally regardless of the pref, matching IDEA.md's
+"always enforced" carve-out for PIN/auth screens. Rationale: TabSSH spans
+multiple connection types (SSH terminal, VNC, cloud consoles, hypervisor
+consoles) that can all display secrets equally, so a terminal-only default
+would need per-type sensitivity plumbing for marginal benefit over the
+existing global toggle; default-off preserves legitimate workflows (demo
+recording, casting, screenshotting output for a bug report) that a
+security-by-default flip would silently break for every existing user on
+upgrade. No code change made — audit entry closed as reviewed/by-design.
 
 ## M11 — OSC-8 hyperlink parsing runs on every write — FIXED
 **`TermuxBridge.kt`** re-scanned output for OSC-8 sequences on each write
