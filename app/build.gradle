@@ -445,66 +445,6 @@ dependencies {
     androidTestImplementation 'androidx.room:room-testing:2.6.1'
 }
 
-// Custom tasks for CI/CD pipeline
-tasks.register('runPerformanceBenchmarks') {
-    description = 'Run performance benchmarks'
-    group = 'verification'
-    
-    doLast {
-        println "🚀 Running performance benchmarks..."
-        println "✅ Performance benchmarks completed"
-    }
-}
-
-tasks.register('detectMemoryLeaks') {
-    description = 'Detect memory leaks'
-    group = 'verification'
-    
-    doLast {
-        println "🔍 Detecting memory leaks..."
-        println "✅ Memory leak detection completed"
-    }
-}
-
-tasks.register('validateThemeAccessibility') {
-    description = 'Validate theme accessibility'
-    group = 'verification'
-    
-    doLast {
-        println "🎨 Validating theme accessibility..."
-        println "✅ Theme accessibility validation completed"
-    }
-}
-
-tasks.register('checkWCAGCompliance') {
-    description = 'Check WCAG compliance'
-    group = 'verification'
-    
-    doLast {
-        println "♿ Checking WCAG compliance..."
-        println "✅ WCAG compliance check completed"
-    }
-}
-
-tasks.register('detectSecrets') {
-    description = 'Detect hardcoded secrets'
-    group = 'verification'
-    
-    doLast {
-        println "🔍 Detecting hardcoded secrets..."
-        println "✅ No hardcoded secrets detected"
-    }
-}
-
-tasks.register('checkFDroidCompliance') {
-    description = 'Check F-Droid compliance' 
-    group = 'verification'
-    
-    doLast {
-        println "📦 Checking F-Droid compliance..."
-        println "✅ F-Droid compliance verified"
-    }
-}
 // Note: Git commit ID and build date are now set directly in buildConfigField
 // to avoid Gradle configuration cache issues with external process execution
 

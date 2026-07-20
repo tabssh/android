@@ -551,12 +551,23 @@ loop and the Mosh watchdog now `sessionScope.launch { }`, and `cleanup()` cancel
 `sessionScope`'s Job alongside `writeScope` at terminal teardown. `make check`
 clean.
 
-## M5 — Six stub verification tasks report success unconditionally
+## M5 — Six stub verification tasks report success unconditionally — FIXED
 **`app/build.gradle:383-440`** — `detectSecrets`, `checkFDroidCompliance`,
 `validateThemeAccessibility`, `checkWCAGCompliance`, `detectMemoryLeaks`,
-`runPerformanceBenchmarks` are `println "✅ ..."` no-ops. `detectSecrets` prints
-"No hardcoded secrets detected" while C1 sits in the same file. A false audit
-trail. **Fix:** implement or remove.
+`runPerformanceBenchmarks` were `println "✅ ..."` no-ops. `detectSecrets`
+printed "No hardcoded secrets detected" while C1 sat in the same file. A false
+audit trail. **Fix:** implement or remove.
+
+**Resolved by removal.** Verified none of the six tasks were referenced by
+any `.github/workflows/*.yml` file or the `Makefile` — they never ran as
+part of CI or any documented build step; they existed purely as decoration
+that always printed success. Real implementations of WCAG contrast
+checking, memory-leak detection, and performance benchmarking are each a
+substantial standalone feature (axe-core-style analysis, LeakCanary
+integration, a Macrobenchmark module) — not something to fake with a
+lighter stub, which would only reproduce the same false-audit-trail
+problem. Since nothing depended on them, all six were deleted from
+`app/build.gradle` rather than implemented as placeholders again.
 
 ## M6 — DB upgrade path: only destructive fallback, zero migrations — FIXED
 **`TabSSHDatabase.kt`** originally had `version = 3`,
