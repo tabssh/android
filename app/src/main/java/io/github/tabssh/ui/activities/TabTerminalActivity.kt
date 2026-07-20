@@ -262,15 +262,14 @@ class TabTerminalActivity : AppCompatActivity() {
         // (tab swap on a different thread) cannot null it between the IME
         // visibility check and hideSoftInputFromWindow().
         val tv = terminalView
-        val imeShown = tv?.let {
-            androidx.core.view.ViewCompat.getRootWindowInsets(it)
+        if (tv != null) {
+            val imeShown = androidx.core.view.ViewCompat.getRootWindowInsets(tv)
                 ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
-        } ?: false
-
-        if (imeShown && tv != null) {
-            imm.hideSoftInputFromWindow(tv.windowToken, 0)
-            Logger.d("TabTerminalActivity", "BACK: hid IME, staying in terminal")
-            return
+            if (imeShown) {
+                imm.hideSoftInputFromWindow(tv.windowToken, 0)
+                Logger.d("TabTerminalActivity", "BACK: hid IME, staying in terminal")
+                return
+            }
         }
 
         Logger.i(
