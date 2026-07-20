@@ -1015,6 +1015,15 @@ Realm format `user@pam` / `user@pve`. Optional SSL bypass.
 - `S2C_FENCE = 248`, `C2S_CLIENT_FENCE = 248` (same wire type for both directions)
 - `ENC_EXTENDED_DESKTOP_SIZE = -308` (0xFFFFFECC)
 
+#### 11.7.2 Direct VNC connections (`VncHost`) and background keep-alive
+
+`VncHostsActivity`/`VncHostEditActivity` manage `VncHost` rows (`vnc_hosts` table, §8) for VNC servers reached directly (not via a hypervisor console proxy) — `VMConsoleActivity` opens a raw socket to `host:port` (or `host:5900+displayNumber`) and drives it with the same `RfbClient` used for hypervisor consoles.
+
+- **`keepAliveInBackground`** (`VncHost.keepAliveInBackground`, default **true**): when the activity backgrounds (`onStop()`) with this on, it does not tear the session down — it `pause()`s the `RfbClient` (stops framebuffer-update requests) and hands the client + socket to the process-scoped `VncBackgroundSessionStore` singleton, then starts `VncKeepAliveService` (foreground service, holds a `PARTIAL_WAKE_LOCK` + `WifiLock`) so the OS doesn't kill the process. `onResume()` reclaims the parked session via `reattachVncHost()` if it's still in the store — no reconnect handshake, no black-screen flash. Off, the socket is closed on every background and a fresh RFB handshake runs on every return.
+- **Idle-suspend timeout** — an indefinitely-parked session still burns battery/WiFi via the held locks, so `VncKeepAliveService` runs a 60 s-interval sweep (`idleSweepRunnable` → `VncBackgroundSessionStore.sweepIdle()`) that fully closes (`discardInternal`: `rfbClient.stop()` + `socket.close()`) any session parked ≥ `DEFAULT_IDLE_TIMEOUT_MS` (10 minutes). If `onResume()` finds `parkedInBackground == true` but the store no longer contains the session (it was swept), it reconnects fresh via `connectToConsole()` instead of leaving the UI stuck disconnected. The service stops itself once `VncBackgroundSessionStore.isEmpty` (every session either reclaimed or swept).
+- This mirrors the pattern used for SSH background sessions (`SSHConnectionService`), but is deliberately leaner: a paused RFB client has nothing to poll at the protocol layer, so the service only needs to hold process-keepalive locks and run the idle sweep — no per-session heartbeat.
+- **Not yet wired to swipeable tabs** — `VMConsoleActivity` is a standalone Activity, unrelated to the SSH `ViewPager2`/`TabManager`/`TerminalPagerAdapter` swipe system (§6.3). Mixing SSH and VNC connections in one swipeable tab strip is a scoped, not-yet-started feature (see the open design questions in project chat history: tab persistence model for VNC, multi-viewtype `TerminalPagerAdapter`, an edge-swipe carve-out for `VncView`'s pointer-forwarding touch model, and the fate of `VMConsoleActivity`/`VncHostsActivity` as standalone entry points).
+
 ### 11.8 UI
 
 - `HypervisorsFragment` (RecyclerView, FAB → `HypervisorEditActivity`, long-press for edit/delete, click → manager activity).

@@ -1469,10 +1469,21 @@ class VMConsoleActivity : AppCompatActivity() {
         // and connectToConsole did not run again). The recreation path re-attaches
         // via the connectToConsole intercept instead.
         val parkedHostId = intent.getStringExtra(EXTRA_VNC_HOST_ID)
-        if (parkedHostId != null && !isConnected && VncBackgroundSessionStore.contains(parkedHostId)) {
-            shouldReconnectOnResume = false
-            connectionJob = lifecycleScope.launch { reattachVncHost(parkedHostId) }
-            return
+        if (parkedHostId != null && !isConnected) {
+            if (VncBackgroundSessionStore.contains(parkedHostId)) {
+                shouldReconnectOnResume = false
+                connectionJob = lifecycleScope.launch { reattachVncHost(parkedHostId) }
+                return
+            } else if (parkedInBackground) {
+                // We parked a keep-alive session in onStop(), but it's no longer
+                // in the store — VncKeepAliveService's idle sweep fully suspended
+                // it (10+ minutes untouched). Nothing to re-attach; reconnect
+                // fresh instead of silently leaving the UI disconnected.
+                parkedInBackground = false
+                if (termuxBridge == null) setupTerminal()
+                connectToConsole()
+                return
+            }
         }
 
         // Auto-reconnect when returning from background if onStop() tore down
@@ -1515,7 +1526,8 @@ class VMConsoleActivity : AppCompatActivity() {
                     vmName = intent.getStringExtra(EXTRA_VM_NAME) ?: hostId,
                     rfbClient = rfb,
                     socket = directVncSocket,
-                    disableResize = vncDisableResize
+                    disableResize = vncDisableResize,
+                    parkedAtMillis = System.currentTimeMillis()
                 )
             )
             VncKeepAliveService.startService(this)

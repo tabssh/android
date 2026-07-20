@@ -31,16 +31,47 @@ import io.github.tabssh.utils.logging.Logger
  * is paused (no framebuffer-update requests outstanding), so there is nothing
  * to monitor or keep alive at the protocol layer beyond preventing the OS from
  * killing the process and letting the WiFi radio sleep. We hold a single
- * indefinite [PowerManager.PARTIAL_WAKE_LOCK] and a [WifiManager.WifiLock] for
- * the whole time any session is parked, mirroring the SSH service's lock names.
+ * [PowerManager.PARTIAL_WAKE_LOCK] and a [WifiManager.WifiLock] for as long as
+ * any session is parked, mirroring the SSH service's lock names — but not
+ * indefinitely: a periodic sweep ([idleSweepRunnable]) fully suspends any
+ * session parked past [VncBackgroundSessionStore.DEFAULT_IDLE_TIMEOUT_MS] (10
+ * minutes), and the service stops itself once nothing is left parked, so an
+ * unattended background VNC session doesn't hold the radio/CPU awake forever.
  */
 class VncKeepAliveService : Service() {
 
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
+    private val sweepHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
+    /**
+     * Periodically closes any parked session that has exceeded
+     * [VncBackgroundSessionStore.DEFAULT_IDLE_TIMEOUT_MS], then re-schedules
+     * itself. Stops the service once nothing is left parked — either every
+     * session was reclaimed (activity resumed) or swept (idle timeout).
+     */
+    private val idleSweepRunnable = object : Runnable {
+        override fun run() {
+            val swept = VncBackgroundSessionStore.sweepIdle(System.currentTimeMillis())
+            if (swept.isNotEmpty()) {
+                Logger.i(TAG, "Idle-timeout suspended ${swept.size} VNC session(s): $swept")
+            }
+            if (VncBackgroundSessionStore.isEmpty) {
+                Logger.d(TAG, "No parked VNC sessions remain after sweep — stopping")
+                stopSelf()
+                return
+            }
+            sweepHandler.postDelayed(this, IDLE_SWEEP_INTERVAL_MS)
+        }
+    }
 
     companion object {
         private const val TAG = "VncKeepAliveService"
+
+        // How often the idle sweep runs while the service is alive. Well under
+        // the 10-minute idle timeout so a suspended session never lingers much
+        // past its deadline.
+        private const val IDLE_SWEEP_INTERVAL_MS = 60_000L
 
         // Distinct from NOTIFICATION_ID_SERVICE (1001, SSH FG anchor) and
         // NOTIFICATION_ID_NO_NETWORK (1002). Reserved low-range id for the
@@ -92,6 +123,11 @@ class VncKeepAliveService : Service() {
         startForeground(NOTIFICATION_ID, buildNotification())
         acquireWakeLock()
         acquireWifiLock()
+        // Re-arm the sweep loop rather than stacking a second one: removeCallbacks
+        // is a no-op if nothing is scheduled (first start), and collapses any
+        // duplicate scheduled run if a new session was parked mid-interval.
+        sweepHandler.removeCallbacks(idleSweepRunnable)
+        sweepHandler.postDelayed(idleSweepRunnable, IDLE_SWEEP_INTERVAL_MS)
         Logger.i(TAG, "VNC keep-alive foreground service started (${VncBackgroundSessionStore.count} session(s))")
 
         // NOT_STICKY: if the OS kills the process the parked sessions die with
@@ -103,6 +139,7 @@ class VncKeepAliveService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         Logger.d(TAG, "Service destroyed")
+        sweepHandler.removeCallbacks(idleSweepRunnable)
         releaseWakeLock()
         releaseWifiLock()
     }

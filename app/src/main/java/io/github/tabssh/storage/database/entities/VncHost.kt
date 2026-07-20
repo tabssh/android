@@ -67,11 +67,15 @@ data class VncHost(
      * When true, this VNC session is kept alive while the app is backgrounded —
      * the TCP socket is held open and framebuffer-update requests are paused —
      * instead of the default drop-on-background / reconnect-on-resume behavior.
-     * Off by default: a held-open VNC stream keeps the CPU/WiFi awake and
-     * consumes battery and data continuously, unlike a cheap SSH keepalive.
+     * On by default so switching tabs/apps and coming back doesn't retrigger the
+     * VNC handshake. To bound the battery/data cost of an indefinitely-held
+     * socket, [VncKeepAliveService] fully suspends (closes) any session that has
+     * sat parked and untouched for longer than its idle timeout (10 minutes) —
+     * see `VncBackgroundSessionStore.sweepIdle()`. A suspended session simply
+     * reconnects fresh on the next `onResume()`.
      */
     @ColumnInfo(name = "keep_alive_in_background")
-    val keepAliveInBackground: Boolean = false,
+    val keepAliveInBackground: Boolean = true,
 
     /** FK to connection_groups — optional folder assignment. */
     @ColumnInfo(name = "group_id")

@@ -37,14 +37,25 @@ object VncBackgroundSessionStore {
      * @property socket The underlying TCP socket, closed on final teardown.
      * @property disableResize Whether the client had client-initiated resize
      *   suppressed, so a re-attach restores the same state.
+     * @property parkedAtMillis Wall-clock time the session was parked, used by
+     *   [sweepIdle] to fully suspend sessions that have sat untouched too long.
      */
     data class ParkedSession(
         val key: String,
         val vmName: String,
         val rfbClient: RfbClient,
         val socket: Socket?,
-        val disableResize: Boolean
+        val disableResize: Boolean,
+        val parkedAtMillis: Long
     )
+
+    /**
+     * Default idle window before a parked session is fully suspended (socket
+     * closed, wake/wifi locks released) rather than held open forever. Balances
+     * "swipe/app-switch doesn't reconnect" against not burning battery and data
+     * on a session nobody has looked at in a while.
+     */
+    const val DEFAULT_IDLE_TIMEOUT_MS = 10 * 60 * 1000L
 
     private val sessions = ConcurrentHashMap<String, ParkedSession>()
 
@@ -84,6 +95,25 @@ object VncBackgroundSessionStore {
         val snapshot = sessions.values.toList()
         sessions.clear()
         snapshot.forEach { discardInternal(it) }
+    }
+
+    /**
+     * Tear down and forget every session parked for at least [maxAgeMillis],
+     * measured against [nowMillis]. Called periodically by
+     * [io.github.tabssh.services.VncKeepAliveService] — a paused session parked
+     * longer than the idle window isn't saving the user anything (nothing is
+     * displayed while backgrounded) but keeps a wake lock, a WiFi lock, and a
+     * TCP socket alive, so it's fully closed and left to reconnect fresh on the
+     * next `onResume()`.
+     *
+     * @return the keys that were swept, for logging.
+     */
+    fun sweepIdle(nowMillis: Long, maxAgeMillis: Long = DEFAULT_IDLE_TIMEOUT_MS): List<String> {
+        val expired = sessions.entries
+            .filter { nowMillis - it.value.parkedAtMillis >= maxAgeMillis }
+            .map { it.key }
+        expired.forEach { key -> sessions.remove(key)?.let { discardInternal(it) } }
+        return expired
     }
 
     private fun discardInternal(session: ParkedSession) {

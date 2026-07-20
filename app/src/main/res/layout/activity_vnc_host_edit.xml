@@ -175,13 +175,14 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="4dp"
+                android:checked="true"
                 android:text="Keep alive in background" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
-                android:text="Holds the connection open when backgrounded instead of reconnecting. Uses more battery and data."
+                android:text="Holds the connection open when backgrounded instead of reconnecting, so switching tabs or apps doesn't retrigger the VNC handshake. After 10 minutes idle in the background it's fully suspended (socket closed, no wake lock) to save battery and data, and reconnects fresh the next time you open it."
                 android:textAppearance="?attr/textAppearanceCaption"
                 android:textColor="?android:attr/textColorSecondary" />
 
