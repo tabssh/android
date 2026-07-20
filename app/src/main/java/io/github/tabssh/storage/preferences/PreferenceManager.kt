@@ -279,9 +279,11 @@ class PreferenceManager(private val context: Context) {
 
     /**
      * Whether the custom-bar PREFIX ("PRE") key is active. Defaults to
-     * enabled; the user can temporarily disable it from the terminal
-     * long-press menu ("Disable Prefix Key") without losing their
-     * configured multiplexer prefix strings.
+     * enabled; the user can temporarily disable it from Settings > Connection
+     * > Multiplexer, or from the toggle inside the PRE key's long-press
+     * multiplexer picker, without losing their configured multiplexer prefix
+     * strings. Only PREFIX taps are gated by this — long-pressing PREFIX
+     * always opens the picker, even while disabled, so it can be re-enabled.
      */
     fun isPrefixKeyEnabled(): Boolean = getBoolean(KEY_PREFIX_KEY_ENABLED, true)
     fun setPrefixKeyEnabled(enabled: Boolean) = setBoolean(KEY_PREFIX_KEY_ENABLED, enabled)

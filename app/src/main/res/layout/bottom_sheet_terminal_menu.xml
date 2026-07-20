@@ -107,20 +107,6 @@
             app:iconSize="20dp" />
 
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_toggle_prefix_key"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="48dp"
-            android:paddingStart="16dp"
-            android:gravity="start|center_vertical"
-            android:text="Disable Prefix Key"
-            app:icon="@drawable/ic_keyboard"
-            app:iconGravity="start"
-            app:iconPadding="12dp"
-            app:iconSize="20dp" />
-
-        <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_find_in_scrollback"
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="match_parent"

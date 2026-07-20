@@ -738,27 +738,6 @@ class TabTerminalActivity : AppCompatActivity() {
             if (customKeyboardVisible) hideCustomKeyboardBar() else showCustomKeyboardBar()
         }
 
-        val prefixKeyBtn = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_toggle_prefix_key)
-        prefixKeyBtn?.text = if (app.preferencesManager.isPrefixKeyEnabled()) "Disable Prefix Key" else "Enable Prefix Key"
-        prefixKeyBtn?.setOnClickListener {
-            bottomSheet.dismiss()
-            val nowEnabled = !app.preferencesManager.isPrefixKeyEnabled()
-            app.preferencesManager.setPrefixKeyEnabled(nowEnabled)
-            if (!nowEnabled && prefixArmed) {
-                // Disabling mid-latch: drop the armed visual so the button
-                // doesn't show a stuck [PRE] the user can no longer clear
-                // by tapping it (PRE taps are now ignored while disabled).
-                prefixArmed = false
-                prefixArmedType = null
-                getActiveTerminalView()?.let { tv ->
-                    tv.setPendingPrefix(null)
-                    tv.onPrefixConsumed = null
-                }
-                updatePrefixKeyVisual(tabManager.getActiveTab()?.activeMultiplexerType)
-            }
-            Logger.d("TabTerminalActivity", "PREFIX key: user toggled enabled=$nowEnabled")
-        }
-
         view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_find_in_scrollback)
             ?.setOnClickListener {
                 bottomSheet.dismiss()
@@ -2436,19 +2415,39 @@ class TabTerminalActivity : AppCompatActivity() {
     private fun showMultiplexerPickerDialog() {
         val prefs = app.preferencesManager
         val tmuxLabel   = prefixToShortLabel(prefs.getMultiplexerPrefix("tmux"))
-        val screenLabel = prefixToShortLabel(prefs.getMultiplexerPrefix("screen"))
         val zellijLabel = prefixToShortLabel(prefs.getMultiplexerPrefix("zellij"))
+        val screenLabel = prefixToShortLabel(prefs.getMultiplexerPrefix("screen"))
+        val enabled = prefs.isPrefixKeyEnabled()
+        // Order: tmux, zellij, screen, then the Enable/Disable toggle — the
+        // toggle is always the last row so long-press can re-enable a
+        // disabled PRE key without needing a separate Settings trip.
         val types = arrayOf(
             "tmux ($tmuxLabel)",
+            "zellij ($zellijLabel)",
             "screen ($screenLabel)",
-            "zellij ($zellijLabel)"
+            if (enabled) "Disable PRE Key" else "Enable PRE Key"
         )
-        val keys  = arrayOf("tmux", "screen", "zellij")
+        val keys  = arrayOf("tmux", "zellij", "screen", "toggle")
         // setMessage and setItems both occupy the dialog body — using both silently
         // hides the item list. Move the hint into the title so the list renders.
         com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setTitle("Select multiplexer (none detected)")
             .setItems(types) { _, which ->
+                if (keys[which] == "toggle") {
+                    val newValue = !enabled
+                    prefs.setPrefixKeyEnabled(newValue)
+                    if (!newValue && prefixArmed) {
+                        prefixArmed = false
+                        prefixArmedType = null
+                        getActiveTerminalView()?.let { tv ->
+                            tv.setPendingPrefix(null)
+                            tv.onPrefixConsumed = null
+                        }
+                    }
+                    updatePrefixKeyVisual(tabManager.getActiveTab()?.activeMultiplexerType)
+                    Logger.i("TabTerminalActivity", "PRE key ${if (newValue) "enabled" else "disabled"}")
+                    return@setItems
+                }
                 val tab = tabManager.getActiveTab() ?: return@setItems
                 tab.setActiveMultiplexerType(keys[which])
                 Logger.i("TabTerminalActivity", "Multiplexer manually set to ${keys[which]}")
@@ -4170,6 +4169,22 @@ class TabTerminalActivity : AppCompatActivity() {
         // Fullscreen had no visible effect until app restart.
         applyTerminalUiPrefs()
 
+        // Re-sync the PRE key with the "Enable PRE Key" toggle — settable from
+        // Settings > Connection > Multiplexer or from the PRE long-press
+        // picker itself. If the user disabled it while this activity was
+        // backgrounded, drop any stuck [PRE] armed-latch — taps are now
+        // ignored while disabled, so a stale [PRE] label could no longer be
+        // cleared by the user.
+        if (!app.preferencesManager.isPrefixKeyEnabled() && prefixArmed) {
+            prefixArmed = false
+            prefixArmedType = null
+            getActiveTerminalView()?.let { tv ->
+                tv.setPendingPrefix(null)
+                tv.onPrefixConsumed = null
+            }
+        }
+        updatePrefixKeyVisual(tabManager.getActiveTab()?.activeMultiplexerType)
+
         // Restore active tab if needed
         val activeTab = tabManager.getActiveTab()
         if (activeTab != null) {
@@ -4269,6 +4284,9 @@ class TabTerminalActivity : AppCompatActivity() {
         // possibly wrong) type, even when detection already reported one.
         binding.multiRowKeyboard.setOnKeyLongClickListener { key ->
             if (key.id == "PREFIX") {
+                // Long-press always works, even when the PRE key is disabled —
+                // it is the only way to reach the Enable/Disable toggle inside
+                // showMultiplexerPickerDialog() and re-enable the key.
                 Logger.d("TabTerminalActivity", "PREFIX key long-press — opening multiplexer picker override")
                 // Cancel any armed latch first so a stale prefix doesn't
                 // fire after the user picks a (possibly different) type —
@@ -4414,8 +4432,9 @@ class TabTerminalActivity : AppCompatActivity() {
                         showMultiplexerPickerDialog()
                     }
                 } else if (!app.preferencesManager.isPrefixKeyEnabled()) {
-                    // User temporarily disabled the PREFIX shortcut from the
-                    // long-press menu — PRE is a no-op until re-enabled.
+                    // User disabled the PREFIX shortcut (Settings or the
+                    // long-press picker's toggle) — tap is a no-op until
+                    // re-enabled; long-press still works regardless.
                     Logger.d("TabTerminalActivity", "PREFIX key: tap ignored (disabled)")
                 } else {
                     // PRE is a shortcut for physically pressing the multiplexer

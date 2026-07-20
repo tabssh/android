@@ -102,6 +102,15 @@
             app:useSimpleSummaryProvider="true" />
 
         <EditTextPreference
+            android:key="multiplexer_custom_prefix_zellij"
+            android:title="zellij prefix"
+            android:summary="Sent by the PRE key and gestures when zellij is active (default: C-g)"
+            android:dialogMessage="Enter the prefix key for zellij.\n\nExamples:\n• C-g or ^g → Ctrl+G (zellij default)\n• C-b or ^b → Ctrl+B\n• C-Space or ^Space → Ctrl+Space\n• M-b or Alt-b → Alt+B\n• 0x07 → Hex byte value\n• ` → Backtick literal\n\nLeave empty to restore the default (C-g)."
+            android:defaultValue="C-g"
+            android:inputType="text"
+            app:useSimpleSummaryProvider="true" />
+
+        <EditTextPreference
             android:key="multiplexer_custom_prefix_screen"
             android:title="screen prefix"
             android:summary="Sent by the PRE key and gestures when screen is active (default: C-a)"
@@ -110,14 +119,11 @@
             android:inputType="text"
             app:useSimpleSummaryProvider="true" />
 
-        <EditTextPreference
-            android:key="multiplexer_custom_prefix_zellij"
-            android:title="zellij prefix"
-            android:summary="Sent by the PRE key and gestures when zellij is active (default: C-g)"
-            android:dialogMessage="Enter the prefix key for zellij.\n\nExamples:\n• C-g or ^g → Ctrl+G (zellij default)\n• C-b or ^b → Ctrl+B\n• C-Space or ^Space → Ctrl+Space\n• M-b or Alt-b → Alt+B\n• 0x07 → Hex byte value\n• ` → Backtick literal\n\nLeave empty to restore the default (C-g)."
-            android:defaultValue="C-g"
-            android:inputType="text"
-            app:useSimpleSummaryProvider="true" />
+        <SwitchPreferenceCompat
+            android:key="terminal_prefix_key_enabled"
+            android:title="Enable PRE Key"
+            android:summary="If disabled, tapping the PRE key on the custom keyboard does nothing. Long-press always works and can also toggle this from the multiplexer picker."
+            android:defaultValue="true" />
 
     </PreferenceCategory>
 
