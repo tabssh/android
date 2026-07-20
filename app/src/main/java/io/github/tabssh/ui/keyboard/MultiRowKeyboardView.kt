@@ -45,6 +45,15 @@ class MultiRowKeyboardView @JvmOverloads constructor(
     /** Saved layout to restore when FN is toggled off. */
     private var savedLayout: List<List<KeyboardKey>>? = null
 
+    /**
+     * Whether the transient STOP_RECORDING key should be appended to row 0.
+     * This is an overlay on top of whatever layout (default or user-customized)
+     * is currently showing — it is never written into [fullLayout] or the
+     * persisted layout JSON, so toggling recording off leaves the user's
+     * layout exactly as it was.
+     */
+    private var recordingIndicatorVisible = false
+
     init {
         orientation = VERTICAL
         // Rows are populated by the hosting activity via setLayout() or
@@ -122,6 +131,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
             applyDefaultKeys()
         }
         applyModifierHighlight()
+        applyRecordingIndicator()
     }
 
     /** Public entry point so the hosting Activity can forward its own onConfigurationChanged. */
@@ -186,6 +196,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
         }
 
         Logger.d(TAG, "Layout set: $numberOfRows rows visible, ${keyboardRows.sumOf { it.getKeys().size }} total keys")
+        applyRecordingIndicator()
     }
 
     /**
@@ -244,6 +255,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
             }
         }
         applyModifierHighlight()
+        applyRecordingIndicator()
     }
 
     /**
@@ -319,6 +331,32 @@ class MultiRowKeyboardView @JvmOverloads constructor(
     }
 
     /**
+     * Show or hide the STOP_RECORDING key on the far right of row 0. Called by
+     * the hosting Activity whenever [io.github.tabssh.terminal.recording.SessionRecorder]
+     * starts or stops. A no-op overlay — see [recordingIndicatorVisible] — so it
+     * never touches the user's saved custom layout.
+     */
+    fun setRecordingIndicatorVisible(visible: Boolean) {
+        if (recordingIndicatorVisible == visible) return
+        recordingIndicatorVisible = visible
+        applyRecordingIndicator()
+    }
+
+    /**
+     * Re-paint row 0 with (or without) the trailing STOP_RECORDING key,
+     * matching [recordingIndicatorVisible]. Skipped while the FN row-swap is
+     * active — there is no room on the F-key rows and restoreFromFn() calls
+     * this again once the swap ends.
+     */
+    private fun applyRecordingIndicator() {
+        if (fnMode) return
+        val row = keyboardRows.firstOrNull() ?: return
+        val keys = row.getKeys().filterNot { it.id == STOP_RECORDING_KEY_ID }
+        val newKeys = if (recordingIndicatorVisible) keys + STOP_RECORDING_KEY else keys
+        row.setKeys(newKeys, pinnedCountForRow(0))
+    }
+
+    /**
      * Replace current rows with an F1-F12 + Back layout.
      */
     private fun enterFnMode() {
@@ -367,6 +405,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
         }
         savedLayout = null
         applyModifierHighlight()
+        applyRecordingIndicator()
     }
 
     /**
@@ -434,6 +473,11 @@ class MultiRowKeyboardView @JvmOverloads constructor(
         const val MIN_ROWS = 1
         const val MAX_ROWS = 5
         const val DEFAULT_ROWS = 3
+        /** ID of the transient stop-recording key toggled by [setRecordingIndicatorVisible]. */
+        const val STOP_RECORDING_KEY_ID = "STOP_RECORDING"
+        private val STOP_RECORDING_KEY = KeyboardKey(
+            STOP_RECORDING_KEY_ID, "⏹", "", KeyboardKey.KeyCategory.ACTION
+        )
         /** Maximum rows shown in landscape to preserve terminal vertical space.
          *  Set to 3 to match the default portrait row count — the split keyboard
          *  layout saves horizontal space, not vertical, so 3 rows fit cleanly. */

@@ -148,6 +148,20 @@
             app:iconPadding="12dp"
             app:iconSize="20dp" />
 
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_toggle_recording"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:paddingStart="16dp"
+            android:gravity="start|center_vertical"
+            android:text="Start Recording"
+            app:icon="@drawable/ic_radio_checked"
+            app:iconGravity="start"
+            app:iconPadding="12dp"
+            app:iconSize="20dp" />
+
         <com.google.android.material.divider.MaterialDivider
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

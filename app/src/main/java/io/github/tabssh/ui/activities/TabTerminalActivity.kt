@@ -772,6 +772,19 @@ class TabTerminalActivity : AppCompatActivity() {
                 showSnippetsDialog()
             }
 
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_toggle_recording)
+            ?.apply {
+                text = if (tabManager.getActiveTab()?.sessionRecorder?.isRecording() == true) {
+                    "Stop Recording"
+                } else {
+                    "Start Recording"
+                }
+                setOnClickListener {
+                    bottomSheet.dismiss()
+                    toggleRecording()
+                }
+            }
+
         // Session section.
         view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_cluster_broadcast)
             ?.setOnClickListener {
@@ -1882,6 +1895,7 @@ class TabTerminalActivity : AppCompatActivity() {
                             profile.getDisplayName()
                         )
                         tab.sessionRecorder?.startRecording()
+                        updateRecordingKeyIndicator()
                     }
 
                     // Yield to the main dispatcher so the Handler.post { addTabToUI() }
@@ -2483,6 +2497,9 @@ class TabTerminalActivity : AppCompatActivity() {
         }
         // Mirror the new tab's multiplexer detection state to the PREFIX key.
         observeMultiplexerState(tabManager.getTab(index))
+        // Recording is tracked per-tab — sync the keyboard's stop-recording
+        // key to whatever the newly active tab's actual state is.
+        updateRecordingKeyIndicator()
     }
     
     private fun updateTabIcon(tab: SSHTab, state: ConnectionState) {
@@ -3331,13 +3348,13 @@ class TabTerminalActivity : AppCompatActivity() {
         startActivity(intent)
     }
     
-    private fun toggleRecording(menuItem: MenuItem) {
+    private fun toggleRecording(menuItem: MenuItem? = null) {
         val activeTab = tabManager.getActiveTab() ?: return
-        
+
         if (activeTab.sessionRecorder?.isRecording() == true) {
             // Stop recording
             activeTab.sessionRecorder?.stopRecording()
-            menuItem.title = "Start Recording"
+            menuItem?.title = "Start Recording"
             Toast.makeText(this, "Recording stopped", Toast.LENGTH_SHORT).show()
         } else {
             // Start recording
@@ -3348,9 +3365,21 @@ class TabTerminalActivity : AppCompatActivity() {
                 )
             }
             activeTab.sessionRecorder?.startRecording()
-            menuItem.title = "Stop Recording"
+            menuItem?.title = "Stop Recording"
             Toast.makeText(this, "Recording started", Toast.LENGTH_SHORT).show()
         }
+        updateRecordingKeyIndicator()
+    }
+
+    /**
+     * Mirror the active tab's recording state onto the custom keyboard's
+     * transient STOP_RECORDING key (far right of row 0) — visible only while
+     * the tab currently on screen is recording. Called after every toggle and
+     * whenever the active tab changes, since recording state is per-tab.
+     */
+    private fun updateRecordingKeyIndicator() {
+        val recording = tabManager.getActiveTab()?.sessionRecorder?.isRecording() == true
+        binding.multiRowKeyboard.setRecordingIndicatorVisible(recording)
     }
     
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
@@ -4344,6 +4373,10 @@ class TabTerminalActivity : AppCompatActivity() {
             "TOGGLE" -> {
                 Logger.d("TabTerminalActivity", "Toggle keyboard action")
                 toggleCustomKeyboard()
+            }
+            "STOP_RECORDING" -> {
+                Logger.d("TabTerminalActivity", "Stop recording key pressed")
+                toggleRecording()
             }
             "PREFIX" -> {
                 val tab = tabManager.getActiveTab()
