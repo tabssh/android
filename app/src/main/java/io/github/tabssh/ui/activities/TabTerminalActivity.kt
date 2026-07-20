@@ -739,6 +739,27 @@ class TabTerminalActivity : AppCompatActivity() {
             if (customKeyboardVisible) hideCustomKeyboardBar() else showCustomKeyboardBar()
         }
 
+        val prefixKeyBtn = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_toggle_prefix_key)
+        prefixKeyBtn?.text = if (app.preferencesManager.isPrefixKeyEnabled()) "Disable Prefix Key" else "Enable Prefix Key"
+        prefixKeyBtn?.setOnClickListener {
+            bottomSheet.dismiss()
+            val nowEnabled = !app.preferencesManager.isPrefixKeyEnabled()
+            app.preferencesManager.setPrefixKeyEnabled(nowEnabled)
+            if (!nowEnabled && prefixArmed) {
+                // Disabling mid-latch: drop the armed visual so the button
+                // doesn't show a stuck [PRE] the user can no longer clear
+                // by tapping it (PRE taps are now ignored while disabled).
+                prefixArmed = false
+                prefixArmedType = null
+                getActiveTerminalView()?.let { tv ->
+                    tv.setPendingPrefix(null)
+                    tv.onPrefixConsumed = null
+                }
+                updatePrefixKeyVisual(tabManager.getActiveTab()?.activeMultiplexerType)
+            }
+            Logger.d("TabTerminalActivity", "PREFIX key: user toggled enabled=$nowEnabled")
+        }
+
         view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_find_in_scrollback)
             ?.setOnClickListener {
                 bottomSheet.dismiss()
@@ -4360,10 +4381,15 @@ class TabTerminalActivity : AppCompatActivity() {
                     } else {
                         showMultiplexerPickerDialog()
                     }
+                } else if (!app.preferencesManager.isPrefixKeyEnabled()) {
+                    // User temporarily disabled the PREFIX shortcut from the
+                    // long-press menu — PRE is a no-op until re-enabled.
+                    Logger.d("TabTerminalActivity", "PREFIX key: tap ignored (disabled)")
                 } else {
-                    // Arm the latch: push the prefix bytes into TerminalView so the
-                    // NEXT keystroke (hardware key, IME text, or custom-bar key) will
-                    // prepend them automatically via consumePendingPrefix().
+                    // PRE is a shortcut for physically pressing the multiplexer
+                    // bind (e.g. Ctrl-B) — so tapping it must act exactly like
+                    // that keypress: send the bytes to the terminal right now,
+                    // not deferred until the user's next keystroke.
                     val prefixStr = when (type) {
                         "tmux"   -> app.preferencesManager.getString(
                             "multiplexer_custom_prefix_tmux",   "C-b")
@@ -4375,9 +4401,18 @@ class TabTerminalActivity : AppCompatActivity() {
                             "multiplexer_custom_prefix_tmux",   "C-b")
                     }
                     val bytes = io.github.tabssh.terminal.gestures.PrefixParser.parse(prefixStr)
+                    if (bytes == null) {
+                        Logger.w("TabTerminalActivity", "PREFIX key: failed to parse prefix '$prefixStr'")
+                        return
+                    }
                     prefixArmed = true
                     prefixArmedType = type
                     getActiveTerminalView()?.let { tv ->
+                        tv.sendText(String(bytes, Charsets.ISO_8859_1))
+                        // Arm only the visual-disarm latch — tmux/screen is now
+                        // server-side waiting for the next keystroke regardless
+                        // of anything the app does; this just clears the [PRE]
+                        // button visual when that keystroke arrives.
                         tv.setPendingPrefix(bytes)
                         tv.onPrefixConsumed = {
                             prefixArmed = false
@@ -4386,24 +4421,27 @@ class TabTerminalActivity : AppCompatActivity() {
                         }
                     }
                     updatePrefixKeyVisual(type)
-                    Logger.d("TabTerminalActivity", "PREFIX key: armed for $type ($prefixStr)")
+                    Logger.d("TabTerminalActivity", "PREFIX key: sent $type ($prefixStr)")
                 }
             }
             else -> {
-                // If the PREFIX latch is armed, the bytes were already pushed into
-                // TerminalView via setPendingPrefix() at arm time. TerminalView's
-                // consumePendingPrefix() fires automatically from onKeyDown() and
-                // commitText() — we only need to clear the Activity-side state here
-                // so that the visual deactivation happens correctly when the latch
-                // fires from a custom-bar key (which bypasses those TerminalView paths).
+                // If the PREFIX latch is armed, the bytes were already sent to
+                // the terminal at PRE-tap time — this only clears the armed
+                // visual. TerminalView's consumePendingPrefix() fires
+                // automatically from onKeyDown() and commitText(); we only
+                // need to clear the Activity-side state here so the visual
+                // deactivation happens correctly when the latch fires from a
+                // custom-bar key (which bypasses those TerminalView paths).
                 if (prefixArmed) {
                     val consumedType = prefixArmedType
                     prefixArmed = false
                     prefixArmedType = null
                     getActiveTerminalView()?.let { tv ->
-                        // consumePendingPrefix() sends the bytes and fires onPrefixConsumed;
-                        // calling it here handles the custom-bar key path. For hardware/IME
-                        // keys it was already called — setPendingPrefix(null) is a no-op then.
+                        // The prefix bytes were already sent at PRE-tap time —
+                        // consumePendingPrefix() here only fires onPrefixConsumed
+                        // to clear the visual, handling the custom-bar key path.
+                        // For hardware/IME keys it was already called — this is
+                        // then a no-op since the latch is already disarmed.
                         tv.consumePendingPrefix()
                         tv.onPrefixConsumed = null
                     }

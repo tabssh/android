@@ -757,12 +757,14 @@ class TerminalView @JvmOverloads constructor(
     private var pendingAlt   = false
     private var pendingShift = false
 
-    // PREFIX latch — exact parallel to pendingCtrl/pendingAlt. Bytes to
-    // prepend before the NEXT user keystroke (set by TabTerminalActivity
-    // when the PRE bar key is tapped). Consumed by onKeyDown() and the
-    // InputConnection commitText path so IME and hardware keys both receive
-    // the prefix, not just custom-bar taps.
-    private var pendingPrefixBytes: ByteArray? = null
+    // PREFIX visual latch — PRE is a shortcut for physically pressing the
+    // multiplexer bind (e.g. Ctrl-B), so TabTerminalActivity sends the
+    // prefix bytes to the terminal the instant PRE is tapped, not deferred.
+    // This flag no longer carries bytes to prepend — it only tracks whether
+    // the NEXT user keystroke (hardware key, IME text, or custom-bar key)
+    // should disarm the PRE key's armed visual, since tmux/screen is now
+    // server-side waiting for that keystroke regardless of app-side state.
+    private var pendingPrefixArmed = false
 
     /** Notified after a pending modifier is consumed so the bar can clear UI. */
     var onModifierConsumed: (() -> Unit)? = null
@@ -774,18 +776,19 @@ class TerminalView @JvmOverloads constructor(
      */
     var onPrefixConsumed: (() -> Unit)? = null
 
-    /** Arm the PREFIX latch with the bytes to prepend before the next keystroke. */
-    fun setPendingPrefix(bytes: ByteArray?) { pendingPrefixBytes = bytes }
+    /** Arm/clear the PREFIX visual-disarm latch (bytes already sent by the caller). */
+    fun setPendingPrefix(bytes: ByteArray?) { pendingPrefixArmed = bytes != null }
 
     /**
-     * If a PREFIX latch is armed, send its bytes to the terminal immediately
-     * then clear the latch. Posts [onPrefixConsumed] to the main looper so
-     * the activity can update the PREFIX key visual from any thread.
+     * If the PREFIX visual latch is armed, clear it and notify
+     * [onPrefixConsumed] so the host can drop the PRE key's armed visual.
+     * The prefix bytes were already sent to the terminal at arm time —
+     * this only fires on the NEXT keystroke after that, purely for UI
+     * state, and no longer sends anything itself.
      */
     internal fun consumePendingPrefix() {
-        val p = pendingPrefixBytes ?: return
-        pendingPrefixBytes = null
-        sendText(String(p, Charsets.ISO_8859_1))
+        if (!pendingPrefixArmed) return
+        pendingPrefixArmed = false
         android.os.Handler(android.os.Looper.getMainLooper()).post { onPrefixConsumed?.invoke() }
     }
 
