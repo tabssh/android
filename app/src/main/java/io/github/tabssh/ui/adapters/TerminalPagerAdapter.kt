@@ -28,6 +28,13 @@ class TerminalPagerAdapter(
      * Copy ActionMode against the right view.
      */
     private val onSelectionStarted: ((TerminalView) -> Unit)? = null,
+    /**
+     * Invoked when selection is cleared from a path other than the
+     * ActionMode's own Cancel button (e.g. tap-outside-to-dismiss). Lets
+     * the host activity finish the floating ActionMode it started, so
+     * swipe-suspend doesn't get stuck. See TerminalView.onSelectionEnded.
+     */
+    private val onSelectionEnded: (() -> Unit)? = null,
     private val onContextMenuRequested: ((Float, Float) -> Unit)? = null,
     private var reverseScrollDirection: Boolean = false,
     private var lineSpacingPercent: Int = 120
@@ -91,6 +98,7 @@ class TerminalPagerAdapter(
             customPrefix,
             onCommandSent,
             onSelectionStarted,
+            onSelectionEnded,
             onContextMenuRequested
         )
     }
@@ -130,6 +138,7 @@ class TerminalPagerAdapter(
         private val customPrefix: String?,
         private val onCommandSent: ((ByteArray) -> Unit)?,
         private val onSelectionStarted: ((TerminalView) -> Unit)? = null,
+        private val onSelectionEnded: (() -> Unit)? = null,
         private val onContextMenuRequested: ((Float, Float) -> Unit)? = null
     ) : RecyclerView.ViewHolder(terminalView) {
 
@@ -157,6 +166,9 @@ class TerminalPagerAdapter(
             // → activity starts the floating Copy ActionMode against THIS view.
             onSelectionStarted?.let { cb ->
                 terminalView.onSelectionStarted = { cb(terminalView) }
+            }
+            onSelectionEnded?.let { cb ->
+                terminalView.onSelectionEnded = cb
             }
 
             // Set up gesture support

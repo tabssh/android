@@ -341,6 +341,17 @@ class TerminalView @JvmOverloads constructor(
      */
     var onSelectionStarted: (() -> Unit)? = null
 
+    /**
+     * Host activities subscribe to know when selection has been cleared
+     * from a path OTHER than the ActionMode's own Cancel button — e.g.
+     * tapping outside the highlight in handleSelectionTouch(). Without
+     * this, exitSelectionMode() only cleared local drawing state and the
+     * floating ActionMode (and the swipe-suspend flag it drives) was
+     * orphaned in the "active" state until the user found the Cancel
+     * button or the Activity was recreated.
+     */
+    var onSelectionEnded: (() -> Unit)? = null
+
     init {
         // Enable focus and touch
         isFocusable = true
@@ -2469,6 +2480,12 @@ class TerminalView @JvmOverloads constructor(
         // selection (e.g. tap-outside-to-cancel, ActionMode dismissed).
         requestFocus()
         invalidate()
+        // Tell the host to finish its floating ActionMode too. Harmless
+        // when we were called FROM onDestroyActionMode (the Activity nulls
+        // its reference before calling us, so this is a no-op in that
+        // case) — but essential when we were called from a tap-outside,
+        // which otherwise leaves the ActionMode (and swipe-suspend) stuck.
+        onSelectionEnded?.invoke()
     }
 
     /**

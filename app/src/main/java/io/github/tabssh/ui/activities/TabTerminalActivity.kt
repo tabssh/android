@@ -927,6 +927,13 @@ class TabTerminalActivity : AppCompatActivity() {
                     startTerminalSelectionActionMode(viewRef)
                 }
 
+                // Tap-outside-to-dismiss clears local selection state without
+                // going through the ActionMode's Cancel button — finish the
+                // ActionMode here too, or swipe-suspend gets stuck permanently.
+                onSelectionEnded = {
+                    selectionActionMode?.finish()
+                }
+
                 // Issue #168 — edge-swipe tab switching. Acts as a backup
                 // path for users who turned off ViewPager2 swipe-mode and
                 // would otherwise have no touch gesture for tab switching.
@@ -1378,8 +1385,12 @@ class TabTerminalActivity : AppCompatActivity() {
                 return false
             }
             override fun onDestroyActionMode(mode: android.view.ActionMode) {
-                view.exitSelectionMode()
+                // Null out BEFORE exitSelectionMode() — it fires
+                // onSelectionEnded, which calls selectionActionMode?.finish().
+                // Nulling first makes that a no-op instead of a re-entrant
+                // finish() on the mode currently being destroyed.
                 if (selectionActionMode === mode) selectionActionMode = null
+                view.exitSelectionMode()
                 // Re-enable swipe now that text selection is done.
                 swipeSuspendedForSelection = false
                 viewPager?.isUserInputEnabled = true
@@ -2203,6 +2214,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 customPrefix,
                 commandCallback,
                 onSelectionStarted = { tv -> startTerminalSelectionActionMode(tv) },
+                onSelectionEnded = { selectionActionMode?.finish() },
                 onContextMenuRequested = { _, _ -> showTerminalMenu() },
                 reverseScrollDirection = app.preferencesManager.isReverseScrollDirection(),
                 lineSpacingPercent = app.preferencesManager.getStringAsInt("terminal_line_spacing", 120)
@@ -2272,6 +2284,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 customPrefix,
                 commandCallback,
                 onSelectionStarted = { tv -> startTerminalSelectionActionMode(tv) },
+                onSelectionEnded = { selectionActionMode?.finish() },
                 onContextMenuRequested = { _, _ -> showTerminalMenu() },
                 reverseScrollDirection = app.preferencesManager.isReverseScrollDirection(),
                 lineSpacingPercent = app.preferencesManager.getStringAsInt("terminal_line_spacing", 120)
