@@ -119,12 +119,6 @@
             android:inputType="text"
             app:useSimpleSummaryProvider="true" />
 
-        <SwitchPreferenceCompat
-            android:key="terminal_prefix_key_enabled"
-            android:title="Enable PRE Key"
-            android:summary="If disabled, tapping the PRE key on the custom keyboard does nothing. Long-press always works and can also toggle this from the multiplexer picker."
-            android:defaultValue="true" />
-
     </PreferenceCategory>
 
 
