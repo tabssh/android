@@ -14,10 +14,17 @@ import androidx.room.*
             parentColumns = ["id"],
             childColumns = ["connection_id"],
             onDelete = ForeignKey.CASCADE
+        ),
+        ForeignKey(
+            entity = VncHost::class,
+            parentColumns = ["id"],
+            childColumns = ["vnc_host_id"],
+            onDelete = ForeignKey.CASCADE
         )
     ],
     indices = [
         Index("connection_id"),
+        Index("vnc_host_id"),
         Index("tab_id", unique = true),
         Index("is_active")
     ]
@@ -30,8 +37,19 @@ data class TabSession(
     @ColumnInfo(name = "tab_id")
     val tabId: String,
 
+    // Exactly one of connectionId / vncHostId is non-null, selected by
+    // tabKind. Both nullable (rather than a single polymorphic FK) because
+    // Room requires a distinct ForeignKey per parent entity/column.
     @ColumnInfo(name = "connection_id")
-    val connectionId: String,
+    val connectionId: String? = null,
+
+    @ColumnInfo(name = "vnc_host_id")
+    val vncHostId: String? = null,
+
+    // "SSH" or "VNC" — mirrors ui.tabs.Tab's sealed subtypes. String (not
+    // Int enum ordinal) to stay readable in raw DB inspection/migrations.
+    @ColumnInfo(name = "tab_kind", defaultValue = "SSH")
+    val tabKind: String = TAB_KIND_SSH,
 
     @ColumnInfo(name = "title")
     val title: String,
@@ -102,5 +120,8 @@ data class TabSession(
         const val STATE_DISCONNECTED = "DISCONNECTED"
         const val STATE_ERROR = "ERROR"
         const val STATE_RECONNECTING = "RECONNECTING"
+
+        const val TAB_KIND_SSH = "SSH"
+        const val TAB_KIND_VNC = "VNC"
     }
 }

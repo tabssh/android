@@ -14,7 +14,7 @@ import io.github.tabssh.utils.logging.Logger
 /**
  * Main Room database for TabSSH.
  *
- * Current version: 5.
+ * Current version: 6.
  * Versions 1 and 2 never shipped with persisted user data (alpha installs were
  * wiped on every upgrade before v3 stabilised). To avoid an IllegalStateException
  * at first open on any leftover v1/v2 install, those versions use
@@ -47,7 +47,7 @@ import io.github.tabssh.utils.logging.Logger
         SyncTombstone::class,
         SyncShadow::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -128,6 +128,62 @@ abstract class TabSSHDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v5 → v6 (VNC-tab-swipe integration, step 1 — see TODO.AI.md): let a
+         * `tab_sessions` row represent either an SSH tab or a VNC tab.
+         *
+         * `connection_id` was `NOT NULL` with a CASCADE FK to `connections`;
+         * SQLite can't ALTER a column to nullable or add a FK in place, so the
+         * table is rebuilt: new nullable `connection_id`, new nullable
+         * `vnc_host_id` FK to `vnc_hosts`, new `tab_kind` discriminator
+         * (`'SSH'`/`'VNC'`). Every existing row is SSH-only (VNC tabs didn't
+         * exist before this migration), so the copy sets `tab_kind = 'SSH'`
+         * and `vnc_host_id = NULL` unconditionally — no data loss, no
+         * ambiguity to resolve.
+         */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `tab_sessions_new` (" +
+                        "`session_id` TEXT NOT NULL, `tab_id` TEXT NOT NULL, " +
+                        "`connection_id` TEXT, `vnc_host_id` TEXT, " +
+                        "`tab_kind` TEXT NOT NULL DEFAULT 'SSH', `title` TEXT NOT NULL, " +
+                        "`is_active` INTEGER NOT NULL, `terminal_content` TEXT NOT NULL, " +
+                        "`cursor_row` INTEGER NOT NULL, `cursor_col` INTEGER NOT NULL, " +
+                        "`scroll_position` INTEGER NOT NULL, `working_directory` TEXT NOT NULL, " +
+                        "`environment_vars` TEXT NOT NULL, `created_at` INTEGER NOT NULL, " +
+                        "`last_activity` INTEGER NOT NULL, `session_state` TEXT NOT NULL, " +
+                        "`terminal_rows` INTEGER NOT NULL, `terminal_cols` INTEGER NOT NULL, " +
+                        "`font_size` REAL NOT NULL, `connection_state` TEXT NOT NULL, " +
+                        "`last_error` TEXT, `has_unread_output` INTEGER NOT NULL, " +
+                        "`unread_lines` INTEGER NOT NULL, `tab_order` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`session_id`), " +
+                        "FOREIGN KEY(`connection_id`) REFERENCES `connections`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE, " +
+                        "FOREIGN KEY(`vnc_host_id`) REFERENCES `vnc_hosts`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"
+                )
+                db.execSQL(
+                    "INSERT INTO `tab_sessions_new` (" +
+                        "session_id, tab_id, connection_id, vnc_host_id, tab_kind, title, " +
+                        "is_active, terminal_content, cursor_row, cursor_col, scroll_position, " +
+                        "working_directory, environment_vars, created_at, last_activity, " +
+                        "session_state, terminal_rows, terminal_cols, font_size, " +
+                        "connection_state, last_error, has_unread_output, unread_lines, tab_order) " +
+                        "SELECT session_id, tab_id, connection_id, NULL, 'SSH', title, " +
+                        "is_active, terminal_content, cursor_row, cursor_col, scroll_position, " +
+                        "working_directory, environment_vars, created_at, last_activity, " +
+                        "session_state, terminal_rows, terminal_cols, font_size, " +
+                        "connection_state, last_error, has_unread_output, unread_lines, tab_order " +
+                        "FROM `tab_sessions`"
+                )
+                db.execSQL("DROP TABLE `tab_sessions`")
+                db.execSQL("ALTER TABLE `tab_sessions_new` RENAME TO `tab_sessions`")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_tab_sessions_connection_id` ON `tab_sessions` (`connection_id`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_tab_sessions_vnc_host_id` ON `tab_sessions` (`vnc_host_id`)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_tab_sessions_tab_id` ON `tab_sessions` (`tab_id`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_tab_sessions_is_active` ON `tab_sessions` (`is_active`)")
+            }
+        }
+
         fun getDatabase(context: Context): TabSSHDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -140,7 +196,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
                 // Pre-v3 alpha installs were wiped on every upgrade — see kdoc.
                 // Real migrations must be added here for every bump from v3 onward.
                 .fallbackToDestructiveMigrationFrom(1, 2)
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .build()
                 INSTANCE = instance
                 instance

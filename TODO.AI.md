@@ -13,6 +13,42 @@
 
 ---
 
+## 🚧 In Progress: VNC-tab-swipe integration
+
+Design decided (see AI.md §11.7.2) — VNC connections join the SSH `ViewPager2`/
+`TabManager`/`TerminalPagerAdapter` swipe system instead of staying in the
+standalone `VMConsoleActivity`. This is a multi-commit feature; each step below
+ships independently, buildable and tested, in dependency order.
+
+1. **DB schema** — `TabSession.connectionId` currently FKs to `connections`
+   (SSH-only). Add a nullable `vncHostId` FK to `vnc_hosts` + a `tabKind`
+   discriminator column; new Room migration + `MigrationTest.kt` coverage.
+2. **Data model** — introduce sealed `Tab` (`Tab.Ssh(SSHTab)` / `Tab.Vnc(VncTab)`)
+   in `io.github.tabssh.ui.tabs`; new `VncTab` class holding a `VncHost` (or
+   ephemeral hypervisor console params) + a handle into the existing
+   `VncBackgroundSessionStore`, keyed by the same `tabId` scheme SSH uses.
+3. **`TabManager` rewrite** — `tabs: MutableList<SSHTab>` → `MutableList<Tab>`;
+   `createTab(profile)` stays SSH-only, add `createVncTab(host)`; `tabsFlow`,
+   `TabManagerListener`, `saveTabState()`/restore all become sealed-type aware.
+4. **`TerminalPagerAdapter`** — `getItemViewType()` (SSH vs VNC) + new
+   `VncViewHolder` binding `VncView`, alongside the existing `TerminalViewHolder`.
+5. **`TabTerminalActivity` swipe gating** — generalize
+   `attachEdgeSwipeGate()`/`swipeSuspendedForSelection` so it also suspends
+   swipe when the active tab is VNC and touch starts inside the content area
+   (not the edge strip) — VNC's pointer-forwarding touch model needs the same
+   carve-out SSH text-selection already has.
+6. **Entry-point consolidation** — connecting to a `VncHost` or hypervisor
+   console opens/activates a VNC tab inside `TabTerminalActivity` instead of
+   launching `VMConsoleActivity`. `VncHostsActivity` stays as the VNC host
+   management (CRUD) screen — same role the SSH connection-profile list plays.
+   Retire `VMConsoleActivity` once all callers are migrated; grep every
+   `startActivity(...VMConsoleActivity...)` call site first.
+7. **Cleanup** — remove now-dead `VMConsoleActivity`-only code paths; update
+   AI.md §11.7.2 from "in progress" to shipped; update this section to ✅.
+
+Dependency order above is required: 3 needs 2, 4 needs 2+3, 5 needs 4, 6 needs
+2–5 all working. Do not reorder or parallelize across agents/commits.
+
 ## ✅ Recently Shipped
 
 - **`6e549c327987`** 🐛 Fix tab create/close permanently disabling swipe-to-switch — `TabTerminalActivity.updateViewPagerAdapter()` now calls `selectionActionMode?.finish()` before rebuilding the adapter, so a stale floating ActionMode from a prior selection no longer leaves swipe permanently disabled.

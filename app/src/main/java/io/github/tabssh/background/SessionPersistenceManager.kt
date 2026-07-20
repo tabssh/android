@@ -341,6 +341,9 @@ class SessionPersistenceManager(
                 // to prevent restoring duplicate tabs for one real connection.
                 .distinctBy { it.tabId }
                 .filter { it.tabId !in liveTabIds }
+                // VNC-kind sessions aren't restorable via this SSH-only path yet
+                // (tracked in TODO.AI.md — VNC-tab-swipe integration, step 3).
+                .filter { it.tabKind == TabSession.TAB_KIND_SSH && it.connectionId != null }
 
             if (sessionsToRestore.isEmpty()) {
                 Logger.d("SessionPersistenceManager", "All saved sessions already alive — skipping restore")
@@ -351,7 +354,8 @@ class SessionPersistenceManager(
 
             for (session in sessionsToRestore) {
                 try {
-                    val connectionProfile = database.connectionDao().getConnectionById(session.connectionId)
+                    val sessionConnectionId = session.connectionId ?: continue
+                    val connectionProfile = database.connectionDao().getConnectionById(sessionConnectionId)
 
                     if (connectionProfile != null) {
                         // Create tab without auto-connecting (using user's preferred cursor style)
