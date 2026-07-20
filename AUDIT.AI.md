@@ -558,16 +558,28 @@ clean.
 "No hardcoded secrets detected" while C1 sits in the same file. A false audit
 trail. **Fix:** implement or remove.
 
-## M6 — DB upgrade path: only destructive fallback, zero migrations
-**`TabSSHDatabase.kt:47`** — `version = 3`, `fallbackToDestructiveMigrationFrom(1, 2)`,
-no registered `Migration` objects; only `schemas/.../3.json` exists. This is
-explained by commit `0bd35d42`, which deliberately **reset** the version numbering
-to 3 (so the AI.md "37 migrations" wording is stale — see AD1, this is *not* a
-"build 34 migrations" task). Residual risk: any user who ever installed a build on
-the old numbering and upgrades will hit the destructive fallback and lose data.
-**Fix:** confirm no released build shipped a conflicting schema under the old
-numbering; if one did, add a real `Migration` for it instead of destructive
-fallback. Verified `version = 3` directly.
+## M6 — DB upgrade path: only destructive fallback, zero migrations — FIXED
+**`TabSSHDatabase.kt`** originally had `version = 3`,
+`fallbackToDestructiveMigrationFrom(1, 2)`, no registered `Migration` objects;
+only `schemas/.../3.json` existed. This was explained by commit `0bd35d42`, which
+deliberately **reset** the version numbering to 3 (so the AI.md "37 migrations"
+wording is stale — see AD1, this is *not* a "build 34 migrations" task). Residual
+risk at the time: any user who ever installed a build on the old numbering and
+upgraded would hit the destructive fallback and lose data.
+
+**Verified as resolved (no new code needed — the H6 sync work already fixed
+this):** the DB is now at `version = 5` with real `Migration` objects registered
+for every bump since the v3 reset — `MIGRATION_3_4` (adds
+`vnc_hosts.keep_alive_in_background`, additive) and `MIGRATION_4_5` (H6 sync
+tombstone tables, additive) — both wired via `.addMigrations(MIGRATION_3_4,
+MIGRATION_4_5)`. `fallbackToDestructiveMigrationFrom(1, 2)` remains scoped only
+to versions 1/2, which per the class kdoc and `0bd35d4b2467`'s commit message
+("All installs are now at v3 — the v3 release was the intentional last wipe")
+never shipped with persisted user data on any released build. `app/schemas/`
+holds `3.json`/`4.json`/`5.json`, matching the registered migration chain. No
+user on a released build can hit the destructive path with real data at risk.
+`MigrationTest.kt` (H6 Slice 6) exercises the v3→v4→v5 chain. Verified against
+source; no code change required, audit entry corrected to match reality.
 
 ## M7 — `-printseeds/-printusage/-printmapping` write to module root — FIXED
 **`proguard-fdroid.pro:22-24`** — relative paths drop `seeds.txt`/`usage.txt`/
