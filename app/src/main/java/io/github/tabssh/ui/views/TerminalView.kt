@@ -82,6 +82,14 @@ class TerminalView @JvmOverloads constructor(
     // Touch and input handling
     private val gestureDetector: GestureDetector
     private val scaleGestureDetector: ScaleGestureDetector
+    // GestureDetector schedules a long-press timer on every ACTION_DOWN,
+    // including the second tap of a double-tap. If that second tap is held
+    // past the long-press timeout before lifting, onLongPress fires for the
+    // SAME touch-down as the just-recognized onDoubleTap — opening the
+    // terminal context menu right after a double-tap word-select. Track the
+    // down-event time of the last onDoubleTap so onLongPress can recognize
+    // and suppress that specific spurious firing.
+    private var lastDoubleTapDownTime = -1L
     private val scroller: OverScroller
     // Float scroll position for sub-row precision. Using a float here lets
     // the canvas translate by the fractional row offset so rows glide smoothly
@@ -2316,10 +2324,22 @@ class TerminalView @JvmOverloads constructor(
         override fun onDoubleTap(e: MotionEvent): Boolean {
             // Double tap = select word at position
             selectWordAtPosition(e.x, e.y)
+            // Remember this touch-down so a long-press timeout firing for
+            // the SAME down event (see onLongPress below) can be suppressed.
+            lastDoubleTapDownTime = e.downTime
             return true
         }
 
         override fun onLongPress(e: MotionEvent) {
+            // If this long-press's down event is the very one that just
+            // produced onDoubleTap above (the user held the second tap past
+            // the long-press timeout before lifting), it is not a separate
+            // gesture — ignore it so double-tap never also opens the
+            // terminal context menu.
+            if (e.downTime == lastDoubleTapDownTime) {
+                Logger.d("TerminalView", "Long press ignored — part of a just-fired double tap")
+                return
+            }
             // Long press on a URL → URL open/copy dialog.
             // Long press on anything else → terminal action menu.
             // Copy/paste lives on the dedicated clipboard key in the keyboard
