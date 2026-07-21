@@ -1,5 +1,13 @@
 # What's New
 
+## Wave 63 — PRE key now looks disabled when it is
+
+- **The PRE key now stays visibly greyed out when you turn off "Enable
+  PRE Key"** — before, the key kept its normal look even after being
+  disabled, which made it seem broken or stuck. Tapping it while
+  disabled still does nothing (as before), and long-pressing it still
+  opens the picker so you can turn it back on.
+
 ## Wave 62 — Easier tab-swipe zone, with feedback when it's missed
 
 - **Swiping between tabs is now easier to trigger** — the strip along

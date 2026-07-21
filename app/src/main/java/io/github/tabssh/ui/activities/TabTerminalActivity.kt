@@ -2430,7 +2430,11 @@ class TabTerminalActivity : AppCompatActivity() {
     }
 
     private fun updatePrefixKeyVisual(multiplexerType: String?) {
-        // Three distinct visual states:
+        // Four distinct visual states:
+        //   0. Disabled (Settings/picker "Enable PRE Key" off) → forced heavy dim,
+        //      regardless of armed/mux state — the key stays tappable/long-pressable
+        //      (tap logs a no-op, long-press still opens the re-enable picker) but
+        //      must *look* inert so a disabled key never appears to be live.
         //   1. Armed (prefixArmed = true)     → solid green fill — latch ready to fire
         //   2. Mux detected (type != null)    → green outline only — mux present, not armed
         //   3. No mux                         → default grey — nothing to send
@@ -2438,6 +2442,10 @@ class TabTerminalActivity : AppCompatActivity() {
         // can tell the difference between "mux running" and "about to send prefix".
         val MUX_GREEN = 0xFF4CAF50.toInt()
         when {
+            !app.preferencesManager.isPrefixKeyEnabled() ->
+                binding.multiRowKeyboard.setKeyState(
+                    "PREFIX", active = false, enabled = true, dimmed = true
+                )
             prefixArmed ->
                 binding.multiRowKeyboard.setKeyState("PREFIX", active = true, enabled = true)
             multiplexerType != null ->

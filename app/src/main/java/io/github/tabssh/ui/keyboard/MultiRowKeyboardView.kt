@@ -316,9 +316,19 @@ class MultiRowKeyboardView @JvmOverloads constructor(
      *                    false → key is dimmed and non-interactive
      * @param accentColor non-zero → coloured outline only (mux detected, not armed);
      *                    0 → default grey outline
+     * @param dimmed      true → force the heavily-dimmed look regardless of the
+     *                    other params, without touching [enabled]'s click
+     *                    dispatch — used when the PREFIX key is disabled via
+     *                    Settings but must stay tappable/long-pressable
      */
-    fun setKeyState(keyId: String, active: Boolean, enabled: Boolean = true, accentColor: Int = 0) {
-        keyboardRows.forEach { it.setKeyState(keyId, active, enabled, accentColor) }
+    fun setKeyState(
+        keyId: String,
+        active: Boolean,
+        enabled: Boolean = true,
+        accentColor: Int = 0,
+        dimmed: Boolean = false
+    ) {
+        keyboardRows.forEach { it.setKeyState(keyId, active, enabled, accentColor, dimmed) }
     }
 
     /**

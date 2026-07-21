@@ -114,17 +114,31 @@ class KeyboardRowView @JvmOverloads constructor(
      *  - [active] = false + [accentColor] != 0 → coloured outline only — mux detected
      *  - [active] = false + [enabled] = false → heavily dimmed — no multiplexer
      *  - [active] = false + [enabled] = true → default styling
+     *  - [dimmed] = true → heavily dimmed regardless of the above, but [enabled]
+     *    is left untouched by this flag so the button stays clickable — used by
+     *    the PREFIX key when the "Enable PRE Key" setting is off, where the key
+     *    must still receive taps/long-presses (tap logs a no-op, long-press
+     *    still opens the re-enable picker) while *looking* disabled.
      * Used by the PREFIX key to reflect live multiplexer detection and armed state.
      */
-    fun setKeyState(keyId: String, active: Boolean, enabled: Boolean, accentColor: Int = 0) {
+    fun setKeyState(
+        keyId: String,
+        active: Boolean,
+        enabled: Boolean,
+        accentColor: Int = 0,
+        dimmed: Boolean = false
+    ) {
         val btn = keyButtonMap[keyId] ?: return
         btn.isEnabled = enabled
         // Solid fill when armed; plain outline when only mux-detected.
         btn.setActive(active)
         // When not in the solid-fill active state, apply accent (coloured outline)
-        // or reset to the default grey outline depending on caller.
-        if (!active) btn.setHighlight(accentColor)
+        // or reset to the default grey outline depending on caller. A forced
+        // "dimmed" state always resets to the plain grey outline — an accent
+        // colour would fight with looking disabled.
+        if (!active) btn.setHighlight(if (dimmed) 0 else accentColor)
         btn.alpha = when {
+            dimmed           -> 0.25f  // Forced dim: feature disabled by the user
             active           -> 1.0f
             accentColor != 0 -> 0.95f  // mux detected, not armed — slightly dim
             enabled          -> 0.7f
