@@ -141,6 +141,14 @@ class TabTerminalActivity : AppCompatActivity() {
     // True only while text selection is active — fully suspends swipe
     // regardless of where the finger goes down (see edge-zone listener).
     private var swipeSuspendedForSelection: Boolean = false
+    // Per-gesture state for the edge-zone reject feedback (haptic + glow) in
+    // attachEdgeSwipeGate() — a mid-screen swipe that gets rejected by the
+    // edge-zone check otherwise fails completely silently, which reads as
+    // "broken" rather than "by design". Reset on every ACTION_DOWN.
+    private var edgeGateDownX: Float = 0f
+    private var edgeGateDownY: Float = 0f
+    private var edgeGateRejectedForGesture: Boolean = false
+    private var edgeGateFeedbackFiredForGesture: Boolean = false
     // Set to true while updateViewPagerAdapter() is swapping the adapter.
     // ViewPager2 fires onPageSelected(0) when a new adapter is assigned
     // (it resets to page 0), and setCurrentItem() fires onPageSelected for
@@ -841,16 +849,38 @@ class TabTerminalActivity : AppCompatActivity() {
             ): Boolean {
                 when (e.actionMasked) {
                     android.view.MotionEvent.ACTION_DOWN -> {
+                        val rejectedByEdgeZone = !swipeSuspendedForSelection &&
+                            tabSwipeEdgePx > 0 &&
+                            run {
+                                val w = recycler.width
+                                !(e.x <= tabSwipeEdgePx || e.x >= w - tabSwipeEdgePx)
+                            }
                         val allowed = when {
                             swipeSuspendedForSelection -> false
                             tabSwipeEdgePx <= 0 -> true
-                            else -> {
-                                val w = recycler.width
-                                e.x <= tabSwipeEdgePx || e.x >= w - tabSwipeEdgePx
-                            }
+                            else -> !rejectedByEdgeZone
                         }
                         viewPager?.isUserInputEnabled = allowed
+                        edgeGateDownX = e.x
+                        edgeGateDownY = e.y
+                        edgeGateRejectedForGesture = rejectedByEdgeZone
+                        edgeGateFeedbackFiredForGesture = false
                         Logger.d("TabTerminalActivity", "edgeSwipeGate ACTION_DOWN — swipeSuspendedForSelection=$swipeSuspendedForSelection, isUserInputEnabled=$allowed")
+                    }
+                    android.view.MotionEvent.ACTION_MOVE -> {
+                        // Fire the reject-feedback cue at most once per gesture,
+                        // and only once the touch has actually become a real
+                        // horizontal drag (not a tap or a vertical scroll) —
+                        // otherwise every rejected tap would glow needlessly.
+                        if (edgeGateRejectedForGesture && !edgeGateFeedbackFiredForGesture) {
+                            val dx = e.x - edgeGateDownX
+                            val dy = e.y - edgeGateDownY
+                            val touchSlop = android.view.ViewConfiguration.get(this@TabTerminalActivity).scaledTouchSlop
+                            if (kotlin.math.abs(dx) > touchSlop && kotlin.math.abs(dx) > kotlin.math.abs(dy)) {
+                                edgeGateFeedbackFiredForGesture = true
+                                showSwipeEdgeRejectionFeedback(edgeGateDownX, recycler.width)
+                            }
+                        }
                     }
                     android.view.MotionEvent.ACTION_UP,
                     android.view.MotionEvent.ACTION_CANCEL -> {
@@ -878,16 +908,49 @@ class TabTerminalActivity : AppCompatActivity() {
         })
     }
 
+    // Haptic tick + a brief alpha-fade glow at the screen edge nearer the
+    // rejected touch — fired once per gesture from attachEdgeSwipeGate() when
+    // a mid-screen swipe is genuinely rejected by the edge-zone check (never
+    // for selection-suspended swipes, which are a separate, intentional
+    // state). Without this cue the rejection is silent and indistinguishable
+    // from a bug. CLOCK_TICK is used (not REJECT) because REJECT requires
+    // API 30+ and this app's minSdk is 21.
+    private fun showSwipeEdgeRejectionFeedback(downX: Float, containerWidth: Int) {
+        binding.viewPager.performHapticFeedback(
+            android.view.HapticFeedbackConstants.CLOCK_TICK,
+            android.view.HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING
+        )
+        val nearStart = downX <= containerWidth - downX
+        val glow = if (nearStart) binding.swipeEdgeGlowStart else binding.swipeEdgeGlowEnd
+        glow.animate().cancel()
+        glow.alpha = 0f
+        glow.animate()
+            .alpha(1f)
+            .setDuration(90)
+            .withEndAction {
+                glow.animate()
+                    .alpha(0f)
+                    .setDuration(220)
+                    .setStartDelay(60)
+                    .start()
+            }
+            .start()
+    }
+
     private fun setupTerminalView() {
         // Check if swipe is enabled
         swipeEnabled = app.preferencesManager.getBoolean("swipe_between_tabs", true)
 
         // Edge-zone width for tab swiping. 0 dp = swipe from anywhere on the
         // page (legacy). A positive value restricts the swipe start to a strip
-        // of this width at each side. Default 48 dp = one Material touch
-        // target, wide enough to hit reliably yet leaving the page body free
-        // for terminal gestures.
-        val edgeDp = app.preferencesManager.getStringAsInt("tab_swipe_edge_dp", 48)
+        // of this width at each side. Default 96 dp (two Material touch
+        // targets) — wide enough to hit reliably from either side without
+        // requiring pixel-precise aim, while still leaving the page body free
+        // for terminal gestures (vim/tmux navigation, text selection). A
+        // rejected mid-screen swipe attempt now also surfaces haptic + visual
+        // feedback (see showSwipeEdgeRejectionFeedback()) so the gate reads
+        // as "by design" rather than "broken".
+        val edgeDp = app.preferencesManager.getStringAsInt("tab_swipe_edge_dp", 96)
         tabSwipeEdgePx = if (edgeDp <= 0) 0 else (edgeDp * resources.displayMetrics.density).toInt()
 
         if (swipeEnabled) {

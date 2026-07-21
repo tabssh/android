@@ -7,6 +7,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Default tab-swipe edge zone widened from 48dp to 96dp, and a rejected mid-screen swipe now gives visible feedback instead of silently doing nothing** — the edge-zone gate added to stop tab-swipe from hijacking mid-screen terminal gestures (vim/tmux navigation, text selection) worked exactly as designed, but a swipe that started outside the strip simply failed with zero feedback, which was indistinguishable from a bug. `tab_swipe_edge_dp`'s default is now `96` (two Material touch targets, easier to hit from either side) and `attachEdgeSwipeGate()` in `TabTerminalActivity.kt` now detects when a real horizontal drag is rejected by the edge check and fires a haptic tick plus a brief edge-glow animation (new `swipe_edge_glow_start`/`swipe_edge_glow_end` views) at the nearer screen edge
+
 ### Added
 
 - **PRE key long-press now opens the multiplexer picker to manually override the detected type** — even with the detection fixes below, auto-detection can't be 100% certain (e.g. a user with both tmux and zellij installed but only tmux attached); long-pressing PRE now opens the same picker dialog shown when detection first fails, letting you override it at any time instead of only when nothing was auto-detected

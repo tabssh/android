@@ -42,6 +42,7 @@
         android:orientation="vertical">
 
         <FrameLayout
+            android:id="@+id/pager_container"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1">
@@ -112,6 +113,30 @@
             android:visibility="gone"
             android:clickable="true"
             android:focusable="true" />
+
+        <!-- Edge-swipe reject feedback. A brief alpha-fade glow spanning the
+             full vertical edge (not just a centered strip) shown at the
+             screen edge nearer the touch point when a mid-screen swipe is
+             rejected by the edge-zone gate in attachEdgeSwipeGate() — makes
+             the gate read as "by design" instead of "broken". Animated from
+             TabTerminalActivity; alpha=0 (invisible) until triggered. -->
+        <View
+            android:id="@+id/swipe_edge_glow_start"
+            android:layout_width="18dp"
+            android:layout_height="match_parent"
+            android:layout_gravity="start"
+            android:background="@drawable/swipe_edge_glow_start"
+            android:alpha="0"
+            android:importantForAccessibility="no" />
+
+        <View
+            android:id="@+id/swipe_edge_glow_end"
+            android:layout_width="18dp"
+            android:layout_height="match_parent"
+            android:layout_gravity="end"
+            android:background="@drawable/swipe_edge_glow_end"
+            android:alpha="0"
+            android:importantForAccessibility="no" />
 
         </FrameLayout>
 

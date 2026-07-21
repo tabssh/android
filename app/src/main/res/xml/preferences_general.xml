@@ -47,7 +47,7 @@
             android:title="Tab Swipe Edge Zone"
             android:summary="Restrict tab swiping to a strip along each side so mid-screen gestures reach the terminal (vim, tmux, text selection). %s"
             android:dependency="swipe_between_tabs"
-            android:defaultValue="48"
+            android:defaultValue="96"
             android:entries="@array/tab_swipe_edge_entries"
             android:entryValues="@array/tab_swipe_edge_values" />
 

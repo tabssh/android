@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Edge-swipe reject feedback glow, right-edge variant — see
+     swipe_edge_glow_start.xml for the full rationale. Gradient direction is
+     mirrored (angle 180) so the bright edge sits at the true screen edge
+     (right) instead of the left. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:type="linear"
+        android:angle="180"
+        android:startColor="?attr/colorPrimary"
+        android:endColor="@android:color/transparent" />
+</shape>

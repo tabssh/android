@@ -1,5 +1,16 @@
 # What's New
 
+## Wave 62 — Easier tab-swipe zone, with feedback when it's missed
+
+- **Swiping between tabs is now easier to trigger** — the strip along
+  each screen edge that starts a tab swipe is wider by default, so you
+  don't need to hit it exactly.
+- **A swipe that starts too close to the middle of the screen now
+  gives a quick buzz and edge glow** — instead of silently doing
+  nothing, so it's clear the swipe was intentionally ignored (the
+  middle of the screen is reserved for terminal gestures like
+  scrolling, vim/tmux navigation, and text selection).
+
 ## Wave 61 — Swipe and multiplexer-detection fixes
 
 - **Tab-switch swipes no longer leak arrow keys into the terminal** —
