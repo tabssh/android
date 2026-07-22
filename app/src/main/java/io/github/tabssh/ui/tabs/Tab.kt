@@ -23,3 +23,12 @@ sealed class Tab {
         override val tabId: String get() = vncTab.tabId
     }
 }
+
+/**
+ * Tab-bar label shared by both variants — [SSHTab.getShortTitle] for SSH,
+ * [VncTab.getDisplayTitle] for VNC (VncTab has no separate short form yet).
+ */
+fun Tab.shortTitle(): String = when (this) {
+    is Tab.Ssh -> sshTab.getShortTitle()
+    is Tab.Vnc -> vncTab.getDisplayTitle()
+}

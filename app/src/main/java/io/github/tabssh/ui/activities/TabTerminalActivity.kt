@@ -32,8 +32,10 @@ import io.github.tabssh.databinding.ActivityTabTerminalBinding
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.ssh.connection.ConnectionState
 import io.github.tabssh.ui.tabs.SSHTab
+import io.github.tabssh.ui.tabs.Tab
 import io.github.tabssh.ui.tabs.TabManager
 import io.github.tabssh.ui.tabs.TabManagerListener
+import io.github.tabssh.ui.tabs.shortTitle
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -2238,7 +2240,7 @@ class TabTerminalActivity : AppCompatActivity() {
         // disabling tab-switch swipes until the activity is recreated).
         selectionActionMode?.finish()
 
-        val allTabs = tabManager.getAllTabs()
+        val allTabs = tabManager.getAllTabsSealed()
 
         // Get font preferences
         val fontSize = app.preferencesManager.getInt("terminal_font_size", 14)
@@ -2321,7 +2323,7 @@ class TabTerminalActivity : AppCompatActivity() {
             // Setup TabLayoutMediator to sync TabLayout with ViewPager2
             tabLayoutMediator?.detach()
             tabLayoutMediator = TabLayoutMediator(binding.tabLayout, binding.viewPager) { tab, position ->
-                tab.text = allTabs.getOrNull(position)?.getShortTitle() ?: "Tab ${position + 1}"
+                tab.text = allTabs.getOrNull(position)?.shortTitle() ?: "Tab ${position + 1}"
                 tab.tag = allTabs.getOrNull(position)?.tabId
             }
             tabLayoutMediator?.attach()
@@ -2375,7 +2377,7 @@ class TabTerminalActivity : AppCompatActivity() {
             // Re-attach mediator
             tabLayoutMediator?.detach()
             tabLayoutMediator = TabLayoutMediator(binding.tabLayout, binding.viewPager) { tab, position ->
-                tab.text = allTabs.getOrNull(position)?.getShortTitle() ?: "Tab ${position + 1}"
+                tab.text = allTabs.getOrNull(position)?.shortTitle() ?: "Tab ${position + 1}"
                 tab.tag = allTabs.getOrNull(position)?.tabId
             }
             tabLayoutMediator?.attach()

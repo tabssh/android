@@ -27,11 +27,26 @@ ships independently, buildable and tested, in dependency order.
    in `io.github.tabssh.ui.tabs`; new `VncTab` class holding a `VncHost` (or
    ephemeral hypervisor console params) + a handle into the existing
    `VncBackgroundSessionStore`, keyed by the same `tabId` scheme SSH uses.
-3. **`TabManager` rewrite** — `tabs: MutableList<SSHTab>` → `MutableList<Tab>`;
-   `createTab(profile)` stays SSH-only, add `createVncTab(host)`; `tabsFlow`,
-   `TabManagerListener`, `saveTabState()`/restore all become sealed-type aware.
-4. **`TerminalPagerAdapter`** — `getItemViewType()` (SSH vs VNC) + new
-   `VncViewHolder` binding `VncView`, alongside the existing `TerminalViewHolder`.
+3. ✅ **`TabManager` rewrite** (`755c6112a3b5`) — backing store is now
+   `MutableList<Tab>`; `createTab(profile)` stays SSH-only, added
+   `createVncTab(host)`. Kept additive rather than breaking: existing
+   `getActiveTab()`/`getAllTabs()`/`getTab()`/`tabsFlow`/`TabManagerListener`
+   keep their original SSH-only signatures (filtered from the sealed list)
+   so TabTerminalActivity's 60+ call sites didn't need to change yet; new
+   `getActiveTabSealed()`/`getAllTabsSealed()`/`getTabSealed()`/
+   `allTabsFlow` added for steps 4-6 to adopt incrementally.
+4. ✅ **`TerminalPagerAdapter` rewrite** — constructor now takes `List<Tab>`
+   (only touch point into `TabTerminalActivity`: `updateViewPagerAdapter()`
+   now sources `tabManager.getAllTabsSealed()` and the `TabLayoutMediator`
+   label uses a new `Tab.shortTitle()` helper — every other `TabManager`
+   call site is untouched). Added `getItemViewType()` (SSH vs VNC) and a new
+   `VncViewHolder` binding `VncView` to the tab's `VncTab.rfbClient` through
+   the same `VncConsoleChannel` wrapper `VMConsoleActivity` uses, alongside
+   the existing `TerminalViewHolder`. `rfbClient` is null until step 6 wires
+   entry points, so most VNC pages render blank/uninteractive until then —
+   `VncViewHolder.bind()` handles that defensively and re-binds cleanly once
+   a client is attached. `boundViewHolders` and the theme/scroll/line-spacing
+   setters now filter to `TerminalViewHolder` only (no-ops on VNC pages).
 5. **`TabTerminalActivity` swipe gating** — generalize
    `attachEdgeSwipeGate()`/`swipeSuspendedForSelection` so it also suspends
    swipe when the active tab is VNC and touch starts inside the content area
