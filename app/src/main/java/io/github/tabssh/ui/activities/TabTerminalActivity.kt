@@ -851,15 +851,31 @@ class TabTerminalActivity : AppCompatActivity() {
             ): Boolean {
                 when (e.actionMasked) {
                     android.view.MotionEvent.ACTION_DOWN -> {
+                        // VNC's pointer-forwarding touch model needs the same
+                        // carve-out SSH text-selection already has: every touch
+                        // inside a VNC page is potentially a remote click/drag,
+                        // never a page-turn gesture, so it must never be eaten
+                        // by a mid-page swipe — even when the SSH "swipe from
+                        // anywhere" preference (tab_swipe_edge_dp = 0) is
+                        // active. Force the same 96dp default edge-only width
+                        // used elsewhere in this method for VNC tabs only;
+                        // SSH tabs keep the user's configured tabSwipeEdgePx
+                        // (including 0) unchanged.
+                        val activeIsVnc = tabManager.getActiveTabSealed() is Tab.Vnc
+                        val effectiveEdgePx = if (activeIsVnc && tabSwipeEdgePx <= 0) {
+                            (96 * resources.displayMetrics.density).toInt()
+                        } else {
+                            tabSwipeEdgePx
+                        }
                         val rejectedByEdgeZone = !swipeSuspendedForSelection &&
-                            tabSwipeEdgePx > 0 &&
+                            effectiveEdgePx > 0 &&
                             run {
                                 val w = recycler.width
-                                !(e.x <= tabSwipeEdgePx || e.x >= w - tabSwipeEdgePx)
+                                !(e.x <= effectiveEdgePx || e.x >= w - effectiveEdgePx)
                             }
                         val allowed = when {
                             swipeSuspendedForSelection -> false
-                            tabSwipeEdgePx <= 0 -> true
+                            effectiveEdgePx <= 0 -> true
                             else -> !rejectedByEdgeZone
                         }
                         viewPager?.isUserInputEnabled = allowed

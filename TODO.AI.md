@@ -47,11 +47,15 @@ ships independently, buildable and tested, in dependency order.
    `VncViewHolder.bind()` handles that defensively and re-binds cleanly once
    a client is attached. `boundViewHolders` and the theme/scroll/line-spacing
    setters now filter to `TerminalViewHolder` only (no-ops on VNC pages).
-5. **`TabTerminalActivity` swipe gating** — generalize
-   `attachEdgeSwipeGate()`/`swipeSuspendedForSelection` so it also suspends
-   swipe when the active tab is VNC and touch starts inside the content area
-   (not the edge strip) — VNC's pointer-forwarding touch model needs the same
-   carve-out SSH text-selection already has.
+5. ✅ **`TabTerminalActivity` swipe gating** — `attachEdgeSwipeGate()`'s
+   `ACTION_DOWN` handler now computes an `effectiveEdgePx`: for an SSH active
+   tab, unchanged (`tabSwipeEdgePx`, including the user's "swipe from
+   anywhere" `0` preference). For a VNC active tab, forces the same 96dp
+   default edge-only width even when `tabSwipeEdgePx <= 0`, since every
+   touch inside a VNC page is a potential remote click/drag and must never
+   be eaten by a mid-page swipe — the same carve-out SSH text-selection
+   already gets via `swipeSuspendedForSelection`. `swipeSuspendedForSelection`
+   itself is untouched (SSH-only, no VNC equivalent needed yet).
 6. **Entry-point consolidation** — connecting to a `VncHost` or hypervisor
    console opens/activates a VNC tab inside `TabTerminalActivity` instead of
    launching `VMConsoleActivity`. `VncHostsActivity` stays as the VNC host
