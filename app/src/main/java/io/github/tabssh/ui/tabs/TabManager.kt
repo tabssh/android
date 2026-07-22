@@ -18,22 +18,50 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 /**
- * Browser-style tab management for SSH sessions
- * Core innovation of TabSSH
+ * Browser-style tab management for SSH (and, as of the VNC-tab-swipe
+ * integration, VNC) sessions. Core innovation of TabSSH.
+ *
+ * VNC-tab-swipe integration step 3 (AI.md §11.7.2 / TODO.AI.md): the
+ * backing store is now the sealed [Tab] type so a future [VncTab] can live
+ * in the same ordered list as [SSHTab]s. This step is deliberately
+ * additive — every pre-existing accessor (`getActiveTab()`, `getAllTabs()`,
+ * `getTab()`, `tabsFlow`, `TabManagerListener`) keeps its original
+ * SSH-only signature and behavior, filtered from the sealed list, so none
+ * of TabTerminalActivity/SessionPersistenceManager/ConnectionLauncher/
+ * TaskerWorker need to change. New sealed-aware accessors
+ * (`getAllTabsSealed()`, `getActiveTabSealed()`, `allTabsFlow`,
+ * `createVncTab()`) are added alongside for steps 4-6 to adopt
+ * incrementally as VNC rendering/gating actually lands.
  */
 class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int = 10) {
 
-    private val tabs = mutableListOf<SSHTab>()
+    private val tabs = mutableListOf<Tab>()
     private var activeTabIndex = 0
+
+    /** SSH-only view of [tabs], preserving the pre-step-3 iteration order. */
+    private fun sshTabs(): List<SSHTab> = tabs.filterIsInstance<Tab.Ssh>().map { it.sshTab }
 
     // Live snapshot of [tabs] for cross-screen observers (e.g. the
     // Connections-tab "Active Sessions" strip). Re-emitted every time
     // a tab is created/closed/moved. Title-changes already arrive via
     // each SSHTab's own `title` Flow — observers should collect both
     // this and the per-tab title flows.
+    //
+    // SSH-only for backward compatibility (ConnectionsFragment's "Active
+    // Sessions" strip is SSH-only today) — see [allTabsFlow] for the
+    // sealed-type equivalent.
     private val _tabsFlow = MutableStateFlow<List<SSHTab>>(emptyList())
     val tabsFlow: StateFlow<List<SSHTab>> = _tabsFlow.asStateFlow()
-    private fun publishTabs() { _tabsFlow.value = tabs.toList() }
+
+    // Sealed-type snapshot of [tabs], for VNC-aware consumers (steps 4-6:
+    // TerminalPagerAdapter, swipe gating, entry-point consolidation).
+    private val _allTabsFlow = MutableStateFlow<List<Tab>>(emptyList())
+    val allTabsFlow: StateFlow<List<Tab>> = _allTabsFlow.asStateFlow()
+
+    private fun publishTabs() {
+        _tabsFlow.value = sshTabs()
+        _allTabsFlow.value = tabs.toList()
+    }
 
     // Per-tab observer jobs that bridge SSHTab.connectionState into the
     // TabManagerListener.onTabConnectionStateChanged callback. Without this
@@ -75,7 +103,7 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
             termuxBridge = termuxBridge
         )
 
-        tabs.add(tab)
+        tabs.add(Tab.Ssh(tab))
         activeTabIndex = tabs.size - 1
 
         // Observe this tab's connection state so the activity learns about
@@ -124,27 +152,55 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
     }
 
     /**
+     * Create a new VNC tab (VNC-tab-swipe integration step 3). Unlike
+     * [createTab] this does not wire a [TabManagerListener] observer yet —
+     * that interface is still SSH-only (see class doc); steps 4-6 add
+     * VNC-aware observation once TerminalPagerAdapter/TabTerminalActivity
+     * actually consume [allTabsFlow].
+     */
+    fun createVncTab(vncHost: io.github.tabssh.storage.database.entities.VncHost?, ephemeralDisplayName: String? = null): VncTab? {
+        if (tabs.size >= maxTabs) {
+            Logger.w("TabManager", "Maximum tabs reached: $maxTabs")
+            return null
+        }
+
+        val tab = VncTab(vncHost = vncHost, ephemeralDisplayName = ephemeralDisplayName)
+        tabs.add(Tab.Vnc(tab))
+        activeTabIndex = tabs.size - 1
+
+        Logger.d("TabManager", "Created new VNC tab: ${tab.getDisplayTitle()}")
+        publishTabs()
+        return tab
+    }
+
+    /**
      * Close tab by index
      */
     fun closeTab(index: Int) {
         if (index in 0 until tabs.size) {
-            val tab = tabs[index]
-            // cleanup() = disconnect() + termuxBridge.cleanup() + connectionScope.cancel().
+            val entry = tabs[index]
+            // cleanup() = disconnect() + termuxBridge.cleanup() + connectionScope.cancel()
+            // (SSHTab) or rfbClient.stop() + VncBackgroundSessionStore.discard() (VncTab).
             // Previously only disconnect() was called, leaking the tab's
             // SupervisorJob scope and TermuxBridge resources for the remainder
             // of the process lifetime.
-            tab.cleanup()
+            when (entry) {
+                is Tab.Ssh -> entry.sshTab.cleanup()
+                is Tab.Vnc -> entry.vncTab.cleanup()
+            }
             tabs.removeAt(index)
-            tabObservers.remove(tab.tabId)?.cancel()
+            tabObservers.remove(entry.tabId)?.cancel()
 
             // Adjust active tab index
             if (activeTabIndex >= index && activeTabIndex > 0) {
                 activeTabIndex--
             }
 
-            Logger.d("TabManager", "Closed tab: ${tab.title.value}")
+            Logger.d("TabManager", "Closed tab: ${entry.tabId}")
             publishTabs()
-            notifyTabClosed(tab, index)
+            if (entry is Tab.Ssh) {
+                notifyTabClosed(entry.sshTab, index)
+            }
         }
     }
 
@@ -154,26 +210,42 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
     fun switchToTab(index: Int) {
         if (index in 0 until tabs.size && index != activeTabIndex) {
             activeTabIndex = index
-            val newTab = getActiveTab()
+            val newTab = getActiveTabSealed()
 
-            Logger.d("TabManager", "Switched to tab: ${newTab?.title?.value}")
+            Logger.d("TabManager", "Switched to tab: ${newTab?.tabId}")
             notifyActiveTabChanged(index)
         }
     }
 
     /**
-     * Get active tab
+     * Get active tab. SSH-only — returns `null` if the active tab is a VNC
+     * tab. See [getActiveTabSealed] for the VNC-aware equivalent.
      */
-    fun getActiveTab(): SSHTab? {
+    fun getActiveTab(): SSHTab? = (getActiveTabSealed() as? Tab.Ssh)?.sshTab
+
+    /** Get active tab, whichever kind it is (VNC-tab-swipe integration step 3). */
+    fun getActiveTabSealed(): Tab? {
         return if (activeTabIndex in 0 until tabs.size) {
             tabs[activeTabIndex]
         } else null
     }
 
     /**
-     * Get all tabs
+     * Get all tabs. SSH-only, in unified-list order.
+     *
+     * CAVEAT: once VNC tabs are actually created (step 6), the index of a
+     * tab in this filtered list no longer matches its index in the
+     * unified `ViewPager2`/`tabs` order — callers that derive a
+     * `ViewPager2`/`switchToTab`/`getTab`/`closeTab` index from
+     * `getAllTabs().indexOfFirst { ... }` must migrate to
+     * [getAllTabsSealed] first. Harmless today: `createVncTab` has no
+     * caller yet, so `tabs` only ever contains `Tab.Ssh` entries and the
+     * two index spaces are identical.
      */
-    fun getAllTabs(): List<SSHTab> = tabs.toList()
+    fun getAllTabs(): List<SSHTab> = sshTabs()
+
+    /** Get all tabs, whichever kind they are, in unified-list (pager) order. */
+    fun getAllTabsSealed(): List<Tab> = tabs.toList()
 
     /**
      * Handle keyboard shortcuts (Tmux-style)
@@ -277,9 +349,13 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
     }
 
     /**
-     * Get tab by index
+     * Get tab by index. SSH-only — returns `null` if the tab at that index
+     * is a VNC tab. See [getTabSealed] for the VNC-aware equivalent.
      */
-    fun getTab(index: Int): SSHTab? {
+    fun getTab(index: Int): SSHTab? = (getTabSealed(index) as? Tab.Ssh)?.sshTab
+
+    /** Get tab by index, whichever kind it is. */
+    fun getTabSealed(index: Int): Tab? {
         return if (index in 0 until tabs.size) tabs[index] else null
     }
 
@@ -343,8 +419,13 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
         // Snapshot: tabs is a plain ArrayList mutated on the main thread.
         // saveTabState runs on Dispatchers.IO; iterating the live list
         // races with addTab/closeTab and causes ConcurrentModificationException.
+        // SSH-only for now — VncTab has no TabSession row/restore path yet
+        // (that's step 6's entry-point consolidation). Index is taken from
+        // the full unified list so ordering stays stable once VNC tabs are
+        // interspersed, rather than renumbering around them.
         val snapshot = tabs.toList()
-        snapshot.forEachIndexed { index, tab ->
+        snapshot.forEachIndexed { index, entry ->
+            val tab = (entry as? Tab.Ssh)?.sshTab ?: return@forEachIndexed
             liveIds.add(tab.tabId)
 
             // Guard: the TabSession FK requires the connection profile to exist
@@ -401,8 +482,14 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
         tabObservers.values.forEach { it.cancel() }
         tabObservers.clear()
         // cleanup() also tears down each tab's connectionScope and the
-        // Termux bridge — disconnect() alone leaked both.
-        tabs.forEach { it.cleanup() }
+        // Termux bridge (SSHTab) or rfbClient + parked session (VncTab) —
+        // disconnect() alone leaked both.
+        tabs.forEach { entry ->
+            when (entry) {
+                is Tab.Ssh -> entry.sshTab.cleanup()
+                is Tab.Vnc -> entry.vncTab.cleanup()
+            }
+        }
         tabs.clear()
         listeners.clear()
         // Publish so the Connections-tab "Active Sessions" strip — and any
