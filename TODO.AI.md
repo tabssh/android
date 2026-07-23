@@ -100,44 +100,59 @@ ships independently, buildable and tested, in dependency order.
    - `VncHostsActivity` / `LibvirtManagerActivity` direct-VNC paths are
      already-`Tab.Vnc`-shaped (always graphical) and are NOT part of the
      `Tab.Console` work — they migrate straight to `Tab.Vnc` in step 6c.
-6a. **`ConsoleTab` data model** — new class in `io.github.tabssh.ui.tabs`
-    mirroring `VncTab`'s shape (`tabId`, `storeKey`, StateFlows for `title`/
+6a. ✅ **`ConsoleTab` data model + `Tab.Console` + adapter compile fallout**
+    — new `ConsoleTab` class in `io.github.tabssh.ui.tabs` mirroring
+    `VncTab`'s shape (`tabId`, `storeKey`, StateFlows for `title`/
     `connectionState`/`isActive`, `activate()`/`deactivate()`/`cleanup()`,
-    `getDisplayTitle()`). Carries the hypervisor type + connect params
-    (host/port/creds/verifySsl/pinnedCertSha256 + type-specific VM id
+    `getDisplayTitle()`). Carries `ConsoleConnectParams` (hypervisor type +
+    host/port/creds/verifySsl/pinnedCertSha256 + type-specific VM id
     fields) needed to defer connection to tab-bind time, plus a nullable
-    live `HypervisorConsoleManager`/`ConsoleConnection` handle and an
+    live `HypervisorConsoleManager`/`TermuxBridge`/`RfbClient` handle and an
     `isGraphicalMode: StateFlow<Boolean>` (starts `false`, flips permanently
-    to `true` on `onSwitchToGraphical`, never back — matches
-    `VMConsoleActivity`'s one-way behavior). Add `Tab.Console(consoleTab)` to
-    the sealed `Tab` in `Tab.kt` + its `Tab.shortTitle()` branch. No
-    `TabTerminalActivity`/`TabManager`/adapter changes yet — data model only,
-    same discipline as original step 2.
-6b. **`TabManager` + persistence for `Tab.Console`** — add
+    to `true` via `markGraphical()`, never back — matches
+    `VMConsoleActivity`'s one-way behavior). Added `Tab.Console(consoleTab)`
+    to the sealed `Tab` in `Tab.kt` + its `Tab.shortTitle()` branch.
+    **Discovered mid-step (not in the original plan):** adding a new sealed
+    `Tab` case makes every exhaustive `when (tab)` in the module fail to
+    compile without a `Tab.Console` branch, regardless of step boundaries —
+    Kotlin's exhaustiveness check doesn't care that `TabManager`/
+    `TerminalPagerAdapter` were scoped for steps 6b/6c. `make check` caught
+    two real sites in `TabManager.kt` (`closeTab`/`cleanup`, fixed with
+    `entry.consoleTab.cleanup()` — trivial, no design work) and two in
+    `TerminalPagerAdapter.kt` (`getItemViewType`/`onBindViewHolder`) that
+    could not be trivially stubbed without violating "no partially
+    implemented code." Rather than fake a branch, pulled 6c's adapter core
+    forward into this commit: `VIEW_TYPE_CONSOLE` + a new `ConsoleViewHolder`
+    holding both a `TerminalView` and a `VncView` in one `FrameLayout`,
+    toggling visibility and collecting `ConsoleTab.isGraphicalMode` to bind
+    text (`TermuxBridge`) or graphical (`VncConsoleChannel`, same wiring as
+    `VncViewHolder`) live — matching what 6c described as "new ground" for
+    this ViewHolder. `setTheme()`/`setReverseScrollDirection()`/
+    `setLineSpacingPercent()`/`getTerminalViewAt()`/`getVncViewAt()` extended
+    to cover bound console holders. `termuxBridge`/`rfbClient` are null for
+    every tab today (no caller constructs a `Tab.Console` yet — that's step
+    6e), so both views render blank until wired, same discipline
+    `VncViewHolder` already used before step 6's entry points existed. This
+    leaves 6b to only `createConsoleTab()` + the persistence decision, and
+    6c to only the `VncHostsActivity`/`LibvirtManagerActivity` → `Tab.Vnc`
+    migration (the exhaustiveness audit both originally called for is done).
+6b. **`TabManager.createConsoleTab()` + persistence** — add
     `createConsoleTab(...)` alongside `createVncTab(...)`; sealed-list
     accessors (`getAllTabsSealed()` etc., already 3rd-kind-ready per step 3)
-    need no structural change, but audit `closeTab`/`switchToTab`/`moveTab`/
-    `cleanup()` for any `is Tab.Vnc`/`is Tab.Ssh` exhaustive `when` that
-    would now fail to compile without a `Tab.Console` branch — Kotlin's
-    exhaustiveness check should surface every one; fix each. `TabManagerListener`
-    stays SSH-only per existing precedent (VNC has no observer wiring either).
-    `saveTabState()` explicitly skips non-`Tab.Ssh` today — decide here
-    whether console tabs get persistence across process death or stay
-    session-only like VNC currently does (VNC has none yet either); default
-    to session-only unless the user asks for persistence, to keep this step
-    additive and small.
-6c. **`TerminalPagerAdapter` — third view type + mode-switching ViewHolder**
-    — add `VIEW_TYPE_CONSOLE`. Needs a `ConsoleViewHolder` that (unlike
-    `VncViewHolder`) can present EITHER a `TerminalView` (text) or `VncView`
-    (graphical) for the same bound tab, and can switch from the former to
-    the latter live if `isGraphicalMode` flips while bound (the Proxmox
-    mid-session fallback) — this is new ground, `TerminalViewHolder`/
-    `VncViewHolder` are each fixed-mode for their whole lifetime. Reuse
-    `VncConsoleChannel` for the graphical path exactly like `VncViewHolder`
-    does. Also migrate `VncHostsActivity`'s and `LibvirtManagerActivity`'s
-    direct-VNC entry points onto `Tab.Vnc` here (see step 6 scope-correction
-    note) — same `getItemViewType()`/adapter machinery already built in step
-    4, no adapter change needed for those two, just caller changes.
+    need no structural change; the exhaustive-`when` audit this step
+    originally called for landed in 6a (forced by the compiler). 
+    `TabManagerListener` stays SSH-only per existing precedent (VNC has no
+    observer wiring either). `saveTabState()` explicitly skips non-`Tab.Ssh`
+    today — decide here whether console tabs get persistence across process
+    death or stay session-only like VNC currently does (VNC has none yet
+    either); default to session-only unless the user asks for persistence,
+    to keep this step additive and small.
+6c. **Migrate `VncHostsActivity`/`LibvirtManagerActivity` onto `Tab.Vnc`**
+    — the `VIEW_TYPE_CONSOLE`/`ConsoleViewHolder` adapter work this step
+    originally described landed in 6a (forced by the compiler); what's left
+    is migrating these two direct-VNC entry points off `VMConsoleActivity`
+    onto `Tab.Vnc`, using the `getItemViewType()`/adapter machinery already
+    built in step 4 — caller changes only, no adapter change needed.
 6d. **`TabTerminalActivity` swipe gating for `Tab.Console`** — extend step
     5's `effectiveEdgePx` check: text-mode console tabs behave like SSH
     (`tabSwipeEdgePx` unchanged, swipe-from-anywhere stays safe — it's a

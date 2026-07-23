@@ -187,6 +187,7 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
             when (entry) {
                 is Tab.Ssh -> entry.sshTab.cleanup()
                 is Tab.Vnc -> entry.vncTab.cleanup()
+                is Tab.Console -> entry.consoleTab.cleanup()
             }
             tabs.removeAt(index)
             tabObservers.remove(entry.tabId)?.cancel()
@@ -488,6 +489,7 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
             when (entry) {
                 is Tab.Ssh -> entry.sshTab.cleanup()
                 is Tab.Vnc -> entry.vncTab.cleanup()
+                is Tab.Console -> entry.consoleTab.cleanup()
             }
         }
         tabs.clear()

@@ -22,13 +22,20 @@ sealed class Tab {
     data class Vnc(val vncTab: VncTab) : Tab() {
         override val tabId: String get() = vncTab.tabId
     }
+
+    data class Console(val consoleTab: ConsoleTab) : Tab() {
+        override val tabId: String get() = consoleTab.tabId
+    }
 }
 
 /**
- * Tab-bar label shared by both variants — [SSHTab.getShortTitle] for SSH,
- * [VncTab.getDisplayTitle] for VNC (VncTab has no separate short form yet).
+ * Tab-bar label shared by all variants — [SSHTab.getShortTitle] for SSH,
+ * [VncTab.getDisplayTitle] for VNC, [ConsoleTab.getDisplayTitle] for
+ * hypervisor consoles (neither VncTab nor ConsoleTab has a separate short
+ * form yet).
  */
 fun Tab.shortTitle(): String = when (this) {
     is Tab.Ssh -> sshTab.getShortTitle()
     is Tab.Vnc -> vncTab.getDisplayTitle()
+    is Tab.Console -> consoleTab.getDisplayTitle()
 }

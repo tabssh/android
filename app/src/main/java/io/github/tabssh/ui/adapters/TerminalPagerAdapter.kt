@@ -1,21 +1,31 @@
 package io.github.tabssh.ui.adapters
 
+import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.recyclerview.widget.RecyclerView
 import io.github.tabssh.hypervisor.console.rfb.RfbConstants
 import io.github.tabssh.hypervisor.vnc.console.VncConsoleChannel
 import io.github.tabssh.themes.definitions.Theme
+import io.github.tabssh.ui.tabs.ConsoleTab
 import io.github.tabssh.ui.tabs.Tab
 import io.github.tabssh.ui.tabs.VncTab
 import io.github.tabssh.ui.views.TerminalView
 import io.github.tabssh.ui.views.VncView
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
- * ViewPager2 adapter for swipeable tabs. Each page is either an SSH terminal
- * ([TerminalViewHolder]) or a VNC framebuffer ([VncViewHolder]), per the
- * VNC-tab-swipe integration (AI.md §11.7.2, TODO.AI.md step 4). [getItemViewType]
- * picks the holder type; both share the same [ViewPager2] and swipe gate.
+ * ViewPager2 adapter for swipeable tabs. Each page is an SSH terminal
+ * ([TerminalViewHolder]), a VNC framebuffer ([VncViewHolder]), or a
+ * hypervisor console ([ConsoleViewHolder]), per the VNC-tab-swipe
+ * integration (AI.md §11.7.2, TODO.AI.md steps 4 and 6a-6c).
+ * [getItemViewType] picks the holder type; all three share the same
+ * [ViewPager2] and swipe gate.
  */
 class TerminalPagerAdapter(
     private val tabs: List<Tab>,
@@ -49,23 +59,28 @@ class TerminalPagerAdapter(
     companion object {
         private const val VIEW_TYPE_SSH = 0
         private const val VIEW_TYPE_VNC = 1
+        private const val VIEW_TYPE_CONSOLE = 2
     }
 
-    // Track bound view holders (both kinds) for theme/pref updates and lookup.
+    // Track bound view holders (all kinds) for theme/pref updates and lookup.
     private val boundViewHolders = mutableSetOf<RecyclerView.ViewHolder>()
 
     private fun boundTerminalHolders(): List<TerminalViewHolder> =
         boundViewHolders.filterIsInstance<TerminalViewHolder>()
 
+    private fun boundConsoleHolders(): List<ConsoleViewHolder> =
+        boundViewHolders.filterIsInstance<ConsoleViewHolder>()
+
     /**
-     * Update theme for all bound terminal views. VNC pages have no text
-     * theme to apply.
+     * Update theme for all bound terminal views — SSH pages and console
+     * pages currently in text mode. VNC pages have no text theme to apply.
      */
     fun setTheme(theme: Theme) {
         currentTheme = theme
         boundTerminalHolders().forEach { holder ->
             holder.terminalView.applyTheme(theme)
         }
+        boundConsoleHolders().forEach { holder -> holder.applyTheme(theme) }
     }
 
     /**
@@ -77,6 +92,7 @@ class TerminalPagerAdapter(
         // Snapshot to avoid ConcurrentModificationException if a layout pass
         // triggered by the update causes RecyclerView to recycle a view.
         boundTerminalHolders().forEach { it.terminalView.reverseScrollDirection = reversed }
+        boundConsoleHolders().forEach { it.terminalView.reverseScrollDirection = reversed }
     }
 
     /**
@@ -86,25 +102,34 @@ class TerminalPagerAdapter(
     fun setLineSpacingPercent(percent: Int) {
         lineSpacingPercent = percent
         boundTerminalHolders().forEach { it.terminalView.setLineSpacingPercent(percent) }
+        boundConsoleHolders().forEach { it.terminalView.setLineSpacingPercent(percent) }
     }
 
     /**
      * Get terminal view at position (for theme application). Returns null
-     * for a VNC page.
+     * for a VNC page or a console page currently in graphical mode.
      */
     fun getTerminalViewAt(position: Int): TerminalView? {
-        return boundTerminalHolders().find { it.bindingAdapterPosition == position }?.terminalView
+        boundTerminalHolders().find { it.bindingAdapterPosition == position }?.let { return it.terminalView }
+        return boundConsoleHolders().find { it.bindingAdapterPosition == position && !it.isGraphicalMode }
+            ?.terminalView
     }
 
-    /** Get the VNC view at position (for zoom/reconnect controls). Returns null for an SSH page. */
+    /**
+     * Get the VNC view at position (for zoom/reconnect controls). Returns
+     * null for an SSH page or a console page currently in text mode.
+     */
     fun getVncViewAt(position: Int): VncView? {
-        return boundViewHolders.filterIsInstance<VncViewHolder>()
-            .find { it.bindingAdapterPosition == position }?.vncView
+        boundViewHolders.filterIsInstance<VncViewHolder>()
+            .find { it.bindingAdapterPosition == position }?.let { return it.vncView }
+        return boundConsoleHolders().find { it.bindingAdapterPosition == position && it.isGraphicalMode }
+            ?.vncView
     }
 
     override fun getItemViewType(position: Int): Int = when (tabs[position]) {
         is Tab.Ssh -> VIEW_TYPE_SSH
         is Tab.Vnc -> VIEW_TYPE_VNC
+        is Tab.Console -> VIEW_TYPE_CONSOLE
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
@@ -116,6 +141,28 @@ class TerminalPagerAdapter(
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
                 VncViewHolder(vncView)
+            }
+            VIEW_TYPE_CONSOLE -> {
+                val terminalView = TerminalView(parent.context)
+                terminalView.layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+                terminalView.reverseScrollDirection = reverseScrollDirection
+                terminalView.setLineSpacingPercent(lineSpacingPercent)
+                val vncView = VncView(parent.context)
+                vncView.layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+                val container = FrameLayout(parent.context)
+                container.layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+                container.addView(terminalView)
+                container.addView(vncView)
+                ConsoleViewHolder(container, terminalView, vncView, fontSize, fontValue)
             }
             else -> {
                 val terminalView = TerminalView(parent.context)
@@ -154,6 +201,11 @@ class TerminalPagerAdapter(
                 if (holder !is VncViewHolder) return
                 holder.bind(tab.vncTab)
             }
+            is Tab.Console -> {
+                if (holder !is ConsoleViewHolder) return
+                holder.bind(tab.consoleTab)
+                currentTheme?.let { theme -> holder.applyTheme(theme) }
+            }
         }
         boundViewHolders.add(holder)
     }
@@ -161,6 +213,7 @@ class TerminalPagerAdapter(
     override fun onViewRecycled(holder: RecyclerView.ViewHolder) {
         super.onViewRecycled(holder)
         if (holder is VncViewHolder) holder.unbind()
+        if (holder is ConsoleViewHolder) holder.unbind()
         boundViewHolders.remove(holder)
     }
 
@@ -263,6 +316,113 @@ class TerminalPagerAdapter(
         }
 
         private fun unwireCallbacks() {
+            channel = null
+            vncView.onPointerEvent = null
+            vncView.onKeyEvent = null
+            vncView.onTextInput = null
+            vncView.onBackspace = null
+            vncView.onViewSizeReady = null
+        }
+    }
+
+    /**
+     * ViewHolder for a hypervisor-console page in ViewPager2 (VNC-tab-swipe
+     * integration step 6c). A console session resolves to either text mode
+     * ([TerminalView], [ConsoleTab.termuxBridge]-driven, same wiring as
+     * [TerminalViewHolder]) or graphical mode ([VncView],
+     * [ConsoleTab.rfbClient]-driven through [VncConsoleChannel], same wiring
+     * as [VncViewHolder]) — [container] holds both views and toggles their
+     * visibility as [ConsoleTab.isGraphicalMode] flips. That flip is
+     * one-way (see [ConsoleTab]), so once graphical mode is bound this
+     * holder never falls back to text mode for the same tab. Until entry
+     * points are consolidated onto this tab system (TODO.AI.md step 6e),
+     * `termuxBridge`/`rfbClient` are null for most tabs — the relevant page
+     * then renders blank with no input wired, same discipline
+     * [VncViewHolder] already uses for un-consolidated VNC tabs.
+     */
+    class ConsoleViewHolder(
+        private val container: FrameLayout,
+        val terminalView: TerminalView,
+        val vncView: VncView,
+        private val fontSize: Int,
+        private val fontValue: String
+    ) : RecyclerView.ViewHolder(container) {
+
+        private var channel: VncConsoleChannel? = null
+        private var modeJob: Job? = null
+        private var currentTheme: Theme? = null
+        private val holderScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+        /** True once this page is showing the graphical (VNC) side. */
+        var isGraphicalMode: Boolean = false
+            private set
+
+        fun bind(consoleTab: ConsoleTab) {
+            unbind()
+            modeJob = holderScope.launch {
+                consoleTab.isGraphicalMode.collect { graphical ->
+                    if (graphical) bindGraphical(consoleTab) else bindText(consoleTab)
+                }
+            }
+        }
+
+        fun applyTheme(theme: Theme) {
+            currentTheme = theme
+            if (!isGraphicalMode) terminalView.applyTheme(theme)
+        }
+
+        private fun bindText(consoleTab: ConsoleTab) {
+            isGraphicalMode = false
+            terminalView.visibility = View.VISIBLE
+            vncView.visibility = View.GONE
+            unwireVnc()
+            val bridge = consoleTab.termuxBridge
+            if (bridge == null) {
+                Logger.d(
+                    "TerminalPagerAdapter",
+                    "Bound console tab with no live text session yet: ${consoleTab.getDisplayTitle()}"
+                )
+                return
+            }
+            terminalView.attachTerminalEmulator(bridge)
+            terminalView.setFont(fontValue)
+            terminalView.setFontSize(fontSize)
+            currentTheme?.let { theme -> terminalView.applyTheme(theme) }
+            Logger.d("TerminalPagerAdapter", "Bound console tab (text mode): ${consoleTab.getDisplayTitle()}")
+        }
+
+        private fun bindGraphical(consoleTab: ConsoleTab) {
+            isGraphicalMode = true
+            terminalView.visibility = View.GONE
+            vncView.visibility = View.VISIBLE
+            unwireVnc()
+            val rfbClient = consoleTab.rfbClient
+            if (rfbClient == null) {
+                Logger.d(
+                    "TerminalPagerAdapter",
+                    "Bound console tab with no live graphical session yet: ${consoleTab.getDisplayTitle()}"
+                )
+                return
+            }
+            val ch = VncConsoleChannel(rfbClient)
+            channel = ch
+            rfbClient.listener = vncView.asRfbListener()
+            vncView.onPointerEvent = { x, y, mask -> ch.sendPointerEvent(x, y, mask) }
+            vncView.onKeyEvent = { keysym, down -> if (down) ch.sendKey(keysym) }
+            vncView.onTextInput = { text -> ch.sendText(text) }
+            vncView.onBackspace = { ch.sendKey(RfbConstants.KEY_BACK_SPACE) }
+            vncView.onViewSizeReady = { w, h -> ch.resizeToPixels(w, h) }
+            Logger.d("TerminalPagerAdapter", "Bound console tab (graphical mode): ${consoleTab.getDisplayTitle()}")
+        }
+
+        /** Called from [onViewRecycled] — drop the mode collector and VNC callbacks so a recycled page can't drive a stale session. */
+        fun unbind() {
+            modeJob?.cancel()
+            modeJob = null
+            unwireVnc()
+        }
+
+        private fun unwireVnc() {
             channel = null
             vncView.onPointerEvent = null
             vncView.onKeyEvent = null
