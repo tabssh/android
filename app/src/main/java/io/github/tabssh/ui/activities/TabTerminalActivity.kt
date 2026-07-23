@@ -1685,9 +1685,14 @@ class TabTerminalActivity : AppCompatActivity() {
         // running tab in the shared TabManager and switch to it. No new
         // connection is created; if the tab is gone (race with cleanup),
         // fall through to the normal connection-by-profile path below.
+        // VNC-tab-swipe integration step 6c — VNC/console tabs are created
+        // directly by their entry-point activities (VncHostsActivity etc.)
+        // against the shared app-scoped TabManager, then focused here via
+        // EXTRA_TAB_ID, same as the SSH "Active Sessions" path above. Must
+        // search the sealed list, not the SSH-only getAllTabs().
         val tabId = intent.getStringExtra(EXTRA_TAB_ID)
         if (tabId != null) {
-            val idx = tabManager.getAllTabs().indexOfFirst { it.tabId == tabId }
+            val idx = tabManager.getAllTabsSealed().indexOfFirst { it.tabId == tabId }
             if (idx >= 0) {
                 Logger.d("TabTerminalActivity", "Focusing tab $tabId at index $idx")
                 tabManager.setActiveTab(idx)

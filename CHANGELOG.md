@@ -13,6 +13,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Direct VNC host connections and libvirt/QEMU VM consoles now open as swipeable tabs inside the main terminal screen instead of a separate full-screen viewer** — `VncHostsActivity` and `LibvirtManagerActivity` used to launch the standalone `VMConsoleActivity`; they now connect, create a `Tab.Vnc` on the shared `TabManager`, and focus it in `TabTerminalActivity` alongside SSH tabs, reusing the same swipe/tab-bar UI. `TerminalPagerAdapter`'s VNC view holder also gained the RFB handshake start (previously never wired for the tab-swipe path) and stale-listener cleanup on tab recycle needed to make this work. Libvirt consoles no longer auto-retry with resize disabled after a server-side resize rejection — that retry relied on tearing down a single-purpose activity, which doesn't fit a persistent multi-tab shell; libvirt/QEMU consoles now request no resize by default instead
 - **PRE key long-press now opens the multiplexer picker to manually override the detected type** — even with the detection fixes below, auto-detection can't be 100% certain (e.g. a user with both tmux and zellij installed but only tmux attached); long-pressing PRE now opens the same picker dialog shown when detection first fails, letting you override it at any time instead of only when nothing was auto-detected
 
 ### Fixed

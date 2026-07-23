@@ -4,7 +4,9 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.recyclerview.widget.RecyclerView
+import io.github.tabssh.hypervisor.console.rfb.RfbClient
 import io.github.tabssh.hypervisor.console.rfb.RfbConstants
+import io.github.tabssh.hypervisor.console.rfb.RfbListener
 import io.github.tabssh.hypervisor.vnc.console.VncConsoleChannel
 import io.github.tabssh.themes.definitions.Theme
 import io.github.tabssh.ui.tabs.ConsoleTab
@@ -283,14 +285,22 @@ class TerminalPagerAdapter(
      * input/render callbacks to the tab's [VncTab.rfbClient] through the same
      * [VncConsoleChannel] wrapper `VMConsoleActivity` uses, so pointer/key
      * behavior stays identical between the standalone viewer and the
-     * swipeable tab. Until entry points are consolidated onto this tab
-     * system (TODO.AI.md step 6), `rfbClient` is null for most tabs — the
-     * page then renders blank with no input wired, and re-binds cleanly once
-     * a client is attached.
+     * swipeable tab. `rfbClient` is null until an entry-point activity
+     * (VncHostsActivity, etc.) has connected the socket and constructed the
+     * client — until then the page renders blank with no input wired, and
+     * re-binds cleanly once a client is attached.
      */
     class VncViewHolder(val vncView: VncView) : RecyclerView.ViewHolder(vncView) {
 
         private var channel: VncConsoleChannel? = null
+
+        // Tracked so unbind() can detach this now-recycled ViewHolder's
+        // listener from the client, which outlives the ViewHolder (it lives
+        // on VncTab). Without this, a recycled page's stale VncView keeps
+        // receiving RfbListener callbacks after it's no longer showing this
+        // tab — corrupting whatever page the RecyclerView recycles it into.
+        private var boundClient: RfbClient? = null
+        private var boundListener: RfbListener? = null
 
         fun bind(vncTab: VncTab) {
             unwireCallbacks()
@@ -301,17 +311,50 @@ class TerminalPagerAdapter(
             }
             val ch = VncConsoleChannel(rfbClient)
             channel = ch
-            rfbClient.listener = vncView.asRfbListener()
+            boundClient = rfbClient
+            val listener = vncView.asRfbListener()
+            boundListener = listener
+            rfbClient.listener = listener
             vncView.onPointerEvent = { x, y, mask -> ch.sendPointerEvent(x, y, mask) }
             vncView.onKeyEvent = { keysym, down -> if (down) ch.sendKey(keysym) }
             vncView.onTextInput = { text -> ch.sendText(text) }
             vncView.onBackspace = { ch.sendKey(RfbConstants.KEY_BACK_SPACE) }
             vncView.onViewSizeReady = { w, h -> ch.resizeToPixels(w, h) }
+            // VNC-tab-swipe integration step 6c — entry-point activities
+            // (VncHostsActivity, etc.) only open the socket and construct the
+            // RfbClient; they never call start() themselves. Driving the
+            // handshake is this ViewHolder's job, deferred until the page
+            // actually renders. On a rebind (page recycled while swiping away,
+            // then swiped back to) the client is already running and
+            // onConnected will not refire — RfbClient.start() is idempotent
+            // (a no-op past the first call), so replay the retained
+            // framebuffer state manually first, same pattern
+            // VMConsoleActivity uses for background reattach.
+            if (rfbClient.framebufferWidth > 0 && rfbClient.framebufferHeight > 0) {
+                listener.onConnected(
+                    rfbClient.framebufferWidth,
+                    rfbClient.framebufferHeight,
+                    rfbClient.serverDesktopName,
+                    rfbClient.framebufferPixels
+                )
+            }
+            rfbClient.start()
             Logger.d("TerminalPagerAdapter", "Bound VNC tab: ${vncTab.getDisplayTitle()}")
         }
 
         /** Called from [onViewRecycled] — drop the channel and callbacks so a recycled page can't drive a stale client. */
         fun unbind() {
+            // Detach this ViewHolder's listener from the client it was bound
+            // to — the client outlives the ViewHolder (it lives on VncTab),
+            // so leaving the listener wired would let a recycled page keep
+            // painting into whatever this ViewHolder gets reused for next.
+            // asRfbListener() returns a fresh object per call, so compare
+            // against the exact instance bind() assigned, not a new one.
+            if (boundClient?.listener === boundListener) {
+                boundClient?.listener = null
+            }
+            boundClient = null
+            boundListener = null
             unwireCallbacks()
         }
 
@@ -349,6 +392,8 @@ class TerminalPagerAdapter(
     ) : RecyclerView.ViewHolder(container) {
 
         private var channel: VncConsoleChannel? = null
+        private var boundClient: RfbClient? = null
+        private var boundListener: RfbListener? = null
         private var modeJob: Job? = null
         private var currentTheme: Theme? = null
         private val holderScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -406,12 +451,28 @@ class TerminalPagerAdapter(
             }
             val ch = VncConsoleChannel(rfbClient)
             channel = ch
-            rfbClient.listener = vncView.asRfbListener()
+            boundClient = rfbClient
+            val listener = vncView.asRfbListener()
+            boundListener = listener
+            rfbClient.listener = listener
             vncView.onPointerEvent = { x, y, mask -> ch.sendPointerEvent(x, y, mask) }
             vncView.onKeyEvent = { keysym, down -> if (down) ch.sendKey(keysym) }
             vncView.onTextInput = { text -> ch.sendText(text) }
             vncView.onBackspace = { ch.sendKey(RfbConstants.KEY_BACK_SPACE) }
             vncView.onViewSizeReady = { w, h -> ch.resizeToPixels(w, h) }
+            // Same discipline as VncViewHolder.bind() — driving the handshake
+            // and replaying retained framebuffer state on rebind is this
+            // holder's job, not the entry-point activity's (see that method's
+            // comment for the full rationale).
+            if (rfbClient.framebufferWidth > 0 && rfbClient.framebufferHeight > 0) {
+                listener.onConnected(
+                    rfbClient.framebufferWidth,
+                    rfbClient.framebufferHeight,
+                    rfbClient.serverDesktopName,
+                    rfbClient.framebufferPixels
+                )
+            }
+            rfbClient.start()
             Logger.d("TerminalPagerAdapter", "Bound console tab (graphical mode): ${consoleTab.getDisplayTitle()}")
         }
 
@@ -423,6 +484,13 @@ class TerminalPagerAdapter(
         }
 
         private fun unwireVnc() {
+            // Detach this ViewHolder's listener from the client it was bound
+            // to — see VncViewHolder.unbind() for the full rationale.
+            if (boundClient?.listener === boundListener) {
+                boundClient?.listener = null
+            }
+            boundClient = null
+            boundListener = null
             channel = null
             vncView.onPointerEvent = null
             vncView.onKeyEvent = null

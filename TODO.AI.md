@@ -146,12 +146,48 @@ ships independently, buildable and tested, in dependency order.
     decision: console tabs stay session-only, same as VNC — `saveTabState()`
     still filters to `Tab.Ssh` only, no change needed. No caller constructs
     a `Tab.Console` yet (step 6e).
-6c. **Migrate `VncHostsActivity`/`LibvirtManagerActivity` onto `Tab.Vnc`**
+6c. **✅ Migrate `VncHostsActivity`/`LibvirtManagerActivity` onto `Tab.Vnc`**
     — the `VIEW_TYPE_CONSOLE`/`ConsoleViewHolder` adapter work this step
-    originally described landed in 6a (forced by the compiler); what's left
-    is migrating these two direct-VNC entry points off `VMConsoleActivity`
-    onto `Tab.Vnc`, using the `getItemViewType()`/adapter machinery already
-    built in step 4 — caller changes only, no adapter change needed.
+    originally described landed in 6a (forced by the compiler); what was left
+    was migrating these two direct-VNC entry points off `VMConsoleActivity`
+    onto `Tab.Vnc`. This turned out **not** to be caller-only, correcting
+    this entry's earlier wording:
+    - Both activities now connect (resolve credentials / open the libvirt
+      stream), construct the `RfbClient`, call
+      `TabManager.createVncTab(...)`, attach the client to the new tab, and
+      focus it in `TabTerminalActivity` via the existing `EXTRA_TAB_ID`
+      "focus a tab" mechanism (built for SSH's Active Sessions tap) — reused
+      rather than adding new VNC-specific intent plumbing.
+      `TabTerminalActivity.handleIntent()`'s `EXTRA_TAB_ID` lookup had to
+      move from `getAllTabs()` (SSH-only) to `getAllTabsSealed()` so VNC/
+      console tabs are reachable via this path at all.
+    - **Adapter change was required, not optional**: `VncViewHolder.bind()`
+      never called `RfbClient.start()` — no VNC session could ever begin its
+      handshake through the swipe adapter, regardless of caller. Fixed by
+      starting the client (idempotent — safe on rebind) and, on rebind after
+      recycle, replaying the retained framebuffer state the same way
+      `VMConsoleActivity.switchToGraphical()`'s reattach path does. Recycled
+      `VncViewHolder`/`ConsoleViewHolder` instances also never detached their
+      listener from the (longer-lived) `RfbClient`, risking a recycled page
+      painting stale frames into whatever it's reused for next — fixed with
+      tracked `boundClient`/`boundListener` fields, applied to both holders
+      for consistency (`ConsoleViewHolder` has no caller yet — step 6e).
+    - **Scope-down, documented per "Honesty over agreement"**:
+      `VMConsoleActivity`'s auto-retry-without-resize behavior (relaunch the
+      console when the server closes the socket after rejecting
+      SetDesktopSize) is dropped for both migrated entry points. That retry
+      relaunched a dedicated, single-purpose activity — incompatible with
+      `TabTerminalActivity`'s shared/persistent multi-tab lifecycle, where
+      other unrelated tabs may be open when one tab hits this. `VncHostsActivity`
+      simply no longer auto-retries (a rejected resize now just leaves that
+      tab disconnected). `LibvirtManagerActivity` instead defaults
+      `RfbClient.canRequestResize = false` unconditionally for its ephemeral
+      consoles, since libvirt/QEMU VNC displays are the common case that
+      rejects resize at all — trading away resize support on the rare
+      display that would honour it for never hitting the rejection/
+      disconnect loop. `LibvirtManagerActivity`'s now-dead
+      `consoleLauncher`/`pendingConsoleVm` result-relaunch plumbing was
+      removed rather than left as dead code.
 6d. **`TabTerminalActivity` swipe gating for `Tab.Console`** — extend step
     5's `effectiveEdgePx` check: text-mode console tabs behave like SSH
     (`tabSwipeEdgePx` unchanged, swipe-from-anywhere stays safe — it's a

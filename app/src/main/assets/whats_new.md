@@ -1072,6 +1072,9 @@ global setting that was silently ignored has been replaced.
   etc.) to get true roaming.
 
 ## Wave 4 — speculative polish (in progress)
+- **VNC host and libvirt/QEMU VM consoles now open as swipeable tabs**,
+  right alongside your SSH sessions, instead of a separate full-screen
+  viewer — swipe between them just like any other tab
 - True 24-bit color rendering (fix latent crash on `SGR 38;2;R;G;B`)
 - Cluster command results stream live as each host completes
 - **Voice typing**: works out of the box — tap the mic on any voice-capable

@@ -8,9 +8,6 @@ import android.view.ViewGroup
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.result.ActivityResult
-import androidx.activity.result.ActivityResultLauncher
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
@@ -25,7 +22,6 @@ import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.hypervisor.libvirt.LibvirtApiClient
 import io.github.tabssh.hypervisor.libvirt.LibvirtException
 import io.github.tabssh.hypervisor.libvirt.LibvirtVm
-import io.github.tabssh.hypervisor.vnc.VncStreamHolder
 import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.storage.database.SystemGroupHelper
 import io.github.tabssh.storage.database.entities.ConnectionProfile
@@ -64,32 +60,6 @@ class LibvirtManagerActivity : AppCompatActivity() {
     private var hypervisorProfile: HypervisorProfile? = null
     private val vms = mutableListOf<LibvirtVm>()
     private lateinit var adapter: VmAdapter
-
-    /**
-     * Tracks the VM whose console was most recently launched so the result
-     * launcher can reopen it (with resize suppressed) when [VMConsoleActivity]
-     * returns after a resize-rejection disconnect.
-     */
-    private var pendingConsoleVm: LibvirtVm? = null
-
-    /**
-     * Result launcher for [VMConsoleActivity]. When the activity returns with
-     * [VMConsoleActivity.EXTRA_DISABLE_RESIZE]=true it means the server closed
-     * the connection after rejecting our SetDesktopSize request. We reopen the
-     * console immediately with resize suppressed so the user keeps a working
-     * session at the server's native resolution.
-     */
-    private val consoleLauncher: ActivityResultLauncher<Intent> =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult ->
-            val disableResize = result.data
-                ?.getBooleanExtra(VMConsoleActivity.EXTRA_DISABLE_RESIZE, false) == true
-            val vm = pendingConsoleVm
-            val client = apiClient
-            if (disableResize && vm != null && client != null) {
-                Logger.i(TAG, "Reopening VNC console for '${vm.name}' with resize suppressed")
-                openConsole(vm, client, disableResize = true)
-            }
-        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -249,24 +219,55 @@ class LibvirtManagerActivity : AppCompatActivity() {
      * (LibvirtException "VNC not configured"), auto-detect the VM's IP via virsh
      * and offer SSH as a fallback.
      *
-     * @param disableResize When true, [VMConsoleActivity.EXTRA_DISABLE_RESIZE] is added to
-     *   the intent so the console suppresses SetDesktopSize for this session. Used when
-     *   relaunching after the server closed the connection due to a resize rejection.
+     * VNC-tab-swipe integration step 6c: creates an ephemeral [io.github.tabssh.ui.tabs.VncTab]
+     * directly on the shared, application-scoped `TabManager` (same pattern as
+     * [VncHostsActivity.openVncConsole]) instead of launching the retired
+     * per-console [VMConsoleActivity]. The [io.github.tabssh.hypervisor.console.rfb.RfbClient]
+     * is constructed here from the libvirt-provided streams but never started —
+     * `TerminalPagerAdapter`'s `VncViewHolder` drives the handshake once the page renders.
+     *
+     * Scope-down (documented per "Honesty over agreement", CLAUDE.md): the old
+     * [VMConsoleActivity] path auto-retried the connection with resize disabled
+     * when the server closed the socket after rejecting a SetDesktopSize request
+     * (see its `onDisconnected` handler and [consoleLauncher] above). That retry
+     * relaunched a fresh, dedicated activity — a model that doesn't fit
+     * [TabTerminalActivity], which is a shared, persistent multi-tab shell that
+     * may have unrelated tabs open when a resize rejection happens on this one;
+     * auto-relaunching it would disrupt those unrelated tabs. Libvirt/QEMU VNC
+     * displays are also the primary case that rejects resize at all, so this
+     * path now defaults `canRequestResize = false` unconditionally for ephemeral
+     * libvirt consoles — trading away resize support on the rare display that
+     * *would* honour it for a connection that never hits the rejection-disconnect
+     * loop at all.
      */
-    private fun openConsole(vm: LibvirtVm, client: LibvirtApiClient, disableResize: Boolean = false) {
-        pendingConsoleVm = vm
+    private fun openConsole(vm: LibvirtVm, client: LibvirtApiClient) {
         lifecycleScope.launch {
             showProgress("Opening console for ${vm.name}…")
             try {
                 val (ins, out) = withContext(Dispatchers.IO) { client.openVncChannel(vm.name) }
-                VncStreamHolder.set(ins, out, socket = null)
-                val intent = Intent(this@LibvirtManagerActivity, VMConsoleActivity::class.java).apply {
-                    putExtra(VMConsoleActivity.EXTRA_DIRECT_VNC, true)
-                    putExtra(VMConsoleActivity.EXTRA_VM_NAME, vm.name)
-                    if (disableResize) putExtra(VMConsoleActivity.EXTRA_DISABLE_RESIZE, true)
-                }
+                val rfbClient = io.github.tabssh.hypervisor.console.rfb.RfbClient(
+                    inputStream = ins,
+                    outputStream = out,
+                    vncPassword = null,
+                    consoleMode = true
+                )
+                rfbClient.canRequestResize = false
+                val tab = app.tabManager.createVncTab(vncHost = null, ephemeralDisplayName = vm.name)
                 hideProgress()
-                consoleLauncher.launch(intent)
+                if (tab == null) {
+                    try { rfbClient.stop() } catch (e: Exception) {
+                        Logger.d(TAG, "rfbClient.stop() suppressed after max-tabs reject: ${e.message}")
+                    }
+                    Toast.makeText(this@LibvirtManagerActivity, "Maximum tabs reached", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+                tab.rfbClient = rfbClient
+                tab.setConnectionState(io.github.tabssh.ssh.connection.ConnectionState.CONNECTED)
+                startActivity(
+                    Intent(this@LibvirtManagerActivity, TabTerminalActivity::class.java).apply {
+                        putExtra(TabTerminalActivity.EXTRA_TAB_ID, tab.tabId)
+                    }
+                )
             } catch (e: LibvirtException) {
                 Logger.w(TAG, "VNC unavailable for ${vm.name}: ${e.message}")
                 hideProgress()

@@ -106,13 +106,74 @@ class VncHostsActivity : AppCompatActivity() {
         )
     }
 
-    /** Open the VNC console for the given host. */
+    /**
+     * Open the VNC console for the given host (VNC-tab-swipe integration
+     * step 6c). Resolves credentials and connects the same way
+     * [VMConsoleActivity.connectVncHost] does, then creates a [Tab.Vnc] on
+     * the shared, application-scoped `TabManager` and focuses it in
+     * [TabTerminalActivity] via [TabTerminalActivity.EXTRA_TAB_ID] — the
+     * same "focus an existing/just-created tab" path already used for the
+     * SSH "Active Sessions" tap (Issue #165). `TabTerminalActivity` never
+     * needs to know how a VNC tab's session was established; it only
+     * renders whatever [io.github.tabssh.ui.tabs.VncTab.rfbClient] is
+     * already attached when the page binds.
+     */
     private fun openVncConsole(host: VncHost) {
-        startActivity(
-            Intent(this, VMConsoleActivity::class.java).apply {
-                putExtra(VMConsoleActivity.EXTRA_VNC_HOST_ID, host.id)
+        lifecycleScope.launch {
+            val (password, username) = withContext(Dispatchers.IO) {
+                val identityId = host.identityId
+                // Per-host password override always takes priority.
+                val hostPw = try {
+                    app.securePasswordManager.retrievePassword("vnc_host_${host.id}")
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Could not retrieve VNC host password: ${e.message}")
+                    null
+                }
+                if (hostPw != null) {
+                    val identityUsername = if (identityId != null) {
+                        app.database.vncIdentityDao().getById(identityId)?.username
+                    } else null
+                    Pair(hostPw, identityUsername)
+                } else if (identityId != null) {
+                    val identity = app.database.vncIdentityDao().getById(identityId)
+                    val pw = try {
+                        app.securePasswordManager.retrievePassword("vnc_identity_$identityId")
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Could not retrieve VNC identity password: ${e.message}")
+                        null
+                    }
+                    Pair(pw, identity?.username)
+                } else {
+                    Pair(null, null)
+                }
             }
-        )
+            try {
+                val (rfbClient, _) = withContext(Dispatchers.IO) {
+                    io.github.tabssh.hypervisor.vnc.VncDirectConnector.connect(host, password, username, this@VncHostsActivity)
+                }
+                val tab = app.tabManager.createVncTab(host)
+                if (tab == null) {
+                    try { rfbClient.stop() } catch (e: Exception) {
+                        Logger.d(TAG, "rfbClient.stop() suppressed after max-tabs reject: ${e.message}")
+                    }
+                    Toast.makeText(this@VncHostsActivity, "Maximum tabs reached", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+                tab.rfbClient = rfbClient
+                tab.setConnectionState(io.github.tabssh.ssh.connection.ConnectionState.CONNECTED)
+                withContext(Dispatchers.IO) {
+                    app.database.vncHostDao().updateLastConnected(host.id, System.currentTimeMillis())
+                }
+                startActivity(
+                    Intent(this@VncHostsActivity, TabTerminalActivity::class.java).apply {
+                        putExtra(TabTerminalActivity.EXTRA_TAB_ID, tab.tabId)
+                    }
+                )
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to connect to VNC host '${host.name}'", e)
+                Toast.makeText(this@VncHostsActivity, "Connection failed: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     // ── Long-press menu ───────────────────────────────────────────────────────
