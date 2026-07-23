@@ -21,7 +21,6 @@ import io.github.tabssh.BuildConfig
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.hypervisor.vnc.VncDirectConnector
-import io.github.tabssh.hypervisor.vnc.VncStreamHolder
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.HypervisorType
@@ -721,10 +720,24 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                                         io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.ENCRYPTED
                                     )
                                 }
-                                val intent = android.content.Intent(this@MainActivity, VMConsoleActivity::class.java).apply {
-                                    putExtra(VMConsoleActivity.EXTRA_VNC_HOST_ID, vncHost.id)
+                                val (rfbClient, _) = withContext(Dispatchers.IO) {
+                                    VncDirectConnector.connect(vncHost, password.takeIf { it.isNotEmpty() }, context = this@MainActivity)
                                 }
-                                startActivity(intent)
+                                val tab = app.tabManager.createVncTab(vncHost)
+                                if (tab == null) {
+                                    try { rfbClient.stop() } catch (e: Exception) {
+                                        Logger.d("MainActivity", "rfbClient.stop() suppressed after max-tabs reject: ${e.message}")
+                                    }
+                                    Toast.makeText(this@MainActivity, "Maximum tabs reached", Toast.LENGTH_SHORT).show()
+                                    return@launch
+                                }
+                                tab.rfbClient = rfbClient
+                                tab.setConnectionState(io.github.tabssh.ssh.connection.ConnectionState.CONNECTED)
+                                startActivity(
+                                    android.content.Intent(this@MainActivity, TabTerminalActivity::class.java).apply {
+                                        putExtra(TabTerminalActivity.EXTRA_TAB_ID, tab.tabId)
+                                    }
+                                )
                             } catch (e: Exception) {
                                 Logger.e("MainActivity", "Failed to save VNC host", e)
                                 Toast.makeText(this@MainActivity, "Failed to save: ${e.message}", Toast.LENGTH_LONG).show()
@@ -742,16 +755,28 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                                     createdAt = now,
                                     modifiedAt = now
                                 )
-                                val (rfbClient, socket) = VncDirectConnector.connect(
-                                    transientHost,
-                                    password.takeIf { it.isNotEmpty() },
-                                    context = this@MainActivity
-                                )
-                                VncStreamHolder.set(socket.inputStream, socket.outputStream, socket)
-                                val intent = android.content.Intent(this@MainActivity, VMConsoleActivity::class.java).apply {
-                                    putExtra(VMConsoleActivity.EXTRA_DIRECT_VNC, true)
+                                val (rfbClient, _) = withContext(Dispatchers.IO) {
+                                    VncDirectConnector.connect(
+                                        transientHost,
+                                        password.takeIf { it.isNotEmpty() },
+                                        context = this@MainActivity
+                                    )
                                 }
-                                startActivity(intent)
+                                val tab = app.tabManager.createVncTab(null, ephemeralDisplayName = transientHost.name)
+                                if (tab == null) {
+                                    try { rfbClient.stop() } catch (e: Exception) {
+                                        Logger.d("MainActivity", "rfbClient.stop() suppressed after max-tabs reject: ${e.message}")
+                                    }
+                                    Toast.makeText(this@MainActivity, "Maximum tabs reached", Toast.LENGTH_SHORT).show()
+                                    return@launch
+                                }
+                                tab.rfbClient = rfbClient
+                                tab.setConnectionState(io.github.tabssh.ssh.connection.ConnectionState.CONNECTED)
+                                startActivity(
+                                    android.content.Intent(this@MainActivity, TabTerminalActivity::class.java).apply {
+                                        putExtra(TabTerminalActivity.EXTRA_TAB_ID, tab.tabId)
+                                    }
+                                )
                             } catch (e: Exception) {
                                 Logger.e("MainActivity", "VNC connect failed", e)
                                 Toast.makeText(this@MainActivity, "Connection failed: vnc $raw:$port: ${e.message}", Toast.LENGTH_LONG).show()

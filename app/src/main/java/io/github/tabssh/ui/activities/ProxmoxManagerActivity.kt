@@ -18,8 +18,14 @@ import com.google.android.material.button.MaterialButton
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.crypto.storage.HypervisorPasswordStore
+import io.github.tabssh.hypervisor.console.ConsoleEventListener
+import io.github.tabssh.hypervisor.console.HypervisorConsoleManager
 import io.github.tabssh.hypervisor.proxmox.ProxmoxApiClient
+import io.github.tabssh.ssh.connection.ConnectionState
 import io.github.tabssh.storage.database.entities.HypervisorProfile
+import io.github.tabssh.terminal.TermuxBridge
+import io.github.tabssh.ui.tabs.ConsoleConnectParams
+import io.github.tabssh.ui.tabs.HypervisorConsoleType
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.replaceAllWithDiff
 import io.github.tabssh.utils.showError
@@ -226,26 +232,120 @@ class ProxmoxManagerActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * VNC-tab-swipe integration step 6e: opens the VM's serial/graphical
+     * console as a [io.github.tabssh.ui.tabs.Tab.Console] inside
+     * [TabTerminalActivity] instead of launching the standalone
+     * `VMConsoleActivity`. Mirrors [LibvirtManagerActivity.openConsole]'s
+     * precedent of creating the tab only *after* the connection succeeds —
+     * `TabManager` has no by-id/by-reference tab-removal API, so a
+     * connect-failure never needs to leave behind (or clean up) a
+     * half-created tab.
+     */
     private fun openConsole(vm: ProxmoxApiClient.ProxmoxVM) {
         val profile = currentProfile ?: return
+        val client = currentClient ?: return
         lifecycleScope.launch {
+            showProgress("Connecting to ${vm.name}…")
             val creds = HypervisorPasswordStore.resolveCredentials(this@ProxmoxManagerActivity, profile)
-            val intent = Intent(this@ProxmoxManagerActivity, VMConsoleActivity::class.java).apply {
-                putExtra(VMConsoleActivity.EXTRA_HYPERVISOR_TYPE, VMConsoleActivity.TYPE_PROXMOX)
-                putExtra(VMConsoleActivity.EXTRA_VM_ID, vm.vmid.toString())
-                putExtra(VMConsoleActivity.EXTRA_VM_NAME, vm.name)
-                putExtra(VMConsoleActivity.EXTRA_VM_NODE, vm.node)
-                putExtra(VMConsoleActivity.EXTRA_VM_TYPE, vm.type)
-                putExtra(VMConsoleActivity.EXTRA_HOST, profile.host)
-                putExtra(VMConsoleActivity.EXTRA_PORT, profile.port)
-                putExtra(VMConsoleActivity.EXTRA_USERNAME, creds.username)
-                putExtra(VMConsoleActivity.EXTRA_PASSWORD, creds.password)
-                putExtra(VMConsoleActivity.EXTRA_REALM, creds.realm ?: "pam")
-                putExtra(VMConsoleActivity.EXTRA_VERIFY_SSL, profile.verifySsl)
-                putExtra(VMConsoleActivity.EXTRA_PINNED_CERT_SHA256, profile.pinnedCertSha256)
+            val manager = HypervisorConsoleManager()
+
+            // Captured after the tab is created below — onSwitchToGraphical
+            // can only fire once the initial connect (which runs first, on
+            // this same coroutine) has already returned, so the tab always
+            // exists by the time this listener needs it.
+            var consoleTab: io.github.tabssh.ui.tabs.ConsoleTab? = null
+            val listener = object : ConsoleEventListener {
+                override fun onConnected(vmName: String) = Unit
+                override fun onDisconnected(reason: String) {
+                    runOnUiThread { consoleTab?.setConnectionState(ConnectionState.DISCONNECTED) }
+                }
+                override fun onError(message: String) {
+                    Logger.w(TAG, "Console error for ${vm.name}: $message")
+                }
+                override fun onSwitchToGraphical(connection: HypervisorConsoleManager.ConsoleConnection.Graphical) {
+                    runOnUiThread { consoleTab?.markGraphical(connection.rfbClient) }
+                }
             }
-            startActivity(intent)
-            Logger.i(TAG, "Launching console for ${vm.name} (vmid=${vm.vmid})")
+
+            try {
+                val connection = manager.connectProxmoxConsole(
+                    client = client,
+                    node = vm.node,
+                    vmid = vm.vmid,
+                    vmName = vm.name,
+                    type = vm.type,
+                    verifySsl = profile.verifySsl,
+                    pinnedCertSha256 = profile.pinnedCertSha256,
+                    displayHost = profile.host,
+                    displayPort = profile.port,
+                    listener = listener
+                )
+                if (connection == null) {
+                    // Do NOT show a second generic error here — every code
+                    // path that returns null has already surfaced a specific
+                    // message via listener.onError() (see VMConsoleActivity's
+                    // connectToConsole() for the double-dialog race this
+                    // avoids).
+                    hideProgress()
+                    return@launch
+                }
+
+                val tab = app.tabManager.createConsoleTab(
+                    ConsoleConnectParams(
+                        type = HypervisorConsoleType.PROXMOX,
+                        host = profile.host,
+                        port = profile.port,
+                        username = creds.username,
+                        password = creds.password,
+                        verifySsl = profile.verifySsl,
+                        pinnedCertSha256 = profile.pinnedCertSha256,
+                        vmId = vm.vmid.toString(),
+                        vmName = vm.name,
+                        vmNode = vm.node,
+                        vmType = vm.type,
+                        realm = creds.realm ?: "pam"
+                    )
+                )
+                if (tab == null) {
+                    manager.disconnect()
+                    hideProgress()
+                    Toast.makeText(this@ProxmoxManagerActivity, "Maximum tabs reached", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+                consoleTab = tab
+                tab.consoleManager = manager
+
+                when (connection) {
+                    is HypervisorConsoleManager.ConsoleConnection.Text -> {
+                        val cursorStyle = app.preferencesManager.getCursorStyleInt()
+                        val bridge = withContext(Dispatchers.IO) {
+                            TermuxBridge(columns = 80, rows = 24, transcriptRows = 2000, cursorStyle = cursorStyle)
+                                .also { it.initialize() }
+                        }
+                        manager.wireToTerminal(connection, bridge)
+                        bridge.onResizeCallback = { cols, rows -> manager.getWebSocketClient()?.sendResize(cols, rows) }
+                        tab.termuxBridge = bridge
+                        tab.setConnectionState(ConnectionState.CONNECTED)
+                    }
+                    is HypervisorConsoleManager.ConsoleConnection.Graphical -> {
+                        tab.markGraphical(connection.rfbClient)
+                        tab.setConnectionState(ConnectionState.CONNECTED)
+                    }
+                }
+
+                hideProgress()
+                startActivity(
+                    Intent(this@ProxmoxManagerActivity, TabTerminalActivity::class.java).apply {
+                        putExtra(TabTerminalActivity.EXTRA_TAB_ID, tab.tabId)
+                    }
+                )
+                Logger.i(TAG, "Opened console tab for ${vm.name} (vmid=${vm.vmid})")
+            } catch (e: Exception) {
+                Logger.e(TAG, "Console connection error for ${vm.name}", e)
+                hideProgress()
+                showError("Connection failed: vm ${vm.name}: ${e.message}")
+            }
         }
     }
 

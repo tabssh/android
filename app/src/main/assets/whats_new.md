@@ -1,5 +1,15 @@
 # What's New
 
+## Wave 64 — VM consoles and VNC quick-connect now open as tabs
+
+- **Proxmox, XCP-ng, and libvirt VM consoles now open as swipeable
+  tabs** alongside your SSH sessions, instead of a separate
+  full-screen console screen. Swipe between them just like SSH tabs.
+- **The main screen's VNC quick-connect now opens as a tab too**,
+  for the same reason.
+- **VNC and console tabs now survive being backgrounded** — switching
+  away and back no longer risks losing or reconnecting the session.
+
 ## Wave 63 — PRE key now looks disabled when it is
 
 - **The PRE key now stays visibly greyed out when you turn off "Enable

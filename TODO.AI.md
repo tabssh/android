@@ -13,12 +13,13 @@
 
 ---
 
-## 🚧 In Progress: VNC-tab-swipe integration
+## ✅ Shipped: VNC-tab-swipe integration
 
-Design decided (see AI.md §11.7.2) — VNC connections join the SSH `ViewPager2`/
-`TabManager`/`TerminalPagerAdapter` swipe system instead of staying in the
-standalone `VMConsoleActivity`. This is a multi-commit feature; each step below
-ships independently, buildable and tested, in dependency order.
+Design decided and fully implemented (see AI.md §11.7.2) — VNC and hypervisor-
+console connections join the SSH `ViewPager2`/`TabManager`/`TerminalPagerAdapter`
+swipe system; the standalone `VMConsoleActivity` viewer has been retired. This
+was a multi-commit feature; each step below shipped independently, buildable
+and tested, in dependency order.
 
 1. **DB schema** — `TabSession.connectionId` currently FKs to `connections`
    (SSH-only). Add a nullable `vncHostId` FK to `vnc_hosts` + a `tabKind`
@@ -198,29 +199,45 @@ ships independently, buildable and tested, in dependency order.
     fresh on every touch alongside the existing `Tab.Vnc` check, so a mode
     flip mid-session is picked up by the very next gesture with no separate
     Flow subscription needed.
-6e. **Entry-point consolidation** — `ProxmoxManagerActivity.openConsole()`
+6e. ✅ **Entry-point consolidation** — `ProxmoxManagerActivity.openConsole()`
     and `XCPngManagerActivity.openVMConsole()` open/activate a `Tab.Console`
     inside `TabTerminalActivity` instead of launching `VMConsoleActivity`.
     `VncHostsActivity` stays the VNC host management (CRUD) screen — same
-    role the SSH connection-profile list plays. Evaluate background-parking
-    parity: `VMConsoleActivity` parks graphical sessions into
-    `VncBackgroundSessionStore` + `VncKeepAliveService` on `onStop`; decide
-    whether `Tab.Console`/`Tab.Vnc` tabs living inside the always-resident
-    `TabTerminalActivity` still need that (likely not — the tab's session
-    already survives backgrounding by staying inside a single long-lived
-    activity — but confirm before dropping it, don't assume).
-6f. **Retire `VMConsoleActivity`** — once every caller (`VncHostsActivity`,
-    `LibvirtManagerActivity`, `ProxmoxManagerActivity`,
-    `XCPngManagerActivity`, `MainActivity`'s VNC quick-connect) is migrated
-    (grep every `startActivity(...VMConsoleActivity...)` call site to
-    confirm zero remain), delete `VMConsoleActivity.kt`, its layout
-    (`activity_vm_console.xml`), and its `<activity>` entry in
-    `AndroidManifest.xml`. `VncStreamHolder` retires with it if nothing else
-    references it after the libvirt migration in 6c — grep first.
-7. **Cleanup** — remove now-dead `VMConsoleActivity`-only code paths
-   (anything step 6f didn't already delete); update AI.md §11.7.2 from "in
-   progress" to shipped, including the `Tab.Console` addition; update this
-   section to ✅.
+    role the SSH connection-profile list plays. Background-parking parity
+    was evaluated and turned out to be needed, contradicting this doc's
+    original "likely not" guess: `TabManager` is Application-scoped, so tabs
+    already survive *activity* destruction on their own, but nothing
+    protected `Tab.Vnc`/graphical `Tab.Console` sessions from OS *process*
+    reclaim while backgrounded (unlike SSH tabs, incidentally protected by
+    `SSHConnectionService`) — grep confirmed `VncBackgroundSessionStore.park`
+    /`VncKeepAliveService.startService` had exactly one call site
+    (`VMConsoleActivity`) before this step. Done: `TabManager.parkBackgroundSessions()`
+    /`reclaimBackgroundSessions()` pause+park (or reclaim) every connected
+    `Tab.Vnc`/graphical `Tab.Console` session via the existing
+    `VncBackgroundSessionStore`, tracking parked keys locally to distinguish
+    "never parked" from "parked then idle-swept" on reclaim.
+    `TabTerminalActivity.onStop()`/`onResume()` call these and start/stop
+    `VncKeepAliveService` accordingly. Respects `VncHost.keepAliveInBackground`
+    for persisted `VncTab`s; ephemeral `VncTab`s and all `ConsoleTab`s default
+    to parked. `VncTab`/`ConsoleTab` keep their own `rfbClient` reference the
+    whole time — unlike `VMConsoleActivity`'s ownership-transfer/teardown
+    pattern, nothing is disconnected or unwired, only paused.
+6f. ✅ **Retire `VMConsoleActivity`** — `MainActivity`'s VNC quick-connect
+    (both the "save permanent" and transient/ephemeral paths) was the last
+    remaining caller; migrated to `app.tabManager.createVncTab(...)` +
+    focus via `TabTerminalActivity.EXTRA_TAB_ID`, same pattern as
+    `VncHostsActivity.openVncConsole()`. Confirmed zero remaining
+    `VMConsoleActivity::class` call sites via grep. Deleted
+    `VMConsoleActivity.kt`, its layout (`activity_vm_console.xml`), its
+    `<activity>` entry in `AndroidManifest.xml`, and `VncStreamHolder.kt`
+    (its only other referrer was `VMConsoleActivity` itself — confirmed via
+    grep before deleting). `make check` clean after deletion.
+7. ✅ **Cleanup** — no dead `VMConsoleActivity`-only code paths remained
+   beyond what step 6f already deleted (grep-confirmed every remaining
+   `VMConsoleActivity` mention is a doc comment, not a live reference).
+   Updated AI.md §11.7.2 from "in progress" to shipped, including the
+   `Tab.Console` addition and the background-parking wiring. This section
+   updated to ✅.
 
 Dependency order above is required: 3 needs 2, 4 needs 2+3, 5 needs 4, 6a
 needs 2-5 all working, 6b needs 6a, 6c needs 6b, 6d needs 6c, 6e needs 6c+6d,

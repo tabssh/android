@@ -2,6 +2,7 @@ package io.github.tabssh.ui.tabs
 
 import io.github.tabssh.hypervisor.console.HypervisorConsoleManager
 import io.github.tabssh.hypervisor.console.rfb.RfbClient
+import io.github.tabssh.hypervisor.vnc.VncBackgroundSessionStore
 import io.github.tabssh.ssh.connection.ConnectionState
 import io.github.tabssh.terminal.TermuxBridge
 import io.github.tabssh.utils.logging.Logger
@@ -70,8 +71,9 @@ class ConsoleTab(val connectParams: ConsoleConnectParams) {
     /**
      * No persisted DB row backs a hypervisor console the way [VncHost] backs
      * a [VncTab] (TODO.AI.md step 6b decides whether that changes), so this
-     * tab always uses its own id — nothing to reattach across process death
-     * yet, unlike VNC's `VncBackgroundSessionStore` reattach-by-host-id path.
+     * tab always uses its own id as its [VncBackgroundSessionStore] key
+     * (step 6e wires graphical-mode console sessions into the same
+     * background-parking path VNC tabs use — see [isParked]/[TabManager]).
      */
     val storeKey: String = tabId
 
@@ -144,6 +146,15 @@ class ConsoleTab(val connectParams: ConsoleConnectParams) {
     /** Get display title for tab bar. */
     fun getDisplayTitle(): String = _title.value
 
+    /**
+     * True once this tab's graphical session is parked in
+     * [VncBackgroundSessionStore] (step 6e background-parking parity).
+     * Text-mode sessions are never parked — there is nothing worth pausing
+     * at the protocol layer, and the tab's own `TermuxBridge`/`HypervisorConsoleManager`
+     * keep running unattended exactly like an SSH tab does.
+     */
+    fun isParked(): Boolean = VncBackgroundSessionStore.contains(storeKey)
+
     /** Tear down this tab's session — disconnects the manager and clears live handles. */
     fun cleanup() {
         Logger.d("ConsoleTab", "Cleaning up console tab ${getDisplayTitle()}")
@@ -160,6 +171,7 @@ class ConsoleTab(val connectParams: ConsoleConnectParams) {
         consoleManager = null
         rfbClient = null
         termuxBridge = null
+        VncBackgroundSessionStore.discard(storeKey)
         _connectionState.value = ConnectionState.DISCONNECTED
     }
 

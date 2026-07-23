@@ -1,10 +1,13 @@
 package io.github.tabssh.ui.tabs
 
 import android.view.KeyEvent
+import io.github.tabssh.hypervisor.console.rfb.RfbClient
+import io.github.tabssh.hypervisor.vnc.VncBackgroundSessionStore
 import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.terminal.TermuxBridge
 import io.github.tabssh.ui.views.TerminalView
+import io.github.tabssh.ssh.connection.ConnectionState
 import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.CoroutineScope
@@ -194,6 +197,123 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
         Logger.d("TabManager", "Created new console tab: ${tab.getDisplayTitle()}")
         publishTabs()
         return tab
+    }
+
+    /**
+     * VNC-tab-swipe integration step 6e background-parking parity: pause
+     * and park every live, connected `Tab.Vnc`/graphical `Tab.Console`
+     * session into [VncBackgroundSessionStore], so [TabTerminalActivity]
+     * can start `VncKeepAliveService` and keep the process (socket + reader
+     * thread) alive while the app is backgrounded — the same protection SSH
+     * tabs already get from `SSHConnectionService`. Unlike `VMConsoleActivity`'s
+     * single-session ownership handoff, tabs keep their own `rfbClient`
+     * reference the whole time (they are Application-scoped and survive
+     * activity destruction on their own); parking here only pauses the
+     * client and registers it with the store/service so the OS doesn't
+     * reclaim the process — nothing is torn down or unwired.
+     *
+     * Respects `VncHost.keepAliveInBackground` (default true, AI.md
+     * §11.7.2) for persisted `VncTab`s — a host that explicitly opted out
+     * is left unparked, exactly like `VMConsoleActivity`'s handling of the
+     * same flag. Ephemeral `VncTab`s (no `VncHost` row) and hypervisor
+     * `ConsoleTab`s have no such toggle, so they default to parked.
+     *
+     * @return true if at least one session was parked (caller should start
+     *   `VncKeepAliveService`).
+     */
+    fun parkBackgroundSessions(): Boolean {
+        var parkedAny = false
+        tabs.forEach { entry ->
+            when (entry) {
+                is Tab.Vnc -> {
+                    val tab = entry.vncTab
+                    val keepAlive = tab.vncHost?.keepAliveInBackground ?: true
+                    if (keepAlive && parkOne(tab.storeKey, tab.getDisplayTitle(), tab.rfbClient, tab.connectionState.value)) {
+                        parkedAny = true
+                    }
+                }
+                is Tab.Console -> {
+                    val tab = entry.consoleTab
+                    if (tab.isGraphicalMode.value &&
+                        parkOne(tab.storeKey, tab.getDisplayTitle(), tab.rfbClient, tab.connectionState.value)
+                    ) {
+                        parkedAny = true
+                    }
+                }
+                is Tab.Ssh -> Unit
+            }
+        }
+        if (parkedAny) {
+            Logger.d("TabManager", "Parked ${VncBackgroundSessionStore.count} background VNC/console session(s)")
+        }
+        return parkedAny
+    }
+
+    private fun parkOne(storeKey: String, displayName: String, rfbClient: RfbClient?, state: ConnectionState): Boolean {
+        if (rfbClient == null || state != ConnectionState.CONNECTED) return false
+        rfbClient.pause()
+        VncBackgroundSessionStore.park(
+            VncBackgroundSessionStore.ParkedSession(
+                key = storeKey,
+                vmName = displayName,
+                rfbClient = rfbClient,
+                socket = null,
+                disableResize = false,
+                parkedAtMillis = System.currentTimeMillis()
+            )
+        )
+        parkedKeys.add(storeKey)
+        return true
+    }
+
+    /**
+     * Reverse of [parkBackgroundSessions]: reclaim (un-pause) every tab
+     * whose session is still parked when the app returns to the
+     * foreground, or mark it disconnected if `VncKeepAliveService`'s idle
+     * sweep fully suspended it while backgrounded (mirrors
+     * `VMConsoleActivity.onResume()`'s parked-but-swept handling, except
+     * tabs don't auto-reconnect — the user reopens the host/console like
+     * any other disconnected tab).
+     */
+    fun reclaimBackgroundSessions() {
+        tabs.forEach { entry ->
+            when (entry) {
+                is Tab.Vnc -> {
+                    val tab = entry.vncTab
+                    reclaimOne(tab.storeKey) { tab.setConnectionState(it) }
+                }
+                is Tab.Console -> {
+                    val tab = entry.consoleTab
+                    reclaimOne(tab.storeKey) { tab.setConnectionState(it) }
+                }
+                is Tab.Ssh -> Unit
+            }
+        }
+    }
+
+    /**
+     * [parkedKeys] tracks exactly which store keys *this* [TabManager]
+     * parked, so [reclaimOne] can tell "never parked" (key absent — nothing
+     * to do, leave connection state untouched) apart from "parked, then
+     * swept by `VncKeepAliveService`'s idle sweep" (key present but the
+     * store no longer holds it — `VncBackgroundSessionStore.discardInternal`
+     * already stopped the `rfbClient`, so the tab must be surfaced as
+     * disconnected rather than showing a stale "Connected" state).
+     */
+    private val parkedKeys = mutableSetOf<String>()
+
+    private fun reclaimOne(storeKey: String, setState: (ConnectionState) -> Unit) {
+        if (!parkedKeys.remove(storeKey)) return
+        val parked = VncBackgroundSessionStore.take(storeKey)
+        if (parked != null) {
+            parked.rfbClient.resume()
+            setState(ConnectionState.CONNECTED)
+        } else {
+            // Swept by the idle timeout while backgrounded — rfbClient was
+            // already stopped by VncBackgroundSessionStore.discardInternal().
+            setState(ConnectionState.DISCONNECTED)
+            Logger.d("TabManager", "Session $storeKey was idle-swept while parked; marked disconnected")
+        }
     }
 
     /**

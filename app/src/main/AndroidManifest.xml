@@ -196,20 +196,6 @@
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
-        <!-- VM Console activity (serial console via hypervisor API).
-             Uses the app's Theme.TabSSH (Material 3) — the layout
-             references ?attr/colorSurfaceVariant which is a Material 3
-             token; the bare MaterialComponents.DayNight (Material 2)
-             theme that was here previously crashed inflating
-             MultiRowKeyboardView at line 38 of activity_vm_console.xml. -->
-        <activity
-            android:name=".ui.activities.VMConsoleActivity"
-            android:exported="false"
-            android:label="VM Console"
-            android:theme="@style/Theme.TabSSH"
-            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
-            android:windowSoftInputMode="adjustNothing" />
-
         <!-- Hypervisor Edit activity -->
         <activity
             android:name=".ui.activities.HypervisorEditActivity"

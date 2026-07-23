@@ -23,6 +23,8 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flowOn
 import io.github.tabssh.network.ConnectionDiagnostic
+import io.github.tabssh.hypervisor.vnc.VncBackgroundSessionStore
+import io.github.tabssh.services.VncKeepAliveService
 import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.ui.adapters.TerminalPagerAdapter
 import io.github.tabssh.ui.views.TerminalView
@@ -4289,6 +4291,15 @@ class TabTerminalActivity : AppCompatActivity() {
         }
         updatePrefixKeyVisual(tabManager.getActiveTab()?.activeMultiplexerType)
 
+        // VNC-tab-swipe integration step 6e: reclaim any Tab.Vnc/Tab.Console
+        // session parked in VncBackgroundSessionStore by onStop() below, then
+        // stop VncKeepAliveService if nothing is left parked (mirrors
+        // VMConsoleActivity.reattachVncHost()'s pattern, see AI.md §11.7.2).
+        tabManager.reclaimBackgroundSessions()
+        if (VncBackgroundSessionStore.isEmpty) {
+            VncKeepAliveService.stopService(applicationContext)
+        }
+
         // Restore active tab if needed
         val activeTab = tabManager.getActiveTab()
         if (activeTab != null) {
@@ -4304,13 +4315,27 @@ class TabTerminalActivity : AppCompatActivity() {
     
     override fun onPause() {
         super.onPause()
-        
+
         // saveTabState() is a disk write — dispatch to IO, bound to the activity lifecycle.
         lifecycleScope.launch(Dispatchers.IO) {
             tabManager.saveTabState()
         }
     }
-    
+
+    override fun onStop() {
+        super.onStop()
+
+        // VNC-tab-swipe integration step 6e background-parking parity: pause
+        // and park every live, connected Tab.Vnc/graphical Tab.Console
+        // session into VncBackgroundSessionStore, then start
+        // VncKeepAliveService so the OS doesn't reclaim the process while
+        // backgrounded — the same protection SSH tabs already get
+        // incidentally from SSHConnectionService (see AI.md §11.7.2).
+        if (tabManager.parkBackgroundSessions()) {
+            VncKeepAliveService.startService(applicationContext)
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
 

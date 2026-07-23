@@ -16,6 +16,7 @@ import io.github.tabssh.hypervisor.xcpng.XCPngApiClient
 import io.github.tabssh.hypervisor.xcpng.XenOrchestraApiClient
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.HypervisorType
+import io.github.tabssh.ui.tabs.HypervisorConsoleType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -426,6 +427,16 @@ class XCPngManagerActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * VNC-tab-swipe integration step 6e: opens the VM's serial/graphical
+     * console as a [io.github.tabssh.ui.tabs.Tab.Console] inside
+     * [TabTerminalActivity] instead of launching the standalone
+     * `VMConsoleActivity`. Same discipline as
+     * [ProxmoxManagerActivity.openConsole]: the tab is created only *after*
+     * the connect succeeds, mirroring [LibvirtManagerActivity.openConsole]'s
+     * precedent, since `TabManager` has no by-id/by-reference tab-removal
+     * API to clean up a half-created tab on connect failure.
+     */
     private fun openVMConsole(vm: XCPngApiClient.XenVM) {
         // Get current hypervisor profile for credentials
         val position = serverSpinner.selectedItemPosition
@@ -434,38 +445,146 @@ class XCPngManagerActivity : AppCompatActivity() {
             return
         }
         val profile = hypervisors[position]
-
-        // Determine hypervisor type (Xen Orchestra or direct XCP-ng)
-        val hypervisorType = if (isXenOrchestra) {
-            VMConsoleActivity.TYPE_XEN_ORCHESTRA
-        } else {
-            VMConsoleActivity.TYPE_XCPNG
-        }
+        val consoleType = if (isXenOrchestra) HypervisorConsoleType.XEN_ORCHESTRA else HypervisorConsoleType.XCPNG
 
         // Resolve the password through the Keystore-backed store before
-        // building the launch intent. Same-process Intent extras are
-        // local — the security concern was the on-disk DB column.
+        // connecting. Same-process values are local — the security concern
+        // was the on-disk DB column.
         lifecycleScope.launch {
+            progressBar.visibility = View.VISIBLE
+            statusText.text = "Connecting to ${vm.name}…"
+            statusText.visibility = View.VISIBLE
+
             val creds = io.github.tabssh.crypto.storage.HypervisorPasswordStore
                 .resolveCredentials(this@XCPngManagerActivity, profile)
-            val intent = android.content.Intent(this@XCPngManagerActivity, VMConsoleActivity::class.java).apply {
-                putExtra(VMConsoleActivity.EXTRA_HYPERVISOR_TYPE, hypervisorType)
-                putExtra(VMConsoleActivity.EXTRA_VM_ID, vm.uuid)
-                putExtra(VMConsoleActivity.EXTRA_VM_NAME, vm.name)
-                putExtra(VMConsoleActivity.EXTRA_VM_REF, vm.uuid) // XCP-ng uses uuid as reference
-                putExtra(VMConsoleActivity.EXTRA_HOST, profile.host)
-                putExtra(VMConsoleActivity.EXTRA_PORT, profile.port)
-                putExtra(VMConsoleActivity.EXTRA_USERNAME, creds.username)
-                putExtra(VMConsoleActivity.EXTRA_PASSWORD, creds.password)
-                putExtra(VMConsoleActivity.EXTRA_IS_XEN_ORCHESTRA, isXenOrchestra)
-                putExtra(VMConsoleActivity.EXTRA_VERIFY_SSL, profile.verifySsl)
-                putExtra(VMConsoleActivity.EXTRA_PINNED_CERT_SHA256, profile.pinnedCertSha256)
-            }
-            startActivity(intent)
+            val manager = io.github.tabssh.hypervisor.console.HypervisorConsoleManager()
 
-            val consoleType = if (isXenOrchestra) "Xen Orchestra" else "XCP-ng"
-            Toast.makeText(this@XCPngManagerActivity, "Opening serial console for ${vm.name}", Toast.LENGTH_SHORT).show()
-            Logger.i("XCPngManager", "Launching $consoleType serial console for VM: ${vm.name} (uuid=${vm.uuid})")
+            // Captured after the tab is created below — onSwitchToGraphical
+            // can only fire once the initial connect (which runs first, on
+            // this same coroutine) has already returned, so the tab always
+            // exists by the time this listener needs it.
+            var consoleTab: io.github.tabssh.ui.tabs.ConsoleTab? = null
+            val listener = object : io.github.tabssh.hypervisor.console.ConsoleEventListener {
+                override fun onConnected(vmName: String) = Unit
+                override fun onDisconnected(reason: String) {
+                    runOnUiThread {
+                        consoleTab?.setConnectionState(io.github.tabssh.ssh.connection.ConnectionState.DISCONNECTED)
+                    }
+                }
+                override fun onError(message: String) {
+                    Logger.w("XCPngManager", "Console error for ${vm.name}: $message")
+                }
+                override fun onSwitchToGraphical(
+                    connection: io.github.tabssh.hypervisor.console.HypervisorConsoleManager.ConsoleConnection.Graphical
+                ) {
+                    runOnUiThread { consoleTab?.markGraphical(connection.rfbClient) }
+                }
+            }
+
+            try {
+                val connection = if (isXenOrchestra) {
+                    val xoClient = currentXoClient
+                    if (xoClient == null) {
+                        progressBar.visibility = View.GONE
+                        showError("Not connected to Xen Orchestra")
+                        return@launch
+                    }
+                    manager.connectXenOrchestraConsole(
+                        client = xoClient,
+                        vmId = vm.uuid,
+                        vmName = vm.name,
+                        verifySsl = profile.verifySsl,
+                        pinnedCertSha256 = profile.pinnedCertSha256,
+                        displayHost = profile.host,
+                        displayPort = profile.port,
+                        listener = listener
+                    )
+                } else {
+                    val xcpClient = currentClient
+                    if (xcpClient == null) {
+                        progressBar.visibility = View.GONE
+                        showError("Not connected to XCP-ng")
+                        return@launch
+                    }
+                    manager.connectXCPngConsole(
+                        client = xcpClient,
+                        vmRef = vm.uuid,
+                        vmName = vm.name,
+                        verifySsl = profile.verifySsl,
+                        pinnedCertSha256 = profile.pinnedCertSha256,
+                        displayHost = profile.host,
+                        displayPort = profile.port,
+                        listener = listener
+                    )
+                }
+                if (connection == null) {
+                    // Do NOT show a second generic error here — every code
+                    // path that returns null has already surfaced a specific
+                    // message via listener.onError() (see VMConsoleActivity's
+                    // connectToConsole() for the double-dialog race this
+                    // avoids).
+                    progressBar.visibility = View.GONE
+                    statusText.visibility = View.GONE
+                    return@launch
+                }
+
+                val tab = app.tabManager.createConsoleTab(
+                    io.github.tabssh.ui.tabs.ConsoleConnectParams(
+                        type = consoleType,
+                        host = profile.host,
+                        port = profile.port,
+                        username = creds.username,
+                        password = creds.password,
+                        verifySsl = profile.verifySsl,
+                        pinnedCertSha256 = profile.pinnedCertSha256,
+                        vmId = vm.uuid,
+                        vmName = vm.name,
+                        vmRef = vm.uuid
+                    )
+                )
+                if (tab == null) {
+                    manager.disconnect()
+                    progressBar.visibility = View.GONE
+                    statusText.visibility = View.GONE
+                    Toast.makeText(this@XCPngManagerActivity, "Maximum tabs reached", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+                consoleTab = tab
+                tab.consoleManager = manager
+
+                when (connection) {
+                    is io.github.tabssh.hypervisor.console.HypervisorConsoleManager.ConsoleConnection.Text -> {
+                        val cursorStyle = app.preferencesManager.getCursorStyleInt()
+                        val bridge = withContext(Dispatchers.IO) {
+                            io.github.tabssh.terminal.TermuxBridge(
+                                columns = 80, rows = 24, transcriptRows = 2000, cursorStyle = cursorStyle
+                            ).also { it.initialize() }
+                        }
+                        manager.wireToTerminal(connection, bridge)
+                        bridge.onResizeCallback = { cols, rows -> manager.getWebSocketClient()?.sendResize(cols, rows) }
+                        tab.termuxBridge = bridge
+                        tab.setConnectionState(io.github.tabssh.ssh.connection.ConnectionState.CONNECTED)
+                    }
+                    is io.github.tabssh.hypervisor.console.HypervisorConsoleManager.ConsoleConnection.Graphical -> {
+                        tab.markGraphical(connection.rfbClient)
+                        tab.setConnectionState(io.github.tabssh.ssh.connection.ConnectionState.CONNECTED)
+                    }
+                }
+
+                progressBar.visibility = View.GONE
+                statusText.visibility = View.GONE
+                startActivity(
+                    android.content.Intent(this@XCPngManagerActivity, TabTerminalActivity::class.java).apply {
+                        putExtra(TabTerminalActivity.EXTRA_TAB_ID, tab.tabId)
+                    }
+                )
+                val consoleLabel = if (isXenOrchestra) "Xen Orchestra" else "XCP-ng"
+                Logger.i("XCPngManager", "Opened $consoleLabel console tab for VM: ${vm.name} (uuid=${vm.uuid})")
+            } catch (e: Exception) {
+                Logger.e("XCPngManager", "Console connection error for ${vm.name}", e)
+                progressBar.visibility = View.GONE
+                showError("Connection failed: vm ${vm.name}: ${e.message}")
+            }
         }
     }
 
