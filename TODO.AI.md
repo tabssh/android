@@ -188,12 +188,16 @@ ships independently, buildable and tested, in dependency order.
       disconnect loop. `LibvirtManagerActivity`'s now-dead
       `consoleLauncher`/`pendingConsoleVm` result-relaunch plumbing was
       removed rather than left as dead code.
-6d. **`TabTerminalActivity` swipe gating for `Tab.Console`** — extend step
+6d. ✅ **`TabTerminalActivity` swipe gating for `Tab.Console`** — extend step
     5's `effectiveEdgePx` check: text-mode console tabs behave like SSH
     (`tabSwipeEdgePx` unchanged, swipe-from-anywhere stays safe — it's a
     terminal), graphical-mode console tabs behave like VNC (forced 96dp
     edge-only, same rationale as step 5). Must re-evaluate live if a bound
-    tab's `isGraphicalMode` flips mid-session.
+    tab's `isGraphicalMode` flips mid-session. Done: `attachEdgeSwipeGate()`'s
+    `ACTION_DOWN` handler now reads `Tab.Console.consoleTab.isGraphicalMode.value`
+    fresh on every touch alongside the existing `Tab.Vnc` check, so a mode
+    flip mid-session is picked up by the very next gesture with no separate
+    Flow subscription needed.
 6e. **Entry-point consolidation** — `ProxmoxManagerActivity.openConsole()`
     and `XCPngManagerActivity.openVMConsole()` open/activate a `Tab.Console`
     inside `TabTerminalActivity` instead of launching `VMConsoleActivity`.

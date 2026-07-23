@@ -1075,6 +1075,11 @@ global setting that was silently ignored has been replaced.
 - **VNC host and libvirt/QEMU VM consoles now open as swipeable tabs**,
   right alongside your SSH sessions, instead of a separate full-screen
   viewer — swipe between them just like any other tab
+- **Proxmox/XCP-ng/libvirt console tabs now protect graphical sessions from
+  accidental swipes the same way VNC tabs do** — once a console switches into
+  graphical mode, tab-switch swipes only trigger from the screen edge so a
+  drag inside the display goes to the remote session instead; text-mode
+  consoles are unaffected
 - True 24-bit color rendering (fix latent crash on `SGR 38;2;R;G;B`)
 - Cluster command results stream live as each host completes
 - **Voice typing**: works out of the box — tap the mic on any voice-capable

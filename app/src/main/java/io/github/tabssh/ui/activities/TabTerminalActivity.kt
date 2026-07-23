@@ -858,11 +858,21 @@ class TabTerminalActivity : AppCompatActivity() {
                         // by a mid-page swipe — even when the SSH "swipe from
                         // anywhere" preference (tab_swipe_edge_dp = 0) is
                         // active. Force the same 96dp default edge-only width
-                        // used elsewhere in this method for VNC tabs only;
-                        // SSH tabs keep the user's configured tabSwipeEdgePx
-                        // (including 0) unchanged.
-                        val activeIsVnc = tabManager.getActiveTabSealed() is Tab.Vnc
-                        val effectiveEdgePx = if (activeIsVnc && tabSwipeEdgePx <= 0) {
+                        // used elsewhere in this method for VNC tabs (and
+                        // graphical-mode hypervisor console tabs — step 6d);
+                        // SSH tabs, and text-mode console tabs, keep the
+                        // user's configured tabSwipeEdgePx (including 0)
+                        // unchanged. ConsoleTab.isGraphicalMode is read fresh
+                        // on every ACTION_DOWN (not cached), so a mode flip
+                        // mid-session (text console → graphical, or back) is
+                        // picked up by the very next touch.
+                        val activeTab = tabManager.getActiveTabSealed()
+                        val forceEdgeOnly = when (activeTab) {
+                            is Tab.Vnc -> true
+                            is Tab.Console -> activeTab.consoleTab.isGraphicalMode.value
+                            else -> false
+                        }
+                        val effectiveEdgePx = if (forceEdgeOnly && tabSwipeEdgePx <= 0) {
                             (96 * resources.displayMetrics.density).toInt()
                         } else {
                             tabSwipeEdgePx
