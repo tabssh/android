@@ -136,17 +136,16 @@ ships independently, buildable and tested, in dependency order.
     leaves 6b to only `createConsoleTab()` + the persistence decision, and
     6c to only the `VncHostsActivity`/`LibvirtManagerActivity` → `Tab.Vnc`
     migration (the exhaustiveness audit both originally called for is done).
-6b. **`TabManager.createConsoleTab()` + persistence** — add
-    `createConsoleTab(...)` alongside `createVncTab(...)`; sealed-list
-    accessors (`getAllTabsSealed()` etc., already 3rd-kind-ready per step 3)
-    need no structural change; the exhaustive-`when` audit this step
-    originally called for landed in 6a (forced by the compiler). 
-    `TabManagerListener` stays SSH-only per existing precedent (VNC has no
-    observer wiring either). `saveTabState()` explicitly skips non-`Tab.Ssh`
-    today — decide here whether console tabs get persistence across process
-    death or stay session-only like VNC currently does (VNC has none yet
-    either); default to session-only unless the user asks for persistence,
-    to keep this step additive and small.
+6b. ✅ **`TabManager.createConsoleTab()` + persistence** — added
+    `createConsoleTab(connectParams)` alongside `createVncTab(...)`;
+    sealed-list accessors (`getAllTabsSealed()` etc., already
+    3rd-kind-ready per step 3) needed no structural change; the
+    exhaustive-`when` audit this step originally called for landed in 6a
+    (forced by the compiler). `TabManagerListener` stays SSH-only per
+    existing precedent (VNC has no observer wiring either). Persistence
+    decision: console tabs stay session-only, same as VNC — `saveTabState()`
+    still filters to `Tab.Ssh` only, no change needed. No caller constructs
+    a `Tab.Console` yet (step 6e).
 6c. **Migrate `VncHostsActivity`/`LibvirtManagerActivity` onto `Tab.Vnc`**
     — the `VIEW_TYPE_CONSOLE`/`ConsoleViewHolder` adapter work this step
     originally described landed in 6a (forced by the compiler); what's left

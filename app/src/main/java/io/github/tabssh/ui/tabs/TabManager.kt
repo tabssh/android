@@ -30,8 +30,9 @@ import kotlinx.coroutines.launch
  * of TabTerminalActivity/SessionPersistenceManager/ConnectionLauncher/
  * TaskerWorker need to change. New sealed-aware accessors
  * (`getAllTabsSealed()`, `getActiveTabSealed()`, `allTabsFlow`,
- * `createVncTab()`) are added alongside for steps 4-6 to adopt
- * incrementally as VNC rendering/gating actually lands.
+ * `createVncTab()`, `createConsoleTab()`) are added alongside for steps
+ * 4-6 to adopt incrementally as VNC/console rendering/gating actually
+ * lands.
  */
 class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int = 10) {
 
@@ -169,6 +170,28 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
         activeTabIndex = tabs.size - 1
 
         Logger.d("TabManager", "Created new VNC tab: ${tab.getDisplayTitle()}")
+        publishTabs()
+        return tab
+    }
+
+    /**
+     * Create a new hypervisor-console tab (VNC-tab-swipe integration step
+     * 6b). Same discipline as [createVncTab]: no [TabManagerListener]
+     * observer wiring (that interface stays SSH-only) and no
+     * [saveTabState] persistence — console tabs are session-only, same as
+     * VNC tabs are today. Entry-point callers land in step 6e.
+     */
+    fun createConsoleTab(connectParams: ConsoleConnectParams): ConsoleTab? {
+        if (tabs.size >= maxTabs) {
+            Logger.w("TabManager", "Maximum tabs reached: $maxTabs")
+            return null
+        }
+
+        val tab = ConsoleTab(connectParams)
+        tabs.add(Tab.Console(tab))
+        activeTabIndex = tabs.size - 1
+
+        Logger.d("TabManager", "Created new console tab: ${tab.getDisplayTitle()}")
         publishTabs()
         return tab
     }
@@ -420,10 +443,12 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
         // Snapshot: tabs is a plain ArrayList mutated on the main thread.
         // saveTabState runs on Dispatchers.IO; iterating the live list
         // races with addTab/closeTab and causes ConcurrentModificationException.
-        // SSH-only for now — VncTab has no TabSession row/restore path yet
-        // (that's step 6's entry-point consolidation). Index is taken from
-        // the full unified list so ordering stays stable once VNC tabs are
-        // interspersed, rather than renumbering around them.
+        // SSH-only for now — VncTab and ConsoleTab have no TabSession
+        // row/restore path yet (both default to session-only, decided in
+        // step 6b for console tabs to match VNC's existing behavior).
+        // Index is taken from the full unified list so ordering stays
+        // stable once VNC/console tabs are interspersed, rather than
+        // renumbering around them.
         val snapshot = tabs.toList()
         snapshot.forEachIndexed { index, entry ->
             val tab = (entry as? Tab.Ssh)?.sshTab ?: return@forEachIndexed
