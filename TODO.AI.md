@@ -56,17 +56,121 @@ ships independently, buildable and tested, in dependency order.
    be eaten by a mid-page swipe — the same carve-out SSH text-selection
    already gets via `swipeSuspendedForSelection`. `swipeSuspendedForSelection`
    itself is untouched (SSH-only, no VNC equivalent needed yet).
-6. **Entry-point consolidation** — connecting to a `VncHost` or hypervisor
-   console opens/activates a VNC tab inside `TabTerminalActivity` instead of
-   launching `VMConsoleActivity`. `VncHostsActivity` stays as the VNC host
-   management (CRUD) screen — same role the SSH connection-profile list plays.
-   Retire `VMConsoleActivity` once all callers are migrated; grep every
-   `startActivity(...VMConsoleActivity...)` call site first.
-7. **Cleanup** — remove now-dead `VMConsoleActivity`-only code paths; update
-   AI.md §11.7.2 from "in progress" to shipped; update this section to ✅.
+6. **Scope correction (this entry replaces the original step 6 text)** — a full
+   read of `VMConsoleActivity.kt` (1619 lines) + `HypervisorConsoleManager.kt`
+   found that "hypervisor console" (Proxmox/XCP-ng/Xen Orchestra) is NOT
+   always VNC: `connectToConsole()` resolves to `HypervisorConsoleManager
+   .ConsoleConnection.Text` (serial, `TermuxBridge`-driven, no RfbClient at
+   all) or `.Graphical` (VNC) depending on server/VM state at connect time —
+   not knowable in advance, and Proxmox can flip Text→Graphical *mid-session*
+   (`onSerialConsoleUnavailable`/resize-rejection fallback). The original
+   step 6 wording ("hypervisor console opens a VNC tab") would have silently
+   broken every VM whose console resolves to text mode. User decided
+   (2026-07-22): add a third sealed `Tab` case, `Tab.Console`, rather than
+   force hypervisor consoles into `Tab.Vnc` or leave them permanently on
+   `VMConsoleActivity`. Full source facts recorded for the steps below:
+   - `ConsoleConnection.Text(webSocketClient: ConsoleWebSocketClient)` /
+     `.Graphical(rfbClient: RfbClient, disableResize: Boolean = false)`.
+   - `HypervisorConsoleManager` API: `connectProxmoxConsole(...)` /
+     `connectXCPngConsole(...)` / `connectXenOrchestraConsole(...)` (all
+     `suspend`, take host/port/user/pass/verifySsl/pinnedCertSha256 + type
+     -specific VM id fields + a `ConsoleEventListener`), plus
+     `reconnectGraphicalWithoutResize()`, `wireToTerminal(TermuxBridge)`,
+     `getWebSocketClient()`, `disconnect()`, `isConnected()`.
+   - `ConsoleEventListener`: `onConnected()`, `onDisconnected()`,
+     `onError(String)`, `onSerialConsoleUnavailable()` (default no-op),
+     `onSwitchToGraphical(ConsoleConnection.Graphical)` (default no-op) — the
+     mid-session Text→Graphical fallback fires through the last one.
+   - Graphical→Text is not supported anywhere in either file — one-way only.
+   - Callers and the plain-value data they hold pre-connect (no live session
+     object exists yet at any of these sites, matching `VncTab`'s
+     ephemeral-then-populated `rfbClient` pattern):
+     `ProxmoxManagerActivity.openConsole()` — `vm.{vmid,name,node,type}` +
+     `profile.{host,port,verifySsl,pinnedCertSha256}` + resolved
+     `creds.{username,password,realm ?: "pam"}`.
+     `XCPngManagerActivity.openVMConsole()` — `vm.{uuid,name,ipAddress}` +
+     selected hypervisor `profile` + `isXenOrchestra` (picks
+     `TYPE_XEN_ORCHESTRA` vs `TYPE_XCPNG`) + resolved `creds.{username,
+     password}`. (`EXTRA_IS_XEN_ORCHESTRA` itself is dead — never read by
+     `VMConsoleActivity`; dispatch is by `EXTRA_HYPERVISOR_TYPE` only. Drop
+     it rather than port it.)
+     `MainActivity`'s VNC quick-connect dialog (`chipVnc.isChecked` block,
+     persisted + ephemeral sub-paths) — VNC-only, no hypervisor-type data;
+     already `Tab.Vnc`-shaped, not part of the `Tab.Console` work.
+   - `VncHostsActivity` / `LibvirtManagerActivity` direct-VNC paths are
+     already-`Tab.Vnc`-shaped (always graphical) and are NOT part of the
+     `Tab.Console` work — they migrate straight to `Tab.Vnc` in step 6c.
+6a. **`ConsoleTab` data model** — new class in `io.github.tabssh.ui.tabs`
+    mirroring `VncTab`'s shape (`tabId`, `storeKey`, StateFlows for `title`/
+    `connectionState`/`isActive`, `activate()`/`deactivate()`/`cleanup()`,
+    `getDisplayTitle()`). Carries the hypervisor type + connect params
+    (host/port/creds/verifySsl/pinnedCertSha256 + type-specific VM id
+    fields) needed to defer connection to tab-bind time, plus a nullable
+    live `HypervisorConsoleManager`/`ConsoleConnection` handle and an
+    `isGraphicalMode: StateFlow<Boolean>` (starts `false`, flips permanently
+    to `true` on `onSwitchToGraphical`, never back — matches
+    `VMConsoleActivity`'s one-way behavior). Add `Tab.Console(consoleTab)` to
+    the sealed `Tab` in `Tab.kt` + its `Tab.shortTitle()` branch. No
+    `TabTerminalActivity`/`TabManager`/adapter changes yet — data model only,
+    same discipline as original step 2.
+6b. **`TabManager` + persistence for `Tab.Console`** — add
+    `createConsoleTab(...)` alongside `createVncTab(...)`; sealed-list
+    accessors (`getAllTabsSealed()` etc., already 3rd-kind-ready per step 3)
+    need no structural change, but audit `closeTab`/`switchToTab`/`moveTab`/
+    `cleanup()` for any `is Tab.Vnc`/`is Tab.Ssh` exhaustive `when` that
+    would now fail to compile without a `Tab.Console` branch — Kotlin's
+    exhaustiveness check should surface every one; fix each. `TabManagerListener`
+    stays SSH-only per existing precedent (VNC has no observer wiring either).
+    `saveTabState()` explicitly skips non-`Tab.Ssh` today — decide here
+    whether console tabs get persistence across process death or stay
+    session-only like VNC currently does (VNC has none yet either); default
+    to session-only unless the user asks for persistence, to keep this step
+    additive and small.
+6c. **`TerminalPagerAdapter` — third view type + mode-switching ViewHolder**
+    — add `VIEW_TYPE_CONSOLE`. Needs a `ConsoleViewHolder` that (unlike
+    `VncViewHolder`) can present EITHER a `TerminalView` (text) or `VncView`
+    (graphical) for the same bound tab, and can switch from the former to
+    the latter live if `isGraphicalMode` flips while bound (the Proxmox
+    mid-session fallback) — this is new ground, `TerminalViewHolder`/
+    `VncViewHolder` are each fixed-mode for their whole lifetime. Reuse
+    `VncConsoleChannel` for the graphical path exactly like `VncViewHolder`
+    does. Also migrate `VncHostsActivity`'s and `LibvirtManagerActivity`'s
+    direct-VNC entry points onto `Tab.Vnc` here (see step 6 scope-correction
+    note) — same `getItemViewType()`/adapter machinery already built in step
+    4, no adapter change needed for those two, just caller changes.
+6d. **`TabTerminalActivity` swipe gating for `Tab.Console`** — extend step
+    5's `effectiveEdgePx` check: text-mode console tabs behave like SSH
+    (`tabSwipeEdgePx` unchanged, swipe-from-anywhere stays safe — it's a
+    terminal), graphical-mode console tabs behave like VNC (forced 96dp
+    edge-only, same rationale as step 5). Must re-evaluate live if a bound
+    tab's `isGraphicalMode` flips mid-session.
+6e. **Entry-point consolidation** — `ProxmoxManagerActivity.openConsole()`
+    and `XCPngManagerActivity.openVMConsole()` open/activate a `Tab.Console`
+    inside `TabTerminalActivity` instead of launching `VMConsoleActivity`.
+    `VncHostsActivity` stays the VNC host management (CRUD) screen — same
+    role the SSH connection-profile list plays. Evaluate background-parking
+    parity: `VMConsoleActivity` parks graphical sessions into
+    `VncBackgroundSessionStore` + `VncKeepAliveService` on `onStop`; decide
+    whether `Tab.Console`/`Tab.Vnc` tabs living inside the always-resident
+    `TabTerminalActivity` still need that (likely not — the tab's session
+    already survives backgrounding by staying inside a single long-lived
+    activity — but confirm before dropping it, don't assume).
+6f. **Retire `VMConsoleActivity`** — once every caller (`VncHostsActivity`,
+    `LibvirtManagerActivity`, `ProxmoxManagerActivity`,
+    `XCPngManagerActivity`, `MainActivity`'s VNC quick-connect) is migrated
+    (grep every `startActivity(...VMConsoleActivity...)` call site to
+    confirm zero remain), delete `VMConsoleActivity.kt`, its layout
+    (`activity_vm_console.xml`), and its `<activity>` entry in
+    `AndroidManifest.xml`. `VncStreamHolder` retires with it if nothing else
+    references it after the libvirt migration in 6c — grep first.
+7. **Cleanup** — remove now-dead `VMConsoleActivity`-only code paths
+   (anything step 6f didn't already delete); update AI.md §11.7.2 from "in
+   progress" to shipped, including the `Tab.Console` addition; update this
+   section to ✅.
 
-Dependency order above is required: 3 needs 2, 4 needs 2+3, 5 needs 4, 6 needs
-2–5 all working. Do not reorder or parallelize across agents/commits.
+Dependency order above is required: 3 needs 2, 4 needs 2+3, 5 needs 4, 6a
+needs 2-5 all working, 6b needs 6a, 6c needs 6b, 6d needs 6c, 6e needs 6c+6d,
+6f needs 6e, 7 needs 6f. Do not reorder or parallelize across agents/commits.
 
 ## ✅ Recently Shipped
 
