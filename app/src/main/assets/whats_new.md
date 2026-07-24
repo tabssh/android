@@ -1,5 +1,17 @@
 # What's New
 
+## Wave 65 — Tab swiping works again
+
+- **Fixed tab swiping breaking after touching the middle of the
+  terminal** — a single tap outside the swipe edge zone could kill
+  swiping between tabs entirely until you left the terminal screen.
+  Swiping now works reliably from anywhere along the full height of
+  the edge strip you configured in Settings, every time.
+- **The swipe-edge setting now also applies when "swipe between
+  tabs" is off** — the quick-fling tab switch in single-terminal
+  mode previously ignored your configured edge width; it now uses
+  it, and "Anywhere on tab" lets you fling from anywhere.
+
 ## Wave 64 — VM consoles and VNC quick-connect now open as tabs
 
 - **Proxmox, XCP-ng, and libvirt VM consoles now open as swipeable

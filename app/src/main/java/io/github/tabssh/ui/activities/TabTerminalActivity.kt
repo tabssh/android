@@ -146,9 +146,10 @@ class TabTerminalActivity : AppCompatActivity() {
     // regardless of where the finger goes down (see edge-zone listener).
     private var swipeSuspendedForSelection: Boolean = false
     // Per-gesture state for the edge-zone reject feedback (haptic + glow) in
-    // attachEdgeSwipeGate() — a mid-screen swipe that gets rejected by the
+    // applyEdgeSwipeGate() — a mid-screen swipe that gets rejected by the
     // edge-zone check otherwise fails completely silently, which reads as
-    // "broken" rather than "by design". Reset on every ACTION_DOWN.
+    // "broken" rather than "by design". Down coords are raw (screen-space)
+    // because the gate runs in dispatchTouchEvent. Reset on every ACTION_DOWN.
     private var edgeGateDownX: Float = 0f
     private var edgeGateDownY: Float = 0f
     private var edgeGateRejectedForGesture: Boolean = false
@@ -840,106 +841,117 @@ class TabTerminalActivity : AppCompatActivity() {
         })
     }
     
-    // Install the edge-zone gate on the ViewPager2's inner RecyclerView.
-    // Runs once, right after the adapter is first assigned. See the call
-    // site and tabSwipeEdgePx for the rationale.
-    private fun attachEdgeSwipeGate() {
+    // Edge-zone swipe gate — evaluated at Activity dispatch level so it sees
+    // EVERY touch event unconditionally. The previous implementation was a
+    // RecyclerView.OnItemTouchListener on ViewPager2's inner RecyclerView,
+    // but ViewPager2's RecyclerViewImpl.onInterceptTouchEvent short-circuits
+    // as `isAllowedToScroll() && super.onInterceptTouchEvent(ev)` — so the
+    // instant the gate set isUserInputEnabled=false on a mid-screen
+    // ACTION_DOWN, the listener stopped receiving events entirely (including
+    // the ACTION_UP that was supposed to reset the flag) and tab swiping
+    // stayed permanently dead after the first mid-screen touch.
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        applyEdgeSwipeGate(ev)
+        return super.dispatchTouchEvent(ev)
+    }
+
+    // Per-gesture gate: on ACTION_DOWN decide whether THIS gesture may swipe
+    // tabs — allowed when the finger goes down anywhere along the full height
+    // of the left/right edge strip (strip width = tabSwipeEdgePx from the
+    // tab_swipe_edge_dp preference; 0 = swipe from anywhere) — then toggle
+    // ViewPager2.isUserInputEnabled accordingly and reset it on UP/CANCEL.
+    private fun applyEdgeSwipeGate(ev: android.view.MotionEvent) {
         val pager = viewPager ?: return
-        val rv = pager.getChildAt(0) as? androidx.recyclerview.widget.RecyclerView ?: return
-        rv.addOnItemTouchListener(object : androidx.recyclerview.widget.RecyclerView.OnItemTouchListener {
-            override fun onInterceptTouchEvent(
-                recycler: androidx.recyclerview.widget.RecyclerView,
-                e: android.view.MotionEvent
-            ): Boolean {
-                when (e.actionMasked) {
-                    android.view.MotionEvent.ACTION_DOWN -> {
-                        // VNC's pointer-forwarding touch model needs the same
-                        // carve-out SSH text-selection already has: every touch
-                        // inside a VNC page is potentially a remote click/drag,
-                        // never a page-turn gesture, so it must never be eaten
-                        // by a mid-page swipe — even when the SSH "swipe from
-                        // anywhere" preference (tab_swipe_edge_dp = 0) is
-                        // active. Force the same 96dp default edge-only width
-                        // used elsewhere in this method for VNC tabs (and
-                        // graphical-mode hypervisor console tabs — step 6d);
-                        // SSH tabs, and text-mode console tabs, keep the
-                        // user's configured tabSwipeEdgePx (including 0)
-                        // unchanged. ConsoleTab.isGraphicalMode is read fresh
-                        // on every ACTION_DOWN (not cached), so a mode flip
-                        // mid-session (text console → graphical, or back) is
-                        // picked up by the very next touch.
-                        val activeTab = tabManager.getActiveTabSealed()
-                        val forceEdgeOnly = when (activeTab) {
-                            is Tab.Vnc -> true
-                            is Tab.Console -> activeTab.consoleTab.isGraphicalMode.value
-                            else -> false
-                        }
-                        val effectiveEdgePx = if (forceEdgeOnly && tabSwipeEdgePx <= 0) {
-                            (96 * resources.displayMetrics.density).toInt()
-                        } else {
-                            tabSwipeEdgePx
-                        }
-                        val rejectedByEdgeZone = !swipeSuspendedForSelection &&
-                            effectiveEdgePx > 0 &&
-                            run {
-                                val w = recycler.width
-                                !(e.x <= effectiveEdgePx || e.x >= w - effectiveEdgePx)
-                            }
-                        val allowed = when {
-                            swipeSuspendedForSelection -> false
-                            effectiveEdgePx <= 0 -> true
-                            else -> !rejectedByEdgeZone
-                        }
-                        viewPager?.isUserInputEnabled = allowed
-                        edgeGateDownX = e.x
-                        edgeGateDownY = e.y
-                        edgeGateRejectedForGesture = rejectedByEdgeZone
-                        edgeGateFeedbackFiredForGesture = false
-                        Logger.d("TabTerminalActivity", "edgeSwipeGate ACTION_DOWN — swipeSuspendedForSelection=$swipeSuspendedForSelection, isUserInputEnabled=$allowed")
-                    }
-                    android.view.MotionEvent.ACTION_MOVE -> {
-                        // Fire the reject-feedback cue at most once per gesture,
-                        // and only once the touch has actually become a real
-                        // horizontal drag (not a tap or a vertical scroll) —
-                        // otherwise every rejected tap would glow needlessly.
-                        if (edgeGateRejectedForGesture && !edgeGateFeedbackFiredForGesture) {
-                            val dx = e.x - edgeGateDownX
-                            val dy = e.y - edgeGateDownY
-                            val touchSlop = android.view.ViewConfiguration.get(this@TabTerminalActivity).scaledTouchSlop
-                            if (kotlin.math.abs(dx) > touchSlop && kotlin.math.abs(dx) > kotlin.math.abs(dy)) {
-                                edgeGateFeedbackFiredForGesture = true
-                                showSwipeEdgeRejectionFeedback(edgeGateDownX, recycler.width)
-                            }
-                        }
-                    }
-                    android.view.MotionEvent.ACTION_UP,
-                    android.view.MotionEvent.ACTION_CANCEL -> {
-                        // Reset to enabled so programmatic paging and the next
-                        // gesture's own DOWN check start from a known state —
-                        // unless a text selection is actively suspending swipe.
-                        if (!swipeSuspendedForSelection) {
-                            viewPager?.isUserInputEnabled = true
-                        } else {
-                            Logger.d("TabTerminalActivity", "edgeSwipeGate ACTION_UP/CANCEL — swipe stays suspended (selection active)")
-                        }
+        if (!swipeEnabled || pager.visibility != View.VISIBLE) return
+        when (ev.actionMasked) {
+            android.view.MotionEvent.ACTION_DOWN -> {
+                // Activity-dispatch coordinates are window-relative; convert
+                // to pager-local via the pager's on-screen position so the
+                // edge math is exact regardless of toolbar/tab-bar height.
+                val loc = IntArray(2)
+                pager.getLocationOnScreen(loc)
+                val x = ev.rawX - loc[0]
+                val y = ev.rawY - loc[1]
+                val insidePager = x >= 0f && x <= pager.width && y >= 0f && y <= pager.height
+                // VNC's pointer-forwarding touch model needs the same
+                // carve-out SSH text-selection already has: every touch
+                // inside a VNC page is potentially a remote click/drag,
+                // never a page-turn gesture, so it must never be eaten
+                // by a mid-page swipe — even when the SSH "swipe from
+                // anywhere" preference (tab_swipe_edge_dp = 0) is
+                // active. Force the same 96dp default edge-only width
+                // used elsewhere for VNC tabs (and graphical-mode
+                // hypervisor console tabs — step 6d); SSH tabs, and
+                // text-mode console tabs, keep the user's configured
+                // tabSwipeEdgePx (including 0) unchanged.
+                // ConsoleTab.isGraphicalMode is read fresh on every
+                // ACTION_DOWN (not cached), so a mode flip mid-session
+                // (text console → graphical, or back) is picked up by
+                // the very next touch.
+                val activeTab = tabManager.getActiveTabSealed()
+                val forceEdgeOnly = when (activeTab) {
+                    is Tab.Vnc -> true
+                    is Tab.Console -> activeTab.consoleTab.isGraphicalMode.value
+                    else -> false
+                }
+                val effectiveEdgePx = if (forceEdgeOnly && tabSwipeEdgePx <= 0) {
+                    (96 * resources.displayMetrics.density).toInt()
+                } else {
+                    tabSwipeEdgePx
+                }
+                val rejectedByEdgeZone = insidePager &&
+                    !swipeSuspendedForSelection &&
+                    effectiveEdgePx > 0 &&
+                    !(x <= effectiveEdgePx || x >= pager.width - effectiveEdgePx)
+                val allowed = when {
+                    swipeSuspendedForSelection -> false
+                    // Touch began outside the pager (toolbar, tab bar, key
+                    // bar) — the pager never sees this gesture, so leave
+                    // input enabled and start the next gesture clean.
+                    !insidePager -> true
+                    effectiveEdgePx <= 0 -> true
+                    else -> !rejectedByEdgeZone
+                }
+                pager.isUserInputEnabled = allowed
+                edgeGateDownX = ev.rawX
+                edgeGateDownY = ev.rawY
+                edgeGateRejectedForGesture = rejectedByEdgeZone
+                edgeGateFeedbackFiredForGesture = false
+                Logger.d("TabTerminalActivity", "edgeSwipeGate ACTION_DOWN — swipeSuspendedForSelection=$swipeSuspendedForSelection, isUserInputEnabled=$allowed")
+            }
+            android.view.MotionEvent.ACTION_MOVE -> {
+                // Fire the reject-feedback cue at most once per gesture,
+                // and only once the touch has actually become a real
+                // horizontal drag (not a tap or a vertical scroll) —
+                // otherwise every rejected tap would glow needlessly.
+                if (edgeGateRejectedForGesture && !edgeGateFeedbackFiredForGesture) {
+                    val dx = ev.rawX - edgeGateDownX
+                    val dy = ev.rawY - edgeGateDownY
+                    val touchSlop = android.view.ViewConfiguration.get(this).scaledTouchSlop
+                    if (kotlin.math.abs(dx) > touchSlop && kotlin.math.abs(dx) > kotlin.math.abs(dy)) {
+                        edgeGateFeedbackFiredForGesture = true
+                        val loc = IntArray(2)
+                        pager.getLocationOnScreen(loc)
+                        showSwipeEdgeRejectionFeedback(edgeGateDownX - loc[0], pager.width)
                     }
                 }
-                // Never consume — this listener only gates, RecyclerView still
-                // handles the event normally.
-                return false
             }
-
-            override fun onTouchEvent(
-                recycler: androidx.recyclerview.widget.RecyclerView,
-                e: android.view.MotionEvent
-            ) {}
-
-            override fun onRequestDisallowInterceptTouchEvent(disallow: Boolean) {}
-        })
+            android.view.MotionEvent.ACTION_UP,
+            android.view.MotionEvent.ACTION_CANCEL -> {
+                // Reset to enabled so programmatic paging and the next
+                // gesture's own DOWN check start from a known state —
+                // unless a text selection is actively suspending swipe.
+                if (!swipeSuspendedForSelection) {
+                    pager.isUserInputEnabled = true
+                } else {
+                    Logger.d("TabTerminalActivity", "edgeSwipeGate ACTION_UP/CANCEL — swipe stays suspended (selection active)")
+                }
+            }
+        }
     }
 
     // Haptic tick + a brief alpha-fade glow at the screen edge nearer the
-    // rejected touch — fired once per gesture from attachEdgeSwipeGate() when
+    // rejected touch — fired once per gesture from applyEdgeSwipeGate() when
     // a mid-screen swipe is genuinely rejected by the edge-zone check (never
     // for selection-suspended swipes, which are a separate, intentional
     // state). Without this cue the rejection is silent and indistinguishable
@@ -1042,7 +1054,10 @@ class TabTerminalActivity : AppCompatActivity() {
                 // Issue #168 — edge-swipe tab switching. Acts as a backup
                 // path for users who turned off ViewPager2 swipe-mode and
                 // would otherwise have no touch gesture for tab switching.
+                // Honors the same tab_swipe_edge_dp preference as pager
+                // mode (0 = fling from anywhere along the terminal).
                 // Direction: -1 = previous tab, +1 = next tab.
+                edgeSwipeDp = edgeDp
                 onEdgeSwipe = { direction ->
                     val count = tabManager.getTabCount()
                     if (count > 1) {
@@ -2341,13 +2356,8 @@ class TabTerminalActivity : AppCompatActivity() {
             isUpdatingAdapter = true
             viewPager?.adapter = pagerAdapter
 
-            // Edge-zone swipe gate. ViewPager2 wraps a RecyclerView; an
-            // OnItemTouchListener sees each gesture's ACTION_DOWN before the
-            // pager's own drag detection runs, so toggling isUserInputEnabled
-            // there decides — per gesture — whether this swipe is allowed to
-            // switch tabs. Only gestures that start within tabSwipeEdgePx of a
-            // side edge are; middle touches fall through to the terminal.
-            attachEdgeSwipeGate()
+            // Edge-zone swipe gating is handled by the dispatchTouchEvent
+            // override (applyEdgeSwipeGate) — nothing to install on the pager.
 
             // Jump to the tab that was active before this activity was created.
             val activeIdx = tabManager.getActiveTabIndex().coerceIn(0, (allTabs.size - 1).coerceAtLeast(0))

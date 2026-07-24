@@ -197,15 +197,19 @@ class TerminalView @JvmOverloads constructor(
     var onCommandSent: ((ByteArray) -> Unit)? = null
 
     // Issue #168 — edge-swipe callback. Fires when a single-finger fling
-    // starts within EDGE_SWIPE_DP (24dp — matches system back-gesture
-    // inset) of the left or right edge AND the dominant axis is
-    // horizontal AND the swipe heads back into the viewport. We react
-    // to a fling (not a static drag), so the system back gesture wins
-    // on slow pulls and ours wins on quick flicks. Direction:
+    // starts within edgeSwipeDp of the left or right edge AND the
+    // dominant axis is horizontal AND the swipe heads back into the
+    // viewport. We react to a fling (not a static drag), so the system
+    // back gesture wins on slow pulls and ours wins on quick flicks.
+    // Direction:
     //   -1 = previous tab (swipe right from left edge),
     //   +1 = next tab     (swipe left  from right edge).
     var onEdgeSwipe: ((direction: Int) -> Unit)? = null
-    private val edgeSwipeDp = 24
+    // Edge-strip width in dp for the fling above. Set by the host from the
+    // tab_swipe_edge_dp preference (single-TerminalView mode); 0 = fling
+    // from anywhere on the terminal, direction taken from the fling sign.
+    // Default 24 matches the old hardcoded system back-gesture inset.
+    var edgeSwipeDp = 24
 
     // ─────────────────────────────────────────────────────────────────
     // Drag-to-select range copy (issue #73)
@@ -2274,18 +2278,30 @@ class TerminalView @JvmOverloads constructor(
             // Issue #168 — edge swipes for tab switching. Detect BEFORE
             // the vertical-fling scrollback handler so a horizontal edge
             // swipe doesn't bounce the scrollback.
+            // Skip while text selection is active — a fast selection drag must
+            // never turn into a tab switch (mirrors the pager-mode
+            // swipeSuspendedForSelection suspend).
             val down = e1
-            if (down != null && Math.abs(velocityX) > Math.abs(velocityY) * 1.5) {
+            val edgeCb = onEdgeSwipe
+            if (down != null && edgeCb != null && !selectionActive &&
+                Math.abs(velocityX) > Math.abs(velocityY) * 1.5
+            ) {
+                if (edgeSwipeDp <= 0) {
+                    // tab_swipe_edge_dp = 0 — fling from anywhere; direction
+                    // follows the fling: rightward = previous, leftward = next.
+                    edgeCb(if (velocityX > 0) -1 else +1)
+                    return true
+                }
                 val edgePx = edgeSwipeDp * resources.displayMetrics.density
                 val w = width
                 val onLeftEdge = down.x < edgePx
                 val onRightEdge = down.x > w - edgePx
                 if (onLeftEdge && velocityX > 0) {
-                    onEdgeSwipe?.invoke(-1)
+                    edgeCb(-1)
                     return true
                 }
                 if (onRightEdge && velocityX < 0) {
-                    onEdgeSwipe?.invoke(+1)
+                    edgeCb(+1)
                     return true
                 }
             }
