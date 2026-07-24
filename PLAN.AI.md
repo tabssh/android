@@ -67,14 +67,14 @@ Numbers reflect execution order. A task is "ready" only when all of its prerequi
 
 8. **NDK + libspice build harness** — add `app/src/main/cpp/` with `CMakeLists.txt` that vendors `spice-protocol` (header-only) + `spice-gtk` (the GLib client). Cross-compile for `arm64-v8a`, `armeabi-v7a`, `x86_64`. Update `app/build.gradle` with `externalNativeBuild { cmake { ... } }`. Decide static vs. shared; prefer static to avoid the multi-`.so` shipping headache. *Files:* new `cpp/CMakeLists.txt`, `cpp/spice_jni.c`, modify `app/build.gradle`, possibly new `docker/Dockerfile.ndk` for reproducible builds.
 9. **SPICE JNI client** — minimal Kotlin facade `hypervisor/console/spice/SpiceClient.kt` mirroring `RfbClient`'s shape (`connect/disconnect/onConnected/onFramebufferUpdate/sendPointerEvent/sendKeyEvent`). Channels wired: main, display, inputs, cursor. *Files:* new `hypervisor/console/spice/`, JNI glue in `cpp/`.
-10. **SPICE-aware `VncView`** — rename to `RemoteDisplayView` or add a parallel `SpiceView` (same Canvas/Bitmap rendering, different event source). *Files:* `ui/views/`, `ui/activities/VMConsoleActivity.kt`.
+10. **SPICE-aware `VncView`** — rename to `RemoteDisplayView` or add a parallel `SpiceView` (same Canvas/Bitmap rendering, different event source). *Files:* `ui/views/`, `ui/activities/TabTerminalActivity.kt`.
 11. **Proxmox spiceproxy** — call `/nodes/{node}/qemu/{vmid}/spiceproxy`, parse the returned `.vv` config (host, port, ticket, TLS cert), feed to `SpiceClient`. *Files:* `ProxmoxApiClient.kt`.
 12. **libvirt SPICE stream** — `virsh domdisplay <vm>` returns `spice://host:port` for SPICE-configured VMs; tunnel over SSH the same way the VNC path does. *Files:* `LibvirtApiClient.kt`.
 
 ### Autodetect + silent-fallback semantics (final pass)
 
 13. **Hypervisor connector chain** — every connector returns a list of `ConsoleStrategy` candidates ranked by likely-to-work. The manager runs the chain; per-strategy failure emits `Logger.i("strategy X failed: ..."); next`; only the final exhaustion surfaces a UI error. Replaces the current hardcoded "termproxy then vncproxy" pair with a generic ordered chain. *Files:* `HypervisorConsoleManager.kt`, every `*ApiClient.kt`.
-14. **UI: progress vs. error distinction** — replace the current "Reconnecting without resize…" toast pattern with a single progress overlay that reports the active strategy by name (low-key, debug log only unless final). User sees one spinner; the spinner text updates as we fall through. *Files:* `VMConsoleActivity.kt`.
+14. **UI: progress vs. error distinction** — replace the current "Reconnecting without resize…" toast pattern with a single progress overlay that reports the active strategy by name (low-key, debug log only unless final). User sees one spinner; the spinner text updates as we fall through. *Files:* `TabTerminalActivity.kt`.
 
 ## Definition of done
 

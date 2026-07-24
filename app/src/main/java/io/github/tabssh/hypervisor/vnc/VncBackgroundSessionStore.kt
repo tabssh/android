@@ -8,14 +8,16 @@ import java.util.concurrent.ConcurrentHashMap
 /**
  * Process-scoped registry of VNC sessions parked while the app is backgrounded.
  *
- * Direct-VNC ([RfbClient]) sessions are normally owned by VMConsoleActivity and
- * torn down in its onStop/onDestroy. When a VncHost opts into
- * `keepAliveInBackground`, the activity instead hands its live-but-paused
- * [RfbClient] to this singleton on background and reclaims it on return. Because
- * this object lives in the application process (not the activity), the socket
- * and its daemon reader thread survive activity destruction — as long as the
- * process itself is kept alive, which is the job of `VncKeepAliveService`
- * (a foreground service that holds wake/wifi locks while [isEmpty] is false).
+ * Direct-VNC ([RfbClient]) sessions are Application-scoped, owned by `TabManager`
+ * for the lifetime of their tab. When a tab's `VncHost` opts into
+ * `keepAliveInBackground` (or the tab is an ephemeral VNC/console tab, which
+ * always opts in), `TabManager.parkBackgroundSessions()` hands the live-but-paused
+ * [RfbClient] to this singleton in `TabTerminalActivity.onStop()` and reclaims it
+ * in `onResume()`. Because this object lives in the application process (not the
+ * activity), the socket and its daemon reader thread survive activity
+ * destruction — as long as the process itself is kept alive, which is the job of
+ * `VncKeepAliveService` (a foreground service that holds wake/wifi locks while
+ * [isEmpty] is false).
  *
  * The RfbClient must be [RfbClient.pause]d before parking so no framebuffer
  * updates are requested while unattended, and its listener detached so a late
@@ -30,8 +32,10 @@ object VncBackgroundSessionStore {
     /**
      * A VNC session held open in the background.
      *
-     * @property key VncHost id — the same id VMConsoleActivity receives via
-     *   `EXTRA_VNC_HOST_ID`, used to match a returning activity to its session.
+     * @property key The tab's store key (VncHost id for persisted `VncTab`s, or
+     *   the tab's own id for ephemeral `VncTab`s/`ConsoleTab`s), used by
+     *   `TabManager.reclaimBackgroundSessions()` to match a returning tab to
+     *   its parked session.
      * @property vmName Display name, for the keep-alive notification.
      * @property rfbClient The live, paused RFB client (socket + reader thread).
      * @property socket The underlying TCP socket, closed on final teardown.

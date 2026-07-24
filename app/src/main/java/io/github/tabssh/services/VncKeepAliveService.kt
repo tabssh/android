@@ -20,9 +20,10 @@ import io.github.tabssh.utils.logging.Logger
  * Foreground service that keeps the process alive while one or more VNC
  * sessions are parked in [VncBackgroundSessionStore].
  *
- * A direct-VNC [io.github.tabssh.hypervisor.console.rfb.RfbClient] is normally
- * owned by VMConsoleActivity and dies with it. When a VncHost opts into
- * `keepAliveInBackground`, the activity pauses the client, hands it to
+ * A direct-VNC [io.github.tabssh.hypervisor.console.rfb.RfbClient] is
+ * Application-scoped, owned by `TabManager` for the lifetime of its tab. When
+ * a tab opts into background parking, `TabTerminalActivity.onStop()` pauses
+ * the client via `TabManager.parkBackgroundSessions()`, hands it to
  * [VncBackgroundSessionStore], and starts this service so the OS keeps the
  * process (and therefore the socket + reader thread) alive across activity
  * destruction, app-switch, screen-off, and Doze.

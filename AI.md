@@ -218,8 +218,7 @@ Top-level config: `android:name=".TabSSHApplication"`, `android:allowBackup="fal
 | `LogViewerActivity`, `AuditLogViewerActivity` | View app/audit logs | — |
 | `KeyboardCustomizationActivity` | Build custom on-screen keyboard layout | — |
 | `HypervisorEditActivity` | CRUD `HypervisorProfile` | — |
-| `ProxmoxManagerActivity`, `XCPngManagerActivity`, `VMwareManagerActivity`, `OciManagerActivity`, `LibvirtManagerActivity` | Per-hypervisor VM/instance list & actions | hypervisor id |
-| `VMConsoleActivity` | Hypervisor serial / graphical console (no SSH) | hypervisor + VM ids |
+| `ProxmoxManagerActivity`, `XCPngManagerActivity`, `VMwareManagerActivity`, `OciManagerActivity`, `LibvirtManagerActivity` | Per-hypervisor VM/instance list & actions; console launches open a `Tab.Console` in `TabTerminalActivity` | hypervisor id |
 | `WidgetConfigActivity` (package `widget/`) | Configure quick-connect widgets | widget id |
 | `VncHostsActivity`, `VncHostEditActivity` | CRUD VNC hosts (DB v34) and direct-VNC entry | — |
 | `CloudAccountManagerActivity` | Per-cloud-account VM list and connect actions | account id |
@@ -237,7 +236,7 @@ Top-level config: `android:name=".TabSSHApplication"`, `android:allowBackup="fal
 | `ThemeEditorActivity` | Custom theme builder; live WCAG AA/AAA contrast feedback via `ThemeValidator`; imports `Theme` and `BuiltInThemes` for base selection | — |
 | `WhatsNewActivity` | Reads `assets/whats_new.md` and renders in a `WebView`; accessible from Settings / About; **not** shown automatically on upgrade | Wave 3.6 |
 
-`MainActivity` and `TabTerminalActivity` are `singleTop`. All have `parentActivityName` set for back navigation. `VMConsoleActivity` runs fullscreen (no action bar).
+`MainActivity` and `TabTerminalActivity` are `singleTop`. All have `parentActivityName` set for back navigation.
 
 ### 4.4 Fragments (8)
 
@@ -262,7 +261,7 @@ Top-level config: `android:name=".TabSSHApplication"`, `android:allowBackup="fal
 
 **File transfer:** `TabTerminalActivity` menu → `SFTPActivity` (uses the existing SSH session) → upload/download via `SFTPManager`.
 
-**Hypervisor console:** `MainActivity` (Hypervisors tab) → manager activity → VM row → `VMConsoleActivity` → `HypervisorConsoleManager` opens `ConsoleWebSocketClient` and pipes its streams into `TermuxBridge`.
+**Hypervisor console:** `MainActivity` (Hypervisors tab) → manager activity → VM row → `Tab.Console` opened/focused in `TabTerminalActivity` → `HypervisorConsoleManager` opens `ConsoleWebSocketClient` and pipes its streams into `TermuxBridge`.
 
 ### 4.7 Performance monitoring
 
@@ -450,7 +449,7 @@ Wired into `SSHConnection`'s auth path when `ConnectionProfile.protocol == Proto
 - Read loop: an IO-dispatcher coroutine reads the SSH `InputStream` in 8 KB chunks and calls `emulator.append()`.
 - Default term type: `xterm-256color`.
 
-The same bridge is used by `VMConsoleActivity` — a `ConsoleWebSocketClient` exposes piped `InputStream`/`OutputStream` and is wired to `TermuxBridge` via `HypervisorConsoleManager.wireToTerminal()`.
+The same bridge is used by console tabs (`Tab.Console` in `TabTerminalActivity`) — a `ConsoleWebSocketClient` exposes piped `InputStream`/`OutputStream` and is wired to `TermuxBridge` via `HypervisorConsoleManager.wireToTerminal()`.
 
 ### 6.2 `TerminalView` (custom `View`)
 
@@ -1284,7 +1283,7 @@ If a new file triggers a false positive, add a targeted `grep -v` to the chain a
 | `hypervisor.vmware` | `VMwareApiClient`, models |
 | `hypervisor.libvirt` | `LibvirtApiClient` (SSH-tunneled VNC + virsh), `LibvirtVm` |
 | `hypervisor.oci` | `OciApiClient`, `OciSigner`, `OciKeyMaterial`, `OciConfigParser`, `OciInstance` |
-| `hypervisor.vnc` | `VncDirectConnector`, `VncStreamHolder` (direct-VNC entry points + framebuffer holder) |
+| `hypervisor.vnc` | `VncDirectConnector` (direct-VNC entry point), `VncBackgroundSessionStore` (background-parking store) |
 | `performance` | `PerformanceManager`, `MetricsCollector`, charts feeder |
 | `protocols.mosh` | Mosh native client glue (`MoshHandoff`, `MoshNativeClient`, `TermuxMoshLauncher`) — fully wired |
 | `services` | `SSHConnectionService`, `TaskerIntentService` |
