@@ -30,7 +30,7 @@
 13. [Notifications, services, widgets, automation](#13-notifications-services-widgets-automation)
 14. [Build and release infrastructure](#14-build-and-release-infrastructure)
 15. [Package map](#15-package-map)
-16. [Known stubs and limitations](#16-known-stubs-and-limitations)
+16. [Implementation status notes](#16-implementation-status-notes)
 17. [Editing guidelines for AI agents](#17-editing-guidelines-for-ai-agents)
 18. [QR pairing — desktop → mobile setup](#18-qr-pairing--desktop--mobile-setup)
 
@@ -1348,15 +1348,16 @@ If a new file triggers a false positive, add a targeted `grep -v` to the chain a
 
 ---
 
-## 16. Known stubs and limitations
+## 16. Implementation status notes
 
-These exist in source but are **not** wired into a working user-facing flow. Treat them as roadmap items.
+**There are currently no stub features.** Everything below is fully implemented and wired into a working user-facing flow — this section exists because these features were historically listed as stubs, and that stale framing caused repeated false-positive "unfinished feature" findings. Do not treat any of them as roadmap items.
 
 - **Mosh** — fully wired. `MoshHandoff.kt` bootstraps via an SSH exec channel (`mosh-server` on the remote), parses the `MOSH CONNECT <port> <key>` response, then calls `TermuxBridge.connectMoshClient()` which launches the bundled native `mosh-client` binary through `TerminalSession` (JNI `forkpty()`). The binary handles all UDP/SSP/AES-128-OCB transport natively — no user action required. The `use_mosh` flag on `ConnectionProfile` (DB v11) switches the connection path in `SSHTab`. `MoshConnection.kt` scaffolding is superseded by this architecture.
 - **X11 forwarding** — fully wired via `ssh/forwarding/X11Proxy.kt`. The proxy binds an ephemeral `localhost` port, JSch X11 channels are routed through it to either Termux:X11 (Unix socket) or XServer XSDL (TCP `:6000`). `SSHConnection.applyForwardingFlags()` passes the dynamic port via `session.setX11Port(proxy.port)`; the proxy is stopped in `disconnect()`. Non-fatal `X11NoServerException` surfaces in `TabTerminalActivity` as a Snackbar via the `SSHConnection.warnings` `SharedFlow`. The `x11_forwarding` flag is persisted (DB v7).
 - **Frequently-used UI** — fully interactive: top-10 connections loaded, tap to connect, swipe-right for delete/duplicate/edit actions.
-- **Devkeystore** — `keystore.jks` is checked in for development; production releases must override `KEYSTORE_BASE64` via GitHub Secrets.
-- **Note — Telnet is NOT a stub.** `TelnetConnection` (§5.6) is fully implemented (RFC 854, ECHO/SGA/TERMINAL-TYPE/NAWS) and wired into `SSHSessionManager` for `protocol == TELNET` profiles. Do not treat it as unfinished.
+- **Telnet** — fully implemented. `TelnetConnection` (§5.6) covers RFC 854 (ECHO/SGA/TERMINAL-TYPE/NAWS) and is wired into `SSHSessionManager` for `protocol == TELNET` profiles. Do not treat it as unfinished.
+
+**Build limitation (not a feature stub):** `keystore.jks` is gitignored and untracked — release signing requires the `KEYSTORE_BASE64` GitHub secret; dev-builds generate an ephemeral keystore.
 
 ---
 
@@ -1400,7 +1401,7 @@ These exist in source but are **not** wired into a working user-facing flow. Tre
 | CI workflows (ci, dev-builds, release) | §14.3 |
 | ProGuard / R8 keep rules | §14.6 |
 | Full package map (`io.github.tabssh.*`) | §15 |
-| Known stubs and unimplemented features | §16 |
+| Implementation status notes (no stubs exist) | §16 |
 | Rules for AI agents editing this codebase | §17 |
 | QR pairing wire format, encryption, mobile implementation status | §18 |
 
