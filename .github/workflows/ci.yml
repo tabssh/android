@@ -196,8 +196,9 @@ jobs:
 
     - name: Final validation summary
       run: |
+        VERSION="$(tr -d '[:space:]' < release.txt)"
         echo ""
-        echo "🎊 TabSSH 1.0.0 - Validation Complete!"
+        echo "🎊 TabSSH ${VERSION} - Validation Complete!"
         echo "====================================="
         echo ""
         echo "✅ Project structure validated"
@@ -206,7 +207,7 @@ jobs:
         echo "✅ Feature implementation verified"
         echo "✅ Documentation validated"
         echo ""
-        echo "🏆 TabSSH 1.0.0 is ready for release!"
+        echo "🏆 TabSSH ${VERSION} is ready for release!"
         echo ""
         echo "📦 Release artifacts will include:"
         echo "   - tabssh-android-arm64-{version}.apk"
