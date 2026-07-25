@@ -1274,62 +1274,77 @@ If a new file triggers a false positive, add a targeted `grep -v` to the chain a
 | Package (`io.github.tabssh.…`) | Responsibility |
 |---|---|
 | (root) | `TabSSHApplication` |
-| `accessibility` | TalkBack, high contrast, keyboard navigation |
 | `audit` | `AuditLogManager` |
-| `automation` | Tasker plug-in glue |
-| `backup` | `BackupManager`, exporter/importer/validator |
-| `crypto` | SSH key parser/generator |
+| `automation` | Tasker plug-in glue (`TaskerActionReceiver`, `TaskerWorker`) |
+| `background` | `HostAvailabilityWorker`, `MonitoringBootReceiver`, `BatteryOptimizationHelper`, `SessionPersistenceManager` |
+| `backup` | `BackupManager` |
+| `backup.export` / `backup.import` / `backup.validation` | `BackupExporter` / `BackupImporter` / `BackupValidator` |
+| `cloud` | Cloud provider clients (`AwsEc2Client`, `AzureVmClient`, `GcpComputeClient`, `DigitalOceanClient`, `HetznerClient`, `LinodeClient`, `VultrClient`, `OciCloudClient`), `CloudProvider`, `CloudInstanceState` |
+| `cluster` | Cluster-command session fan-out (`ClusterCommandExecutor`) |
+| `crypto` | `SSHKeyParser`, `SSHKeyGenerator` |
+| `crypto.algorithms` | `CryptoUtils` |
 | `crypto.keys` | `KeyStorage`, `KeyType` |
 | `crypto.storage` | `SecurePasswordManager` |
-| `hypervisor.console` | `HypervisorConsoleManager`, `ConsoleWebSocketClient`, `RfbClient` (under `hypervisor.console.rfb`) |
+| `crypto.tls` | Hypervisor TLS TOFU (`HypervisorTrustManagerFactory`, `HypervisorCertPromptDialog`) |
+| `hypervisor.console` | `HypervisorConsoleManager`, `ConsoleWebSocketClient`; `RfbClient` under `hypervisor.console.rfb` |
+| `hypervisor.spice` | SPICE console client (`SpiceClient`, `SpiceConnectionParams`, `SpiceKeyMap`, `SpiceLoader`, listeners) |
 | `hypervisor.proxmox` | `ProxmoxApiClient`, models |
 | `hypervisor.xcpng` | `XCPngApiClient`, `XenOrchestraApiClient`, models |
 | `hypervisor.vmware` | `VMwareApiClient`, models |
 | `hypervisor.libvirt` | `LibvirtApiClient` (SSH-tunneled VNC + virsh), `LibvirtVm` |
 | `hypervisor.oci` | `OciApiClient`, `OciSigner`, `OciKeyMaterial`, `OciConfigParser`, `OciInstance` |
 | `hypervisor.vnc` | `VncDirectConnector` (direct-VNC entry point), `VncBackgroundSessionStore` (background-parking store) |
-| `performance` | `PerformanceManager`, `MetricsCollector`, charts feeder |
+| `hypervisor.vnc.console` | `VncConsoleChannel` |
+| `network` | `NetworkAwareReconnector`, `ConnectionDiagnostic` |
+| `network.detection` | `NetworkDetector` |
+| `network.portknock` | `PortKnocker` |
+| `pairing` | QR pairing inbound (`QrPayloadCodec`, `PairingDecryptor`, `PairingImporter`, `PairingPayload`) |
+| `performance` | `MetricsCollector`, `PerformanceModels` |
 | `protocols.mosh` | Mosh native client glue (`MoshHandoff`, `MoshNativeClient`, `TermuxMoshLauncher`) — fully wired |
-| `services` | `SSHConnectionService`, `TaskerIntentService` |
-| `sftp` | `SFTPManager`, `TransferTask` |
+| `services` | `SSHConnectionService`, `VncKeepAliveService` |
+| `sftp` | `SFTPManager`, `SCPClient`, `TransferTask` |
+| `ssh` | `HistoryFetcher` |
+| `ssh.auth` | Auth type definitions (`AuthType` enum) |
 | `ssh.config` | `SSHConfigParser` |
 | `ssh.connection` | `SSHConnection`, `HostKeyVerifier`, `SSHSessionManager` and listeners, `TelnetConnection` (RFC 854; fully implemented — not a stub) |
 | `ssh.forwarding` | `PortForwardingManager`, `X11Proxy`, `HttpPortProbe` |
-| `ssh.auth` | Auth type definitions (`AuthType` enum) |
 | `storage.database` | `TabSSHDatabase` |
-| `storage.database.dao` | DAOs |
-| `storage.database.entities` | Room entities |
-| `storage.files` | `FileManager` |
+| `storage.database.dao` | DAOs (21) |
+| `storage.database.entities` | Room entities (21) |
 | `storage.preferences` | `PreferenceManager` |
 | `sync` | `SAFSyncManager` |
-| `sync.encryption` | `SyncEncryptor` |
 | `sync.data` | `SyncDataCollector`, `SyncDataApplier` |
+| `sync.encryption` | `SyncEncryptor` |
 | `sync.merge` | `MergeEngine` (3-way merge), `ConflictResolver` (apply user decisions) |
 | `sync.metadata` | `SyncMetadataManager` (device id, version, timestamps) |
 | `sync.models` | `SyncDataPackage`, `SyncMetadata`, `SyncResult`, `Conflict`, `ConflictResolution`, `MergeResult`, `DeviceInfo`, `SyncItemCounts`, etc. |
 | `sync.observer` | `DatabaseChangeObserver` (debounced sync-on-change) |
+| `sync.tombstone` | `TombstoneRecorder` (explicit-delete tombstoning for sync) |
 | `sync.worker` | `SyncWorker`, `SyncWorkScheduler` |
-| `terminal` | `TermuxBridge`, `TerminalManager`, `SessionRecorder`, `TranscriptManager` |
-| `terminal.emulator` | `ANSIParser`, `TerminalBuffer`, `TerminalRenderer` (legacy/secondary path) |
-| `themes` | `Theme`, `ThemeManager`, `ThemeParser`, `ThemeValidator`, `BuiltInThemes` |
-| `cloud` | `CloudAccountsActivity`, cloud provider clients (Aws/Azure/Gcp/DigitalOcean/Hetzner/Linode/Vultr) |
-| `ui.activities` | 36 activities (one additional, `WidgetConfigActivity`, lives in the root `widget/` package) |
+| `terminal` | `TermuxBridge` |
+| `terminal.emulator` | `ANSIParser`, `TerminalBuffer`, `TerminalEmulator`, `TerminalManager` |
+| `terminal.gestures` | `TerminalGestureHandler`, `GestureCommandMapper`, `PrefixParser` |
+| `terminal.recording` | `SessionRecorder`, `TranscriptManager` |
+| `terminal.renderer` | `TerminalRenderer` (legacy/secondary path) |
+| `terminal.search` | `ScrollbackSearchController` (find-in-scrollback) |
+| `themes.definitions` | `Theme`, `ThemeManager`, `BuiltInThemes` |
+| `themes.parser` | `ThemeParser` |
+| `themes.validator` | `ThemeValidator` |
+| `ui.activities` | 35 activities (one additional, `WidgetConfigActivity`, lives in the root `widget/` package) |
 | `ui.adapters` | RecyclerView adapters |
 | `ui.dialogs` | Reusable dialog builders / fragments |
 | `ui.fragments` | Fragments (8) |
 | `ui.keyboard` | Custom on-screen keyboard widgets |
 | `ui.models` | UI-only view-model state classes |
 | `ui.tabs` | `TabManager`, `SSHTab` |
-| `ui.utils` | UI-scoped helpers |
+| `ui.utils` | UI-scoped helpers (`ConnectionLauncher`, `ConnectionListBuilder`, `DialogUtils`, `UIHelper`) |
 | `ui.views` | `TerminalView`, `PerformanceOverlayView` |
-| `ui.widget` | UI widget helpers (note: app-widget receivers live in the root `widget/` package) |
-| `utils` | `Logger`, `NotificationHelper`, `DialogUtils`, `ClipboardHelper`, `ActivityExtensions`, `FontManager`, `AnrWatchdog`, `ValidationHelper`, helpers |
+| `utils` | `ClipboardHelper`, `NotificationHelper`, `FontManager`, `ActivityExtensions`, `RecyclerViewExt` |
+| `utils.diagnostics` | `AnrWatchdog` |
+| `utils.logging` | `Logger` |
+| `utils.paste` | `PasteProvider` (MicroBin paste upload) |
+| `utils.performance` | `PerformanceManager` |
 | `widget` | `ConnectionWidgetProvider` (+ inner-class size variants) and `WidgetConfigActivity` |
-| `background` | `HostAvailabilityWorker`, `MonitoringBootReceiver`, `BatteryOptimizationHelper`, `SessionPersistenceManager` |
-| `cluster` | Cluster-command session fan-out (`ClusterCommandActivity` backend) |
-| `network` | Low-level networking helpers used by hypervisor/SSH layers |
-| `pairing` | QR pairing inbound (camera, decode, decrypt, import) |
-| `platform` | Android platform-version shims |
 
 ---
 
