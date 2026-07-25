@@ -80,7 +80,7 @@
 ┌────▼────┐  ┌──────────▼─────────┐  ┌────▼──────────────┐
 │ SSH     │  │ Terminal           │  │ Storage           │
 │ ssh/*   │  │ terminal/*         │  │ storage/database/ │
-│ JSch    │  │ TermuxBridge →     │  │ Room (v17)        │
+│ JSch    │  │ TermuxBridge →     │  │ Room (v6)         │
 │ 2.27.7  │  │ Termux emulator    │  │ 17 entities       │
 └────┬────┘  └──────────┬─────────┘  └────┬──────────────┘
      │                  │                  │
@@ -593,7 +593,9 @@ If the Keystore is unavailable (e.g. broken ROM), the manager auto-degrades to `
 
 ### 8.1 Room database
 
-`storage/database/TabSSHDatabase.kt` — **version 37**, schema exported to `app/schemas/`.
+`storage/database/TabSSHDatabase.kt` — **version 6**, schema exported to `app/schemas/` (`3.json`–`6.json`).
+
+Version numbering was deliberately **reset to 3** by commit `0bd35d42` — the v3 release was the intentional last destructive wipe, and every installed build since starts from the v3 baseline. Registered migrations: `MIGRATION_3_4` (adds `vnc_hosts.keep_alive_in_background`), `MIGRATION_4_5` (sync tombstone/shadow tables), `MIGRATION_5_6` (VNC-tab session fields). `fallbackToDestructiveMigrationFrom(1, 2)` covers only pre-reset versions that never shipped with persisted user data. Historical `vNN` references above 6 elsewhere in this document (v7, v11, v27, v33, v33→34) refer to the **pre-reset numbering** and describe when a column/table was introduced historically, not the current chain.
 
 ### 8.2 Entities (19)
 
