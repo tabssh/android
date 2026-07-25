@@ -81,7 +81,7 @@
 │ SSH     │  │ Terminal           │  │ Storage           │
 │ ssh/*   │  │ terminal/*         │  │ storage/database/ │
 │ JSch    │  │ TermuxBridge →     │  │ Room (v6)         │
-│ 2.27.7  │  │ Termux emulator    │  │ 17 entities       │
+│ 2.27.7  │  │ Termux emulator    │  │ 21 entities       │
 └────┬────┘  └──────────┬─────────┘  └────┬──────────────┘
      │                  │                  │
 ┌────▼──────────────────▼──────────────────▼─────────────────┐
@@ -597,7 +597,7 @@ If the Keystore is unavailable (e.g. broken ROM), the manager auto-degrades to `
 
 Version numbering was deliberately **reset to 3** by commit `0bd35d42` — the v3 release was the intentional last destructive wipe, and every installed build since starts from the v3 baseline. Registered migrations: `MIGRATION_3_4` (adds `vnc_hosts.keep_alive_in_background`), `MIGRATION_4_5` (sync tombstone/shadow tables), `MIGRATION_5_6` (VNC-tab session fields). `fallbackToDestructiveMigrationFrom(1, 2)` covers only pre-reset versions that never shipped with persisted user data. Historical `vNN` references above 6 elsewhere in this document (v7, v11, v27, v33, v33→34) refer to the **pre-reset numbering** and describe when a column/table was introduced historically, not the current chain.
 
-### 8.2 Entities (19)
+### 8.2 Entities (21)
 
 | Entity | Table | Notable fields | File |
 |---|---|---|---|
@@ -620,10 +620,12 @@ Version numbering was deliberately **reset to 3** by commit `0bd35d42` — the v
 | `MonitorSlot` | `monitor_slots` | per-host background monitoring config + state: `enabled`, `alertOnDown/Recovery`, `cpuThreshold`, `memoryThreshold`, `diskThreshold`, `loadThreshold`, `enablePerformanceChecks`, `checkIntervalMinutes`, `alertCooldownMinutes`, `isCurrentlyDown`, `consecutiveFailures`, `lastCheckedAt`, `lastSeenUp`, `lastNotifiedDownAt` | `entities/MonitorSlot.kt` |
 | `VncHost` | `vnc_hosts` | UUID `id`, `name`, `host`, `port`, `identityId`, color tag, sync metadata (added v33→34) | `entities/VncHost.kt` |
 | `VncIdentity` | `vnc_identities` | UUID `id`, `name`; password stored in `SecurePasswordManager` under `vnc_identity_${id}` — never in DB (added v33→34) | `entities/VncIdentity.kt` |
+| `SyncTombstone` | `sync_tombstones` | (`entityType`, `entityKey`) PK, `deletedAt`, `deviceId` — records explicit deletes so sync can propagate them (added v4→5) | `entities/SyncTombstone.kt` |
+| `SyncShadow` | `sync_shadow` | (`entityType`, `entityKey`) PK — snapshot of live keys after the last successful sync; vanished keys are auto-tombstoned at collect. Local bookkeeping only, never travels in the sync payload (added v4→5) | `entities/SyncShadow.kt` |
 
 ### 8.3 DAOs
 
-Fifteen DAOs in `storage/database/dao/`. Notable queries:
+Twenty-one DAOs in `storage/database/dao/`. Notable queries:
 - `ConnectionDao`: `getAllConnections()` (Flow), `getRecentConnections(limit)`, `getFrequentlyUsedConnections(limit)` (used by Frequent tab), `getUngroupedConnections()`, `searchConnections()`, `updateLastConnected()` (auto-increments connection count).
 - `HypervisorDao`: `getAllHypervisors()` (Flow), `getByType()`, `updateLastConnected()`.
 - `AuditLogDao`: range queries by date, by connection, by session; cleanup queries.
@@ -1368,7 +1370,7 @@ These exist in source but are **not** wired into a working user-facing flow. Tre
 | Password storage levels, biometric unlock, TTL | §7.4 |
 | Screenshot protection, clipboard auto-clear, password lifecycle | §7.5 |
 | Room database version, full migration chain | §8.1–8.4 |
-| All 19 entities and their notable fields | §8.2 |
+| All 21 entities and their notable fields | §8.2 |
 | Preference keys and defaults by category | §8.6 |
 | SAF sync wire format, encryption, 3-way merge, conflict resolution | §9 |
 | Sync coverage matrix (what syncs, what doesn't, and why) | §9.4 |
