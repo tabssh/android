@@ -222,7 +222,7 @@ class SSHConnection(
      * [NetworkAwareReconnector.onUserInitiated] is called first to cancel
      * any pending backoff timer so the user is never blocked.
      */
-    suspend fun connect(): Boolean = withContext(Dispatchers.IO) {
+    suspend fun connect(): Boolean = withContext(connectDispatcher) {
         // If this is a direct user-driven call (not from the reconnector),
         // cancel any pending retry timer so we connect immediately.
         reconnector?.onUserInitiated()
@@ -242,7 +242,7 @@ class SSHConnection(
         }
 
         connectJob?.cancel()
-        connectJob = scope.launch(Dispatchers.IO) {
+        connectJob = scope.launch(connectDispatcher) {
             try {
                 _connectionState.value = ConnectionState.CONNECTING
                 _errorMessage.value = null
@@ -808,6 +808,18 @@ class SSHConnection(
         // per-host, it lands as columns on ConnectionProfile + a UI field.
         const val X11_DEFAULT_HOST = "localhost"
         const val X11_DEFAULT_PORT = 6000
+
+        // Audit O8 — bulk-reconnect thread usage. Each connection used to
+        // launch its blocking JSch handshake straight on Dispatchers.IO, so
+        // a bulk reconnect of N tabs occupied N IO threads at once (the IO
+        // pool grows to 64), starving every other IO consumer (see the
+        // hostKeyDbDispatcher note in HostKeyVerifier for the DB casualty).
+        // This shared app-wide view caps concurrent handshakes at 8 while
+        // reusing the IO pool's threads — no new threads are created, and
+        // disconnect/exec/SFTP stay on plain Dispatchers.IO so they never
+        // queue behind a burst of slow handshakes.
+        @OptIn(ExperimentalCoroutinesApi::class)
+        val connectDispatcher = Dispatchers.IO.limitedParallelism(8)
     }
 
     /**
