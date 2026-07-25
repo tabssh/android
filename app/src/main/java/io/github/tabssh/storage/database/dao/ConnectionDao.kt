@@ -1,6 +1,5 @@
 package io.github.tabssh.storage.database.dao
 
-import androidx.lifecycle.LiveData
 import androidx.room.*
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import kotlinx.coroutines.flow.Flow
@@ -13,10 +12,7 @@ interface ConnectionDao {
     
     @Query("SELECT * FROM connections ORDER BY sort_order, name")
     fun getAllConnections(): Flow<List<ConnectionProfile>>
-    
-    @Query("SELECT * FROM connections ORDER BY sort_order, name")
-    fun getAllConnectionsLiveData(): LiveData<List<ConnectionProfile>>
-    
+
     @Query("SELECT * FROM connections WHERE name = :name LIMIT 1")
     suspend fun getByName(name: String): ConnectionProfile?
 

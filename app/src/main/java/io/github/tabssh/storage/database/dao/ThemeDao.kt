@@ -1,6 +1,5 @@
 package io.github.tabssh.storage.database.dao
 
-import androidx.lifecycle.LiveData
 import androidx.room.*
 import io.github.tabssh.storage.database.entities.ThemeDefinition
 import kotlinx.coroutines.flow.Flow
@@ -13,10 +12,7 @@ interface ThemeDao {
     
     @Query("SELECT * FROM themes ORDER BY is_built_in DESC, name")
     fun getAllThemes(): Flow<List<ThemeDefinition>>
-    
-    @Query("SELECT * FROM themes ORDER BY is_built_in DESC, name")
-    fun getAllThemesLiveData(): LiveData<List<ThemeDefinition>>
-    
+
     @Query("SELECT * FROM themes WHERE themeId = :themeId")
     suspend fun getThemeById(themeId: String): ThemeDefinition?
 

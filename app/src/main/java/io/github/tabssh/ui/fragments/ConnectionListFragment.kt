@@ -5,7 +5,10 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -61,17 +64,21 @@ class ConnectionListFragment : Fragment() {
     }
 
     private fun observeConnections() {
-        viewModel.connections.observe(viewLifecycleOwner) { connections ->
-            val items = connections.map { profile ->
-                ConnectionListItem.Connection(
-                    profile = profile,
-                    isInGroup = false,
-                    indentLevel = 0
-                )
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.connections.collect { connections ->
+                    val items = connections.map { profile ->
+                        ConnectionListItem.Connection(
+                            profile = profile,
+                            isInGroup = false,
+                            indentLevel = 0
+                        )
+                    }
+                    adapter.items.clear()
+                    adapter.items.addAll(items)
+                    adapter.notifyDataSetChanged()
+                }
             }
-            adapter.items.clear()
-            adapter.items.addAll(items)
-            adapter.notifyDataSetChanged()
         }
     }
 
@@ -96,11 +103,11 @@ class ConnectionListViewModel(application: android.app.Application) : androidx.l
     private val database = io.github.tabssh.storage.database.TabSSHDatabase.getDatabase(application)
     private val connectionDao = database.connectionDao()
 
-    private val _connections = androidx.lifecycle.MutableLiveData<List<ConnectionProfile>>()
-    val connections: androidx.lifecycle.LiveData<List<ConnectionProfile>> = _connections
+    private val _connections = kotlinx.coroutines.flow.MutableStateFlow<List<ConnectionProfile>>(emptyList())
+    val connections: kotlinx.coroutines.flow.StateFlow<List<ConnectionProfile>> = _connections
 
-    private val _isLoading = androidx.lifecycle.MutableLiveData(false)
-    val isLoading: androidx.lifecycle.LiveData<Boolean> = _isLoading
+    private val _isLoading = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val isLoading: kotlinx.coroutines.flow.StateFlow<Boolean> = _isLoading
 
     init {
         loadConnections()
@@ -114,15 +121,15 @@ class ConnectionListViewModel(application: android.app.Application) : androidx.l
             try {
                 // Observe connections from database
                 connectionDao.getAllConnections().collect { connectionList ->
-                    _connections.postValue(connectionList.sortedByDescending { it.lastConnected })
-                    _isLoading.postValue(false)
+                    _connections.value = connectionList.sortedByDescending { it.lastConnected }
+                    _isLoading.value = false
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
                 io.github.tabssh.utils.logging.Logger.e("ConnectionListViewModel", "Failed to load connections", e)
-                _connections.postValue(emptyList())
-                _isLoading.postValue(false)
+                _connections.value = emptyList()
+                _isLoading.value = false
             }
         }
     }

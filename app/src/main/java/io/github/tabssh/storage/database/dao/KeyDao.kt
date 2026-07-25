@@ -1,6 +1,5 @@
 package io.github.tabssh.storage.database.dao
 
-import androidx.lifecycle.LiveData
 import androidx.room.*
 import io.github.tabssh.storage.database.entities.StoredKey
 import kotlinx.coroutines.flow.Flow
@@ -17,9 +16,6 @@ interface KeyDao {
     @Query("SELECT * FROM stored_keys ORDER BY name")
     suspend fun getAllKeysList(): List<StoredKey>
 
-    @Query("SELECT * FROM stored_keys ORDER BY name")
-    fun getAllKeysLiveData(): LiveData<List<StoredKey>>
-    
     @Query("SELECT * FROM stored_keys WHERE keyId = :keyId")
     suspend fun getKeyById(keyId: String): StoredKey?
 
