@@ -1,6 +1,6 @@
 # TabSSH TODO
 
-**Last Updated:** 2026-07-24
+**Last Updated:** 2026-07-25
 **Version:** 0.9.1 (pinned via `release.txt` — DO NOT MODIFY without coordinated bump in `app/build.gradle` + F-Droid metadata)
 
 > **Usage rules for AI agents:**
@@ -74,6 +74,94 @@
 - **`417d072`** ✨ Cloud Accounts Manager UI + Power Controls (A–H complete) — `CloudAccountManagerActivity`, `CloudInstanceAdapter`, 8 cloud client power actions, Start/Stop toggle, Restart/Force Restart, live instance state; OCI removed from Hypervisors spinner (stays in enum for DB compat); contextual connection failure toasts app-wide.
 
 ---
+
+## 📌 Open items (migrated from AUDIT.AI.md, deleted 2026-07-25)
+
+All CRITICAL/HIGH/MEDIUM audit findings (C1–C7, H1–H11, M1–M14) were fixed and
+re-verified against source before the audit file was deleted. The items below
+were still open at deletion time.
+
+### Maintainer actions (cannot be done by AI)
+
+- **C1 remainder — rotate keystore password off `tabssh123`**: rotate the key to
+  a strong password, upload the re-keyed `KEYSTORE_BASE64`, add the
+  `KEYSTORE_PASSWORD` / `KEY_PASSWORD` repo secrets, then drop the
+  `?: "tabssh123"` fallbacks in `app/build.gradle`. CI already passes the
+  secrets through — the moment they exist they take over with no code change.
+- **M3 remainder — provision `NVD_API_KEY`**: request a key at
+  https://nvd.nist.gov/developers/request-an-api-key and add it as the
+  `NVD_API_KEY` repo secret; until then `dependencyCheckAnalyze` runs
+  unauthenticated/throttled. Code-level wiring is done.
+
+### LOW / NIT
+
+- **L1 — LiveData in new code**: `ThemeDao.kt`, `KeyDao.kt`, `ConnectionDao.kt`,
+  `ConnectionListFragment.kt` still expose/use `LiveData`; AI.md §17 rule 10
+  forbids it. Migrate to `Flow`/`StateFlow`.
+- **L2 — Dual JSON libraries**: both Gson 2.10.1 (Room `Converters.kt`,
+  `TabTerminalActivity.kt`) and kotlinx-serialization 1.6.0 (sync) ship.
+  Consolidate on kotlinx-serialization; drop Gson.
+- **L3 — Commented-out code**: dead `onCreateOptionsMenu` block in
+  `TabTerminalActivity.kt` (~line 2815). Delete.
+- **L4 — Inline trailing comment**: `settings.gradle:14` (`// Termux ...` on a
+  code line). Move to its own line above.
+- **L6 — Stale version strings in CI**: `ci.yml:200,209` hardcode
+  "TabSSH 1.0.0" (project is 0.9.1). Derive from `release.txt`.
+- **NIT-1 — Outdated AndroidX/Kotlin deps**: appcompat 1.6.1→1.7.x,
+  core-ktx 1.12→1.16, fragment-ktx 1.6.2→1.8.x, lifecycle 2.7→2.9,
+  coroutines 1.7.3→1.10.x, kotlinx-serialization 1.6→1.7.x, material 1.11→1.12;
+  MPAndroidChart v3.1.0 unmaintained. No known CVEs at current pins.
+
+### OPT — optimization opportunities
+
+- **O1 — Per-character Paint allocation**: `TerminalRenderer.kt` allocates a
+  `Paint` per glyph/run during draw → GC churn on full-screen redraws. Reuse a
+  pool keyed by style.
+- **O3 — Duplicate DAO queries**: `ConnectionDao.getConnectionById` /
+  `getConnection` are redundant. Collapse to one.
+- **O4 — Redundant serialization round-trips**: follows from L2 —
+  `ConnectionProfile` serialized via Gson in hot UI paths.
+- **O5 — `runBlocking` on the connect path**: host-key DB read still blocks the
+  handshake thread per connect; a pre-cached known-hosts map would remove it.
+- **O6 — String-built shell commands over SSH**: libvirt/virsh path reformats
+  command strings per call; batch status queries to cut SSH round-trips.
+- **O7 — Configure-time work in `build.gradle`**: move version/commit stamping
+  to a cached task input for faster incremental builds.
+- **O8 — Bulk reconnect thread usage**: per-session scopes without pooling; a
+  shared lifecycle-scoped dispatcher would cap thread growth.
+
+### SPEC DRIFT — IDEA.md update backlog
+
+`IDEA.md` (the WHAT spec) is missing shipped features. Each needs a sentence in
+the relevant section before the next release: VNC console client · SPICE client ·
+Telnet · X11 forwarding · Mosh watchdog/roaming lifecycle · cloud-provider parity
+check (DO/Hetzner/Linode/Vultr/EC2/GCP/Azure/OCI) · libvirt-over-SSH transport ·
+dashboard/monitor slots · MPAndroidChart graphs · macro library (raw-byte
+recording) · snippet `{var}` substitution UI · QR pairing Argon2id envelope ·
+backup format v3 schema/versioning · sync PBKDF2-100k parameters · Keystore
+AES-GCM tiered password storage · PIN hashing/lockout mechanics · hypervisor TLS
+TOFU pinning store/rotation · OCI PEM/BouncyCastle key parsing · verify
+"23 built-in themes" count · multiplexer auto-attach heuristics · session
+transcript on-disk format · bulk-import field mapping (CSV/JSON/PuTTY
+.reg/Terraform) · Tasker/widget/quick-connect intent surface · audit-log
+storage/retention + privacy note.
+
+### AI.md INTERNAL DRIFT
+
+- **AD1 — DB version disagreement**: AI.md §8.1 says "version 37", §2 says
+  "Room (v17), 17 entities"; code is `version = 6` (numbering reset at v3 by
+  `0bd35d42`). Make AI.md state the real version and note the reset — this is
+  NOT a task to author missing migrations.
+- **AD2 — Entity count**: recompute §2's "17 entities" against
+  `TabSSHDatabase`'s registered entity set.
+- **AD3 — §15 package map lists phantom packages**: regenerate from the actual
+  `app/src/main/java/io/github/tabssh` layout.
+- **AD5 — Stub status stale wording**: §16 lists Mosh/X11/Telnet under a
+  "stubs" heading while stating they are fully implemented. Move them out of
+  any "stub" framing.
+
+Resolved before deletion (not migrated): L5 (`$(shell pwd)` already gone from
+Makefile), O2 (closed by M11), AD4 (closed by M8).
 
 ---
 
