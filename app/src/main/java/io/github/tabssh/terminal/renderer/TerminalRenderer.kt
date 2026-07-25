@@ -13,6 +13,11 @@ class TerminalRenderer(
     private val cursorPaint: Paint
 ) {
 
+    // Scratch paints reused across cells — render() runs per frame, and
+    // allocating a Paint per cell caused GC churn on large buffers (audit O1).
+    private val cellBgPaint = Paint()
+    private val glyphPaint = Paint()
+
     private val defaultColors = intArrayOf(
         Color.BLACK, Color.RED, Color.GREEN, Color.YELLOW,
         Color.BLUE, Color.MAGENTA, Color.CYAN, Color.WHITE,
@@ -37,6 +42,10 @@ class TerminalRenderer(
 
         // Draw background
         canvas.drawRect(0f, 0f, canvas.width.toFloat(), canvas.height.toFloat(), backgroundPaint)
+
+        // Re-sync the glyph scratch paint once per frame so external changes
+        // to textPaint (font size, antialiasing) are picked up.
+        glyphPaint.set(textPaint)
 
         // Draw text
         for (row in 0 until rows) {
@@ -71,25 +80,19 @@ class TerminalRenderer(
                 // Draw the cell background whenever it differs from the base background
                 // (covers explicit bgColor and reversed cells, including reversed spaces)
                 if (bgInt != backgroundPaint.color) {
-                    val bgPaint = Paint().apply { color = bgInt }
-                    canvas.drawRect(x, y, x + cellWidth, y + cellHeight, bgPaint)
+                    cellBgPaint.color = bgInt
+                    canvas.drawRect(x, y, x + cellWidth, y + cellHeight, cellBgPaint)
                 }
 
                 // Draw character
                 if (char.char != ' ') {
-                    val charPaint = Paint(textPaint).apply {
-                        color = fgInt
+                    glyphPaint.color = fgInt
+                    // Reset formatting every cell — the scratch paint carries
+                    // state from the previous glyph otherwise.
+                    glyphPaint.typeface = if (char.bold) Typeface.DEFAULT_BOLD else textPaint.typeface
+                    glyphPaint.isUnderlineText = char.underline
 
-                        // Apply formatting
-                        if (char.bold) {
-                            typeface = Typeface.DEFAULT_BOLD
-                        }
-                        if (char.underline) {
-                            isUnderlineText = true
-                        }
-                    }
-
-                    canvas.drawText(char.char.toString(), x, y + cellHeight * 0.8f, charPaint)
+                    canvas.drawText(char.char.toString(), x, y + cellHeight * 0.8f, glyphPaint)
                 }
             }
         }
