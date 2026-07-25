@@ -11,7 +11,8 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         maven { url 'https://jitpack.io' }
-        maven { url 'https://termux.dev/termux-app/maven/' } // Termux terminal emulator
+        // Termux terminal emulator
+        maven { url 'https://termux.dev/termux-app/maven/' }
     }
 }
 
