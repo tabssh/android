@@ -139,7 +139,7 @@ Defined in `app/build.gradle`:
 | Biometric | `androidx.biometric:biometric` | 1.1.0 |
 | UI | `com.google.android.material:material` | 1.11.0 |
 | Charts | `com.github.PhilJay:MPAndroidChart` | v3.1.0 |
-| JSON | `com.google.code.gson:gson` 2.10.1; `org.jetbrains.kotlinx:kotlinx-serialization-json` 1.6.0 |
+| JSON | `org.jetbrains.kotlinx:kotlinx-serialization-json` 1.6.0 |
 | Test | JUnit 4.13.2, Mockito 5.7.0, Espresso 3.5.1, JaCoCo |
 
 `settings.gradle` adds Termux's Maven repo and JitPack alongside Google + Maven Central.

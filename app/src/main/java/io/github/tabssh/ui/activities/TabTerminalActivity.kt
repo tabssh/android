@@ -83,7 +83,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 putExtra(EXTRA_CONNECTION_PROFILE_ID, profile.id)
                 // Also embed the full profile as JSON so unsaved (quick-connect) profiles work
                 putExtra(EXTRA_CONNECTION_PROFILE,
-                    com.google.gson.Gson().toJson(profile))
+                    kotlinx.serialization.json.Json.encodeToString(ConnectionProfile.serializer(), profile))
                 putExtra(EXTRA_AUTO_CONNECT, autoConnect)
                 if (forceNew) putExtra(EXTRA_FORCE_NEW, true)
             }
@@ -1767,7 +1767,8 @@ class TabTerminalActivity : AppCompatActivity() {
                 // If not in DB, try embedded JSON (for quick-connect)
                 if (profile == null && connectionProfileJson != null) {
                     try {
-                        profile = com.google.gson.Gson().fromJson(connectionProfileJson, ConnectionProfile::class.java)
+                        profile = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+                            .decodeFromString(ConnectionProfile.serializer(), connectionProfileJson)
                         Logger.d("TabTerminalActivity", "Using embedded profile (quick-connect)")
                     } catch (e: Exception) {
                         Logger.w("TabTerminalActivity", "Failed to decode profile JSON", e)

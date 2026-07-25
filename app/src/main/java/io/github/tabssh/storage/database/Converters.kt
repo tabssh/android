@@ -2,8 +2,11 @@ package io.github.tabssh.storage.database
 
 import android.util.Base64
 import androidx.room.TypeConverter
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.SetSerializer
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.Json
 import java.util.*
 
 /**
@@ -12,7 +15,17 @@ import java.util.*
  */
 class Converters {
 
-    private val gson = Gson()
+    // Lenient parsing keeps rows written by the previous Gson converters readable
+    // (Gson emitted <-style escapes and tolerated loose JSON).
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
+
+    private val stringListSerializer = ListSerializer(String.serializer())
+    private val stringMapSerializer = MapSerializer(String.serializer(), String.serializer())
+    private val stringSetSerializer = SetSerializer(String.serializer())
+    private val intListSerializer = ListSerializer(Int.serializer())
 
     @TypeConverter
     fun fromTimestamp(value: Long?): Date? {
@@ -26,54 +39,42 @@ class Converters {
 
     @TypeConverter
     fun fromStringList(value: List<String>?): String? {
-        return value?.let { gson.toJson(it) }
+        return value?.let { json.encodeToString(stringListSerializer, it) }
     }
 
     @TypeConverter
     fun toStringList(value: String?): List<String>? {
-        return value?.let {
-            val listType = object : TypeToken<List<String>>() {}.type
-            gson.fromJson(it, listType)
-        }
+        return value?.let { json.decodeFromString(stringListSerializer, it) }
     }
 
     @TypeConverter
     fun fromStringMap(value: Map<String, String>?): String? {
-        return value?.let { gson.toJson(it) }
+        return value?.let { json.encodeToString(stringMapSerializer, it) }
     }
 
     @TypeConverter
     fun toStringMap(value: String?): Map<String, String>? {
-        return value?.let {
-            val mapType = object : TypeToken<Map<String, String>>() {}.type
-            gson.fromJson(it, mapType)
-        }
+        return value?.let { json.decodeFromString(stringMapSerializer, it) }
     }
 
     @TypeConverter
     fun fromStringSet(value: Set<String>?): String? {
-        return value?.let { gson.toJson(it) }
+        return value?.let { json.encodeToString(stringSetSerializer, it) }
     }
 
     @TypeConverter
     fun toStringSet(value: String?): Set<String>? {
-        return value?.let {
-            val setType = object : TypeToken<Set<String>>() {}.type
-            gson.fromJson(it, setType)
-        }
+        return value?.let { json.decodeFromString(stringSetSerializer, it) }
     }
 
     @TypeConverter
     fun fromIntList(value: List<Int>?): String? {
-        return value?.let { gson.toJson(it) }
+        return value?.let { json.encodeToString(intListSerializer, it) }
     }
 
     @TypeConverter
     fun toIntList(value: String?): List<Int>? {
-        return value?.let {
-            val listType = object : TypeToken<List<Int>>() {}.type
-            gson.fromJson(it, listType)
-        }
+        return value?.let { json.decodeFromString(intListSerializer, it) }
     }
 
     @TypeConverter
