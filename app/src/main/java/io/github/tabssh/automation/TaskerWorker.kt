@@ -121,7 +121,7 @@ class TaskerWorker(
         val connectionId = inputData.getString(KEY_CONNECTION_ID)
         val connectionName = inputData.getString(KEY_CONNECTION_NAME)
         val profile = when {
-            !connectionId.isNullOrEmpty() -> app.database.connectionDao().getConnection(connectionId)
+            !connectionId.isNullOrEmpty() -> app.database.connectionDao().getConnectionById(connectionId)
             !connectionName.isNullOrEmpty() -> app.database.connectionDao().getByName(connectionName)
             else -> {
                 broadcastError("No connection ID or name provided")

@@ -19,9 +19,6 @@ interface ConnectionDao {
     @Query("SELECT * FROM connections WHERE id = :id")
     suspend fun getConnectionById(id: String): ConnectionProfile?
 
-    @Query("SELECT * FROM connections WHERE id = :id")
-    suspend fun getConnection(id: String): ConnectionProfile?
-    
     @Query("SELECT * FROM connections WHERE group_id = :groupId ORDER BY sort_order, name")
     suspend fun getConnectionsByGroup(groupId: String): List<ConnectionProfile>
     

@@ -148,7 +148,7 @@ class BackupImporter(
             obj.mapValues { it.value.jsonPrimitive.content }
         } ?: emptyMap()
         for (c in items) {
-            val existing = database.connectionDao().getConnection(c.id)
+            val existing = database.connectionDao().getConnectionById(c.id)
             if (existing != null && !overwriteExisting) continue
             database.connectionDao().insertConnection(c)
             passwords[c.id]?.let { b64 ->
