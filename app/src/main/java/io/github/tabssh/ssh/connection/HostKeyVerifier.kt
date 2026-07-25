@@ -9,7 +9,10 @@ import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.database.dao.HostKeyVerificationResult
 import io.github.tabssh.storage.database.entities.HostKeyEntry
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.first
 import android.util.Base64
@@ -59,14 +62,33 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
             Logger.i("HostKeyVerifier", "Checking host key for $hostname:$port ($keyType)")
             Logger.i("HostKeyVerifier", "Fingerprint: $fingerprint")
 
-            // Verify against database on the dedicated host-key DB thread
-            // (hostKeyDbDispatcher) so a bulk reconnect cannot starve the
-            // shared IO pool — see the companion-object kdoc.
-            Logger.d("HostKeyVerifier", "Querying database for existing host key...")
-            val result = runBlocking(hostKeyDbDispatcher) {
-                hostKeyDao.verifyHostKey(hostname, port, publicKeyBase64, fingerprint)
+            ensureCacheStarted(hostKeyDao)
+
+            // Fast path (audit O5): serve known-good hosts from the in-memory
+            // cache so the JSch handshake thread never blocks on a DB round-trip.
+            // Any miss or mismatch — including a cold or stale cache — falls
+            // through to the authoritative transactional verify below, so
+            // staleness can only produce an extra prompt, never a silent accept
+            // of an unknown key (the removed-key window matches the pre-existing
+            // check-then-connect race and is bounded by Room's Flow invalidation).
+            val cachedEntry = hostKeyCache?.get("$hostname:$port")
+            val result = if (cachedEntry != null && cachedEntry.publicKey == publicKeyBase64) {
+                // Bookkeeping (last-verified bump / fingerprint self-heal) is not
+                // security-relevant — run it asynchronously off the handshake thread.
+                cacheScope.launch {
+                    hostKeyDao.verifyHostKey(hostname, port, publicKeyBase64, fingerprint)
+                }
+                HostKeyVerificationResult.ACCEPTED
+            } else {
+                // Verify against database on the dedicated host-key DB thread
+                // (hostKeyDbDispatcher) so a bulk reconnect cannot starve the
+                // shared IO pool — see the companion-object kdoc.
+                Logger.d("HostKeyVerifier", "Querying database for existing host key...")
+                runBlocking(hostKeyDbDispatcher) {
+                    hostKeyDao.verifyHostKey(hostname, port, publicKeyBase64, fingerprint)
+                }
             }
-            Logger.i("HostKeyVerifier", "Database verification result: $result")
+            Logger.i("HostKeyVerifier", "Verification result: $result")
 
             when (result) {
                 HostKeyVerificationResult.ACCEPTED -> {
@@ -594,6 +616,31 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
             java.util.concurrent.Executors.newSingleThreadExecutor { r ->
                 Thread(r, "tabssh-hostkey-db").apply { isDaemon = true }
             }.asCoroutineDispatcher()
+
+        // App-wide known-hosts cache (audit O5). Populated from Room's
+        // getAllHostKeys() Flow, so every DB write — accept, remove, sync
+        // apply, clear-all — refreshes it automatically via invalidation.
+        // check() reads this map on its ACCEPTED fast path instead of
+        // blocking the handshake thread; all other outcomes go through the
+        // authoritative transactional DAO verify. The database is an
+        // app-level singleton, so a single shared cache is correct for
+        // every HostKeyVerifier instance.
+        private val cacheScope = CoroutineScope(SupervisorJob() + hostKeyDbDispatcher)
+
+        @Volatile
+        private var hostKeyCache: Map<String, HostKeyEntry>? = null
+
+        private val cacheStarted = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        private fun ensureCacheStarted(dao: io.github.tabssh.storage.database.dao.HostKeyDao) {
+            if (cacheStarted.compareAndSet(false, true)) {
+                cacheScope.launch {
+                    dao.getAllHostKeys().collect { entries ->
+                        hostKeyCache = entries.associateBy { "${it.hostname}:${it.port}" }
+                    }
+                }
+            }
+        }
     }
 
 }
