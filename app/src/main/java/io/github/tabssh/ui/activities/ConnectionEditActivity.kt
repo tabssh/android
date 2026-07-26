@@ -1024,6 +1024,14 @@ class ConnectionEditActivity : AppCompatActivity() {
         }
         profile.multiplexerSessionName?.let { binding.editMultiplexerSessionName.setText(it) }
 
+        // NULL override = auto-detect, shown as the "AUTO" sentinel entry.
+        val ovEntries = resources.getStringArray(R.array.multiplexer_override_entries)
+        val ovValues = resources.getStringArray(R.array.multiplexer_override_values)
+        val ovIndex = ovValues.indexOf(profile.multiplexerOverride ?: "AUTO")
+        binding.spinnerMultiplexerOverride.setText(
+            ovEntries.getOrNull(ovIndex) ?: ovEntries[0], false
+        )
+
         selectedGroupId = profile.groupId
         val resolvedGroup = selectedGroupId?.let { gid ->
             withContext(Dispatchers.IO) { app.database.connectionGroupDao().getGroupById(gid) }
@@ -1437,6 +1445,13 @@ class ConnectionEditActivity : AppCompatActivity() {
         val multiplexerMode = if (modeIndex >= 0) modeValues[modeIndex] else "OFF"
         val multiplexerSessionName = binding.editMultiplexerSessionName.text.toString().takeIf { it.isNotBlank() }
 
+        // "AUTO" sentinel (or anything unrecognised) round-trips to a NULL
+        // override so live detection stays in charge.
+        val ovEntries = resources.getStringArray(R.array.multiplexer_override_entries)
+        val ovValues = resources.getStringArray(R.array.multiplexer_override_values)
+        val ovIndex = ovEntries.indexOf(binding.spinnerMultiplexerOverride.text.toString())
+        val multiplexerOverride = ovValues.getOrNull(ovIndex)?.takeIf { it != "AUTO" }
+
         val themeEntries = resources.getStringArray(R.array.terminal_theme_entries)
         val themeValues = resources.getStringArray(R.array.terminal_theme_values)
         val selectedThemeText = binding.spinnerConnectionTheme.text.toString()
@@ -1505,6 +1520,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             compression = compression, keepAlive = keepAlive,
             x11Forwarding = x11Forwarding, moshMode = moshMode,
             multiplexerMode = multiplexerMode, multiplexerSessionName = multiplexerSessionName,
+            multiplexerOverride = multiplexerOverride,
             theme = theme, fontSizeOverride = fontSizeOverride,
             postConnectScript = postConnectScript, envVars = envVars,
             agentForwarding = agentForwarding, remoteCommand = remoteCommand,
@@ -1522,6 +1538,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             compression = compression, keepAlive = keepAlive,
             x11Forwarding = x11Forwarding, moshMode = moshMode,
             multiplexerMode = multiplexerMode, multiplexerSessionName = multiplexerSessionName,
+            multiplexerOverride = multiplexerOverride,
             theme = theme, fontSizeOverride = fontSizeOverride,
             postConnectScript = postConnectScript, envVars = envVars,
             agentForwarding = agentForwarding, remoteCommand = remoteCommand,
@@ -2255,6 +2272,11 @@ class ConnectionEditActivity : AppCompatActivity() {
                     if (value != "OFF") View.VISIBLE else View.GONE
             }
         }
+
+        val ovEntries = resources.getStringArray(R.array.multiplexer_override_entries)
+        val ovAdapter = android.widget.ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, ovEntries)
+        binding.spinnerMultiplexerOverride.setAdapter(ovAdapter)
+        binding.spinnerMultiplexerOverride.setText(ovEntries[0], false)
     }
 
     private fun setupConnectionThemeSpinner() {

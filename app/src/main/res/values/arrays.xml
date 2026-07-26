@@ -336,6 +336,23 @@
         <item>ASK</item>
     </string-array>
 
+    <!-- PRE-key multiplexer override (per-connection). "AUTO" maps to a NULL
+         override in the DB; the other values are stored verbatim. -->
+    <string-array name="multiplexer_override_entries">
+        <item>Auto (detect)</item>
+        <item>tmux</item>
+        <item>zellij</item>
+        <item>screen</item>
+        <item>Off (disable PRE key)</item>
+    </string-array>
+    <string-array name="multiplexer_override_values">
+        <item>AUTO</item>
+        <item>tmux</item>
+        <item>zellij</item>
+        <item>screen</item>
+        <item>off</item>
+    </string-array>
+
     <!-- Log level options -->
     <string-array name="log_levels">
         <item>Verbose</item>

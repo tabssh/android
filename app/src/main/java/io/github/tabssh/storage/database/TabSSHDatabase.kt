@@ -47,7 +47,7 @@ import io.github.tabssh.utils.logging.Logger
         SyncTombstone::class,
         SyncShadow::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -184,6 +184,21 @@ abstract class TabSSHDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v6 → v7: add `connections.multiplexer_override` — per-connection
+         * PRE-key multiplexer pin set via the long-press picker (null = auto,
+         * "tmux"/"screen"/"zellij" = pinned type, "off" = PRE key disabled).
+         * Additive nullable ADD COLUMN, no data transform; existing rows
+         * default to NULL (auto-detect, the pre-v7 behavior).
+         */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE connections ADD COLUMN multiplexer_override TEXT"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): TabSSHDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -196,7 +211,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
                 // Pre-v3 alpha installs were wiped on every upgrade — see kdoc.
                 // Real migrations must be added here for every bump from v3 onward.
                 .fallbackToDestructiveMigrationFrom(1, 2)
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .build()
                 INSTANCE = instance
                 instance

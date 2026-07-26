@@ -2525,9 +2525,13 @@ class TabTerminalActivity : AppCompatActivity() {
     }
 
     /**
-     * Show a dialog for the user to manually select the multiplexer type when
-     * none has been auto-detected. Sets the type on the active tab so subsequent
-     * PREFIX presses send the correct prefix immediately.
+     * Show the PRE-key picker (long-press on the PREFIX key). A picked type
+     * takes effect immediately AND is persisted as a per-connection override
+     * (`ConnectionProfile.multiplexerOverride`) so it survives reconnects and
+     * app restarts. Precedence: override > live detection > global default.
+     * "Auto (detect)" clears the override and hands control back to the
+     * detection loop; "Off (this connection)" dims the PRE key for this
+     * connection only.
      */
     private fun showMultiplexerPickerDialog() {
         val prefs = app.preferencesManager
@@ -2535,20 +2539,23 @@ class TabTerminalActivity : AppCompatActivity() {
         val zellijLabel = prefixToShortLabel(prefs.getMultiplexerPrefix("zellij"))
         val screenLabel = prefixToShortLabel(prefs.getMultiplexerPrefix("screen"))
         val enabled = prefs.isPrefixKeyEnabled()
-        // Order: tmux, zellij, screen, then the Enable/Disable toggle — the
-        // toggle is always the last row so long-press can re-enable a
-        // disabled PRE key without needing a separate Settings trip.
+        // Order: auto, the three pinned types, per-connection off, then the
+        // global Enable/Disable toggle — the toggle is always the last row so
+        // long-press can re-enable a disabled PRE key without needing a
+        // separate Settings trip.
         val types = arrayOf(
+            "Auto (detect)",
             "tmux ($tmuxLabel)",
             "zellij ($zellijLabel)",
             "screen ($screenLabel)",
+            "Off (this connection)",
             if (enabled) "Disable PRE Key" else "Enable PRE Key"
         )
-        val keys  = arrayOf("tmux", "zellij", "screen", "toggle")
+        val keys  = arrayOf("auto", "tmux", "zellij", "screen", "off", "toggle")
         // setMessage and setItems both occupy the dialog body — using both silently
         // hides the item list. Move the hint into the title so the list renders.
         com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-            .setTitle("Select multiplexer (none detected)")
+            .setTitle("PRE key multiplexer")
             .setItems(types) { _, which ->
                 if (keys[which] == "toggle") {
                     val newValue = !enabled
@@ -2566,11 +2573,35 @@ class TabTerminalActivity : AppCompatActivity() {
                     return@setItems
                 }
                 val tab = tabManager.getActiveTab() ?: return@setItems
-                tab.setActiveMultiplexerType(keys[which])
-                Logger.i("TabTerminalActivity", "Multiplexer manually set to ${keys[which]}")
+                // "auto" means no override — stored as NULL.
+                val override = keys[which].takeIf { it != "auto" }
+                tab.applyMultiplexerOverride(override)
+                persistMultiplexerOverride(tab.profile.id, override)
+                Logger.i(
+                    "TabTerminalActivity",
+                    "Multiplexer override set to ${override ?: "auto"} for ${tab.profile.getDisplayName()}"
+                )
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    /**
+     * Persist the per-connection PRE-key override picked in the long-press
+     * dialog. Re-reads the row before writing so a concurrent edit in
+     * ConnectionEditActivity isn't clobbered with the tab's stale in-memory
+     * profile snapshot.
+     */
+    private fun persistMultiplexerOverride(connectionId: String, override: String?) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val dao = app.database.connectionDao()
+                val fresh = dao.getConnectionById(connectionId) ?: return@launch
+                dao.updateConnection(fresh.copy(multiplexerOverride = override))
+            } catch (e: Exception) {
+                Logger.w("TabTerminalActivity", "Failed to persist multiplexer override: ${e.message}")
+            }
+        }
     }
 
     private fun switchToTab(index: Int) {

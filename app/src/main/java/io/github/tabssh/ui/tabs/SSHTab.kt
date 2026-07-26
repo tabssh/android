@@ -137,6 +137,40 @@ class SSHTab(
         _activeMultiplexerType.value = type
     }
 
+    /**
+     * Per-connection PRE-key override, seeded from
+     * [ConnectionProfile.multiplexerOverride] and updatable mid-session via
+     * the long-press picker (the picker persists the same value to the DB
+     * row separately). Precedence: override > live detection > global
+     * default. null = auto; "tmux"/"screen"/"zellij" = pinned; "off" = the
+     * PRE key is disabled for this connection.
+     */
+    @Volatile
+    private var multiplexerOverride: String? = profile.multiplexerOverride
+
+    /** True when a user override (including "off") is pinning the PRE key. */
+    val hasMultiplexerOverride: Boolean get() = multiplexerOverride != null
+
+    /**
+     * Apply a per-connection PRE-key override chosen in the long-press
+     * picker. Pinned types take effect immediately; "off" clears the active
+     * type (PRE key dims); null returns to auto mode and restarts the
+     * detection loop so live state catches up without waiting for a
+     * reconnect. Detection probes never overwrite a pinned value — see
+     * [probeMultiplexerOnce].
+     */
+    fun applyMultiplexerOverride(type: String?) {
+        multiplexerOverride = type
+        when (type) {
+            null -> {
+                // Back to auto: let the next probe decide, starting now.
+                if (connection?.isConnected() == true) detectMultiplexerViaExec()
+            }
+            "off" -> _activeMultiplexerType.value = null
+            else -> _activeMultiplexerType.value = type
+        }
+    }
+
     private var multiplexerDetectionJob: Job? = null
 
     // Screen change listener for UI updates
@@ -823,13 +857,23 @@ class SSHTab(
     private fun runPostConnectCommands() {
         val lines = mutableListOf<String>()
 
+        // Seed the PRE-key state from the persisted per-connection override
+        // before anything else runs — a pinned type shows immediately and
+        // "off" keeps the key dimmed regardless of what detection would say.
+        multiplexerOverride?.let { ov ->
+            _activeMultiplexerType.value = if (ov == "off") null else ov
+        }
+
         if (profile.multiplexerMode != "OFF") {
             val app = try { io.github.tabssh.TabSSHApplication.get() } catch (_: Exception) { null }
-            val type = app?.let {
-                androidx.preference.PreferenceManager
-                    .getDefaultSharedPreferences(it)
-                    .getString("gesture_multiplexer_type", "tmux")
-            } ?: "tmux"
+            // A pinned per-connection type also drives auto-launch; "off"
+            // only disables the PRE key, not the profile's auto-launch mode.
+            val type = multiplexerOverride?.takeIf { it != "off" }
+                ?: app?.let {
+                    androidx.preference.PreferenceManager
+                        .getDefaultSharedPreferences(it)
+                        .getString("gesture_multiplexer_type", "tmux")
+                } ?: "tmux"
             val name = profile.multiplexerSessionName?.takeIf { it.isNotBlank() } ?: "tabssh"
             val cmd = buildMultiplexerCommand(type, profile.multiplexerMode, name)
             if (cmd != null) {
@@ -837,7 +881,11 @@ class SSHTab(
                 lines.add(cmd)
                 // Record the active type so the PREFIX keyboard key sends the
                 // right prefix byte without needing a global preference lookup.
-                _activeMultiplexerType.value = type
+                // An "off" override keeps the key dimmed even while the
+                // profile's auto-launch still starts the multiplexer.
+                if (multiplexerOverride != "off") {
+                    _activeMultiplexerType.value = type
+                }
             }
         }
 
@@ -845,8 +893,10 @@ class SSHTab(
         // after connect so the login shell (and any auto-started multiplexer)
         // has time to set up environment. Only sets activeMultiplexerType if
         // it wasn't already determined by the auto-launch branch above.
-        // Skip when the user explicitly opted out of all multiplexer features.
-        if (profile.multiplexerMode != "OFF") {
+        // Skip when the user explicitly opted out of all multiplexer features
+        // or pinned a per-connection override — a pinned value never yields
+        // to detection, so the probe loop would be wasted exec channels.
+        if (profile.multiplexerMode != "OFF" && multiplexerOverride == null) {
             detectMultiplexerViaExec()
         }
 
@@ -978,6 +1028,11 @@ class SSHTab(
             Logger.d("SSHTab", "Multiplexer probe raw output: '$rawOutput'")
             val output = rawOutput.substringBefore(':')
             val detected = if (output in listOf("tmux", "screen", "zellij")) output else null
+            // A pinned per-connection override always wins over detection —
+            // report what was detected but never overwrite the pinned state.
+            // Guards the on-demand probeMultiplexerNow() path too (the
+            // periodic loop is already skipped while an override is set).
+            if (multiplexerOverride != null) return detected
             if (detected != _activeMultiplexerType.value) {
                 _activeMultiplexerType.value = detected
                 if (detected != null)
