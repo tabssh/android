@@ -249,8 +249,14 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
     override fun add(hostkey: HostKey, userInfo: UserInfo?) {
         try {
             val (hostname, port) = parseHostPort(hostkey.host)
+            // JSch's HostKey.getKey() returns the key Base64-encoded (a String,
+            // not raw bytes). The old `hostkey.key as ByteArray` cast could never
+            // succeed — it threw ClassCastException on every call, the catch below
+            // swallowed it, and add() never persisted a key. Decode for the
+            // fingerprint and store the Base64 string directly.
+            val keyBytes = Base64.decode(hostkey.key, Base64.DEFAULT)
             // Use our own fingerprint generator since JSch's method signature may vary
-            val fingerprint = generateFingerprint(hostkey.key as ByteArray)
+            val fingerprint = generateFingerprint(keyBytes)
 
             runBlocking(hostKeyDbDispatcher) {
                 val entry = HostKeyEntry(
@@ -258,7 +264,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
                     hostname = hostname,
                     port = port,
                     keyType = hostkey.type,
-                    publicKey = Base64.encodeToString(hostkey.key as ByteArray, Base64.NO_WRAP),
+                    publicKey = Base64.encodeToString(keyBytes, Base64.NO_WRAP),
                     fingerprint = fingerprint,
                     trustLevel = "ACCEPTED"
                 )
