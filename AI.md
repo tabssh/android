@@ -4,7 +4,7 @@
 >
 > **Generated:** 2026-04-25; updated 2026-05-12 from a parallel survey of ~201 Kotlin sources, all Gradle/Docker/CI configs, and every preference/layout/menu XML. Updated 2026-06-14: tab-freeze fix, swipe-lock during selection, SEL key removal, URL wrap detection, `Ctrl+` notation fix, multiplexer picker prefix fix, long-press context menu restore, clipboard menu restore.
 >
-> **Last verified against:** `versionCode 9` / `versionName 0.0.9`, database `v37` (full chain: v17→v18 env_vars+agent_forwarding → v19 stored_keys.certificate → v20 connections.protocol → v21 workspaces → v22 connections.color_tag → v23 cloud_accounts → v24 connections.remote_command → v25 connections.ip_mode → v26 macros → v27 hypervisor_accounts+account_id → v28 hypervisors.pinned_cert_sha256 → v29 OCI auth_type+5 OCI columns → v30 hypervisors.display_host/port → v31 connections.oci_instance_id → v32 monitor_slots → v33 OCI credentials promoted to hypervisor_accounts), JSch `mwiede:2.27.7`, Termux `terminal-emulator:0.118.1`, AGP 8.7.3, Kotlin 2.0.21, Gradle 8.11.1.
+> **Last verified against:** `versionCode 9` / `versionName 0.0.9`, database `v37` (full chain: v17→v18 env_vars+agent_forwarding → v19 stored_keys.certificate → v20 connections.protocol → v21 workspaces → v22 connections.color_tag → v23 cloud_accounts → v24 connections.remote_command → v25 connections.ip_mode → v26 macros → v27 hypervisor_accounts+account_id → v28 hypervisors.pinned_cert_sha256 → v29 OCI auth_type+5 OCI columns → v30 hypervisors.display_host/port → v31 connections.oci_instance_id → v32 monitor_slots → v33 OCI credentials promoted to hypervisor_accounts), JSch `mwiede:2.27.7`, Termux `terminal-emulator:0.118.1`, AGP 8.13.2, Kotlin 2.4.10, Gradle 8.14.5.
 >
 > **Format conventions:**
 > - File paths are repo-relative unless prefixed with `/`.
@@ -106,9 +106,10 @@
 
 | Component | Version | File |
 |---|---|---|
-| Android Gradle Plugin | 8.7.3 | `build.gradle` |
-| Kotlin | 2.0.21 | `build.gradle` |
-| Gradle wrapper | 8.11.1 | `gradle/wrapper/gradle-wrapper.properties` |
+| Android Gradle Plugin | 8.13.2 | `build.gradle` |
+| Kotlin | 2.4.10 | `build.gradle` |
+| KSP | 2.3.10 (decoupled from the Kotlin version since 2.3.x) | `build.gradle` |
+| Gradle wrapper | 8.14.5 | `gradle/wrapper/gradle-wrapper.properties` |
 | OWASP DependencyCheck | 8.4.0 | `build.gradle` (CVSS fail threshold ≥ 7.0) |
 | JVM target | 17 (Eclipse Temurin in Docker) | `app/build.gradle`, `docker/Dockerfile` |
 
@@ -135,12 +136,12 @@ Defined in `app/build.gradle`:
 | Crypto | `org.bouncycastle:bcpkix-jdk18on` | 1.79 |
 | Crypto | `org.bouncycastle:bcprov-jdk18on` | 1.79 |
 | HTTP/WS | `com.squareup.okhttp3:okhttp` | 4.12.0 |
-| DB | `androidx.room:room-runtime`, `room-ktx`, `room-compiler` (KSP) | 2.6.1 |
+| DB | `androidx.room:room-runtime`, `room-ktx`, `room-compiler` (KSP) | 2.8.4 |
 | Background | `androidx.work:work-runtime` | 2.9.0 |
 | Biometric | `androidx.biometric:biometric` | 1.1.0 |
 | UI | `com.google.android.material:material` | 1.12.0 |
 | Charts | `com.github.PhilJay:MPAndroidChart` | v3.1.0 |
-| JSON | `org.jetbrains.kotlinx:kotlinx-serialization-json` 1.7.3 |
+| JSON | `org.jetbrains.kotlinx:kotlinx-serialization-json` 1.11.0 |
 | Test | JUnit 4.13.2, Mockito 5.7.0, Espresso 3.5.1, JaCoCo |
 
 `settings.gradle` adds Termux's Maven repo and JitPack alongside Google + Maven Central.
@@ -1173,7 +1174,7 @@ Per-channel toggles: `notifications_enabled`, `show_connection_notifications`, `
 
 | Image | Base | Use |
 |---|---|---|
-| `docker/Dockerfile` | `eclipse-temurin:17-jdk` | CI / `make build` (Android SDK 34, build-tools 34.0.0, Gradle 8.11.1 pre-cached at `/opt/gradle`) |
+| `docker/Dockerfile.build` | `eclipse-temurin:17-jdk` | CI / `make build` build image `ghcr.io/tabssh/android:build` (Android SDK platforms 34+35, build-tools 34.0.0, NDK 26.1.10909125, CMake 3.22.1, Gradle 8.14.5 pre-warmed in `GRADLE_USER_HOME`) |
 | `docker/Dockerfile.dev` | `debian:12-slim` | local dev (multi-platform SDK 31–34, NDK 25.2.9519653, CMake 3.22.1, Gradle 8.5, non-root `developer` UID 1000) |
 
 Compose files: `docker/docker-compose.yml` (services: `tabssh-builder`, `tabssh-test`, `tabssh-build`, shared `gradle-cache` volume) and `docker/docker-compose.dev.yml` (interactive `tabssh-dev` shell, optional emulator).

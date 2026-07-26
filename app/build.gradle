@@ -6,7 +6,8 @@ plugins {
     // Json.encodeToString blows up at runtime with "Serializer for class
     // X is not found." Sync upload was the only path exercising reified
     // serializers so the breakage was latent until the SAF upload ran.
-    id 'org.jetbrains.kotlin.plugin.serialization' version '2.0.21'
+    // The version MUST match `kotlin_version` in the root build.gradle.
+    id 'org.jetbrains.kotlin.plugin.serialization' version '2.4.10'
     id 'com.google.devtools.ksp'
     id 'jacoco'
 }
@@ -376,24 +377,24 @@ dependencies {
     implementation 'org.bouncycastle:bcprov-jdk18on:1.79'
     
     // Database
-    implementation 'androidx.room:room-runtime:2.6.1'
-    implementation 'androidx.room:room-ktx:2.6.1'
-    ksp 'androidx.room:room-compiler:2.6.1'
+    implementation 'androidx.room:room-runtime:2.8.4'
+    implementation 'androidx.room:room-ktx:2.8.4'
+    ksp 'androidx.room:room-compiler:2.8.4'
     
     // File operations
     implementation 'androidx.documentfile:documentfile:1.0.1'
     
     // JSON handling
-    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3'
+    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0'
     
     // Charts - MPAndroidChart for performance graphs
     implementation 'com.github.PhilJay:MPAndroidChart:v3.1.0'
     
     // Coroutines
-    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0'
 
     // Terminal Emulator - Termux (MIT licensed, full emoji/256-color support)
-    // Using only terminal-emulator (not terminal-view) to maintain minSdk 21
+    // Using only terminal-emulator (not terminal-view)
     // We render using our own TerminalView, just need the emulation engine
     // JitPack format: com.github.termux.termux-app:module:version
     implementation('com.github.termux.termux-app:terminal-emulator:v0.118.1') {
@@ -431,8 +432,8 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.mockito:mockito-core:5.7.0'
     testImplementation 'org.mockito:mockito-inline:5.2.0'
-    testImplementation 'androidx.room:room-testing:2.6.1'
-    testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2'
+    testImplementation 'androidx.room:room-testing:2.8.4'
+    testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0'
     
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
@@ -440,7 +441,7 @@ dependencies {
     androidTestImplementation 'androidx.test:rules:1.5.0'
     androidTestImplementation 'androidx.test.espresso:espresso-contrib:3.5.1'
     androidTestImplementation 'androidx.test.espresso:espresso-accessibility:3.5.1'
-    androidTestImplementation 'androidx.room:room-testing:2.6.1'
+    androidTestImplementation 'androidx.room:room-testing:2.8.4'
 }
 
 // Note: Git commit ID and build date are now set directly in buildConfigField

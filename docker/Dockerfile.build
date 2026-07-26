@@ -54,6 +54,7 @@ RUN yes | sdkmanager --licenses > /dev/null 2>&1 || true && \
     sdkmanager \
         "platform-tools" \
         "platforms;android-34" \
+        "platforms;android-35" \
         "build-tools;34.0.0" \
         "cmake;3.22.1" \
         "ndk;26.1.10909125" \
@@ -61,8 +62,8 @@ RUN yes | sdkmanager --licenses > /dev/null 2>&1 || true && \
 
 # ── Gradle wrapper pre-warm ────────────────────────────────────────────────────
 # Pre-populate the exact directory structure the Gradle wrapper expects so it
-# never needs to download gradle-8.11.1-bin.zip at runtime.
-ENV GRADLE_VERSION=8.11.1
+# never needs to download gradle-8.14.5-bin.zip at runtime.
+ENV GRADLE_VERSION=8.14.5
 ENV GRADLE_USER_HOME=/root/.gradle
 
 RUN DIST_DIR="${GRADLE_USER_HOME}/wrapper/dists/gradle-${GRADLE_VERSION}-bin" && \
