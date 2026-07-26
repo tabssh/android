@@ -29,43 +29,50 @@ repository: https://github.com/tabssh/android
 - Port knocking before connect
 - Agent forwarding
 - SFTP file browser with upload, download, rename, chmod, delete; remote file editor; SCP fallback
-- Session recording and replay (transcript)
+- Session recording and replay (transcript) — transcripts stored on-device as plain-text `.log` files in the app's external `Transcripts/` directory
 - `~/.ssh/config` import
-- Bulk import: CSV, JSON, PuTTY .reg, Terraform state
+- Bulk import: CSV, JSON, PuTTY .reg, Terraform state — each format maps its fields onto connection profiles (host, port, user, auth, group)
 - Custom on-screen keyboard with configurable rows and gesture bindings
 - Find-in-scrollback
-- Snippet library with `{var}` placeholder substitution
-- Macro recording (raw byte sequences)
-- Mosh support
-- Terminal multiplexer integration (tmux / screen / zellij) — auto-attach and create-new modes
+- Snippet library with `{var}` placeholder substitution — placeholders are filled through a prompt UI at run time
+- Macro library — record raw byte sequences and replay them into any session
+- Mosh support — sessions survive IP changes/roaming, with a watchdog that re-establishes the connection after network transitions
+- Telnet connections alongside SSH (plain-text legacy protocol, clearly separated from SSH profiles)
+- X11 forwarding to a local Android X server (XServer-XSDL / Termux:X11)
+- Terminal multiplexer integration (tmux / screen / zellij) — auto-attach and create-new modes, with auto-detection heuristics (session listing plus a process-scan fallback) and a manual override picker
 - Post-connect script execution
 - Per-connection color tags, font size overrides, custom themes
 - URL detection on long-press
+- Performance dashboard with configurable monitor slots per host and metric graphs (MPAndroidChart)
 
 ### Security requirements
 - All passwords and private key passphrases must never be stored in plaintext or in the database
-- Credential storage with tiered access levels: never / session-only / encrypted / biometric
+- Credential storage with tiered access levels: never / session-only / encrypted / biometric — encrypted tiers are backed by Android Keystore AES-GCM
 - Biometric unlock for stored passwords with configurable TTL
-- App-lock PIN with a failed-attempt lockout
+- App-lock PIN with a failed-attempt lockout — the PIN is stored only as a salted Argon2id hash, never plaintext
 - Screenshot capture prevention (configurable); always enforced on PIN and auth screens
 - SSH host key verification on first connect (TOFU) with fingerprint display
 - Clipboard auto-clear for sensitive pastes
-- Audit log of SSH commands and session events
+- Audit log of SSH commands and session events — stays on-device, with user-configurable size (MB) and age (days) retention caps and separate command/output capture toggles
 
 ### Sync and backup
 - Cross-device sync via SAF — user supplies any DocumentsProvider (Google Drive, Dropbox, OneDrive, Nextcloud, local); app embeds no cloud SDKs
 - Cross-device merge with per-entity conflict resolution
-- End-to-end encrypted sync — passphrase required, no server-side keys
-- Backup and restore as a portable encrypted archive
+- End-to-end encrypted sync — passphrase required, no server-side keys; AES-256-GCM with PBKDF2-HmacSHA256 (100,000 iterations) key derivation
+- Backup and restore as a portable encrypted archive — versioned format (currently v3) with in-archive version metadata so older backups migrate forward on import
 
 ### Hypervisor management
 - Proxmox, XCP-ng (and Xen Orchestra), VMware, QEMU/libvirt (KVM) — list VMs/instances, start, stop, shutdown, reboot, snapshot
+- QEMU/libvirt is managed over an SSH transport (`virsh` on the remote host) — no libvirt TCP daemon needs to be exposed
+- Built-in VNC console client for VM graphical consoles — consoles open as swipeable tabs next to terminal sessions
+- SPICE console client for hypervisors that expose SPICE displays
 - Reusable hypervisor credential accounts (username/password or OCI API key) shared across hypervisor profiles
-- TLS certificate pinning (TOFU) for hypervisor REST APIs
-- OCI API key authentication (tenancy, user, region, fingerprint, compartment, private key)
+- TLS certificate pinning (TOFU) for hypervisor REST APIs — pins are stored per profile and rotated only on explicit user re-approval
+- OCI API key authentication (tenancy, user, region, fingerprint, compartment, private key) — PEM private keys parsed via BouncyCastle
 
 ### Cloud provider management
 - Manage SSH-accessible instances across DigitalOcean, Hetzner, Linode, Vultr, AWS EC2, Google Cloud Compute, Azure VMs, and Oracle Cloud (OCI)
+- All eight providers expose the same feature surface — list instances, live state, power control, SSH connect — no provider gets a reduced experience
 - Live instance state (running / stopped / transitioning) with start/stop control
 - Cloud account credentials must never be stored in the database
 - No vendor SDKs embedded — all providers accessed via their REST APIs
@@ -80,7 +87,8 @@ repository: https://github.com/tabssh/android
 ### Automation and integrations
 - Tasker/Locale plugin for launching connections from external apps
 - Quick-connect home-screen widgets
-- QR pairing for importing connection profiles from a desktop companion
+- Tasker, widgets, and quick-connect all drive the same public intent surface, so third-party automation apps can launch connections too
+- QR pairing for importing connection profiles from a desktop companion — the QR payload is encrypted with an Argon2id-derived key envelope
 
 ### Distribution constraints
 - F-Droid compatible: no proprietary libraries, no analytics, reproducible build variant
