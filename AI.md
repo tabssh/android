@@ -135,11 +135,10 @@ Defined in `app/build.gradle`:
 | HTTP/WS | `com.squareup.okhttp3:okhttp` | 4.12.0 |
 | DB | `androidx.room:room-runtime`, `room-ktx`, `room-compiler` (KSP) | 2.6.1 |
 | Background | `androidx.work:work-runtime` | 2.9.0 |
-| Security | `androidx.security:security-crypto` | 1.1.0-alpha06 |
 | Biometric | `androidx.biometric:biometric` | 1.1.0 |
-| UI | `com.google.android.material:material` | 1.11.0 |
+| UI | `com.google.android.material:material` | 1.12.0 |
 | Charts | `com.github.PhilJay:MPAndroidChart` | v3.1.0 |
-| JSON | `org.jetbrains.kotlinx:kotlinx-serialization-json` 1.6.0 |
+| JSON | `org.jetbrains.kotlinx:kotlinx-serialization-json` 1.7.3 |
 | Test | JUnit 4.13.2, Mockito 5.7.0, Espresso 3.5.1, JaCoCo |
 
 `settings.gradle` adds Termux's Maven repo and JitPack alongside Google + Maven Central.

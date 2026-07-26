@@ -11,7 +11,7 @@ internal_org: tabssh
 app_id: io.github.tabssh
 min_sdk: 21
 target_sdk: 34
-compile_sdk: 34
+compile_sdk: 35
 language: Kotlin
 license: MIT
 repository: https://github.com/tabssh/android
