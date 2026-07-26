@@ -9,7 +9,7 @@ project_org: tabssh
 internal_name: tabssh
 internal_org: tabssh
 app_id: io.github.tabssh
-min_sdk: 21
+min_sdk: 24
 target_sdk: 34
 compile_sdk: 35
 language: Kotlin
@@ -43,13 +43,13 @@ repository: https://github.com/tabssh/android
 - Post-connect script execution
 - Per-connection color tags, font size overrides, custom themes
 - URL detection on long-press
-- Performance dashboard with configurable monitor slots per host and metric graphs (MPAndroidChart)
+- Performance dashboard with configurable monitor slots per host and metric graphs
 
 ### Security requirements
 - All passwords and private key passphrases must never be stored in plaintext or in the database
-- Credential storage with tiered access levels: never / session-only / encrypted / biometric — encrypted tiers are backed by Android Keystore AES-GCM
+- Credential storage with tiered access levels: never / session-only / encrypted / biometric — encrypted tiers are backed by hardware-backed device key storage
 - Biometric unlock for stored passwords with configurable TTL
-- App-lock PIN with a failed-attempt lockout — the PIN is stored only as a salted Argon2id hash, never plaintext
+- App-lock PIN with a failed-attempt lockout — the PIN is stored only as a salted one-way hash, never plaintext
 - Screenshot capture prevention (configurable); always enforced on PIN and auth screens
 - SSH host key verification on first connect (TOFU) with fingerprint display
 - Clipboard auto-clear for sensitive pastes
@@ -58,17 +58,17 @@ repository: https://github.com/tabssh/android
 ### Sync and backup
 - Cross-device sync via SAF — user supplies any DocumentsProvider (Google Drive, Dropbox, OneDrive, Nextcloud, local); app embeds no cloud SDKs
 - Cross-device merge with per-entity conflict resolution
-- End-to-end encrypted sync — passphrase required, no server-side keys; AES-256-GCM with PBKDF2-HmacSHA256 (100,000 iterations) key derivation
-- Backup and restore as a portable encrypted archive — versioned format (currently v3) with in-archive version metadata so older backups migrate forward on import
+- End-to-end encrypted sync — a user passphrase is required and there are no server-side keys; sync archives are encrypted with a passphrase-derived key
+- Backup and restore as a portable encrypted archive — versioned format with in-archive version metadata so older backups migrate forward on import
 
 ### Hypervisor management
 - Proxmox, XCP-ng (and Xen Orchestra), VMware, QEMU/libvirt (KVM) — list VMs/instances, start, stop, shutdown, reboot, snapshot
-- QEMU/libvirt is managed over an SSH transport (`virsh` on the remote host) — no libvirt TCP daemon needs to be exposed
+- QEMU/libvirt is managed over an SSH transport to the remote host — no libvirt TCP daemon needs to be exposed
 - Built-in VNC console client for VM graphical consoles — consoles open as swipeable tabs next to terminal sessions
 - SPICE console client for hypervisors that expose SPICE displays
 - Reusable hypervisor credential accounts (username/password or OCI API key) shared across hypervisor profiles
 - TLS certificate pinning (TOFU) for hypervisor REST APIs — pins are stored per profile and rotated only on explicit user re-approval
-- OCI API key authentication (tenancy, user, region, fingerprint, compartment, private key) — PEM private keys parsed via BouncyCastle
+- OCI API key authentication (tenancy, user, region, fingerprint, compartment, private key)
 
 ### Cloud provider management
 - Manage SSH-accessible instances across DigitalOcean, Hetzner, Linode, Vultr, AWS EC2, Google Cloud Compute, Azure VMs, and Oracle Cloud (OCI)
@@ -88,19 +88,13 @@ repository: https://github.com/tabssh/android
 - Tasker/Locale plugin for launching connections from external apps
 - Quick-connect home-screen widgets
 - Tasker, widgets, and quick-connect all drive the same public intent surface, so third-party automation apps can launch connections too
-- QR pairing for importing connection profiles from a desktop companion — the QR payload is encrypted with an Argon2id-derived key envelope
+- QR pairing for importing connection profiles from a desktop companion — the QR payload is encrypted with a passphrase-derived key envelope
 
 ### Distribution constraints
 - F-Droid compatible: no proprietary libraries, no analytics, reproducible build variant
 - Zero telemetry by default; opt-in only
 - Works fully offline (no cloud account required to use the app)
 - No feature gating — all functionality available to all users
-
-### Build toolchain
-- The project maintains its own build image `ghcr.io/tabssh/android:build`, built from `docker/Dockerfile.build` and refreshed monthly by `build-toolchain.yml`. This is the declared build image for the project.
-- The image bakes the full Android toolchain — SDK, platform-tools, build-tools, CMake 3.22.1, and the pinned NDK 26.1.10909125 — plus the GitHub CLI and pre-warmed Gradle caches, so CI and local `make` never provision or lazily download the toolchain per run.
-- All CI (`ci.yml`, `dev-builds.yml`, `release.yml`) and the Makefile build and test inside this image; no toolchain is installed inline in a workflow step.
-- The generic `casjaysdev/android` maintained image does not exist yet; until it does, this project-declared image is the toolchain. If that image is later published, the build image may be rebased `FROM casjaysdev/android` (extend, never replace).
 
 ### What the app must never do
 - Store raw passwords or PEM keys in the Room database

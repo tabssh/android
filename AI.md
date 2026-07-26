@@ -47,9 +47,9 @@
 | **License** | MIT |
 | **Repository** | https://github.com/tabssh/android |
 | **Distribution** | GitHub Releases + F-Droid (planned) |
-| **Min SDK** | 21 (Android 5.0) — covers ~99.5% of devices |
+| **Min SDK** | 24 (Android 7.0) — covers ~96% of active devices. Raised from 21 to eliminate latent NewApi crashes from unguarded API 22–24 calls; see the rationale comment in `app/build.gradle`. |
 | **Target SDK** | 34 (Android 14) |
-| **Compile SDK** | 34 |
+| **Compile SDK** | 35 |
 | **JVM target** | 17 |
 | **Kotlin code style** | `official` |
 
@@ -111,6 +111,8 @@
 | Gradle wrapper | 8.11.1 | `gradle/wrapper/gradle-wrapper.properties` |
 | OWASP DependencyCheck | 8.4.0 | `build.gradle` (CVSS fail threshold ≥ 7.0) |
 | JVM target | 17 (Eclipse Temurin in Docker) | `app/build.gradle`, `docker/Dockerfile` |
+
+**Declared build image.** The project maintains its own build image `ghcr.io/tabssh/android:build`, built from `docker/Dockerfile.build` and refreshed monthly by `build-toolchain.yml`. It bakes the full Android toolchain — SDK, platform-tools, build-tools, CMake 3.22.1, and the pinned NDK 26.1.10909125 — plus the GitHub CLI and pre-warmed Gradle caches, so CI and local `make` never provision or lazily download the toolchain per run. All CI (`ci.yml`, `dev-builds.yml`, `release.yml`) and the Makefile build and test inside this image; no toolchain is installed inline in a workflow step. The generic `casjaysdev/android` maintained image does not exist yet; until it does, this project-declared image is the toolchain, and it may later be rebased `FROM casjaysdev/android` (extend, never replace).
 
 ### 3.2 Build types and flavors
 
@@ -196,7 +198,7 @@ Crash handling: shows `CrashReportActivity` in debug, logs and clears sensitive 
 
 Top-level config: `android:name=".TabSSHApplication"`, `android:allowBackup="false"`, `android:fullBackupContent="false"`, `android:dataExtractionRules="@xml/data_extraction_rules"`, `android:hardwareAccelerated="true"`, `android:largeHeap="true"`, default theme `@style/Theme.TabSSH.Dark`.
 
-**Permissions:** `INTERNET`, `ACCESS_NETWORK_STATE`, `USE_BIOMETRIC`, `USE_FINGERPRINT`, `READ_EXTERNAL_STORAGE` and `WRITE_EXTERNAL_STORAGE` (API ≤28), `WAKE_LOCK`, `VIBRATE`, `POST_NOTIFICATIONS` (API 33+), `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_DATA_SYNC`. Uses `tools:overrideLibrary` to allow Termux's library to coexist with `minSdk 21`.
+**Permissions:** `INTERNET`, `ACCESS_NETWORK_STATE`, `USE_BIOMETRIC`, `USE_FINGERPRINT`, `READ_EXTERNAL_STORAGE` and `WRITE_EXTERNAL_STORAGE` (API ≤28), `WAKE_LOCK`, `VIBRATE`, `POST_NOTIFICATIONS` (API 33+), `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_DATA_SYNC`. Uses `tools:overrideLibrary` to allow Termux's library to coexist with `minSdk 24`.
 
 **Exported components:** `MainActivity` (LAUNCHER), `TaskerActionReceiver` (Tasker plug-in broadcast receiver), `ConnectionWidgetProvider` and its size-variant inner-class receivers (`Widget2x1`/`Widget4x2`/`Widget4x4`). Everything else is `exported="false"`.
 
@@ -1452,7 +1454,7 @@ When modifying this codebase follow these rules:
 5. **Threading discipline.** `lifecycleScope.launch {}` defaults to `Dispatchers.Main` — never call Keystore, database, or filesystem ops inside a bare launch. `Room` suspend DAOs switch dispatchers automatically; `SecurePasswordManager.retrievePassword()` does **not** — always wrap it in `withContext(Dispatchers.IO)`. All `HypervisorPasswordStore` store/retrieve methods do switch internally. SAF launcher callbacks fire on Main; capture `context` before launching IO and guard `withContext(Dispatchers.Main)` blocks with `if (!isAdded) return@withContext`.
 6. **Activity composition over inheritance.** New screens should be activities or fragments hosted by `SettingsActivity`-style containers, not subclasses of existing activities.
 7. **Use the existing notification channels.** Don't create new channels for one-off events.
-8. **Keep `minSdk = 21` working.** Termux's library targets a higher SDK and is allowed via `tools:overrideLibrary`; new dependencies must respect minSdk 21 or be guarded by `Build.VERSION.SDK_INT` checks.
+8. **Keep `minSdk = 24` working.** minSdk was raised from 21 to 24 (Android 7.0) to eliminate a class of latent `NewApi` crashes — dozens of API 22–24 calls were invoked unguarded under minSdk 21 (see the rationale comment in `app/build.gradle`). Termux's library targets a higher SDK and is allowed via `tools:overrideLibrary`; new dependencies must respect minSdk 24 or be guarded by `Build.VERSION.SDK_INT` checks.
 9. **F-Droid build must remain reproducible.** Don't introduce non-deterministic generated code, don't pull in proprietary services, don't add network-fetching Gradle plugins.
 10. **Prefer `Flow` and `StateFlow`.** That's the existing reactive style; don't introduce LiveData, RxJava, or callback chains for new code.
 11. **AI.md is the architecture, CLAUDE.md is a short loader.** When you change architecture, update AI.md. When you add a dev rule, add it here in §17. Never add spec content to CLAUDE.md.
