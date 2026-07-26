@@ -15,6 +15,23 @@
 
 ## ✅ Recently Shipped
 
+- **`69181e9183c8`** 📝 SPEC DRIFT — synced IDEA.md with all 24 shipped-feature backlog items (VNC/SPICE consoles, Telnet, X11, Mosh roaming, libvirt-over-SSH, cloud parity, dashboard slots/graphs, macro library, snippet UI, QR Argon2id, backup v3, sync PBKDF2-100k, Keystore AES-GCM tiers, PIN Argon2id, TLS TOFU rotation, OCI PEM parsing, multiplexer heuristics, transcript format, bulk-import mapping, intent surface, audit-log retention); "23 built-in themes" verified correct against `BuiltInThemes` (3+12+8).
+- **`bc2ac25fb93a`** 📦 NIT-1 — dep bumps: compileSdk 34→35 (targetSdk stays 34), appcompat 1.7.1, core-ktx 1.16.0, fragment-ktx 1.8.9, lifecycle 2.9.4, material 1.12.0, serialization 1.7.3, coroutines 1.10.2; dropped unused `lifecycle-livedata-ktx` (orphaned by L1); coroutines/serialization capped below the Kotlin-2.2-metadata lines (compiler is Kotlin 2.0.21); MPAndroidChart stays v3.1.0 (no newer pin exists, no known CVEs).
+- **`9e4681a44172`** ⚡ O8 — bulk-reconnect thread cap: `SSHConnection` handshakes now run on a shared `Dispatchers.IO.limitedParallelism(8)` view instead of raw IO, so N reconnecting tabs no longer occupy N IO threads; disconnect/exec/SFTP stay on plain IO.
+- **`4df0c4e49b8d`** ⚡ O5 — pre-cached known-hosts map in `HostKeyVerifier` fed by the `getAllHostKeys()` Room Flow; ACCEPTED fast path serves from cache with async bookkeeping; any miss/mismatch still hits the authoritative transactional DAO verify (staleness can only cause an extra prompt, never a silent accept).
+- **`4351a4c76f19`** ⚡ O1 — `TerminalRenderer` reuses two pooled `Paint` objects (`cellBgPaint`, `glyphPaint`) instead of allocating per glyph/run, eliminating GC churn on full-screen redraws.
+- **`a18114367cc9`** 🗑️ L2+O4 — dropped Gson; Room `Converters.kt` and `TabTerminalActivity` profile hand-off now use kotlinx-serialization (lenient + ignoreUnknownKeys keeps old Gson-written rows readable); removed the Gson dep.
+- **`ed2bc5f0a100`** ♻️ O3 — collapsed duplicate `ConnectionDao.getConnection`/`getConnectionById` to one query; call sites updated.
+- **`ba6c0825bbb8`** ♻️ L1 — LiveData fully removed: DAO `*LiveData()` methods deleted, `ConnectionListFragment` collects `StateFlow` via `repeatOnLifecycle`.
+- **`4a7ad2cedf47`** 📝 AD5 — AI.md §16 no longer frames Mosh/X11/Telnet as stubs.
+- **`6bb16916e3fa`** 📝 AD3 — AI.md §15 package map regenerated from the real source layout.
+- **`61fb6f65403e`** 📝 AD2 — AI.md §2 entity count corrected against `TabSSHDatabase`.
+- **`9a7e9cbdba1f`** 📝 AD1 — AI.md states the real Room version (v6, numbering reset at v3) instead of "37"/"17".
+- **`311f8af21fcb`** 🔧 L6 — CI version strings derived from `release.txt` instead of hardcoded "1.0.0".
+- **`007fafd015f3`** 🎨 L4 — `settings.gradle` inline trailing comment moved above the line.
+- **`2ed48571f731`** 🗑️ L3 — dead commented-out `onCreateOptionsMenu` block deleted from `TabTerminalActivity`.
+- **(no commit)** O6 closed as already resolved — `LibvirtApiClient.listDomains()` is already a single `virsh list --all` round-trip; per-VM `domifaddr`/`vncdisplay`/power calls are on-demand user actions, not a loop — nothing to batch.
+- **(no commit)** O7 closed as already resolved — version/commit stamping was already a cached task input in the tree.
 - **`f33f871b55ca`** 📝 Fix stale VMConsoleActivity references after retirement — final grep sweep after the VNC-tab-swipe migration; corrected `AI.md`/`PLAN.AI.md` prose still describing `VMConsoleActivity` as a live component, and `VncBackgroundSessionStore.kt`/`VncKeepAliveService.kt` KDoc still describing it as the current session owner.
 - **`177756ee8131`** 🐛 Retire VMConsoleActivity, park VNC/console tabs in background — VNC-tab-swipe integration complete (multi-commit feature, steps 1–7 per AI.md §11.7.2): `c15ba899251e` (schema v5→v6), `68384a2cda5d` (sealed `Tab`/`VncTab`), `755c6112a3b5` (`TabManager` sealed-Tab backing store), `fdfa35256115` (`TerminalPagerAdapter` VncViewHolder), `45292e078f63` (VNC-aware edge-swipe gating), `070596a23b76` (`ConsoleTab`/`Tab.Console`), `eb4333fb91fc` (`TabManager.createConsoleTab()`), `b363a4289ce2` (migrate VNC/libvirt entry points onto `Tab.Vnc`), `80a87fb57e0d` (swipe gating for graphical console tabs), `177756ee8131` (Proxmox/XCP-ng entry-point consolidation, background-parking parity, `VMConsoleActivity`/`VncStreamHolder` deletion). Every VNC and hypervisor-console connection now opens as a swipeable tab in `TabTerminalActivity`; the standalone full-screen viewer is gone.
 - **`6e549c327987`** 🐛 Fix tab create/close permanently disabling swipe-to-switch — `TabTerminalActivity.updateViewPagerAdapter()` now calls `selectionActionMode?.finish()` before rebuilding the adapter, so a stale floating ActionMode from a prior selection no longer leaves swipe permanently disabled.
@@ -78,8 +95,11 @@
 ## 📌 Open items (migrated from AUDIT.AI.md, deleted 2026-07-25)
 
 All CRITICAL/HIGH/MEDIUM audit findings (C1–C7, H1–H11, M1–M14) were fixed and
-re-verified against source before the audit file was deleted. The items below
-were still open at deletion time.
+re-verified against source before the audit file was deleted. All migrated
+LOW/NIT/OPT/SPEC-DRIFT/AD items shipped on 2026-07-25 — see ✅ Recently Shipped
+(`2ed48571f731` … `69181e9183c8`; O6/O7 closed as already resolved, no commit;
+L5/O2/AD4 were already resolved before the audit file was deleted). Only the
+maintainer-credential items below remain.
 
 ### Maintainer actions (cannot be done by AI)
 
@@ -92,76 +112,6 @@ were still open at deletion time.
   https://nvd.nist.gov/developers/request-an-api-key and add it as the
   `NVD_API_KEY` repo secret; until then `dependencyCheckAnalyze` runs
   unauthenticated/throttled. Code-level wiring is done.
-
-### LOW / NIT
-
-- **L1 — LiveData in new code**: `ThemeDao.kt`, `KeyDao.kt`, `ConnectionDao.kt`,
-  `ConnectionListFragment.kt` still expose/use `LiveData`; AI.md §17 rule 10
-  forbids it. Migrate to `Flow`/`StateFlow`.
-- **L2 — Dual JSON libraries**: both Gson 2.10.1 (Room `Converters.kt`,
-  `TabTerminalActivity.kt`) and kotlinx-serialization 1.6.0 (sync) ship.
-  Consolidate on kotlinx-serialization; drop Gson.
-- **L3 — Commented-out code**: dead `onCreateOptionsMenu` block in
-  `TabTerminalActivity.kt` (~line 2815). Delete.
-- **L4 — Inline trailing comment**: `settings.gradle:14` (`// Termux ...` on a
-  code line). Move to its own line above.
-- **L6 — Stale version strings in CI**: `ci.yml:200,209` hardcode
-  "TabSSH 1.0.0" (project is 0.9.1). Derive from `release.txt`.
-- **NIT-1 — Outdated AndroidX/Kotlin deps**: appcompat 1.6.1→1.7.x,
-  core-ktx 1.12→1.16, fragment-ktx 1.6.2→1.8.x, lifecycle 2.7→2.9,
-  coroutines 1.7.3→1.10.x, kotlinx-serialization 1.6→1.7.x, material 1.11→1.12;
-  MPAndroidChart v3.1.0 unmaintained. No known CVEs at current pins.
-
-### OPT — optimization opportunities
-
-- **O1 — Per-character Paint allocation**: `TerminalRenderer.kt` allocates a
-  `Paint` per glyph/run during draw → GC churn on full-screen redraws. Reuse a
-  pool keyed by style.
-- **O3 — Duplicate DAO queries**: `ConnectionDao.getConnectionById` /
-  `getConnection` are redundant. Collapse to one.
-- **O4 — Redundant serialization round-trips**: follows from L2 —
-  `ConnectionProfile` serialized via Gson in hot UI paths.
-- **O5 — `runBlocking` on the connect path**: host-key DB read still blocks the
-  handshake thread per connect; a pre-cached known-hosts map would remove it.
-- **O6 — String-built shell commands over SSH**: libvirt/virsh path reformats
-  command strings per call; batch status queries to cut SSH round-trips.
-- **O7 — Configure-time work in `build.gradle`**: move version/commit stamping
-  to a cached task input for faster incremental builds.
-- **O8 — Bulk reconnect thread usage**: per-session scopes without pooling; a
-  shared lifecycle-scoped dispatcher would cap thread growth.
-
-### SPEC DRIFT — IDEA.md update backlog
-
-`IDEA.md` (the WHAT spec) is missing shipped features. Each needs a sentence in
-the relevant section before the next release: VNC console client · SPICE client ·
-Telnet · X11 forwarding · Mosh watchdog/roaming lifecycle · cloud-provider parity
-check (DO/Hetzner/Linode/Vultr/EC2/GCP/Azure/OCI) · libvirt-over-SSH transport ·
-dashboard/monitor slots · MPAndroidChart graphs · macro library (raw-byte
-recording) · snippet `{var}` substitution UI · QR pairing Argon2id envelope ·
-backup format v3 schema/versioning · sync PBKDF2-100k parameters · Keystore
-AES-GCM tiered password storage · PIN hashing/lockout mechanics · hypervisor TLS
-TOFU pinning store/rotation · OCI PEM/BouncyCastle key parsing · verify
-"23 built-in themes" count · multiplexer auto-attach heuristics · session
-transcript on-disk format · bulk-import field mapping (CSV/JSON/PuTTY
-.reg/Terraform) · Tasker/widget/quick-connect intent surface · audit-log
-storage/retention + privacy note.
-
-### AI.md INTERNAL DRIFT
-
-- **AD1 — DB version disagreement**: AI.md §8.1 says "version 37", §2 says
-  "Room (v17), 17 entities"; code is `version = 6` (numbering reset at v3 by
-  `0bd35d42`). Make AI.md state the real version and note the reset — this is
-  NOT a task to author missing migrations.
-- **AD2 — Entity count**: recompute §2's "17 entities" against
-  `TabSSHDatabase`'s registered entity set.
-- **AD3 — §15 package map lists phantom packages**: regenerate from the actual
-  `app/src/main/java/io/github/tabssh` layout.
-- **AD5 — Stub status stale wording**: §16 lists Mosh/X11/Telnet under a
-  "stubs" heading while stating they are fully implemented. Move them out of
-  any "stub" framing.
-
-Resolved before deletion (not migrated): L5 (`$(shell pwd)` already gone from
-Makefile), O2 (closed by M11), AD4 (closed by M8).
 
 ---
 
