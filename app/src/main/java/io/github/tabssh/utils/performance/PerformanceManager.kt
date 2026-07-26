@@ -304,52 +304,6 @@ class PerformanceManager(private val context: Context) {
     }
     
     /**
-     * Get performance recommendations
-     */
-    fun getPerformanceRecommendations(): List<PerformanceRecommendation> {
-        val metrics = _performanceMetrics.value
-        val recommendations = mutableListOf<PerformanceRecommendation>()
-        
-        // Memory recommendations
-        if (metrics.memoryPressureLevel == MemoryPressureLevel.HIGH) {
-            recommendations.add(
-                PerformanceRecommendation(
-                    type = RecommendationType.MEMORY,
-                    title = "High Memory Usage",
-                    description = "Consider closing unused tabs or reducing scrollback buffer size",
-                    priority = RecommendationPriority.HIGH
-                )
-            )
-        }
-        
-        // Battery recommendations
-        if (metrics.batteryLevel < 20 && !metrics.isCharging) {
-            recommendations.add(
-                PerformanceRecommendation(
-                    type = RecommendationType.BATTERY,
-                    title = "Low Battery",
-                    description = "Enable battery saver mode to extend usage time",
-                    priority = RecommendationPriority.HIGH
-                )
-            )
-        }
-        
-        // CPU recommendations
-        if (metrics.cpuUsagePercent > 70) {
-            recommendations.add(
-                PerformanceRecommendation(
-                    type = RecommendationType.CPU,
-                    title = "High CPU Usage",
-                    description = "Reduce terminal animation frequency or close resource-intensive connections",
-                    priority = RecommendationPriority.MEDIUM
-                )
-            )
-        }
-        
-        return recommendations
-    }
-    
-    /**
      * Cleanup resources
      */
     fun cleanup() {
@@ -395,24 +349,6 @@ data class PerformanceMetrics(
  */
 enum class MemoryPressureLevel {
     NORMAL, MODERATE, HIGH, CRITICAL
-}
-
-/**
- * Performance recommendations
- */
-data class PerformanceRecommendation(
-    val type: RecommendationType,
-    val title: String,
-    val description: String,
-    val priority: RecommendationPriority
-)
-
-enum class RecommendationType {
-    MEMORY, CPU, BATTERY, NETWORK, RENDERING
-}
-
-enum class RecommendationPriority {
-    LOW, MEDIUM, HIGH, CRITICAL
 }
 
 /**

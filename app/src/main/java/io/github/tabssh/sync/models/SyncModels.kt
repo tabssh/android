@@ -3,27 +3,10 @@ package io.github.tabssh.sync.models
 import io.github.tabssh.storage.database.entities.CloudAccount
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HostKeyEntry
-import io.github.tabssh.storage.database.entities.HypervisorAccount
-import io.github.tabssh.storage.database.entities.Macro
-import io.github.tabssh.storage.database.entities.MonitorSlot
 import io.github.tabssh.storage.database.entities.StoredKey
 import io.github.tabssh.storage.database.entities.ThemeDefinition
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
-
-/**
- * Result of a sync operation
- */
-data class SyncResult(
-    val success: Boolean,
-    val message: String,
-    val conflicts: List<Conflict> = emptyList(),
-    val syncedItemCounts: SyncItemCounts? = null,
-    val timestamp: Long = System.currentTimeMillis(),
-    val error: Exception? = null
-) {
-    fun hasConflicts(): Boolean = conflicts.isNotEmpty()
-}
 
 /**
  * Counts of synced items
@@ -74,53 +57,6 @@ data class SyncMetadata(
     val formatVersion: Int = 2,
     val encryptionVersion: Int = 1,
     val itemCounts: SyncItemCounts
-)
-
-/**
- * Complete sync file data structure
- */
-@Serializable
-data class SyncFileData(
-    val metadata: SyncMetadata,
-    val connections: List<ConnectionProfile>,
-    val keys: List<StoredKey>,
-    val themes: List<ThemeDefinition>,
-    val preferences: Map<String, JsonElement>,
-    val hostKeys: List<HostKeyEntry>,
-    val syncBase: SyncBase,
-    /** Wave 5.3 — optional for backward compat with v2 sync files. */
-    val workspaces: List<io.github.tabssh.storage.database.entities.Workspace> = emptyList(),
-    /** Wave 5.4 — additional last-write-wins entities. */
-    val snippets: List<io.github.tabssh.storage.database.entities.Snippet> = emptyList(),
-    val identities: List<io.github.tabssh.storage.database.entities.Identity> = emptyList(),
-    val groups: List<io.github.tabssh.storage.database.entities.ConnectionGroup> = emptyList(),
-    /** Wave 7.1 — last-write-wins. */
-    val hypervisors: List<io.github.tabssh.storage.database.entities.HypervisorProfile> = emptyList(),
-    val certificates: List<io.github.tabssh.storage.database.entities.TrustedCertificate> = emptyList(),
-    /** Wave 11 — macros / monitor_slots (missing from original SyncFileData; added 2026-05-21). */
-    val macros: List<Macro> = emptyList(),
-    val monitorSlots: List<MonitorSlot> = emptyList(),
-    /** Wave 12 — hypervisor account metadata (missing from original SyncFileData; added 2026-05-21). */
-    val hypervisorAccounts: List<HypervisorAccount> = emptyList(),
-    /** Wave 13 — direct VNC hosts and VNC identity metadata. */
-    val vncHosts: List<io.github.tabssh.storage.database.entities.VncHost> = emptyList(),
-    val vncIdentities: List<io.github.tabssh.storage.database.entities.VncIdentity> = emptyList(),
-    /** Wave 14 — cloud provider account metadata (token stays Keystore-bound via secrets). */
-    val cloudAccounts: List<CloudAccount> = emptyList(),
-    /** Multi-host dashboard groups and host membership from the `multi_host_dashboard`
-     *  SharedPreferences file.  Empty when sync_dashboard switch is off (per-device default). */
-    val dashboardConfig: Map<String, String> = emptyMap()
-)
-
-/**
- * Base snapshot for 3-way merge
- */
-@Serializable
-data class SyncBase(
-    val connectionHashes: Map<String, String> = emptyMap(),
-    val keyHashes: Map<String, String> = emptyMap(),
-    val themeHashes: Map<String, String> = emptyMap(),
-    val hostKeyHashes: Map<String, String> = emptyMap()
 )
 
 /**
@@ -217,16 +153,6 @@ data class EncryptedData(
 }
 
 /**
- * Sync trigger types
- */
-enum class SyncTrigger {
-    MANUAL,
-    ON_LAUNCH,
-    ON_CHANGE,
-    SCHEDULED
-}
-
-/**
  * Merge strategy options
  */
 enum class MergeStrategy {
@@ -319,99 +245,6 @@ data class MergeResult<T>(
     fun hasConflicts(): Boolean = conflicts.isNotEmpty()
 
     fun isSuccessful(): Boolean = conflicts.isEmpty()
-}
-
-/**
- * Sync status information
- */
-data class SyncStatus(
-    val enabled: Boolean,
-    val lastSyncTime: Long,
-    val lastSyncResult: SyncResult?,
-    val isSyncing: Boolean,
-    val accountEmail: String?,
-    val deviceId: String,
-    val pendingConflictCount: Int = 0
-) {
-    fun hasNeverSynced(): Boolean = lastSyncTime == 0L
-
-    fun getLastSyncDescription(): String {
-        if (hasNeverSynced()) return "Never synced"
-
-        val now = System.currentTimeMillis()
-        val diff = now - lastSyncTime
-
-        return when {
-            diff < 60_000 -> "Just now"
-            diff < 3600_000 -> "${diff / 60_000} minutes ago"
-            diff < 86400_000 -> "${diff / 3600_000} hours ago"
-            diff < 604800_000 -> "${diff / 86400_000} days ago"
-            else -> "${diff / 604800_000} weeks ago"
-        }
-    }
-}
-
-/**
- * Complete merge result combining all entity types
- */
-data class CompleteMergeResult(
-    val connectionResult: MergeResult<io.github.tabssh.storage.database.entities.ConnectionProfile>,
-    val keyResult: MergeResult<io.github.tabssh.storage.database.entities.StoredKey>,
-    val themeResult: MergeResult<io.github.tabssh.storage.database.entities.ThemeDefinition>,
-    val hostKeyResult: MergeResult<io.github.tabssh.storage.database.entities.HostKeyEntry>,
-    val preferences: Map<String, JsonElement>,
-    val conflicts: List<Conflict>
-) {
-    fun hasConflicts(): Boolean = conflicts.isNotEmpty()
-}
-
-/**
- * Remote sync file information
- */
-data class RemoteSyncFile(
-    val fileId: String,
-    val fileName: String,
-    val deviceId: String,
-    val modifiedTime: Long,
-    val size: Long
-)
-
-/**
- * Sync progress information
- */
-data class SyncProgress(
-    val stage: SyncStage,
-    val currentItem: Int = 0,
-    val totalItems: Int = 0,
-    val message: String = ""
-) {
-    fun getPercentage(): Int {
-        return if (totalItems > 0) {
-            ((currentItem.toFloat() / totalItems) * 100).toInt()
-        } else {
-            0
-        }
-    }
-}
-
-/**
- * Stages of sync operation
- */
-enum class SyncStage {
-    IDLE,
-    AUTHENTICATING,
-    COLLECTING_DATA,
-    ENCRYPTING,
-    UPLOADING,
-    DOWNLOADING,
-    DECRYPTING,
-    MERGING,
-    RESOLVING_CONFLICTS,
-    APPLYING_CHANGES,
-    APPLYING,  // Added for force download
-    COMPLETED,
-    FAILED,
-    ERROR      // Added for error states
 }
 
 /**

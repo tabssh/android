@@ -68,34 +68,6 @@ object DialogUtils {
     }
 
     /**
-     * Shows a confirmation dialog with Yes/No buttons
-     */
-    fun showConfirmDialog(
-        context: Context,
-        title: String,
-        message: String,
-        positiveButton: String = "Yes",
-        negativeButton: String = "No",
-        onConfirm: () -> Unit,
-        onCancel: (() -> Unit)? = null
-    ) {
-        if (isContextDead(context)) return
-        MaterialAlertDialogBuilder(context)
-            .setTitle(title)
-            .setMessage(message)
-            .setPositiveButton(positiveButton) { dialog, _ ->
-                dialog.dismiss()
-                onConfirm()
-            }
-            .setNegativeButton(negativeButton) { dialog, _ ->
-                dialog.dismiss()
-                onCancel?.invoke()
-            }
-            .setCancelable(false)
-            .show()
-    }
-
-    /**
      * Shows a dialog with a copy button for any text content
      */
     fun showCopyableDialog(

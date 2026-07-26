@@ -234,21 +234,4 @@ abstract class TabSSHDatabase : RoomDatabase() {
         Logger.d("TabSSHDatabase", "Database maintenance completed")
     }
 
-    suspend fun getDatabaseStats(): DatabaseStats {
-        return DatabaseStats(
-            connectionCount = connectionDao().getConnectionCount(),
-            keyCount = keyDao().getKeyCount(),
-            hostKeyCount = hostKeyDao().getHostKeyCount(),
-            sessionCount = tabSessionDao().getActiveSessionCount(),
-            themeCount = themeDao().getThemeCount()
-        )
-    }
 }
-
-data class DatabaseStats(
-    val connectionCount: Int = 0,
-    val keyCount: Int = 0,
-    val hostKeyCount: Int = 0,
-    val sessionCount: Int = 0,
-    val themeCount: Int = 0
-)

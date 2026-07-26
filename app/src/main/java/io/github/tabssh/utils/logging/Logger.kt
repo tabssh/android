@@ -693,19 +693,7 @@ object Logger {
         i("Logger", "App log cleared by user")
     }
 
-    /**
-     * Clear all logs (both debug and app logs)
-     */
-    fun clearAllLogs() {
-        clearLogs()
-        clearAppLog()
-    }
-
     fun isDebugMode(): Boolean = debugMode
-
-    fun setContext(context: Context) {
-        appContext = context.applicationContext
-    }
 
     /**
      * Get ALL logs as string (for debugging/support)
@@ -828,36 +816,6 @@ object Logger {
         }
     }
 
-    /**
-     * Get error logs as string
-     */
-    fun getErrorLogs(): String {
-        val errorLog = appContext?.let { File(it.filesDir, "error.log") }
-        return if (errorLog?.exists() == true) {
-            errorLog.readText()
-        } else {
-            logFile?.let { file ->
-                if (file.exists()) {
-                    file.readLines().filter {
-                        it.contains(" E/") || it.contains("WTF/") || it.contains("CRASH")
-                    }.takeLast(200).joinToString("\n")
-                } else ""
-            } ?: "No error logs found"
-        }
-    }
-
-    /**
-     * Get audit logs as string
-     */
-    fun getAuditLogs(): String {
-        val auditLog = appContext?.let { File(it.filesDir, "audit.log") }
-        return if (auditLog?.exists() == true) {
-            auditLog.readText()
-        } else {
-            "Audit logging not enabled or no audit events recorded"
-        }
-    }
-
     // ── Per-host log ─────────────────────────────────────────────────────────
 
     // Rotation cap comes from the host_log_max_size_mb preference (default 1 MB),
@@ -921,20 +879,6 @@ object Logger {
                 ?: emptyList()
         } else {
             emptyList()
-        }
-    }
-
-    /**
-     * Read the host log for a specific connection ID (primary + overflow).
-     */
-    fun readHostLog(connectionId: String): String {
-        val ctx = appContext ?: return ""
-        val logsDir = File(ctx.filesDir, "host_logs")
-        val primary  = File(logsDir, "$connectionId.log")
-        val overflow = File(logsDir, "$connectionId.log.1")
-        return buildString {
-            if (overflow.exists()) append(overflow.readText())
-            if (primary.exists())  append(primary.readText())
         }
     }
 

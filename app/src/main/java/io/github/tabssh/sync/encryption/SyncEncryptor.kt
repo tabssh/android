@@ -251,39 +251,6 @@ class SyncEncryptor {
         return criteriaCount >= 3
     }
 
-    /**
-     * Get password strength description
-     */
-    fun getPasswordStrength(password: String): PasswordStrength {
-        if (password.length < 8) return PasswordStrength.WEAK
-        if (password.length < 12) return PasswordStrength.FAIR
-
-        val hasUppercase = password.any { it.isUpperCase() }
-        val hasLowercase = password.any { it.isLowerCase() }
-        val hasDigit = password.any { it.isDigit() }
-        val hasSpecial = password.any { !it.isLetterOrDigit() }
-
-        val criteriaCount = listOf(hasUppercase, hasLowercase, hasDigit, hasSpecial).count { it }
-
-        return when {
-            password.length >= 16 && criteriaCount >= 4 -> PasswordStrength.VERY_STRONG
-            password.length >= 14 && criteriaCount >= 3 -> PasswordStrength.STRONG
-            password.length >= 12 && criteriaCount >= 3 -> PasswordStrength.GOOD
-            criteriaCount >= 2 -> PasswordStrength.FAIR
-            else -> PasswordStrength.WEAK
-        }
-    }
-}
-
-/**
- * Password strength levels
- */
-enum class PasswordStrength(val description: String) {
-    WEAK("Weak - Not recommended"),
-    FAIR("Fair - Consider adding more characters"),
-    GOOD("Good - Acceptable"),
-    STRONG("Strong - Recommended"),
-    VERY_STRONG("Very Strong - Excellent")
 }
 
 /**

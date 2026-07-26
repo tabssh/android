@@ -491,45 +491,12 @@ class SessionPersistenceManager(
     }
     
     /**
-     * Get session persistence statistics
-     */
-    suspend fun getSessionStatistics(): SessionStatistics {
-        val activeSessions = database.tabSessionDao().getActiveSessionsList()
-        val totalSessions = database.tabSessionDao().getAllTabs()
-
-        return SessionStatistics(
-            isAppInForeground = isAppInForeground,
-            activeActivityCount = activeActivityCount,
-            lastBackgroundTime = lastBackgroundTime,
-            preserveSessionsEnabled = preserveSessionsOnBackground,
-            activeSavedSessions = activeSessions.size,
-            totalSavedSessions = totalSessions.size,
-            backgroundDuration = if (lastBackgroundTime > 0 && !isAppInForeground) {
-                System.currentTimeMillis() - lastBackgroundTime
-            } else 0L
-        )
-    }
-    
-    /**
      * Cleanup resources
      */
     fun cleanup() {
         Logger.d("SessionPersistenceManager", "Cleaning up session persistence manager")
-        
+
         backgroundMonitoringJob?.cancel()
         persistenceScope.cancel()
     }
 }
-
-/**
- * Session persistence statistics
- */
-data class SessionStatistics(
-    val isAppInForeground: Boolean,
-    val activeActivityCount: Int,
-    val lastBackgroundTime: Long,
-    val preserveSessionsEnabled: Boolean,
-    val activeSavedSessions: Int,
-    val totalSavedSessions: Int,
-    val backgroundDuration: Long
-)

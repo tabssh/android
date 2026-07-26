@@ -615,26 +615,6 @@ class SFTPManager(private val sshConnection: SSHConnection) {
         activeTransfers.clear()
     }
     
-    /**
-     * Get transfer statistics
-     */
-    fun getTransferStatistics(): SFTPStatistics {
-        val totalTransfers = activeTransfers.size
-        val uploading = activeTransfers.values.count { it.type == TransferType.UPLOAD }
-        val downloading = activeTransfers.values.count { it.type == TransferType.DOWNLOAD }
-        val totalBytes = activeTransfers.values.sumOf { it.totalBytes }
-        val transferredBytes = activeTransfers.values.sumOf { it.bytesTransferred }
-        
-        return SFTPStatistics(
-            activeTransfers = totalTransfers,
-            uploadingCount = uploading,
-            downloadingCount = downloading,
-            totalBytes = totalBytes,
-            transferredBytes = transferredBytes,
-            isConnected = _isConnected.value
-        )
-    }
-    
     // Helper methods
     
     private fun generateTransferId(): String = UUID.randomUUID().toString()
@@ -756,18 +736,6 @@ data class RemoteFileInfo(
         else -> "File"
     }
 }
-
-/**
- * SFTP statistics
- */
-data class SFTPStatistics(
-    val activeTransfers: Int,
-    val uploadingCount: Int,
-    val downloadingCount: Int,
-    val totalBytes: Long,
-    val transferredBytes: Long,
-    val isConnected: Boolean
-)
 
 /**
  * SFTP event listener interface

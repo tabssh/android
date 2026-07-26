@@ -379,24 +379,6 @@ class ThemeManager(private val context: Context) {
         Logger.d("ThemeManager", "Theme cache cleared")
     }
     
-    /**
-     * Get theme usage statistics
-     */
-    suspend fun getThemeStatistics(): ThemeStatistics {
-        val allThemes: List<ThemeDefinition> = database.themeDao().getAllThemes().first()
-        val customThemes = allThemes.count { it: ThemeDefinition -> !it.isBuiltIn }
-        val totalUsage = allThemes.sumOf { it: ThemeDefinition -> it.usageCount }
-        val mostPopular = allThemes.maxByOrNull { it: ThemeDefinition -> it.usageCount }
-
-        return ThemeStatistics(
-            totalThemes = allThemes.size,
-            builtInThemes = allThemes.size - customThemes,
-            customThemes = customThemes,
-            totalUsageCount = totalUsage,
-            mostPopularTheme = mostPopular?.name ?: "Unknown"
-        )
-    }
-    
     private fun generateThemeId(name: String): String {
         return "custom_" + name.lowercase()
             .replace(Regex("[^a-z0-9]"), "_")
@@ -494,17 +476,6 @@ sealed class ImportThemeResult {
     data class Success(val theme: Theme) : ImportThemeResult()
     data class Error(val message: String) : ImportThemeResult()
 }
-
-/**
- * Theme usage statistics
- */
-data class ThemeStatistics(
-    val totalThemes: Int,
-    val builtInThemes: Int,
-    val customThemes: Int,
-    val totalUsageCount: Int,
-    val mostPopularTheme: String
-)
 
 /**
  * Interface for theme change events

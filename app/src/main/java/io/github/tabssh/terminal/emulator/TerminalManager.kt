@@ -123,35 +123,6 @@ class TerminalManager(private val context: Context) {
     }
     
     /**
-     * Get terminal statistics
-     */
-    fun getTerminalStatistics(): TerminalManagerStats {
-        val totalTerminals = terminals.size
-        val activeTerminals = terminals.values.count { it.isActive.value }
-        val memoryUsage = estimateMemoryUsage()
-        
-        return TerminalManagerStats(
-            totalTerminals = totalTerminals,
-            activeTerminals = activeTerminals,
-            memoryUsageBytes = memoryUsage
-        )
-    }
-    
-    private fun estimateMemoryUsage(): Long {
-        // Rough estimate of memory usage
-        var totalMemory = 0L
-        
-        terminals.values.forEach { terminal ->
-            val buffer = terminal.getBuffer()
-            val bufferSize = buffer.getRows() * buffer.getCols() * 16 // Rough estimate per char
-            val scrollbackSize = buffer.getScrollbackSize() * buffer.getCols() * 16
-            totalMemory += bufferSize + scrollbackSize
-        }
-        
-        return totalMemory
-    }
-    
-    /**
      * Trim memory usage by cleaning up inactive terminals
      */
     fun trimInactiveTerminals() {
@@ -208,12 +179,18 @@ class TerminalManager(private val context: Context) {
     private suspend fun performMaintenance() {
         Logger.d("TerminalManager", "Performing terminal maintenance")
         
-        val stats = getTerminalStatistics()
-        Logger.d("TerminalManager", "Terminal stats: ${stats.totalTerminals} total, ${stats.activeTerminals} active, ${stats.memoryUsageBytes / 1024}KB memory")
-        
+        // Rough memory estimate: 16 bytes per cell across buffer and scrollback
+        var memoryUsageBytes = 0L
+        terminals.values.forEach { terminal ->
+            val buffer = terminal.getBuffer()
+            memoryUsageBytes += (buffer.getRows() + buffer.getScrollbackSize()).toLong() * buffer.getCols() * 16
+        }
+        val activeTerminals = terminals.values.count { it.isActive.value }
+        Logger.d("TerminalManager", "Terminal stats: ${terminals.size} total, $activeTerminals active, ${memoryUsageBytes / 1024}KB memory")
+
         // Clean up inactive terminals if memory usage is high
-        if (stats.memoryUsageBytes > 50 * 1024 * 1024) { // 50MB threshold
-            Logger.w("TerminalManager", "High memory usage (${stats.memoryUsageBytes / 1024 / 1024}MB), trimming terminals")
+        if (memoryUsageBytes > 50 * 1024 * 1024) { // 50MB threshold
+            Logger.w("TerminalManager", "High memory usage (${memoryUsageBytes / 1024 / 1024}MB), trimming terminals")
             trimInactiveTerminals()
         }
         
@@ -298,34 +275,4 @@ class TerminalManager(private val context: Context) {
         
         Logger.i("TerminalManager", "Terminal manager cleanup complete")
     }
-    
-    /**
-     * Get debug information
-     */
-    fun getDebugInfo(): String {
-        val stats = getTerminalStatistics()
-        return buildString {
-            appendLine("Terminal Manager Debug Info:")
-            appendLine("Total Terminals: ${stats.totalTerminals}")
-            appendLine("Active Terminals: ${stats.activeTerminals}")
-            appendLine("Memory Usage: ${stats.memoryUsageBytes / 1024}KB")
-            appendLine("Default Size: ${defaultCols}x${defaultRows}")
-            appendLine("Max Scrollback: $maxScrollback")
-            appendLine("Terminal Type: $defaultTerminalType")
-            appendLine("Encoding: $defaultEncoding")
-            appendLine("Terminals:")
-            terminals.forEach { (id, terminal) ->
-                appendLine("  $id: ${terminal.getCols()}x${terminal.getRows()}, active=${terminal.isActive.value}")
-            }
-        }
-    }
 }
-
-/**
- * Terminal manager statistics
- */
-data class TerminalManagerStats(
-    val totalTerminals: Int,
-    val activeTerminals: Int,
-    val memoryUsageBytes: Long
-)

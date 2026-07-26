@@ -336,27 +336,6 @@ class PortForwardingManager(private val sshConnection: SSHConnection) {
     }
     
     /**
-     * Get port forwarding statistics
-     */
-    fun getStatistics(): PortForwardingStatistics {
-        val totalTunnels = activeTunnels.size
-        val activeTunnelCount = activeTunnels.values.count { it.state == TunnelState.ACTIVE }
-        val localForwards = activeTunnels.values.count { it.type == TunnelType.LOCAL_FORWARD }
-        val remoteForwards = activeTunnels.values.count { it.type == TunnelType.REMOTE_FORWARD }
-        val dynamicForwards = activeTunnels.values.count { it.type == TunnelType.DYNAMIC_FORWARD }
-        val totalBytesTransferred = activeTunnels.values.sumOf { it.bytesTransferred }
-        
-        return PortForwardingStatistics(
-            totalTunnels = totalTunnels,
-            activeTunnels = activeTunnelCount,
-            localForwards = localForwards,
-            remoteForwards = remoteForwards,
-            dynamicForwards = dynamicForwards,
-            totalBytesTransferred = totalBytesTransferred
-        )
-    }
-    
-    /**
      * Check if a local port is available
      */
     suspend fun isPortAvailable(port: Int): Boolean = withContext(Dispatchers.IO) {
@@ -604,18 +583,6 @@ enum class TunnelState(val displayName: String) {
     ACTIVE("Active"),
     ERROR("Error")
 }
-
-/**
- * Port forwarding statistics
- */
-data class PortForwardingStatistics(
-    val totalTunnels: Int,
-    val activeTunnels: Int,
-    val localForwards: Int,
-    val remoteForwards: Int,
-    val dynamicForwards: Int,
-    val totalBytesTransferred: Long
-)
 
 /**
  * Port forwarding event listener

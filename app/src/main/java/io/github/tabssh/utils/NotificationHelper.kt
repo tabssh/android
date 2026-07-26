@@ -737,14 +737,6 @@ object NotificationHelper {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.cancel(notificationId)
     }
-    
-    /**
-     * Cancel all notifications
-     */
-    fun cancelAllNotifications(context: Context) {
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.cancelAll()
-    }
 
     // ── Host monitoring notifications ─────────────────────────────────────────
 

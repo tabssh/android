@@ -240,9 +240,9 @@ Top-level config: `android:name=".TabSSHApplication"`, `android:allowBackup="fal
 
 `MainActivity` and `TabTerminalActivity` are `singleTop`. All have `parentActivityName` set for back navigation.
 
-### 4.4 Fragments (8)
+### 4.4 Fragments (7)
 
-`FrequentConnectionsFragment`, `ConnectionsFragment`, `IdentitiesFragment`, `PerformanceFragment`, `HypervisorsFragment`, `ConnectionListFragment`, `CloudAccountsFragment`, `InfraFragment`. Plus `PreferenceFragmentCompat` subclasses inside `SettingsActivity`: `SettingsMainFragment`, `GeneralSettingsFragment`, `TerminalSettingsFragment`, `SecuritySettingsFragment`, `ConnectionSettingsFragment`, `LoggingSettingsFragment`, `TaskerSettingsFragment`. `SyncSettingsActivity` hosts a `PreferenceFragmentCompat` for SAF sync settings (defined inline in that activity).
+`FrequentConnectionsFragment`, `ConnectionsFragment`, `IdentitiesFragment`, `PerformanceFragment`, `HypervisorsFragment`, `CloudAccountsFragment`, `InfraFragment`. Plus `PreferenceFragmentCompat` subclasses inside `SettingsActivity`: `SettingsMainFragment`, `GeneralSettingsFragment`, `TerminalSettingsFragment`, `SecuritySettingsFragment`, `ConnectionSettingsFragment`, `LoggingSettingsFragment`, `TaskerSettingsFragment`. `SyncSettingsActivity` hosts a `PreferenceFragmentCompat` for SAF sync settings (defined inline in that activity).
 
 ### 4.5 Services and receivers
 
@@ -481,7 +481,7 @@ The same bridge is used by console tabs (`Tab.Console` in `TabTerminalActivity`)
 ### 6.4 Input
 
 - `KeyboardHandler` translates Android key events into ANSI control sequences.
-- `view_custom_keyboard.xml` + `KeyboardKeyAdapter` implement an on-screen SSH keyboard (Esc, Tab, Ctrl, Alt, arrows, Fn keys, customizable rows 1–5).
+- `MultiRowKeyboardView` + `KeyboardRowView` (in `ui.keyboard`) implement the on-screen SSH keyboard bar (Esc, Tab, Ctrl, Alt, arrows, Fn keys, customizable rows 1–5).
 - `GestureCommandMapper` + `TerminalGestureHandler` bind multi-touch gestures (2/3-finger swipes, pinch in/out — 10 mappings) to tmux/screen/zellij command sequences with configurable prefix.
 - **Find-in-scrollback** — `TabTerminalActivity.showFindDialog()` opens an `AlertDialog` with an `EditText`. On submit it calls `TermuxBridge.findInScrollback(query)` which scans the Termux buffer rows for the query string (case-insensitive), highlights matches by temporarily inverting their cell colours, and scrolls to the first hit. Accessible from the terminal bottom sheet menu ("Find in Scrollback…").
 
@@ -957,9 +957,9 @@ Realm format `user@pam` / `user@pve`. Optional SSL bypass.
     the same TLS pinning behaviour as the other hypervisors.
   - `OciInstance.kt` — Compute Instance data class +
     `OciInstanceAction` enum.
-  - `OciConfigParser.kt` — zero-dep INI parser for `~/.oci/config`,
-    handles `[DEFAULT]` + named sections, rejects session-token
-    profiles up front.
+  - `~/.oci/config` INI parsing lives in
+    `CloudAccountsFragment.parseOciConfigIni()` — handles `[DEFAULT]`
+    + named sections, rejects session-token profiles up front.
 - **UI:** OCI onboarding is hosted **inline in `HypervisorEditActivity`**;
   `OciManagerActivity` shows the instance list with start/stop/softstop/
   reset/softreset (no console — deferred). When the user picks "OCI"
@@ -1119,7 +1119,7 @@ Package `cloud/` (separate from `hypervisor/`). Manages SSH-accessible cloud VM 
 | `PerformanceOverlayView` | draggable real-time CPU/mem/battery/network overlay |
 | `ConnectionAdapter`, `GroupedConnectionAdapter` | connection list (flat / grouped) |
 | `TerminalPagerAdapter`, `MainPagerAdapter` | tab pagers |
-| `IdentityAdapter`, `FileAdapter`, `TransferAdapter`, `TunnelAdapter`, `SnippetAdapter`, `AuditLogAdapter`, `TranscriptAdapter`, `HypervisorAdapter`, `KeyboardKeyAdapter` | self-explanatory |
+| `IdentityAdapter`, `FileAdapter`, `TransferAdapter`, `TunnelAdapter`, `SnippetAdapter`, `AuditLogAdapter`, `TranscriptAdapter`, `HypervisorAdapter` | self-explanatory |
 
 ---
 
@@ -1284,7 +1284,6 @@ If a new file triggers a false positive, add a targeted `grep -v` to the chain a
 | `cloud` | Cloud provider clients (`AwsEc2Client`, `AzureVmClient`, `GcpComputeClient`, `DigitalOceanClient`, `HetznerClient`, `LinodeClient`, `VultrClient`, `OciCloudClient`), `CloudProvider`, `CloudInstanceState` |
 | `cluster` | Cluster-command session fan-out (`ClusterCommandExecutor`) |
 | `crypto` | `SSHKeyParser`, `SSHKeyGenerator` |
-| `crypto.algorithms` | `CryptoUtils` |
 | `crypto.keys` | `KeyStorage`, `KeyType` |
 | `crypto.storage` | `SecurePasswordManager` |
 | `crypto.tls` | Hypervisor TLS TOFU (`HypervisorTrustManagerFactory`, `HypervisorCertPromptDialog`) |
@@ -1294,7 +1293,7 @@ If a new file triggers a false positive, add a targeted `grep -v` to the chain a
 | `hypervisor.xcpng` | `XCPngApiClient`, `XenOrchestraApiClient`, models |
 | `hypervisor.vmware` | `VMwareApiClient`, models |
 | `hypervisor.libvirt` | `LibvirtApiClient` (SSH-tunneled VNC + virsh), `LibvirtVm` |
-| `hypervisor.oci` | `OciApiClient`, `OciSigner`, `OciKeyMaterial`, `OciConfigParser`, `OciInstance` |
+| `hypervisor.oci` | `OciApiClient`, `OciSigner`, `OciKeyMaterial`, `OciInstance` |
 | `hypervisor.vnc` | `VncDirectConnector` (direct-VNC entry point), `VncBackgroundSessionStore` (background-parking store) |
 | `hypervisor.vnc.console` | `VncConsoleChannel` |
 | `network` | `NetworkAwareReconnector`, `ConnectionDiagnostic` |
@@ -1319,7 +1318,7 @@ If a new file triggers a false positive, add a targeted `grep -v` to the chain a
 | `sync.encryption` | `SyncEncryptor` |
 | `sync.merge` | `MergeEngine` (3-way merge), `ConflictResolver` (apply user decisions) |
 | `sync.metadata` | `SyncMetadataManager` (device id, version, timestamps) |
-| `sync.models` | `SyncDataPackage`, `SyncMetadata`, `SyncResult`, `Conflict`, `ConflictResolution`, `MergeResult`, `DeviceInfo`, `SyncItemCounts`, etc. |
+| `sync.models` | `SyncDataPackage`, `SyncMetadata`, `Conflict`, `ConflictResolution`, `MergeResult`, `DeviceInfo`, `SyncItemCounts`, etc. |
 | `sync.observer` | `DatabaseChangeObserver` (debounced sync-on-change) |
 | `sync.tombstone` | `TombstoneRecorder` (explicit-delete tombstoning for sync) |
 | `sync.worker` | `SyncWorker`, `SyncWorkScheduler` |
@@ -1339,7 +1338,7 @@ If a new file triggers a false positive, add a targeted `grep -v` to the chain a
 | `ui.keyboard` | Custom on-screen keyboard widgets |
 | `ui.models` | UI-only view-model state classes |
 | `ui.tabs` | `TabManager`, `SSHTab` |
-| `ui.utils` | UI-scoped helpers (`ConnectionLauncher`, `ConnectionListBuilder`, `DialogUtils`, `UIHelper`) |
+| `ui.utils` | UI-scoped helpers (`ConnectionLauncher`, `DialogUtils`) |
 | `ui.views` | `TerminalView`, `PerformanceOverlayView` |
 | `utils` | `ClipboardHelper`, `NotificationHelper`, `FontManager`, `ActivityExtensions`, `RecyclerViewExt` |
 | `utils.diagnostics` | `AnrWatchdog` |

@@ -648,17 +648,6 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
 }
 
 /**
- * Tab state enumeration
- */
-enum class TabState {
-    CONNECTING,
-    CONNECTED,
-    DISCONNECTED,
-    ERROR
-}
-
-
-/**
  * Tab manager event listener
  */
 interface TabManagerListener {
