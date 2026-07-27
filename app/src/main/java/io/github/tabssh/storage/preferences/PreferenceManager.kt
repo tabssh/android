@@ -88,7 +88,6 @@ class PreferenceManager(private val context: Context) {
         // UI preferences
         private const val KEY_MAX_TABS = "ui_max_tabs"
         private const val KEY_CONFIRM_TAB_CLOSE = "ui_confirm_tab_close"
-        private const val KEY_SHOW_FUNCTION_KEYS = "ui_show_function_keys"
         private const val KEY_FULLSCREEN_MODE = "ui_fullscreen_mode"
         private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
         // Key MUST match preferences_general.xml's `<ListPreference android:key="app_theme"/>`
@@ -399,9 +398,6 @@ class PreferenceManager(private val context: Context) {
     fun isConfirmTabClose(): Boolean = getBoolean(KEY_CONFIRM_TAB_CLOSE, true)
     fun setConfirmTabClose(confirm: Boolean) = setBoolean(KEY_CONFIRM_TAB_CLOSE, confirm)
     
-    fun isShowFunctionKeys(): Boolean = getBoolean(KEY_SHOW_FUNCTION_KEYS, true)
-    fun setShowFunctionKeys(show: Boolean) = setBoolean(KEY_SHOW_FUNCTION_KEYS, show)
-    
     fun isFullscreenMode(): Boolean = getBoolean(KEY_FULLSCREEN_MODE, false)
     fun setFullscreenMode(fullscreen: Boolean) = setBoolean(KEY_FULLSCREEN_MODE, fullscreen)
     
@@ -686,6 +682,12 @@ class PreferenceManager(private val context: Context) {
 
     fun isAutoResolveConflictsEnabled(): Boolean = getBoolean("sync_auto_resolve", true)
     fun setAutoResolveConflicts(enabled: Boolean) = setBoolean("sync_auto_resolve", enabled)
+
+    // Set when a headless (WorkManager) sync hits conflicts it could not resolve
+    // interactively and had to keep the local side (§9.6). The user can review
+    // and reconcile from a foreground sync; cleared once acknowledged.
+    fun hasPendingSyncConflicts(): Boolean = getBoolean("sync_pending_conflicts", false)
+    fun setPendingSyncConflicts(pending: Boolean) = setBoolean("sync_pending_conflicts", pending)
 
     // Note: SAF sync settings (file URI, password) are stored in SAFSyncManager's own SharedPreferences
     // The settings above are used by SyncWorkScheduler for scheduling decisions

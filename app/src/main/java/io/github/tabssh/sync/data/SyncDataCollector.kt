@@ -780,7 +780,6 @@ class SyncDataCollector {
             "confirmTabClose" to preferenceManager.isConfirmTabClose(),
             "appTheme" to preferenceManager.getAppTheme(),
             "dynamicColors" to preferenceManager.isDynamicColors(),
-            "showFunctionKeys" to preferenceManager.isShowFunctionKeys(),
             "fullscreenMode" to preferenceManager.isFullscreenMode(),
             "keepScreenOn" to preferenceManager.isKeepScreenOn()
         )

@@ -88,6 +88,18 @@ class BackupManager(private val context: Context) {
         try {
             Logger.i("BackupManager", "Creating backup...")
 
+            // Encryption requested but no usable password: fail loudly. The old
+            // code fell through to the plaintext branch, writing an unencrypted
+            // backup of every credential while the encryptBackup=true UI promised
+            // otherwise — a silent downgrade that must never happen.
+            if (encryptBackup && password.isNullOrBlank()) {
+                Logger.e("BackupManager", "Encrypted backup requested without a password")
+                return@withContext BackupResult(
+                    success = false,
+                    message = "Encrypted backup requires a password"
+                )
+            }
+
             // A backup always contains absolutely everything, including all
             // credentials. Encryption is a file-level option the user controls;
             // it never changes what the backup contains. This guarantees a

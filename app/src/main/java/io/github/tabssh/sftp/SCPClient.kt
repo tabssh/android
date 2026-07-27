@@ -89,8 +89,18 @@ class SCPClient(private val sshConnection: SSHConnection) {
             }
 
             // Send file header: C<mode> <length> <filename>\n
+            // The filename is the last field and runs to the newline, so any
+            // newline or control byte in it would inject a second SCP protocol
+            // message (e.g. a forged D-directory or C-file record). Reject such
+            // names outright rather than silently truncating.
             val mode = "0644"
             val name = File(remotePath).name
+            if (name.isEmpty() || name == "." || name == ".." ||
+                name.contains('/') || name.any { it.code < 0x20 }) {
+                Logger.e(TAG, "SCP refused unsafe remote filename")
+                task.complete(TransferResult.Error("Unsafe remote filename"))
+                return@withContext false
+            }
             val header = "C$mode ${localFile.length()} $name\n"
             out.write(header.toByteArray(Charsets.US_ASCII))
             out.flush()

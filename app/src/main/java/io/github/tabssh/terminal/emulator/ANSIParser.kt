@@ -183,6 +183,13 @@ class ANSIParser(private val buffer: TerminalBuffer) {
                 currentParam.clear()
                 parserState = ParserState.CSI_PARAM
             }
+            ch in '<'..'?' -> {
+                // DEC private-mode marker (< = > ?) — e.g. ESC[?1049h. Record it
+                // and keep parsing parameters so private modes (alternate screen,
+                // cursor visibility, bracketed paste) dispatch instead of aborting.
+                intermediateChars.append(ch)
+                parserState = ParserState.CSI_PARAM
+            }
             ch in ' '..'/' -> {
                 intermediateChars.append(ch)
                 parserState = ParserState.CSI_INTERMEDIATE

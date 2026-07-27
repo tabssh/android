@@ -12,6 +12,10 @@ interface HostKeyDao {
     
     @Query("SELECT * FROM host_keys ORDER BY hostname, port")
     fun getAllHostKeys(): Flow<List<HostKeyEntry>>
+
+    // Snapshot list variant for the three-way merge base capture (§9.6).
+    @Query("SELECT * FROM host_keys")
+    suspend fun getAllHostKeysList(): List<HostKeyEntry>
     
     @Query("SELECT * FROM host_keys WHERE id = :id")
     suspend fun getHostKeyById(id: String): HostKeyEntry?

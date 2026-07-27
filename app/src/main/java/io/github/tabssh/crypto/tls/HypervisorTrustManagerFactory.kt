@@ -27,9 +27,14 @@ import javax.net.ssl.X509TrustManager
  *                                 the TLS handshake aborts cleanly and OkHttp surfaces
  *                                 the failure as the caller's request error.
  *
- * Hostname verification is intentionally bypassed: hypervisor TLS certs are
- * routinely self-signed with a CN/SAN that doesn't match the user's bookmark
- * hostname (an IP, a `*.local`, or `localhost`). Pin-by-fingerprint replaces it.
+ * Hostname verification is conditional. For a leaf accepted because it chains
+ * to a system CA (publicly-trusted endpoints such as OCI), strict RFC 2818
+ * hostname verification runs — the cert carries a real hostname and skipping
+ * the check would let a valid cert for one host be replayed against another.
+ * For a self-signed / TOFU-pinned leaf it is bypassed: hypervisor certs
+ * routinely use a CN/SAN that doesn't match the bookmark hostname (an IP, a
+ * `*.local`, or `localhost`), and pin-by-fingerprint already binds identity.
+ * (The `verifySsl = false` trust-all path bypasses everything by design.)
  */
 object HypervisorTrustManagerFactory {
 
@@ -119,6 +124,18 @@ object HypervisorTrustManagerFactory {
         // Resolved once at install time and closed over by the TrustManager.
         val systemTm = resolveSystemTrustManager()
 
+        // Leaf SHA-256s that were accepted because they chain to a system CA
+        // (publicly-trusted endpoints such as OCI). For these the certificate
+        // carries a meaningful hostname, so hostname verification MUST run —
+        // skipping it would let a valid cert for host A be replayed against
+        // host B. Self-signed / TOFU-pinned leaves are NOT added here: pinning
+        // by fingerprint already binds the identity, so their hostname bypass
+        // (needed for IP / *.local / self-signed CN mismatches) is retained.
+        // Populated inside checkServerTrusted, read inside the hostname verifier;
+        // both run on the handshake thread but concurrent pooled handshakes can
+        // overlap, so use a thread-safe set.
+        val systemTrustedLeaves = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
         // checkClientTrusted is empty by design — we are the TLS client
         // here, never validating an inbound client cert. checkServerTrusted
         // does the real TOFU pinning work below.
@@ -158,6 +175,7 @@ object HypervisorTrustManagerFactory {
 
                     if (systemTrusted) {
                         captured.sha256 = presented
+                        systemTrustedLeaves.add(presented)
                         Logger.i(TAG, "Publicly-trusted cert accepted silently — captured pin: $presented (host=$host:$port)")
                         return
                     }
@@ -214,8 +232,29 @@ object HypervisorTrustManagerFactory {
         val ctx = SSLContext.getInstance("TLS")
         ctx.init(null, arrayOf<TrustManager>(pinning), java.security.SecureRandom())
         builder.sslSocketFactory(ctx.socketFactory, pinning)
-        // Bypass hostname verification — pinning replaces it (see kdoc).
-        builder.hostnameVerifier { _, _ -> true }
+
+        // Hostname verification policy:
+        //   • Leaf accepted via the system CA  → run strict RFC 2818 hostname
+        //     verification (the cert has a real, meaningful CN/SAN).
+        //   • Leaf accepted via pin / TOFU     → bypass (pinning replaces it;
+        //     hypervisor certs routinely carry an IP / *.local / mismatched CN).
+        val strictVerifier = javax.net.ssl.HttpsURLConnection.getDefaultHostnameVerifier()
+        builder.hostnameVerifier { hostname, session ->
+            val leafSha = try {
+                (session.peerCertificates.firstOrNull() as? X509Certificate)?.let { sha256Hex(it.encoded) }
+            } catch (e: Exception) {
+                null
+            }
+            if (leafSha != null && systemTrustedLeaves.contains(leafSha)) {
+                val ok = strictVerifier.verify(hostname, session)
+                if (!ok) {
+                    Logger.w(TAG, "Hostname verification FAILED for publicly-trusted cert (host=$hostname, leaf=$leafSha)")
+                }
+                ok
+            } else {
+                true
+            }
+        }
     }
 
     /**

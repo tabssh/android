@@ -19,6 +19,7 @@ import io.github.tabssh.sync.models.MergeStrategy
 import io.github.tabssh.sync.models.SyncDataPackage
 import io.github.tabssh.utils.logging.Logger
 import androidx.room.withTransaction
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonElement
@@ -341,6 +342,8 @@ class SyncDataApplier {
 
             Logger.i(TAG, "Applied $appliedCount items from sync data")
             ApplyResult.Success(appliedCount)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to apply sync data", e)
             ApplyResult.Error("Failed to apply sync data: ${e.message}")
@@ -563,6 +566,8 @@ class SyncDataApplier {
             Logger.d(TAG, "Applied $appliedCount sync changes successfully")
 
             ApplyResult.Success(appliedCount)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to apply sync data", e)
             ApplyResult.Error("Failed to apply sync data: ${e.message}")
@@ -1105,7 +1110,6 @@ class SyncDataApplier {
                     "confirmTabClose" -> preferenceManager.setConfirmTabClose(value as Boolean)
                     "appTheme" -> preferenceManager.setAppTheme(value as String)
                     "dynamicColors" -> preferenceManager.setDynamicColors(value as Boolean)
-                    "showFunctionKeys" -> preferenceManager.setShowFunctionKeys(value as Boolean)
                     "fullscreenMode"   -> preferenceManager.setFullscreenMode(value as Boolean)
                     "keepScreenOn"     -> preferenceManager.setKeepScreenOn(value as Boolean)
                 }

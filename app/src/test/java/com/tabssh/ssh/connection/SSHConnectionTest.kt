@@ -2,36 +2,21 @@ package io.github.tabssh.ssh.connection
 
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.ssh.auth.AuthType
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.mockito.Mock
-import org.mockito.MockitoAnnotations
-import org.mockito.junit.MockitoJUnitRunner
-import org.mockito.kotlin.verify
-import org.mockito.kotlin.whenever
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * Comprehensive unit tests for SSH connection management
+ * Unit tests for SSH connection value types (profile, state, auth, stats).
  */
-@ExperimentalCoroutinesApi
-@RunWith(MockitoJUnitRunner::class)
 class SSHConnectionTest {
-    
-    @Mock
-    private lateinit var mockConnectionListener: ConnectionListener
-    
+
     private lateinit var connectionProfile: ConnectionProfile
-    
+
     @Before
     fun setUp() {
-        MockitoAnnotations.openMocks(this)
-        
         connectionProfile = ConnectionProfile(
             id = "test-connection",
             name = "Test Server",
@@ -108,12 +93,6 @@ class SSHConnectionTest {
         assertEquals(AuthType.PUBLIC_KEY, AuthType.fromString("PUBLIC_KEY"))
         assertEquals(AuthType.PASSWORD, AuthType.fromString(null)) // Default
         assertEquals(AuthType.PASSWORD, AuthType.fromString("INVALID")) // Default
-    }
-    
-    @Test
-    fun `test connection listener notifications`() = runTest {
-        // This would test the connection listener callbacks
-        // Requires more setup with actual connection mocking
     }
     
     @Test

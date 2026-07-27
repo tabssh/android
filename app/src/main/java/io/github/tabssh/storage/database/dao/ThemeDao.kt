@@ -13,6 +13,10 @@ interface ThemeDao {
     @Query("SELECT * FROM themes ORDER BY is_built_in DESC, name")
     fun getAllThemes(): Flow<List<ThemeDefinition>>
 
+    // Snapshot list variant for the three-way merge base capture (§9.6).
+    @Query("SELECT * FROM themes")
+    suspend fun getAllThemesList(): List<ThemeDefinition>
+
     @Query("SELECT * FROM themes WHERE themeId = :themeId")
     suspend fun getThemeById(themeId: String): ThemeDefinition?
 

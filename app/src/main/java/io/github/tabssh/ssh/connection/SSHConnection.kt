@@ -1067,6 +1067,13 @@ class SSHConnection(
             return@withContext null
         }
 
+        // Tracks the jump session from the moment it is created so the catch
+        // block can tear it down. Previously the catch only touched
+        // `jumpHostSession`, which is assigned AFTER jumpSession.connect()
+        // succeeds — so a failure during connect()/auth leaked the half-open
+        // session (and its allocated JSch channel slot).
+        var pendingSession: Session? = null
+
         try {
             // Issue #12 — register jump host with the sanitizer BEFORE the
             // first log line mentions it so it renders as jump{N} rather
@@ -1081,6 +1088,7 @@ class SSHConnection(
 
             // Create jump host session
             val jumpSession = jsch.getSession(jumpUsername, jumpHost, jumpPort)
+            pendingSession = jumpSession
             stepDone("jump-session-create")
 
             // Configure jump host session
@@ -1166,7 +1174,10 @@ class SSHConnection(
 
         } catch (e: Exception) {
             Logger.e("SSHConnection", "Failed to setup jump host", e)
-            jumpHostSession?.disconnect()
+            // Disconnect the session whether or not it reached the
+            // jumpHostSession assignment — pendingSession is set as soon as it
+            // is created, so a failure during connect()/auth no longer leaks it.
+            try { pendingSession?.disconnect() } catch (_: Exception) {}
             jumpHostSession = null
             throw SSHException("Jump host setup failed: ${e.message}", e)
         }
@@ -1791,7 +1802,40 @@ class SSHConnection(
             return@withContext null
         }
     }
-    
+
+    /**
+     * Open a fresh, dedicated SFTP channel that is NOT cached in [sftpChannel].
+     * The caller owns it and MUST disconnect it when done.
+     *
+     * [openSftpChannel] returns one shared channel for the whole connection.
+     * JSch's ChannelSftp is not thread-safe, so concurrent transfers sharing
+     * that single channel corrupt each other. Long-running transfers each take
+     * their own channel via this method (SSH multiplexes channels over the one
+     * session) so they can run in parallel without stepping on one another.
+     */
+    suspend fun openDedicatedSftpChannel(): ChannelSftp? = withContext(Dispatchers.IO) {
+        val currentSession = session
+        if (currentSession == null || !currentSession.isConnected) {
+            Logger.e("SSHConnection", "Cannot open dedicated SFTP channel: session not connected")
+            return@withContext null
+        }
+
+        try {
+            val channel = currentSession.openChannel("sftp") as ChannelSftp
+            try {
+                channel.connect()
+            } catch (e: Exception) {
+                try { channel.disconnect() } catch (_: Exception) {}
+                throw e
+            }
+            Logger.d("SSHConnection", "Dedicated SFTP channel opened")
+            channel
+        } catch (e: Exception) {
+            Logger.e("SSHConnection", "Failed to open dedicated SFTP channel", e)
+            null
+        }
+    }
+
     /**
      * Zero in-memory credential caches without disconnecting. Called by
      * [SSHSessionManager.clearCachedCredentials] when the app moves to the

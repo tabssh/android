@@ -1,7 +1,7 @@
 # TabSSH Android App - Complete Technical Specification
 
 **Version**: 1.0  (database v23)
-**Date**: April 2026 — last sync: 2026-04-28, end of Wave 9.2 (Mosh native binaries shipped end-to-end). Outstanding: FIDO2 hardware-key auth, full SSH-cert UI, snippet `{?password}` variables. See `../FEATURES_AUDIT.md` for the full have/want/drop matrix vs JuiceSSH/Termius.
+**Date**: April 2026 — last sync: 2026-04-28, end of Wave 9.2 (Mosh native binaries shipped end-to-end). Outstanding: FIDO2 hardware-key auth, full SSH-cert UI, snippet `{?password}` variables.
 **Repository**: https://github.com/tabssh/android  
 **Website**: https://tabssh.github.io  
 

@@ -138,6 +138,9 @@ class TermuxBridge(
     @Volatile
     private var readJob: Job? = null
 
+    // Serializes disconnect() so it is atomic and idempotent across threads.
+    private val disconnectLock = Any()
+
     // Coroutine scope for write operations (IO thread)
     private val writeScope = CoroutineScope(Dispatchers.IO + Job())
 
@@ -1029,11 +1032,14 @@ class TermuxBridge(
      * fire the listener callbacks ONLY on the first transition from
      * connected to disconnected.
      */
-    fun disconnect() {
+    fun disconnect() = synchronized(disconnectLock) {
+        // Guarded by disconnectLock so concurrent callers (e.g. the read loop's
+        // onSessionFinished and a user tap) can't both pass the check-then-act
+        // guard and double-close streams or double-fire onDisconnected().
         val wasConnected = _isConnected.value
         if (!wasConnected && inputStream == null && outputStream == null && readJob == null && moshSession == null) {
             // Already torn down — nothing to do, don't re-fire listeners.
-            return
+            return@synchronized
         }
 
         Logger.i(TAG, "Disconnecting")

@@ -141,6 +141,5 @@ Do not do a broad dead code sweep before v1. The risk/reward is wrong — no use
 
 - `AI.md` — architecture, packages, DB schema, sync, crypto, hypervisors, QR pairing
 - `CLAUDE.md` — operational runbook (build commands, commit policy, file locations)
-- `FEATURES_AUDIT.md` — have/want/drop matrix vs JuiceSSH and Termius
 - `fdroid-submission/SPEC.md` — F-Droid formatted app description
-- `release.txt` — single-line version pin, source of truth for `versionName` (currently `0.0.9`)
+- `release.txt` — single-line version pin, source of truth for `versionName` (currently `0.9.1`)

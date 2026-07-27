@@ -430,11 +430,26 @@ dependencies {
 
     // Testing
     testImplementation 'junit:junit:4.13.2'
+    // Maps kotlin.test.* (assertEquals/assertTrue/@Test) onto JUnit4. Every unit
+    // test file uses the kotlin.test API, so without this the whole test source
+    // set fails to compile ("unresolved reference kotlin.test"). Pinned to the
+    // project Kotlin version so the assertion API matches the compiler.
+    testImplementation "org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version"
     testImplementation 'org.mockito:mockito-core:5.7.0'
     testImplementation 'org.mockito:mockito-inline:5.2.0'
     testImplementation 'androidx.room:room-testing:2.8.4'
     testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0'
-    
+    // Robolectric + androidx.test provide an Android runtime for local JVM unit
+    // tests of classes that need a real Context / Android Keystore. Example:
+    // SecurePasswordManagerTest constructs SecurePasswordManager, whose field
+    // initializer calls KeyStore.getInstance("AndroidKeyStore") — that provider
+    // cannot be mocked, so the test needs Robolectric's shadowed keystore and
+    // SharedPreferences. testOptions.unitTests.includeAndroidResources (above)
+    // was already set for exactly this Robolectric-style unit testing.
+    testImplementation 'org.robolectric:robolectric:4.14.1'
+    testImplementation 'androidx.test:core:1.6.1'
+    testImplementation 'androidx.test.ext:junit:1.2.1'
+
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
     androidTestImplementation 'androidx.test:runner:1.5.2'

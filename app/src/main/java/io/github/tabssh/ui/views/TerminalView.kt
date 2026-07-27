@@ -87,8 +87,9 @@ class TerminalView @JvmOverloads constructor(
     // past the long-press timeout before lifting, onLongPress fires for the
     // SAME touch-down as the just-recognized onDoubleTap — opening the
     // terminal context menu right after a double-tap word-select. Track the
-    // down-event time of the last onDoubleTap so onLongPress can recognize
-    // and suppress that specific spurious firing.
+    // down-event time of the double-tap's SECOND tap (captured in
+    // onDoubleTapEvent, since onDoubleTap itself carries the first tap's
+    // event) so onLongPress can recognize and suppress that spurious firing.
     private var lastDoubleTapDownTime = -1L
     private val scroller: OverScroller
     // Float scroll position for sub-row precision. Using a float here lets
@@ -2340,10 +2341,22 @@ class TerminalView @JvmOverloads constructor(
         override fun onDoubleTap(e: MotionEvent): Boolean {
             // Double tap = select word at position
             selectWordAtPosition(e.x, e.y)
-            // Remember this touch-down so a long-press timeout firing for
-            // the SAME down event (see onLongPress below) can be suppressed.
-            lastDoubleTapDownTime = e.downTime
             return true
+        }
+
+        override fun onDoubleTapEvent(e: MotionEvent): Boolean {
+            // Remember the SECOND tap's touch-down so a long-press timeout
+            // firing for that same down event (see onLongPress below) can be
+            // suppressed. This must be captured here and NOT in onDoubleTap:
+            // GestureDetector invokes onDoubleTap with the FIRST tap's down
+            // event (mCurrentDownEvent is replaced only after that callback),
+            // while the long-press timer fires with the second tap's down
+            // event — comparing against the first tap's downTime never
+            // matches, which is why the previous guard failed.
+            if (e.actionMasked == MotionEvent.ACTION_DOWN) {
+                lastDoubleTapDownTime = e.downTime
+            }
+            return false
         }
 
         override fun onLongPress(e: MotionEvent) {

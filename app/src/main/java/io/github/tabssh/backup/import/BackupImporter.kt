@@ -476,7 +476,6 @@ class BackupImporter(
             preferenceManager.setConfirmTabClose(u.optBoolean("confirmTabClose", true))
             preferenceManager.setAppTheme(u.optString("appTheme", "system"))
             preferenceManager.setDynamicColors(u.optBoolean("dynamicColors", true))
-            preferenceManager.setShowFunctionKeys(u.optBoolean("showFunctionKeys", true))
             preferenceManager.setFullscreenMode(u.optBoolean("fullscreenMode", false))
             preferenceManager.setKeepScreenOn(u.optBoolean("keepScreenOn", false))
         }

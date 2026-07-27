@@ -125,12 +125,6 @@
             android:summary="Hide status &amp; navigation bars while in a tab"
             android:defaultValue="false" />
 
-        <SwitchPreferenceCompat
-            android:key="ui_show_function_keys"
-            android:title="Show Function Key Row"
-            android:summary="Display the custom F1-F12 / arrow row in terminals"
-            android:defaultValue="true" />
-
         <ListPreference
             android:key="volume_keys_action"
             android:title="Volume Key Action"

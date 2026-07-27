@@ -431,7 +431,6 @@ class BackupExporter(
             put("confirmTabClose", preferenceManager.isConfirmTabClose())
             put("appTheme", preferenceManager.getAppTheme())
             put("dynamicColors", preferenceManager.isDynamicColors())
-            put("showFunctionKeys", preferenceManager.isShowFunctionKeys())
             put("fullscreenMode", preferenceManager.isFullscreenMode())
             put("keepScreenOn", preferenceManager.isKeepScreenOn())
         })

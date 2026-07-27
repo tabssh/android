@@ -164,7 +164,10 @@ object BuiltInThemes {
             isDark = false,
             isBuiltIn = true,
             background = 0xFFFDF6E3.toInt(),
-            foreground = 0xFF657B83.toInt(),
+            // base01 (emphasized content) instead of canonical base00 body
+            // text: base00 (#657B83) on base3 is ~4.1:1, below WCAG AA 4.5:1
+            // (ThemeValidator ERROR). base01 is ~5.0:1 and still Solarized.
+            foreground = 0xFF586E75.toInt(),
             cursor = 0xFF586E75.toInt(),
             selection = 0x44EEE8D5.toInt(),
             highlight = 0xFFB58900.toInt(),
@@ -596,7 +599,11 @@ object BuiltInThemes {
             isBuiltIn = true,
             background = 0xFF191724.toInt(),
             foreground = 0xFFE0DEF4.toInt(),
-            cursor = 0xFF524F67.toInt(),
+            // "subtle" (#908CAA) instead of "highlight-high" (#524F67):
+            // highlight-high on base is ~2.3:1, below the WCAG AA 4.5:1
+            // cursor check (ThemeValidator ERROR). subtle is ~5.5:1 and
+            // still a canonical Rosé Pine role color.
+            cursor = 0xFF908CAA.toInt(),
             selection = 0x442A2837.toInt(),
             highlight = 0xFFEBBCBA.toInt(),
             ansiColors = intArrayOf(

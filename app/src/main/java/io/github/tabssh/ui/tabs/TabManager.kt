@@ -42,8 +42,17 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
     private val tabs = mutableListOf<Tab>()
     private var activeTabIndex = 0
 
+    // tabs is a plain ArrayList but is mutated from more than the UI thread:
+    // createTab() is invoked from TaskerWorker (a WorkManager background thread)
+    // and SessionPersistenceManager as well as the activity. A monitor lock
+    // (reentrant, so nested helper calls like sshTabs()/publishTabs() are safe)
+    // serializes every read and mutation of the list and activeTabIndex.
+    private val tabsLock = Any()
+
     /** SSH-only view of [tabs], preserving the pre-step-3 iteration order. */
-    private fun sshTabs(): List<SSHTab> = tabs.filterIsInstance<Tab.Ssh>().map { it.sshTab }
+    private fun sshTabs(): List<SSHTab> = synchronized(tabsLock) {
+        tabs.filterIsInstance<Tab.Ssh>().map { it.sshTab }
+    }
 
     // Live snapshot of [tabs] for cross-screen observers (e.g. the
     // Connections-tab "Active Sessions" strip). Re-emitted every time
@@ -62,7 +71,7 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
     private val _allTabsFlow = MutableStateFlow<List<Tab>>(emptyList())
     val allTabsFlow: StateFlow<List<Tab>> = _allTabsFlow.asStateFlow()
 
-    private fun publishTabs() {
+    private fun publishTabs() = synchronized(tabsLock) {
         _tabsFlow.value = sshTabs()
         _allTabsFlow.value = tabs.toList()
     }
@@ -88,7 +97,7 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
      * Create new tab with connection profile
      * @param cursorStyle 0=block, 1=underline, 2=bar (I-beam)
      */
-    fun createTab(profile: ConnectionProfile, cursorStyle: Int = 2): SSHTab? {
+    fun createTab(profile: ConnectionProfile, cursorStyle: Int = 2): SSHTab? = synchronized(tabsLock) {
         if (tabs.size >= maxTabs) {
             Logger.w("TabManager", "Maximum tabs reached: $maxTabs")
             return null
@@ -162,7 +171,7 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
      * VNC-aware observation once TerminalPagerAdapter/TabTerminalActivity
      * actually consume [allTabsFlow].
      */
-    fun createVncTab(vncHost: io.github.tabssh.storage.database.entities.VncHost?, ephemeralDisplayName: String? = null): VncTab? {
+    fun createVncTab(vncHost: io.github.tabssh.storage.database.entities.VncHost?, ephemeralDisplayName: String? = null): VncTab? = synchronized(tabsLock) {
         if (tabs.size >= maxTabs) {
             Logger.w("TabManager", "Maximum tabs reached: $maxTabs")
             return null
@@ -184,7 +193,7 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
      * [saveTabState] persistence — console tabs are session-only, same as
      * VNC tabs are today. Entry-point callers land in step 6e.
      */
-    fun createConsoleTab(connectParams: ConsoleConnectParams): ConsoleTab? {
+    fun createConsoleTab(connectParams: ConsoleConnectParams): ConsoleTab? = synchronized(tabsLock) {
         if (tabs.size >= maxTabs) {
             Logger.w("TabManager", "Maximum tabs reached: $maxTabs")
             return null
@@ -221,7 +230,7 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
      * @return true if at least one session was parked (caller should start
      *   `VncKeepAliveService`).
      */
-    fun parkBackgroundSessions(): Boolean {
+    fun parkBackgroundSessions(): Boolean = synchronized(tabsLock) {
         var parkedAny = false
         tabs.forEach { entry ->
             when (entry) {
@@ -275,7 +284,7 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
      * tabs don't auto-reconnect — the user reopens the host/console like
      * any other disconnected tab).
      */
-    fun reclaimBackgroundSessions() {
+    fun reclaimBackgroundSessions() = synchronized(tabsLock) {
         tabs.forEach { entry ->
             when (entry) {
                 is Tab.Vnc -> {
@@ -319,7 +328,7 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
     /**
      * Close tab by index
      */
-    fun closeTab(index: Int) {
+    fun closeTab(index: Int) = synchronized(tabsLock) {
         if (index in 0 until tabs.size) {
             val entry = tabs[index]
             // cleanup() = disconnect() + termuxBridge.cleanup() + connectionScope.cancel()
@@ -351,7 +360,7 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
     /**
      * Switch to tab by index
      */
-    fun switchToTab(index: Int) {
+    fun switchToTab(index: Int) = synchronized(tabsLock) {
         if (index in 0 until tabs.size && index != activeTabIndex) {
             activeTabIndex = index
             val newTab = getActiveTabSealed()
@@ -368,8 +377,8 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
     fun getActiveTab(): SSHTab? = (getActiveTabSealed() as? Tab.Ssh)?.sshTab
 
     /** Get active tab, whichever kind it is (VNC-tab-swipe integration step 3). */
-    fun getActiveTabSealed(): Tab? {
-        return if (activeTabIndex in 0 until tabs.size) {
+    fun getActiveTabSealed(): Tab? = synchronized(tabsLock) {
+        if (activeTabIndex in 0 until tabs.size) {
             tabs[activeTabIndex]
         } else null
     }
@@ -389,15 +398,15 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
     fun getAllTabs(): List<SSHTab> = sshTabs()
 
     /** Get all tabs, whichever kind they are, in unified-list (pager) order. */
-    fun getAllTabsSealed(): List<Tab> = tabs.toList()
+    fun getAllTabsSealed(): List<Tab> = synchronized(tabsLock) { tabs.toList() }
 
     /**
      * Handle keyboard shortcuts (Tmux-style)
      */
-    fun handleKeyboardShortcut(keyCode: Int, event: KeyEvent): Boolean {
+    fun handleKeyboardShortcut(keyCode: Int, event: KeyEvent): Boolean = synchronized(tabsLock) {
         val isCtrlPressed = event.isCtrlPressed
 
-        return when {
+        when {
             isCtrlPressed && keyCode == KeyEvent.KEYCODE_T -> {
                 // Ctrl+T - New tab (would need connection profile)
                 true
@@ -469,12 +478,12 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
     /**
      * Get tab count
      */
-    fun getTabCount(): Int = tabs.size
+    fun getTabCount(): Int = synchronized(tabsLock) { tabs.size }
 
     /**
      * Move tab position
      */
-    fun moveTab(fromIndex: Int, toIndex: Int) {
+    fun moveTab(fromIndex: Int, toIndex: Int) = synchronized(tabsLock) {
         if (fromIndex in 0 until tabs.size && toIndex in 0 until tabs.size) {
             val tab = tabs.removeAt(fromIndex)
             tabs.add(toIndex, tab)
@@ -499,8 +508,8 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
     fun getTab(index: Int): SSHTab? = (getTabSealed(index) as? Tab.Ssh)?.sshTab
 
     /** Get tab by index, whichever kind it is. */
-    fun getTabSealed(index: Int): Tab? {
-        return if (index in 0 until tabs.size) tabs[index] else null
+    fun getTabSealed(index: Int): Tab? = synchronized(tabsLock) {
+        if (index in 0 until tabs.size) tabs[index] else null
     }
 
     /**
@@ -513,25 +522,27 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
     /**
      * Switch to previous tab
      */
-    fun switchToPreviousTab() {
-        if (tabs.isEmpty()) return
-        val prevIndex = if (activeTabIndex == 0) tabs.size - 1 else activeTabIndex - 1
-        switchToTab(prevIndex)
+    fun switchToPreviousTab() = synchronized(tabsLock) {
+        if (tabs.isNotEmpty()) {
+            val prevIndex = if (activeTabIndex == 0) tabs.size - 1 else activeTabIndex - 1
+            switchToTab(prevIndex)
+        }
     }
 
     /**
      * Switch to next tab
      */
-    fun switchToNextTab() {
-        if (tabs.isEmpty()) return
-        val nextIndex = (activeTabIndex + 1) % tabs.size
-        switchToTab(nextIndex)
+    fun switchToNextTab() = synchronized(tabsLock) {
+        if (tabs.isNotEmpty()) {
+            val nextIndex = (activeTabIndex + 1) % tabs.size
+            switchToTab(nextIndex)
+        }
     }
 
     /**
      * Switch to tab by number (1-based)
      */
-    fun switchToTabNumber(number: Int) {
+    fun switchToTabNumber(number: Int) = synchronized(tabsLock) {
         val index = number - 1
         if (index in 0 until tabs.size) {
             switchToTab(index)
@@ -541,7 +552,7 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
     /**
      * Close all tabs
      */
-    fun closeAllTabs() {
+    fun closeAllTabs() = synchronized(tabsLock) {
         tabs.indices.reversed().forEach { index ->
             closeTab(index)
         }
@@ -569,7 +580,7 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
         // Index is taken from the full unified list so ordering stays
         // stable once VNC/console tabs are interspersed, rather than
         // renumbering around them.
-        val snapshot = tabs.toList()
+        val snapshot = synchronized(tabsLock) { tabs.toList() }
         snapshot.forEachIndexed { index, entry ->
             val tab = (entry as? Tab.Ssh)?.sshTab ?: return@forEachIndexed
             liveIds.add(tab.tabId)
@@ -630,14 +641,16 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
         // cleanup() also tears down each tab's connectionScope and the
         // Termux bridge (SSHTab) or rfbClient + parked session (VncTab) —
         // disconnect() alone leaked both.
-        tabs.forEach { entry ->
-            when (entry) {
-                is Tab.Ssh -> entry.sshTab.cleanup()
-                is Tab.Vnc -> entry.vncTab.cleanup()
-                is Tab.Console -> entry.consoleTab.cleanup()
+        synchronized(tabsLock) {
+            tabs.forEach { entry ->
+                when (entry) {
+                    is Tab.Ssh -> entry.sshTab.cleanup()
+                    is Tab.Vnc -> entry.vncTab.cleanup()
+                    is Tab.Console -> entry.consoleTab.cleanup()
+                }
             }
+            tabs.clear()
         }
-        tabs.clear()
         listeners.clear()
         // Publish so the Connections-tab "Active Sessions" strip — and any
         // other tabsFlow consumer — gets the empty-list emission and can

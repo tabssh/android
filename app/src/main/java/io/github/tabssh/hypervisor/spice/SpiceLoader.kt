@@ -61,7 +61,7 @@ object SpiceLoader {
     /**
      * Returns 1 when the native library was compiled with
      * `TABSSH_SPICE_AVAILABLE=1`, 0 otherwise. Implemented in
-     * `app/src/main/cpp/spice_stub.c`.
+     * `app/src/main/cpp/spice_client.c`.
      */
     @JvmStatic
     private external fun nativeIsSpiceAvailable(): Int

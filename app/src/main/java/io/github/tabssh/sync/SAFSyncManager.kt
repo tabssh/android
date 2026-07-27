@@ -7,6 +7,7 @@ import androidx.documentfile.provider.DocumentFile
 import io.github.tabssh.sync.encryption.SyncEncryptor
 import io.github.tabssh.sync.models.SyncDataPackage
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
@@ -94,6 +95,13 @@ class SAFSyncManager(private val context: Context) {
         prefs.edit().putBoolean(KEY_SYNC_PASSWORD_SET, true).apply()
         return true
     }
+
+    /**
+     * Public accessor for the sync password so the three-way merge coordinator
+     * can encrypt/decrypt the at-rest base snapshot with the same key as the
+     * sync file (§9.6). Returns null when no password is configured.
+     */
+    suspend fun getEncryptionPassword(): String? = getSyncPassword()
 
     /**
      * Get the sync password from secure storage
@@ -264,6 +272,8 @@ class SAFSyncManager(private val context: Context) {
             prefs.edit().putLong("sync_last_time", System.currentTimeMillis()).apply()
 
             true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             lastError = "Upload failed: ${e.message}"
             Logger.e(TAG, "Upload failed", e)
@@ -330,6 +340,8 @@ class SAFSyncManager(private val context: Context) {
             prefs.edit().putLong("sync_last_time", System.currentTimeMillis()).apply()
 
             payload
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             lastError = "Download failed: ${e.message}"
             Logger.e(TAG, "Download failed", e)
@@ -376,6 +388,8 @@ class SAFSyncManager(private val context: Context) {
         } catch (e: SecurityException) {
             Logger.w(TAG, "Permission denied for sync file", e)
             SyncFileStatus.NO_PERMISSION
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Error checking sync file", e)
             SyncFileStatus.ERROR

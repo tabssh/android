@@ -12,11 +12,14 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.Vector
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Manages SFTP operations for file transfer and browsing
@@ -26,9 +29,17 @@ class SFTPManager(private val sshConnection: SSHConnection) {
     
     private var sftpChannel: ChannelSftp? = null
     private val transferScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    
-    // Active transfers
-    private val activeTransfers = mutableMapOf<String, TransferTask>()
+
+    // Serializes access to the shared [sftpChannel] used by metadata operations
+    // (list/stat/mkdir/rm/rename/chmod/cd/pwd/exists). JSch's ChannelSftp is not
+    // thread-safe, so two concurrent metadata calls on the same channel corrupt
+    // each other. Long-running transfers do NOT use this channel — each opens its
+    // own dedicated channel via SSHConnection.openDedicatedSftpChannel().
+    private val channelMutex = Mutex()
+
+    // Active transfers. ConcurrentHashMap because entries are added on the caller
+    // thread and removed from transfer coroutines running on Dispatchers.IO.
+    private val activeTransfers = ConcurrentHashMap<String, TransferTask>()
     
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
@@ -95,33 +106,40 @@ class SFTPManager(private val sshConnection: SSHConnection) {
      * List files and directories in remote path
      */
     suspend fun listRemoteFiles(path: String): List<RemoteFileInfo> = withContext(Dispatchers.IO) {
-        val channel = sftpChannel ?: return@withContext emptyList()
-        
-        return@withContext try {
-            @Suppress("UNCHECKED_CAST")
-            val entries = channel.ls(path) as Vector<ChannelSftp.LsEntry>
-            
-            entries.mapNotNull { entry ->
-                if (entry.filename == "." || entry.filename == "..") {
-                    null
-                } else {
-                    RemoteFileInfo(
-                        name = entry.filename,
-                        path = if (path.endsWith("/")) "$path${entry.filename}" else "$path/${entry.filename}",
-                        size = entry.attrs.size,
-                        permissions = entry.attrs.permissionsString,
-                        isDirectory = entry.attrs.isDir,
-                        isSymlink = entry.attrs.isLink,
-                        modifiedTime = entry.attrs.mTime * 1000L,
-                        owner = entry.attrs.uId,
-                        group = entry.attrs.gId
-                    )
-                }
-            }.sortedWith(compareBy<RemoteFileInfo> { !it.isDirectory }.thenBy { it.name.lowercase() })
-            
-        } catch (e: SftpException) {
-            Logger.e("SFTPManager", "Failed to list remote files in $path", e)
-            emptyList()
+        withChannel(emptyList()) { channel ->
+            try {
+                @Suppress("UNCHECKED_CAST")
+                val entries = channel.ls(path) as Vector<ChannelSftp.LsEntry>
+
+                entries.mapNotNull { entry ->
+                    // Skip "." / ".." and drop any server-supplied name that is
+                    // not a plain path component. A hostile server returning a
+                    // filename with "/" or ".." could otherwise steer a later
+                    // download outside the chosen local directory.
+                    if (!isSafeRemoteName(entry.filename)) {
+                        if (entry.filename != "." && entry.filename != "..") {
+                            Logger.w("SFTPManager", "Skipping remote entry with unsafe name in $path")
+                        }
+                        null
+                    } else {
+                        RemoteFileInfo(
+                            name = entry.filename,
+                            path = if (path.endsWith("/")) "$path${entry.filename}" else "$path/${entry.filename}",
+                            size = entry.attrs.size,
+                            permissions = entry.attrs.permissionsString,
+                            isDirectory = entry.attrs.isDir,
+                            isSymlink = entry.attrs.isLink,
+                            modifiedTime = entry.attrs.mTime * 1000L,
+                            owner = entry.attrs.uId,
+                            group = entry.attrs.gId
+                        )
+                    }
+                }.sortedWith(compareBy<RemoteFileInfo> { !it.isDirectory }.thenBy { it.name.lowercase() })
+
+            } catch (e: SftpException) {
+                Logger.e("SFTPManager", "Failed to list remote files in $path", e)
+                emptyList()
+            }
         }
     }
     
@@ -129,26 +147,26 @@ class SFTPManager(private val sshConnection: SSHConnection) {
      * Get remote file attributes
      */
     suspend fun getRemoteFileAttributes(path: String): RemoteFileInfo? = withContext(Dispatchers.IO) {
-        val channel = sftpChannel ?: return@withContext null
-        
-        return@withContext try {
-            val attrs = channel.stat(path)
-            val name = File(path).name
-            
-            RemoteFileInfo(
-                name = name,
-                path = path,
-                size = attrs.size,
-                permissions = attrs.permissionsString,
-                isDirectory = attrs.isDir,
-                isSymlink = attrs.isLink,
-                modifiedTime = attrs.mTime * 1000L,
-                owner = attrs.uId,
-                group = attrs.gId
-            )
-        } catch (e: SftpException) {
-            Logger.e("SFTPManager", "Failed to get attributes for $path", e)
-            null
+        withChannel(null) { channel ->
+            try {
+                val attrs = channel.stat(path)
+                val name = File(path).name
+
+                RemoteFileInfo(
+                    name = name,
+                    path = path,
+                    size = attrs.size,
+                    permissions = attrs.permissionsString,
+                    isDirectory = attrs.isDir,
+                    isSymlink = attrs.isLink,
+                    modifiedTime = attrs.mTime * 1000L,
+                    owner = attrs.uId,
+                    group = attrs.gId
+                )
+            } catch (e: SftpException) {
+                Logger.e("SFTPManager", "Failed to get attributes for $path", e)
+                null
+            }
         }
     }
     
@@ -216,12 +234,15 @@ class SFTPManager(private val sshConnection: SSHConnection) {
     }
     
     private suspend fun performUpload(task: TransferTask) = withContext(Dispatchers.IO) {
-        val channel = sftpChannel
+        // Each transfer runs on its own dedicated ChannelSftp. JSch channels are
+        // not thread-safe, and a long-running transfer must not block or corrupt
+        // the shared cached metadata channel used by listRemoteFiles/stat/etc.
+        val channel = sshConnection.openDedicatedSftpChannel()
         if (channel == null) {
             task.complete(TransferResult.Error("SFTP not connected"))
             return@withContext
         }
-        
+
         try {
             task.updateState(TransferState.ACTIVE)
             val localFile = File(task.localPath)
@@ -290,6 +311,15 @@ class SFTPManager(private val sshConnection: SSHConnection) {
                 }
             }
             
+            // transferWithProgress exits its copy loop on cancellation, so a
+            // cancelled transfer would otherwise fall through and report Success
+            // over a partial file. Surface the cancellation as Cancelled instead.
+            if (task.isCancelled()) {
+                task.complete(TransferResult.Cancelled)
+                Logger.i("SFTPManager", "Upload cancelled: ${task.localPath}")
+                return@withContext
+            }
+
             task.complete(TransferResult.Success)
             Logger.i("SFTPManager", "Upload completed: ${task.localPath}")
 
@@ -310,17 +340,24 @@ class SFTPManager(private val sshConnection: SSHConnection) {
             Logger.e("SFTPManager", "Upload failed: ${task.localPath}", e)
             task.complete(TransferResult.Error(e.message ?: "Upload failed"))
         } finally {
+            // The dedicated channel is owned by this transfer — always release it.
+            try {
+                channel.disconnect()
+            } catch (e: Exception) {
+                Logger.w("SFTPManager", "Failed to disconnect transfer channel", e)
+            }
             activeTransfers.remove(task.id)
         }
     }
     
     private suspend fun performDownload(task: TransferTask) = withContext(Dispatchers.IO) {
-        val channel = sftpChannel
+        // Dedicated per-transfer channel — see performUpload for the rationale.
+        val channel = sshConnection.openDedicatedSftpChannel()
         if (channel == null) {
             task.complete(TransferResult.Error("SFTP not connected"))
             return@withContext
         }
-        
+
         try {
             task.updateState(TransferState.ACTIVE)
             val localFile = File(task.localPath)
@@ -384,6 +421,14 @@ class SFTPManager(private val sshConnection: SSHConnection) {
                 }
             }
             
+            // A cancelled download leaves a partial file on disk — report
+            // Cancelled rather than falling through to a false Success.
+            if (task.isCancelled()) {
+                task.complete(TransferResult.Cancelled)
+                Logger.i("SFTPManager", "Download cancelled: ${task.remotePath}")
+                return@withContext
+            }
+
             task.complete(TransferResult.Success)
             Logger.i("SFTPManager", "Download completed: ${task.remotePath}")
 
@@ -404,6 +449,12 @@ class SFTPManager(private val sshConnection: SSHConnection) {
             Logger.e("SFTPManager", "Download failed: ${task.remotePath}", e)
             task.complete(TransferResult.Error(e.message ?: "Download failed"))
         } finally {
+            // The dedicated channel is owned by this transfer — always release it.
+            try {
+                channel.disconnect()
+            } catch (e: Exception) {
+                Logger.w("SFTPManager", "Failed to disconnect transfer channel", e)
+            }
             activeTransfers.remove(task.id)
         }
     }
@@ -452,15 +503,15 @@ class SFTPManager(private val sshConnection: SSHConnection) {
      * Create remote directory
      */
     suspend fun createRemoteDirectory(path: String): Boolean = withContext(Dispatchers.IO) {
-        val channel = sftpChannel ?: return@withContext false
-        
-        return@withContext try {
-            channel.mkdir(path)
-            Logger.d("SFTPManager", "Created remote directory: $path")
-            true
-        } catch (e: SftpException) {
-            Logger.e("SFTPManager", "Failed to create remote directory: $path", e)
-            false
+        withChannel(false) { channel ->
+            try {
+                channel.mkdir(path)
+                Logger.d("SFTPManager", "Created remote directory: $path")
+                true
+            } catch (e: SftpException) {
+                Logger.e("SFTPManager", "Failed to create remote directory: $path", e)
+                false
+            }
         }
     }
     
@@ -468,26 +519,26 @@ class SFTPManager(private val sshConnection: SSHConnection) {
      * Delete remote file or directory
      */
     suspend fun deleteRemoteFile(path: String, isDirectory: Boolean): Boolean = withContext(Dispatchers.IO) {
-        val channel = sftpChannel ?: return@withContext false
-        
-        return@withContext try {
-            if (isDirectory) {
-                deleteRemoteDirectoryRecursive(channel, path)
-            } else {
-                channel.rm(path)
-            }
-            Logger.d("SFTPManager", "Deleted remote ${if (isDirectory) "directory" else "file"}: $path")
-            // Audit logging — best-effort, never break the SFTP success path.
+        withChannel(false) { channel ->
             try {
-                val app = sshConnection.context.applicationContext as? io.github.tabssh.TabSSHApplication
-                app?.auditLogManager?.logSftpDelete(sshConnection.profile, sshConnection.id, path)
-            } catch (e: Exception) {
-                Logger.w("SFTPManager", "Audit log (sftpDelete) failed: ${e.message}")
+                if (isDirectory) {
+                    deleteRemoteDirectoryRecursive(channel, path)
+                } else {
+                    channel.rm(path)
+                }
+                Logger.d("SFTPManager", "Deleted remote ${if (isDirectory) "directory" else "file"}: $path")
+                // Audit logging — best-effort, never break the SFTP success path.
+                try {
+                    val app = sshConnection.context.applicationContext as? io.github.tabssh.TabSSHApplication
+                    app?.auditLogManager?.logSftpDelete(sshConnection.profile, sshConnection.id, path)
+                } catch (e: Exception) {
+                    Logger.w("SFTPManager", "Audit log (sftpDelete) failed: ${e.message}")
+                }
+                true
+            } catch (e: SftpException) {
+                Logger.e("SFTPManager", "Failed to delete remote $path", e)
+                false
             }
-            true
-        } catch (e: SftpException) {
-            Logger.e("SFTPManager", "Failed to delete remote $path", e)
-            false
         }
     }
     
@@ -518,15 +569,15 @@ class SFTPManager(private val sshConnection: SSHConnection) {
      * Rename/move remote file or directory
      */
     suspend fun renameRemoteFile(oldPath: String, newPath: String): Boolean = withContext(Dispatchers.IO) {
-        val channel = sftpChannel ?: return@withContext false
-        
-        return@withContext try {
-            channel.rename(oldPath, newPath)
-            Logger.d("SFTPManager", "Renamed remote: $oldPath -> $newPath")
-            true
-        } catch (e: SftpException) {
-            Logger.e("SFTPManager", "Failed to rename remote: $oldPath -> $newPath", e)
-            false
+        withChannel(false) { channel ->
+            try {
+                channel.rename(oldPath, newPath)
+                Logger.d("SFTPManager", "Renamed remote: $oldPath -> $newPath")
+                true
+            } catch (e: SftpException) {
+                Logger.e("SFTPManager", "Failed to rename remote: $oldPath -> $newPath", e)
+                false
+            }
         }
     }
     
@@ -534,15 +585,15 @@ class SFTPManager(private val sshConnection: SSHConnection) {
      * Change remote file permissions
      */
     suspend fun changeRemotePermissions(path: String, permissions: Int): Boolean = withContext(Dispatchers.IO) {
-        val channel = sftpChannel ?: return@withContext false
-        
-        return@withContext try {
-            channel.chmod(permissions, path)
-            Logger.d("SFTPManager", "Changed permissions for $path to ${Integer.toOctalString(permissions)}")
-            true
-        } catch (e: SftpException) {
-            Logger.e("SFTPManager", "Failed to change permissions for $path", e)
-            false
+        withChannel(false) { channel ->
+            try {
+                channel.chmod(permissions, path)
+                Logger.d("SFTPManager", "Changed permissions for $path to ${Integer.toOctalString(permissions)}")
+                true
+            } catch (e: SftpException) {
+                Logger.e("SFTPManager", "Failed to change permissions for $path", e)
+                false
+            }
         }
     }
     
@@ -550,15 +601,15 @@ class SFTPManager(private val sshConnection: SSHConnection) {
      * Get current remote working directory
      */
     suspend fun getRemoteWorkingDirectory(): String? = withContext(Dispatchers.IO) {
-        val channel = sftpChannel ?: return@withContext null
-        
-        return@withContext try {
-            val pwd = channel.pwd()
-            Logger.d("SFTPManager", "Remote working directory: $pwd")
-            pwd
-        } catch (e: SftpException) {
-            Logger.e("SFTPManager", "Failed to get remote working directory", e)
-            null
+        withChannel(null) { channel ->
+            try {
+                val pwd = channel.pwd()
+                Logger.d("SFTPManager", "Remote working directory: $pwd")
+                pwd
+            } catch (e: SftpException) {
+                Logger.e("SFTPManager", "Failed to get remote working directory", e)
+                null
+            }
         }
     }
     
@@ -566,15 +617,15 @@ class SFTPManager(private val sshConnection: SSHConnection) {
      * Change remote working directory
      */
     suspend fun changeRemoteDirectory(path: String): Boolean = withContext(Dispatchers.IO) {
-        val channel = sftpChannel ?: return@withContext false
-        
-        return@withContext try {
-            channel.cd(path)
-            Logger.d("SFTPManager", "Changed remote directory to: $path")
-            true
-        } catch (e: SftpException) {
-            Logger.e("SFTPManager", "Failed to change remote directory to: $path", e)
-            false
+        withChannel(false) { channel ->
+            try {
+                channel.cd(path)
+                Logger.d("SFTPManager", "Changed remote directory to: $path")
+                true
+            } catch (e: SftpException) {
+                Logger.e("SFTPManager", "Failed to change remote directory to: $path", e)
+                false
+            }
         }
     }
     
@@ -582,13 +633,13 @@ class SFTPManager(private val sshConnection: SSHConnection) {
      * Check if remote path exists
      */
     suspend fun remoteFileExists(path: String): Boolean = withContext(Dispatchers.IO) {
-        val channel = sftpChannel ?: return@withContext false
-        
-        return@withContext try {
-            channel.stat(path)
-            true
-        } catch (e: SftpException) {
-            false
+        withChannel(false) { channel ->
+            try {
+                channel.stat(path)
+                true
+            } catch (e: SftpException) {
+                false
+            }
         }
     }
     
@@ -618,6 +669,31 @@ class SFTPManager(private val sshConnection: SSHConnection) {
     // Helper methods
     
     private fun generateTransferId(): String = UUID.randomUUID().toString()
+
+    /**
+     * Run [block] against the shared SFTP channel under [channelMutex], so
+     * metadata operations never touch JSch's non-thread-safe channel
+     * concurrently. Returns [default] when the channel is not open.
+     */
+    private suspend fun <T> withChannel(default: T, block: suspend (ChannelSftp) -> T): T =
+        channelMutex.withLock {
+            val channel = sftpChannel ?: return@withLock default
+            block(channel)
+        }
+
+    /**
+     * True if [name] is a single, safe path component. A malicious or compromised
+     * server can return directory entries whose filename contains a path
+     * separator or "..", which would let a later download escape the chosen local
+     * directory (path traversal). Reject anything that is not a plain component.
+     */
+    private fun isSafeRemoteName(name: String): Boolean =
+        name.isNotEmpty() &&
+        name != "." &&
+        name != ".." &&
+        !name.contains('/') &&
+        !name.contains('\\') &&
+        name.none { it.code < 0x20 }
     
     private fun getLocalFilePermissions(file: File): Int {
         // Convert Java file permissions to Unix octal format

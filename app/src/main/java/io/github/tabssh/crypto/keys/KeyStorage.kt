@@ -127,7 +127,10 @@ class KeyStorage(private val context: Context) {
         try {
             val keyPair = when (keyType) {
                 KeyType.RSA -> generateRSAKeyPair(keySize)
-                KeyType.DSA -> generateDSAKeyPair(keySize)
+                KeyType.DSA -> return@withContext GenerateResult.Error(
+                    "DSA key generation is not supported — DSA is deprecated and rejected by " +
+                    "modern OpenSSH. Use Ed25519 or ECDSA instead. (Existing DSA keys can still be imported.)"
+                )
                 KeyType.ECDSA -> generateECDSAKeyPair(keySize)
                 KeyType.ED25519 -> generateEd25519KeyPair()
             }
@@ -183,12 +186,6 @@ class KeyStorage(private val context: Context) {
         return keyPairGenerator.generateKeyPair()
     }
     
-    private fun generateDSAKeyPair(keySize: Int): KeyPair {
-        val keyPairGenerator = KeyPairGenerator.getInstance("DSA")
-        keyPairGenerator.initialize(keySize, SecureRandom())
-        return keyPairGenerator.generateKeyPair()
-    }
-    
     private fun generateECDSAKeyPair(keySize: Int): KeyPair {
         val keyPairGenerator = KeyPairGenerator.getInstance("EC")
         val ecGenParameterSpec = when (keySize) {
@@ -202,14 +199,22 @@ class KeyStorage(private val context: Context) {
     }
     
     private fun generateEd25519KeyPair(): KeyPair {
-        // Ed25519 support requires API 23+ or external library
-        // For now, fallback to ECDSA P-256 if Ed25519 not available
+        // Ed25519 is provided by the platform on API 30+ (or via a security
+        // provider). Previously this silently fell back to ECDSA P-256 when the
+        // algorithm was unavailable, so a user who explicitly asked for Ed25519
+        // could end up with an ECDSA key without ever being told. Surface the
+        // failure to the caller (generateKeyPair turns it into a GenerateResult.Error
+        // the UI shows) instead of substituting a different key type behind their back.
         return try {
             val keyPairGenerator = KeyPairGenerator.getInstance("Ed25519")
             keyPairGenerator.generateKeyPair()
         } catch (e: Exception) {
-            Logger.w("KeyStorage", "Ed25519 not supported, falling back to ECDSA P-256")
-            generateECDSAKeyPair(256)
+            Logger.w("KeyStorage", "Ed25519 not supported on this device", e)
+            throw UnsupportedOperationException(
+                "Ed25519 is not supported on this device (requires Android 11 / API 30 or newer). " +
+                "Choose ECDSA or RSA instead.",
+                e
+            )
         }
     }
     

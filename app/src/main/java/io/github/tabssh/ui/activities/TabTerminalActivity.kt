@@ -1575,12 +1575,9 @@ class TabTerminalActivity : AppCompatActivity() {
 
         // Custom keyboard bar is always visible — it carries CTL/ALT/ESC/
         // arrows/symbols that the system IME does not provide and the user
-        // expects in every terminal. Earlier code gated this on
-        // `ui_show_function_keys`, but that pref's stated purpose
-        // ("Show Function Key Row" = F1-F12 row) is a different element
-        // (`function_keys_container` in the layout, currently unbound).
-        // Toggling the pref hid the whole bar instead of just F-keys —
-        // confusing UX. Manual show/hide is still available via
+        // expects in every terminal. The old `ui_show_function_keys` pref and
+        // its hidden function-key row were removed entirely (redundant with
+        // the custom keyboard). Manual show/hide is still available via
         // showCustomKeyboardBar / hideCustomKeyboardBar (toolbar action).
 
         // Line-spacing and scroll-direction — push to all bound terminal views
@@ -1690,14 +1687,6 @@ class TabTerminalActivity : AppCompatActivity() {
     }
     
     private fun setupFunctionKeys() {
-        // Set up function key buttons
-        binding.btnCtrl.setOnClickListener { sendKey("ctrl") }
-        binding.btnAlt.setOnClickListener { sendKey("alt") }
-        binding.btnEsc.setOnClickListener { sendKey("esc") }
-        binding.btnTab.setOnClickListener { sendKey("tab") }
-        binding.btnArrowUp.setOnClickListener { sendKey("up") }
-        binding.btnArrowDown.setOnClickListener { sendKey("down") }
-        
         // Bottom action bar
         binding.btnKeyboard.setOnClickListener { toggleKeyboard() }
         binding.btnSnippets.setOnClickListener { showSnippetsDialog() }
@@ -3584,6 +3573,23 @@ class TabTerminalActivity : AppCompatActivity() {
                     tabManager.switchToTabNumber(tabNumber)
                     return true
                 }
+                // Font-size zoom on bare Ctrl (browser/IDE/terminal
+                // convention: Ctrl+= / Ctrl+- / Ctrl+0). These are not
+                // printable control codes, so the remote shell loses
+                // nothing. Ctrl+1..9 above is tab switching, leaving 0
+                // free for reset — exactly matching the convention.
+                KeyEvent.KEYCODE_EQUALS, KeyEvent.KEYCODE_PLUS -> {
+                    adjustFontSize(+2)
+                    return true
+                }
+                KeyEvent.KEYCODE_MINUS -> {
+                    adjustFontSize(-2)
+                    return true
+                }
+                KeyEvent.KEYCODE_0 -> {
+                    resetFontSize()
+                    return true
+                }
             }
             // App command shortcuts — REQUIRE Shift so bare Ctrl+letter
             // passes through to the terminal as the corresponding
@@ -3656,6 +3662,7 @@ class TabTerminalActivity : AppCompatActivity() {
         items += io.github.tabssh.ui.views.PaletteDialog.Item("Close current tab", null) { closeCurrentTab() }
         items += io.github.tabssh.ui.views.PaletteDialog.Item("Increase font size", "Ctrl+= (or Volume Up)") { adjustFontSize(+2) }
         items += io.github.tabssh.ui.views.PaletteDialog.Item("Decrease font size", "Ctrl+- (or Volume Down)") { adjustFontSize(-2) }
+        items += io.github.tabssh.ui.views.PaletteDialog.Item("Reset font size", "Ctrl+0") { resetFontSize() }
         items += io.github.tabssh.ui.views.PaletteDialog.Item("Toggle keyboard", null) { toggleKeyboard() }
         val barLabel = if (customKeyboardVisible) "Hide key bar" else "Show key bar"
         items += io.github.tabssh.ui.views.PaletteDialog.Item(barLabel, "Show or hide the custom function-key bar") {
@@ -3716,65 +3723,27 @@ class TabTerminalActivity : AppCompatActivity() {
             val newSize = (currentSize + delta).coerceIn(8, 32)
             it.setFontSize(newSize)
 
-            // Save to preferences
-            app.preferencesManager.setInt("terminal_font_size", newSize)
-
-            // Show toast with current size
+            // Session-only zoom (like pinch): the terminal_font_size pref
+            // stays the user's Settings baseline so resetFontSize() has a
+            // real value to return to. Persisting here would silently
+            // redefine that baseline and make reset a no-op.
             Toast.makeText(this, "Font Size: ${newSize}sp", Toast.LENGTH_SHORT).show()
 
             Logger.d("TabTerminalActivity", "Font size adjusted: $currentSize → $newSize")
         }
     }
-    
-    private fun sendKey(key: String) {
-        val terminal = getActiveTerminalView()
-        when (key) {
-            "ctrl" -> {
-                // Toggle the one-shot CTL latch on the terminal. The next
-                // character (from IME, hardware, or custom-bar key) will be
-                // sent as a Ctrl chord via sendCharWithPendingModifier().
-                if (terminal == null) {
-                    showToast("No active session")
-                    return
-                }
-                if (terminal.isPendingCtrl()) {
-                    terminal.setPendingModifier(null)
-                    showToast("Ctrl off")
-                } else {
-                    terminal.setPendingModifier("CTL")
-                    terminal.onModifierConsumed = { binding.multiRowKeyboard.clearModifier() }
-                    showToast("Ctrl armed — next key")
-                }
-            }
-            "alt" -> {
-                if (terminal == null) {
-                    showToast("No active session")
-                    return
-                }
-                if (terminal.isPendingAlt()) {
-                    terminal.setPendingModifier(null)
-                    showToast("Alt off")
-                } else {
-                    terminal.setPendingModifier("ALT")
-                    terminal.onModifierConsumed = { binding.multiRowKeyboard.clearModifier() }
-                    showToast("Alt armed — next key")
-                }
-            }
-            "esc" -> {
-                terminal?.sendKeySequence("\u001B")
-            }
-            "tab" -> {
-                terminal?.sendKeySequence("\t")
-            }
-            "up" -> {
-                terminal?.sendKeySequence("\u001B[A")
-            }
-            "down" -> {
-                terminal?.sendKeySequence("\u001B[B")
-            }
-        }
-    }
 
+    private fun resetFontSize() {
+        val view = getActiveTerminalView() ?: return
+        // Reset to the user's configured baseline (Settings → Terminal →
+        // Font Size), NOT a hardcoded default — 14 only applies when the
+        // user never touched the slider.
+        val baseline = app.preferencesManager.getInt("terminal_font_size", 14)
+        view.setFontSize(baseline)
+        Toast.makeText(this, "Font Size: ${baseline}sp (your default)", Toast.LENGTH_SHORT).show()
+        Logger.d("TabTerminalActivity", "Font size reset to baseline: $baseline")
+    }
+    
     private fun toggleKeyboard() {
         val terminalView = getActiveTerminalView() ?: return
         val imm = getSystemService(android.content.Context.INPUT_METHOD_SERVICE)

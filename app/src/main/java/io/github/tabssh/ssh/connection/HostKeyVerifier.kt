@@ -373,11 +373,31 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
      * Parse hostname and port from host string
      */
     private fun parseHostPort(host: String): Pair<String, Int> {
-        val parts = host.split(":")
-        return if (parts.size == 2) {
-            Pair(parts[0], parts[1].toIntOrNull() ?: 22)
+        val trimmed = host.trim()
+
+        // Bracketed IPv6 literal, optionally with a port: "[::1]" or "[2001:db8::1]:2222".
+        if (trimmed.startsWith("[")) {
+            val close = trimmed.indexOf(']')
+            if (close > 0) {
+                val addr = trimmed.substring(1, close)
+                val rest = trimmed.substring(close + 1)
+                val port = if (rest.startsWith(":")) rest.substring(1).toIntOrNull() ?: 22 else 22
+                return Pair(addr, port)
+            }
+        }
+
+        // Bare IPv6 literal (two or more colons, no brackets) carries no port component;
+        // splitting on ":" would corrupt the address, so return it verbatim.
+        if (trimmed.count { it == ':' } > 1) {
+            return Pair(trimmed, 22)
+        }
+
+        // "host:port" or a bare host/IPv4. Split on the last colon so hostnames survive.
+        val idx = trimmed.lastIndexOf(':')
+        return if (idx > 0) {
+            Pair(trimmed.substring(0, idx), trimmed.substring(idx + 1).toIntOrNull() ?: 22)
         } else {
-            Pair(host, 22)
+            Pair(trimmed, 22)
         }
     }
 

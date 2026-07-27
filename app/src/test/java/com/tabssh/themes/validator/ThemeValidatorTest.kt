@@ -1,14 +1,30 @@
 package io.github.tabssh.themes.validator
 
+import android.app.Application
 import io.github.tabssh.themes.definitions.BuiltInThemes
 import io.github.tabssh.themes.definitions.Theme
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import kotlin.test.*
 
 /**
- * Comprehensive tests for theme validation and accessibility compliance
+ * Comprehensive tests for theme validation and accessibility compliance.
+ *
+ * Runs under Robolectric because BuiltInThemes.getAllThemes() includes the
+ * system-default theme, whose selection reads
+ * android.content.res.Resources.getSystem().configuration.uiMode — that returns
+ * null on a bare JVM, so an Android runtime is required.
+ *
+ * A stock android.app.Application is forced via @Config so Robolectric does not
+ * instantiate the real TabSSHApplication — its onTerminate() teardown lazily
+ * builds SecurePasswordManager, which calls KeyStore.getInstance("AndroidKeyStore")
+ * and would fail every case (Robolectric does not shadow that provider).
  */
+@RunWith(RobolectricTestRunner::class)
+@Config(application = Application::class)
 class ThemeValidatorTest {
     
     private lateinit var validator: ThemeValidator

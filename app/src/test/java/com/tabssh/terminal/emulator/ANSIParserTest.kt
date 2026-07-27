@@ -3,8 +3,10 @@ package io.github.tabssh.terminal.emulator
 import org.junit.Before
 import org.junit.Test
 import org.mockito.Mock
+import org.mockito.Mockito
+import org.mockito.Mockito.times
+import org.mockito.Mockito.verify
 import org.mockito.MockitoAnnotations
-import org.mockito.kotlin.verify
 import kotlin.test.assertEquals
 
 /**
@@ -20,41 +22,41 @@ class ANSIParserTest {
     @Before
     fun setUp() {
         MockitoAnnotations.openMocks(this)
+        // Give the mock a realistic terminal size so parser math that clamps to
+        // the buffer dimensions (e.g. the scroll region's coerceAtMost(getRows()-1))
+        // behaves like a real 24x80 terminal instead of a 0x0 default mock.
+        Mockito.`when`(mockBuffer.getRows()).thenReturn(24)
+        Mockito.`when`(mockBuffer.getCols()).thenReturn(80)
         parser = ANSIParser(mockBuffer)
     }
     
     @Test
     fun `test plain text processing`() {
         parser.processText("Hello World")
-        
-        // Verify each character was written
+
+        // Verify each character was written ("Hello World" has l x3 and o x2).
         verify(mockBuffer).writeChar('H')
         verify(mockBuffer).writeChar('e')
-        verify(mockBuffer).writeChar('l')
-        verify(mockBuffer).writeChar('l')
-        verify(mockBuffer).writeChar('o')
+        verify(mockBuffer, times(3)).writeChar('l')
+        verify(mockBuffer, times(2)).writeChar('o')
         verify(mockBuffer).writeChar(' ')
         verify(mockBuffer).writeChar('W')
-        verify(mockBuffer).writeChar('o')
         verify(mockBuffer).writeChar('r')
-        verify(mockBuffer).writeChar('l')
         verify(mockBuffer).writeChar('d')
     }
     
     @Test
     fun `test control characters`() {
         parser.processText("Hello\nWorld\r")
-        
+
+        // "Hello World" characters plus LF/CR; l appears x3 and o x2.
         verify(mockBuffer).writeChar('H')
         verify(mockBuffer).writeChar('e')
-        verify(mockBuffer).writeChar('l')
-        verify(mockBuffer).writeChar('l')
-        verify(mockBuffer).writeChar('o')
+        verify(mockBuffer, times(3)).writeChar('l')
+        verify(mockBuffer, times(2)).writeChar('o')
         verify(mockBuffer).writeChar('\n')
         verify(mockBuffer).writeChar('W')
-        verify(mockBuffer).writeChar('o')
         verify(mockBuffer).writeChar('r')
-        verify(mockBuffer).writeChar('l')
         verify(mockBuffer).writeChar('d')
         verify(mockBuffer).writeChar('\r')
     }
@@ -214,10 +216,10 @@ class ANSIParserTest {
         
         // Also test CSI versions
         parser.processText("\u001B[s") // Save
-        verify(mockBuffer, org.mockito.kotlin.times(2)).saveCursor()
+        verify(mockBuffer, times(2)).saveCursor()
         
         parser.processText("\u001B[u") // Restore
-        verify(mockBuffer, org.mockito.kotlin.times(2)).restoreCursor()
+        verify(mockBuffer, times(2)).restoreCursor()
     }
     
     @Test
@@ -235,14 +237,18 @@ class ANSIParserTest {
     
     @Test
     fun `test malformed sequences handling`() {
-        // Parser should gracefully handle malformed sequences
+        // Parser should gracefully handle malformed but complete sequences.
         parser.processText("\u001B[999X") // Invalid sequence
         parser.processText("\u001B[;;;;;m") // Multiple empty parameters
-        parser.processText("\u001B") // Incomplete sequence
-        
-        // Should not crash and should continue processing
+
+        // Should not crash and should continue processing.
         parser.processText("Valid text")
         verify(mockBuffer).writeChar('V')
+
+        // A lone ESC is an incomplete sequence: the parser correctly keeps
+        // the escape state open (streaming continuation), so it is exercised
+        // last, where there is no following character for it to consume.
+        parser.processText("\u001B")
     }
     
     @Test

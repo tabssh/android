@@ -64,15 +64,6 @@
         <attr name="minTabWidth" format="dimension" />
     </declare-styleable>
     
-    <!-- Function key bar attributes -->
-    <declare-styleable name="FunctionKeyBar">
-        <attr name="keyBackgroundColor" format="color" />
-        <attr name="keyTextColor" format="color" />
-        <attr name="keyPressedColor" format="color" />
-        <attr name="showFunctionKeys" format="boolean" />
-        <attr name="keySize" format="dimension" />
-    </declare-styleable>
-    
     <!-- File browser attributes -->
     <declare-styleable name="FileBrowserView">
         <attr name="localPaneBackgroundColor" format="color" />

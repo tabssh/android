@@ -18,13 +18,18 @@ import com.google.android.material.button.MaterialButton
 import io.github.tabssh.R
 import io.github.tabssh.sync.SAFSyncManager
 import io.github.tabssh.sync.SyncFileStatus
-import io.github.tabssh.sync.data.SyncDataApplier
 import io.github.tabssh.sync.data.SyncDataCollector
+import io.github.tabssh.sync.merge.SyncMergeCoordinator
+import io.github.tabssh.sync.models.Conflict
+import io.github.tabssh.sync.models.ConflictResolution
 import io.github.tabssh.sync.worker.SyncWorkScheduler
+import io.github.tabssh.ui.dialogs.ConflictResolutionDialog
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.resume
 
 class SyncSettingsActivity : AppCompatActivity() {
 
@@ -489,7 +494,13 @@ class SyncSettingsActivity : AppCompatActivity() {
                     val collector = SyncDataCollector(this@SyncSettingsActivity)
                     val remote = syncManager.download()
                     if (remote != null) {
-                        SyncDataApplier(this@SyncSettingsActivity).applyAll(remote)
+                        // §9.6 three-way merge. Foreground: hand conflicts to the
+                        // resolution dialog on the main thread.
+                        SyncMergeCoordinator(this@SyncSettingsActivity).merge(
+                            remote,
+                            syncManager.getEncryptionPassword(),
+                            resolveConflicts = { conflicts -> resolveConflictsInteractively(conflicts) }
+                        )
                     }
                     val p = collector.collectAll()
                     val uploaded = syncManager.upload(p)
@@ -522,7 +533,12 @@ class SyncSettingsActivity : AppCompatActivity() {
                 val payload = withContext(Dispatchers.IO) { syncManager.download() }
                 if (payload != null) {
                     withContext(Dispatchers.IO) {
-                        SyncDataApplier(this@SyncSettingsActivity).applyAll(payload)
+                        // §9.6 three-way merge with interactive resolution.
+                        SyncMergeCoordinator(this@SyncSettingsActivity).merge(
+                            payload,
+                            syncManager.getEncryptionPassword(),
+                            resolveConflicts = { conflicts -> resolveConflictsInteractively(conflicts) }
+                        )
                         // Refresh the shadow baseline so the deletes just
                         // applied are not re-detected as local deletions by the
                         // next collect's tombstone backstop.
@@ -550,6 +566,19 @@ class SyncSettingsActivity : AppCompatActivity() {
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    // Bridge the callback-based ConflictResolutionDialog to a suspend function
+    // for SyncMergeCoordinator. The dialog must run on the main thread; the
+    // coroutine resumes once the user has decided every conflict.
+    private suspend fun resolveConflictsInteractively(
+        conflicts: List<Conflict>
+    ): List<ConflictResolution> = withContext(Dispatchers.Main) {
+        suspendCancellableCoroutine { cont ->
+            ConflictResolutionDialog(this@SyncSettingsActivity, conflicts) { resolutions ->
+                if (cont.isActive) cont.resume(resolutions)
+            }.show()
+        }
+    }
 
     private fun formatLastSync(ts: Long): String {
         if (ts == 0L) return "Never"

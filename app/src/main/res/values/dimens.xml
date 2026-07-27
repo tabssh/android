@@ -30,8 +30,6 @@
          labels (Kbd / Snip / Files / Paste / Menu) got cropped to their
          first character. 72dp leaves comfortable space for both. -->
     <dimen name="bottom_bar_height">72dp</dimen>
-    <dimen name="function_key_height">40dp</dimen>
-    <dimen name="function_key_width">64dp</dimen>
     
     <!-- Touch targets -->
     <dimen name="min_touch_target">48dp</dimen>

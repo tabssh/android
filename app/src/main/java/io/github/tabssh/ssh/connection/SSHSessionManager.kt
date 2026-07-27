@@ -79,6 +79,16 @@ class SSHSessionManager(private val context: Context) {
                 return existingConnection
             } else {
                 Logger.d("SSHSessionManager", "Discarding stale pool entry (stateOk=$stateOk, sessionOk=$sessionOk)")
+                // Tear the stale wrapper down before dropping the references.
+                // disconnect() cancels its NetworkAwareReconnector and closes
+                // any lingering channels; without this the evicted connection's
+                // reconnect loop keeps running detached, racing the fresh
+                // connection created just below for the same profile.
+                try {
+                    existingConnection.disconnect()
+                } catch (e: Exception) {
+                    Logger.w("SSHSessionManager", "Failed to disconnect stale pool entry", e)
+                }
                 connectionPool.remove(profile.id)
                 activeConnections.remove(profile.id)
             }

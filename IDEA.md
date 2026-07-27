@@ -31,12 +31,12 @@ repository: https://github.com/tabssh/android
 - SFTP file browser with upload, download, rename, chmod, delete; remote file editor; SCP fallback
 - Session recording and replay (transcript) — transcripts stored on-device as plain-text `.log` files in the app's external `Transcripts/` directory
 - `~/.ssh/config` import
-- Bulk import: CSV, JSON, PuTTY .reg, Terraform state — each format maps its fields onto connection profiles (host, port, user, auth, group)
+- Bulk import: CSV, JSON, PuTTY .reg, Terraform `.tf` config files — each format maps its fields onto connection profiles (host, port, user, auth, group)
 - Custom on-screen keyboard with configurable rows and gesture bindings
 - Find-in-scrollback
 - Snippet library with `{var}` placeholder substitution — placeholders are filled through a prompt UI at run time
 - Macro library — record raw byte sequences and replay them into any session
-- Mosh support — sessions survive IP changes/roaming, with a watchdog that re-establishes the connection after network transitions
+- Mosh support — sessions survive IP changes/roaming via mosh's native UDP protocol (intrinsic roaming; no app-level reconnect layer required)
 - Telnet connections alongside SSH (plain-text legacy protocol, clearly separated from SSH profiles)
 - X11 forwarding to a local Android X server (XServer-XSDL / Termux:X11)
 - Terminal multiplexer integration (tmux / screen / zellij) — auto-attach and create-new modes, with auto-detection heuristics (session listing plus a process-scan fallback) and a manual override picker
@@ -67,7 +67,7 @@ repository: https://github.com/tabssh/android
 - Built-in VNC console client for VM graphical consoles — consoles open as swipeable tabs next to terminal sessions
 - SPICE console client for hypervisors that expose SPICE displays
 - Reusable hypervisor credential accounts (username/password or OCI API key) shared across hypervisor profiles
-- TLS certificate pinning (TOFU) for hypervisor REST APIs — pins are stored per profile and rotated only on explicit user re-approval
+- TLS certificate pinning (TOFU) for hypervisor REST APIs when SSL verification is enabled on the profile (off by default to accommodate self-signed hypervisor certs) — pins are stored per profile and rotated only on explicit user re-approval
 - OCI API key authentication (tenancy, user, region, fingerprint, compartment, private key)
 
 ### Cloud provider management
