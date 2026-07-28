@@ -112,6 +112,21 @@ maintainer-credential items below remain.
   https://nvd.nist.gov/developers/request-an-api-key and add it as the
   `NVD_API_KEY` repo secret; until then `dependencyCheckAnalyze` runs
   unauthenticated/throttled. Code-level wiring is done.
+- **AI.md refresh (LOW)**: stale "Last verified against" header (says 0.0.9 /
+  DB v37; actual 0.9.1 / DB v7) and §11.9 cloud-provider table is missing OCI
+  (code ships 8 providers incl. `OciCloudClient`). AI.md is read-only in audit
+  scope; maintainer should refresh.
+
+### Open items (migrated from 2026-07-26 audit, shipped in `c0749ea897eb`)
+
+- **FLAG_SECURE / clipboard hardening default OFF (LOW)**: screenshot
+  protection and clipboard-clear defaults remain opt-in. Left as-is per audit
+  scope; revisit if a hardening pass is requested.
+- **verifySsl=false trust-all default (HIGH, ACCEPTED AS DESIGN)**:
+  `HypervisorProfile.verifySsl` defaults to false → trust-all + hostname bypass
+  for self-signed hypervisor certs. Maintainer explicitly accepted this
+  tradeoff on 2026-07-26; the verifySsl=true + system-CA branch now does
+  strict RFC 2818 hostname verification. Do not "fix" without a new decision.
 
 ---
 
