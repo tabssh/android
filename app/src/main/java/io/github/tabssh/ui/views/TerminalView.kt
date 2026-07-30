@@ -2250,11 +2250,15 @@ class TerminalView @JvmOverloads constructor(
             // (vim, less, man, htop...). It does NOT reach tmux/screen/zellij's
             // OWN scrollback view (their copy-mode) when the user is sitting at a
             // plain shell prompt with no alt-screen program running — that only
-            // has a client-detectable trigger via mouse-tracking mode. Getting
-            // that working zero-config requires the multiplexer to have mouse
-            // mode enabled (tmux: `set -g mouse on`; zellij defaults to mouse
-            // mode on already; GNU screen has no equivalent mouse-scroll support
-            // at all, with or without config).
+            // has a client-detectable trigger via mouse-tracking mode. TabSSH
+            // therefore enables mouse mode itself on the tmux sessions it
+            // launches (SSHTab.buildMultiplexerCommand appends a session-scoped
+            // `set -q mouse on`), which lights up the mouse-tracking path above
+            // and makes swipes scroll tmux's server-side scrollback like a
+            // scrollbar. zellij defaults to mouse mode on already; GNU screen
+            // has no equivalent mouse-scroll support at all, with or without
+            // config; a tmux the user starts manually needs `set -g mouse on`
+            // in their own .tmux.conf.
             if (termuxEmulator != null && termuxEmulator.isAlternateBufferActive()) {
                 val scrollDeltaKey = if (reverseScrollDirection) -distanceY else distanceY
                 keyScrollAccum += scrollDeltaKey

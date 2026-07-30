@@ -1053,25 +1053,40 @@ class SSHTab(
         multiplexerDetectionJob = null
     }
 
-    private fun buildMultiplexerCommand(type: String, mode: String, name: String): String? {
-        val safeName = name.replace("'", "")
-        return when (type) {
-            "tmux" -> when (mode) {
-                "AUTO_ATTACH", "ASK" -> "tmux new -A -s '$safeName'"
-                "CREATE_NEW"         -> "tmux new -s '$safeName'"
-                else                 -> null
+    // Companion-scoped and internal (not private on the instance) so the pure
+    // command-assembly logic is unit-testable without constructing an SSHTab.
+    internal companion object {
+        /**
+         * tmux gets session-scoped mouse mode enabled in the same command
+         * sequence (`\; set -q mouse on`): with mouse on, tmux enables mouse
+         * tracking client-side, so TerminalView forwards swipe gestures as
+         * wheel events and tmux scrolls its own server-side scrollback —
+         * swipes act like a scrollbar instead of falling back to arrow keys
+         * that a plain shell prompt just echoes. `set` without -g is session
+         * scoped (only the TabSSH-launched session), -q suppresses the
+         * unknown-option error on pre-2.1 tmux servers. zellij has mouse mode
+         * on by default; GNU screen has no mouse-scroll support at all.
+         */
+        internal fun buildMultiplexerCommand(type: String, mode: String, name: String): String? {
+            val safeName = name.replace("'", "")
+            return when (type) {
+                "tmux" -> when (mode) {
+                    "AUTO_ATTACH", "ASK" -> "tmux new -A -s '$safeName' \\; set -q mouse on"
+                    "CREATE_NEW"         -> "tmux new -s '$safeName' \\; set -q mouse on"
+                    else                 -> null
+                }
+                "screen" -> when (mode) {
+                    "AUTO_ATTACH", "ASK" -> "screen -RR '$safeName'"
+                    "CREATE_NEW"         -> "screen -S '$safeName'"
+                    else                 -> null
+                }
+                "zellij" -> when (mode) {
+                    "AUTO_ATTACH", "ASK" -> "zellij attach --create '$safeName'"
+                    "CREATE_NEW"         -> "zellij --session '$safeName'"
+                    else                 -> null
+                }
+                else -> null
             }
-            "screen" -> when (mode) {
-                "AUTO_ATTACH", "ASK" -> "screen -RR '$safeName'"
-                "CREATE_NEW"         -> "screen -S '$safeName'"
-                else                 -> null
-            }
-            "zellij" -> when (mode) {
-                "AUTO_ATTACH", "ASK" -> "zellij attach --create '$safeName'"
-                "CREATE_NEW"         -> "zellij --session '$safeName'"
-                else                 -> null
-            }
-            else -> null
         }
     }
 

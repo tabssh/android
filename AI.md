@@ -352,11 +352,11 @@ Supporting API on `SSHConnection`:
 `SSHTab.runPostConnectCommands()` runs ~500ms after the bridge wires up. Two sources, joined and sent down the shell channel as if the user typed them:
 
 1. `profile.multiplexerMode != "OFF"` → injected one of:
-   - tmux: `tmux new -A -s <name>` (AUTO_ATTACH/ASK), `tmux new -s <name>` (CREATE_NEW)
+   - tmux: `tmux new -A -s <name> \; set -q mouse on` (AUTO_ATTACH/ASK), `tmux new -s <name> \; set -q mouse on` (CREATE_NEW)
    - screen: `screen -RR <name>` (AUTO_ATTACH/ASK), `screen -S <name>` (CREATE_NEW)
    - zellij: `zellij attach --create <name>` (AUTO_ATTACH/ASK), `zellij --session <name>` (CREATE_NEW)
 
-   Multiplexer type from the global `gesture_multiplexer_type` pref (default tmux). Session name from `profile.multiplexerSessionName` (default `tabssh`).
+   Multiplexer type from the global `gesture_multiplexer_type` pref (default tmux). Session name from `profile.multiplexerSessionName` (default `tabssh`). The tmux commands chain a **session-scoped** `set -q mouse on` (no `-g`, `-q` quiet on pre-2.1 servers): with mouse mode on, tmux enables client mouse tracking, so `TerminalView.onScroll()` forwards swipes as wheel events and tmux scrolls its own server-side scrollback — swipe-to-scroll acts like a scrollbar inside TabSSH-launched tmux sessions. zellij has mouse on by default; GNU screen has no mouse-scroll support; a manually-started tmux needs `set -g mouse on` in the user's `.tmux.conf`. Command assembly lives in `SSHTab.buildMultiplexerCommand()` (internal, companion object, unit-tested by `SSHTabMultiplexerCommandTest`).
 
 2. `profile.postConnectScript` lines (skipping `#`-prefixed comments and blank lines).
 
