@@ -2,9 +2,9 @@
 
 > **Audience:** AI coding assistants (Claude Code, Copilot, Gemini, etc.) and human contributors who need an accurate, code-grounded picture of how this project is actually built. **CLAUDE.md** is the operational/runbook document; this file is the architectural ground truth derived from a full source survey.
 >
-> **Generated:** 2026-04-25; updated 2026-05-12 from a parallel survey of ~201 Kotlin sources, all Gradle/Docker/CI configs, and every preference/layout/menu XML. Updated 2026-06-14: tab-freeze fix, swipe-lock during selection, SEL key removal, URL wrap detection, `Ctrl+` notation fix, multiplexer picker prefix fix, long-press context menu restore, clipboard menu restore.
+> **Generated:** 2026-04-25; updated 2026-05-12 from a parallel survey of ~201 Kotlin sources, all Gradle/Docker/CI configs, and every preference/layout/menu XML. Updated 2026-06-14: tab-freeze fix, swipe-lock during selection, SEL key removal, URL wrap detection, `Ctrl+` notation fix, multiplexer picker prefix fix, long-press context menu restore, clipboard menu restore. Updated 2026-07-30: security/correctness audit fixes, §9.6 three-way sync merge wired (base-snapshot layer + conflict dialog), DEC private-marker CSI fix in `ANSIParser`, double-tap/long-press race fix, function-key row removed, font-size zoom shortcuts (Ctrl+= / Ctrl+- / Ctrl+0 reset), WCAG AA theme corrections.
 >
-> **Last verified against:** `versionCode 9` / `versionName 0.0.9`, database `v37` (full chain: v17→v18 env_vars+agent_forwarding → v19 stored_keys.certificate → v20 connections.protocol → v21 workspaces → v22 connections.color_tag → v23 cloud_accounts → v24 connections.remote_command → v25 connections.ip_mode → v26 macros → v27 hypervisor_accounts+account_id → v28 hypervisors.pinned_cert_sha256 → v29 OCI auth_type+5 OCI columns → v30 hypervisors.display_host/port → v31 connections.oci_instance_id → v32 monitor_slots → v33 OCI credentials promoted to hypervisor_accounts), JSch `mwiede:2.27.7`, Termux `terminal-emulator:0.118.1`, AGP 8.13.2, Kotlin 2.4.10, Gradle 8.14.5.
+> **Last verified against:** `versionCode 11` / `versionName 1.0.0` (pinned via `release.txt`), database `v7` (in-code migration chain `MIGRATION_3_4` → `MIGRATION_6_7` in `TabSSHDatabase.kt`), JSch `mwiede:2.27.7`, Termux `terminal-emulator:0.118.1`, AGP 8.13.2, Kotlin 2.4.10, Gradle 8.14.5.
 >
 > **Format conventions:**
 > - File paths are repo-relative unless prefixed with `/`.
@@ -1052,6 +1052,7 @@ Package `cloud/` (separate from `hypervisor/`). Manages SSH-accessible cloud VM 
 | Hetzner | `HetznerClient` | Server list |
 | Linode | `LinodeClient` | Linode instance list |
 | Vultr | `VultrClient` | VPS list |
+| OCI | `OciCloudClient` | Compute instance list (running instances with reachable IP; public preferred) |
 
 **Secret storage pattern.** Cloud API tokens are stored in `SecurePasswordManager` under the key `cloud_token_${accountId}`. The `CloudAccount` DB entity stores only metadata (`provider`, `enabled`, `lastRefreshAt`, `lastCount`); the token is **never** written to the `cloud_accounts` table. Both the row and the token are synced: the row via `collectCloudAccounts()` and the token via the `cloud_token_{id}` entry in the AES-GCM secrets map (see §9.4).
 
@@ -1259,7 +1260,7 @@ If a new file triggers a false positive, add a targeted `grep -v` to the chain a
 
 ### 14.5 F-Droid metadata
 
-`metadata/io.github.tabssh.yml` — categories (System / Internet / Security), MIT license, source/issue/changelog URLs, `Builds:` entry building `fdroidRelease` from tag `v0.0.9`. Description block lists feature categories.
+`metadata/io.github.tabssh.yml` — categories (System / Internet / Security), MIT license, source/issue/changelog URLs, `Builds:` entry building `fdroidRelease` from tag `v1.0.0`. Description block lists feature categories.
 
 ### 14.6 ProGuard / R8
 

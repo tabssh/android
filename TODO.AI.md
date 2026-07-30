@@ -1,7 +1,7 @@
 # TabSSH TODO
 
-**Last Updated:** 2026-07-25
-**Version:** 0.9.1 (pinned via `release.txt` — DO NOT MODIFY without coordinated bump in `app/build.gradle` + F-Droid metadata)
+**Last Updated:** 2026-07-30
+**Version:** 1.0.0 (pinned via `release.txt` — DO NOT MODIFY without coordinated bump in `app/build.gradle` + F-Droid metadata)
 
 > **Usage rules for AI agents:**
 > 1. Open this file at the start of every session that touches 2 or more tasks.
@@ -112,10 +112,6 @@ maintainer-credential items below remain.
   https://nvd.nist.gov/developers/request-an-api-key and add it as the
   `NVD_API_KEY` repo secret; until then `dependencyCheckAnalyze` runs
   unauthenticated/throttled. Code-level wiring is done.
-- **AI.md refresh (LOW)**: stale "Last verified against" header (says 0.0.9 /
-  DB v37; actual 0.9.1 / DB v7) and §11.9 cloud-provider table is missing OCI
-  (code ships 8 providers incl. `OciCloudClient`). AI.md is read-only in audit
-  scope; maintainer should refresh.
 
 ### Open items (migrated from 2026-07-26 audit, shipped in `c0749ea897eb`)
 
@@ -157,4 +153,4 @@ Do not do a broad dead code sweep before v1. The risk/reward is wrong — no use
 - `AI.md` — architecture, packages, DB schema, sync, crypto, hypervisors, QR pairing
 - `CLAUDE.md` — operational runbook (build commands, commit policy, file locations)
 - `fdroid-submission/SPEC.md` — F-Droid formatted app description
-- `release.txt` — single-line version pin, source of truth for `versionName` (currently `0.9.1`)
+- `release.txt` — single-line version pin, source of truth for `versionName` (currently `1.0.0`)

@@ -21,7 +21,7 @@ Description: |
     tabbed interface for multiple SSH sessions while maintaining enterprise-grade
     security and accessibility standards.
 
-    🚀 COMPLETE FEATURE SET - Everything included in 0.0.9:
+    🚀 COMPLETE FEATURE SET - Everything included in 1.0.0:
 
     ⭐ CORE SSH FEATURES:
     * True browser-style tabbed interface for multiple SSH sessions
@@ -115,9 +115,9 @@ Description: |
 RequiresRoot: false
 
 Builds:
-  - versionName: '0.9.1'
-    versionCode: 10
-    commit: v0.9.1
+  - versionName: '1.0.0'
+    versionCode: 11
+    commit: v1.0.0
     subdir: .
     gradle:
       - fdroidRelease
@@ -128,5 +128,5 @@ Builds:
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$
-CurrentVersion: '0.9.1'
-CurrentVersionCode: 10
+CurrentVersion: '1.0.0'
+CurrentVersionCode: 11

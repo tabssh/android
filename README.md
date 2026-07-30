@@ -287,7 +287,7 @@ android/
 ├── scripts/            # Build and automation scripts
 ├── fdroid-submission/  # F-Droid metadata
 ├── Makefile
-└── release.txt         # Version pin (0.9.1)
+└── release.txt         # Version pin (1.0.0)
 ```
 
 ### 🐳 Docker Build

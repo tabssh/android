@@ -7,22 +7,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-07-30
+
+### Security
+
+- **Hypervisor TLS hostname verification** — the `verifySsl=true` + system-CA path now performs strict RFC 2818 hostname verification instead of accepting any certificate name; `verifySsl=false` remains an explicit trust-all opt-in for self-signed hypervisor certs (accepted design decision)
+
 ### Changed
 
 - **Default tab-swipe edge zone widened from 48dp to 96dp, and a rejected mid-screen swipe now gives visible feedback instead of silently doing nothing** — the edge-zone gate added to stop tab-swipe from hijacking mid-screen terminal gestures (vim/tmux navigation, text selection) worked exactly as designed, but a swipe that started outside the strip simply failed with zero feedback, which was indistinguishable from a bug. `tab_swipe_edge_dp`'s default is now `96` (two Material touch targets, easier to hit from either side) and `applyEdgeSwipeGate()` in `TabTerminalActivity.kt` now detects when a real horizontal drag is rejected by the edge check and fires a haptic tick plus a brief edge-glow animation (new `swipe_edge_glow_start`/`swipe_edge_glow_end` views) at the nearer screen edge
 
 ### Added
 
+- **WebDAV sync true three-way merge** — sync now keeps a base-snapshot layer of the last successfully synced state, enabling real three-way merges between local and remote changes; genuine both-sides-changed conflicts surface a resolution dialog instead of silently last-writer-wins
+- **Font-size keyboard shortcuts** — Ctrl+= / Ctrl++ and Ctrl+- zoom the terminal font in ±2sp steps (session-only, never persisted), and Ctrl+0 resets to the size configured in Settings → Terminal → Font Size; all three are also available in the command palette
 - **Direct VNC host connections and libvirt/QEMU VM consoles now open as swipeable tabs inside the main terminal screen instead of a separate full-screen viewer** — `VncHostsActivity` and `LibvirtManagerActivity` used to launch the standalone `VMConsoleActivity`; they now connect, create a `Tab.Vnc` on the shared `TabManager`, and focus it in `TabTerminalActivity` alongside SSH tabs, reusing the same swipe/tab-bar UI. `TerminalPagerAdapter`'s VNC view holder also gained the RFB handshake start (previously never wired for the tab-swipe path) and stale-listener cleanup on tab recycle needed to make this work. Libvirt consoles no longer auto-retry with resize disabled after a server-side resize rejection — that retry relied on tearing down a single-purpose activity, which doesn't fit a persistent multi-tab shell; libvirt/QEMU consoles now request no resize by default instead. Hypervisor console tabs (Proxmox/XCP-ng/libvirt `Tab.Console`) now get the same edge-only swipe protection as VNC tabs whenever they're in graphical mode — `applyEdgeSwipeGate()` in `TabTerminalActivity.kt` reads `ConsoleTab.isGraphicalMode` fresh on every touch, so a console that flips between text and graphical mid-session gets the right gating on the very next gesture; text-mode console tabs are unaffected and keep behaving like a plain SSH terminal
 - **Proxmox and XCP-ng/Xen Orchestra VM consoles now open as swipeable tabs too, and the standalone VM console viewer is gone** — `ProxmoxManagerActivity.openConsole()` and `XCPngManagerActivity.openVMConsole()` now create/activate a `Tab.Console` on the shared `TabManager` instead of launching `VMConsoleActivity`; the main terminal quick-connect's VNC option (both saved and one-off connections) was migrated the same way. With every caller migrated, `VMConsoleActivity` and its `VncStreamHolder` handoff have been deleted outright. VNC and hypervisor-console tabs now also survive being backgrounded the same way SSH tabs already do — `TabManager` pauses and parks their session into the existing `VncBackgroundSessionStore`/`VncKeepAliveService` when the app leaves the foreground, and reclaims (or, if the session was idle-swept after 10 minutes, surfaces as disconnected) it on return, instead of risking Android killing the whole process mid-session with no protection at all
 
 ### Removed
 
+- **"Show Function Key Row" setting** — the preference toggled nothing (the function-key row it referenced was never wired); the dead setting and its preference plumbing are gone
 - **`VMConsoleActivity`, its layout, and `VncStreamHolder`** — the standalone full-screen VM/VNC console viewer is fully retired now that every caller opens a swipeable `Tab.Vnc`/`Tab.Console` inside `TabTerminalActivity` instead
 - **PRE key long-press now opens the multiplexer picker to manually override the detected type** — even with the detection fixes below, auto-detection can't be 100% certain (e.g. a user with both tmux and zellij installed but only tmux attached); long-pressing PRE now opens the same picker dialog shown when detection first fails, letting you override it at any time instead of only when nothing was auto-detected
 
 ### Fixed
 
+- **Double-tap-to-copy no longer races long-press selection** — a double tap could land while a long-press selection ActionMode was being created, leaving the copy menu unopenable or the selection stuck; the gesture paths are now serialized
+- **DEC private-marker CSI sequences parsed correctly** — `ANSIParser` mishandled the `?` private marker in CSI sequences, corrupting parsing of DEC private-mode set/reset sequences
+- **WCAG AA contrast for built-in themes** — Solarized Light foreground (4.1:1 → 5.0:1) and Rosé Pine cursor (2.3:1 → 5.5:1) corrected to meet the 4.5:1 AA minimum enforced by `ThemeValidator`
 - **Tab swiping went permanently dead after the first touch outside the edge strip** — the edge-zone gate lived in a `RecyclerView.OnItemTouchListener` on ViewPager2's inner RecyclerView, but ViewPager2's `RecyclerViewImpl.onInterceptTouchEvent` short-circuits as `isAllowedToScroll() && super.onInterceptTouchEvent(ev)`, so the moment the gate disabled `isUserInputEnabled` on a mid-screen `ACTION_DOWN`, the listener stopped receiving events entirely — including the `ACTION_UP` that was supposed to re-enable input — leaving swipe dead for every later gesture, even ones starting on the edge. The gate now runs in a `dispatchTouchEvent` override in `TabTerminalActivity.kt` (`applyEdgeSwipeGate()`), which sees every event unconditionally; a swipe starting anywhere along the full height of the edge strip (width = the `tab_swipe_edge_dp` preference; 0 = anywhere) switches tabs, and the selection-suspend, VNC/graphical-console 96dp carve-out, and rejection haptic/glow feedback all behave as before
 - **Single-view mode's edge-swipe fling now honors the `tab_swipe_edge_dp` preference** — `TerminalView`'s issue-#168 fling handler used a hardcoded 24dp edge strip regardless of the user's setting; `edgeSwipeDp` is now set from the preference in `setupTerminalView()`, with `0` meaning a horizontal fling anywhere on the terminal switches tabs (direction follows the fling), and the fling is suppressed while text selection is active to mirror pager-mode's selection suspend
 - **PRE key stayed fully visible/active-looking after being disabled via the "Enable PRE Key" toggle, even though taps on it were already silently ignored** — `updatePrefixKeyVisual()` in `TabTerminalActivity.kt` always passed `enabled = true` to `KeyboardRowView.setKeyState()` regardless of `PreferenceManager.isPrefixKeyEnabled()`, so the key never rendered its dimmed state; `setKeyState()` and `MultiRowKeyboardView.setKeyState()` gained a new `dimmed` parameter that forces the heavily-dimmed look without touching Android's `View.isEnabled` (which would have also blocked the long-press re-enable picker), and `updatePrefixKeyVisual()` now checks the setting first and applies it
@@ -418,6 +430,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Connection statistics and per-host audit log
 - Multi-host dashboard with live CPU/memory/disk metrics
 
-[Unreleased]: https://github.com/tabssh/android/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/tabssh/android/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/tabssh/android/compare/v0.9.1...v1.0.0
 [0.9.1]: https://github.com/tabssh/android/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/tabssh/android/releases/tag/v0.9.0

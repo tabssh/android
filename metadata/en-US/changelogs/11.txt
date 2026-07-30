@@ -1,0 +1,10 @@
+TabSSH 1.0.0 — first stable release
+
+• Security & correctness audit: TLS hostname verification fix,
+  DEC private-marker CSI parsing fix, double-tap/long-press race fix
+• WebDAV sync: true three-way merge with base-snapshot layer and
+  conflict resolution dialog
+• Font-size shortcuts: Ctrl+= / Ctrl+- zoom (session-only),
+  Ctrl+0 resets to your configured size
+• WCAG AA theme corrections (Solarized Light, Rosé Pine)
+• Removed non-functional "Show Function Key Row" setting

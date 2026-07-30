@@ -95,8 +95,8 @@ android {
         // Android 5.0-6.0. minSdk 24 still covers ~96% of active devices.
         minSdk 24
         targetSdk 34
-        versionCode 10
-        versionName "0.9.1"
+        versionCode 11
+        versionName "1.0.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
