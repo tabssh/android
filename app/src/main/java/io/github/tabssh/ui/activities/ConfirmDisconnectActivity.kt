@@ -1,7 +1,6 @@
 package io.github.tabssh.ui.activities
 
 import android.os.Bundle
-import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import io.github.tabssh.TabSSHApplication
@@ -10,14 +9,20 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /**
- * Transparent dialog activity that confirms an SSH disconnect requested
- * from the notification shade.
+ * Transparent dialog activity that confirms an SSH tab disconnect
+ * requested from the notification shade.
  *
  * Android does not allow showing an AlertDialog directly from a
  * BroadcastReceiver. The "Disconnect" notification action therefore
  * launches this lightweight transparent Activity instead of a receiver.
  * The Activity shows a confirmation dialog immediately in [onCreate],
  * tears itself down either way, and never appears in the task stack.
+ *
+ * Tab-scoped (per-tab notifications): the action carries [EXTRA_TAB_ID],
+ * so confirming closes exactly one tab. When other tabs still share the
+ * same profile's SSH session, only this tab's channel is closed (Issue
+ * #163); the underlying session is torn down only when the last tab for
+ * that profile goes away.
  *
  * Theme: [Theme.TabSSH.Transparent] — the window background is clear so
  * the notification shade / underlying app shows through while the dialog
@@ -28,60 +33,67 @@ class ConfirmDisconnectActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "ConfirmDisconnectActivity"
 
-        /** String — the `id` field of the [ConnectionProfile] to close. */
-        const val EXTRA_PROFILE_ID = "profile_id"
+        /** String — the [io.github.tabssh.ui.tabs.SSHTab.tabId] of the tab to close. */
+        const val EXTRA_TAB_ID = "tab_id"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val profileId = intent.getStringExtra(EXTRA_PROFILE_ID)
-        if (profileId.isNullOrBlank()) {
-            Logger.w(TAG, "No profile_id in intent — nothing to disconnect")
+        val tabId = intent.getStringExtra(EXTRA_TAB_ID)
+        if (tabId.isNullOrBlank()) {
+            Logger.w(TAG, "No tab_id in intent — nothing to disconnect")
             finish()
             return
         }
 
         val app = applicationContext as TabSSHApplication
-        val conn = app.sshSessionManager.getConnection(profileId)
-        val displayName = conn?.profile?.getDisplayName() ?: profileId
+        val tab = app.tabManager.getAllTabs().find { it.tabId == tabId }
+        if (tab == null) {
+            // Tab already closed (stale notification action) — just make
+            // sure the notification itself is gone and bail out quietly.
+            io.github.tabssh.utils.NotificationHelper.cancelTabNotification(this, tabId)
+            Logger.w(TAG, "Tab $tabId no longer exists — cancelled stale notification")
+            finish()
+            return
+        }
+        val displayName = tab.getDisplayTitle()
 
         AlertDialog.Builder(this)
             .setTitle("Disconnect?")
-            .setMessage("Close the SSH connection to $displayName?")
+            .setMessage("Close the SSH session \"$displayName\"?")
             .setPositiveButton("Disconnect") { _, _ ->
-                Logger.i(TAG, "User confirmed disconnect for profile $profileId")
+                Logger.i(TAG, "User confirmed disconnect for tab $tabId")
                 // Cancel the notification immediately for instant visual
                 // feedback — the async disconnect chain below can take
                 // several seconds (JSch socket teardown) and should never
                 // block the UI or leave a stale notification.
-                io.github.tabssh.utils.NotificationHelper.cancelHostNotification(
-                    this, profileId
+                io.github.tabssh.utils.NotificationHelper.cancelTabNotification(
+                    this, tabId
                 )
-                // Dispatch all blocking work (JSch session.disconnect() is
+                // Dispatch all blocking work (JSch channel/session teardown is
                 // network I/O) to IO to avoid ANR on the main thread.
                 // Use applicationScope (not lifecycleScope) so the coroutine
                 // survives the activity being destroyed by finish() below.
                 app.applicationScope.launch(Dispatchers.IO) {
                     try {
-                        val tab = app.tabManager.getAllTabs()
-                            .find { it.profile.id == profileId }
-                        if (tab != null) {
-                            // Disconnect the SSHTab (closes bridge, channels,
-                            // mosh PTY, telnet — all connection types).
-                            tab.disconnect()
+                        // Close exactly this tab (cleanup() closes its own
+                        // channel, bridge, mosh PTY — all connection types —
+                        // and fires TabManagerListener.onTabClosed so the
+                        // service updates its notifications and FG anchor).
+                        val closed = app.tabManager.closeTabById(tabId)
+                        val profileId = (closed ?: tab).profile.id
+                        // Tear the shared SSH session down only when no other
+                        // tab still uses this profile (Issue #163 siblings).
+                        val stillShared = app.tabManager.getAllTabs()
+                            .any { it.profile.id == profileId }
+                        if (!stillShared) {
+                            try {
+                                app.sshSessionManager.closeConnectionIntentionally(profileId)
+                            } catch (_: Exception) { }
                         }
-                        // Always call closeConnectionIntentionally so the
-                        // SSH/mosh session is removed from activeConnections
-                        // and the service can stop cleanly. Safe to call even
-                        // if the tab was not found (handles already-dropped
-                        // connections) or if tab.disconnect() already cleaned
-                        // up (idempotent in SSHSessionManager).
-                        try {
-                            app.sshSessionManager.closeConnectionIntentionally(profileId)
-                        } catch (_: Exception) { }
                     } catch (e: Exception) {
-                        Logger.e(TAG, "Disconnect failed for $profileId", e)
+                        Logger.e(TAG, "Disconnect failed for tab $tabId", e)
                     }
                 }
                 finish()

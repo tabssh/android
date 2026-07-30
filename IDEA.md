@@ -44,6 +44,7 @@ repository: https://github.com/tabssh/android
 - Per-connection color tags, font size overrides, custom themes
 - URL detection on long-press
 - Performance dashboard with configurable monitor slots per host and metric graphs
+- Per-session status notifications — every open tab gets its own shade entry (even when tabs share one host), tapping jumps to that exact tab, a Disconnect action closes just that session, and entries clear as soon as their tab closes
 
 ### Security requirements
 - All passwords and private key passphrases must never be stored in plaintext or in the database

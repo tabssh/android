@@ -358,6 +358,23 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
     }
 
     /**
+     * Close an SSH tab by its stable [SSHTab.tabId]. Lookup and close run
+     * atomically under [tabsLock] so a concurrent createTab/closeTab/moveTab
+     * can't shift the index between the find and the removal (the
+     * notification-shade Disconnect action resolves tabs by id, not index).
+     *
+     * @return the closed [SSHTab], or null if no tab with that id exists
+     *   (already closed — e.g. a stale notification action).
+     */
+    fun closeTabById(tabId: String): SSHTab? = synchronized(tabsLock) {
+        val index = tabs.indexOfFirst { it.tabId == tabId }
+        if (index < 0) return null
+        val tab = (tabs[index] as? Tab.Ssh)?.sshTab
+        closeTab(index)
+        tab
+    }
+
+    /**
      * Switch to tab by index
      */
     fun switchToTab(index: Int) = synchronized(tabsLock) {

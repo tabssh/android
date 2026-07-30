@@ -19,7 +19,7 @@ import io.github.tabssh.utils.logging.Logger
  *
  * Channel layout:
  * ┌─ ssh_service_v2       — FG service anchor / placeholder (low, silent)
- * ├─ ssh_silent_v3        — per-host SSH session status (low, silent)
+ * ├─ ssh_silent_v3        — per-tab SSH session status (low, silent)
  * ├─ ssh_alerts_v3        — per-host SSH events (high, audible, per-profile gated)
  * ├─ file_transfer_v2     — SFTP progress (low, silent)
  * ├─ errors_v2            — connection errors / auth failures (high, audible)
@@ -27,7 +27,7 @@ import io.github.tabssh.utils.logging.Logger
  * └─ host_metrics_v1      — CPU/mem/disk threshold breaches (default, silent)
  *
  * Notification group keys:
- * - GROUP_SSH_SESSIONS   — groups all per-host SSH session notifications
+ * - GROUP_SSH_SESSIONS   — groups all per-tab SSH session notifications
  * - GROUP_MONITORING     — groups all monitoring (down/recovery/metric) alerts
  */
 object NotificationHelper {
@@ -39,18 +39,19 @@ object NotificationHelper {
     const val NOTIFICATION_ID_FILE_TRANSFER = 3001
     const val NOTIFICATION_ID_ERROR = 4001
 
-    // Group summary IDs — must be outside the per-host (10_000–99_999) and
+    // Group summary IDs — must be outside the per-tab (10_000–99_999) and
     // monitoring (200_000–289_999) ranges so they never collide.
     private const val NOTIFICATION_ID_SSH_GROUP = 1000
     private const val NOTIFICATION_ID_MONITORING_GROUP = 199_999
 
-    // Per-host notifications occupy a dedicated id range. The id is
-    // derived from `profile.id.hashCode()` so it's stable across the
-    // app's lifetime for any given profile (and so update/cancel can
-    // target the right notification without a separate lookup table).
+    // Per-tab notifications occupy a dedicated id range. The id is
+    // derived from `SSHTab.tabId.hashCode()` so it's stable for the
+    // lifetime of any given tab (and so update/cancel can target the
+    // right notification without a separate lookup table). Keyed by tab
+    // — not profile — so N tabs to the same host get N notifications.
     // Keeps the value positive and outside the constant ids above.
-    fun perHostNotificationId(profileId: String): Int {
-        return 10_000 + ((profileId.hashCode().toLong() and 0x7FFFFFFFL) % 90_000).toInt()
+    fun perTabNotificationId(tabId: String): Int {
+        return 10_000 + ((tabId.hashCode().toLong() and 0x7FFFFFFFL) % 90_000).toInt()
     }
 
     // ── Notification group keys ───────────────────────────────────────────────
@@ -74,7 +75,7 @@ object NotificationHelper {
     private const val CHANNEL_FILE_TRANSFER = "file_transfer_v2"
     private const val CHANNEL_ERROR       = "errors_v2"
 
-    // Per-host status (persistent, silent). Default channel for the
+    // Per-tab status (persistent, silent). Default channel for the
     // ongoing per-session notification — never beeps or vibrates.
     private const val CHANNEL_SSH_SILENT  = "ssh_silent_v3"
 
@@ -99,7 +100,7 @@ object NotificationHelper {
 
             // ── Session Service ───────────────────────────────────────────────────
             // Transient foreground-service anchor. Posted as a silent placeholder
-            // ("Starting SSH session…") before the first real per-host notification
+            // ("Starting SSH session…") before the first real per-tab notification
             // is live. Swapped out immediately on first connect; users rarely see
             // this beyond the first half-second of a new connection.
             // Importance LOW: must not surface as a heads-up banner or make noise.
@@ -145,7 +146,7 @@ object NotificationHelper {
             }
 
             // ── Active Sessions ───────────────────────────────────────────────────
-            // Persistent per-host status row ("Connected to host:port-ssh") for
+            // Persistent per-tab status row ("Connected to host:port-ssh") for
             // every active terminal session. Always present while a session is live;
             // auto-cleared 30 s after disconnect. Never beeps or vibrates — the user
             // controls the foreground service through this notification, not the other
@@ -237,27 +238,34 @@ object NotificationHelper {
     }
 
     /**
-     * Build the persistent per-host status notification for a profile.
+     * Build the persistent per-tab status notification for one SSH tab.
      * Always lives on [CHANNEL_SSH_SILENT]. Caller is responsible for
      * posting (so the SSHConnectionService can use the same Notification
      * object as the foreground anchor via startForeground).
      *
+     * Keyed by [tabId] — not by profile — so four tabs (even four tabs to
+     * the same host) produce four independent shade entries, each with its
+     * own tap-to-navigate and Disconnect action.
+     *
      * All SSH session notifications carry [GROUP_SSH_SESSIONS] so Android
      * can collapse them under the group summary notification.
      *
-     * Schema (matches user spec):
-     *   - state CONNECTED, title present:  "Connected to {host}:{title}"
-     *   - state CONNECTED, no title:       "Connected to {host}:{port}-{ssh|mosh}"
-     *   - state CONNECTING:                "Connecting to {host}:{port}…"
-     *   - state ERROR:                     "Connection error: {host}:{port}"
-     *   - state DISCONNECTED:              "Disconnected from {host}"
+     * Content schema:
+     *   - state CONNECTED, tab title set:  "{displayName}" / "{tabTitle} ({protocol})"
+     *   - state CONNECTED, no tab title:   "{displayName}" / "{protocol}"
+     *   - state CONNECTING:                "{displayName}" / "Connecting…"
+     *   - state ERROR:                     "{displayName}" / "Connection error"
+     *   - state DISCONNECTED:              "{displayName}" / "Disconnected[ (error)]"
      *
-     * CONNECTED notifications also include a "Disconnect" action that
-     * launches [ConfirmDisconnectActivity] for a user-confirmed close.
+     * Tapping the notification jumps to that exact tab (EXTRA_TAB_ID →
+     * TabTerminalActivity.handleIntent switches the pager). CONNECTED
+     * notifications also include a "Disconnect" action that launches
+     * [ConfirmDisconnectActivity] for a user-confirmed close of that tab.
      */
-    fun buildHostStatusNotification(
+    fun buildTabStatusNotification(
         context: Context,
         profile: io.github.tabssh.storage.database.entities.ConnectionProfile,
+        tabId: String,
         state: io.github.tabssh.ssh.connection.ConnectionState,
         terminalTitle: String?,
         cleanExit: Boolean = true
@@ -292,13 +300,20 @@ object NotificationHelper {
 
         val tapTarget = Intent(context, io.github.tabssh.ui.activities.TabTerminalActivity::class.java)
             .apply {
+                // EXTRA_TAB_ID makes handleIntent() switch straight to this
+                // tab; profile id + auto_connect=false remain as the fallback
+                // path if the tab no longer exists when the user taps.
+                putExtra(io.github.tabssh.ui.activities.TabTerminalActivity.EXTRA_TAB_ID, tabId)
                 putExtra(io.github.tabssh.ui.activities.TabTerminalActivity.EXTRA_CONNECTION_PROFILE_ID, profile.id)
                 putExtra(io.github.tabssh.ui.activities.TabTerminalActivity.EXTRA_AUTO_CONNECT, false)
                 addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             }
+        // Request code keyed by tabId so each tab's tap intent stays a
+        // distinct cached PendingIntent (profile-keyed codes would make
+        // same-host tabs overwrite each other's extras).
         val pendingIntent = PendingIntent.getActivity(
             context,
-            profile.id.hashCode(),
+            tabId.hashCode(),
             tapTarget,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -329,9 +344,9 @@ object NotificationHelper {
 
         // "Disconnect" action — only shown for live CONNECTED sessions.
         // Launches ConfirmDisconnectActivity (transparent dialog) so the
-        // user gets an explicit confirmation before the connection is torn down.
+        // user gets an explicit confirmation before the tab is torn down.
         if (state == io.github.tabssh.ssh.connection.ConnectionState.CONNECTED) {
-            val disconnectPi = buildDisconnectPendingIntent(context, profile.id)
+            val disconnectPi = buildDisconnectPendingIntent(context, tabId)
             builder.addAction(
                 NotificationCompat.Action.Builder(
                     R.drawable.ic_disconnect,
@@ -366,11 +381,13 @@ object NotificationHelper {
     /**
      * Build the PendingIntent for the "Disconnect" notification action.
      * Launches [ConfirmDisconnectActivity] — a transparent dialog — so the
-     * user confirms before the SSH connection is torn down.
+     * user confirms before the tab's connection is torn down. Tab-scoped:
+     * disconnecting one of several tabs to the same host closes only that
+     * tab's channel (Issue #163), not its siblings.
      */
-    private fun buildDisconnectPendingIntent(context: Context, profileId: String): PendingIntent {
+    private fun buildDisconnectPendingIntent(context: Context, tabId: String): PendingIntent {
         val intent = Intent(context, io.github.tabssh.ui.activities.ConfirmDisconnectActivity::class.java).apply {
-            putExtra(io.github.tabssh.ui.activities.ConfirmDisconnectActivity.EXTRA_PROFILE_ID, profileId)
+            putExtra(io.github.tabssh.ui.activities.ConfirmDisconnectActivity.EXTRA_TAB_ID, tabId)
             // FLAG_ACTIVITY_NEW_TASK required when starting an Activity from a
             // non-Activity context (notification action fires from the OS).
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -379,38 +396,21 @@ object NotificationHelper {
         // does not accidentally reuse the wrong cached intent.
         return PendingIntent.getActivity(
             context,
-            profileId.hashCode() xor 0x1000,
+            tabId.hashCode() xor 0x1000,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
     }
 
     /**
-     * Post the per-host status notification. Safe to call repeatedly
-     * for the same profile — Android coalesces updates by id.
+     * Cancel one tab's status notification (no animation, no
+     * disconnect-message — just gone). Used for immediate cleanup when a
+     * tab is closed or a disconnect is confirmed from the shade. Normal
+     * disconnect renders the DISCONNECTED variant which auto-clears.
      */
-    fun showHostStatus(
-        context: Context,
-        profile: io.github.tabssh.storage.database.entities.ConnectionProfile,
-        state: io.github.tabssh.ssh.connection.ConnectionState,
-        terminalTitle: String?,
-        cleanExit: Boolean = true
-    ): Notification {
-        val notification = buildHostStatusNotification(context, profile, state, terminalTitle, cleanExit)
+    fun cancelTabNotification(context: Context, tabId: String) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        nm.notify(perHostNotificationId(profile.id), notification)
-        return notification
-    }
-
-    /**
-     * Cancel the per-host status notification (no animation, no
-     * disconnect-message — just gone). Use for explicit cleanup like
-     * when a profile is deleted while connected. Normal disconnect
-     * goes through showHostStatus(DISCONNECTED) which auto-clears.
-     */
-    fun cancelHostNotification(context: Context, profileId: String) {
-        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        nm.cancel(perHostNotificationId(profileId))
+        nm.cancel(perTabNotificationId(tabId))
     }
 
     /**
@@ -420,7 +420,7 @@ object NotificationHelper {
      * this summary in the notification shade once there are multiple active
      * sessions. The summary itself shows a count and taps into MainActivity.
      *
-     * Called by [SSHConnectionService] after every per-host notification
+     * Called by [SSHConnectionService] after every per-tab notification
      * render so the count stays accurate. When [connectedCount] is 0 the
      * summary is cancelled instead of posted.
      */
@@ -548,8 +548,10 @@ object NotificationHelper {
         if (!vibOn) builder.setVibrate(longArrayOf(0))
 
         // Use a derived id so the alert doesn't collide with the silent
-        // status notification's id.
-        val alertId = perHostNotificationId(profile.id) xor 0x40000
+        // per-tab status notification ids. Alerts stay host-scoped (one
+        // audible ping per host event), so the id derives from profile.id
+        // using the same range formula, shifted out of 10_000–99_999.
+        val alertId = (10_000 + ((profile.id.hashCode().toLong() and 0x7FFFFFFFL) % 90_000).toInt()) xor 0x40000
         nm.notify(alertId, builder.build())
     }
     

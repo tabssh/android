@@ -224,7 +224,7 @@ Top-level config: `android:name=".TabSSHApplication"`, `android:allowBackup="fal
 | `WidgetConfigActivity` (package `widget/`) | Configure quick-connect widgets | widget id |
 | `VncHostsActivity`, `VncHostEditActivity` | CRUD VNC hosts (DB v34) and direct-VNC entry | — |
 | `CloudAccountManagerActivity` | Per-cloud-account VM list and connect actions | account id |
-| `ConfirmDisconnectActivity` | Transparent confirm dialog launched from notification "Disconnect" action | profile id |
+| `ConfirmDisconnectActivity` | Transparent confirm dialog launched from notification "Disconnect" action | tab id |
 | `HostDetailActivity` | Single-host live metrics + monitoring config | host id |
 | `ImportExportActivity` | Master Import/Export hub (backups, SSH config import, bulk import) | — |
 | `TranscriptViewerActivity` | Replay recorded sessions | transcript id |
@@ -1135,7 +1135,7 @@ Package `cloud/` (separate from `hypervisor/`). Manages SSH-accessible cloud VM 
 | `ssh_service_v2` | LOW | FG-service anchor + placeholder notification (`SSHConnectionService`) |
 | `file_transfer_v2` | LOW | SFTP progress (ongoing, BigText for completion) |
 | `errors_v2` | HIGH | actionable errors |
-| `ssh_silent_v3` | LOW | per-host persistent session status (silent) — carries "Disconnect" action |
+| `ssh_silent_v3` | LOW | per-tab persistent session status (silent) — carries "Disconnect" action |
 | `ssh_alerts_v3` | HIGH | per-host audible/vibrating session events (controlled by `notifSoundMode`/`notifVibrateMode`) |
 | `host_monitoring_v1` | HIGH | host down/recovery alerts from background `HostAvailabilityWorker` |
 | `host_metrics_v1` | DEFAULT | CPU/memory/disk threshold breach alerts (silent) |
@@ -1144,20 +1144,24 @@ Package `cloud/` (separate from `hypervisor/`). Manages SSH-accessible cloud VM 
 
 | Group key | Summary ID | Covers |
 |---|---|---|
-| `tabssh_ssh_sessions` | 1000 | all `ssh_silent_v3` per-host notifications |
+| `tabssh_ssh_sessions` | 1000 | all `ssh_silent_v3` per-tab notifications |
 | `tabssh_monitoring` | 199999 | all `host_monitoring_v1` + `host_metrics_v1` alerts |
 
-`SSHConnectionService.refreshAllHostNotifications()` calls `NotificationHelper.postSshGroupSummary(count)` every 30 s (and on sweep) to keep the SSH group summary accurate. Monitoring group summary is posted inline alongside each monitoring alert.
+`SSHConnectionService.refreshAllTabNotifications()` calls `NotificationHelper.postSshGroupSummary(count)` every 30 s (and on sweep) to keep the SSH group summary accurate. Monitoring group summary is posted inline alongside each monitoring alert.
 
-**Disconnect from notification:** every CONNECTED per-host notification carries a "Disconnect" action button. Tapping it launches `ConfirmDisconnectActivity` (transparent dialog, `Theme.TabSSH.Transparent`) which calls `SSHSessionManager.closeConnection(profileId)` on confirm.
+**One notification per tab.** Session-status notifications are keyed by `SSHTab.tabId` (`NotificationHelper.perTabNotificationId`, id range 10 000–99 999), not by profile — four open tabs produce four shade entries even when they share one host/SSH session (Issue #163 sibling channels). Rendering is driven by `TabManagerListener.onTabConnectionStateChanged`; `SessionManagerListener` remains only for DB stats, audible alerts (`ssh_alerts_v3`, still host-scoped), and service self-stop. Tapping a notification carries `EXTRA_TAB_ID` so `TabTerminalActivity.handleIntent()` jumps to that exact tab.
 
-**Multihost dashboard sessions are invisible to this layer.** `MultiHostDashboardActivity` opens connections via `SSHSessionManager.connectForMonitoring()` (§5.1.3). That path never fires `onConnectionEstablished` and never starts `SSHConnectionService`, so no per-host "Connected to…" notification is posted for monitoring-only sessions.
+**Cleanup on exit/disconnect:** `TabManagerListener.onTabClosed` cancels the closed tab's notification immediately (and swaps the FG anchor if that tab held it); the 30 s heartbeat additionally sweeps orphaned ids in the per-tab range and `onDestroy` cancels all of them.
+
+**Disconnect from notification:** every CONNECTED per-tab notification carries a "Disconnect" action button. Tapping it launches `ConfirmDisconnectActivity` (transparent dialog, `Theme.TabSSH.Transparent`) with `EXTRA_TAB_ID`; on confirm it closes exactly that tab via `TabManager.closeTabById(tabId)` and tears the shared SSH session down (`closeConnectionIntentionally`) only when no other tab still uses the profile.
+
+**Multihost dashboard sessions are invisible to this layer.** `MultiHostDashboardActivity` opens connections via `SSHSessionManager.connectForMonitoring()` (§5.1.3). That path never fires `onConnectionEstablished`, never starts `SSHConnectionService`, and owns no tab — so no "Connected to…" notification is posted for monitoring-only sessions.
 
 Per-channel toggles: `notifications_enabled`, `show_connection_notifications`, `show_error_notifications`, `show_file_transfer_notifications`, `notification_vibrate`. Master switch for monitoring: `monitoring_enabled` pref.
 
 ### 13.2 Foreground service
 
-`SSHConnectionService` (`services/SSHConnectionService.kt`) — `foregroundServiceType="dataSync"`, `START_NOT_STICKY`. Runs a 30-second connection-health loop, listens for `SessionManagerListener` events, manages per-host + group summary notifications, auto-stops 30 s after the last connection closes.
+`SSHConnectionService` (`services/SSHConnectionService.kt`) — `foregroundServiceType="dataSync"`, `START_NOT_STICKY`. Runs a 30-second connection-health loop, listens for `SessionManagerListener` (stats/alerts/self-stop) and `TabManagerListener` (per-tab notification rendering) events, manages per-tab + group summary notifications with the FG anchor pinned to a live tab, auto-stops 30 s after the last connection closes.
 
 ### 13.3 Widgets
 
