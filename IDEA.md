@@ -6,15 +6,42 @@ TabSSH is an Android SSH client that brings browser-style tabbed sessions to the
 
 project_name: tabssh
 project_org: tabssh
+# FROZEN — set once at first-time setup, never edit
 internal_name: tabssh
+# FROZEN — set once at first-time setup, never edit
 internal_org: tabssh
+# FROZEN forever — shipped applicationId
 app_id: io.github.tabssh
 min_sdk: 24
-target_sdk: 34
-compile_sdk: 35
-language: Kotlin
 license: MIT
+# views — existing app with XML layouts
+ui_toolkit: views
+di: manual
+store_targets: fdroid, provider-releases
+form_factors: phone, widget
 repository: https://github.com/tabssh/android
+
+## Applicability
+
+database: yes
+network: yes
+notifications: yes
+background_work: yes
+backup_sync: yes
+media: no
+
+## Toolchain
+
+# Override of casjaysdev/android:latest — repo-pinned CI image with the
+# Android SDK and this project's Gradle dependency cache pre-baked, shared
+# by the GitHub workflows and local Docker builds for reproducibility
+build_image: ghcr.io/tabssh/android:build
+kotlin: 2.4.10
+agp: 8.13.2
+gradle: 8.14.5
+compile_sdk: 35
+target_sdk: 34
+version_code_scheme: manual
 
 ## Business logic
 
@@ -96,6 +123,17 @@ repository: https://github.com/tabssh/android
 - Zero telemetry by default; opt-in only
 - Works fully offline (no cloud account required to use the app)
 - No feature gating — all functionality available to all users
+
+### Trust boundaries
+- Remote SSH/telnet hosts, hypervisor and cloud APIs, clipboard contents, QR payloads, imported config/bulk files, and user-supplied sync storage are all untrusted input
+- The device keystore and the app's own encrypted storage are the only trusted secret stores
+- verifySsl defaults to off on hypervisor profiles — an accepted, documented design decision to accommodate self-signed hypervisor certs; TOFU pinning is the compensating control
+
+### Permission justifications
+- Camera: QR pairing import only; declared optional (app fully works without it)
+- Notifications: per-session status entries and connection events
+- Foreground service: keeps SSH/mosh sessions alive while backgrounded
+- Network: the app's core purpose; no network use on first launch is still required
 
 ### What the app must never do
 - Store raw passwords or PEM keys in the Room database
