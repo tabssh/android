@@ -72,6 +72,7 @@ version_code_scheme: manual
 - Per-connection color tags, font size overrides, custom themes
 - URL detection on long-press
 - Performance dashboard with configurable monitor slots per host and metric graphs
+- Scrollbar-style scrolling — swiping moves the viewed content smoothly in every session context, and local scrollback shows a transient draggable scrollbar thumb; the thumb must never interfere with left/right tab-switch swipes
 - Per-session status notifications — every open tab gets its own shade entry (even when tabs share one host), tapping jumps to that exact tab, a Disconnect action closes just that session, and entries clear as soon as their tab closes
 
 ### Security requirements

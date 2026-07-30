@@ -213,6 +213,52 @@ class TerminalView @JvmOverloads constructor(
     var edgeSwipeDp = 24
 
     // ─────────────────────────────────────────────────────────────────
+    // Scrollback thumb — transient right-edge overlay scrollbar.
+    //
+    // Shown only while the LOCAL scrollback is moving (finger scroll,
+    // fling, volume-key paging) and never in the remote-mouse-tracking
+    // or alt-screen paths — the client has no scroll position there.
+    // Geometry lives in ScrollbarThumbGeometry (pure, unit-tested);
+    // this block only holds view state, paint, and fade timing.
+    //
+    // Right-edge conflict with the Issue #168 tab-swipe strip is
+    // resolved by direction: a touch on the visible thumb becomes a
+    // drag only once its movement is predominantly VERTICAL; a
+    // predominantly horizontal move falls through untouched to the
+    // gestureDetector so the edge-swipe tab fling still fires.
+    // ─────────────────────────────────────────────────────────────────
+    private val thumbPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    // True from the first scroll motion until the fade completes.
+    private var thumbShownActive = false
+    // Uptime of the last scroll/fling/drag activity — drives the fade clock.
+    private var thumbLastActivityMs = 0L
+    // Pointer went down on the visible thumb but direction is still undecided.
+    private var thumbDragCandidate = false
+    // The thumb owns the pointer — scrubbing scrollYf until ACTION_UP/CANCEL.
+    private var thumbDragging = false
+    private var thumbDownX = 0f
+    private var thumbDownY = 0f
+    private var thumbLastDragY = 0f
+    /** Minimum thumb length — 48dp keeps it grabbable on deep scrollback. */
+    private val thumbMinLenPx by lazy { 48f * resources.displayMetrics.density }
+    /** Idle thumb width (4dp); widens while dragging for grab feedback. */
+    private val thumbWidthPx by lazy { 4f * resources.displayMetrics.density }
+    /** Thumb width while dragging (8dp). */
+    private val thumbDragWidthPx by lazy { 8f * resources.displayMetrics.density }
+    /** Gap between the thumb and the right view edge (4dp). */
+    private val thumbEdgeMarginPx by lazy { 4f * resources.displayMetrics.density }
+    /** Right-edge grab strip width (24dp) — generous horizontal slop. */
+    private val thumbTouchStripPx by lazy { 24f * resources.displayMetrics.density }
+    /** Extra vertical grab slop above/below the thumb (12dp). */
+    private val thumbTouchPadPx by lazy { 12f * resources.displayMetrics.density }
+    /** Movement threshold for the vertical-vs-horizontal drag decision. */
+    private val thumbClaimSlopPx by lazy {
+        android.view.ViewConfiguration.get(context).scaledTouchSlop.toFloat()
+    }
+    // Fires after the hide delay purely to kick off the fade redraw loop.
+    private val thumbHideRunnable = Runnable { invalidate() }
+
+    // ─────────────────────────────────────────────────────────────────
     // Drag-to-select range copy (issue #73)
     //
     // Long-press → context menu → "Select text…" calls
@@ -1172,6 +1218,8 @@ class TerminalView @JvmOverloads constructor(
             if (visualBellActive) {
                 canvas.drawColor(0x40FFFFFF.toInt())
             }
+            // Scrollback thumb overlay — last so it sits above all content.
+            drawScrollThumb(canvas)
             return
         }
 
@@ -1217,6 +1265,9 @@ class TerminalView @JvmOverloads constructor(
         } ?: run {
             Logger.w("TerminalView", "Terminal renderer is null in onDraw")
         }
+
+        // Scrollback thumb overlay for the fallback renderer path.
+        drawScrollThumb(canvas)
     }
 
     /**
@@ -1845,6 +1896,11 @@ class TerminalView @JvmOverloads constructor(
         // word-select / URL-detect while the user is shaping a range.
         if (handleSelectionTouch(event)) return true
 
+        // Scrollback thumb drag — claims the pointer only when the thumb is
+        // visible, the touch landed on it, and the movement is predominantly
+        // vertical; every other case returns false and changes nothing.
+        if (handleThumbTouch(event)) return true
+
         // Handle single-finger gestures (scroll, tap, long press)
         if (!isScaling) {
             gestureDetector.onTouchEvent(event)
@@ -2292,6 +2348,9 @@ class TerminalView @JvmOverloads constructor(
             // so we don't pay for multiple redraws if onScroll fires twice before
             // the next Choreographer beat.
             invalidate()
+            // Surface the scrollback thumb for this local-scrollback motion
+            // (never in the mouse-tracking/alt-screen branches above).
+            if (maxScrollYPx() > 0) showScrollThumb()
             return true
         }
 
@@ -2347,6 +2406,9 @@ class TerminalView @JvmOverloads constructor(
             // reverseScrollDirection: leave as +velocityY (old behaviour).
             val flingVelocity = if (reverseScrollDirection) velocityY.toInt() else -velocityY.toInt()
             scroller.fling(0, scrollYInt, 0, flingVelocity, 0, 0, 0, maxScrollYPx())
+            // Keep the thumb up for the fling; computeScroll() refreshes it
+            // each frame while the scroller is still animating.
+            if (maxScrollYPx() > 0) showScrollThumb()
             postInvalidateOnAnimation()
             return true
         }
@@ -2870,8 +2932,190 @@ class TerminalView @JvmOverloads constructor(
             // mid-fling (e.g. the user types `clear`) leaving scroller.currY above
             // the new maximum, which produces a blank strip at the bottom of the view.
             scrollYf = scroller.currY.toFloat().coerceIn(0f, maxScrollYPx().toFloat())
+            // Keep the thumb alive while a local-scrollback fling or page
+            // animation is running (the scroller is only ever driven by the
+            // local-scrollback paths, so this never fires for mouse/alt modes).
+            if (maxScrollYPx() > 0) showScrollThumb()
             postInvalidateOnAnimation()
         }
+    }
+
+    // ── Scrollback thumb helpers ─────────────────────────────────────────────
+
+    /** Mark scroll activity: show the thumb and (re)start its fade countdown. */
+    private fun showScrollThumb() {
+        thumbShownActive = true
+        thumbLastActivityMs = android.os.SystemClock.uptimeMillis()
+        removeCallbacks(thumbHideRunnable)
+        postDelayed(thumbHideRunnable, THUMB_HIDE_DELAY_MS)
+        invalidate()
+    }
+
+    /**
+     * Current thumb opacity in [0, 1]: fully visible while dragging or inside
+     * the hide delay, then a linear fade over THUMB_FADE_MS, then hidden.
+     */
+    private fun thumbAlphaNow(nowMs: Long): Float {
+        if (!thumbShownActive) return 0f
+        if (thumbDragging || thumbDragCandidate) return 1f
+        val elapsed = nowMs - thumbLastActivityMs
+        if (elapsed < THUMB_HIDE_DELAY_MS) return 1f
+        return (1f - (elapsed - THUMB_HIDE_DELAY_MS).toFloat() / THUMB_FADE_MS).coerceIn(0f, 1f)
+    }
+
+    /**
+     * True when the thumb can accept a touch-down: it is on screen AND the
+     * view is in the local-scrollback context (no remote mouse tracking, no
+     * alt screen, no active text selection, scrollback exists).
+     */
+    private fun isThumbInteractive(): Boolean {
+        if (!thumbShownActive || selectionActive) return false
+        if (thumbAlphaNow(android.os.SystemClock.uptimeMillis()) <= 0f) return false
+        if (maxScrollYPx() <= 0) return false
+        val termuxEmulator = termuxBridge?.getEmulator()
+        if (termuxEmulator != null &&
+            (termuxEmulator.isMouseTrackingActive() || termuxEmulator.isAlternateBufferActive())
+        ) {
+            return false
+        }
+        return true
+    }
+
+    /** Draw the thumb overlay — called last in onDraw so it sits on top. */
+    private fun drawScrollThumb(canvas: Canvas) {
+        if (!thumbShownActive) return
+        val maxScroll = maxScrollYPx().toFloat()
+        if (maxScroll <= 0f) {
+            thumbShownActive = false
+            return
+        }
+        val now = android.os.SystemClock.uptimeMillis()
+        val alpha = thumbAlphaNow(now)
+        if (alpha <= 0f) {
+            thumbShownActive = false
+            return
+        }
+        val trackH = height.toFloat()
+        val len = ScrollbarThumbGeometry.thumbLengthPx(trackH, maxScroll, thumbMinLenPx)
+        if (len <= 0f) return
+        val top = ScrollbarThumbGeometry.thumbTopPx(trackH, maxScroll, scrollYf, len)
+        val w = if (thumbDragging) thumbDragWidthPx else thumbWidthPx
+        val right = width - thumbEdgeMarginPx
+        // Theme-derived color: the terminal foreground already contrasts the
+        // terminal background by definition, so a translucent fg pill reads on
+        // every theme. 40% idle, 70% while dragging — never a hardcoded hue.
+        val baseAlpha = if (thumbDragging) 0.70f else 0.40f
+        thumbPaint.color = currentTheme?.foreground ?: Color.WHITE
+        thumbPaint.alpha = (255f * baseAlpha * alpha).toInt()
+        val radius = w / 2f
+        canvas.drawRoundRect(right - w, top, right, top + len, radius, radius, thumbPaint)
+        // Drive the fade animation frame-by-frame once the hide delay elapsed.
+        if (alpha < 1f) postInvalidateOnAnimation()
+    }
+
+    /**
+     * Thumb touch handling — runs BEFORE the pinch and gesture detectors.
+     *
+     * ACTION_DOWN never claims (returns false) so the gestureDetector always
+     * sees the full stream; the claim happens on the first ACTION_MOVE whose
+     * movement is predominantly vertical, at which point the gestureDetector
+     * gets a synthetic ACTION_CANCEL and the thumb scrubs scrollYf until the
+     * pointer lifts. Horizontal movement, an invisible thumb, or a touch off
+     * the thumb all leave the event stream completely untouched — taps, tab
+     * edge-swipes, and selection near the right edge behave exactly as before.
+     */
+    private fun handleThumbTouch(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                thumbDragging = false
+                thumbDragCandidate = false
+                if (isThumbInteractive()) {
+                    val trackH = height.toFloat()
+                    val maxScroll = maxScrollYPx().toFloat()
+                    val len = ScrollbarThumbGeometry.thumbLengthPx(trackH, maxScroll, thumbMinLenPx)
+                    val top = ScrollbarThumbGeometry.thumbTopPx(trackH, maxScroll, scrollYf, len)
+                    if (ScrollbarThumbGeometry.isInThumbTouchTarget(
+                            event.x, event.y, width.toFloat(), thumbTouchStripPx,
+                            top, len, thumbTouchPadPx
+                        )
+                    ) {
+                        thumbDragCandidate = true
+                        thumbDownX = event.x
+                        thumbDownY = event.y
+                        thumbLastDragY = event.y
+                        // Keep the thumb from fading away under the finger
+                        // while the direction decision is pending.
+                        showScrollThumb()
+                    }
+                }
+                return false
+            }
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                // A second finger before the claim → pinch-to-zoom wins.
+                if (!thumbDragging) thumbDragCandidate = false
+                // Extra fingers during an active drag are ignored — the drag
+                // keeps the pointer until the gesture ends.
+                return thumbDragging
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (thumbDragging) {
+                    val dy = event.y - thumbLastDragY
+                    thumbLastDragY = event.y
+                    val trackH = height.toFloat()
+                    val maxScroll = maxScrollYPx().toFloat()
+                    val len = ScrollbarThumbGeometry.thumbLengthPx(trackH, maxScroll, thumbMinLenPx)
+                    val delta = ScrollbarThumbGeometry.dragScrollDelta(dy, trackH, maxScroll, len)
+                    scrollYf = (scrollYf + delta).coerceIn(0f, maxScroll)
+                    thumbLastActivityMs = android.os.SystemClock.uptimeMillis()
+                    invalidate()
+                    return true
+                }
+                if (thumbDragCandidate) {
+                    val dx = event.x - thumbDownX
+                    val dy = event.y - thumbDownY
+                    when (ScrollbarThumbGeometry.classifyDrag(dx, dy, thumbClaimSlopPx)) {
+                        ScrollbarThumbGeometry.DragClaim.CLAIM -> {
+                            thumbDragCandidate = false
+                            thumbDragging = true
+                            // Stop any in-flight fling — the finger owns the
+                            // position now.
+                            scroller.forceFinished(true)
+                            // The gestureDetector saw the DOWN and the slop
+                            // moves; cancel it so it can neither scroll nor
+                            // fling (tab switch) from this pointer anymore.
+                            val cancel = MotionEvent.obtain(event)
+                            cancel.action = MotionEvent.ACTION_CANCEL
+                            gestureDetector.onTouchEvent(cancel)
+                            cancel.recycle()
+                            // Anchor the scrub at the current finger position
+                            // so the claim itself causes no jump.
+                            thumbLastDragY = event.y
+                            invalidate()
+                            return true
+                        }
+                        ScrollbarThumbGeometry.DragClaim.PASS -> {
+                            // Predominantly horizontal — release the pointer
+                            // so the Issue #168 edge-swipe tab fling (and any
+                            // other gesture) proceeds exactly as before.
+                            thumbDragCandidate = false
+                        }
+                        ScrollbarThumbGeometry.DragClaim.UNDECIDED -> {}
+                    }
+                }
+                return false
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                thumbDragCandidate = false
+                if (thumbDragging) {
+                    thumbDragging = false
+                    // Restart the fade countdown now that the finger is up.
+                    showScrollThumb()
+                    return true
+                }
+                return false
+            }
+        }
+        return false
     }
 
     /**
@@ -2918,6 +3162,12 @@ class TerminalView @JvmOverloads constructor(
         stopCursorBlink()
         pendingResize?.let { resizeHandler.removeCallbacks(it) }
         pendingResize = null
+        // Drop the scrollback thumb's pending fade callback and drag state so
+        // a ViewPager2 page detach can never leave a stale claimed pointer.
+        removeCallbacks(thumbHideRunnable)
+        thumbShownActive = false
+        thumbDragging = false
+        thumbDragCandidate = false
     }
 
     // ── Cursor blink helpers ─────────────────────────────────────────────────
@@ -2935,6 +3185,10 @@ class TerminalView @JvmOverloads constructor(
 
     companion object {
         private const val CURSOR_BLINK_INTERVAL_MS = 500L
+        // Scrollback thumb stays fully visible this long after the last
+        // scroll activity, then fades out over THUMB_FADE_MS.
+        private const val THUMB_HIDE_DELAY_MS = 1200L
+        private const val THUMB_FADE_MS = 250L
         // Keyboard open/close animation fires two onSizeChanged events ~30 ms
         // apart. Debounce longer than the animation gap so only the settled
         // final size is forwarded to the SSH server via SIGWINCH.
