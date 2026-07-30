@@ -346,7 +346,16 @@ class SSHConnection(
                 } else {
                     val resolved = resolveHostForIpMode(profile.host, profile.ipMode)
                     Logger.i("SSHConnection", "Direct connection to $resolved (host=${profile.host}, ipMode=${profile.ipMode}):${profile.port} as $effectiveUsername")
-                    jsch.getSession(effectiveUsername, resolved, profile.port)
+                    // Issue #12 — TimingSocketFactory logs DNS + per-address
+                    // TCP connect timing and falls back across all resolved
+                    // addresses (JSch's default path tries only the first).
+                    // Not set on tunnel sessions above: those connect to
+                    // localhost where neither timing nor fallback matters.
+                    jsch.getSession(effectiveUsername, resolved, profile.port).also {
+                        it.setSocketFactory(
+                            TimingSocketFactory(profile.ipMode, profile.connectTimeout * 1000)
+                        )
+                    }
                 }
                 stepDone("dns+session-create")
 
@@ -491,7 +500,13 @@ class SSHConnection(
                 it.setHostKeyAlias(profile.host)
             }
         } else {
-            jsch.getSession(effectiveUsername, profile.host, profile.port)
+            // Issue #12 — same timing/fallback socket factory as the first
+            // attempt so the retry path behaves identically.
+            jsch.getSession(effectiveUsername, profile.host, profile.port).also {
+                it.setSocketFactory(
+                    TimingSocketFactory(profile.ipMode, profile.connectTimeout * 1000)
+                )
+            }
         }
         setupHttpSocksProxy(retrySession)
         configureSession(retrySession)
@@ -625,7 +640,36 @@ class SSHConnection(
         // config keys do nothing on JSch. Set on Session below after
         // setConfig so the values stick.
         
-        // Preferred algorithms (secure defaults)
+        // Preferred algorithms (secure defaults) + Issue #12 fast-path
+        // kex/host-key pinning — shared with the jump-host session.
+        putPinnedAlgorithms(config)
+
+        session.setConfig(config)
+
+        // Keepalive — always on; interval uses per-host override when set,
+        // otherwise falls back to the global preference (default 60 s).
+        // Carrier NAT timeouts, cellular handoffs and Wi-Fi sleep all silently
+        // kill idle TCP sockets; a tiny NOOP every N seconds is mandatory.
+        val prefs = (context.applicationContext as? io.github.tabssh.TabSSHApplication)
+            ?.preferencesManager
+        val aliveIntervalMs = profile.serverAliveInterval
+            ?.let { it.coerceAtLeast(5) * 1_000L }
+            ?: prefs?.getServerAliveIntervalMs()
+            ?: 60_000L
+        session.serverAliveInterval = aliveIntervalMs.toInt()
+        session.serverAliveCountMax = 3
+
+        Logger.d("SSHConnection", "Session configured: compression=${profile.compression}, keepalive=${aliveIntervalMs / 1000}s")
+    }
+
+    /**
+     * Algorithm preferences shared by the main session AND the jump-host
+     * session (Issue #12 — the jump session previously used JSch's default
+     * kex list, so a bastion hop still paid the slow
+     * diffie-hellman-group-exchange-sha256 path the main session had been
+     * pinned away from).
+     */
+    private fun putPinnedAlgorithms(config: java.util.Properties) {
         config["PreferredAuthentications"] = "publickey,keyboard-interactive,password"
         config["cipher.s2c"] = "aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr"
         config["cipher.c2s"] = "aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr"
@@ -661,23 +705,6 @@ class SSHConnection(
                 "ecdsa-sha2-nistp521," +
                 "rsa-sha2-512," +
                 "rsa-sha2-256"
-
-        session.setConfig(config)
-
-        // Keepalive — always on; interval uses per-host override when set,
-        // otherwise falls back to the global preference (default 60 s).
-        // Carrier NAT timeouts, cellular handoffs and Wi-Fi sleep all silently
-        // kill idle TCP sockets; a tiny NOOP every N seconds is mandatory.
-        val prefs = (context.applicationContext as? io.github.tabssh.TabSSHApplication)
-            ?.preferencesManager
-        val aliveIntervalMs = profile.serverAliveInterval
-            ?.let { it.coerceAtLeast(5) * 1_000L }
-            ?: prefs?.getServerAliveIntervalMs()
-            ?: 60_000L
-        session.serverAliveInterval = aliveIntervalMs.toInt()
-        session.serverAliveCountMax = 3
-
-        Logger.d("SSHConnection", "Session configured: compression=${profile.compression}, keepalive=${aliveIntervalMs / 1000}s")
     }
 
     /**
@@ -1089,11 +1116,22 @@ class SSHConnection(
             // Create jump host session
             val jumpSession = jsch.getSession(jumpUsername, jumpHost, jumpPort)
             pendingSession = jumpSession
+            // Issue #12 — jump connect gets the same DNS/TCP timing +
+            // multi-address fallback as direct connects. ipMode "auto":
+            // the profile's ipMode governs the TARGET host; the bastion
+            // hostname is resolved on its own, so resolver order applies.
+            jumpSession.setSocketFactory(
+                TimingSocketFactory("auto", profile.connectTimeout * 1000)
+            )
             stepDone("jump-session-create")
 
             // Configure jump host session
             val config = java.util.Properties()
             config["StrictHostKeyChecking"] = "ask"
+            // Issue #12 — the jump session previously ran with JSch's
+            // default algorithm lists, so the bastion hop still paid the
+            // slow group-exchange kex the main session was pinned past.
+            putPinnedAlgorithms(config)
             jumpSession.setConfig(config)
             jumpSession.timeout = profile.connectTimeout * 1000
             stepDone("jump-config")
