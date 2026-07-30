@@ -32,9 +32,10 @@ media: no
 
 ## Toolchain
 
-# Override of casjaysdev/android:latest — repo-pinned CI image with the
-# Android SDK and this project's Gradle dependency cache pre-baked, shared
-# by the GitHub workflows and local Docker builds for reproducibility
+# The template default casjaysdev/android:latest does not exist yet —
+# do not switch to it. This repo's pre-baked CI image (Android SDK +
+# project Gradle dependency cache) is the build image, shared by the
+# GitHub workflows and local Docker builds for reproducibility
 build_image: ghcr.io/tabssh/android:build
 kotlin: 2.4.10
 agp: 8.13.2
