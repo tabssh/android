@@ -129,29 +129,46 @@ object Logger {
     private val RE_IPV6_FULL     = Regex("""(?<![:\w])(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}(?![:\w])""")
     private val RE_IPV6_COMP     = Regex("""(?<![:\w])(?:[0-9a-fA-F]{1,4}:){0,6}::(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{0,4})?(?![:\w])""")
     private val RE_IPV4          = Regex("""\b(?:\d{1,3}\.){3}\d{1,3}\b""")
-    // RE_HOSTNAME: TLD must contain at least one letter (not just digits) so
-    // version numbers like "2.0", "8.7", "SSH-2.0" are not matched as hostnames.
-    private val RE_HOSTNAME      = Regex("""\b[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.([a-zA-Z][a-zA-Z0-9]{1,})\b""")
+    // RE_HOSTNAME: multi-label so a full FQDN (host.example.com) is matched
+    // and replaced as ONE unit — a two-label pattern used to match only
+    // "host.example" and leave a real-TLD residue like "server2.com" in the
+    // sanitized log (issue #12 comment thread). TLD must start with a letter
+    // so version numbers like "2.0", "8.7", "SSH-2.0" are not matched.
+    private val RE_HOSTNAME      = Regex("""\b(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z][a-zA-Z0-9]+\b""")
     private val RE_USER_AT    = Regex("""([a-zA-Z0-9_.-]+)@([a-zA-Z0-9.-]+)""")
     private val RE_HOME_PATH  = Regex("""/home/[a-zA-Z0-9_-]+""")
     private val RE_USERS_PATH = Regex("""/Users/[a-zA-Z0-9_-]+""")
-    // Domain suffixes / keywords that are always safe to keep as-is.
-    // SAFE_DOMAIN_KEYWORDS covers SSH algorithm vendor domains (openssh.com,
-    // libssh.org), JVM runtime packages (java, javax, dalvik, kotlin), and
-    // third-party library packages (okhttp, jsch) so that stack traces and
-    // SSH algorithm-name strings like "chacha20-poly1305@openssh.com" are
-    // preserved verbatim instead of being anonymized.
-    private val SAFE_DOMAIN_SUFFIXES = setOf(".com", ".org", ".net")
-    private val SAFE_DOMAIN_KEYWORDS = setOf(
+    // Ports (issue #12 comment thread — ports leaked in shared logs).
+    // RE_PORT_KV redacts explicit "port 2222" / "port=2222" / "port: 2222"
+    // forms anywhere; RE_ANON_HOST_PORT redacts the ":port" suffix left
+    // behind after a host was anonymized to server{N}/IP{N}/jump{N}.
+    private val RE_PORT_KV        = Regex("""(?i)\bport[=:\s]\s*\d{1,5}\b""")
+    private val RE_ANON_HOST_PORT = Regex("""\b((?:server|IP|jump)\d+):\d{1,5}\b""")
+    // Host labels that are always safe to keep as-is. A host is preserved
+    // verbatim only when one of its dot-separated labels EXACTLY equals an
+    // entry here — substring matching preserved private hosts like
+    // "myandroid.example", and the old blanket .com/.org/.net suffix bypass
+    // preserved nearly every real user domain verbatim (issue #12 comment
+    // thread). Covers SSH algorithm vendor domains (openssh.com, libssh.org),
+    // JVM/Android runtime packages, and third-party library packages so
+    // stack traces and algorithm-name strings like
+    // "chacha20-poly1305@openssh.com" stay readable.
+    private val SAFE_DOMAIN_LABELS = setOf(
         // public cloud / OS / dev tool domains — add diagnostic context
-        "android", "google", "github",
+        "android", "androidx", "google", "github",
         // SSH algorithm vendor domains embedded in algorithm names
         "openssh", "libssh", "dropbear",
         // JVM / Android runtime packages that appear in stack traces
-        "java", "javax", "kotlin", "dalvik", "sun.",
+        "java", "javax", "kotlin", "kotlinx", "dalvik", "sun",
         // third-party libraries whose class names appear in stack traces
-        "okhttp", "jsch", "okio",
+        "okhttp", "okhttp3", "jsch", "jcraft", "okio",
     )
+
+    // True when any dot-separated label of [host] exactly matches a safe
+    // label — e.g. "com.jcraft.jsch.Session" (jcraft), "java.lang" (java),
+    // "chacha20-poly1305@openssh.com"'s host part (openssh).
+    private fun isSafeHost(host: String): Boolean =
+        host.lowercase().split('.').any { it in SAFE_DOMAIN_LABELS }
 
     /**
      * Initialize the logger
@@ -456,8 +473,7 @@ object Logger {
         // match whose host part is a safe domain verbatim.
         s = RE_USER_AT.replace(s) { match ->
             val host = match.groupValues[2]
-            if (SAFE_DOMAIN_SUFFIXES.any { host.endsWith(it) } ||
-                SAFE_DOMAIN_KEYWORDS.any { host.contains(it) }) {
+            if (isSafeHost(host)) {
                 match.value  // algorithm name / public domain — keep as-is
             } else {
                 val anonUser = userMap.getOrPut(match.groupValues[1]) { "user${++userCounter}" }
@@ -493,13 +509,16 @@ object Logger {
         // anything private.
         s = RE_HOSTNAME.replace(s) { match ->
             val host = match.value
-            if (SAFE_DOMAIN_SUFFIXES.any { host.endsWith(it) } ||
-                SAFE_DOMAIN_KEYWORDS.any { host.contains(it) }) {
+            if (isSafeHost(host)) {
                 host
             } else {
                 anonForHost(host) { hostMap.getOrPut(host) { "server${++hostCounter}" } }
             }
         }
+
+        // ── ports (after host passes so anonymized host:port forms exist) ─
+        s = RE_PORT_KV       .replace(s, "port=[PORT]")
+        s = RE_ANON_HOST_PORT.replace(s) { m -> "${m.groupValues[1]}:[PORT]" }
 
         // ── home-directory paths that reveal usernames ────────────────────
         s = RE_HOME_PATH .replace(s, "/home/[user]")
