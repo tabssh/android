@@ -1993,18 +1993,20 @@ class TerminalView @JvmOverloads constructor(
             //
             // HOME/END must honour DECCKM exactly like the arrow keys: the
             // xterm-256color terminfo defines khome=\EOH and kend=\EOF (SS3),
-            // and vim/less enable application cursor keys (\033[?1h). Sending
-            // the CSI form (\033[H) unconditionally is why Home/End did not
-            // work inside vim. With any modifier the parameterised CSI form is
-            // used (SS3 has no modifier extension), matching ss3ArrowSeq.
+            // and vim/less enable application cursor keys (\033[?1h). Plain
+            // normal-mode Home/End use the VT220 tilde form (\e[1~ / \e[4~)
+            // instead of xterm's CSI-letter form (\e[H / \e[F): readline only
+            // hardcodes the tilde form via distro inputrc, and TERM=screen*/
+            // tmux* terminfo defines khome=\E[1~ — hosts without an \e[H
+            // binding swallowed the CSI prefix and inserted a literal H/F.
+            // With any modifier the parameterised CSI form \e[1;<mod>H/F is
+            // used (xterm convention; SS3 has no modifier extension).
             KeyEvent.KEYCODE_MOVE_HOME -> {
-                val appMode = isApplicationCursorKeysMode()
-                sendKeySequence(if (appMode) ss3ArrowSeq('H', isShift, isAlt, isCtrl) else arrowSeq('H', isShift, isAlt, isCtrl))
+                sendKeySequence(homeEndSeq('H', 1, isShift, isAlt, isCtrl))
                 return true
             }
             KeyEvent.KEYCODE_MOVE_END -> {
-                val appMode = isApplicationCursorKeysMode()
-                sendKeySequence(if (appMode) ss3ArrowSeq('F', isShift, isAlt, isCtrl) else arrowSeq('F', isShift, isAlt, isCtrl))
+                sendKeySequence(homeEndSeq('F', 4, isShift, isAlt, isCtrl))
                 return true
             }
             KeyEvent.KEYCODE_PAGE_UP -> { sendKeySequence(tildeSeq(5, isShift, isAlt, isCtrl)); return true }
@@ -2082,6 +2084,20 @@ class TerminalView @JvmOverloads constructor(
      */
     fun isApplicationCursorKeysMode(): Boolean =
         termuxBridge?.getEmulator()?.isCursorKeysApplicationMode() == true
+
+    /**
+     * Home/End sequence. Plain normal mode uses the VT220 tilde form
+     * (\e[1~ / \e[4~) — bound by every distro's default inputrc and by
+     * screen/tmux terminfo, unlike xterm's \e[H / \e[F which unbound
+     * hosts echo as a literal H/F. DECCKM plain uses SS3 (\eOH / \eOF,
+     * xterm-256color khome/kend). Any modifier uses the parameterised
+     * CSI form \e[1;<mod>H/F (xterm convention).
+     */
+    private fun homeEndSeq(letter: Char, tildeNum: Int, shift: Boolean, alt: Boolean, ctrl: Boolean): String {
+        val mod = modifierCode(shift, alt, ctrl)
+        if (mod != 1) return "\u001b[1;$mod$letter"
+        return if (isApplicationCursorKeysMode()) "\u001bO$letter" else "\u001b[$tildeNum~"
+    }
 
     private fun tildeSeq(num: Int, shift: Boolean, alt: Boolean, ctrl: Boolean): String {
         val mod = modifierCode(shift, alt, ctrl)
@@ -2247,8 +2263,8 @@ class TerminalView @JvmOverloads constructor(
                 if (ticks != 0) {
                     keyScrollAccum -= ticks * cellH
                     val appMode = termuxEmulator.isCursorKeysApplicationMode()
-                    val up = if (appMode) "OA".toByteArray() else "[A".toByteArray()
-                    val down = if (appMode) "OB".toByteArray() else "[B".toByteArray()
+                    val up = if (appMode) "\u001bOA".toByteArray() else "\u001b[A".toByteArray()
+                    val down = if (appMode) "\u001bOB".toByteArray() else "\u001b[B".toByteArray()
                     // ticks > 0 == swipe toward older content == Up arrow.
                     val key = if (ticks > 0) up else down
                     repeat(Math.abs(ticks)) { termuxBridge?.write(key) }

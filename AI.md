@@ -494,6 +494,8 @@ The same bridge is used by console tabs (`Tab.Console` in `TabTerminalActivity`)
 - Row 4: number row 0–9
 - Row 5: customizable; alphabet row by default
 
+**Navigation-key sequences:** Home/End emit the VT220 tilde forms `\e[1~` / `\e[4~` — never xterm's `\e[H` / `\e[F`, which are unbound on `TERM=screen*`/`tmux*` sessions (and any host without an inputrc binding) and get echoed as a literal `H`/`F`. When the remote sets DECCKM (`\e[?1h`), Home/End and arrows switch to SS3 (`\eOH`/`\eOF`, `\eOA`…); modifier chords always use the parameterised CSI forms (`\e[1;<mod>H`). This convention is enforced in `KeyboardKey.getAllAvailableKeys()`, `MultiRowKeyboardView.getDefaultRowLayouts()`, `TerminalView.homeEndSeq()` (hardware keys), and `TermuxBridge.sendKeyPress()`, and guarded by `KeyboardKeyTest`.
+
 Key dispatches route to `TabTerminalActivity.handleCustomKeyPress()`. Notable special keys:
 
 | Key ID | Label | Behavior |

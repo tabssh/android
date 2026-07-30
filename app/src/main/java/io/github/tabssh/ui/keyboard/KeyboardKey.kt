@@ -37,8 +37,11 @@ data class KeyboardKey(
             KeyboardKey("INSERT", "INS", "\u001B[2~"),
             
             // Navigation
-            KeyboardKey("HOME", "HOME", "\u001B[H"),
-            KeyboardKey("END", "END", "\u001B[F"),
+            // HOME/END use the VT220 tilde form: \e[H / \e[F is unbound on TERM=screen*/tmux*
+            // sessions (and any host without an inputrc binding) and echoes a literal H/F;
+            // \e[1~ / \e[4~ is bound by default inputrc and screen/tmux terminfo everywhere.
+            KeyboardKey("HOME", "HOME", "\u001B[1~"),
+            KeyboardKey("END", "END", "\u001B[4~"),
             KeyboardKey("PGUP", "PGUP", "\u001B[5~"),
             KeyboardKey("PGDN", "PGDN", "\u001B[6~"),
             

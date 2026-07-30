@@ -811,8 +811,8 @@ class TermuxBridge(
                     android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> "\u001b[C".toByteArray()
                     android.view.KeyEvent.KEYCODE_DPAD_LEFT -> "\u001b[D".toByteArray()
                     // Home/End
-                    android.view.KeyEvent.KEYCODE_MOVE_HOME -> "\u001b[H".toByteArray()
-                    android.view.KeyEvent.KEYCODE_MOVE_END -> "\u001b[F".toByteArray()
+                    android.view.KeyEvent.KEYCODE_MOVE_HOME -> "\u001b[1~".toByteArray()
+                    android.view.KeyEvent.KEYCODE_MOVE_END -> "\u001b[4~".toByteArray()
                     // Page Up/Down
                     android.view.KeyEvent.KEYCODE_PAGE_UP -> "\u001b[5~".toByteArray()
                     android.view.KeyEvent.KEYCODE_PAGE_DOWN -> "\u001b[6~".toByteArray()
