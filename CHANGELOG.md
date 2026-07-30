@@ -7,6 +7,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Swiping in a mosh session at a plain shell prompt typed literal arrow keys (`^[[A`/`^[[B`) into the shell** — mosh pins the terminal to the alternate screen for its entire lifetime, so the alt-screen swipe fallback (arrow-key forwarding meant for vim/less/man/htop) fired at the prompt and injected keystrokes; the fallback in `TerminalView.onScroll()` is now gated on cursor keys being in application mode (DECCKM/smkx), which full-screen terminfo apps enable at startup and a shell prompt never does — swipes at an alt-screen prompt are swallowed instead of typed, and the forwarded sequences are always the SS3 (`ESC O A/B`) variants since the gate guarantees application mode
+
+### Changed
+
+- **The scrollback thumb is now a persistent desktop-style scrollbar (konsole/xfce4-terminal), not a transient overlay** — the auto-fading thumb introduced right after 1.0.0 never appeared in mouse-tracking/alt-screen sessions and vanished 1.2 s after every scroll; `TerminalView` now always draws a full-height right-edge track (faint) with a thumb that maps the terminal's local scrollback position, and the thumb fills the whole track when there is nothing to scroll back through (empty scrollback, alt-screen app, mosh) — visible but inert, exactly like a desktop terminal with an empty history; dragging the thumb scrolls only the terminal's own scrollback and still yields to horizontal movement, so left/right tab-switch swipes are unaffected; all fade timers and show/hide state are gone
+- **Swipe up/down now scrolls like a desktop mousewheel: 3 lines per line-height of finger travel** — all three swipe paths in `TerminalView` (wheel-event forwarding under remote mouse tracking, arrow-key forwarding on the alternate screen, and smooth pixel scrolling of local scrollback, including fling velocity) are geared by a shared `WHEEL_STEP_LINES = 3` constant matching the desktop wheel default, replacing the previous 1:1 line-per-line mapping
+
 ## [1.0.0] - 2026-07-30
 
 ### Security
