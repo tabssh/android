@@ -1,0 +1,94 @@
+# Project Audit
+
+Started: 2026-07-31
+
+Scope: security, code quality, logic correctness, documentation, line-by-line
+AI.md compliance, code-flow trace. Fixes applied where safe and reversible;
+security-behavior and large-refactor items are logged for a user decision.
+
+## Pass 1: Security
+
+- [x] crypto: Keystore AES keys were generated with no `setKeySize`, so
+  AndroidKeyStore defaulted to **AES-128-GCM**, violating PART 6 "AES-256-GCM".
+  — FIXED: added `.setKeySize(256)` in
+  `crypto/storage/SecurePasswordManager.kt` (createSecretKey) and
+  `crypto/keys/KeyStorage.kt` (createKeyEncryptionKey). Forward-compatible:
+  existing 128-bit aliases keep decrypting; new credentials/keys are 256-bit.
+- [ ] crypto/tls: `HypervisorTrustManagerFactory.installTrustAll` (verifySsl=off)
+  is a **blanket trust-all forever** — empty `checkServerTrusted`, hostname
+  verifier `{ _, _ -> true }`, no cert captured or pinned. IDEA.md (lines 100,
+  132) states TOFU certificate pinning is the *compensating control* for
+  verifySsl=off; the code does not implement it. PART 6 permits a bypass path
+  "ONLY IF ... backed by TOFU pinning". NEEDS USER DECISION — implementing
+  TOFU-pin-on-first-cert changes security-visible behavior (would prompt on a
+  changed cert where it currently accepts silently). File:
+  `crypto/tls/HypervisorTrustManagerFactory.kt:72-100`.
+- [ ] crypto/storage: legacy plaintext `hypervisors.password` column is only
+  blanked lazily on first access (HypervisorPasswordStore.kt:180-197,219-231).
+  A pre-existing plaintext password can linger in Room until the row is next
+  read. Consider a one-shot migration sweep to blank all legacy rows.
+
+## Pass 2: Code Quality
+
+- [x] whole tree: 102 tracked text files (.kt/.xml/.gradle/.pro/.properties/.md)
+  had no trailing newline — violates AI.md non-negotiable #10. — FIXED:
+  appended a single trailing newline to all 102. Excluded
+  `metadata/en-US/short_description.txt` (verbatim F-Droid store field).
+- [ ] error handling: ~130 catch blocks swallow the exception with no log /
+  rethrow / user-surface (`catch (_: Exception) {}`, `{ null }`, comment-only).
+  Many are legitimate best-effort teardown; the security-sensitive subset MUST
+  at least log: `crypto/storage/HypervisorPasswordStore.kt:299,305,351,356`,
+  `crypto/tls/HypervisorTrustManagerFactory.kt:247`, `audit/AuditLogManager.kt:86`.
+  Also discarded `runCatching` results in MultiHostDashboardActivity.kt:969,
+  HostAvailabilityWorker.kt:376, HostDetailActivity.kt:273,
+  CloudAccountManagerActivity.kt:301,391. Fix the security subset first.
+- [ ] ui: hardcoded palette colors violate PART 7 "never hardcode colors":
+  `ui/activities/MultiHostDashboardActivity.kt:1341-1343` (gauge red/orange/green),
+  `ui/activities/KeyboardCustomizationActivity.kt:536-540` (category colors),
+  `ui/fragments/PerformanceFragment.kt:519,520,528` (#1976D2). Move to
+  `res/values/colors.xml` (+ night variant). NOTE: `TerminalView.Color.rgb(r,g,b)`
+  (ANSI cube) and `parseColor(group.color)` (user data) are NOT violations.
+
+## Pass 3: Logic and Correctness
+
+- [ ] storage/database: `TabSSHDatabase.kt:213` uses
+  `fallbackToDestructiveMigrationFrom(1, 2)`. PART 5 / non-negotiable #2 say
+  "Never destructive-migrate; no fallbackToDestructiveMigration in any variant."
+  Documented as pre-release-only (v1/v2 never shipped persisted data). Low real
+  risk but a literal deviation from an absolute rule — confirm v1/v2 were never
+  shipped to real users, else provide real 1→2→3 migrations.
+
+## Pass 4: Documentation Completeness
+
+- [ ] structure: `fdroid-submission/` duplicates repo docs and metadata —
+  `SPEC.md`, `LICENSE.md`, `CHANGELOG.md`, `README.md`, and
+  `io.github.tabssh.yml` (which now DIFFERS from `metadata/io.github.tabssh.yml`).
+  Not in AI.md PART 3 structure; risks drift. FLAG ONLY — do not delete without
+  user confirmation. Recommend removing the duplicates and keeping F-Droid
+  metadata solely under `metadata/`.
+
+## Pass 5: Spec and Rules Compliance
+
+- [ ] network: no `res/xml/network_security_config.xml` and no
+  `android:networkSecurityConfig` / `usesCleartextTraffic` in AndroidManifest.
+  PART 9 requires a networkSecurityConfig with `cleartextTrafficPermitted="false"`
+  (debug-only per-host exceptions allowed). NEEDS CARE: app supports Telnet
+  (raw-socket plaintext, not governed by NSC) and possibly non-TLS hypervisor
+  HTTP — verify a false default won't break intended cleartext before adding.
+- [ ] tests: JVM unit tests live under `app/src/test/java/com/tabssh/...`
+  (wrong directory) while correctly declaring `package io.github.tabssh.*`.
+  PART 3 says test package = {app_id}. Move files into
+  `app/src/test/java/io/github/tabssh/...` to match package/dir convention.
+
+## Pass 6: Code Flow Trace
+
+- [ ] network: PART 9 requires ONE shared HTTP client with explicit timeouts and
+  `User-Agent: {project_name}/{version}`. Instead ~13 REST/console clients each
+  build their own `OkHttpClient.Builder()` (e.g. ProxmoxApiClient.kt:61,
+  HetznerClient.kt:29, and every file in `cloud/` + `hypervisor/*/`). Consolidate
+  onto one app-scoped OkHttp instance (per-request auth/timeout overrides where
+  needed) and set a project User-Agent. Verify timeouts are explicit on each.
+
+## Completed
+- crypto: AES-256 key size enforced on both Keystore key generators.
+- whole tree: trailing newline added to 102 text files.
