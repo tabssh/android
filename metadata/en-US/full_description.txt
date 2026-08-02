@@ -46,7 +46,9 @@ TabSSH is a comprehensive, open-source SSH client for Android that provides a tr
 • Background connection persistence and app switching support
 • Background host monitoring — TCP reachability probes, down/recovery alerts,
   CPU/memory/disk threshold notifications, configurable cooldown (15 min–12 h)
-• Hypervisor management — Proxmox VE, XCP-ng, Xen Orchestra, OCI Compute
+• Hypervisor management — Proxmox VE, XCP-ng, Xen Orchestra, VMware, OCI Compute
+• Cloud instance management — DigitalOcean, Hetzner, Linode, Vultr,
+  AWS EC2, Google Cloud Compute, Azure VMs
 • Keyboard drag-to-reorder: rearrange keys in any row of the custom key editor
 
 🔒 SECURITY & PRIVACY:

@@ -66,8 +66,10 @@ Description: |
     * Background connection persistence and app switching support
     * Background host monitoring — TCP reachability probes with down/recovery
       notifications, configurable alert cooldown, CPU/memory/disk thresholds
-    * Hypervisor management — Proxmox VE, XCP-ng, Xen Orchestra, OCI Compute
-      (list/start/stop/reset instances, VM serial console)
+    * Hypervisor management — Proxmox VE, XCP-ng, Xen Orchestra, VMware,
+      OCI Compute (list/start/stop/reset instances, VM serial console)
+    * Cloud instance management — DigitalOcean, Hetzner, Linode, Vultr,
+      AWS EC2, Google Cloud Compute, Azure VMs
     * Keyboard drag-to-reorder: rearrange keys within any row in the key editor
 
     🔒 SECURITY & PRIVACY:
@@ -97,7 +99,7 @@ Description: |
     * Background processing optimization
 
     🌍 INTERNATIONALIZATION:
-    * Multi-language support (English, Spanish, French, German, Japanese)
+    * Multi-language support (English, Spanish, French, German)
     * RTL language support
     * Localized documentation
 
@@ -119,12 +121,14 @@ Builds:
     versionCode: 11
     commit: v1.0.0
     subdir: .
-    gradle:
-      - fdroidRelease
+    ndk: r26b
+    output: app/build/outputs/apk/fdroidRelease/tabssh-android-universal.apk
     prebuild:
       - echo "sdk.dir=$$SDK$$" > local.properties
       - echo "ndk.dir=$$NDK$$" >> local.properties
       - echo "org.gradle.project.fdroidBuild=true" >> gradle.properties
+    build:
+      - ./gradlew assembleFdroidRelease
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$

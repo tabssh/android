@@ -85,6 +85,14 @@ android {
     // The `debug` build type ignores it entirely and forces DEBUG_MODE = true.
     def isProductionRelease = { String v -> v ==~ /^\d+\.\d+\.\d+$/ }
 
+    // F-Droid builder detection. The recipe in metadata/io.github.tabssh.yml
+    // writes `org.gradle.project.fdroidBuild=true` into gradle.properties in
+    // its prebuild step. When set: ABI splits are disabled (F-Droid expects a
+    // single deterministic APK per build) and the fdroidRelease build type
+    // produces an unsigned APK (F-Droid signs with its own key). Local and CI
+    // builds never set the property, so their behavior is unchanged.
+    def isFdroidBuild = (findProperty('fdroidBuild') ?: 'false').toString().toBoolean()
+
     defaultConfig {
         applicationId "io.github.tabssh"
         // Android 7.0. Raised from 21 to eliminate a class of latent
@@ -202,13 +210,20 @@ android {
             
             // Use deterministic build settings for reproducible builds
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'proguard-fdroid.pro'
+
+            // On the F-Droid builder there is no keystore.jks — produce an
+            // unsigned APK and let F-Droid sign with its own key. Local/CI
+            // smoke builds (no fdroidBuild property) keep the release keystore.
+            signingConfig isFdroidBuild ? null : signingConfigs.release
         }
     }
     
-    // APK splits for multi-architecture releases
+    // APK splits for multi-architecture releases. Disabled on the F-Droid
+    // builder (fdroidBuild=true) — F-Droid builds one APK per recipe entry,
+    // so the fdroid build emits a single universal APK instead.
     splits {
         abi {
-            enable true
+            enable !isFdroidBuild
             reset()
             include 'arm64-v8a', 'armeabi-v7a', 'x86_64', 'x86'
             universalApk true // Also create a universal APK
