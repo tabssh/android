@@ -119,6 +119,7 @@ class PreferenceManager(private val context: Context) {
         private const val KEY_SERVER_ALIVE_INTERVAL = "server_alive_interval"
         private const val KEY_X11_FORWARDING_DEFAULT = "x11_forwarding_default"
         private const val KEY_AGENT_FORWARDING_DEFAULT = "agent_forwarding_default"
+        private const val KEY_FILE_OPEN_SIZE_LIMIT_MB = "file_open_size_limit_mb"
 
 
         // Accessibility preferences
@@ -455,6 +456,12 @@ class PreferenceManager(private val context: Context) {
 
     fun getServerAliveIntervalSec(): Int = getStringAsInt(KEY_SERVER_ALIVE_INTERVAL, 60).coerceAtLeast(5)
     fun setServerAliveIntervalSec(seconds: Int) = setString(KEY_SERVER_ALIVE_INTERVAL, seconds.toString())
+
+    // file:// "Open" round trip — size threshold above which RemoteFileOpener
+    // prompts before downloading (see FileOpenPolicy.exceedsSizeGate).
+    fun getFileOpenSizeLimitMb(): Int =
+        getStringAsInt(KEY_FILE_OPEN_SIZE_LIMIT_MB, io.github.tabssh.utils.FileOpenPolicy.DEFAULT_SIZE_LIMIT_MB)
+    fun setFileOpenSizeLimitMb(mb: Int) = setString(KEY_FILE_OPEN_SIZE_LIMIT_MB, mb.toString())
 
     fun isX11ForwardingDefault(): Boolean = getBoolean(KEY_X11_FORWARDING_DEFAULT, false)
     fun setX11ForwardingDefault(enabled: Boolean) = setBoolean(KEY_X11_FORWARDING_DEFAULT, enabled)

@@ -83,13 +83,20 @@ class SFTPActivity : AppCompatActivity() {
     private val localFiles = mutableListOf<File>()
     private val remoteFiles = mutableListOf<RemoteFileInfo>()
     private val activeTransfers = mutableListOf<TransferTask>()
-    
+
+    // file:// "Open" round trip (download → external viewer/editor → upload
+    // back on change). Constructed here, before onCreate finishes, so it can
+    // observe this activity's lifecycle for the post-edit resume check.
+    private val remoteFileOpener = io.github.tabssh.sftp.RemoteFileOpener(this) {
+        (application as TabSSHApplication).preferencesManager.getFileOpenSizeLimitMb()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
         binding = ActivitySftpBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        
+
         app = application as TabSSHApplication
 
         intent.getStringExtra(EXTRA_INITIAL_REMOTE_PATH)?.let { initialPath ->
@@ -689,7 +696,10 @@ class SFTPActivity : AppCompatActivity() {
         val items = if (file.isDirectory) {
             arrayOf("Open", "Download Folder", "Rename", "Permissions…", "Delete")
         } else {
-            arrayOf("Open / Edit", "Download", "Rename", "Permissions…", "Properties", "Delete")
+            // "Open" downloads and hands the file to an external app (the
+            // file:// round trip — RemoteFileOpener). "Open / Edit" is the
+            // separate in-app text editor for small (<1 MiB) text files.
+            arrayOf("Open", "Open / Edit", "Download", "Rename", "Permissions…", "Properties", "Delete")
         }
 
         androidx.appcompat.app.AlertDialog.Builder(this)
@@ -697,7 +707,7 @@ class SFTPActivity : AppCompatActivity() {
             .setItems(items) { _, which ->
                 if (which < 0 || which >= items.size) return@setItems
                 when (items[which]) {
-                    "Open" -> handleRemoteFileClick(file)
+                    "Open" -> if (file.isDirectory) handleRemoteFileClick(file) else openRemoteFileExternally(file)
                     "Open / Edit" -> openOrEditRemoteFile(file)
                     "Download", "Download Folder" -> downloadFile(file)
                     "Rename" -> renameRemoteFile(file)
@@ -707,6 +717,19 @@ class SFTPActivity : AppCompatActivity() {
                 }
             }
             .show()
+    }
+
+    /**
+     * file:// "Open" round trip for a remote file selected in the SFTP
+     * browser — download to cacheDir/file-links/, then hand off to whatever
+     * app the device resolves for its MIME type (see RemoteFileOpener).
+     */
+    private fun openRemoteFileExternally(file: RemoteFileInfo) {
+        if (!::sftpManager.isInitialized) {
+            showToast("SFTP not connected yet")
+            return
+        }
+        remoteFileOpener.open(sftpManager, file.path, file.name)
     }
 
     /**

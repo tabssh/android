@@ -99,6 +99,14 @@ class TabTerminalActivity : AppCompatActivity() {
     private lateinit var app: TabSSHApplication
     private lateinit var tabManager: TabManager
 
+    // file:// "Open" round trip for tapped file:// terminal links (see
+    // showRemoteFileDialog). Constructed here, before onCreate finishes, so
+    // it can observe this activity's lifecycle for the post-edit resume
+    // check.
+    private val remoteFileOpener = io.github.tabssh.sftp.RemoteFileOpener(this) {
+        (application as TabSSHApplication).preferencesManager.getFileOpenSizeLimitMb()
+    }
+
     /**
      * Set to `true` while a Reconnect-from-disconnect-dialog flow is in
      * flight. The reconnect path must close the dead tab before opening
@@ -1275,25 +1283,55 @@ class TabTerminalActivity : AppCompatActivity() {
 
     /**
      * file:// links — the path is on the remote host's filesystem, never
-     * this device, so "Open" is never offered. "Open in SFTP" only appears
-     * when the active tab has a live connection to browse against.
+     * this device. "Open" (download + hand off to an external app) and
+     * "Open in SFTP" only appear when the active tab has a live connection
+     * to fetch the file over.
      */
     private fun showRemoteFileDialog(action: io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.RemoteFile) {
         val activeTab = tabManager.getActiveTab()
         val canBrowse = activeTab != null && activeTab.isConnected()
-        val builder = androidx.appcompat.app.AlertDialog.Builder(this)
+        val items = if (canBrowse) {
+            arrayOf("Open", "Open in SFTP", "Copy path")
+        } else {
+            arrayOf("Copy path")
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Remote file path")
             .setMessage("${action.path}\n\nThis path refers to a file on the remote host, not this device.")
-            .setNeutralButton("Copy path") { _, _ ->
-                copyToClipboard("Path", action.path)
+            .setItems(items) { _, which ->
+                if (which < 0 || which >= items.size) return@setItems
+                when (items[which]) {
+                    "Open" -> openRemoteFileExternally(activeTab!!, action.path)
+                    "Open in SFTP" -> openSftpAtPath(activeTab!!, action.path)
+                    "Copy path" -> copyToClipboard("Path", action.path)
+                }
             }
             .setNegativeButton("Cancel", null)
-        if (canBrowse) {
-            builder.setPositiveButton("Open in SFTP") { _, _ ->
-                openSftpAtPath(activeTab!!, action.path)
-            }
+            .show()
+    }
+
+    /**
+     * file:// "Open" round trip for a file:// link tapped in the terminal —
+     * downloads it over the active tab's connection to cacheDir/file-links/,
+     * then hands it to an external app via FileProvider (RemoteFileOpener).
+     * Opens an ad-hoc SFTPManager for the tab's SSH connection, mirroring
+     * RemoteFileEditorActivity's in-app editor.
+     */
+    private fun openRemoteFileExternally(tab: SSHTab, path: String) {
+        val ssh = app.sshSessionManager.getConnection(tab.profile.id)
+        if (ssh == null) {
+            android.widget.Toast.makeText(this, "Connection not active", android.widget.Toast.LENGTH_SHORT).show()
+            return
         }
-        builder.show()
+        lifecycleScope.launch {
+            val sftp = io.github.tabssh.sftp.SFTPManager(ssh)
+            val connected = withContext(Dispatchers.IO) { sftp.connect() }
+            if (!connected) {
+                android.widget.Toast.makeText(this@TabTerminalActivity, "SFTP failed to open", android.widget.Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            remoteFileOpener.open(sftp, path, path.substringAfterLast('/'))
+        }
     }
 
     /**

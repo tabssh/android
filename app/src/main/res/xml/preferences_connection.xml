@@ -32,6 +32,20 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+        android:title="File Open"
+        android:key="category_file_open">
+
+        <EditTextPreference
+            android:key="file_open_size_limit_mb"
+            android:title="Open Size Limit (MB)"
+            android:summary="Prompt before downloading a file this large to open it externally or in the SFTP browser"
+            android:defaultValue="20"
+            android:inputType="number"
+            app:useSimpleSummaryProvider="true" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
         android:title="SSH Behavior"
         android:key="category_connection_behavior">
 

@@ -582,6 +582,19 @@ class ConnectionSettingsFragment : PreferenceFragmentCompat() {
             true
         }
 
+        // File open size limit bounds: 1..2000 MB. RemoteFileOpener reads
+        // this via PreferenceManager.getFileOpenSizeLimitMb() before every
+        // file:// / SFTP "Open" download.
+        findPreference<Preference>("file_open_size_limit_mb")?.setOnPreferenceChangeListener { _, newValue ->
+            val raw = (newValue as? String).orEmpty().trim()
+            val mb = raw.toIntOrNull()
+            if (mb == null || mb < 1 || mb > 2000) {
+                android.widget.Toast.makeText(requireContext(), "Size limit must be 1–2000 MB", android.widget.Toast.LENGTH_SHORT).show()
+                return@setOnPreferenceChangeListener false
+            }
+            true
+        }
+
         // Keep-alive listener removed — the toggle and interval preferences
         // are gone from preferences_connection.xml. SSH-layer keepalive is
         // unconditionally on at the mobile-default 10s interval (see
