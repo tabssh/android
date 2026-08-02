@@ -79,14 +79,17 @@ __device_for() {
       ;;
     tablet)
       case "$size" in
-        small)  echo "pixel_c" ;;        # 10.2" — closest "small" tablet in stock SDK
-        large|"") echo "pixel_tablet" ;; # 11"
+        # 10.2" — closest "small" tablet in stock SDK
+        small)  echo "pixel_c" ;;
+        # 11"
+        large|"") echo "pixel_tablet" ;;
         *) echo "pixel_tablet" ;;
       esac
       ;;
     fold|foldable) echo "pixel_fold" ;;
     tv)            echo "tv_1080p" ;;
-    *) echo "$type" ;;  # raw passthrough — let avdmanager validate
+    # raw passthrough — let avdmanager validate
+    *) echo "$type" ;;
   esac
 }
 
@@ -148,35 +151,35 @@ __running_serial_for() {
     avd=$("$ADB" -s "$serial" emu avd name 2>/dev/null | head -1 | tr -d '\r')
     if [[ "$avd" == "$target_name" ]]; then
       echo "$serial"
-      return
+      return 0
     fi
   done
 }
 
 __start_avd() {
   local type="$1" size="${2:-}"
-  ensure_sdk
+  __ensure_sdk
 
   local device_id
-  device_id="$(device_for "$type" "$size")"
+  device_id="$(__device_for "$type" "$size")"
   local name
-  name="$(avd_name_for "$type" "$size")"
+  name="$(__avd_name_for "$type" "$size")"
 
-  if [[ "${FORCE_RECREATE:-0}" = "1" ]] && avd_exists "$name"; then
+  if [[ "${FORCE_RECREATE:-0}" = "1" ]] && __avd_exists "$name"; then
     "$AVDMGR" delete avd -n "$name" 2>/dev/null || true
   fi
 
-  if ! avd_exists "$name"; then
-    create_avd "$name" "$device_id"
+  if ! __avd_exists "$name"; then
+    __create_avd "$name" "$device_id"
   fi
 
   # Already running for this AVD? Done.
   local running
-  running="$(running_serial_for "$name")"
+  running="$(__running_serial_for "$name")"
   if [[ -n "$running" ]]; then
     echo "✅ Emulator '$name' already running on $running"
     "$ADB" devices
-    return
+    return 0
   fi
 
   # A DIFFERENT TabSSH emulator already running? Stop it first — only one
@@ -248,12 +251,12 @@ __stop_avd() {
   local type="${1:-}" size="${2:-}"
   if [[ -n "$type" ]]; then
     local name
-    name="$(avd_name_for "$type" "$size")"
+    name="$(__avd_name_for "$type" "$size")"
     local serial
-    serial="$(running_serial_for "$name")"
+    serial="$(__running_serial_for "$name")"
     if [[ -z "$serial" ]]; then
       echo "ℹ  '$name' is not running."
-      return
+      return 0
     fi
     "$ADB" -s "$serial" emu kill 2>/dev/null || true
     echo "🛑 Stopped $name ($serial)"
@@ -272,9 +275,9 @@ __stop_avd() {
 __delete_avd() {
   local type="${1:?delete needs a type}" size="${2:-}"
   local name
-  name="$(avd_name_for "$type" "$size")"
-  stop_avd "$type" "$size"
-  if avd_exists "$name"; then
+  name="$(__avd_name_for "$type" "$size")"
+  __stop_avd "$type" "$size"
+  if __avd_exists "$name"; then
     "$AVDMGR" delete avd -n "$name" >/dev/null 2>&1
     echo "🗑  Deleted AVD $name"
   else
@@ -283,8 +286,8 @@ __delete_avd() {
 }
 
 __clean_all() {
-  stop_avd
-  for name in $(list_tabssh_avds); do
+  __stop_avd
+  for name in $(__list_tabssh_avds); do
     "$AVDMGR" delete avd -n "$name" >/dev/null 2>&1
     echo "🗑  Deleted $name"
   done
@@ -293,7 +296,7 @@ __clean_all() {
 
 __list_avds() {
   echo "TabSSH AVDs:"
-  list_tabssh_avds | sed 's/^/  /'
+  __list_tabssh_avds | sed 's/^/  /'
   echo
   echo "Running emulators:"
   "$ADB" devices | awk '/^emulator-/' | sed 's/^/  /'
@@ -306,27 +309,27 @@ case "$COMMAND" in
   ""|start)
     # `start [type] [size]` or omitted (defaults to phone)
     shift || true
-    start_avd "${1:-phone}" "${2:-}"
+    __start_avd "${1:-phone}" "${2:-}"
     ;;
   stop)
     shift
-    stop_avd "${1:-}" "${2:-}"
+    __stop_avd "${1:-}" "${2:-}"
     ;;
   delete|rm)
     shift
-    delete_avd "${1:?type required}" "${2:-}"
+    __delete_avd "${1:?type required}" "${2:-}"
     ;;
   clean)
-    clean_all
+    __clean_all
     ;;
   list|ls)
-    list_avds
+    __list_avds
     ;;
   -h|--help|help)
     sed -n '2,30p' "$0" | sed 's/^# *//' | head -27
     ;;
   *)
     # Implicit start: first arg is a type (e.g. `tablet`, `phone`, `fold`)
-    start_avd "$COMMAND" "${2:-}"
+    __start_avd "$COMMAND" "${2:-}"
     ;;
 esac
