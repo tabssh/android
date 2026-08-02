@@ -1338,11 +1338,14 @@ class MultiHostDashboardActivity : AppCompatActivity() {
             bar.setProgressCompat(pct, true)
         }
 
-        private fun barColor(pct: Int): Int = when {
-            pct >= 85 -> Color.parseColor("#F44336")
-            pct >= 65 -> Color.parseColor("#FF9800")
-            else      -> Color.parseColor("#4CAF50")
-        }
+        private fun barColor(pct: Int): Int = androidx.core.content.ContextCompat.getColor(
+            itemView.context,
+            when {
+                pct >= 85 -> R.color.gauge_critical
+                pct >= 65 -> R.color.gauge_warn
+                else      -> R.color.gauge_ok
+            }
+        )
     }
 
     inner class EmptyStateHolder(view: View) : RecyclerView.ViewHolder(view) {

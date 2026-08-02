@@ -96,6 +96,21 @@
     <color name="outline">#FFE0E0E0</color>
     <color name="outline_variant">#FFF5F5F5</color>
     
+    <!-- Metric gauge thresholds (dashboard progress bars) -->
+    <color name="gauge_ok">@color/success</color>
+    <color name="gauge_warn">@color/warning</color>
+    <color name="gauge_critical">@color/error</color>
+
+    <!-- Keyboard customization key categories -->
+    <color name="keyboard_key_modifier">@color/info</color>
+    <color name="keyboard_key_arrow">@color/success</color>
+    <color name="keyboard_key_function">@color/warning</color>
+    <color name="keyboard_key_symbol">@color/accent_500</color>
+    <color name="keyboard_key_action">#FFE91E63</color>
+
+    <!-- Performance chart line -->
+    <color name="chart_cpu_line">@color/primary_500</color>
+
     <!-- Dark theme colors -->
     <color name="surface_dark">#FF121212</color>
     <color name="surface_variant_dark">#FF1E1E1E</color>

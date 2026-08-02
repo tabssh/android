@@ -533,11 +533,11 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
     private fun keyColor(key: KeyboardKey) = when (key.category) {
-        KeyboardKey.KeyCategory.MODIFIER -> Color.parseColor("#2196F3")
-        KeyboardKey.KeyCategory.ARROW    -> Color.parseColor("#4CAF50")
-        KeyboardKey.KeyCategory.FUNCTION -> Color.parseColor("#FF9800")
-        KeyboardKey.KeyCategory.SYMBOL   -> Color.parseColor("#9C27B0")
-        KeyboardKey.KeyCategory.ACTION   -> Color.parseColor("#E91E63")
+        KeyboardKey.KeyCategory.MODIFIER -> androidx.core.content.ContextCompat.getColor(this, R.color.keyboard_key_modifier)
+        KeyboardKey.KeyCategory.ARROW    -> androidx.core.content.ContextCompat.getColor(this, R.color.keyboard_key_arrow)
+        KeyboardKey.KeyCategory.FUNCTION -> androidx.core.content.ContextCompat.getColor(this, R.color.keyboard_key_function)
+        KeyboardKey.KeyCategory.SYMBOL   -> androidx.core.content.ContextCompat.getColor(this, R.color.keyboard_key_symbol)
+        KeyboardKey.KeyCategory.ACTION   -> androidx.core.content.ContextCompat.getColor(this, R.color.keyboard_key_action)
         else -> Color.WHITE
     }
 }

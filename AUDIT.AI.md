@@ -42,12 +42,13 @@ security-behavior and large-refactor items are logged for a user decision.
   HostAvailabilityWorker, HostDetailActivity, CloudAccountManagerActivity
   (both sites). The ~120 remaining best-effort-teardown swallows are
   accepted as-is (legitimate cleanup paths, not security-relevant).
-- [ ] ui: hardcoded palette colors violate PART 7 "never hardcode colors":
-  `ui/activities/MultiHostDashboardActivity.kt:1341-1343` (gauge red/orange/green),
-  `ui/activities/KeyboardCustomizationActivity.kt:536-540` (category colors),
-  `ui/fragments/PerformanceFragment.kt:519,520,528` (#1976D2). Move to
-  `res/values/colors.xml` (+ night variant). NOTE: `TerminalView.Color.rgb(r,g,b)`
-  (ANSI cube) and `parseColor(group.color)` (user data) are NOT violations.
+- [x] ui: hardcoded palette colors in MultiHostDashboardActivity (gauge),
+  KeyboardCustomizationActivity (key categories), PerformanceFragment
+  (chart line). — FIXED: named resources added to `values/colors.xml`
+  (gauge_*, keyboard_key_*, chart_cpu_line, mapped onto existing semantic
+  colors) with lighter Material-300 overrides in `values-night/colors.xml`;
+  all three call sites use ContextCompat.getColor. `TerminalView.Color.rgb`
+  (ANSI cube) and `parseColor(group.color)` (user data) remain non-violations.
 
 ## Pass 3: Logic and Correctness
 

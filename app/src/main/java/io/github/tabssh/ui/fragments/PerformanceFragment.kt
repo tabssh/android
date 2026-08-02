@@ -515,9 +515,10 @@ class PerformanceFragment : Fragment() {
         
         if (entries.isEmpty()) return
         
+        val lineColor = androidx.core.content.ContextCompat.getColor(requireContext(), R.color.chart_cpu_line)
         val dataSet = LineDataSet(entries, "CPU Usage").apply {
-            color = Color.parseColor("#1976D2")
-            setCircleColor(Color.parseColor("#1976D2"))
+            color = lineColor
+            setCircleColor(lineColor)
             circleRadius = 2f
             lineWidth = 2f
             setDrawValues(false)
@@ -525,7 +526,7 @@ class PerformanceFragment : Fragment() {
             mode = LineDataSet.Mode.CUBIC_BEZIER
             cubicIntensity = 0.2f
             setDrawFilled(true)
-            fillColor = Color.parseColor("#1976D2")
+            fillColor = lineColor
             fillAlpha = 50
         }
         

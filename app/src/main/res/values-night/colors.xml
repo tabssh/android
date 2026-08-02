@@ -29,4 +29,16 @@
     <!-- Tab strip uses surface on day; in night just stay dark too -->
     <color name="tab_background">#FF1E1E1E</color>
     <color name="tab_text">#FFFFFFFF</color>
+
+    <!-- Lighter Material 300-tone hues so gauge bars, keyboard category
+         labels, and the CPU chart line keep contrast on dark surfaces -->
+    <color name="gauge_ok">#FF81C784</color>
+    <color name="gauge_warn">#FFFFB74D</color>
+    <color name="gauge_critical">#FFE57373</color>
+    <color name="keyboard_key_modifier">#FF64B5F6</color>
+    <color name="keyboard_key_arrow">#FF81C784</color>
+    <color name="keyboard_key_function">#FFFFB74D</color>
+    <color name="keyboard_key_symbol">#FFBA68C8</color>
+    <color name="keyboard_key_action">#FFF06292</color>
+    <color name="chart_cpu_line">#FF64B5F6</color>
 </resources>
