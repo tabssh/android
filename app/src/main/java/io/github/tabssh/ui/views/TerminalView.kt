@@ -1793,9 +1793,17 @@ class TerminalView @JvmOverloads constructor(
             segEnd++
         }
 
-        // Clamp to ±4 rows around the tap so we never build excessively large strings.
-        val winStart = maxOf(segStart, row - 4)
-        val winEnd   = minOf(segEnd,   row + 4)
+        // Use the full wrap segment. segStart/segEnd are already bounded by the
+        // first non-wrapped row on each side (and hard-bounded by 0/terminalRows-1,
+        // i.e. at most one screen height), so no further clamping is needed here.
+        // A previous ±4-row clamp around the tap point cut off the window before
+        // it reached the URL's scheme prefix whenever a tap landed more than 4 rows
+        // from the start of a long wrapped URL, which made the regex fail to match
+        // at all (mid/end-of-URL taps) or match only a truncated fragment (taps
+        // near the start) — this is why only long, multi-row-wrapped URLs failed
+        // to be detected while short single-row URLs worked fine.
+        val winStart = segStart
+        val winEnd   = segEnd
         if (winStart == row && winEnd == row) return null
 
         val combined = buildWrappedWindowText(winStart, winEnd) ?: return null
