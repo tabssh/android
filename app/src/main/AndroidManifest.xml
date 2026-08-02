@@ -233,6 +233,35 @@
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- System-wide ssh:// and sftp:// link handler — see
+             LinkHandlerActivity for the security rationale (untrusted-input
+             parsing, never auto-connect, transient profile only).
+             Transparent/no-history: it only ever shows one confirmation
+             dialog, then hands off to TabTerminalActivity and finishes.
+             Custom schemes are exempt from Android App Links verification,
+             so when another SSH app also claims ssh:// or sftp:// the user
+             picks "Always"/"Just once" via the normal resolver sheet. -->
+        <activity
+            android:name=".ui.activities.LinkHandlerActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:launchMode="singleInstance"
+            android:theme="@style/Theme.TabSSH.Transparent">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="ssh" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="sftp" />
+            </intent-filter>
+        </activity>
+
         <!-- SFTP file browser activity -->
         <activity
             android:name=".ui.activities.SFTPActivity"

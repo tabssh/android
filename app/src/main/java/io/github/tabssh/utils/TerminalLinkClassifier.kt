@@ -18,6 +18,9 @@ object TerminalLinkClassifier {
         /** ssh://[user@]host[:port][/...] — offer to open a new session in-app. */
         data class Ssh(val url: String, val username: String?, val host: String, val port: Int) : LinkAction()
 
+        /** sftp://[user@]host[:port][/path] — offer to browse the remote host over SFTP. */
+        data class Sftp(val url: String, val username: String?, val host: String, val port: Int, val path: String) : LinkAction()
+
         /** file://[host]/path — path lives on the remote host, never the device. */
         data class RemoteFile(val url: String, val path: String) : LinkAction()
 
@@ -36,11 +39,16 @@ object TerminalLinkClassifier {
         return when (scheme) {
             "ssh" -> parseSsh(url)?.let { (username, host, port) -> LinkAction.Ssh(url, username, host, port) }
                 ?: LinkAction.Browser(url)
+            "sftp" -> parseSftp(url)?.let { (username, host, port, path) -> LinkAction.Sftp(url, username, host, port, path) }
+                ?: LinkAction.Browser(url)
             "file" -> LinkAction.RemoteFile(url, extractFilePath(url))
             "git", "ftp", "ftps", "svn" -> LinkAction.ExternalScheme(url, scheme)
             else -> LinkAction.Browser(url)
         }
     }
+
+    /** Parsed sftp:// authority + optional remote path (see [parseSftp]). */
+    data class SftpTarget(val username: String?, val host: String, val port: Int, val path: String)
 
     /**
      * Parses an ssh:// authority into (username, host, port). Username is
@@ -50,6 +58,40 @@ object TerminalLinkClassifier {
     fun parseSsh(url: String): Triple<String?, String, Int>? {
         val withoutScheme = url.replaceFirst(Regex("(?i)^ssh://"), "")
         val authority = withoutScheme.substringBefore("/").substringBefore("?").substringBefore("#")
+        return parseAuthority(authority)
+    }
+
+    /**
+     * Parses an sftp:// URL into (username, host, port, path). Username and
+     * port follow the same rules as [parseSsh]; the path defaults to "/"
+     * when absent and is percent-decoded. Returns null when no host can be
+     * extracted (e.g. "sftp://" alone).
+     */
+    fun parseSftp(url: String): SftpTarget? {
+        val withoutScheme = url.replaceFirst(Regex("(?i)^sftp://"), "")
+        val authority = withoutScheme.substringBefore("/").substringBefore("?").substringBefore("#")
+        val (username, host, port) = parseAuthority(authority) ?: return null
+
+        val rawPath = withoutScheme.substring(authority.length).substringBefore("?").substringBefore("#")
+        val path = if (rawPath.isBlank()) {
+            "/"
+        } else {
+            try {
+                java.net.URLDecoder.decode(rawPath, "UTF-8")
+            } catch (e: Exception) {
+                rawPath
+            }
+        }
+        return SftpTarget(username, host, port, path)
+    }
+
+    /**
+     * Shared ssh:// / sftp:// authority parser: "[user@]host[:port]" (or
+     * "[user@][::ipv6]:port]" for bracketed IPv6 literals) -> (username,
+     * host, port). Port defaults to 22 when absent. Returns null when the
+     * authority is blank or no host can be extracted.
+     */
+    private fun parseAuthority(authority: String): Triple<String?, String, Int>? {
         if (authority.isBlank()) return null
 
         val atIdx = authority.lastIndexOf('@')

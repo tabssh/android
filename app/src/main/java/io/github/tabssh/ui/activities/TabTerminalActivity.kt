@@ -72,6 +72,11 @@ class TabTerminalActivity : AppCompatActivity() {
         const val EXTRA_FORCE_NEW = "force_new"
         // Preference key that persists whether the custom function-key bar is visible.
         const val PREF_KEY_BAR_VISIBLE = "key_bar_visible"
+        // Set by LinkHandlerActivity for a tapped sftp:// link: once the transient
+        // quick-connect profile embedded in this intent finishes connecting, open
+        // SFTPActivity at this remote path instead of just landing on the terminal.
+        // Never set for normal (non-link) connects.
+        const val EXTRA_OPEN_SFTP_PATH = "open_sftp_path"
 
         fun createIntent(
             context: Context,
@@ -1146,6 +1151,8 @@ class TabTerminalActivity : AppCompatActivity() {
         when (val action = io.github.tabssh.utils.TerminalLinkClassifier.classify(url)) {
             is io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.Ssh ->
                 showSshLinkDialog(action)
+            is io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.Sftp ->
+                showSftpLinkDialog(action)
             is io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.RemoteFile ->
                 showRemoteFileDialog(action)
             is io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.ExternalScheme ->
@@ -1219,6 +1226,54 @@ class TabTerminalActivity : AppCompatActivity() {
     }
 
     /**
+     * sftp:// links tapped inside the terminal — same transient quick-connect
+     * as ssh:// links, but the new session opens straight into the SFTP
+     * browser at the link's path instead of landing on the terminal.
+     */
+    private fun showSftpLinkDialog(action: io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.Sftp) {
+        val display = (action.username?.let { "$it@" } ?: "") + action.host +
+            if (action.port != 22) ":${action.port}" else ""
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("SFTP link")
+            .setMessage("$display\nRemote path: ${action.path}\n\nConnect opens a new session and browses this path over SFTP.")
+            .setPositiveButton("Connect") { _, _ ->
+                connectSftpLink(action)
+            }
+            .setNeutralButton("Copy") { _, _ ->
+                copyToClipboard("SFTP link", action.url)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Starts a new session for a tapped sftp:// link via a transient (never
+     * persisted) ConnectionProfile — same shape as connectSshLink(), plus
+     * EXTRA_OPEN_SFTP_PATH so handleIntent() opens SFTPActivity once the
+     * connection comes up instead of just landing on the terminal.
+     */
+    private fun connectSftpLink(action: io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.Sftp) {
+        val username = action.username?.takeIf { it.isNotBlank() }
+            ?: app.preferencesManager.getDefaultUsername().trim().takeIf { it.isNotBlank() }
+            ?: "root"
+        val profile = io.github.tabssh.storage.database.entities.ConnectionProfile(
+            id = java.util.UUID.randomUUID().toString(),
+            name = "$username@${action.host}",
+            host = action.host,
+            port = action.port,
+            username = username,
+            authType = AuthType.KEYBOARD_INTERACTIVE.name,
+            keyId = null,
+            groupId = null
+        )
+        val intent = createIntent(this, profile, autoConnect = true, forceNew = true).apply {
+            putExtra(EXTRA_OPEN_SFTP_PATH, action.path)
+        }
+        startActivity(intent)
+        Logger.i("TabTerminalActivity", "Connecting SFTP link: $username@${action.host}:${action.port}${action.path}")
+    }
+
+    /**
      * file:// links — the path is on the remote host's filesystem, never
      * this device, so "Open" is never offered. "Open in SFTP" only appears
      * when the active tab has a live connection to browse against.
@@ -1247,12 +1302,21 @@ class TabTerminalActivity : AppCompatActivity() {
      */
     private fun openSftpAtPath(tab: SSHTab, path: String) {
         val startDir = path.substringBeforeLast('/', "/").ifEmpty { "/" }
+        openSftpAt(tab, startDir)
+    }
+
+    /**
+     * Launches the SFTP browser for [tab]'s connection at [dirPath] directly
+     * (no filename-stripping — callers that already have a directory, such
+     * as the sftp:// link handoff in handleIntent(), use this).
+     */
+    private fun openSftpAt(tab: SSHTab, dirPath: String) {
         val intent = Intent(this, io.github.tabssh.ui.activities.SFTPActivity::class.java).apply {
             putExtra(io.github.tabssh.ui.activities.SFTPActivity.EXTRA_CONNECTION_ID, tab.profile.id)
-            putExtra(io.github.tabssh.ui.activities.SFTPActivity.EXTRA_INITIAL_REMOTE_PATH, startDir)
+            putExtra(io.github.tabssh.ui.activities.SFTPActivity.EXTRA_INITIAL_REMOTE_PATH, dirPath)
         }
         startActivity(intent)
-        Logger.d("TabTerminalActivity", "Opening SFTP at path: $startDir")
+        Logger.d("TabTerminalActivity", "Opening SFTP at path: $dirPath")
     }
 
     /**
@@ -1901,6 +1965,20 @@ class TabTerminalActivity : AppCompatActivity() {
                     Logger.d("TabTerminalActivity", "Found profile: ${profile.name}, identityId: ${profile.identityId}")
                     if (autoConnect) {
                         connectToProfile(profile, forceNew = forceNew)
+                        // sftp:// link handoff (see EXTRA_OPEN_SFTP_PATH) — only
+                        // open SFTP if the connect above actually produced a
+                        // live tab; a failed/cancelled connect leaves nothing
+                        // to browse and the user already saw why.
+                        val openSftpPath = intent.getStringExtra(EXTRA_OPEN_SFTP_PATH)
+                        if (openSftpPath != null) {
+                            val connectedTab = tabManager.getAllTabs()
+                                .firstOrNull { it.profile.id == profile.id && it.isConnected() }
+                            if (connectedTab != null) {
+                                openSftpAt(connectedTab, openSftpPath)
+                            } else {
+                                Logger.w("TabTerminalActivity", "sftp:// link: connect did not produce a live tab, not opening SFTP")
+                            }
+                        }
                     } else {
                         // autoConnect=false means "surface the existing session" (e.g. notification tap).
                         // connectToProfile already handles the reattach short-circuit, but we must

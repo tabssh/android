@@ -31,6 +31,17 @@ class TerminalLinkClassifierTest {
     }
 
     @Test
+    fun `classify routes sftp scheme to Sftp action`() {
+        val action = TerminalLinkClassifier.classify("sftp://deploy@example.com:2222/srv/www")
+        assertTrue(action is TerminalLinkClassifier.LinkAction.Sftp)
+        val sftp = action as TerminalLinkClassifier.LinkAction.Sftp
+        assertEquals("deploy", sftp.username)
+        assertEquals("example.com", sftp.host)
+        assertEquals(2222, sftp.port)
+        assertEquals("/srv/www", sftp.path)
+    }
+
+    @Test
     fun `classify routes git ftp ftps svn to ExternalScheme`() {
         for (scheme in listOf("git", "ftp", "ftps", "svn")) {
             val action = TerminalLinkClassifier.classify("$scheme://example.com/repo")
@@ -83,6 +94,64 @@ class TerminalLinkClassifierTest {
     @Test
     fun `parseSsh returns null when no host present`() {
         assertNull(TerminalLinkClassifier.parseSsh("ssh://"))
+    }
+
+    @Test
+    fun `parseSftp handles user host port and path`() {
+        val target = TerminalLinkClassifier.parseSftp("sftp://deploy@10.0.0.5:2200/srv/www")!!
+        assertEquals("deploy", target.username)
+        assertEquals("10.0.0.5", target.host)
+        assertEquals(2200, target.port)
+        assertEquals("/srv/www", target.path)
+    }
+
+    @Test
+    fun `parseSftp defaults port to 22 and path to root when absent`() {
+        val target = TerminalLinkClassifier.parseSftp("sftp://deploy@host.example.com")!!
+        assertEquals("deploy", target.username)
+        assertEquals("host.example.com", target.host)
+        assertEquals(22, target.port)
+        assertEquals("/", target.path)
+    }
+
+    @Test
+    fun `parseSftp handles missing username`() {
+        val target = TerminalLinkClassifier.parseSftp("sftp://host.example.com:22/data")!!
+        assertNull(target.username)
+        assertEquals("host.example.com", target.host)
+        assertEquals(22, target.port)
+        assertEquals("/data", target.path)
+    }
+
+    @Test
+    fun `parseSftp handles bracketed IPv6 host`() {
+        val target = TerminalLinkClassifier.parseSftp("sftp://root@[::1]:2222/etc")!!
+        assertEquals("root", target.username)
+        assertEquals("::1", target.host)
+        assertEquals(2222, target.port)
+        assertEquals("/etc", target.path)
+    }
+
+    @Test
+    fun `parseSftp decodes percent-encoded path characters`() {
+        val target = TerminalLinkClassifier.parseSftp("sftp://host.example.com/home/user/my%20folder")!!
+        assertEquals("/home/user/my folder", target.path)
+    }
+
+    @Test
+    fun `parseSftp strips query and fragment from path`() {
+        val target = TerminalLinkClassifier.parseSftp("sftp://host.example.com/data?x=1#frag")!!
+        assertEquals("/data", target.path)
+    }
+
+    @Test
+    fun `parseSftp returns null when no host present`() {
+        assertNull(TerminalLinkClassifier.parseSftp("sftp://"))
+    }
+
+    @Test
+    fun `parseSftp returns null for blank authority`() {
+        assertNull(TerminalLinkClassifier.parseSftp("sftp:///data"))
     }
 
     @Test
