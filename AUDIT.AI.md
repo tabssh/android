@@ -67,12 +67,12 @@ security-behavior and large-refactor items are logged for a user decision.
 
 ## Pass 5: Spec and Rules Compliance
 
-- [ ] network: no `res/xml/network_security_config.xml` and no
-  `android:networkSecurityConfig` / `usesCleartextTraffic` in AndroidManifest.
-  PART 9 requires a networkSecurityConfig with `cleartextTrafficPermitted="false"`
-  (debug-only per-host exceptions allowed). NEEDS CARE: app supports Telnet
-  (raw-socket plaintext, not governed by NSC) and possibly non-TLS hypervisor
-  HTTP — verify a false default won't break intended cleartext before adding.
+- [x] network: no networkSecurityConfig existed. — FIXED (user decision:
+  allow cleartext): added `res/xml/network_security_config.xml` with
+  `cleartextTrafficPermitted="true"` (system trust anchors) and wired
+  `android:networkSecurityConfig` in AndroidManifest. The PART 9 deviation
+  is documented in IDEA.md § Trust boundaries — hypervisor/cloud endpoints
+  are user-configured and may be plain-http consoles on private LANs.
 - [x] tests: JVM unit tests lived under `app/src/test/java/com/tabssh/...`
   while declaring `package io.github.tabssh.*`. — FIXED: all 9 misplaced
   test files moved to `app/src/test/java/io/github/tabssh/...`; full unit

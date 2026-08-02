@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Deviation from AI.md PART 9 ("cleartextTrafficPermitted=false"), documented
+  in IDEA.md: cleartext stays permitted because hypervisor/cloud endpoints are
+  user-configured and may be plain-http LAN consoles (e.g. Proxmox/libvirt on
+  a private network). Blocking cleartext here would break those setups.
+  Telnet is raw-socket and unaffected by this config either way.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

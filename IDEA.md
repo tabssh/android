@@ -130,6 +130,7 @@ version_code_scheme: manual
 - Remote SSH/telnet hosts, hypervisor and cloud APIs, clipboard contents, QR payloads, imported config/bulk files, and user-supplied sync storage are all untrusted input
 - The device keystore and the app's own encrypted storage are the only trusted secret stores
 - verifySsl defaults to off on hypervisor profiles — an accepted, documented design decision to accommodate self-signed hypervisor certs; TOFU pinning is the compensating control
+- Cleartext HTTP stays permitted in network_security_config.xml — an accepted, documented deviation from the AI.md PART 9 cleartext ban: hypervisor/cloud endpoints are user-configured and may be plain-http consoles on private LANs; blocking cleartext would break those setups
 
 ### Permission justifications
 - Camera: QR pairing import only; declared optional (app fully works without it)
