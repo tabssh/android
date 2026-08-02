@@ -14,15 +14,18 @@ security-behavior and large-refactor items are logged for a user decision.
   `crypto/storage/SecurePasswordManager.kt` (createSecretKey) and
   `crypto/keys/KeyStorage.kt` (createKeyEncryptionKey). Forward-compatible:
   existing 128-bit aliases keep decrypting; new credentials/keys are 256-bit.
-- [ ] crypto/tls: `HypervisorTrustManagerFactory.installTrustAll` (verifySsl=off)
-  is a **blanket trust-all forever** — empty `checkServerTrusted`, hostname
-  verifier `{ _, _ -> true }`, no cert captured or pinned. IDEA.md (lines 100,
-  132) states TOFU certificate pinning is the *compensating control* for
-  verifySsl=off; the code does not implement it. PART 6 permits a bypass path
-  "ONLY IF ... backed by TOFU pinning". NEEDS USER DECISION — implementing
-  TOFU-pin-on-first-cert changes security-visible behavior (would prompt on a
-  changed cert where it currently accepts silently). File:
-  `crypto/tls/HypervisorTrustManagerFactory.kt:72-100`.
+- [x] crypto/tls: `HypervisorTrustManagerFactory.installTrustAll` (verifySsl=off)
+  was a **blanket trust-all forever** — empty `checkServerTrusted`, hostname
+  verifier `{ _, _ -> true }`, no cert captured or pinned, while IDEA.md
+  (lines 100, 132) states TOFU pinning is the compensating control. — FIXED
+  (user approved): `installTrustAll` replaced with `installQuietTofu` — no
+  stored pin: first-seen cert is captured silently (no prompt; the user opted
+  out of first-use verification) and persisted by the existing
+  `persistCapturedPinIfAny` caller flow; pin match: silent OK; pin mismatch:
+  the same "cert changed" dialog as verifySsl=on (ACCEPT_AND_PIN /
+  ACCEPT_ONCE / REJECT-aborts-handshake). Hostname verification stays
+  bypassed — the pin binds identity. No caller changes needed (all clients
+  already pass pin + captured holder unconditionally).
 - [x] crypto/storage: legacy plaintext `hypervisors.password` column was only
   blanked lazily on first access. — FIXED: added
   `HypervisorPasswordStore.sweepLegacyPlaintext()` — a startup sweep (run

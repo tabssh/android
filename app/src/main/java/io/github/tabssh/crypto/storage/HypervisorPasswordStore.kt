@@ -128,13 +128,14 @@ object HypervisorPasswordStore {
      * hypervisor manager activity right after a successful authenticate()
      * with the value from `client.getCapturedCertSha256()`. Writes to
      * the DB only when:
-     *   * the client actually captured a SHA (i.e. verifySsl=true and
-     *     no prior pin), AND
+     *   * the client actually captured a SHA — first-connect TOFU in
+     *     either mode (verifySsl=true prompts or system-CA-vets; off
+     *     pins the first-seen cert silently), or a user-approved pin
+     *     update after a cert change, AND
      *   * the row currently has no pin OR a different pin
      *     (handles the "user clicked Forget pin and reconnected" path).
      *
-     * No-op for verifySsl=false connects (capturedSha will be null) and
-     * for connects where the pin already matched (capturedSha is also
+     * No-op for connects where the pin already matched (capturedSha is
      * null because the trust manager didn't write to it).
      */
     suspend fun persistCapturedPinIfAny(

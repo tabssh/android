@@ -12,7 +12,7 @@ import java.util.concurrent.TimeUnit
  * directly. `newBuilder()` copies the connection pool and dispatcher from
  * this instance (so all callers share sockets/threads) while still letting
  * each site override timeouts or install per-host TLS trust (hypervisor
- * pinning, trust-all dev mode, console websocket idle timeouts, etc.).
+ * pinning, quiet-TOFU mode, console websocket idle timeouts, etc.).
  *
  * Base timeouts here are deliberately generous defaults for a plain REST
  * call; sites with tighter or looser needs override them on the derived

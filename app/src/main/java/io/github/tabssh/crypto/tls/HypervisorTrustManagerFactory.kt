@@ -13,7 +13,12 @@ import javax.net.ssl.X509TrustManager
 /**
  * TLS pinning for hypervisor REST + WebSocket clients and cloud provider APIs.
  *
- *   verifySsl = false           → trust-all (MITM-able; only for user-opted hosts).
+ *   verifySsl = false           → TOFU-pin without first-use prompts: the first cert
+ *                                 seen is captured silently and persisted by the
+ *                                 caller; later connects accept only that cert, and
+ *                                 a changed cert shows the "cert changed" dialog.
+ *                                 Weaker than verifySsl=true (first contact is
+ *                                 unauthenticated) but never blanket trust-all.
  *   verifySsl = true, no pin    → try the system CA first.
  *                                   • System CA accepts (publicly-trusted cert, e.g.
  *                                     OCI, Let's Encrypt on Proxmox): silently capture
@@ -34,7 +39,8 @@ import javax.net.ssl.X509TrustManager
  * For a self-signed / TOFU-pinned leaf it is bypassed: hypervisor certs
  * routinely use a CN/SAN that doesn't match the bookmark hostname (an IP, a
  * `*.local`, or `localhost`), and pin-by-fingerprint already binds identity.
- * (The `verifySsl = false` trust-all path bypasses everything by design.)
+ * (The `verifySsl = false` path always bypasses hostname verification — the
+ * silently-captured pin binds identity there.)
  */
 object HypervisorTrustManagerFactory {
 
@@ -54,8 +60,9 @@ object HypervisorTrustManagerFactory {
     /**
      * Configure an OkHttpClient.Builder with the right TLS stack for
      * the given (verifySsl, pinnedSha256) combo. `captured` receives
-     * the leaf SHA on first-connect TOFU; ignore it when verifySsl is
-     * false or a pin is already set.
+     * the leaf SHA on first-connect TOFU — in BOTH modes; the caller
+     * persists it after `authenticate()` so the next connect enforces
+     * the stored pin.
      *
      * `host` / `port` are display-only — used by the user-prompt
      * dialogs (Phase 2) so the user sees which server they're being
@@ -70,32 +77,90 @@ object HypervisorTrustManagerFactory {
         port: Int = 0
     ) {
         if (!verifySsl) {
-            // Trust-all is a deliberate per-host bypass, but the user
-            // should be able to see in the debug log that they took it.
-            // Without this line, a `verifySsl=false` row was indistinguish-
-            // able from a properly-pinned one in postmortem triage.
-            Logger.w(TAG, "TLS trust-all enabled for ${if (host.isNotEmpty()) "$host:$port" else "<unspecified host>"} — connection is MITM-able. Consider pinning instead.")
-            installTrustAll(builder)
+            // verifySsl=off is a deliberate per-host opt-out of CA/first-use
+            // verification, but PART 6 forbids blanket trust-all — TOFU
+            // pinning is the compensating control. Log it so a verifySsl=off
+            // row is distinguishable in postmortem triage.
+            Logger.w(TAG, "TLS verification off for ${if (host.isNotEmpty()) "$host:$port" else "<unspecified host>"} — first-seen cert will be pinned without a prompt (TOFU). Consider verifySsl=on instead.")
+            installQuietTofu(builder, pinnedSha256, captured, host, port)
             return
         }
         installPinning(builder, pinnedSha256, captured, host, port)
     }
 
-    /** Install a TrustManager that accepts every cert. */
-    private fun installTrustAll(builder: OkHttpClient.Builder) {
-        // Lint correctly notices this is trust-all; we intentionally
-        // opt into it ONLY when the user has checked "verifySsl = false"
-        // on the hypervisor profile. The warning is logged loudly above.
-        val trustAll = object : X509TrustManager {
+    /**
+     * TOFU pinning for verifySsl=off profiles.
+     *
+     * No stored pin → accept ANY presented cert silently and capture its
+     * SHA-256 (no dialog — the user opted out of first-use verification);
+     * the caller persists the capture, so every later connect enforces it.
+     * Pin match → silent OK. Pin mismatch → the same "cert changed" dialog
+     * as the verifySsl=on path (ACCEPT_AND_PIN / ACCEPT_ONCE / REJECT).
+     * Hostname verification is bypassed — the pin binds identity, and
+     * verifySsl=off hosts routinely present IP / *.local / mismatched CNs.
+     */
+    private fun installQuietTofu(
+        builder: OkHttpClient.Builder,
+        pinnedSha256: String?,
+        captured: CapturedPin,
+        host: String,
+        port: Int
+    ) {
+        // checkClientTrusted is empty by design — we are the TLS client,
+        // never validating an inbound client cert.
+        val tofu = object : X509TrustManager {
             @SuppressLint("TrustAllX509TrustManager")
             override fun checkClientTrusted(c: Array<X509Certificate>, t: String) {}
-            @SuppressLint("TrustAllX509TrustManager")
-            override fun checkServerTrusted(c: Array<X509Certificate>, t: String) {}
+            override fun checkServerTrusted(chain: Array<X509Certificate>, t: String) {
+                if (chain.isEmpty()) {
+                    throw CertificateException("Empty certificate chain")
+                }
+                val presented = sha256Hex(chain[0].encoded)
+
+                // Stored pin or same-session capture matches → silent OK.
+                if ((!pinnedSha256.isNullOrBlank() && pinnedSha256.equals(presented, ignoreCase = true)) ||
+                    (!captured.sha256.isNullOrBlank() && captured.sha256.equals(presented, ignoreCase = true))) {
+                    Logger.d(TAG, "Cert pin match (verifySsl=off) — leaf SHA-256: $presented")
+                    return
+                }
+
+                if (pinnedSha256.isNullOrBlank()) {
+                    // First contact — capture and pin silently. verifySsl=off
+                    // means the user opted out of first-use verification, so
+                    // no dialog; the pin still protects every later connect.
+                    captured.sha256 = presented
+                    Logger.i(TAG, "First-seen cert pinned silently (verifySsl=off): $presented (host=$host:$port)")
+                    return
+                }
+
+                // Prior pin set but presented cert doesn't match → possible MITM or cert rotation.
+                Logger.w(TAG, "Cert pin MISMATCH (verifySsl=off) — pinned $pinnedSha256 vs presented $presented (host=$host:$port)")
+                val action = HypervisorCertPromptDialog.promptChangedCert(
+                    host, port, pinnedSha256, presented
+                )
+                when (action) {
+                    HypervisorCertPromptDialog.Action.ACCEPT_AND_PIN -> {
+                        captured.sha256 = presented
+                        Logger.i(TAG, "User accepted pin update: $pinnedSha256 → $presented")
+                    }
+                    HypervisorCertPromptDialog.Action.ACCEPT_ONCE -> {
+                        Logger.i(TAG, "User accepted changed cert once-only — pin NOT updated")
+                    }
+                    HypervisorCertPromptDialog.Action.REJECT -> {
+                        Logger.w(TAG, "User rejected changed cert — aborting handshake")
+                        throw CertificateException(
+                            "User rejected certificate change for $host:$port\n" +
+                            "Pinned:    SHA-256 $pinnedSha256\n" +
+                            "Presented: SHA-256 $presented"
+                        )
+                    }
+                }
+            }
             override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
         }
         val ctx = SSLContext.getInstance("TLS")
-        ctx.init(null, arrayOf<TrustManager>(trustAll), java.security.SecureRandom())
-        builder.sslSocketFactory(ctx.socketFactory, trustAll)
+        ctx.init(null, arrayOf<TrustManager>(tofu), java.security.SecureRandom())
+        builder.sslSocketFactory(ctx.socketFactory, tofu)
         builder.hostnameVerifier { _, _ -> true }
     }
 
