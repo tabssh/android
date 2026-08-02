@@ -1,7 +1,5 @@
 # TODO
 
-- Non-http URL schemes are detected but mishandled on tap (TerminalView urlPattern covers http/https/ftp/ftps/ssh/git/svn/file; TabTerminalActivity.showUrlDialog/openUrl treats all as browser links via ACTION_VIEW):
-  - `file://` can never open — resolves against the local device, and API 24+ throws FileUriExposedException; should drop "Open" and offer "Copy path" / "Open in SFTP" (path is on the remote host)
-  - `ssh://` should be handled in-app (parse user/host/port → new connection tab); no manifest intent-filter for the ssh scheme exists either
-  - `git://` / `ftp://` / `ftps://` / `svn://` should show "Open" only when `resolveActivity()` finds a handler; make "Copy" primary otherwise
-  - Dialog copy says "This will open in your browser" for every scheme — only true for http(s)
+- file:// terminal links (and SFTP remote files generally) have no "Download & Open" flow — remote files can only be queued for download and then shared (ACTION_SEND via FileProvider); add download-to-cache + ACTION_VIEW with MIME resolved from the extension, reusing the shareFile FileProvider pattern (pending user decision on scope)
+
+- Add manifest intent-filters so TabSSH can act as a system-wide handler for ssh:// and sftp:// links tapped in OTHER apps (in-terminal ssh:// links already connect in-app via TerminalLinkClassifier). Requirements: exported activity with ACTION_VIEW + BROWSABLE + DEFAULT for both schemes; NEVER auto-connect — always land on a prefilled confirmation (quick-connect flow); never attach stored keys/passwords to a link-chosen host; sftp:// routes to the SFTP browser with the URL path prefilling the remote directory; parse the URI as untrusted input via TerminalLinkClassifier; custom schemes are exempt from verified App Links, so "Always" default is user-chosen via the resolver sheet when another SSH app also claims the scheme

@@ -59,8 +59,29 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!-- Termux package visibility (Android 11+ requires explicit package query). -->
+    <!-- git/ftp/ftps/svn ACTION_VIEW visibility for terminal-detected links —
+         Android 11+ package visibility hides resolveActivity() results for
+         these schemes unless the querying intent is declared here; without
+         this TabTerminalActivity's "Open" button never appears even when a
+         handling app is installed. -->
     <queries>
         <package android:name="com.termux" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="git" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="ftp" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="ftps" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="svn" />
+        </intent>
     </queries>
 
     <!-- Custom signature-level permission protecting TaskerActionReceiver.

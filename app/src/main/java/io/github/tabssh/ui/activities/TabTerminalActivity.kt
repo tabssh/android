@@ -1136,12 +1136,29 @@ class TabTerminalActivity : AppCompatActivity() {
     }
 
     /**
-     * Show dialog for detected URL with explicit Open/Copy/Cancel
-     * confirmation. The user may have long-pressed by accident (terminals
-     * are touch-noisy), so we never auto-launch — they have to tap Open.
+     * Show dialog for a detected terminal link. The dialog kind and its
+     * actions depend on the link's scheme (see TerminalLinkClassifier) — the
+     * user may have long-pressed by accident (terminals are touch-noisy), so
+     * nothing is ever auto-launched.
      */
     private fun showUrlDialog(url: String) {
         if (isFinishing || isDestroyed) return
+        when (val action = io.github.tabssh.utils.TerminalLinkClassifier.classify(url)) {
+            is io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.Ssh ->
+                showSshLinkDialog(action)
+            is io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.RemoteFile ->
+                showRemoteFileDialog(action)
+            is io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.ExternalScheme ->
+                showExternalSchemeDialog(action)
+            is io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.Browser ->
+                showBrowserLinkDialog(action.url)
+        }
+    }
+
+    /**
+     * http(s)/www. links — unchanged flow: opens in the device's browser.
+     */
+    private fun showBrowserLinkDialog(url: String) {
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Open this URL?")
             .setMessage("$url\n\nThis will open in your browser. Tap Open only if you meant to follow this link.")
@@ -1149,10 +1166,126 @@ class TabTerminalActivity : AppCompatActivity() {
                 openUrl(url)
             }
             .setNeutralButton("Copy") { _, _ ->
-                copyUrlToClipboard(url)
+                copyToClipboard("URL", url)
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    /**
+     * ssh:// links — parsed into user/host/port and handled entirely in-app:
+     * Connect starts a new tab against a transient (unsaved) ConnectionProfile,
+     * the same "quick connect" path MainActivity uses for ad-hoc connections.
+     */
+    private fun showSshLinkDialog(action: io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.Ssh) {
+        val display = (action.username?.let { "$it@" } ?: "") + action.host +
+            if (action.port != 22) ":${action.port}" else ""
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("SSH link")
+            .setMessage("$display\n\nConnect opens a new session to this host.")
+            .setPositiveButton("Connect") { _, _ ->
+                connectSshLink(action)
+            }
+            .setNeutralButton("Copy") { _, _ ->
+                copyToClipboard("SSH link", action.url)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Starts a new session for a tapped ssh:// link via a transient (never
+     * persisted) ConnectionProfile — mirrors MainActivity.quickConnect().
+     * No stored password/key exists for it, so KEYBOARD_INTERACTIVE auth
+     * makes connectToProfile() prompt for a password like any quick connect.
+     */
+    private fun connectSshLink(action: io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.Ssh) {
+        val username = action.username?.takeIf { it.isNotBlank() }
+            ?: app.preferencesManager.getDefaultUsername().trim().takeIf { it.isNotBlank() }
+            ?: "root"
+        val profile = io.github.tabssh.storage.database.entities.ConnectionProfile(
+            id = java.util.UUID.randomUUID().toString(),
+            name = "$username@${action.host}",
+            host = action.host,
+            port = action.port,
+            username = username,
+            authType = AuthType.KEYBOARD_INTERACTIVE.name,
+            keyId = null,
+            groupId = null
+        )
+        val intent = createIntent(this, profile, autoConnect = true, forceNew = true)
+        startActivity(intent)
+        Logger.i("TabTerminalActivity", "Connecting SSH link: $username@${action.host}:${action.port}")
+    }
+
+    /**
+     * file:// links — the path is on the remote host's filesystem, never
+     * this device, so "Open" is never offered. "Open in SFTP" only appears
+     * when the active tab has a live connection to browse against.
+     */
+    private fun showRemoteFileDialog(action: io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.RemoteFile) {
+        val activeTab = tabManager.getActiveTab()
+        val canBrowse = activeTab != null && activeTab.isConnected()
+        val builder = androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Remote file path")
+            .setMessage("${action.path}\n\nThis path refers to a file on the remote host, not this device.")
+            .setNeutralButton("Copy path") { _, _ ->
+                copyToClipboard("Path", action.path)
+            }
+            .setNegativeButton("Cancel", null)
+        if (canBrowse) {
+            builder.setPositiveButton("Open in SFTP") { _, _ ->
+                openSftpAtPath(activeTab!!, action.path)
+            }
+        }
+        builder.show()
+    }
+
+    /**
+     * Launches the SFTP browser for the active tab's connection, navigated
+     * straight to the tapped file:// link's directory.
+     */
+    private fun openSftpAtPath(tab: SSHTab, path: String) {
+        val startDir = path.substringBeforeLast('/', "/").ifEmpty { "/" }
+        val intent = Intent(this, io.github.tabssh.ui.activities.SFTPActivity::class.java).apply {
+            putExtra(io.github.tabssh.ui.activities.SFTPActivity.EXTRA_CONNECTION_ID, tab.profile.id)
+            putExtra(io.github.tabssh.ui.activities.SFTPActivity.EXTRA_INITIAL_REMOTE_PATH, startDir)
+        }
+        startActivity(intent)
+        Logger.d("TabTerminalActivity", "Opening SFTP at path: $startDir")
+    }
+
+    /**
+     * git:// ftp:// ftps:// svn:// links — "Open" is only offered when
+     * resolveActivity() finds a handler for the scheme (Android 11+ package
+     * visibility requires the matching <queries> entry in AndroidManifest.xml);
+     * otherwise the dialog offers only Copy.
+     */
+    private fun showExternalSchemeDialog(action: io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.ExternalScheme) {
+        val url = action.url
+        val hasHandler = try {
+            Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)).resolveActivity(packageManager) != null
+        } catch (e: Exception) {
+            false
+        }
+        val message = if (hasHandler) {
+            "$url\n\nThis will open in an app that handles ${action.scheme}:// links."
+        } else {
+            "$url\n\nNo app on this device can open ${action.scheme}:// links."
+        }
+        val builder = androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Open this link?")
+            .setMessage(message)
+            .setNeutralButton("Copy") { _, _ ->
+                copyToClipboard("URL", url)
+            }
+            .setNegativeButton("Cancel", null)
+        if (hasHandler) {
+            builder.setPositiveButton("Open") { _, _ ->
+                openUrl(url)
+            }
+        }
+        builder.show()
     }
 
     /**
@@ -1170,16 +1303,16 @@ class TabTerminalActivity : AppCompatActivity() {
     }
 
     /**
-     * Copy URL to clipboard
+     * Copy arbitrary link text (URL, SSH link, or remote path) to clipboard.
      */
-    private fun copyUrlToClipboard(url: String) {
-        // URLs aren't usually secret; mark non-sensitive so they don't get
-        // hidden behind the system clipboard preview shield.
-        io.github.tabssh.utils.ClipboardHelper.copy(this, "URL", url, sensitive = false)
-        Toast.makeText(this, "URL copied to clipboard", Toast.LENGTH_SHORT).show()
-        Logger.d("TabTerminalActivity", "Copied URL to clipboard: $url")
+    private fun copyToClipboard(label: String, text: String) {
+        // Terminal links aren't usually secret; mark non-sensitive so they
+        // don't get hidden behind the system clipboard preview shield.
+        io.github.tabssh.utils.ClipboardHelper.copy(this, label, text, sensitive = false)
+        Toast.makeText(this, "$label copied to clipboard", Toast.LENGTH_SHORT).show()
+        Logger.d("TabTerminalActivity", "Copied $label to clipboard: $text")
     }
-    
+
     /**
      * Show comprehensive SSH connection error dialog
      */

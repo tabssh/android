@@ -35,7 +35,14 @@ class SFTPActivity : AppCompatActivity() {
     
     companion object {
         const val EXTRA_CONNECTION_ID = "connection_id"
-        
+
+        /**
+         * Optional starting remote directory — set when a file:// terminal
+         * link's "Open in SFTP" action navigates straight to that path
+         * instead of the default "/".
+         */
+        const val EXTRA_INITIAL_REMOTE_PATH = "initial_remote_path"
+
         fun createIntent(context: Context, connectionId: String): Intent {
             return Intent(context, SFTPActivity::class.java).apply {
                 putExtra(EXTRA_CONNECTION_ID, connectionId)
@@ -84,14 +91,18 @@ class SFTPActivity : AppCompatActivity() {
         setContentView(binding.root)
         
         app = application as TabSSHApplication
-        
+
+        intent.getStringExtra(EXTRA_INITIAL_REMOTE_PATH)?.let { initialPath ->
+            currentRemotePath = initialPath
+        }
+
         setupToolbar()
         setupSFTPManager()
         setupFileAdapters()
         setupTransferAdapter()
         setupButtons()
         setupPathNavigation()
-        
+
         // Load initial directories
         loadLocalDirectory(currentLocalPath)
         loadRemoteDirectory(currentRemotePath)
@@ -137,7 +148,7 @@ class SFTPActivity : AppCompatActivity() {
                             app.database.connectionDao().getConnectionById(connectionId)?.getDisplayName()
                         } ?: connectionId.take(8)
                     } catch (_: Exception) { connectionId.take(8) }
-                    sftpTabs.add(SftpTab(connectionId, displayName, sftpManager, "/"))
+                    sftpTabs.add(SftpTab(connectionId, displayName, sftpManager, currentRemotePath))
                     activeSftpTabIndex = 0
                     rebuildSftpTabsStrip()
                     loadRemoteDirectory(currentRemotePath)
