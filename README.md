@@ -135,7 +135,7 @@ Download from [Releases](https://github.com/tabssh/android/releases):
 
 ### F-Droid
 
-Submission metadata is prepared in `fdroid-submission/`. Listing pending review.
+Submission metadata lives in `metadata/`; run `./scripts/prepare-fdroid-submission.sh` to bundle it for upload. Listing pending review.
 
 ### Requirements
 
@@ -285,7 +285,7 @@ android/
 ├── .github/workflows/  # CI/CD (ci, dev-builds, mosh-binaries, release)
 ├── docker/             # Dockerfile (toolchain image), docker-compose.yml
 ├── scripts/            # Build and automation scripts
-├── fdroid-submission/  # F-Droid metadata
+├── metadata/           # F-Droid metadata
 ├── Makefile
 └── release.txt         # Version pin (1.0.0)
 ```
