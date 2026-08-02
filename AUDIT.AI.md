@@ -73,10 +73,10 @@ security-behavior and large-refactor items are logged for a user decision.
   (debug-only per-host exceptions allowed). NEEDS CARE: app supports Telnet
   (raw-socket plaintext, not governed by NSC) and possibly non-TLS hypervisor
   HTTP — verify a false default won't break intended cleartext before adding.
-- [ ] tests: JVM unit tests live under `app/src/test/java/com/tabssh/...`
-  (wrong directory) while correctly declaring `package io.github.tabssh.*`.
-  PART 3 says test package = {app_id}. Move files into
-  `app/src/test/java/io/github/tabssh/...` to match package/dir convention.
+- [x] tests: JVM unit tests lived under `app/src/test/java/com/tabssh/...`
+  while declaring `package io.github.tabssh.*`. — FIXED: all 9 misplaced
+  test files moved to `app/src/test/java/io/github/tabssh/...`; full unit
+  test suite re-run green after the move.
 
 ## Pass 6: Code Flow Trace
 
