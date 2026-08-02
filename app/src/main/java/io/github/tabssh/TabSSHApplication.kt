@@ -251,6 +251,10 @@ class TabSSHApplication : Application() {
             // port-forward, multi-host dashboard, SFTP, performance.
             wireGlobalHostKeyCallbacks()
             wireGlobalNotifications()
+            // One-shot sweep: blank any legacy plaintext hypervisors.password
+            // rows now instead of waiting for each row's next retrieve().
+            io.github.tabssh.crypto.storage.HypervisorPasswordStore
+                .sweepLegacyPlaintext(this@TabSSHApplication)
             // Re-register periodic sync work on every cold start. WorkManager's
             // DB survives process death but can be wiped by reinstall or system
             // maintenance. Re-registering is idempotent when

@@ -23,10 +23,13 @@ security-behavior and large-refactor items are logged for a user decision.
   TOFU-pin-on-first-cert changes security-visible behavior (would prompt on a
   changed cert where it currently accepts silently). File:
   `crypto/tls/HypervisorTrustManagerFactory.kt:72-100`.
-- [ ] crypto/storage: legacy plaintext `hypervisors.password` column is only
-  blanked lazily on first access (HypervisorPasswordStore.kt:180-197,219-231).
-  A pre-existing plaintext password can linger in Room until the row is next
-  read. Consider a one-shot migration sweep to blank all legacy rows.
+- [x] crypto/storage: legacy plaintext `hypervisors.password` column was only
+  blanked lazily on first access. — FIXED: added
+  `HypervisorPasswordStore.sweepLegacyPlaintext()` — a startup sweep (run
+  from TabSSHApplication's background init) that migrates every remaining
+  plaintext row into the Keystore and blanks the column. Keystore wins when
+  an alias already holds a newer secret; failed writes leave the row for
+  retry; re-runs each cold start to catch backup-restored plaintext.
 
 ## Pass 2: Code Quality
 

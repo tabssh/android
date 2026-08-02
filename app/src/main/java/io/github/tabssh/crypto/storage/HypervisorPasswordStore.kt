@@ -231,6 +231,53 @@ object HypervisorPasswordStore {
             ok
         }
 
+    /**
+     * One-shot startup sweep: migrate EVERY row that still carries a legacy
+     * plaintext `hypervisors.password` value into the Keystore and blank the
+     * column, instead of waiting for the row's next [retrieve]. Runs on each
+     * cold start (cheap single SELECT when nothing is left to do) so rows
+     * reintroduced with plaintext by a backup restore are also caught.
+     *
+     * Keystore wins: if an alias already holds a password (the user updated
+     * it since the plaintext was written), the DB value is discarded, not
+     * copied over the newer secret. A failed Keystore write leaves the row
+     * intact for the next sweep or lazy [retrieve].
+     */
+    suspend fun sweepLegacyPlaintext(context: Context) = withContext(Dispatchers.IO) {
+        val app = context.applicationContext as? TabSSHApplication ?: return@withContext
+        val dao = app.database.hypervisorDao()
+        val pm = app.securePasswordManager
+        val stale = try {
+            dao.getAllList().filter { it.password.isNotEmpty() }
+        } catch (e: Exception) {
+            Logger.w(TAG, "Legacy plaintext sweep could not list hypervisors", e)
+            return@withContext
+        }
+        for (row in stale) {
+            val alias = aliasFor(row.id)
+            try {
+                val existing = try { pm.retrievePassword(alias) } catch (e: Exception) {
+                    Logger.w(TAG, "Sweep retrievePassword($alias) threw — skipping row", e)
+                    continue
+                }
+                val ok = if (existing.isNullOrEmpty()) {
+                    pm.storePassword(alias, row.password, SecurePasswordManager.StorageLevel.ENCRYPTED)
+                } else {
+                    // Keystore already has a (newer) secret — just drop the plaintext.
+                    true
+                }
+                if (ok) {
+                    dao.update(row.copy(password = ""))
+                    Logger.i(TAG, "Sweep migrated legacy plaintext password for hypervisor id=${row.id}")
+                } else {
+                    Logger.w(TAG, "Sweep storePassword($alias) returned false — leaving row for retry")
+                }
+            } catch (e: Exception) {
+                Logger.w(TAG, "Sweep failed for hypervisor id=${row.id} — leaving row for retry", e)
+            }
+        }
+    }
+
     /** Delete the stored password — call from hypervisor delete paths. */
     suspend fun clear(context: Context, id: Long) {
         val app = context.applicationContext as? TabSSHApplication ?: return
