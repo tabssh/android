@@ -243,8 +243,24 @@ class PreferenceManager(private val context: Context) {
     }
     fun setFontSize(size: Float) = preferences.edit().putInt(KEY_FONT_SIZE, size.toInt()).apply()
     
-    fun getLineSpacing(): Float = getFloat(KEY_LINE_SPACING, 1.2f)
-    fun setLineSpacing(spacing: Float) = setFloat(KEY_LINE_SPACING, spacing)
+    // The terminal_line_spacing slot is owned by a SeekBarPreference, which
+    // persists an Int percent (100–200). getFloat() against that slot threw
+    // ClassCastException (broke backup export); a Float multiplier written by
+    // an older setLineSpacing would conversely crash the settings screen.
+    // Read whatever type is there and normalize to a multiplier (values > 10
+    // are percents); always write back as an Int percent.
+    fun getLineSpacing(): Float {
+        val multiplier = when (val raw = preferences.all[KEY_LINE_SPACING]) {
+            is Int -> raw / 100f
+            is Float -> if (raw > 10f) raw / 100f else raw
+            is String -> raw.toFloatOrNull()?.let { if (it > 10f) it / 100f else it } ?: 1.2f
+            else -> 1.2f
+        }
+        return multiplier.coerceIn(1.0f, 2.0f)
+    }
+    fun setLineSpacing(spacing: Float) = preferences.edit()
+        .putInt(KEY_LINE_SPACING, (spacing.coerceIn(1.0f, 2.0f) * 100).toInt())
+        .apply()
     
     fun getCursorStyle(): String = getString(KEY_CURSOR_STYLE, "bar") // Default to I-beam
     fun setCursorStyle(style: String) = setString(KEY_CURSOR_STYLE, style)
@@ -524,14 +540,6 @@ class PreferenceManager(private val context: Context) {
 
     fun setInt(key: String, value: Int) {
         preferences.edit().putInt(key, value).apply()
-    }
-    
-    private fun getFloat(key: String, defaultValue: Float): Float {
-        return preferences.getFloat(key, defaultValue)
-    }
-    
-    private fun setFloat(key: String, value: Float) {
-        preferences.edit().putFloat(key, value).apply()
     }
 
     internal fun getLong(key: String, defaultValue: Long): Long {
