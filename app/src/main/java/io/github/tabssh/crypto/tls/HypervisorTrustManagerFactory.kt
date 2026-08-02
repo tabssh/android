@@ -243,6 +243,7 @@ object HypervisorTrustManagerFactory {
             val leafSha = try {
                 (session.peerCertificates.firstOrNull() as? X509Certificate)?.let { sha256Hex(it.encoded) }
             } catch (e: Exception) {
+                Logger.w(TAG, "Could not hash peer leaf cert for $hostname — treating as non-system-trusted", e)
                 null
             }
             if (leafSha != null && systemTrustedLeaves.contains(leafSha)) {

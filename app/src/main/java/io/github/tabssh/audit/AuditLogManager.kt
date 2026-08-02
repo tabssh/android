@@ -83,7 +83,10 @@ class AuditLogManager(
         return try {
             val rm = context.getSystemService(Context.RESTRICTIONS_SERVICE) as? RestrictionsManager
             rm?.applicationRestrictions?.takeIf { !it.isEmpty }
-        } catch (_: Exception) { null }
+        } catch (e: Exception) {
+            Logger.w("AuditLogManager", "Could not load MDM restrictions bundle", e)
+            null
+        }
     }
 
     /** True if an MDM has pushed `mdm_audit_enabled = true`. */

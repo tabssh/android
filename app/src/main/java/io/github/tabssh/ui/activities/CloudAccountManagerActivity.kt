@@ -298,7 +298,11 @@ class CloudAccountManagerActivity : AppCompatActivity() {
             val credsJson = withContext(Dispatchers.IO) {
                 app.securePasswordManager.retrievePassword(hostCredKey(acct.id, inst.id))
             }
-            val creds = credsJson?.let { runCatching { JSONObject(it) }.getOrNull() }
+            val creds = credsJson?.let {
+                runCatching { JSONObject(it) }
+                    .onFailure { e -> Logger.w("CloudAccountManager", "Stored instance credentials JSON is corrupt — falling back to defaults", e) }
+                    .getOrNull()
+            }
             val username   = creds?.optString("username").takeIf { !it.isNullOrBlank() } ?: "root"
             val password   = creds?.optString("password").takeIf { !it.isNullOrBlank() }
             val identityId = creds?.optString("identityId").takeIf { !it.isNullOrBlank() }
@@ -388,7 +392,11 @@ class CloudAccountManagerActivity : AppCompatActivity() {
                 val ids = app.database.identityDao().getAllIdentitiesList()
                 c to ids
             }
-            val existing = credsJson?.let { runCatching { JSONObject(it) }.getOrNull() }
+            val existing = credsJson?.let {
+                runCatching { JSONObject(it) }
+                    .onFailure { e -> Logger.w("CloudAccountManager", "Stored instance credentials JSON is corrupt — showing empty form", e) }
+                    .getOrNull()
+            }
 
             val dp  = resources.displayMetrics.density
             val ctx = this@CloudAccountManagerActivity

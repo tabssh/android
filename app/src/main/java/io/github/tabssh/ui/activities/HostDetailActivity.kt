@@ -271,6 +271,7 @@ class HostDetailActivity : AppCompatActivity() {
             while (true) {
                 if (!ssh.isConnected()) break
                 val r = runCatching { collector.collectMetrics() }
+                    .onFailure { e -> Logger.w("HostDetailActivity", "Metrics collection threw — keeping last values", e) }
                 val metrics = r.getOrNull()?.getOrNull()
                 runOnUiThread { if (metrics != null) updateMetrics(metrics) }
                 delay(REFRESH_MS)

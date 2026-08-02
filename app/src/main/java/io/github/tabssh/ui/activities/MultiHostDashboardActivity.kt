@@ -967,6 +967,7 @@ class MultiHostDashboardActivity : AppCompatActivity() {
                     break   // fall back to the outer reconnect loop
                 }
                 val r = runCatching { collector.collectMetrics() }
+                    .onFailure { e -> Logger.w("MultiHostDashboard", "Metrics collection threw for ${profile.name}", e) }
                 withContext(Dispatchers.Main) {
                     if (r.isSuccess) {
                         r.getOrNull()?.let { result ->

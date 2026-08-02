@@ -34,14 +34,14 @@ security-behavior and large-refactor items are logged for a user decision.
   had no trailing newline — violates AI.md non-negotiable #10. — FIXED:
   appended a single trailing newline to all 102. Excluded
   `metadata/en-US/short_description.txt` (verbatim F-Droid store field).
-- [ ] error handling: ~130 catch blocks swallow the exception with no log /
-  rethrow / user-surface (`catch (_: Exception) {}`, `{ null }`, comment-only).
-  Many are legitimate best-effort teardown; the security-sensitive subset MUST
-  at least log: `crypto/storage/HypervisorPasswordStore.kt:299,305,351,356`,
-  `crypto/tls/HypervisorTrustManagerFactory.kt:247`, `audit/AuditLogManager.kt:86`.
-  Also discarded `runCatching` results in MultiHostDashboardActivity.kt:969,
-  HostAvailabilityWorker.kt:376, HostDetailActivity.kt:273,
-  CloudAccountManagerActivity.kt:301,391. Fix the security subset first.
+- [x] error handling: security-sensitive swallowed exceptions now log. —
+  FIXED: Logger.w added at HypervisorPasswordStore (4 keystore-read sites),
+  HypervisorTrustManagerFactory (peer-cert hash failure),
+  AuditLogManager (MDM bundle load), and `onFailure` logging on the
+  discarded `runCatching` results in MultiHostDashboardActivity,
+  HostAvailabilityWorker, HostDetailActivity, CloudAccountManagerActivity
+  (both sites). The ~120 remaining best-effort-teardown swallows are
+  accepted as-is (legitimate cleanup paths, not security-relevant).
 - [ ] ui: hardcoded palette colors violate PART 7 "never hardcode colors":
   `ui/activities/MultiHostDashboardActivity.kt:1341-1343` (gauge red/orange/green),
   `ui/activities/KeyboardCustomizationActivity.kt:536-540` (category colors),

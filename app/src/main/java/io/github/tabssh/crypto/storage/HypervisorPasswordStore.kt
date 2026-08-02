@@ -296,13 +296,19 @@ object HypervisorPasswordStore {
         val pm = app.securePasswordManager
         val current = try {
             pm.retrievePassword("$OCI_KEY_ACCOUNT_PREFIX$accountId")
-        } catch (_: Exception) { null }
+        } catch (e: Exception) {
+            Logger.w(TAG, "retrieveOciAccountKey($accountId) threw", e)
+            null
+        }
         if (!current.isNullOrBlank()) return@withContext current
         // Lazy migration from legacy profile-keyed alias
         if (legacyProfileId != null) {
             val legacy = try {
                 pm.retrievePassword("oci_private_key_$legacyProfileId")
-            } catch (_: Exception) { null }
+            } catch (e: Exception) {
+                Logger.w(TAG, "retrieveOciAccountKey legacy read (profile $legacyProfileId) threw", e)
+                null
+            }
             if (!legacy.isNullOrBlank()) {
                 try {
                     pm.storePassword(
@@ -348,12 +354,18 @@ object HypervisorPasswordStore {
         val pm = app.securePasswordManager
         val current = try {
             pm.retrievePassword("$OCI_PASS_ACCOUNT_PREFIX$accountId")
-        } catch (_: Exception) { null }
+        } catch (e: Exception) {
+            Logger.w(TAG, "retrieveOciAccountPassphrase($accountId) threw", e)
+            null
+        }
         if (!current.isNullOrBlank()) return@withContext current
         if (legacyProfileId != null) {
             val legacy = try {
                 pm.retrievePassword("oci_passphrase_$legacyProfileId")
-            } catch (_: Exception) { null }
+            } catch (e: Exception) {
+                Logger.w(TAG, "retrieveOciAccountPassphrase legacy read (profile $legacyProfileId) threw", e)
+                null
+            }
             if (!legacy.isNullOrBlank()) {
                 try {
                     pm.storePassword(

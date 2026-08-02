@@ -374,6 +374,7 @@ class HostAvailabilityWorker(
         if (!ssh.isConnected()) return
 
         val result = runCatching { MetricsCollector(ssh).collectMetrics() }
+            .onFailure { e -> Logger.w(TAG, "Metrics collection threw for ${profile.name} — skipping threshold check", e) }
         val metrics = result.getOrNull()?.getOrNull() ?: return
 
         if (!notificationsEnabled) return
