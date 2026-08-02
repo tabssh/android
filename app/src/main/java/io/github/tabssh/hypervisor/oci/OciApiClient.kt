@@ -80,7 +80,7 @@ class OciApiClient(
 
     // Separate HTTP clients so each endpoint's TLS session has its own pin.
     // Bounded timeouts so a stalled OCI endpoint cannot hang the UI forever.
-    private val identityClient: OkHttpClient = OkHttpClient.Builder()
+    private val identityClient: OkHttpClient = io.github.tabssh.network.SharedHttpClient.client.newBuilder()
         .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
         .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
         .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
@@ -93,7 +93,7 @@ class OciApiClient(
         .addInterceptor(signer.asInterceptor())
         .build()
 
-    private val iaasClient: OkHttpClient = OkHttpClient.Builder()
+    private val iaasClient: OkHttpClient = io.github.tabssh.network.SharedHttpClient.client.newBuilder()
         .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
         .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
         .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)

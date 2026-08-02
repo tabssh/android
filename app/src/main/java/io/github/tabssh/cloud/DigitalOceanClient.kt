@@ -30,7 +30,7 @@ class DigitalOceanClient : CloudProvider {
 
     override val type = CloudProviderType.DIGITALOCEAN
 
-    private val http: OkHttpClient = OkHttpClient.Builder()
+    private val http: OkHttpClient = io.github.tabssh.network.SharedHttpClient.client.newBuilder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .writeTimeout(20, TimeUnit.SECONDS)

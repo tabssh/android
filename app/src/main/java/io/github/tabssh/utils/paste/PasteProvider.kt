@@ -17,7 +17,7 @@ interface PasteProvider {
 }
 
 private val sharedHttpClient: OkHttpClient by lazy {
-    OkHttpClient.Builder()
+    io.github.tabssh.network.SharedHttpClient.client.newBuilder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)

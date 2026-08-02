@@ -84,12 +84,20 @@ security-behavior and large-refactor items are logged for a user decision.
 
 ## Pass 6: Code Flow Trace
 
-- [ ] network: PART 9 requires ONE shared HTTP client with explicit timeouts and
+- [x] network: PART 9 requires ONE shared HTTP client with explicit timeouts and
   `User-Agent: {project_name}/{version}`. Instead ~13 REST/console clients each
   build their own `OkHttpClient.Builder()` (e.g. ProxmoxApiClient.kt:61,
   HetznerClient.kt:29, and every file in `cloud/` + `hypervisor/*/`). Consolidate
   onto one app-scoped OkHttp instance (per-request auth/timeout overrides where
-  needed) and set a project User-Agent. Verify timeouts are explicit on each.
+  needed) and set a project User-Agent. Verify timeouts are explicit on each. —
+  FIXED: added `io.github.tabssh.network.SharedHttpClient` (connect 15s /
+  read 30s / write 30s, `User-Agent: tabssh/{BuildConfig.VERSION_NAME}`
+  interceptor). All 14 construction sites (Hetzner, DigitalOcean, Vultr,
+  Azure, AwsEc2, Gcp, Linode, Proxmox, XCPng, XenOrchestra, VMware, Oci x2,
+  ConsoleWebSocket, PasteProvider) now derive via
+  `SharedHttpClient.client.newBuilder()`, sharing one connection pool and
+  dispatcher while keeping each site's own TLS pinning/trust-all setup and
+  timeout/callTimeout overrides unchanged. `make check` passes.
 
 ## Completed
 - crypto: AES-256 key size enforced on both Keystore key generators.

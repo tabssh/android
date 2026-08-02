@@ -49,7 +49,7 @@ class AzureVmClient : CloudProvider {
 
     override val type = CloudProviderType.AZURE
 
-    private val http: OkHttpClient = OkHttpClient.Builder()
+    private val http: OkHttpClient = io.github.tabssh.network.SharedHttpClient.client.newBuilder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)

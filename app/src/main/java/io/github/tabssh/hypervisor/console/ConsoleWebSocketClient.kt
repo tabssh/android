@@ -183,7 +183,7 @@ class ConsoleWebSocketClient(
     fun getCapturedCertSha256(): String? = capturedPin.sha256
 
     init {
-        val builder = OkHttpClient.Builder()
+        val builder = io.github.tabssh.network.SharedHttpClient.client.newBuilder()
             .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .writeTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
