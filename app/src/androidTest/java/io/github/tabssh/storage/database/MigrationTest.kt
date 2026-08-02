@@ -18,8 +18,8 @@ import org.junit.Assert.assertTrue
  * matches the declared entity snapshot. The chain test exercises both
  * migrations in sequence.
  *
- * Pre-v3 installs (v1, v2) are wiped by fallbackToDestructiveMigrationFrom
- * and have no schema JSON, so they are intentionally not covered here.
+ * Versions 1 and 2 never shipped to real users and have no schema JSON;
+ * v3 is the effective baseline, so they are intentionally not covered here.
  */
 @RunWith(AndroidJUnit4::class)
 class MigrationTest {

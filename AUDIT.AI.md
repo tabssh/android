@@ -51,12 +51,11 @@ security-behavior and large-refactor items are logged for a user decision.
 
 ## Pass 3: Logic and Correctness
 
-- [ ] storage/database: `TabSSHDatabase.kt:213` uses
-  `fallbackToDestructiveMigrationFrom(1, 2)`. PART 5 / non-negotiable #2 say
-  "Never destructive-migrate; no fallbackToDestructiveMigration in any variant."
-  Documented as pre-release-only (v1/v2 never shipped persisted data). Low real
-  risk but a literal deviation from an absolute rule — confirm v1/v2 were never
-  shipped to real users, else provide real 1→2→3 migrations.
+- [x] storage/database: `TabSSHDatabase.kt` used
+  `fallbackToDestructiveMigrationFrom(1, 2)`, a literal deviation from
+  non-negotiable #2. — FIXED (user confirmed v1/v2 never shipped to real
+  users): fallback call removed, kdoc and MigrationTest.kt comment updated;
+  v3 is the effective schema baseline.
 
 ## Pass 4: Documentation Completeness
 
