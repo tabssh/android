@@ -23,18 +23,18 @@ internal vocabulary doesn't lie.
 - **SPICE:** NDK + upstream `libspice-client-glib` + `libspice-protocol`, JNI wrapper. APK grows ~8–12 MB; all SPICE channels supported (display, inputs, cursor, playback, record, smartcard, usbredir).
 - **VMware:** VNC-via-vmx only (ESXi VMs configured with `RemoteDisplay.vnc.enabled = TRUE`). MKS/WMKS is out of scope — proprietary, no public spec, fragile across versions. Clear error when VNC is not enabled.
 
-## Current state (survey baseline)
+## Current state (updated 2026-08-06)
 
-| Hypervisor | Today | Target |
+| Hypervisor | Now | Remaining target |
 |---|---|---|
-| Proxmox | termproxy text + vncproxy VNC | + SPICE (spiceproxy) for `display=spice` VMs |
-| QEMU (direct) | Direct VNC works | unchanged |
-| libvirt (SSH) | VNC via `virsh vncdisplay` tunnel | + SPICE stream via libvirt |
-| XCP-ng (XAPI) | Text console only | + VNC console (`console.get_location` for VNC consoles) |
-| Xen Orchestra | Text only | + VNC console (XO REST `/vms/:id/vnc`) |
-| VMware | Stub — list/power only | + VNC-via-vmx direct connect to ESXi host:port |
-| TightVNC | Works (standard RFB Tight encoding) | unchanged |
-| Direct VNC | Works (TCP, VeNCrypt, X509) | + WSS variant for any host that exposes WebSocket VNC |
+| Proxmox | termproxy text + vncproxy VNC; spiceproxy code present | verify SPICE end-to-end (needs libspice prebuilts) |
+| QEMU (direct) | Direct VNC works | done |
+| libvirt (SSH) | VNC via `virsh vncdisplay` tunnel | + SPICE stream (`virsh domdisplay`) — NOT done |
+| XCP-ng (XAPI) | Text + VNC console (get_consoles / rfb) — shipped | done |
+| Xen Orchestra | Text + VNC console — shipped | done |
+| VMware | Stub — list/power only | + VNC-via-vmx direct connect to ESXi host:port — NOT done |
+| TightVNC | Works (standard RFB Tight encoding) | done |
+| Direct VNC | Works (TCP, VeNCrypt, X509) + WSS variant — shipped | done |
 
 ## RFB extension gaps (vs. current `PREFERRED_ENCODINGS`)
 
@@ -51,30 +51,30 @@ Gaps to close:
 
 ## Work items (dependency-ordered)
 
-Numbers reflect execution order. A task is "ready" only when all of its prerequisites are complete.
+Numbers reflect execution order. A task is "ready" only when all of its prerequisites are complete. Status as of 2026-08-06: `[SHIPPED]` / `[OPEN]`.
 
 ### Foundation (no SPICE dependency — can ship first)
 
-1. **Strategy chain refactor** — introduce `ConsoleStrategy` interface and `ConsoleStrategyChain.connect()` that tries each strategy in order; only the final failure surfaces to UI; intermediate failures are `Logger.i` only. Refactor existing Proxmox termproxy→vncproxy code to use it. *Files:* new `hypervisor/console/ConsoleStrategy.kt`, modify `HypervisorConsoleManager.kt`, `ProxmoxApiClient.kt`.
-2. **Server-class autodetection** — central `VncServerProfile` derived from desktop name + capability signals (ExtendedDesktopSize support, encoding list, security types). Replaces the inline `name.startsWith("QEMU (")` check shipped in `8e559a9b671f`. Adds: TigerVNC, TightVNC, RealVNC, x11vnc, UltraVNC, libvirt-built-in, Proxmox-vncproxy variants. *Files:* new `hypervisor/console/rfb/VncServerProfile.kt`, modify `RfbClient.kt`.
-3. **RFB extension polish** — verify ContinuousUpdates handshake, wire XVP dispatch, mid-session DesktopName re-detect, JPEG quality/compression-level emission gated on settings. Add TightPng to encoding list behind a pref. *Files:* `RfbClient.kt`, `RfbDecoder.kt`, `RfbConstants.kt`, new `settings/VncSettings.kt`.
-4. **XCP-ng VNC console** — extend `XCPngApiClient` to detect graphical-console VMs (XAPI `VM.get_consoles` returns refs; each has a `protocol` field — `rfb` vs `vt100`); return a `Graphical(RfbClient)` for `rfb` consoles. WebSocket transport same as text. *Files:* `XCPngApiClient.kt`, `HypervisorConsoleManager.kt`.
-5. **Xen Orchestra VNC console** — XO REST `/rest/v0/vms/:id/console` returns an upgrade-able WebSocket; detect `protocol=rfb`. *Files:* `XenOrchestraApiClient.kt`.
-6. **VMware VNC-via-vmx** — `VMwareApiClient.openConsole()` reads VM config for `RemoteDisplay.vnc.enabled` + `RemoteDisplay.vnc.port` + `RemoteDisplay.vnc.password`; opens direct TCP to ESXi host on that port; returns `RfbClient`. Clear error when VNC is not enabled. *Files:* `VMwareApiClient.kt`, `HypervisorConsoleManager.kt`.
-7. **Direct VNC + WSS variant** — `VncDirectConnector` already does TCP; add `connectWss(url, ...)` for hosts that expose RFB over WebSocket (some KasmVNC / novnc setups). *Files:* `VncDirectConnector.kt`.
+1. `[SHIPPED]` **Strategy chain refactor** — introduce `ConsoleStrategy` interface and `ConsoleStrategyChain.connect()` that tries each strategy in order; only the final failure surfaces to UI; intermediate failures are `Logger.i` only. Refactor existing Proxmox termproxy→vncproxy code to use it. *Files:* new `hypervisor/console/ConsoleStrategy.kt`, modify `HypervisorConsoleManager.kt`, `ProxmoxApiClient.kt`.
+2. `[SHIPPED]` **Server-class autodetection** — central `VncServerProfile` derived from desktop name + capability signals (ExtendedDesktopSize support, encoding list, security types). Replaces the inline `name.startsWith("QEMU (")` check shipped in `8e559a9b671f`. Adds: TigerVNC, TightVNC, RealVNC, x11vnc, UltraVNC, libvirt-built-in, Proxmox-vncproxy variants. *Files:* new `hypervisor/console/rfb/VncServerProfile.kt`, modify `RfbClient.kt`.
+3. `[SHIPPED]` **RFB extension polish** — verify ContinuousUpdates handshake, wire XVP dispatch, mid-session DesktopName re-detect, JPEG quality/compression-level emission gated on settings. Add TightPng to encoding list behind a pref. *Files:* `RfbClient.kt`, `RfbDecoder.kt`, `RfbConstants.kt`, new `settings/VncSettings.kt`.
+4. `[SHIPPED]` **XCP-ng VNC console** — extend `XCPngApiClient` to detect graphical-console VMs (XAPI `VM.get_consoles` returns refs; each has a `protocol` field — `rfb` vs `vt100`); return a `Graphical(RfbClient)` for `rfb` consoles. WebSocket transport same as text. *Files:* `XCPngApiClient.kt`, `HypervisorConsoleManager.kt`.
+5. `[SHIPPED]` **Xen Orchestra VNC console** — XO REST `/rest/v0/vms/:id/console` returns an upgrade-able WebSocket; detect `protocol=rfb`. *Files:* `XenOrchestraApiClient.kt`.
+6. `[OPEN]` **VMware VNC-via-vmx** — `VMwareApiClient.openConsole()` reads VM config for `RemoteDisplay.vnc.enabled` + `RemoteDisplay.vnc.port` + `RemoteDisplay.vnc.password`; opens direct TCP to ESXi host on that port; returns `RfbClient`. Clear error when VNC is not enabled. *Files:* `VMwareApiClient.kt`, `HypervisorConsoleManager.kt`.
+7. `[SHIPPED]` **Direct VNC + WSS variant** — `VncDirectConnector` already does TCP; add `connectWss(url, ...)` for hosts that expose RFB over WebSocket (some KasmVNC / novnc setups). *Files:* `VncDirectConnector.kt`.
 
 ### SPICE (gated on NDK build pipeline)
 
-8. **NDK + libspice build harness** — add `app/src/main/cpp/` with `CMakeLists.txt` that vendors `spice-protocol` (header-only) + `spice-gtk` (the GLib client). Cross-compile for `arm64-v8a`, `armeabi-v7a`, `x86_64`. Update `app/build.gradle` with `externalNativeBuild { cmake { ... } }`. Decide static vs. shared; prefer static to avoid the multi-`.so` shipping headache. *Files:* new `cpp/CMakeLists.txt`, `cpp/spice_jni.c`, modify `app/build.gradle`, possibly new `docker/Dockerfile.ndk` for reproducible builds.
-9. **SPICE JNI client** — minimal Kotlin facade `hypervisor/console/spice/SpiceClient.kt` mirroring `RfbClient`'s shape (`connect/disconnect/onConnected/onFramebufferUpdate/sendPointerEvent/sendKeyEvent`). Channels wired: main, display, inputs, cursor. *Files:* new `hypervisor/console/spice/`, JNI glue in `cpp/`.
-10. **SPICE-aware `VncView`** — rename to `RemoteDisplayView` or add a parallel `SpiceView` (same Canvas/Bitmap rendering, different event source). *Files:* `ui/views/`, `ui/activities/TabTerminalActivity.kt`.
-11. **Proxmox spiceproxy** — call `/nodes/{node}/qemu/{vmid}/spiceproxy`, parse the returned `.vv` config (host, port, ticket, TLS cert), feed to `SpiceClient`. *Files:* `ProxmoxApiClient.kt`.
-12. **libvirt SPICE stream** — `virsh domdisplay <vm>` returns `spice://host:port` for SPICE-configured VMs; tunnel over SSH the same way the VNC path does. *Files:* `LibvirtApiClient.kt`.
+8. `[OPEN]` **NDK + libspice build harness** — add `app/src/main/cpp/` with `CMakeLists.txt` that vendors `spice-protocol` (header-only) + `spice-gtk` (the GLib client). Cross-compile for `arm64-v8a`, `armeabi-v7a`, `x86_64`. Update `app/build.gradle` with `externalNativeBuild { cmake { ... } }`. Decide static vs. shared; prefer static to avoid the multi-`.so` shipping headache. *Files:* new `cpp/CMakeLists.txt`, `cpp/spice_jni.c`, modify `app/build.gradle`, possibly new `docker/Dockerfile.ndk` for reproducible builds.
+9. `[OPEN]` **SPICE JNI client** — minimal Kotlin facade `hypervisor/console/spice/SpiceClient.kt` mirroring `RfbClient`'s shape (`connect/disconnect/onConnected/onFramebufferUpdate/sendPointerEvent/sendKeyEvent`). Channels wired: main, display, inputs, cursor. *Files:* new `hypervisor/console/spice/`, JNI glue in `cpp/`.
+10. `[PARTIAL]` **SPICE-aware `VncView`** — rename to `RemoteDisplayView` or add a parallel `SpiceView` (same Canvas/Bitmap rendering, different event source). *Files:* `ui/views/`, `ui/activities/TabTerminalActivity.kt`.
+11. `[PARTIAL]` **Proxmox spiceproxy** — call `/nodes/{node}/qemu/{vmid}/spiceproxy`, parse the returned `.vv` config (host, port, ticket, TLS cert), feed to `SpiceClient`. *Files:* `ProxmoxApiClient.kt`.
+12. `[OPEN]` **libvirt SPICE stream** — `virsh domdisplay <vm>` returns `spice://host:port` for SPICE-configured VMs; tunnel over SSH the same way the VNC path does. *Files:* `LibvirtApiClient.kt`.
 
 ### Autodetect + silent-fallback semantics (final pass)
 
-13. **Hypervisor connector chain** — every connector returns a list of `ConsoleStrategy` candidates ranked by likely-to-work. The manager runs the chain; per-strategy failure emits `Logger.i("strategy X failed: ..."); next`; only the final exhaustion surfaces a UI error. Replaces the current hardcoded "termproxy then vncproxy" pair with a generic ordered chain. *Files:* `HypervisorConsoleManager.kt`, every `*ApiClient.kt`.
-14. **UI: progress vs. error distinction** — replace the current "Reconnecting without resize…" toast pattern with a single progress overlay that reports the active strategy by name (low-key, debug log only unless final). User sees one spinner; the spinner text updates as we fall through. *Files:* `TabTerminalActivity.kt`.
+13. `[OPEN]` **Hypervisor connector chain** — every connector returns a list of `ConsoleStrategy` candidates ranked by likely-to-work. The manager runs the chain; per-strategy failure emits `Logger.i("strategy X failed: ..."); next`; only the final exhaustion surfaces a UI error. Replaces the current hardcoded "termproxy then vncproxy" pair with a generic ordered chain. *Files:* `HypervisorConsoleManager.kt`, every `*ApiClient.kt`.
+14. `[OPEN]` **UI: progress vs. error distinction** — replace the current "Reconnecting without resize…" toast pattern with a single progress overlay that reports the active strategy by name (low-key, debug log only unless final). User sees one spinner; the spinner text updates as we fall through. *Files:* `TabTerminalActivity.kt`.
 
 ## Definition of done
 
