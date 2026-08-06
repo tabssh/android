@@ -175,6 +175,11 @@ keystore.jks
 mosh/out/
 app/src/main/jniLibs/*/libmosh-client.so
 
+# SPICE native library — cross-compiled by spice-libs.yml, fetched from GH
+# releases at build time (see scripts/fetch-spice-libs.sh + spice/Dockerfile).
+spice/out/
+app/src/main/jniLibs/*/libtabssh_native.so
+
 # Nerd Fonts — fetched from upstream nerd-fonts at build time
 # (see scripts/fetch-fonts.sh). Same idiom as mosh: 24 MB total, TTFs
 # compress poorly under git pack, so we keep them out of repo history

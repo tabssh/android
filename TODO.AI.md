@@ -29,6 +29,30 @@ direct VNC WSS) have shipped. Still open:
 - SPICE consumer facade (PLAN item 9): `hypervisor/console/spice/SpiceClient.kt`
   Kotlin facade over `SpiceLoader` not yet wired. `ui/views/SpiceView.kt`
   exists but is not driven end-to-end.
+- SPICE cross-compile recipe: RESOLVED for x86_64 (verified locally in
+  Docker — `spice/out/x86_64/libtabssh_native.so`, 11 MB, stripped, all 9
+  `Java_..._SpiceClient_native*` + `nativeIsSpiceAvailable` symbols exported,
+  `readelf -d` NEEDED = only libm/libdl/liblog/libandroid/libc, i.e. the
+  whole SPICE stack is static-linked). Fixes applied: pkg-config search path
+  now includes `share/pkgconfig` (spice-protocol installs its .pc there);
+  `python3-six`/`python3-pyparsing` for spice-common codegen; static
+  libjpeg-turbo (spice-gtk requires libjpeg); GStreamer patched out (see the
+  limitation below). REMAINING: run `spice-libs.yml` so CI builds the other
+  three ABIs (arm64-v8a, armeabi-v7a, x86) and publishes the first
+  `spice-libs-0.42.0` prerelease — only x86_64 is proven; the 32-bit
+  armeabi-v7a build in particular may surface ABI-specific issues.
+- SPICE GStreamer omission (durable record of a deliberate limitation):
+  spice-gtk 0.42 mandates the full gstreamer-1.0 stack, which cannot be
+  static-linked into the single self-contained `.so` without pulling in the
+  entire GStreamer + plugin tree (defeats the mosh-parity model). The build
+  patches GStreamer out (`spice/build-android.sh` + `spice/cpp/spice_gst_stubs.c`)
+  and relies on the builtin MJPEG decoder (libjpeg). Consequences to revisit
+  if a user needs them: (a) non-MJPEG SPICE video streams (VP8/VP9/H264/H265)
+  do not decode — the stream is dropped, the surface still gets ordinary draw
+  commands; (b) SPICE audio playback/record is a no-op (already out of scope
+  per PLAN.AI.md). If full-motion video streaming becomes a requirement, the
+  options are cross-building a static GStreamer subset with manual plugin
+  registration, or an alternative in-tree video decoder.
 - VMware VNC-via-vmx (PLAN item 6): not implemented — no `RemoteDisplay.vnc`
   handling in `hypervisor/vmware/VMwareApiClient.kt`.
 - libvirt SPICE domdisplay (PLAN item 12): not implemented — no `domdisplay`

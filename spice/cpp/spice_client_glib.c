@@ -48,6 +48,7 @@
 #include <glib.h>
 #include <glib-object.h>
 #include <spice-client.h>
+#include <spice/vd_agent.h>
 
 #define LOG_TAG "tabssh_spice"
 #define LOGI(fmt, ...) __android_log_print(ANDROID_LOG_INFO,  LOG_TAG, fmt, ##__VA_ARGS__)

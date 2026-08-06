@@ -9,9 +9,13 @@
 # so the APK needs no additional runtime .so and runs no native toolchain
 # at package time.
 #
-# Dependency chain (build order): zlib → libffi → pcre2 → glib →
-# pixman → openssl → opus → json-glib → spice-protocol → spice-gtk
-# (spice-client-glib-2.0) → link libtabssh_native.so.
+# Dependency chain (build order): zlib → libffi → pcre2 → libiconv → glib →
+# pixman → openssl → opus → libjpeg-turbo → json-glib → spice-protocol →
+# spice-gtk (spice-client-glib-2.0) → link libtabssh_native.so.
+#
+# libiconv is needed because Bionic has no iconv() at API 26 (added at 28);
+# meson's dependency('iconv') in glib's meson.build finds neither a builtin
+# nor a system iconv otherwise, so glib configure fails.
 #
 # Total disk: ~6 GB during build. Time: ~40-60 min per ABI on a modern
 # x86 box (glib + spice-gtk dominate).
@@ -43,6 +47,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
     python3-setuptools \
+    python3-packaging \
+    python3-six \
+    python3-pyparsing \
     git \
     perl \
     wget \
@@ -69,10 +76,12 @@ WORKDIR /opt/sources
 RUN wget -q https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz && \
     wget -q https://github.com/libffi/libffi/releases/download/v3.4.6/libffi-3.4.6.tar.gz && \
     wget -q https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.44/pcre2-10.44.tar.gz && \
+    wget -q https://ftp.gnu.org/gnu/libiconv/libiconv-1.18.tar.gz && \
     wget -q https://download.gnome.org/sources/glib/2.80/glib-2.80.4.tar.xz && \
     wget -q https://www.cairographics.org/releases/pixman-0.43.4.tar.gz && \
     wget -q https://www.openssl.org/source/openssl-3.0.13.tar.gz && \
     wget -q https://downloads.xiph.org/releases/opus/opus-1.5.2.tar.gz && \
+    wget -q https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.0.4/libjpeg-turbo-3.0.4.tar.gz && \
     wget -q https://download.gnome.org/sources/json-glib/1.8/json-glib-1.8.0.tar.xz && \
     wget -q https://www.spice-space.org/download/releases/spice-protocol-0.14.4.tar.xz && \
     wget -q https://www.spice-space.org/download/gtk/spice-gtk-0.42.tar.xz
