@@ -66,7 +66,7 @@ RUN wget -q https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-
 
 # Pre-cache source tarballs so repeat builds don't re-download.
 WORKDIR /opt/sources
-RUN wget -q https://zlib.net/zlib-1.3.1.tar.gz && \
+RUN wget -q https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz && \
     wget -q https://github.com/libffi/libffi/releases/download/v3.4.6/libffi-3.4.6.tar.gz && \
     wget -q https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.44/pcre2-10.44.tar.gz && \
     wget -q https://download.gnome.org/sources/glib/2.80/glib-2.80.4.tar.xz && \
