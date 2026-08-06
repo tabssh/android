@@ -162,6 +162,17 @@ jobs:
         chmod +x scripts/fetch-mosh-binaries.sh
         TABSSH_REPO="${{ github.repository }}" scripts/fetch-mosh-binaries.sh
 
+    - name: Fetch latest SPICE native libraries
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Pulls latest spice-libs-X.Y.Z release assets and drops them into
+        # app/src/main/jniLibs/<abi>/libtabssh_native.so. Won't fail the build
+        # if no release exists yet — SpiceLoader gates on load and falls back
+        # to VNC (workflow `spice-libs.yml` publishes these manually).
+        chmod +x scripts/fetch-spice-libs.sh
+        TABSSH_REPO="${{ github.repository }}" scripts/fetch-spice-libs.sh
+
     - name: Fetch Nerd Fonts
       run: |
         chmod +x scripts/fetch-fonts.sh

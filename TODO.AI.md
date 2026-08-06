@@ -16,11 +16,19 @@ features.** Owned by `PLAN.AI.md`; tracked in detail there. Foundation items
 (strategy chain, VncServerProfile, RFB polish, XCP-ng VNC, Xen Orchestra VNC,
 direct VNC WSS) have shipped. Still open:
 
-- SPICE end-to-end (PLAN items 8–12): `app/libs/spice/` has no vendored
-  libspice prebuilts, so `hypervisor/spice/SpiceLoader.isSpiceAvailable()`
-  returns false and every path falls back to VNC. Facade (`SpiceClient.kt`),
-  JNI C (`app/src/main/cpp/spice_client_glib.c`), and `ui/views/SpiceView.kt`
-  exist but are not functional in shipping builds.
+- SPICE delivery pipeline (PLAN item 8): DONE — mosh-parity out-of-tree
+  native build is in place. `spice/Dockerfile` + `spice/build-android.sh`
+  cross-compile the libspice chain into one `libtabssh_native.so` per ABI;
+  `.github/workflows/spice-libs.yml` publishes them; `scripts/fetch-spice-libs.sh`
+  drops them into `app/src/main/jniLibs/<abi>/` at build time (wired into
+  `make build` + dev-builds/release CI). `app/build.gradle` runs no native
+  toolchain. REMAINING: run `spice-libs.yml` on CI to shake out the meson
+  cross-build and publish the first `spice-libs-*` release; until then
+  `SpiceLoader.isSpiceAvailable()` returns false and every path falls back
+  to VNC (by design).
+- SPICE consumer facade (PLAN item 9): `hypervisor/console/spice/SpiceClient.kt`
+  Kotlin facade over `SpiceLoader` not yet wired. `ui/views/SpiceView.kt`
+  exists but is not driven end-to-end.
 - VMware VNC-via-vmx (PLAN item 6): not implemented — no `RemoteDisplay.vnc`
   handling in `hypervisor/vmware/VMwareApiClient.kt`.
 - libvirt SPICE domdisplay (PLAN item 12): not implemented — no `domdisplay`

@@ -32,7 +32,7 @@ BLUE := \033[0;34m
 YELLOW := \033[1;33m
 NC := \033[0m
 
-.PHONY: build check clean install logs image fetch-mosh fetch-fonts adb-reconnect help
+.PHONY: build check clean install logs image fetch-mosh fetch-spice fetch-fonts adb-reconnect help
 
 .DEFAULT_GOAL := help
 
@@ -41,7 +41,7 @@ help: ## Show available targets
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@grep -E -- '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(BLUE)%-10s$(NC) %s\n", $$1, $$2}'
 
-build: _ensure-image fetch-mosh fetch-fonts ## Build debug APKs
+build: _ensure-image fetch-mosh fetch-spice fetch-fonts ## Build debug APKs
 	@echo -e "$(GREEN)🚀 Building TabSSH v$(VERSION)...$(NC)"
 	@mkdir -p $(GRADLE_CACHE)
 	@$(DOCKER_RUN) $(BUILD_IMAGE) ./gradlew clean assembleDebug --no-daemon --build-cache
@@ -52,6 +52,9 @@ build: _ensure-image fetch-mosh fetch-fonts ## Build debug APKs
 
 fetch-mosh: ## Fetch mosh-client binaries from latest GH release
 	@scripts/fetch-mosh-binaries.sh
+
+fetch-spice: ## Fetch SPICE native libs (libtabssh_native.so) from latest GH release
+	@scripts/fetch-spice-libs.sh
 
 fetch-fonts: ## Fetch Nerd Fonts (skip-if-present, --force to refresh)
 	@scripts/fetch-fonts.sh

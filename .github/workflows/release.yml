@@ -11,9 +11,10 @@ name: Production Release
 # (`.github/workflows/development-builds.yml`) which produces prerelease
 # builds named `devel-{commit}` on every push to develop branches.
 #
-# `mosh-binaries.yml` produces a third channel that is build-infra only:
-# its releases are marked prerelease and don't appear on the repo's main
-# page — they're consumed at build time by `scripts/fetch-mosh-binaries.sh`.
+# `mosh-binaries.yml` and `spice-libs.yml` produce build-infra-only channels:
+# their releases are marked prerelease and don't appear on the repo's main
+# page — they're consumed at build time by `scripts/fetch-mosh-binaries.sh`
+# and `scripts/fetch-spice-libs.sh` respectively.
 # ─────────────────────────────────────────────────────────────────────────
 
 on:
@@ -131,6 +132,17 @@ jobs:
         # publishes them on a monthly cadence).
         chmod +x scripts/fetch-mosh-binaries.sh
         TABSSH_REPO="${{ github.repository }}" scripts/fetch-mosh-binaries.sh
+
+    - name: Fetch latest SPICE native libraries
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Pulls latest spice-libs-X.Y.Z release assets and drops them into
+        # app/src/main/jniLibs/<abi>/libtabssh_native.so. Won't fail the build
+        # if no release exists yet — SpiceLoader gates on load and falls back
+        # to VNC (workflow `spice-libs.yml` publishes these manually).
+        chmod +x scripts/fetch-spice-libs.sh
+        TABSSH_REPO="${{ github.repository }}" scripts/fetch-spice-libs.sh
 
     - name: Fetch Nerd Fonts
       run: |

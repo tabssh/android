@@ -6,17 +6,19 @@ import io.github.tabssh.utils.logging.Logger
  * Gatekeeper for the SPICE native library.
  *
  * Loads `libtabssh_native.so` exactly once and reports whether it was
- * built against a real libspice-client-glib prebuilt or the empty
- * scaffold that ships in fresh clones (see `libs/spice/README.md`).
+ * built against a real libspice-client-glib prebuilt or is simply
+ * absent from this APK. The library is cross-compiled out-of-tree by
+ * the `spice-libs.yml` CI workflow (see `spice/Dockerfile` +
+ * `spice/build-android.sh`), published as a prerelease, and dropped
+ * into `app/src/main/jniLibs/<abi>/libtabssh_native.so` at build time
+ * by `scripts/fetch-spice-libs.sh`. When no such release exists yet the
+ * APK simply ships without the library.
+ *
  * Every SPICE code path — connector, JNI bindings, display view —
  * MUST call [isSpiceAvailable] first and take the VNC fallback when
  * it returns false. This lets a single APK ship to both
  * SPICE-enabled and SPICE-disabled builds without any [UnsatisfiedLinkError]
- * at runtime.
- *
- * Task #12 lands the loader alongside the CMake harness; the real
- * JNI bindings (connect, disconnect, framebuffer callbacks) land in
- * task #13 and hang off this same class.
+ * at runtime: a missing or scaffold-only library degrades to VNC.
  */
 object SpiceLoader {
     private const val TAG = "SpiceLoader"
@@ -61,7 +63,7 @@ object SpiceLoader {
     /**
      * Returns 1 when the native library was compiled with
      * `TABSSH_SPICE_AVAILABLE=1`, 0 otherwise. Implemented in
-     * `app/src/main/cpp/spice_client.c`.
+     * `spice/cpp/spice_client.c`.
      */
     @JvmStatic
     private external fun nativeIsSpiceAvailable(): Int

@@ -67,12 +67,6 @@ android {
     namespace 'io.github.tabssh'
     compileSdk 35
 
-    // Pin the NDK so the CMake/JNI build resolves the same toolchain in CI
-    // (the ghcr.io/tabssh/android:build image bakes this exact version) and in
-    // F-Droid reproducible builds, instead of letting AGP pick — and lazily
-    // download — whatever its default happens to be at build time.
-    ndkVersion '26.1.10909125'
-
     // Production-release detection. A clean semver "x.x.x" (e.g. "1.0.0",
     // "1.2.3") is a production release — debug logging stays off so end users
     // don't pay the I/O cost or risk leaking diagnostic detail. Anything else
@@ -111,21 +105,17 @@ android {
         // Enable vector drawables
         vectorDrawables.useSupportLibrary = true
 
-        // Multi-architecture support for all Android devices
+        // Multi-architecture support for all Android devices. This also
+        // scopes which per-ABI jniLibs are packaged — including the SPICE
+        // native library `libtabssh_native.so`, which is cross-compiled
+        // out-of-tree (see spice/Dockerfile + spice/build-android.sh) and
+        // fetched into app/src/main/jniLibs/<abi>/ by
+        // scripts/fetch-spice-libs.sh at build time, exactly like the mosh
+        // client. The APK build itself runs no native toolchain; when the
+        // prebuilt is absent the SpiceLoader gate disables SPICE at runtime
+        // and falls back to VNC.
         ndk {
             abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64', 'x86'
-        }
-
-        // Native build (SPICE client + JNI shim).
-        // Task #12 lands the harness only — the CMake file compiles a
-        // JNI stub when no SPICE prebuilts are present under
-        // libs/spice/<abi>/, so the AGP build stays green on a fresh
-        // clone. Real SPICE bindings land in tasks #13/#14.
-        externalNativeBuild {
-            cmake {
-                cppFlags ''
-                arguments '-DANDROID_STL=c++_static'
-            }
         }
 
         // Build information - version, commit ID, and build date
@@ -329,17 +319,6 @@ android {
                 'x86'        : 'x86',
             ][abiName] ?: abiName
             outputFileName = "tabssh-android-${archTag}.apk"
-        }
-    }
-
-    // Point the AGP native build at the CMake harness. The CMakeLists
-    // gates the SPICE link chain behind a filesystem check for
-    // libs/spice/<abi>/lib/libspice-client-glib-2.0.a, so a fresh
-    // clone with no prebuilts still produces a working (stub) .so.
-    externalNativeBuild {
-        cmake {
-            path "src/main/cpp/CMakeLists.txt"
-            version "3.22.1"
         }
     }
 
