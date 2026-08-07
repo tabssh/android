@@ -30,6 +30,13 @@ import io.github.tabssh.services.VncKeepAliveService
 import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.ui.adapters.TerminalPagerAdapter
 import io.github.tabssh.ui.views.TerminalView
+import io.github.tabssh.ui.views.VncView
+import io.github.tabssh.ui.views.SpiceView
+import io.github.tabssh.ui.tabs.ConsoleTab
+import io.github.tabssh.ui.tabs.ConsoleDisplayMode
+import io.github.tabssh.hypervisor.console.rfb.RfbConstants
+import io.github.tabssh.hypervisor.spice.SpiceConstants
+import io.github.tabssh.ui.keyboard.ConsoleKeyMapper
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.databinding.ActivityTabTerminalBinding
@@ -79,6 +86,12 @@ class TabTerminalActivity : AppCompatActivity() {
         // SFTPActivity at this remote path instead of just landing on the terminal.
         // Never set for normal (non-link) connects.
         const val EXTRA_OPEN_SFTP_PATH = "open_sftp_path"
+        // Custom-keyboard-bar key ids handled as activity-level actions rather
+        // than terminal/console input — handleCustomKeyPress() never routes
+        // these to sendConsoleKeyPress() even on a graphical console tab.
+        private val CONSOLE_BAR_ACTION_KEY_IDS = setOf(
+            "PASTE", "CLIPBOARD", "MENU", "TOGGLE", "STOP_RECORDING", "PREFIX"
+        )
 
         fun createIntent(
             context: Context,
@@ -199,6 +212,17 @@ class TabTerminalActivity : AppCompatActivity() {
      * (the tab's detection state could theoretically change between arm and fire).
      */
     private var prefixArmedType: String? = null
+
+    /**
+     * Latched CTL/ALT/SFT id (bar's [MultiRowKeyboardView] modifier state)
+     * pending for the next key sent to a graphical console tab (RFB/SPICE).
+     * TerminalView tracks its own pending-modifier state internally
+     * ([TerminalView.setPendingModifier]); VncView/SpiceView have no such
+     * concept, so [sendConsoleKeyPress] brackets the next key with this
+     * modifier and clears it — same one-shot-latch contract as the
+     * terminal path.
+     */
+    private var consolePendingModifier: String? = null
 
     // Find-in-scrollback
     private var searchController: ScrollbackSearchController? = null
@@ -3982,6 +4006,118 @@ class TabTerminalActivity : AppCompatActivity() {
     }
 
     /**
+     * Get the active tab's actual input view — [TerminalView] for SSH tabs
+     * and text-mode console tabs, [io.github.tabssh.ui.views.VncView] for
+     * console tabs in RFB display mode, [io.github.tabssh.ui.views.SpiceView]
+     * for console tabs in SPICE display mode. Classic (non-swipe) mode only
+     * ever hosts SSH tabs (VNC/console tabs require swipe/ViewPager2 — see
+     * onResume's classic-mode reconnect comment), so it always falls back to
+     * the single [terminalView]. Used by [toggleKeyboard] so the IME attaches
+     * to whichever view is actually receiving input.
+     */
+    private fun getActiveInputView(): View? {
+        if (bottomPaneFocused && bottomTerminalView != null) return bottomTerminalView
+        if (!swipeEnabled) return terminalView
+        val currentItem = viewPager?.currentItem ?: return null
+        val holder = (viewPager?.getChildAt(0) as? androidx.recyclerview.widget.RecyclerView)
+            ?.findViewHolderForAdapterPosition(currentItem)
+        return when (holder) {
+            is TerminalPagerAdapter.TerminalViewHolder -> holder.terminalView
+            is TerminalPagerAdapter.VncViewHolder -> holder.vncView
+            is TerminalPagerAdapter.ConsoleViewHolder -> when {
+                !holder.isGraphicalMode -> holder.terminalView
+                holder.isRfbMode -> holder.vncView
+                else -> holder.spiceView
+            }
+            else -> null
+        }
+    }
+
+    /**
+     * Get the active tab's [ConsoleTab], or null when the active tab is not
+     * a console tab. Used by [handleCustomKeyPress] to decide whether a bar
+     * key must be routed to the RFB/SPICE session instead of a TerminalView.
+     */
+    private fun getActiveConsoleTab(): ConsoleTab? =
+        (tabManager.getActiveTabSealed() as? Tab.Console)?.consoleTab
+
+    /**
+     * Route a custom-keyboard-bar key press to a console tab's graphical
+     * (RFB or SPICE) session. Named keys ([ConsoleKeyMapper.RFB_KEYSYM_BY_ID] /
+     * [ConsoleKeyMapper.SPICE_SCANCODE_BY_ID]) are sent as a press+release
+     * pair through the resolved [VncView] / [SpiceView]; single printable
+     * characters go through the view's `sendChar`. Any modifier latched via
+     * [consolePendingModifier] brackets the key as modifier-down, key
+     * press/release, modifier-up, then is cleared (along with the bar's
+     * highlight) — mirroring TerminalView's pending-modifier contract. Keys
+     * with no console mapping are logged at debug and dropped; never crash.
+     */
+    private fun sendConsoleKeyPress(consoleTab: ConsoleTab, key: io.github.tabssh.ui.keyboard.KeyboardKey) {
+        val inputView = getActiveInputView()
+        val modifier = consolePendingModifier
+        consolePendingModifier = null
+        if (modifier != null) binding.multiRowKeyboard.clearModifier()
+
+        when (consoleTab.displayMode.value) {
+            ConsoleDisplayMode.RFB -> {
+                val vncView = inputView as? VncView
+                if (vncView == null) {
+                    Logger.d("TabTerminalActivity", "Console key ${key.id}: no active VncView")
+                    return
+                }
+                val modKeysym = modifier?.let { ConsoleKeyMapper.RFB_MODIFIER_KEYSYM[it] }
+                val keysym = ConsoleKeyMapper.RFB_KEYSYM_BY_ID[key.id]
+                if (keysym != null) {
+                    if (modKeysym != null) vncView.sendKey(modKeysym, true)
+                    vncView.sendKey(keysym, true)
+                    vncView.sendKey(keysym, false)
+                    if (modKeysym != null) vncView.sendKey(modKeysym, false)
+                    return
+                }
+                val ch = key.keySequence.singleOrNull()
+                if (ch == null) {
+                    Logger.d("TabTerminalActivity", "Console key ${key.id}: no RFB mapping — dropped")
+                    return
+                }
+                if (modKeysym != null) vncView.sendKey(modKeysym, true)
+                vncView.sendChar(ch)
+                if (modKeysym != null) vncView.sendKey(modKeysym, false)
+            }
+            ConsoleDisplayMode.SPICE -> {
+                val spiceView = inputView as? SpiceView
+                if (spiceView == null) {
+                    Logger.d("TabTerminalActivity", "Console key ${key.id}: no active SpiceView")
+                    return
+                }
+                val modScancode = modifier?.let { ConsoleKeyMapper.SPICE_MODIFIER_SCANCODE[it] }
+                val scancode = ConsoleKeyMapper.SPICE_SCANCODE_BY_ID[key.id]
+                if (scancode != null) {
+                    if (modScancode != null) spiceView.sendScancode(modScancode, true)
+                    spiceView.sendScancode(scancode, true)
+                    spiceView.sendScancode(scancode, false)
+                    if (modScancode != null) spiceView.sendScancode(modScancode, false)
+                    return
+                }
+                val ch = key.keySequence.singleOrNull()
+                if (ch == null) {
+                    Logger.d("TabTerminalActivity", "Console key ${key.id}: no SPICE mapping — dropped")
+                    return
+                }
+                if (modScancode != null) spiceView.sendScancode(modScancode, true)
+                if (!spiceView.sendChar(ch)) {
+                    Logger.d("TabTerminalActivity", "Console key ${key.id}: char '$ch' has no scancode — dropped")
+                }
+                if (modScancode != null) spiceView.sendScancode(modScancode, false)
+            }
+            ConsoleDisplayMode.TEXT -> {
+                // Unreachable — callers only route here when isGraphicalMode is
+                // true, and a console tab's displayMode never falls back to
+                // TEXT once it flips graphical (see ConsoleTab).
+            }
+        }
+    }
+
+    /**
      * Adjust terminal font size by delta
      */
     /**
@@ -4097,25 +4233,29 @@ class TabTerminalActivity : AppCompatActivity() {
     }
     
     private fun toggleKeyboard() {
-        val terminalView = getActiveTerminalView() ?: return
+        // getActiveInputView() resolves TerminalView / VncView / SpiceView
+        // depending on tab type and console display mode — VncView and
+        // SpiceView both implement onCreateInputConnection so the IME
+        // attaches to them exactly like it does to a TerminalView.
+        val inputView = getActiveInputView() ?: return
         val imm = getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
             as android.view.inputmethod.InputMethodManager
 
         // Always grab focus first so the IME has a target.
-        terminalView.requestFocus()
+        inputView.requestFocus()
 
         // toggleSoftInput(SHOW_IMPLICIT) silently no-ops on the first tap when
         // the framework hasn't seen us as the active input client yet (Issue
         // #39). Use WindowInsetsCompat to read actual IME visibility and
         // drive show/hide explicitly.
         val rootInsets = androidx.core.view.ViewCompat
-            .getRootWindowInsets(terminalView)
+            .getRootWindowInsets(inputView)
         val imeVisible = rootInsets?.isVisible(
             androidx.core.view.WindowInsetsCompat.Type.ime()
         ) == true
 
         if (imeVisible) {
-            imm.hideSoftInputFromWindow(terminalView.windowToken, 0)
+            imm.hideSoftInputFromWindow(inputView.windowToken, 0)
             Logger.d("TabTerminalActivity", "IME hidden")
         } else {
             if (hasHardwareKeyboard()) {
@@ -4123,7 +4263,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 return
             }
             imm.showSoftInput(
-                terminalView,
+                inputView,
                 android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT
             )
             Logger.d("TabTerminalActivity", "IME shown")
@@ -4178,7 +4318,17 @@ class TabTerminalActivity : AppCompatActivity() {
      * sheet with text-only actions.
      */
     private fun showClipboardMenu() {
-        val options = arrayOf("Paste", "Select Text…", "Copy Screen")
+        // A graphical console tab (RFB/SPICE) has no text buffer to select
+        // from or terminal screen to copy — those entries only make sense
+        // against a TerminalView, so they're dropped from the menu entirely
+        // rather than shown disabled. Paste still works everywhere: it goes
+        // through the console text-input path on a graphical console tab.
+        val consoleGraphical = getActiveConsoleTab()?.isGraphicalMode?.value == true
+        val options = if (consoleGraphical) {
+            arrayOf("Paste")
+        } else {
+            arrayOf("Paste", "Select Text…", "Copy Screen")
+        }
         com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setItems(options) { _, which ->
                 when (which) {
@@ -4209,6 +4359,18 @@ class TabTerminalActivity : AppCompatActivity() {
             ?.coerceToText(this)?.toString()
         if (text.isNullOrEmpty()) {
             Toast.makeText(this, "Clipboard is empty", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val consoleTab = getActiveConsoleTab()
+        if (consoleTab != null && consoleTab.isGraphicalMode.value) {
+            when (val inputView = getActiveInputView()) {
+                is VncView -> inputView.onTextInput?.invoke(text)
+                is SpiceView -> inputView.onTextInput?.invoke(text)
+                else -> {
+                    Logger.w("TabTerminalActivity", "pasteFromClipboard: no active console view")
+                    Toast.makeText(this, "No active session", Toast.LENGTH_SHORT).show()
+                }
+            }
             return
         }
         val tv = getActiveTerminalView()
@@ -4803,11 +4965,18 @@ class TabTerminalActivity : AppCompatActivity() {
         // sticky CTL/ALT (Issue #37). Also wire the inverse — when the
         // terminal consumes a one-shot modifier, the bar UI must reset.
         binding.multiRowKeyboard.setOnModifierChangedListener { modifier ->
-            val tv = getActiveTerminalView() ?: return@setOnModifierChangedListener
-            tv.setPendingModifier(modifier)
-            tv.onModifierConsumed = {
-                binding.multiRowKeyboard.clearModifier()
+            val tv = getActiveTerminalView()
+            if (tv != null) {
+                tv.setPendingModifier(modifier)
+                tv.onModifierConsumed = {
+                    binding.multiRowKeyboard.clearModifier()
+                }
+                return@setOnModifierChangedListener
             }
+            // No TerminalView active — a graphical console tab (RFB/SPICE) is
+            // showing. Latch the modifier here; sendConsoleKeyPress consumes
+            // and clears it (and the bar visual) on the next non-modifier key.
+            consolePendingModifier = modifier
         }
 
         // Defer the expensive layout population (button creation) to after
@@ -4859,6 +5028,22 @@ class TabTerminalActivity : AppCompatActivity() {
 
     private fun handleCustomKeyPress(key: io.github.tabssh.ui.keyboard.KeyboardKey) {
         Logger.d("TabTerminalActivity", "Custom key pressed: ${key.label} id=${key.id} sequence=${key.keySequence.map { it.code }}")
+
+        // Console tabs in RFB/SPICE mode have no TerminalView — everything
+        // except the bar's own activity-level actions (clipboard menu,
+        // terminal menu, keyboard toggle, recording, multiplexer prefix —
+        // none of which are terminal-text-input keys) must be sent to the
+        // graphical session instead of falling through to the TerminalView
+        // path below. Text-mode console tabs (getActiveConsoleTab() with
+        // isGraphicalMode == false) fall through unchanged, same as SSH tabs.
+        val consoleTab = getActiveConsoleTab()
+        if (consoleTab != null && consoleTab.isGraphicalMode.value &&
+            key.id !in CONSOLE_BAR_ACTION_KEY_IDS
+        ) {
+            sendConsoleKeyPress(consoleTab, key)
+            return
+        }
+
         val terminal = getActiveTerminalView()
 
         when (key.id) {

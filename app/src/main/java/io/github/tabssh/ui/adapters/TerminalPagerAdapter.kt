@@ -147,7 +147,7 @@ class TerminalPagerAdapter(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
-                VncViewHolder(vncView)
+                VncViewHolder(vncView, onContextMenuRequested)
             }
             VIEW_TYPE_CONSOLE -> {
                 val terminalView = TerminalView(parent.context)
@@ -176,7 +176,10 @@ class TerminalPagerAdapter(
                 container.addView(terminalView)
                 container.addView(vncView)
                 container.addView(spiceView)
-                ConsoleViewHolder(container, terminalView, vncView, spiceView, fontSize, fontValue)
+                ConsoleViewHolder(
+                    container, terminalView, vncView, spiceView, fontSize, fontValue,
+                    onContextMenuRequested
+                )
             }
             else -> {
                 val terminalView = TerminalView(parent.context)
@@ -302,7 +305,10 @@ class TerminalPagerAdapter(
      * client — until then the page renders blank with no input wired, and
      * re-binds cleanly once a client is attached.
      */
-    class VncViewHolder(val vncView: VncView) : RecyclerView.ViewHolder(vncView) {
+    class VncViewHolder(
+        val vncView: VncView,
+        private val onContextMenuRequested: ((Float, Float) -> Unit)? = null
+    ) : RecyclerView.ViewHolder(vncView) {
 
         private var channel: VncConsoleChannel? = null
 
@@ -332,6 +338,7 @@ class TerminalPagerAdapter(
             vncView.onTextInput = { text -> ch.sendText(text) }
             vncView.onBackspace = { ch.sendKey(RfbConstants.KEY_BACK_SPACE) }
             vncView.onViewSizeReady = { w, h -> ch.resizeToPixels(w, h) }
+            vncView.onContextMenuRequested = onContextMenuRequested
             // VNC-tab-swipe integration step 6c — entry-point activities
             // (VncHostsActivity, etc.) only open the socket and construct the
             // RfbClient; they never call start() themselves. Driving the
@@ -377,6 +384,7 @@ class TerminalPagerAdapter(
             vncView.onTextInput = null
             vncView.onBackspace = null
             vncView.onViewSizeReady = null
+            vncView.onContextMenuRequested = null
         }
     }
 
@@ -401,7 +409,8 @@ class TerminalPagerAdapter(
         val vncView: VncView,
         val spiceView: SpiceView,
         private val fontSize: Int,
-        private val fontValue: String
+        private val fontValue: String,
+        private val onContextMenuRequested: ((Float, Float) -> Unit)? = null
     ) : RecyclerView.ViewHolder(container) {
 
         private var channel: VncConsoleChannel? = null
@@ -458,6 +467,7 @@ class TerminalPagerAdapter(
             terminalView.attachTerminalEmulator(bridge)
             terminalView.setFont(fontValue)
             terminalView.setFontSize(fontSize)
+            terminalView.onContextMenuRequested = onContextMenuRequested
             currentTheme?.let { theme -> terminalView.applyTheme(theme) }
             Logger.d("TerminalPagerAdapter", "Bound console tab (text mode): ${consoleTab.getDisplayTitle()}")
         }
@@ -489,6 +499,7 @@ class TerminalPagerAdapter(
             vncView.onTextInput = { text -> ch.sendText(text) }
             vncView.onBackspace = { ch.sendKey(RfbConstants.KEY_BACK_SPACE) }
             vncView.onViewSizeReady = { w, h -> ch.resizeToPixels(w, h) }
+            vncView.onContextMenuRequested = onContextMenuRequested
             // Same discipline as VncViewHolder.bind() — driving the handshake
             // and replaying retained framebuffer state on rebind is this
             // holder's job, not the entry-point activity's (see that method's
@@ -540,6 +551,7 @@ class TerminalPagerAdapter(
                 client.sendKeyEvent(SpiceConstants.SC_BACKSPACE, true)
                 client.sendKeyEvent(SpiceConstants.SC_BACKSPACE, false)
             }
+            spiceView.onContextMenuRequested = onContextMenuRequested
             // A SpiceClient is single-shot (no restart after stop), so exactly
             // one bind may call start(); the tab arbitrates via an atomic flag.
             // On rebind after page recycling the native session keeps running —
@@ -576,6 +588,7 @@ class TerminalPagerAdapter(
             spiceView.onTextInput = null
             spiceView.onBackspace = null
             spiceView.onViewSizeReady = null
+            spiceView.onContextMenuRequested = null
         }
 
         private fun unwireVnc() {
@@ -592,6 +605,7 @@ class TerminalPagerAdapter(
             vncView.onTextInput = null
             vncView.onBackspace = null
             vncView.onViewSizeReady = null
+            vncView.onContextMenuRequested = null
         }
     }
 }

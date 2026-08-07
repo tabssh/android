@@ -64,6 +64,10 @@ class SpiceView @JvmOverloads constructor(
         private const val MAX_SCALE = 4.0f
         /* Wheel pointer events emitted per scroll fling step. */
         private const val SCROLL_STEPS = 3
+        // Longer than GestureDetector's own long-press timeout so the existing
+        // hold-to-right-click gesture fires first; only a hold past this point
+        // opens the shared session context menu (same menu TerminalView opens).
+        private const val CONTEXT_MENU_TIMEOUT_MS = 900L
     }
 
     // ── Framebuffer ──────────────────────────────────────────────────────
@@ -119,10 +123,26 @@ class SpiceView @JvmOverloads constructor(
      */
     var onBackspace: (() -> Unit)? = null
 
+    /**
+     * Called with (x, y) when the user holds a single-finger touch past
+     * [CONTEXT_MENU_TIMEOUT_MS] — opens the same shared session context
+     * menu TerminalView's long-press opens. Fires in addition to (after)
+     * the shorter-timeout right-click gesture already bound to long-press,
+     * so a plain long-press still right-clicks and only a longer hold
+     * surfaces the menu.
+     */
+    var onContextMenuRequested: ((Float, Float) -> Unit)? = null
+
     // ── Pointer bookkeeping ──────────────────────────────────────────────
 
     /** Bitmask of buttons currently held. Mirrors SPICE's `state` byte. */
     private var currentButtonMask = 0
+
+    private val contextMenuHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var contextMenuRunnable: Runnable? = null
+    private var contextMenuDownX = 0f
+    private var contextMenuDownY = 0f
+    private val contextMenuTouchSlop = android.view.ViewConfiguration.get(context).scaledTouchSlop
 
     private val gestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
         override fun onDown(e: MotionEvent) = true
@@ -312,11 +332,19 @@ class SpiceView @JvmOverloads constructor(
                 currentButtonMask = currentButtonMask or SpiceConstants.MASK_LEFT
                 onPointerMove?.invoke(bx, by, currentButtonMask)
                 onPointerButton?.invoke(SpiceConstants.BTN_LEFT, currentButtonMask, true)
+                armContextMenuTimer(event.x, event.y)
             }
             MotionEvent.ACTION_MOVE -> {
                 if (event.pointerCount == 1 && !scaleDetector.isInProgress) {
                     val (bx, by) = screenToBitmap(event.x, event.y)
                     onPointerMove?.invoke(bx, by, currentButtonMask)
+                    if (abs(event.x - contextMenuDownX) > contextMenuTouchSlop ||
+                        abs(event.y - contextMenuDownY) > contextMenuTouchSlop
+                    ) {
+                        cancelContextMenuTimer()
+                    }
+                } else {
+                    cancelContextMenuTimer()
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
@@ -324,9 +352,27 @@ class SpiceView @JvmOverloads constructor(
                 currentButtonMask = currentButtonMask and SpiceConstants.MASK_LEFT.inv()
                 onPointerButton?.invoke(SpiceConstants.BTN_LEFT, currentButtonMask, false)
                 onPointerMove?.invoke(bx, by, currentButtonMask)
+                cancelContextMenuTimer()
             }
         }
         return true
+    }
+
+    private fun armContextMenuTimer(x: Float, y: Float) {
+        cancelContextMenuTimer()
+        contextMenuDownX = x
+        contextMenuDownY = y
+        val runnable = Runnable {
+            performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+            onContextMenuRequested?.invoke(x, y)
+        }
+        contextMenuRunnable = runnable
+        contextMenuHandler.postDelayed(runnable, CONTEXT_MENU_TIMEOUT_MS)
+    }
+
+    private fun cancelContextMenuTimer() {
+        contextMenuRunnable?.let { contextMenuHandler.removeCallbacks(it) }
+        contextMenuRunnable = null
     }
 
     private fun screenToBitmap(sx: Float, sy: Float): Pair<Int, Int> {

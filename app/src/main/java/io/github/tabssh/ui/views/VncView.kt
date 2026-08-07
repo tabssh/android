@@ -48,6 +48,10 @@ class VncView @JvmOverloads constructor(
         private const val MAX_SCALE = 4.0f
         private const val SCROLL_STEPS = 3        // pointer events per scroll fling step
         private const val CLICK_TIMEOUT_MS = 200L // tap → click if released within
+        // Longer than GestureDetector's own long-press timeout so the existing
+        // hold-to-right-click gesture fires first; only a hold past this point
+        // opens the shared session context menu (same menu TerminalView opens).
+        private const val CONTEXT_MENU_TIMEOUT_MS = 900L
     }
 
     // ── Framebuffer ──────────────────────────────────────────────────────
@@ -81,12 +85,28 @@ class VncView @JvmOverloads constructor(
     /** Called when the Android soft keyboard (IME) deletes a character before the cursor. */
     var onBackspace: (() -> Unit)? = null
 
+    /**
+     * Called with (x, y) when the user holds a single-finger touch past
+     * [CONTEXT_MENU_TIMEOUT_MS] — opens the same shared session context
+     * menu TerminalView's long-press opens. Fires in addition to (after)
+     * the shorter-timeout right-click gesture already bound to long-press,
+     * so a plain long-press still right-clicks and only a longer hold
+     * surfaces the menu.
+     */
+    var onContextMenuRequested: ((Float, Float) -> Unit)? = null
+
     // ── Touch bookkeeping ─────────────────────────────────────────────────
 
     private var lastButtonMask = 0
     private var pressX = 0f
     private var pressY = 0f
     private var pressTime = 0L
+
+    private val contextMenuHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var contextMenuRunnable: Runnable? = null
+    private var contextMenuDownX = 0f
+    private var contextMenuDownY = 0f
+    private val contextMenuTouchSlop = android.view.ViewConfiguration.get(context).scaledTouchSlop
 
     private val gestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
         override fun onDown(e: MotionEvent) = true
@@ -290,20 +310,46 @@ class VncView @JvmOverloads constructor(
                 val (bx, by) = screenToBitmap(event.x, event.y)
                 lastButtonMask = RfbConstants.BTN_LEFT
                 firePointer(bx, by, lastButtonMask)
+                armContextMenuTimer(event.x, event.y)
             }
             MotionEvent.ACTION_MOVE -> {
                 if (event.pointerCount == 1 && !scaleDetector.isInProgress) {
                     val (bx, by) = screenToBitmap(event.x, event.y)
                     firePointer(bx, by, lastButtonMask)
+                    if (kotlin.math.abs(event.x - contextMenuDownX) > contextMenuTouchSlop ||
+                        kotlin.math.abs(event.y - contextMenuDownY) > contextMenuTouchSlop
+                    ) {
+                        cancelContextMenuTimer()
+                    }
+                } else {
+                    cancelContextMenuTimer()
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 val (bx, by) = screenToBitmap(event.x, event.y)
                 firePointer(bx, by, 0)
                 lastButtonMask = 0
+                cancelContextMenuTimer()
             }
         }
         return true
+    }
+
+    private fun armContextMenuTimer(x: Float, y: Float) {
+        cancelContextMenuTimer()
+        contextMenuDownX = x
+        contextMenuDownY = y
+        val runnable = Runnable {
+            performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+            onContextMenuRequested?.invoke(x, y)
+        }
+        contextMenuRunnable = runnable
+        contextMenuHandler.postDelayed(runnable, CONTEXT_MENU_TIMEOUT_MS)
+    }
+
+    private fun cancelContextMenuTimer() {
+        contextMenuRunnable?.let { contextMenuHandler.removeCallbacks(it) }
+        contextMenuRunnable = null
     }
 
     private fun screenToBitmap(sx: Float, sy: Float): Pair<Int, Int> {
