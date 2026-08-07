@@ -359,8 +359,16 @@
         <activity
             android:name=".ui.activities.PortForwardingActivity"
             android:exported="false"
-            android:label="Port Forwarding"
+            android:label="@string/port_forwarding_title"
             android:parentActivityName=".ui.activities.TabTerminalActivity"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- Add / edit a saved port-forward rule -->
+        <activity
+            android:name=".ui.activities.PortForwardEditActivity"
+            android:exported="false"
+            android:label="@string/port_forward_edit_title_new"
+            android:parentActivityName=".ui.activities.PortForwardingActivity"
             android:windowSoftInputMode="adjustResize" />
 
         <!-- Transparent confirm-disconnect dialog launched from the SSH session
@@ -523,6 +531,20 @@
              exported=false: no external component needs to trigger this. -->
         <receiver
             android:name=".background.MonitoringBootReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Port-forward auto-start boot/update receiver.
+             Enqueues PortForwardStartupWorker after a reboot or app update so
+             saved forwards marked enabled + auto-start come back up once the
+             network is available. exported=false: internal trigger only. -->
+        <receiver
+            android:name=".background.PortForwardBootReceiver"
             android:enabled="true"
             android:exported="false">
             <intent-filter>

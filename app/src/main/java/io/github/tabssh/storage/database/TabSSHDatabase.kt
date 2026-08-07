@@ -14,7 +14,7 @@ import io.github.tabssh.utils.logging.Logger
 /**
  * Main Room database for TabSSH.
  *
- * Current version: 6.
+ * Current version: 8.
  * Versions 1 and 2 never shipped to real users, so v3 is the effective schema
  * baseline and no fallback path exists for them. Every version bump from v3
  * onward MUST register a real Migration object via addMigrations(); destructive
@@ -42,9 +42,10 @@ import io.github.tabssh.utils.logging.Logger
         VncHost::class,
         VncIdentity::class,
         SyncTombstone::class,
-        SyncShadow::class
+        SyncShadow::class,
+        PortForward::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -71,6 +72,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
     abstract fun vncIdentityDao(): VncIdentityDao
     abstract fun syncTombstoneDao(): SyncTombstoneDao
     abstract fun syncShadowDao(): SyncShadowDao
+    abstract fun portForwardDao(): PortForwardDao
 
     companion object {
         @Volatile
@@ -196,6 +198,45 @@ abstract class TabSSHDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v7 → v8: add the `port_forwards` table — saved, persistent SSH
+         * port-forward rules (standalone feature). New table only; no data
+         * transform. DDL matches Room's generated schema for PortForward
+         * exactly (column order, NOT NULL flags, and the two indices).
+         */
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `port_forwards` (" +
+                        "`id` TEXT NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`type` TEXT NOT NULL, " +
+                        "`connection_id` TEXT, " +
+                        "`ssh_host` TEXT, " +
+                        "`ssh_port` INTEGER NOT NULL, " +
+                        "`ssh_username` TEXT, " +
+                        "`identity_id` TEXT, " +
+                        "`host_ip` TEXT NOT NULL, " +
+                        "`remote_port` INTEGER NOT NULL, " +
+                        "`local_port` INTEGER NOT NULL, " +
+                        "`enabled` INTEGER NOT NULL, " +
+                        "`auto_start` INTEGER NOT NULL, " +
+                        "`created_at` INTEGER NOT NULL, " +
+                        "`modified_at` INTEGER NOT NULL, " +
+                        "`sort_order` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`id`))"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_port_forwards_connection_id` " +
+                        "ON `port_forwards` (`connection_id`)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_port_forwards_identity_id` " +
+                        "ON `port_forwards` (`identity_id`)"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): TabSSHDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -205,7 +246,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
                 )
                 .addCallback(DatabaseCallback())
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                 .build()
                 INSTANCE = instance
                 instance

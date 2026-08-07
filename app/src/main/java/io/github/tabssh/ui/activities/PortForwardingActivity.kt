@@ -1,381 +1,202 @@
 package io.github.tabssh.ui.activities
 
+import android.content.Intent
 import android.os.Bundle
-import android.view.LayoutInflater
-import android.widget.EditText
-import android.widget.Spinner
-import android.widget.ArrayAdapter
-import androidx.activity.viewModels
+import android.view.View
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+import com.google.android.material.snackbar.Snackbar
 import io.github.tabssh.R
-import io.github.tabssh.ssh.forwarding.PortForwardingManager
-import io.github.tabssh.ssh.forwarding.TunnelType
-import io.github.tabssh.ui.adapters.TunnelAdapter
+import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.storage.database.entities.PortForward
+import io.github.tabssh.ui.adapters.PortForwardAdapter
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Activity for managing SSH port forwarding tunnels
- * Allows users to create local, remote, and dynamic (SOCKS) tunnels
+ * Standalone manager for saved SSH port-forward rules.
+ *
+ * Rules live in the database (see [PortForward]) and are independent of any
+ * live terminal session — the [io.github.tabssh.ssh.forwarding.PortForwardCoordinator]
+ * opens (or reuses) an SSH connection when a rule is started. The screen
+ * observes the rule list as a Flow and exposes add / edit / delete plus a
+ * per-row start/stop toggle.
  */
 class PortForwardingActivity : AppCompatActivity() {
 
-    private lateinit var recyclerView: RecyclerView
-    private lateinit var adapter: TunnelAdapter
-    private lateinit var fab: FloatingActionButton
+    private val app: TabSSHApplication
+        get() = application as TabSSHApplication
 
-    // Tunnels are managed per-connection, so we need connection ID
-    private var connectionId: String? = null
-    private var portForwardingManager: PortForwardingManager? = null
+    private lateinit var recyclerView: RecyclerView
+    private lateinit var emptyState: View
+    private lateinit var fab: ExtendedFloatingActionButton
+    private lateinit var adapter: PortForwardAdapter
+
+    // Optional: when launched from a terminal tab, a new forward defaults to
+    // that saved connection.
+    private var prefillConnectionId: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_port_forwarding)
 
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        supportActionBar?.title = "Port Forwarding"
+        prefillConnectionId = intent.getStringExtra(EXTRA_CONNECTION_ID)
 
-        // Host-key dialogs are wired ONCE in TabSSHApplication; whichever
-        // Activity is foreground at the moment of the SSH challenge will
-        // receive the dialog. No per-activity wiring needed.
-
-        connectionId = intent.getStringExtra("connection_id")
-        if (connectionId == null) {
-            // Wave 3.3 — no connection passed in, treat as standalone launch
-            // ("Background Tunnels" entry from the drawer). Pick a saved
-            // connection, open an SSH session that persists in
-            // SSHSessionManager, and proceed without a terminal.
-            promptStandaloneConnection()
-        } else {
-            // Caller (terminal activity) already opened the session; reuse
-            // it AND wire the manager so the rest of this screen works.
-            val app = application as io.github.tabssh.TabSSHApplication
-            val existing = app.sshSessionManager.getConnection(connectionId!!)
-            if (existing != null) {
-                portForwardingManager =
-                    io.github.tabssh.ssh.forwarding.PortForwardingManager(existing)
-            } else {
-                Logger.w("PortForwardingActivity",
-                    "connectionId=$connectionId given but no live SSH session")
-            }
-            setupRecyclerView()
-            setupFab()
-            loadTunnels()
-        }
+        setupToolbar()
+        setupRecyclerView()
+        setupFab()
+        observeForwards()
     }
 
-
-    private fun promptStandaloneConnection() {
-        val app = application as io.github.tabssh.TabSSHApplication
-        lifecycleScope.launch {
-            val candidates = try {
-                withContext(Dispatchers.IO) {
-                    app.database.connectionDao().getRecentConnections(50)
-                }
-            } catch (e: Exception) {
-                Logger.e("PortForwardingActivity", "Recent fetch failed", e)
-                emptyList()
-            }
-            if (candidates.isEmpty()) {
-                runOnUiThread {
-                    showError("No saved connections — add one first to use background tunnels.")
-                    finish()
-                }
-                return@launch
-            }
-            runOnUiThread {
-                val labels = candidates.map { it.getDisplayName() }.toTypedArray()
-                MaterialAlertDialogBuilder(this@PortForwardingActivity)
-                    .setTitle("Pick connection for background tunnels")
-                    .setItems(labels) { _, which ->
-                        attachStandaloneSession(candidates[which])
-                    }
-                    .setNegativeButton("Cancel") { _, _ -> finish() }
-                    .setOnCancelListener { finish() }
-                    .show()
-            }
+    private fun setupToolbar() {
+        val toolbar = findViewById<Toolbar>(R.id.toolbar)
+        setSupportActionBar(toolbar)
+        supportActionBar?.apply {
+            setDisplayHomeAsUpEnabled(true)
+            title = getString(R.string.port_forwarding_title)
         }
-    }
-
-    private fun attachStandaloneSession(profile: io.github.tabssh.storage.database.entities.ConnectionProfile) {
-        val app = application as io.github.tabssh.TabSSHApplication
-
-        // Show a "connecting" indicator immediately so the screen doesn't
-        // look like it instantly jumped back to the main UI when host key
-        // dialogs / auth prompts take a moment.
-        supportActionBar?.title = "Port Forwarding · connecting…"
-
-        lifecycleScope.launch {
-            val session = app.sshSessionManager.connectToServer(profile)
-            if (session == null) {
-                runOnUiThread {
-                    // Don't auto-finish — let the user read the error and
-                    // hit back themselves. The previous behaviour
-                    // (immediate finish()) is exactly what the user
-                    // reported as "just goes back to main UI".
-                    showErrorAndAllowRetry(profile,
-                        "SSH connection failed for ${profile.getDisplayName()}.\n\n" +
-                        "Likely causes:\n" +
-                        " • Host key not yet trusted (accept it from a regular terminal first)\n" +
-                        " • Bad password / wrong key\n" +
-                        " • Host unreachable")
-                }
-                return@launch
-            }
-            connectionId = profile.id
-            // CRITICAL — without this the screen renders but every action
-            // is a silent no-op because portForwardingManager?.X returns
-            // null. This was the actual root cause of the user-reported bug.
-            portForwardingManager =
-                io.github.tabssh.ssh.forwarding.PortForwardingManager(session)
-            runOnUiThread {
-                supportActionBar?.title = "Port Forwarding · ${profile.getDisplayName()}"
-                setupRecyclerView()
-                setupFab()
-                loadTunnels()
-            }
-        }
-    }
-
-    private fun showErrorAndAllowRetry(
-        profile: io.github.tabssh.storage.database.entities.ConnectionProfile,
-        message: String,
-    ) {
-        // Three-button error: Open Terminal (accept host key), Pick another host, Close.
-        // "Open Terminal" is the primary escape hatch for the TOFU dead-end — the
-        // user can trust the host key in a terminal tab and then come back here.
-        MaterialAlertDialogBuilder(this)
-            .setTitle("Couldn't attach")
-            .setMessage(message)
-            .setPositiveButton("Open Terminal") { _, _ -> openTerminalForProfile(profile) }
-            .setNeutralButton("Pick another host") { _, _ -> promptStandaloneConnection() }
-            .setNegativeButton("Close") { _, _ -> finish() }
-            .setCancelable(false)
-            .show()
-    }
-
-    private fun openTerminalForProfile(
-        profile: io.github.tabssh.storage.database.entities.ConnectionProfile,
-    ) {
-        val intent = android.content.Intent(this, TabTerminalActivity::class.java).apply {
-            putExtra("connection_id", profile.id)
-            putExtra("auto_connect", true)
-            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
-                    android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        startActivity(intent)
-        finish()
     }
 
     private fun setupRecyclerView() {
-        recyclerView = findViewById(R.id.recycler_tunnels)
+        recyclerView = findViewById(R.id.recycler_forwards)
+        emptyState = findViewById(R.id.empty_state)
         recyclerView.layoutManager = LinearLayoutManager(this)
 
-        adapter = TunnelAdapter(
-            onStart = { tunnel ->
-                lifecycleScope.launch {
-                    val ok = portForwardingManager?.startTunnel(tunnel.id) ?: false
-                    loadTunnels()
-                    // Wave 3.4 — auto-detect HTTP on the local end after a
-                    // successful Local Forward; offer "Open in browser" if so.
-                    if (ok && tunnel.type == TunnelType.LOCAL_FORWARD) {
-                        val effectivePort = tunnel.actualLocalPort?.takeIf { it > 0 } ?: tunnel.localPort
-                        offerBrowserOpenIfHttp(effectivePort)
-                    }
-                }
-            },
-            onStop = { tunnel ->
-                lifecycleScope.launch {
-                    portForwardingManager?.stopTunnel(tunnel.id)
-                    loadTunnels()
-                }
-            },
-            onDelete = { tunnel ->
-                showDeleteConfirmation(tunnel.id)
-            }
+        adapter = PortForwardAdapter(
+            onToggle = { toggle(it) },
+            onEdit = { openEditor(it.id) },
+            onDelete = { confirmDelete(it) }
         )
         recyclerView.adapter = adapter
     }
 
     private fun setupFab() {
-        fab = findViewById(R.id.fab_add_tunnel)
-        fab.setOnClickListener {
-            showTunnelTypeDialog()
-        }
+        fab = findViewById(R.id.fab_add_forward)
+        fab.setOnClickListener { openEditor(null) }
     }
 
-    private fun loadTunnels() {
+    /**
+     * Observe the saved rules and, on every emission, refresh the running-state
+     * overlay and the saved-connection name map so rows render fully.
+     */
+    private fun observeForwards() {
         lifecycleScope.launch {
-            val tunnels = portForwardingManager?.getActiveTunnels() ?: emptyList()
-            adapter.submitList(tunnels)
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                app.database.portForwardDao().getAll().collectLatest { forwards ->
+                    val names = withContext(Dispatchers.IO) {
+                        app.database.connectionDao().getAllConnectionsList()
+                            .associate { it.id to it.getDisplayName() }
+                    }
+                    adapter.setConnectionNames(names)
+                    adapter.submitList(forwards)
+                    refreshRunningState(forwards)
+                    renderEmptyState(forwards.isEmpty())
+                }
+            }
         }
     }
 
-    private fun showTunnelTypeDialog() {
-        val types = arrayOf("Local Forward (-L)", "Remote Forward (-R)", "Dynamic/SOCKS (-D)")
-        MaterialAlertDialogBuilder(this)
-            .setTitle("Select Tunnel Type")
-            .setItems(types) { _, which ->
-                when (which) {
-                    0 -> showLocalForwardDialog()
-                    1 -> showRemoteForwardDialog()
-                    2 -> showDynamicForwardDialog()
-                }
-            }
-            .show()
+    private fun refreshRunningState(forwards: List<PortForward>) {
+        val running = forwards.asSequence()
+            .map { it.id }
+            .filter { app.portForwardCoordinator.isRunning(it) }
+            .toSet()
+        adapter.setRunningIds(running)
     }
 
-    private fun showLocalForwardDialog() {
-        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_local_forward, null)
-        val localPortEdit = dialogView.findViewById<EditText>(R.id.edit_local_port)
-        val remoteHostEdit = dialogView.findViewById<EditText>(R.id.edit_remote_host)
-        val remotePortEdit = dialogView.findViewById<EditText>(R.id.edit_remote_port)
+    private fun renderEmptyState(isEmpty: Boolean) {
+        emptyState.visibility = if (isEmpty) View.VISIBLE else View.GONE
+        recyclerView.visibility = if (isEmpty) View.GONE else View.VISIBLE
+    }
 
-        MaterialAlertDialogBuilder(this)
-            .setTitle("Create Local Forward")
-            .setMessage("Forward local port to remote host:port")
-            .setView(dialogView)
-            .setPositiveButton("Create") { _, _ ->
-                val localPort = localPortEdit.text.toString().toIntOrNull() ?: 0
-                val remoteHost = remoteHostEdit.text.toString()
-                val remotePort = remotePortEdit.text.toString().toIntOrNull() ?: 0
-
-                if (localPort > 0 && remoteHost.isNotEmpty() && remotePort > 0) {
-                    lifecycleScope.launch {
-                        portForwardingManager?.createLocalForward(
-                            localPort = localPort,
-                            remoteHost = remoteHost,
-                            remotePort = remotePort,
-                            autoStart = true
+    /**
+     * Start a stopped forward or stop a running one. All coordinator calls are
+     * suspend and run off the main thread; results surface as a Snackbar.
+     */
+    private fun toggle(pf: PortForward) {
+        lifecycleScope.launch {
+            if (app.portForwardCoordinator.isRunning(pf.id)) {
+                app.portForwardCoordinator.stop(pf.id)
+                showMessage(getString(R.string.port_forward_stopped, displayName(pf)))
+            } else {
+                val result = app.portForwardCoordinator.start(pf)
+                result.onSuccess {
+                    showMessage(getString(R.string.port_forward_started, displayName(pf)))
+                }.onFailure { error ->
+                    Logger.w("PortForwardingActivity", "Start failed: ${error.message}")
+                    showMessage(
+                        getString(
+                            R.string.port_forward_start_failed,
+                            error.message ?: getString(R.string.port_forward_status_stopped)
                         )
-                        loadTunnels()
-                    }
-                } else {
-                    showError("Invalid port forwarding configuration")
+                    )
                 }
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+            // Reflect the new running state on the toggled row.
+            adapter.setRunningIds(currentRunningIds())
+        }
     }
 
-    private fun showRemoteForwardDialog() {
-        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_remote_forward, null)
-        val remotePortEdit = dialogView.findViewById<EditText>(R.id.edit_remote_port)
-        val localHostEdit = dialogView.findViewById<EditText>(R.id.edit_local_host)
-        val localPortEdit = dialogView.findViewById<EditText>(R.id.edit_local_port)
+    private fun currentRunningIds(): Set<String> =
+        adapter.currentList.asSequence()
+            .map { it.id }
+            .filter { app.portForwardCoordinator.isRunning(it) }
+            .toSet()
 
-        // Pre-fill localhost
-        localHostEdit.setText("localhost")
-
+    private fun confirmDelete(pf: PortForward) {
         MaterialAlertDialogBuilder(this)
-            .setTitle("Create Remote Forward")
-            .setMessage("Forward remote port to local host:port")
-            .setView(dialogView)
-            .setPositiveButton("Create") { _, _ ->
-                val remotePort = remotePortEdit.text.toString().toIntOrNull() ?: 0
-                val localHost = localHostEdit.text.toString()
-                val localPort = localPortEdit.text.toString().toIntOrNull() ?: 0
-
-                if (remotePort > 0 && localHost.isNotEmpty() && localPort > 0) {
-                    lifecycleScope.launch {
-                        portForwardingManager?.createRemoteForward(
-                            remotePort = remotePort,
-                            localHost = localHost,
-                            localPort = localPort,
-                            autoStart = true
-                        )
-                        loadTunnels()
-                    }
-                } else {
-                    showError("Invalid port forwarding configuration")
-                }
-            }
-            .setNegativeButton("Cancel", null)
+            .setTitle(R.string.port_forward_delete_title)
+            .setMessage(getString(R.string.port_forward_delete_message, displayName(pf)))
+            .setPositiveButton(R.string.delete) { _, _ -> delete(pf) }
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
-    private fun showDynamicForwardDialog() {
-        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_dynamic_forward, null)
-        val localPortEdit = dialogView.findViewById<EditText>(R.id.edit_local_port)
-
-        // Suggest common SOCKS port
-        localPortEdit.setText("1080")
-
-        MaterialAlertDialogBuilder(this)
-            .setTitle("Create Dynamic Forward (SOCKS Proxy)")
-            .setMessage("Create a SOCKS proxy on local port")
-            .setView(dialogView)
-            .setPositiveButton("Create") { _, _ ->
-                val localPort = localPortEdit.text.toString().toIntOrNull() ?: 0
-
-                if (localPort > 0) {
-                    lifecycleScope.launch {
-                        portForwardingManager?.createDynamicForward(
-                            localPort = localPort,
-                            autoStart = true
-                        )
-                        loadTunnels()
-                    }
-                } else {
-                    showError("Invalid port number")
-                }
+    private fun delete(pf: PortForward) {
+        lifecycleScope.launch {
+            // Stop any live tunnel first so we don't leak the session.
+            if (app.portForwardCoordinator.isRunning(pf.id)) {
+                app.portForwardCoordinator.stop(pf.id)
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+            withContext(Dispatchers.IO) {
+                app.database.portForwardDao().delete(pf)
+            }
+        }
     }
 
-    private fun showDeleteConfirmation(tunnelId: String) {
-        MaterialAlertDialogBuilder(this)
-            .setTitle("Delete Tunnel")
-            .setMessage("Are you sure you want to delete this tunnel?")
-            .setPositiveButton("Delete") { _, _ ->
-                lifecycleScope.launch {
-                    portForwardingManager?.removeTunnel(tunnelId)
-                    loadTunnels()
-                }
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
+    private fun openEditor(forwardId: String?) {
+        val intent = Intent(this, PortForwardEditActivity::class.java)
+        if (forwardId != null) {
+            intent.putExtra(PortForwardEditActivity.EXTRA_FORWARD_ID, forwardId)
+        } else if (prefillConnectionId != null) {
+            intent.putExtra(PortForwardEditActivity.EXTRA_PREFILL_CONNECTION_ID, prefillConnectionId)
+        }
+        startActivity(intent)
     }
 
-    private fun showError(message: String) =
-        io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(this, "Error", message)
+    private fun displayName(pf: PortForward): String =
+        pf.name.ifBlank { pf.getSummary() }
+
+    private fun showMessage(message: String) {
+        Snackbar.make(recyclerView, message, Snackbar.LENGTH_SHORT).show()
+    }
 
     override fun onSupportNavigateUp(): Boolean {
         finish()
         return true
     }
 
-    /**
-     * Wave 3.4 — Probe the freshly opened local port; if it's an HTTP server,
-     * offer a one-tap "Open in browser" via a confirmation dialog.
-     */
-    private fun offerBrowserOpenIfHttp(localPort: Int) {
-        if (localPort <= 0) return
-        lifecycleScope.launch {
-            val isHttp = io.github.tabssh.ssh.forwarding.HttpPortProbe.probe(localPort)
-            if (!isHttp) return@launch
-            val url = "http://127.0.0.1:$localPort/"
-            MaterialAlertDialogBuilder(this@PortForwardingActivity)
-                .setTitle("HTTP detected on :$localPort")
-                .setMessage("Open $url in your browser?")
-                .setPositiveButton("Open") { _, _ ->
-                    try {
-                        startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
-                    } catch (e: Exception) {
-                        Logger.w("PortForwardingActivity", "No browser to handle $url: ${e.message}")
-                        showError("No browser available to open $url")
-                    }
-                }
-                .setNegativeButton("Cancel", null)
-                .show()
-        }
+    companion object {
+        const val EXTRA_CONNECTION_ID = "connection_id"
     }
 }

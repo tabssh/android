@@ -221,5 +221,74 @@
     <string name="mdm_desc_audit_retention_days">Number of days to retain audit entries before automatic deletion.</string>
     <string name="mdm_desc_syslog_host">Hostname or IP address of a UDP syslog receiver (RFC 5424). Leave blank to disable forwarding.</string>
     <string name="mdm_desc_syslog_port">UDP port of the syslog receiver.</string>
+
+    <!-- Port forwarding — list screen -->
+    <string name="port_forwarding_title">Port Forwarding</string>
+    <string name="port_forward_add">Add forward</string>
+    <string name="port_forward_empty_title">No port forwards yet</string>
+    <string name="port_forward_empty_body">Create a forward to reach a remote service, expose a local one, or run a SOCKS proxy over SSH.</string>
+    <string name="port_forward_start">Start forward</string>
+    <string name="port_forward_stop">Stop forward</string>
+    <string name="port_forward_more_actions">More actions</string>
+    <string name="port_forward_edit">Edit forward</string>
+    <string name="port_forward_delete">Delete forward</string>
+    <string name="port_forward_endpoint_via">via %1$s</string>
+    <string name="port_forward_status_running">Running</string>
+    <string name="port_forward_status_stopped">Stopped</string>
+    <string name="port_forward_status_disabled">Disabled</string>
+    <string name="port_forward_delete_title">Delete forward?</string>
+    <string name="port_forward_delete_message">This removes the saved forward “%1$s”. Any running tunnel for it is stopped.</string>
+    <string name="port_forward_started">Started “%1$s”</string>
+    <string name="port_forward_stopped">Stopped “%1$s”</string>
+    <string name="port_forward_start_failed">Couldn\'t start: %1$s</string>
+
+    <!-- Port forwarding — type labels -->
+    <string name="port_forward_type_local">Local</string>
+    <string name="port_forward_type_remote">Remote</string>
+    <string name="port_forward_type_dynamic">SOCKS</string>
+
+    <!-- Port forwarding — editor screen -->
+    <string name="port_forward_edit_title_new">New Forward</string>
+    <string name="port_forward_edit_title_edit">Edit Forward</string>
+    <string name="port_forward_section_general">General</string>
+    <string name="port_forward_section_endpoint">SSH endpoint</string>
+    <string name="port_forward_section_forward">Forward</string>
+    <string name="port_forward_section_options">Options</string>
+    <string name="port_forward_name_hint">Name</string>
+    <string name="port_forward_name_helper">A short label, e.g. “Database tunnel”</string>
+    <string name="port_forward_type_hint">Type</string>
+    <string name="port_forward_type_local_desc">Local (-L): reach a service on the server’s network from this device.</string>
+    <string name="port_forward_type_remote_desc">Remote (-R): expose a service running on this device to the server.</string>
+    <string name="port_forward_type_dynamic_desc">Dynamic (-D): a SOCKS proxy that reaches everything the server can.</string>
+    <string name="port_forward_endpoint_mode_saved">Use saved connection</string>
+    <string name="port_forward_endpoint_mode_manual">Enter host manually</string>
+    <string name="port_forward_connection_hint">Saved connection</string>
+    <string name="port_forward_ssh_host_hint">SSH host</string>
+    <string name="port_forward_ssh_port_hint">SSH port</string>
+    <string name="port_forward_ssh_username_hint">Username</string>
+    <string name="port_forward_identity_hint">Identity (key)</string>
+    <string name="port_forward_identity_none">No identity</string>
+    <string name="port_forward_host_ip_hint">Host / IP</string>
+    <string name="port_forward_host_ip_helper">Target host reachable from the SSH server</string>
+    <string name="port_forward_remote_port_hint">Remote port</string>
+    <string name="port_forward_local_port_hint">Local port</string>
+    <string name="port_forward_local_port_optional_helper">Leave blank to match the remote port</string>
+    <string name="port_forward_socks_port_hint">Local SOCKS port</string>
+    <string name="port_forward_socks_port_helper">Point apps at localhost on this port. Common: 1080</string>
+    <string name="port_forward_local_target_host_hint">Local target host</string>
+    <string name="port_forward_local_target_host_helper">Host on this device’s network the server should reach</string>
+    <string name="port_forward_local_target_port_hint">Local target port</string>
+    <string name="port_forward_server_port_hint">Server port</string>
+    <string name="port_forward_server_port_helper">Port opened on the SSH server</string>
+    <string name="port_forward_switch_enabled">Enabled</string>
+    <string name="port_forward_switch_enabled_desc">Off means this forward never starts, manually or on boot.</string>
+    <string name="port_forward_switch_autostart">Auto-start on boot</string>
+    <string name="port_forward_switch_autostart_desc">Start automatically when the app launches. Only ever runs while Enabled.</string>
+    <string name="port_forward_error_name">Enter a name</string>
+    <string name="port_forward_error_connection">Choose a saved connection</string>
+    <string name="port_forward_error_ssh_host">Enter the SSH host</string>
+    <string name="port_forward_error_ssh_username">Enter a username</string>
+    <string name="port_forward_error_port_range">Enter a port from 1 to 65535</string>
+    <string name="port_forward_error_host_ip">Enter the target host</string>
 </resources>
 

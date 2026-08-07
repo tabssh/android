@@ -58,6 +58,11 @@ class TabSSHApplication : Application() {
     val terminalManager by lazy { TerminalManager(this) }
     val themeManager by lazy { ThemeManager(this) }
     val performanceManager by lazy { PerformanceManager(this) }
+    /** Owns the lifecycle of saved, persistent port forwards (start/stop,
+     *  session reuse, auto-start on boot). Standalone from connections. */
+    val portForwardCoordinator by lazy {
+        io.github.tabssh.ssh.forwarding.PortForwardCoordinator(this)
+    }
     val auditLogManager by lazy { io.github.tabssh.audit.AuditLogManager(this, database, preferencesManager) }
     val tabManager by lazy { io.github.tabssh.ui.tabs.TabManager(database) }
     val sessionPersistenceManager by lazy {
@@ -405,6 +410,13 @@ class TabSSHApplication : Application() {
         // inside the worker itself so we don't need to conditionalize here.
         tryInit("HostMonitor") {
             io.github.tabssh.background.HostAvailabilityWorker.schedule(this)
+        }
+
+        // Bring up enabled auto-start port forwards on cold start too (not just
+        // on boot). Unique work + network constraint make this idempotent and
+        // safe on every launch; the enabled/auto-start filter lives in the DAO.
+        tryInit("PortForwardAutoStart") {
+            io.github.tabssh.background.PortForwardStartupWorker.schedule(this)
         }
 
         tryInit("SessionPersistence") {
