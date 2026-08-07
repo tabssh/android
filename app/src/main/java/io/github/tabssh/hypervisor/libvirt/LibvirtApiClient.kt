@@ -139,6 +139,18 @@ class LibvirtApiClient(
         "'" + value.replace("'", "'\\''") + "'"
 
     /**
+     * True when [output] carries a virsh diagnostic. virsh always emits errors
+     * as a line beginning `error:`, so the check is anchored to line start.
+     *
+     * A bare `contains("error:")`/`contains("failed")` scan of the whole output
+     * misfires on the object's own name: virsh echoes it back on success, so a
+     * domain or snapshot legitimately named `failed-boot` would report every
+     * successful operation — and every listing that includes it — as a failure.
+     */
+    private fun isVirshError(output: String): Boolean =
+        output.lineSequence().any { it.trimStart().startsWith("error:") }
+
+    /**
      * Reject domain names that are empty or contain whitespace or a NUL byte.
      * libvirt domain names never contain these, and the `virsh list` parser
      * splits on whitespace so a space would corrupt enumeration anyway.
@@ -224,7 +236,7 @@ class LibvirtApiClient(
         if (!output.contains("started") && !output.contains("Domain '$domain' started")) {
             // virsh exit code is not surfaced via JSch exec channel exit status
             // reliably on all distros; check stdout instead.
-            if (output.contains("error:") || output.contains("failed")) {
+            if (isVirshError(output)) {
                 throw LibvirtException("virsh start failed: $output")
             }
         }
@@ -239,7 +251,7 @@ class LibvirtApiClient(
     suspend fun destroyDomain(domain: String) = withContext(Dispatchers.IO) {
         requireValidDomain(domain)
         val output = runCommand("virsh destroy ${shQuote(domain)} 2>&1").trim()
-        if (output.contains("error:") || output.contains("failed")) {
+        if (isVirshError(output)) {
             throw LibvirtException("virsh destroy failed: $output")
         }
         Logger.i(TAG, "destroyDomain($domain): $output")
@@ -253,7 +265,7 @@ class LibvirtApiClient(
     suspend fun shutdownDomain(domain: String) = withContext(Dispatchers.IO) {
         requireValidDomain(domain)
         val output = runCommand("virsh shutdown ${shQuote(domain)} 2>&1").trim()
-        if (output.contains("error:") || output.contains("failed")) {
+        if (isVirshError(output)) {
             throw LibvirtException("virsh shutdown failed: $output")
         }
         Logger.i(TAG, "shutdownDomain($domain): $output")
@@ -265,7 +277,7 @@ class LibvirtApiClient(
     suspend fun rebootDomain(domain: String) = withContext(Dispatchers.IO) {
         requireValidDomain(domain)
         val output = runCommand("virsh reboot ${shQuote(domain)} 2>&1").trim()
-        if (output.contains("error:") || output.contains("failed")) {
+        if (isVirshError(output)) {
             throw LibvirtException("virsh reboot failed: $output")
         }
         Logger.i(TAG, "rebootDomain($domain): $output")
@@ -278,7 +290,7 @@ class LibvirtApiClient(
     suspend fun resetDomain(domain: String) = withContext(Dispatchers.IO) {
         requireValidDomain(domain)
         val output = runCommand("virsh reset ${shQuote(domain)} 2>&1").trim()
-        if (output.contains("error:") || output.contains("failed")) {
+        if (isVirshError(output)) {
             throw LibvirtException("virsh reset failed: $output")
         }
         Logger.i(TAG, "resetDomain($domain): $output")
@@ -505,7 +517,7 @@ class LibvirtApiClient(
     suspend fun listSnapshots(domain: String): List<LibvirtSnapshot> = withContext(Dispatchers.IO) {
         requireValidDomain(domain)
         val output = runCommand("virsh snapshot-list ${shQuote(domain)} 2>&1")
-        if (output.contains("error:") || output.contains("failed")) {
+        if (isVirshError(output)) {
             throw LibvirtException("virsh snapshot-list failed: ${output.trim()}")
         }
         val result = mutableListOf<LibvirtSnapshot>()
@@ -541,7 +553,7 @@ class LibvirtApiClient(
         requireValidDomain(domain)
         requireValidSnapshotName(name)
         val output = runCommand("virsh snapshot-create-as ${shQuote(domain)} --name ${shQuote(name)} 2>&1").trim()
-        if (output.contains("error:") || output.contains("failed")) {
+        if (isVirshError(output)) {
             throw LibvirtException("virsh snapshot-create-as failed: $output")
         }
         Logger.i(TAG, "createSnapshot($domain, $name): $output")
@@ -556,7 +568,7 @@ class LibvirtApiClient(
         requireValidDomain(domain)
         requireValidSnapshotName(name)
         val output = runCommand("virsh snapshot-revert ${shQuote(domain)} --snapshotname ${shQuote(name)} 2>&1").trim()
-        if (output.contains("error:") || output.contains("failed")) {
+        if (isVirshError(output)) {
             throw LibvirtException("virsh snapshot-revert failed: $output")
         }
         Logger.i(TAG, "revertSnapshot($domain, $name): $output")
@@ -571,7 +583,7 @@ class LibvirtApiClient(
         requireValidDomain(domain)
         requireValidSnapshotName(name)
         val output = runCommand("virsh snapshot-delete ${shQuote(domain)} --snapshotname ${shQuote(name)} 2>&1").trim()
-        if (output.contains("error:") || output.contains("failed")) {
+        if (isVirshError(output)) {
             throw LibvirtException("virsh snapshot-delete failed: $output")
         }
         Logger.i(TAG, "deleteSnapshot($domain, $name): $output")
