@@ -273,6 +273,17 @@ class SessionPersistenceManager(
     
     private suspend fun saveTabSession(tab: SSHTab, tabIndex: Int, immediate: Boolean) {
         try {
+            // Guard: the TabSession FK requires the connection profile to exist
+            // in the `connections` table. Ephemeral / quick-connect profiles are
+            // created in-memory and never persisted, so inserting a session for
+            // them would throw SQLITE_CONSTRAINT_FOREIGNKEY. Skip those tabs —
+            // same check TabManager.saveTabState() uses.
+            val profileInDb = database.connectionDao().getConnectionById(tab.profile.id)
+            if (profileInDb == null) {
+                Logger.d("SessionPersistenceManager", "Skipping session save for ephemeral profile: ${tab.getDisplayTitle()}")
+                return
+            }
+
             val terminal = tab.termuxBridge
             val stats = tab.getConnectionStats()
 
