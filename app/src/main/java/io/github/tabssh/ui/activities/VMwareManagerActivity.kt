@@ -5,6 +5,8 @@ import android.os.Bundle
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
+import android.widget.EditText
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -15,6 +17,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.crypto.storage.HypervisorPasswordStore
@@ -177,9 +180,10 @@ class VMwareManagerActivity : AppCompatActivity() {
 
     private fun confirmStop(vm: VMwareApiClient.VMwareVM, client: VMwareApiClient) {
         AlertDialog.Builder(this)
-            .setTitle("Power Off ${vm.name}?")
-            .setMessage("This will forcibly power off the VM. Any unsaved data will be lost.")
-            .setPositiveButton("Power Off") { _, _ -> vmAction(vm, client, "stop") }
+            .setTitle("Stop ${vm.name}?")
+            .setMessage("Shutdown Guest asks the guest OS to shut down cleanly (requires VMware Tools). Power Off forcibly cuts power — any unsaved data will be lost.")
+            .setPositiveButton("Shutdown Guest") { _, _ -> vmAction(vm, client, "shutdown") }
+            .setNeutralButton("Power Off") { _, _ -> vmAction(vm, client, "stop") }
             .setNegativeButton("Cancel", null)
             .show()
     }
@@ -195,15 +199,25 @@ class VMwareManagerActivity : AppCompatActivity() {
 
     private fun vmAction(vm: VMwareApiClient.VMwareVM, client: VMwareApiClient, action: String) {
         lifecycleScope.launch {
-            showProgress("${action.replaceFirstChar { it.uppercase() }}ing ${vm.name}…")
+            // Human-readable progress label per action verb
+            val progressLabel = when (action) {
+                "start"    -> "Starting"
+                "stop"     -> "Stopping"
+                "shutdown" -> "Shutting down"
+                "reboot"   -> "Restarting"
+                "reset"    -> "Resetting"
+                else       -> action.replaceFirstChar { it.uppercase() }
+            }
+            showProgress("$progressLabel ${vm.name}…")
             try {
                 val ok = withContext(Dispatchers.IO) {
                     when (action) {
-                        "start"  -> client.startVM(vm.vm)
-                        "stop"   -> client.stopVM(vm.vm)
-                        "reboot" -> client.resetVM(vm.vm)
-                        "reset"  -> client.resetVM(vm.vm)
-                        else     -> false
+                        "start"    -> client.startVM(vm.vm)
+                        "stop"     -> client.stopVM(vm.vm)
+                        "shutdown" -> { client.shutdownVM(vm.vm); true }
+                        "reboot"   -> { client.rebootGuest(vm.vm); true }
+                        "reset"    -> client.resetVM(vm.vm)
+                        else       -> false
                     }
                 }
                 if (ok) {
@@ -398,7 +412,9 @@ class VMwareManagerActivity : AppCompatActivity() {
             }
 
             holder.btnStart.text = "Power On"
-            holder.btnStop.text = "Power Off"
+            holder.btnStop.text = "Stop"
+            holder.btnReboot.text = "Restart Guest"
+            holder.btnReset.text = "Hard Reset"
 
             // Button visibility by power state
             when (vm.powerState.uppercase()) {
@@ -432,6 +448,9 @@ class VMwareManagerActivity : AppCompatActivity() {
             holder.rowMain.visibility = if (holder.btnStart.visibility == View.VISIBLE || holder.btnStop.visibility == View.VISIBLE) View.VISIBLE else View.GONE
             holder.rowSecondary.visibility = if (holder.btnReboot.visibility == View.VISIBLE || holder.btnReset.visibility == View.VISIBLE) View.VISIBLE else View.GONE
 
+            // Long-press opens the snapshot management dialog
+            holder.itemView.setOnLongClickListener { showSnapshotDialog(vm); true }
+
             holder.btnConsole.setOnClickListener { openVncConsole(vm) }
             holder.btnSsh.setOnClickListener { openSshConsole(vm) }
             holder.btnStart.setOnClickListener { vmAction(vm, client, "start") }
@@ -453,5 +472,188 @@ class VMwareManagerActivity : AppCompatActivity() {
             "SUSPENDED"   -> "Paused"
             else          -> state.split("_").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
         }
+    }
+
+    // ── Snapshot management dialog ────────────────────────────────────────────
+
+    /**
+     * Show snapshot management dialog for a VM
+     */
+    private fun showSnapshotDialog(vm: VMwareApiClient.VMwareVM) {
+        val client = currentClient ?: return
+
+        val dialogView = layoutInflater.inflate(R.layout.dialog_vm_snapshots, null)
+        val vmNameText = dialogView.findViewById<TextView>(R.id.vm_name_text)
+        val dialogProgressBar = dialogView.findViewById<ProgressBar>(R.id.progress_bar)
+        val emptyStateText = dialogView.findViewById<TextView>(R.id.empty_state_text)
+        val snapshotRecyclerView = dialogView.findViewById<RecyclerView>(R.id.snapshot_recycler_view)
+        val createButton = dialogView.findViewById<Button>(R.id.create_snapshot_button)
+        val closeButton = dialogView.findViewById<Button>(R.id.close_button)
+
+        snapshotRecyclerView.layoutManager = LinearLayoutManager(this)
+        vmNameText.text = "VM: ${vm.name}"
+
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setView(dialogView)
+            .create()
+
+        // Load snapshots
+        lifecycleScope.launch {
+            try {
+                dialogProgressBar.visibility = View.VISIBLE
+                val snapshots = client.listSnapshots(vm.vm)
+                dialogProgressBar.visibility = View.GONE
+
+                if (snapshots.isEmpty()) {
+                    emptyStateText.visibility = View.VISIBLE
+                    snapshotRecyclerView.visibility = View.GONE
+                } else {
+                    emptyStateText.visibility = View.GONE
+                    snapshotRecyclerView.visibility = View.VISIBLE
+                    snapshotRecyclerView.adapter = SnapshotAdapter(snapshots) { snapshot, action ->
+                        handleSnapshotAction(vm, snapshot, action, dialog)
+                    }
+                }
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to load snapshots: ${e.message}", e)
+                dialogProgressBar.visibility = View.GONE
+                emptyStateText.text = "Error loading snapshots"
+                emptyStateText.visibility = View.VISIBLE
+            }
+        }
+
+        createButton.setOnClickListener {
+            showCreateSnapshotDialog(vm, dialog)
+        }
+
+        closeButton.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.show()
+    }
+
+    /**
+     * Show create snapshot dialog
+     */
+    private fun showCreateSnapshotDialog(vm: VMwareApiClient.VMwareVM, parentDialog: AlertDialog) {
+        val input = EditText(this)
+        input.hint = "Snapshot name"
+        input.setText("Snapshot ${System.currentTimeMillis()}")
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Create Snapshot")
+            .setMessage("Enter a name for the snapshot of ${vm.name}")
+            .setView(input)
+            .setPositiveButton("Create") { _, _ ->
+                val name = input.text.toString()
+                lifecycleScope.launch {
+                    try {
+                        val success = currentClient?.createSnapshot(vm.vm, name) ?: false
+                        if (success) {
+                            Toast.makeText(this@VMwareManagerActivity, "Snapshot created", Toast.LENGTH_SHORT).show()
+                            parentDialog.dismiss()
+                            // Reopen to show the refreshed snapshot list
+                            showSnapshotDialog(vm)
+                        } else {
+                            showError("Failed to create snapshot")
+                        }
+                    } catch (e: Exception) {
+                        Logger.e(TAG, "Snapshot creation error: ${e.message}", e)
+                        showError("Error: ${e.message}")
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Handle snapshot actions (revert, delete)
+     */
+    private fun handleSnapshotAction(vm: VMwareApiClient.VMwareVM, snapshot: VMwareApiClient.VMwareSnapshot, action: String, parentDialog: AlertDialog) {
+        when (action) {
+            "revert" -> {
+                MaterialAlertDialogBuilder(this)
+                    .setTitle("Revert to Snapshot")
+                    .setMessage("Are you sure you want to revert ${vm.name} to snapshot '${snapshot.name}'?\n\nThis will restore the VM to its state when the snapshot was taken.")
+                    .setPositiveButton("Revert") { _, _ ->
+                        lifecycleScope.launch {
+                            try {
+                                val success = currentClient?.revertSnapshot(snapshot.snapshot) ?: false
+                                if (success) {
+                                    Toast.makeText(this@VMwareManagerActivity, "VM reverted to snapshot", Toast.LENGTH_SHORT).show()
+                                    parentDialog.dismiss()
+                                } else {
+                                    showError("Failed to revert")
+                                }
+                            } catch (e: Exception) {
+                                Logger.e(TAG, "Revert error: ${e.message}", e)
+                                showError("Error: ${e.message}")
+                            }
+                        }
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+            "delete" -> {
+                MaterialAlertDialogBuilder(this)
+                    .setTitle("Delete Snapshot")
+                    .setMessage("Are you sure you want to delete snapshot '${snapshot.name}'?\n\nThis action cannot be undone.")
+                    .setPositiveButton("Delete") { _, _ ->
+                        lifecycleScope.launch {
+                            try {
+                                val success = currentClient?.deleteSnapshot(snapshot.snapshot) ?: false
+                                if (success) {
+                                    Toast.makeText(this@VMwareManagerActivity, "Snapshot deleted", Toast.LENGTH_SHORT).show()
+                                    parentDialog.dismiss()
+                                    // Reopen to show the refreshed snapshot list
+                                    showSnapshotDialog(vm)
+                                } else {
+                                    showError("Failed to delete snapshot")
+                                }
+                            } catch (e: Exception) {
+                                Logger.e(TAG, "Delete error: ${e.message}", e)
+                                showError("Error: ${e.message}")
+                            }
+                        }
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+        }
+    }
+
+    /**
+     * Snapshot adapter for RecyclerView
+     */
+    private inner class SnapshotAdapter(
+        private val snapshots: List<VMwareApiClient.VMwareSnapshot>,
+        private val onAction: (VMwareApiClient.VMwareSnapshot, String) -> Unit
+    ) : RecyclerView.Adapter<SnapshotAdapter.ViewHolder>() {
+
+        inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+            val name: TextView = view.findViewById(R.id.snapshot_name)
+            val time: TextView = view.findViewById(R.id.snapshot_time)
+            val revertButton: Button = view.findViewById(R.id.revert_button)
+            val deleteButton: Button = view.findViewById(R.id.delete_button)
+        }
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+            val view = layoutInflater.inflate(R.layout.item_snapshot, parent, false)
+            return ViewHolder(view)
+        }
+
+        override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+            val snapshot = snapshots[position]
+
+            holder.name.text = snapshot.name
+            holder.time.text = "Created: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date(snapshot.createTime))}"
+
+            holder.revertButton.setOnClickListener { onAction(snapshot, "revert") }
+            holder.deleteButton.setOnClickListener { onAction(snapshot, "delete") }
+        }
+
+        override fun getItemCount() = snapshots.size
     }
 }

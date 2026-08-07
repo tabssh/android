@@ -454,6 +454,237 @@ class VMwareApiClient(
         return null
     }
 
+    // ── Guest power ops & snapshots (vim25 SOAP) ──────────────────────────────
+
+    /** One snapshot in a VM's snapshot tree, flattened by [listSnapshots]. */
+    data class VMwareSnapshot(
+        val snapshot: String,
+        val name: String,
+        val createTime: Long
+    )
+
+    /**
+     * Ask the guest OS to shut down cleanly via vim25 ShutdownGuest. Requires VMware Tools
+     * running in a powered-on guest; a SOAP fault is rethrown with that context attached.
+     */
+    suspend fun shutdownVM(vmId: String): Unit = withContext(Dispatchers.IO) {
+        try {
+            withSoapSession { _, cookie ->
+                soapCall(
+                    soapEnvelope(
+                        "<vim25:ShutdownGuest>" +
+                            "<vim25:_this type=\"VirtualMachine\">${xmlEscape(vmId)}</vim25:_this>" +
+                            "</vim25:ShutdownGuest>"
+                    ),
+                    cookie
+                )
+            }
+            Logger.i("VMwareAPI", "Guest shutdown requested for $vmId")
+        } catch (e: IOException) {
+            throw IOException("Guest shutdown failed — the VM must be powered on with VMware Tools running (${e.message})")
+        }
+    }
+
+    /**
+     * Ask the guest OS to reboot cleanly via vim25 RebootGuest. Requires VMware Tools
+     * running in a powered-on guest; a SOAP fault is rethrown with that context attached.
+     * The REST-based [resetVM] remains the hard power-cycle path.
+     */
+    suspend fun rebootGuest(vmId: String): Unit = withContext(Dispatchers.IO) {
+        try {
+            withSoapSession { _, cookie ->
+                soapCall(
+                    soapEnvelope(
+                        "<vim25:RebootGuest>" +
+                            "<vim25:_this type=\"VirtualMachine\">${xmlEscape(vmId)}</vim25:_this>" +
+                            "</vim25:RebootGuest>"
+                    ),
+                    cookie
+                )
+            }
+            Logger.i("VMwareAPI", "Guest reboot requested for $vmId")
+        } catch (e: IOException) {
+            throw IOException("Guest restart failed — the VM must be powered on with VMware Tools running (${e.message})")
+        }
+    }
+
+    /**
+     * Create a snapshot of the VM without memory capture or quiesce. Returns true when the
+     * server accepts the request and returns a task MoRef; the task is not polled.
+     */
+    suspend fun createSnapshot(vmId: String, name: String): Boolean = withContext(Dispatchers.IO) {
+        withSoapSession { _, cookie ->
+            val resp = soapCall(
+                soapEnvelope(
+                    "<vim25:CreateSnapshot_Task>" +
+                        "<vim25:_this type=\"VirtualMachine\">${xmlEscape(vmId)}</vim25:_this>" +
+                        "<vim25:name>${xmlEscape(name)}</vim25:name>" +
+                        "<vim25:description/>" +
+                        "<vim25:memory>false</vim25:memory>" +
+                        "<vim25:quiesce>false</vim25:quiesce>" +
+                        "</vim25:CreateSnapshot_Task>"
+                ),
+                cookie
+            )
+            parseTagText(resp.body, "returnval") != null
+        }
+    }
+
+    /** List all snapshots of a VM as a flat list; VMs with no snapshot property return an empty list. */
+    suspend fun listSnapshots(vmId: String): List<VMwareSnapshot> = withContext(Dispatchers.IO) {
+        withSoapSession { propertyCollector, cookie ->
+            val resp = soapCall(
+                soapEnvelope(
+                    "<vim25:RetrievePropertiesEx>" +
+                        "<vim25:_this type=\"PropertyCollector\">${xmlEscape(propertyCollector)}</vim25:_this>" +
+                        "<vim25:specSet>" +
+                        "<vim25:propSet>" +
+                        "<vim25:type>VirtualMachine</vim25:type>" +
+                        "<vim25:pathSet>snapshot</vim25:pathSet>" +
+                        "</vim25:propSet>" +
+                        "<vim25:objectSet>" +
+                        "<vim25:obj type=\"VirtualMachine\">${xmlEscape(vmId)}</vim25:obj>" +
+                        "</vim25:objectSet>" +
+                        "</vim25:specSet>" +
+                        "<vim25:options/>" +
+                        "</vim25:RetrievePropertiesEx>"
+                ),
+                cookie
+            )
+            parseSnapshotTree(resp.body)
+        }
+    }
+
+    /** Revert the VM to the given VirtualMachineSnapshot MoRef. True when the task was accepted. */
+    suspend fun revertSnapshot(snapshotRef: String): Boolean = withContext(Dispatchers.IO) {
+        withSoapSession { _, cookie ->
+            val resp = soapCall(
+                soapEnvelope(
+                    "<vim25:RevertToSnapshot_Task>" +
+                        "<vim25:_this type=\"VirtualMachineSnapshot\">${xmlEscape(snapshotRef)}</vim25:_this>" +
+                        "</vim25:RevertToSnapshot_Task>"
+                ),
+                cookie
+            )
+            parseTagText(resp.body, "returnval") != null
+        }
+    }
+
+    /** Delete one snapshot (children kept, disks consolidated). True when the task was accepted. */
+    suspend fun deleteSnapshot(snapshotRef: String): Boolean = withContext(Dispatchers.IO) {
+        withSoapSession { _, cookie ->
+            val resp = soapCall(
+                soapEnvelope(
+                    "<vim25:RemoveSnapshot_Task>" +
+                        "<vim25:_this type=\"VirtualMachineSnapshot\">${xmlEscape(snapshotRef)}</vim25:_this>" +
+                        "<vim25:removeChildren>false</vim25:removeChildren>" +
+                        "<vim25:consolidate>true</vim25:consolidate>" +
+                        "</vim25:RemoveSnapshot_Task>"
+                ),
+                cookie
+            )
+            parseTagText(resp.body, "returnval") != null
+        }
+    }
+
+    /**
+     * Run [block] inside a logged-in vim25 SOAP session: RetrieveServiceContent → Login,
+     * then Logout in a finally so the server-side session never leaks. [block] receives
+     * the resolved PropertyCollector MoRef and the vmware_soap_session cookie.
+     */
+    private suspend fun <T> withSoapSession(block: (propertyCollector: String, cookie: String) -> T): T = withContext(Dispatchers.IO) {
+        val content = soapCall(
+            soapEnvelope(
+                "<vim25:RetrieveServiceContent>" +
+                    "<vim25:_this type=\"ServiceInstance\">ServiceInstance</vim25:_this>" +
+                    "</vim25:RetrieveServiceContent>"
+            ),
+            cookie = null
+        )
+        val sessionManager = parseTagText(content.body, "sessionManager")
+            ?: throw IOException("vim25: ServiceContent has no sessionManager")
+        val propertyCollector = parseTagText(content.body, "propertyCollector")
+            ?: throw IOException("vim25: ServiceContent has no propertyCollector")
+        val login = soapCall(
+            soapEnvelope(
+                "<vim25:Login>" +
+                    "<vim25:_this type=\"SessionManager\">${xmlEscape(sessionManager)}</vim25:_this>" +
+                    "<vim25:userName>${xmlEscape(username)}</vim25:userName>" +
+                    "<vim25:password>${xmlEscape(password)}</vim25:password>" +
+                    "</vim25:Login>"
+            ),
+            cookie = null
+        )
+        val cookie = login.sessionCookie
+            ?: throw IOException("vim25: Login returned no vmware_soap_session cookie")
+        try {
+            block(propertyCollector, cookie)
+        } finally {
+            try {
+                soapCall(
+                    soapEnvelope(
+                        "<vim25:Logout>" +
+                            "<vim25:_this type=\"SessionManager\">${xmlEscape(sessionManager)}</vim25:_this>" +
+                            "</vim25:Logout>"
+                    ),
+                    cookie
+                )
+            } catch (e: Exception) {
+                Logger.w("VMwareAPI", "vim25 Logout failed: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Flatten the VirtualMachineSnapshotTree in a RetrievePropertiesEx response. Each
+     * rootSnapshotList/childSnapshotList element opens one tree node whose snapshot MoRef,
+     * name, and createTime arrive in schema order, so a node emits on its createTime and
+     * nested children simply restart the field collection afterwards.
+     */
+    private fun parseSnapshotTree(xml: String): List<VMwareSnapshot> {
+        val snapshots = mutableListOf<VMwareSnapshot>()
+        var inNode = false
+        var ref: String? = null
+        var name: String? = null
+        val parser = newParser(xml)
+        var event = parser.eventType
+        while (event != XmlPullParser.END_DOCUMENT) {
+            if (event == XmlPullParser.START_TAG) {
+                when (parser.name) {
+                    "rootSnapshotList", "childSnapshotList" -> {
+                        inNode = true
+                        ref = null
+                        name = null
+                    }
+                    "snapshot" -> if (inNode && ref == null) ref = parser.nextText()
+                    "name" -> if (inNode && name == null) name = parser.nextText()
+                    "createTime" -> if (inNode && ref != null && name != null) {
+                        snapshots.add(VMwareSnapshot(ref, name, parseXsdDateTime(parser.nextText())))
+                        ref = null
+                        name = null
+                    }
+                }
+            }
+            event = parser.next()
+        }
+        return snapshots
+    }
+
+    /** Parse a vim25 xsd:dateTime (e.g. 2024-01-02T03:04:05.123456Z or with a ±hh:mm offset) into epoch millis; 0 when unparseable. */
+    private fun parseXsdDateTime(value: String): Long {
+        return try {
+            // Drop fractional seconds — sub-second precision is irrelevant for display
+            val cleaned = value.trim().replace(Regex("\\.\\d+"), "")
+            val format = if (cleaned.endsWith("Z")) "yyyy-MM-dd'T'HH:mm:ss'Z'" else "yyyy-MM-dd'T'HH:mm:ssXXX"
+            val parser = java.text.SimpleDateFormat(format, java.util.Locale.US)
+            if (cleaned.endsWith("Z")) parser.timeZone = java.util.TimeZone.getTimeZone("UTC")
+            parser.parse(cleaned)?.time ?: 0L
+        } catch (e: Exception) {
+            Logger.w("VMwareAPI", "Unparseable xsd:dateTime '$value': ${e.message}")
+            0L
+        }
+    }
+
     /**
      * Detect if this is vCenter or standalone ESXi
      * vCenter has datacenter management, standalone ESXi does not

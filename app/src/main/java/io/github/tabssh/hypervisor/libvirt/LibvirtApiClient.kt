@@ -156,6 +156,23 @@ class LibvirtApiClient(
         return domain
     }
 
+    /**
+     * Reject snapshot names that are empty or contain whitespace or a NUL byte.
+     * The `virsh snapshot-list` table parser splits on whitespace runs, so a
+     * space would corrupt enumeration. Single-quoting already neutralises shell
+     * metacharacters; this is the same defence-in-depth guard as
+     * [requireValidDomain], failing fast with a snapshot-specific message.
+     */
+    private fun requireValidSnapshotName(name: String): String {
+        if (name.isBlank()) {
+            throw LibvirtException("Snapshot name is empty")
+        }
+        if (name.any { it.isWhitespace() || it == '\u0000' }) {
+            throw LibvirtException("Snapshot name contains illegal whitespace or control characters")
+        }
+        return name
+    }
+
     // ── virsh commands ────────────────────────────────────────────────────────
 
     /**
@@ -464,6 +481,100 @@ class LibvirtApiClient(
         }
         if (port == 0 && tlsPort == 0) return null
         return ParsedSpiceUri(password, host, port, tlsPort)
+    }
+
+    // ── Snapshots ────────────────────────────────────────────────────────────
+
+    /** One snapshot of a domain as reported by `virsh snapshot-list`. */
+    data class LibvirtSnapshot(
+        val name: String,
+        val creationTime: String,
+        val state: String
+    )
+
+    /**
+     * Returns all snapshots of [domain] reported by `virsh snapshot-list <domain>`.
+     * Parses the table output:
+     * ```
+     *  Name    Creation Time               State
+     * ---------------------------------------------
+     *  clean   2026-01-01 12:00:00 +0000   shutoff
+     * ```
+     * Throws [LibvirtException] if virsh reports an error.
+     */
+    suspend fun listSnapshots(domain: String): List<LibvirtSnapshot> = withContext(Dispatchers.IO) {
+        requireValidDomain(domain)
+        val output = runCommand("virsh snapshot-list ${shQuote(domain)} 2>&1")
+        if (output.contains("error:") || output.contains("failed")) {
+            throw LibvirtException("virsh snapshot-list failed: ${output.trim()}")
+        }
+        val result = mutableListOf<LibvirtSnapshot>()
+        // Skip header lines (dashes separator and column header)
+        var pastHeader = false
+        for (line in output.lines()) {
+            val trimmed = line.trim()
+            if (trimmed.startsWith("---") || trimmed.startsWith("Name")) {
+                pastHeader = true
+                continue
+            }
+            if (!pastHeader || trimmed.isEmpty()) continue
+
+            // Format: " Name   Creation Time   State" — split on 2+ spaces
+            val parts = trimmed.split(Regex("\\s{2,}"), limit = 3)
+            if (parts.size < 3) continue
+            result += LibvirtSnapshot(
+                name = parts[0].trim(),
+                creationTime = parts[1].trim(),
+                state = parts[2].trim()
+            )
+        }
+        Logger.d(TAG, "listSnapshots($domain): found ${result.size} snapshot(s)")
+        result
+    }
+
+    /**
+     * Create a snapshot of [domain] named [name] via
+     * `virsh snapshot-create-as <domain> --name <name>`.
+     * Throws [LibvirtException] if virsh reports an error.
+     */
+    suspend fun createSnapshot(domain: String, name: String) = withContext(Dispatchers.IO) {
+        requireValidDomain(domain)
+        requireValidSnapshotName(name)
+        val output = runCommand("virsh snapshot-create-as ${shQuote(domain)} --name ${shQuote(name)} 2>&1").trim()
+        if (output.contains("error:") || output.contains("failed")) {
+            throw LibvirtException("virsh snapshot-create-as failed: $output")
+        }
+        Logger.i(TAG, "createSnapshot($domain, $name): $output")
+    }
+
+    /**
+     * Revert [domain] to snapshot [name] via
+     * `virsh snapshot-revert <domain> --snapshotname <name>`.
+     * Throws [LibvirtException] if virsh reports an error.
+     */
+    suspend fun revertSnapshot(domain: String, name: String) = withContext(Dispatchers.IO) {
+        requireValidDomain(domain)
+        requireValidSnapshotName(name)
+        val output = runCommand("virsh snapshot-revert ${shQuote(domain)} --snapshotname ${shQuote(name)} 2>&1").trim()
+        if (output.contains("error:") || output.contains("failed")) {
+            throw LibvirtException("virsh snapshot-revert failed: $output")
+        }
+        Logger.i(TAG, "revertSnapshot($domain, $name): $output")
+    }
+
+    /**
+     * Delete snapshot [name] of [domain] via
+     * `virsh snapshot-delete <domain> --snapshotname <name>`.
+     * Throws [LibvirtException] if virsh reports an error.
+     */
+    suspend fun deleteSnapshot(domain: String, name: String) = withContext(Dispatchers.IO) {
+        requireValidDomain(domain)
+        requireValidSnapshotName(name)
+        val output = runCommand("virsh snapshot-delete ${shQuote(domain)} --snapshotname ${shQuote(name)} 2>&1").trim()
+        if (output.contains("error:") || output.contains("failed")) {
+            throw LibvirtException("virsh snapshot-delete failed: $output")
+        }
+        Logger.i(TAG, "deleteSnapshot($domain, $name): $output")
     }
 
     // ── Lifecycle ────────────────────────────────────────────────────────────

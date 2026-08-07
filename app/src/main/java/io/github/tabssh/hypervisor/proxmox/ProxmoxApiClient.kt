@@ -282,6 +282,90 @@ class ProxmoxApiClient(
         }
     }
 
+    data class ProxmoxSnapshot(
+        val name: String,
+        // Epoch seconds; absent (null) while a snapshot is still being created
+        val snaptime: Long?,
+        val description: String?
+    )
+
+    /**
+     * List snapshots for a VM or container.
+     * The synthetic "current" entry (live state, no snaptime) is skipped.
+     */
+    suspend fun listSnapshots(node: String, vmid: Int, type: String = "qemu"): List<ProxmoxSnapshot> = withContext(Dispatchers.IO) {
+        try {
+            val endpoint = if (type == "lxc") "/nodes/$node/lxc/$vmid/snapshot" else "/nodes/$node/qemu/$vmid/snapshot"
+            val json = apiGet(endpoint)
+            val snapshots = mutableListOf<ProxmoxSnapshot>()
+
+            val data = json.getJSONArray("data")
+            for (i in 0 until data.length()) {
+                val snap = data.getJSONObject(i)
+                val name = snap.getString("name")
+                val snaptime = if (snap.has("snaptime")) snap.getLong("snaptime") else null
+                // Proxmox always appends a synthetic "current" entry for the live state — not a real snapshot
+                if (name == "current" && snaptime == null) continue
+                snapshots.add(ProxmoxSnapshot(
+                    name = name,
+                    snaptime = snaptime,
+                    description = snap.optString("description").takeIf { it.isNotBlank() }
+                ))
+            }
+
+            Logger.d("ProxmoxAPI", "Retrieved ${snapshots.size} snapshots for VM $vmid")
+            snapshots
+        } catch (e: Exception) {
+            Logger.e("ProxmoxAPI", "Failed to list snapshots", e)
+            emptyList()
+        }
+    }
+
+    /**
+     * Create a snapshot. Success = HTTP 200 (the returned UPID task is not polled).
+     */
+    suspend fun createSnapshot(node: String, vmid: Int, type: String = "qemu", name: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val endpoint = if (type == "lxc") "/nodes/$node/lxc/$vmid/snapshot" else "/nodes/$node/qemu/$vmid/snapshot"
+            apiPost(endpoint, mapOf("snapname" to name))
+            Logger.i("ProxmoxAPI", "Created snapshot '$name' for VM $vmid")
+            true
+        } catch (e: Exception) {
+            Logger.e("ProxmoxAPI", "Failed to create snapshot", e)
+            false
+        }
+    }
+
+    /**
+     * Roll back a VM to a snapshot. Success = HTTP 200 (the returned UPID task is not polled).
+     */
+    suspend fun rollbackSnapshot(node: String, vmid: Int, type: String = "qemu", name: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val endpoint = if (type == "lxc") "/nodes/$node/lxc/$vmid/snapshot/$name/rollback" else "/nodes/$node/qemu/$vmid/snapshot/$name/rollback"
+            apiPost(endpoint)
+            Logger.i("ProxmoxAPI", "Rolled back VM $vmid to snapshot '$name'")
+            true
+        } catch (e: Exception) {
+            Logger.e("ProxmoxAPI", "Failed to rollback snapshot", e)
+            false
+        }
+    }
+
+    /**
+     * Delete a snapshot. Success = HTTP 200 (the returned UPID task is not polled).
+     */
+    suspend fun deleteSnapshot(node: String, vmid: Int, type: String = "qemu", name: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val endpoint = if (type == "lxc") "/nodes/$node/lxc/$vmid/snapshot/$name" else "/nodes/$node/qemu/$vmid/snapshot/$name"
+            apiDelete(endpoint)
+            Logger.i("ProxmoxAPI", "Deleted snapshot '$name' for VM $vmid")
+            true
+        } catch (e: Exception) {
+            Logger.e("ProxmoxAPI", "Failed to delete snapshot", e)
+            false
+        }
+    }
+
     /**
      * Terminal proxy result containing ticket and WebSocket URL
      */
@@ -581,6 +665,24 @@ class ProxmoxApiClient(
             .url("$baseUrl$endpoint")
             .addHeader("Cookie", "PVEAuthCookie=$authTicket")
             .get()
+            .build()
+
+        return client.newCall(request).execute().use { response ->
+            val responseBody = response.body?.string()
+            if (response.isSuccessful && responseBody != null) {
+                JSONObject(responseBody)
+            } else {
+                throw IOException("API request failed: ${response.code}")
+            }
+        }
+    }
+
+    private fun apiDelete(endpoint: String): JSONObject {
+        val request = Request.Builder()
+            .url("$baseUrl$endpoint")
+            .addHeader("Cookie", "PVEAuthCookie=$authTicket")
+            .addHeader("CSRFPreventionToken", csrfToken ?: "")
+            .delete()
             .build()
 
         return client.newCall(request).execute().use { response ->

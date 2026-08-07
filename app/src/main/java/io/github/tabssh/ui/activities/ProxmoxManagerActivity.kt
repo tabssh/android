@@ -467,6 +467,12 @@ class ProxmoxManagerActivity : AppCompatActivity() {
             holder.rowMain.visibility = if (holder.btnStart.visibility == View.VISIBLE || holder.btnStop.visibility == View.VISIBLE) View.VISIBLE else View.GONE
             holder.rowSecondary.visibility = if (holder.btnReboot.visibility == View.VISIBLE || holder.btnReset.visibility == View.VISIBLE) View.VISIBLE else View.GONE
 
+            // Long-press opens the snapshot management dialog
+            holder.itemView.setOnLongClickListener {
+                showSnapshotDialog(vm, client)
+                true
+            }
+
             holder.btnConsole.setOnClickListener { openConsole(vm) }
             holder.btnStart.setOnClickListener { powerAction(vm, client, "start") }
             holder.btnStop.setOnClickListener { powerAction(vm, client, "stop") }
@@ -488,6 +494,194 @@ class ProxmoxManagerActivity : AppCompatActivity() {
             "paused"     -> "Paused"
             "restarting" -> "Restarting"
             else         -> state.replaceFirstChar { it.uppercase() }
+        }
+    }
+
+    // ── Snapshot management ───────────────────────────────────────────────────
+
+    /**
+     * Show snapshot management dialog for a VM. Opened by long-press on a VM
+     * row; mirrors [XCPngManagerActivity]'s snapshot dialog pattern.
+     */
+    private fun showSnapshotDialog(vm: ProxmoxApiClient.ProxmoxVM, client: ProxmoxApiClient) {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_vm_snapshots, null)
+        val vmNameText = dialogView.findViewById<TextView>(R.id.vm_name_text)
+        val dialogProgress = dialogView.findViewById<ProgressBar>(R.id.progress_bar)
+        val emptyStateText = dialogView.findViewById<TextView>(R.id.empty_state_text)
+        val snapshotRecycler = dialogView.findViewById<RecyclerView>(R.id.snapshot_recycler_view)
+        val createButton = dialogView.findViewById<android.widget.Button>(R.id.create_snapshot_button)
+        val closeButton = dialogView.findViewById<android.widget.Button>(R.id.close_button)
+
+        snapshotRecycler.layoutManager = LinearLayoutManager(this)
+        vmNameText.text = "VM: ${vm.name}"
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .create()
+
+        // Load snapshots
+        lifecycleScope.launch {
+            try {
+                dialogProgress.visibility = View.VISIBLE
+                val snapshots = client.listSnapshots(vm.node, vm.vmid, vm.type)
+                dialogProgress.visibility = View.GONE
+
+                if (snapshots.isEmpty()) {
+                    emptyStateText.visibility = View.VISIBLE
+                    snapshotRecycler.visibility = View.GONE
+                } else {
+                    emptyStateText.visibility = View.GONE
+                    snapshotRecycler.visibility = View.VISIBLE
+                    snapshotRecycler.adapter = SnapshotAdapter(snapshots) { snapshot, action ->
+                        handleSnapshotAction(vm, client, snapshot, action, dialog)
+                    }
+                }
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to load snapshots: ${e.message}", e)
+                dialogProgress.visibility = View.GONE
+                emptyStateText.text = "Error loading snapshots"
+                emptyStateText.visibility = View.VISIBLE
+            }
+        }
+
+        createButton.setOnClickListener {
+            showCreateSnapshotDialog(vm, client, dialog)
+        }
+
+        closeButton.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.show()
+    }
+
+    /**
+     * Show create snapshot dialog
+     */
+    private fun showCreateSnapshotDialog(vm: ProxmoxApiClient.ProxmoxVM, client: ProxmoxApiClient, parentDialog: AlertDialog) {
+        val input = android.widget.EditText(this)
+        input.hint = "Snapshot name"
+        // Proxmox snapshot names must be config IDs (letter first, no spaces) — default differs from XCPng's
+        input.setText("snap${System.currentTimeMillis()}")
+
+        AlertDialog.Builder(this)
+            .setTitle("Create Snapshot")
+            .setMessage("Enter a name for the snapshot of ${vm.name}")
+            .setView(input)
+            .setPositiveButton("Create") { _, _ ->
+                val name = input.text.toString().trim()
+                lifecycleScope.launch {
+                    try {
+                        val success = client.createSnapshot(vm.node, vm.vmid, vm.type, name)
+                        if (success) {
+                            Toast.makeText(this@ProxmoxManagerActivity, "Snapshot created", Toast.LENGTH_SHORT).show()
+                            parentDialog.dismiss()
+                            // Refresh
+                            showSnapshotDialog(vm, client)
+                        } else {
+                            Toast.makeText(this@ProxmoxManagerActivity, "Failed to create snapshot", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (e: Exception) {
+                        Logger.e(TAG, "Snapshot creation error: ${e.message}", e)
+                        Toast.makeText(this@ProxmoxManagerActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Handle snapshot actions (revert, delete)
+     */
+    private fun handleSnapshotAction(vm: ProxmoxApiClient.ProxmoxVM, client: ProxmoxApiClient, snapshot: ProxmoxApiClient.ProxmoxSnapshot, action: String, parentDialog: AlertDialog) {
+        when (action) {
+            "revert" -> {
+                AlertDialog.Builder(this)
+                    .setTitle("Revert to Snapshot")
+                    .setMessage("Are you sure you want to revert ${vm.name} to snapshot '${snapshot.name}'?\n\nThis will restore the VM to its state when the snapshot was taken.")
+                    .setPositiveButton("Revert") { _, _ ->
+                        lifecycleScope.launch {
+                            try {
+                                val success = client.rollbackSnapshot(vm.node, vm.vmid, vm.type, snapshot.name)
+                                if (success) {
+                                    Toast.makeText(this@ProxmoxManagerActivity, "VM reverted to snapshot", Toast.LENGTH_SHORT).show()
+                                    parentDialog.dismiss()
+                                } else {
+                                    Toast.makeText(this@ProxmoxManagerActivity, "Failed to revert", Toast.LENGTH_SHORT).show()
+                                }
+                            } catch (e: Exception) {
+                                Logger.e(TAG, "Revert error: ${e.message}", e)
+                                Toast.makeText(this@ProxmoxManagerActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+            "delete" -> {
+                AlertDialog.Builder(this)
+                    .setTitle("Delete Snapshot")
+                    .setMessage("Are you sure you want to delete snapshot '${snapshot.name}'?\n\nThis action cannot be undone.")
+                    .setPositiveButton("Delete") { _, _ ->
+                        lifecycleScope.launch {
+                            try {
+                                val success = client.deleteSnapshot(vm.node, vm.vmid, vm.type, snapshot.name)
+                                if (success) {
+                                    Toast.makeText(this@ProxmoxManagerActivity, "Snapshot deleted", Toast.LENGTH_SHORT).show()
+                                    parentDialog.dismiss()
+                                    // Refresh
+                                    showSnapshotDialog(vm, client)
+                                } else {
+                                    Toast.makeText(this@ProxmoxManagerActivity, "Failed to delete snapshot", Toast.LENGTH_SHORT).show()
+                                }
+                            } catch (e: Exception) {
+                                Logger.e(TAG, "Delete error: ${e.message}", e)
+                                Toast.makeText(this@ProxmoxManagerActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+        }
+    }
+
+    /**
+     * Snapshot adapter for RecyclerView
+     */
+    private inner class SnapshotAdapter(
+        private val snapshots: List<ProxmoxApiClient.ProxmoxSnapshot>,
+        private val onAction: (ProxmoxApiClient.ProxmoxSnapshot, String) -> Unit
+    ) : RecyclerView.Adapter<SnapshotAdapter.VH>() {
+
+        inner class VH(view: View) : RecyclerView.ViewHolder(view) {
+            val name: TextView = view.findViewById(R.id.snapshot_name)
+            val time: TextView = view.findViewById(R.id.snapshot_time)
+            val revertButton: android.widget.Button = view.findViewById(R.id.revert_button)
+            val deleteButton: android.widget.Button = view.findViewById(R.id.delete_button)
+        }
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
+            val v = layoutInflater.inflate(R.layout.item_snapshot, parent, false)
+            return VH(v)
+        }
+
+        override fun getItemCount() = snapshots.size
+
+        override fun onBindViewHolder(holder: VH, position: Int) {
+            val snapshot = snapshots[position]
+
+            holder.name.text = snapshot.name
+            // snaptime is epoch seconds; null while the snapshot is still being created
+            holder.time.text = if (snapshot.snaptime != null) {
+                "Created: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date(snapshot.snaptime * 1000))}"
+            } else {
+                snapshot.description ?: "Creating…"
+            }
+
+            holder.revertButton.setOnClickListener { onAction(snapshot, "revert") }
+            holder.deleteButton.setOnClickListener { onAction(snapshot, "delete") }
         }
     }
 }

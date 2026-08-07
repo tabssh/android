@@ -16,6 +16,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **The scrollback thumb is now a persistent desktop-style scrollbar (konsole/xfce4-terminal), not a transient overlay** — the auto-fading thumb introduced right after 1.0.0 never appeared in mouse-tracking/alt-screen sessions and vanished 1.2 s after every scroll; `TerminalView` now always draws a full-height right-edge track (faint) with a thumb that maps the terminal's local scrollback position, and the thumb fills the whole track when there is nothing to scroll back through (empty scrollback, alt-screen app, mosh) — visible but inert, exactly like a desktop terminal with an empty history; dragging the thumb scrolls only the terminal's own scrollback and still yields to horizontal movement, so left/right tab-switch swipes are unaffected; all fade timers and show/hide state are gone
 - **Swipe up/down now scrolls like a desktop mousewheel: 3 lines per line-height of finger travel** — all three swipe paths in `TerminalView` (wheel-event forwarding under remote mouse tracking, arrow-key forwarding on the alternate screen, and smooth pixel scrolling of local scrollback, including fling velocity) are geared by a shared `WHEEL_STEP_LINES = 3` constant matching the desktop wheel default, replacing the previous 1:1 line-per-line mapping
 
+### Added
+
+- **VM snapshots on every hypervisor backend** — Proxmox, VMware, and libvirt/QEMU now have snapshot create/list/revert/delete to match XCP-ng/Xen Orchestra: long-press a VM row in any hypervisor manager to open the snapshot dialog (same UI as XCP-ng's). Proxmox uses the REST snapshot endpoints for both QEMU VMs and LXC containers; VMware uses vim25 SOAP task calls (`CreateSnapshot_Task`/`RevertToSnapshot_Task`/`RemoveSnapshot_Task`, no memory capture); libvirt shells out to `virsh snapshot-create-as`/`snapshot-revert`/`snapshot-delete` over SSH
+- **VMware guest shutdown and guest restart** — the VM row's Stop action now offers a clean "Shutdown Guest" (vim25 `ShutdownGuest`, needs VMware Tools) alongside hard "Power Off", and the reboot button is now a clean "Restart Guest" (`RebootGuest`) with the hard reset kept as "Hard Reset"
+
 ## [1.0.0] - 2026-07-30
 
 ### Security

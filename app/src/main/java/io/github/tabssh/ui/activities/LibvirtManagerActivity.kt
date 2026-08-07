@@ -5,6 +5,8 @@ import android.os.Bundle
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
+import android.widget.EditText
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -547,6 +549,189 @@ class LibvirtManagerActivity : AppCompatActivity() {
             .show()
     }
 
+    // ── Snapshot management ───────────────────────────────────────────────────
+
+    /**
+     * Show the snapshot management dialog for [vm]: lists existing snapshots
+     * with revert/delete actions and offers creating a new one.
+     */
+    private fun showSnapshotDialog(vm: LibvirtVm, client: LibvirtApiClient) {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_vm_snapshots, null)
+        val vmNameText = dialogView.findViewById<TextView>(R.id.vm_name_text)
+        val dialogProgress = dialogView.findViewById<ProgressBar>(R.id.progress_bar)
+        val emptyStateText = dialogView.findViewById<TextView>(R.id.empty_state_text)
+        val snapshotRecycler = dialogView.findViewById<RecyclerView>(R.id.snapshot_recycler_view)
+        val createButton = dialogView.findViewById<Button>(R.id.create_snapshot_button)
+        val closeButton = dialogView.findViewById<Button>(R.id.close_button)
+
+        snapshotRecycler.layoutManager = LinearLayoutManager(this)
+        vmNameText.text = "VM: ${vm.name}"
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .create()
+
+        // Load snapshots
+        lifecycleScope.launch {
+            try {
+                dialogProgress.visibility = View.VISIBLE
+                val snapshots = withContext(Dispatchers.IO) { client.listSnapshots(vm.name) }
+                dialogProgress.visibility = View.GONE
+
+                if (snapshots.isEmpty()) {
+                    emptyStateText.visibility = View.VISIBLE
+                    snapshotRecycler.visibility = View.GONE
+                } else {
+                    emptyStateText.visibility = View.GONE
+                    snapshotRecycler.visibility = View.VISIBLE
+                    snapshotRecycler.adapter = SnapshotAdapter(snapshots) { snapshot, action ->
+                        handleSnapshotAction(vm, client, snapshot, action, dialog)
+                    }
+                }
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to load snapshots for ${vm.name}", e)
+                dialogProgress.visibility = View.GONE
+                emptyStateText.text = "Error loading snapshots"
+                emptyStateText.visibility = View.VISIBLE
+            }
+        }
+
+        createButton.setOnClickListener { showCreateSnapshotDialog(vm, client, dialog) }
+        closeButton.setOnClickListener { dialog.dismiss() }
+
+        dialog.show()
+    }
+
+    /**
+     * Prompt for a snapshot name and create the snapshot. virsh snapshot names
+     * must not contain whitespace (the client rejects them too), so the input
+     * is validated before the command is sent.
+     */
+    private fun showCreateSnapshotDialog(vm: LibvirtVm, client: LibvirtApiClient, parentDialog: AlertDialog) {
+        val input = EditText(this)
+        input.hint = "Snapshot name"
+        input.setText("snapshot-${System.currentTimeMillis()}")
+
+        AlertDialog.Builder(this)
+            .setTitle("Create Snapshot")
+            .setMessage("Enter a name for the snapshot of ${vm.name}")
+            .setView(input)
+            .setPositiveButton("Create") { _, _ ->
+                val name = input.text.toString().trim()
+                if (name.isEmpty()) {
+                    Toast.makeText(this, "Snapshot name cannot be empty", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                if (name.any { it.isWhitespace() }) {
+                    Toast.makeText(this, "Snapshot name cannot contain spaces", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                lifecycleScope.launch {
+                    try {
+                        withContext(Dispatchers.IO) { client.createSnapshot(vm.name, name) }
+                        Toast.makeText(this@LibvirtManagerActivity, "Snapshot created", Toast.LENGTH_SHORT).show()
+                        parentDialog.dismiss()
+                        // Refresh
+                        showSnapshotDialog(vm, client)
+                    } catch (e: Exception) {
+                        Logger.e(TAG, "Snapshot creation error for ${vm.name}", e)
+                        showDomainError("Error", "Failed to create snapshot: ${e.message}")
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Handle snapshot actions (revert, delete), each behind a confirmation dialog.
+     */
+    private fun handleSnapshotAction(
+        vm: LibvirtVm,
+        client: LibvirtApiClient,
+        snapshot: LibvirtApiClient.LibvirtSnapshot,
+        action: String,
+        parentDialog: AlertDialog
+    ) {
+        when (action) {
+            "revert" -> {
+                AlertDialog.Builder(this)
+                    .setTitle("Revert to Snapshot")
+                    .setMessage("Are you sure you want to revert ${vm.name} to snapshot '${snapshot.name}'?\n\nThis will restore the VM to its state when the snapshot was taken.")
+                    .setPositiveButton("Revert") { _, _ ->
+                        lifecycleScope.launch {
+                            try {
+                                withContext(Dispatchers.IO) { client.revertSnapshot(vm.name, snapshot.name) }
+                                Toast.makeText(this@LibvirtManagerActivity, "VM reverted to snapshot", Toast.LENGTH_SHORT).show()
+                                parentDialog.dismiss()
+                                // Reverting can change the domain's power state — refresh the list
+                                loadDomains(client)
+                            } catch (e: Exception) {
+                                Logger.e(TAG, "Revert error for ${vm.name}", e)
+                                showDomainError("Error", "Failed to revert: ${e.message}")
+                            }
+                        }
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+            "delete" -> {
+                AlertDialog.Builder(this)
+                    .setTitle("Delete Snapshot")
+                    .setMessage("Are you sure you want to delete snapshot '${snapshot.name}'?\n\nThis action cannot be undone.")
+                    .setPositiveButton("Delete") { _, _ ->
+                        lifecycleScope.launch {
+                            try {
+                                withContext(Dispatchers.IO) { client.deleteSnapshot(vm.name, snapshot.name) }
+                                Toast.makeText(this@LibvirtManagerActivity, "Snapshot deleted", Toast.LENGTH_SHORT).show()
+                                parentDialog.dismiss()
+                                // Refresh
+                                showSnapshotDialog(vm, client)
+                            } catch (e: Exception) {
+                                Logger.e(TAG, "Delete error for ${vm.name}", e)
+                                showDomainError("Error", "Failed to delete snapshot: ${e.message}")
+                            }
+                        }
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+        }
+    }
+
+    /**
+     * Snapshot adapter for the snapshot dialog's RecyclerView.
+     */
+    private inner class SnapshotAdapter(
+        private val snapshots: List<LibvirtApiClient.LibvirtSnapshot>,
+        private val onAction: (LibvirtApiClient.LibvirtSnapshot, String) -> Unit
+    ) : RecyclerView.Adapter<SnapshotAdapter.VH>() {
+
+        inner class VH(view: View) : RecyclerView.ViewHolder(view) {
+            val name: TextView = view.findViewById(R.id.snapshot_name)
+            val time: TextView = view.findViewById(R.id.snapshot_time)
+            val revertButton: Button = view.findViewById(R.id.revert_button)
+            val deleteButton: Button = view.findViewById(R.id.delete_button)
+        }
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
+            val v = layoutInflater.inflate(R.layout.item_snapshot, parent, false)
+            return VH(v)
+        }
+
+        override fun getItemCount(): Int = snapshots.size
+
+        override fun onBindViewHolder(holder: VH, position: Int) {
+            val snapshot = snapshots[position]
+
+            holder.name.text = snapshot.name
+            holder.time.text = "Created: ${snapshot.creationTime} (${snapshot.state})"
+
+            holder.revertButton.setOnClickListener { onAction(snapshot, "revert") }
+            holder.deleteButton.setOnClickListener { onAction(snapshot, "delete") }
+        }
+    }
+
     // ── Adapter ───────────────────────────────────────────────────────────────
 
     private inner class VmAdapter(
@@ -629,6 +814,9 @@ class LibvirtManagerActivity : AppCompatActivity() {
             holder.rowConnect.visibility = if (holder.btnConsole.visibility == View.VISIBLE || holder.btnSsh.visibility == View.VISIBLE) View.VISIBLE else View.GONE
             holder.rowMain.visibility = if (holder.btnStart.visibility == View.VISIBLE || holder.btnStop.visibility == View.VISIBLE) View.VISIBLE else View.GONE
             holder.rowSecondary.visibility = if (holder.btnReboot.visibility == View.VISIBLE || holder.btnReset.visibility == View.VISIBLE) View.VISIBLE else View.GONE
+
+            // Long-press opens the snapshot management dialog for this domain
+            holder.itemView.setOnLongClickListener { showSnapshotDialog(vm, client); true }
 
             holder.btnConsole.setOnClickListener { openConsole(vm, client) }
             holder.btnSsh.setOnClickListener { directSshToVm(vm, client) }
