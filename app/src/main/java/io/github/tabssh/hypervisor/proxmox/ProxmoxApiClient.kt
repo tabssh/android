@@ -341,7 +341,9 @@ class ProxmoxApiClient(
      */
     suspend fun rollbackSnapshot(node: String, vmid: Int, type: String = "qemu", name: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            val endpoint = if (type == "lxc") "/nodes/$node/lxc/$vmid/snapshot/$name/rollback" else "/nodes/$node/qemu/$vmid/snapshot/$name/rollback"
+            val n = encodePathSegment(node)
+            val s = encodePathSegment(name)
+            val endpoint = if (type == "lxc") "/nodes/$n/lxc/$vmid/snapshot/$s/rollback" else "/nodes/$n/qemu/$vmid/snapshot/$s/rollback"
             apiPost(endpoint)
             Logger.i("ProxmoxAPI", "Rolled back VM $vmid to snapshot '$name'")
             true
@@ -356,7 +358,9 @@ class ProxmoxApiClient(
      */
     suspend fun deleteSnapshot(node: String, vmid: Int, type: String = "qemu", name: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            val endpoint = if (type == "lxc") "/nodes/$node/lxc/$vmid/snapshot/$name" else "/nodes/$node/qemu/$vmid/snapshot/$name"
+            val n = encodePathSegment(node)
+            val s = encodePathSegment(name)
+            val endpoint = if (type == "lxc") "/nodes/$n/lxc/$vmid/snapshot/$s" else "/nodes/$n/qemu/$vmid/snapshot/$s"
             apiDelete(endpoint)
             Logger.i("ProxmoxAPI", "Deleted snapshot '$name' for VM $vmid")
             true
@@ -660,6 +664,15 @@ class ProxmoxApiClient(
         }
     }
 
+    /**
+     * Percent-encode one path segment. Node and snapshot names are interpolated
+     * into the REST path, and a name containing `/`, `?`, `#`, or a space would
+     * otherwise silently retarget the request at a different endpoint.
+     * `URLEncoder` is form-encoding, so its `+`-for-space is corrected here.
+     */
+    private fun encodePathSegment(value: String): String =
+        java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
+
     private fun apiGet(endpoint: String): JSONObject {
         val request = Request.Builder()
             .url("$baseUrl$endpoint")
@@ -690,9 +703,29 @@ class ProxmoxApiClient(
             if (response.isSuccessful && responseBody != null) {
                 JSONObject(responseBody)
             } else {
-                throw IOException("API request failed: ${response.code}")
+                val errorDetail = proxmoxErrorDetail(responseBody)
+                throw IOException(if (errorDetail.isBlank()) "API request failed: ${response.code}" else errorDetail)
             }
         }
+    }
+
+    /**
+     * Extract Proxmox's own error text from a failed response body so callers
+     * surface the reason (e.g. "snapshot name too long") rather than a status code.
+     * `errors` may be a flat string or a JSONObject keyed by endpoint
+     * (e.g. `{"vmid":"serial interface not defined"}`); both forms are unwrapped.
+     */
+    private fun proxmoxErrorDetail(responseBody: String?): String = try {
+        val body = JSONObject(responseBody ?: "{}")
+        body.optString("errors", "").takeIf { it.isNotBlank() }
+            ?: body.optJSONObject("errors")?.let { errObj ->
+                val key = errObj.keys().takeIf { it.hasNext() }?.next()
+                key?.let { errObj.optString(it, "").takeIf { v -> v.isNotBlank() } }
+                    ?: errObj.toString().takeIf { it.isNotBlank() }
+            }
+            ?: responseBody?.take(200) ?: ""
+    } catch (_: Exception) {
+        responseBody?.take(200) ?: ""
     }
 
     private fun apiPost(endpoint: String, formParams: Map<String, String> = emptyMap()): JSONObject {
@@ -713,21 +746,7 @@ class ProxmoxApiClient(
             if (response.isSuccessful && responseBody != null) {
                 JSONObject(responseBody)
             } else {
-                val errorDetail = try {
-                    val body = JSONObject(responseBody ?: "{}")
-                    // errors may be a flat string or a JSONObject keyed by endpoint
-                    // (e.g. {"vmid":"serial interface not defined"}). Extract the
-                    // actual text so callers can do simple string matching.
-                    body.optString("errors", "").takeIf { it.isNotBlank() }
-                        ?: body.optJSONObject("errors")?.let { errObj ->
-                            val key = errObj.keys().takeIf { it.hasNext() }?.next()
-                            key?.let { errObj.optString(it, "").takeIf { v -> v.isNotBlank() } }
-                                ?: errObj.toString().takeIf { it.isNotBlank() }
-                        }
-                        ?: responseBody?.take(200) ?: ""
-                } catch (_: Exception) {
-                    responseBody?.take(200) ?: ""
-                }
+                val errorDetail = proxmoxErrorDetail(responseBody)
                 throw IOException(if (errorDetail.isBlank()) "API request failed: ${response.code}" else errorDetail)
             }
         }
