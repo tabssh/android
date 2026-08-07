@@ -7,6 +7,8 @@ import com.jcraft.jsch.JSch
 import com.jcraft.jsch.Session
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.crypto.storage.HypervisorPasswordStore
+import io.github.tabssh.hypervisor.spice.SpiceConnectionParams
+import io.github.tabssh.hypervisor.spice.SpiceLoader
 import io.github.tabssh.ssh.connection.HostKeyAction
 import io.github.tabssh.ssh.connection.HostKeyVerifier
 import io.github.tabssh.storage.database.entities.HypervisorProfile
@@ -335,6 +337,134 @@ class LibvirtApiClient(
                 throw e
             }
         }
+
+    // ── SPICE display ────────────────────────────────────────────────────────
+
+    /**
+     * Result of a successful [getSpiceDisplay] probe: the SSH-forwarded local
+     * port (kept so [stopSpiceForward] can tear the forward down when the
+     * console tab closes) plus ready-to-use [SpiceConnectionParams] pointing
+     * the native client at `127.0.0.1:<localPort>`.
+     */
+    data class SpiceDisplay(
+        val localPort: Int,
+        val params: SpiceConnectionParams
+    )
+
+    /**
+     * Probe [domain] for a SPICE display via `virsh domdisplay` and, when one
+     * exists, tunnel it over this client's SSH session with a local port
+     * forward — same keep-the-display-off-the-network model as [openVncChannel].
+     *
+     * Returns null — silently, per the console fallback contract (Logger.i
+     * only) — when the native SPICE library is not shipped in this APK, the
+     * domain has no SPICE display (VNC-only or headless), the domdisplay URI
+     * is unparsable, or the port forward cannot be established; the caller
+     * falls through to the VNC path. Throws only when the SSH session itself
+     * is unusable.
+     */
+    suspend fun getSpiceDisplay(domain: String): SpiceDisplay? = withContext(Dispatchers.IO) {
+        requireValidDomain(domain)
+        if (!SpiceLoader.isSpiceAvailable()) {
+            Logger.i(TAG, "getSpiceDisplay($domain): native SPICE library not present — VNC fallback")
+            return@withContext null
+        }
+        // --include-password embeds the SPICE ticket as URI userinfo
+        // (spice://:ticket@host:port); without it a password-protected
+        // display would pass the transport handshake and then fail auth.
+        val output = runCommand("virsh domdisplay --include-password ${shQuote(domain)} 2>/dev/null")
+            .lines().firstOrNull { it.isNotBlank() }?.trim() ?: ""
+        if (!output.startsWith("spice://")) {
+            Logger.i(TAG, "getSpiceDisplay($domain): no SPICE display (domdisplay='$output') — VNC fallback")
+            return@withContext null
+        }
+        val parsed = parseSpiceUri(output)
+        if (parsed == null) {
+            Logger.i(TAG, "getSpiceDisplay($domain): unparsable domdisplay URI — VNC fallback")
+            return@withContext null
+        }
+        val sess = session ?: throw LibvirtException("SSH session not established; call connect() first")
+        // Prefer the plaintext port: the SSH tunnel already encrypts and
+        // authenticates the hop, so SPICE-level TLS adds only a certificate
+        // that could never validate against the 127.0.0.1 tunnel endpoint.
+        val remotePort = if (parsed.port > 0) parsed.port else parsed.tlsPort
+        val localPort = try {
+            // lport 0 lets JSch pick a free local port and return it
+            sess.setPortForwardingL(0, parsed.host, remotePort)
+        } catch (e: Exception) {
+            Logger.i(TAG, "getSpiceDisplay($domain): port forward to ${parsed.host}:$remotePort failed: ${e.message} — VNC fallback")
+            return@withContext null
+        }
+        Logger.i(TAG, "SPICE display for '$domain' at ${parsed.host}:$remotePort forwarded to 127.0.0.1:$localPort")
+        val params = if (parsed.port > 0) {
+            SpiceConnectionParams(
+                host = "127.0.0.1",
+                port = localPort,
+                tlsPort = 0,
+                password = parsed.password
+            )
+        } else {
+            // TLS-only display: tunnel the TLS port but skip chain validation —
+            // the server certificate names the hypervisor host, not 127.0.0.1,
+            // and the SSH tunnel already provides transport integrity/authenticity.
+            SpiceConnectionParams(
+                host = "127.0.0.1",
+                port = 0,
+                tlsPort = localPort,
+                password = parsed.password,
+                tlsVerify = false
+            )
+        }
+        SpiceDisplay(localPort, params)
+    }
+
+    /**
+     * Remove the local port forward created by [getSpiceDisplay]. Safe to call
+     * after the session is gone — a closed session tears down all forwards
+     * itself, so a failure here is log-only.
+     */
+    fun stopSpiceForward(localPort: Int) {
+        try {
+            session?.delPortForwardingL(localPort)
+            Logger.d(TAG, "stopSpiceForward: removed local forward on port $localPort")
+        } catch (e: Exception) {
+            Logger.d(TAG, "stopSpiceForward($localPort): ${e.message}")
+        }
+    }
+
+    /** Parsed pieces of a `virsh domdisplay` `spice://` URI. */
+    private data class ParsedSpiceUri(
+        val password: String,
+        val host: String,
+        val port: Int,
+        val tlsPort: Int
+    )
+
+    /**
+     * Parse `spice://[:password@]host[:port][?tls-port=N&...]` as produced by
+     * `virsh domdisplay --include-password` (see libvirt's cmdDomDisplay).
+     * Returns null when the URI does not match that shape or carries neither
+     * a plain port nor a tls-port. IPv6 listen addresses arrive bracketed
+     * (`spice://[::1]:5900`) and are unwrapped for the forward target.
+     */
+    private fun parseSpiceUri(uri: String): ParsedSpiceUri? {
+        val match = Regex("^spice://(?:([^@/?]*)@)?(\\[[^\\]]*\\]|[^:/?]*)(?::(\\d+))?(?:\\?(.*))?$")
+            .find(uri) ?: return null
+        // Userinfo is ":ticket" (empty user part); tolerate a bare value too.
+        val userinfo = match.groupValues[1]
+        val password = userinfo.substringAfter(':', missingDelimiterValue = userinfo)
+        val rawHost = match.groupValues[2].removeSurrounding("[", "]")
+        // An empty listen address means the display binds localhost on the hypervisor.
+        val host = rawHost.ifBlank { "127.0.0.1" }
+        val port = match.groupValues[3].toIntOrNull() ?: 0
+        var tlsPort = 0
+        for (param in match.groupValues[4].split('&')) {
+            val kv = param.split('=', limit = 2)
+            if (kv.size == 2 && kv[0] == "tls-port") tlsPort = kv[1].toIntOrNull() ?: 0
+        }
+        if (port == 0 && tlsPort == 0) return null
+        return ParsedSpiceUri(password, host, port, tlsPort)
+    }
 
     // ── Lifecycle ────────────────────────────────────────────────────────────
 

@@ -244,6 +244,21 @@ class LibvirtManagerActivity : AppCompatActivity() {
         lifecycleScope.launch {
             showProgress("Opening console for ${vm.name}…")
             try {
+                // SPICE first: richest protocol when the domain exposes it and
+                // the native library shipped; any miss falls through silently
+                // to the VNC path (Logger.i inside getSpiceDisplay).
+                val spiceDisplay = withContext(Dispatchers.IO) {
+                    try {
+                        client.getSpiceDisplay(vm.name)
+                    } catch (e: Exception) {
+                        Logger.i(TAG, "SPICE probe failed for ${vm.name}: ${e.message} — VNC fallback")
+                        null
+                    }
+                }
+                if (spiceDisplay != null) {
+                    openSpiceTab(vm, client, spiceDisplay)
+                    return@launch
+                }
                 val (ins, out) = withContext(Dispatchers.IO) { client.openVncChannel(vm.name) }
                 val rfbClient = io.github.tabssh.hypervisor.console.rfb.RfbClient(
                     inputStream = ins,
@@ -283,6 +298,53 @@ class LibvirtManagerActivity : AppCompatActivity() {
                 showError("Could not open console: ${e.message}")
             }
         }
+    }
+
+    /**
+     * Host a SPICE session for [vm] in a [io.github.tabssh.ui.tabs.ConsoleTab] —
+     * the tab kind the SPICE architecture renders (`TerminalPagerAdapter`'s
+     * `bindSpice`); [io.github.tabssh.ui.tabs.VncTab] is RFB-only. The
+     * [io.github.tabssh.hypervisor.spice.SpiceClient] is constructed un-started:
+     * the ConsoleViewHolder attaches the SpiceView listener and performs the
+     * single start() once the page renders, same as the Proxmox spiceproxy flow.
+     * The SSH local port forward is removed via the tab's cleanup hook.
+     */
+    private fun openSpiceTab(vm: LibvirtVm, client: LibvirtApiClient, display: LibvirtApiClient.SpiceDisplay) {
+        val hvProfile = hypervisorProfile ?: run {
+            client.stopSpiceForward(display.localPort)
+            showError("Hypervisor profile not loaded")
+            return
+        }
+        val connectParams = io.github.tabssh.ui.tabs.ConsoleConnectParams(
+            type = io.github.tabssh.ui.tabs.HypervisorConsoleType.LIBVIRT,
+            host = hvProfile.host,
+            port = hvProfile.port,
+            username = hvProfile.username,
+            // No API password is stored on the tab: the SPICE ticket travels in
+            // SpiceConnectionParams and libvirt consoles have no reconnect path.
+            password = "",
+            verifySsl = true,
+            pinnedCertSha256 = null,
+            vmId = vm.name,
+            vmName = vm.name
+        )
+        val tab = app.tabManager.createConsoleTab(connectParams)
+        hideProgress()
+        if (tab == null) {
+            client.stopSpiceForward(display.localPort)
+            Toast.makeText(this, "Maximum tabs reached", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val spiceClient = io.github.tabssh.hypervisor.spice.SpiceClient(display.params)
+        tab.markSpice(spiceClient)
+        tab.onCleanup = { client.stopSpiceForward(display.localPort) }
+        tab.setConnectionState(io.github.tabssh.ssh.connection.ConnectionState.CONNECTED)
+        startActivity(
+            Intent(this, TabTerminalActivity::class.java).apply {
+                putExtra(TabTerminalActivity.EXTRA_TAB_ID, tab.tabId)
+            }
+        )
+        Logger.i(TAG, "Opened SPICE console tab for ${vm.name} via 127.0.0.1:${display.localPort}")
     }
 
     /**

@@ -18,9 +18,11 @@ import java.util.UUID
  * ahead of `VMConsoleActivity`'s retirement (TODO.AI.md step 6f). VMware is
  * intentionally excluded: `VMConsoleActivity` never implemented it (serial
  * console via RFB "not yet implemented"; VMware VMs use the SSH path
- * instead), so there is nothing to port.
+ * instead), so there is nothing to port. LIBVIRT was added for the
+ * SSH-tunneled SPICE console path (`LibvirtManagerActivity.openConsole`) —
+ * libvirt VNC consoles still use ephemeral [VncTab]s.
  */
-enum class HypervisorConsoleType { PROXMOX, XCPNG, XEN_ORCHESTRA }
+enum class HypervisorConsoleType { PROXMOX, XCPNG, XEN_ORCHESTRA, LIBVIRT }
 
 /**
  * Which renderer a [ConsoleTab] is currently driving: TEXT (serial console
@@ -106,6 +108,13 @@ class ConsoleTab(val connectParams: ConsoleConnectParams) {
     // Set true by the first bind that calls SpiceClient.start(); rebinds must
     // not start() again — a SpiceClient is single-shot (see SpiceClient docs).
     private val spiceStartRequested = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /**
+     * Optional extra teardown hook run once during [cleanup] — e.g. the
+     * libvirt SPICE path removes its SSH local port forward here.
+     */
+    @Volatile
+    var onCleanup: (() -> Unit)? = null
 
     private val _title = MutableStateFlow(connectParams.vmName)
     val title: StateFlow<String> = _title.asStateFlow()
@@ -216,6 +225,12 @@ class ConsoleTab(val connectParams: ConsoleConnectParams) {
         } catch (e: Exception) {
             Logger.d("ConsoleTab", "spiceClient.stop() suppressed: ${e.message}")
         }
+        try {
+            onCleanup?.invoke()
+        } catch (e: Exception) {
+            Logger.d("ConsoleTab", "onCleanup hook suppressed: ${e.message}")
+        }
+        onCleanup = null
         consoleManager = null
         rfbClient = null
         spiceClient = null
