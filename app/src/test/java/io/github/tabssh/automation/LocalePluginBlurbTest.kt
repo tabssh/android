@@ -6,8 +6,9 @@ import kotlin.test.assertTrue
 
 /**
  * Tests for LocalePlugin.buildBlurb — the summary line shown in the
- * automation host's task editor. Bundle build/validate paths need an
- * Android runtime and are exercised on-device.
+ * automation host's task editor. Pure string work, so no Android runtime
+ * is needed here; the bundle build/validate paths are covered under
+ * Robolectric in LocalePluginBundleTest.
  */
 class LocalePluginBlurbTest {
 

@@ -66,27 +66,32 @@ object LocalePlugin {
      * Validates a bundle delivered by a host app. Hosts relay whatever
      * was stored, but a malicious caller can fire the receiver directly
      * with arbitrary contents — treat everything as untrusted input.
+     *
+     * Every read is wrapped: unparcelling a payload that carries a class
+     * this process cannot load throws, and an uncaught throw inside
+     * `onReceive`/`onCreate` is a crash any installed app could trigger.
      */
-    fun isBundleValid(bundle: Bundle?): Boolean {
-        if (bundle == null) return false
-        if (bundle.getInt(BUNDLE_KEY_VERSION, -1) != BUNDLE_VERSION) return false
-        val action = bundle.getString(BUNDLE_KEY_ACTION) ?: return false
-        if (action !in SUPPORTED_ACTIONS) return false
+    fun isBundleValid(bundle: Bundle?): Boolean = runCatching {
+        if (bundle == null) return@runCatching false
+        if (bundle.getInt(BUNDLE_KEY_VERSION, -1) != BUNDLE_VERSION) return@runCatching false
+        val action = bundle.getString(BUNDLE_KEY_ACTION) ?: return@runCatching false
+        if (action !in SUPPORTED_ACTIONS) return@runCatching false
+        // The connection ID is mandatory, not interchangeable with the name:
+        // IDs are opaque UUIDs only obtainable through LocaleEditActivity, while
+        // names are guessable, which would let any app target a profile blind.
         val id = bundle.getString(BUNDLE_KEY_CONNECTION_ID)
-        val name = bundle.getString(BUNDLE_KEY_CONNECTION_NAME)
-        if (id.isNullOrEmpty() && name.isNullOrEmpty()) return false
-        if ((id?.length ?: 0) > MAX_NAME_LENGTH) return false
-        if ((name?.length ?: 0) > MAX_NAME_LENGTH) return false
-        if ((bundle.getString(BUNDLE_KEY_COMMAND)?.length ?: 0) > MAX_COMMAND_LENGTH) return false
-        if ((bundle.getString(BUNDLE_KEY_KEYS)?.length ?: 0) > MAX_KEYS_LENGTH) return false
+        if (id.isNullOrEmpty() || id.length > MAX_NAME_LENGTH) return@runCatching false
+        if ((bundle.getString(BUNDLE_KEY_CONNECTION_NAME)?.length ?: 0) > MAX_NAME_LENGTH) return@runCatching false
+        if ((bundle.getString(BUNDLE_KEY_COMMAND)?.length ?: 0) > MAX_COMMAND_LENGTH) return@runCatching false
+        if ((bundle.getString(BUNDLE_KEY_KEYS)?.length ?: 0) > MAX_KEYS_LENGTH) return@runCatching false
         if (action == TaskerWorker.ACTION_SEND_COMMAND &&
             bundle.getString(BUNDLE_KEY_COMMAND).isNullOrEmpty()
-        ) return false
+        ) return@runCatching false
         if (action == TaskerWorker.ACTION_SEND_KEYS &&
             bundle.getString(BUNDLE_KEY_KEYS).isNullOrEmpty()
-        ) return false
-        return true
-    }
+        ) return@runCatching false
+        true
+    }.getOrDefault(false)
 
     /** Short human-readable summary shown in the host app's task editor. */
     fun buildBlurb(action: String, connectionName: String, command: String?, keys: String?): String {

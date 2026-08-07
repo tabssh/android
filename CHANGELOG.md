@@ -10,6 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Security
 
 - **Tasker integration is now opt-in (default OFF)** — the setting previously defaulted to ON, which was harmless while the only entry point was the signature-gated `TaskerActionReceiver`, but the new Locale plugin fire receiver is exported without a permission (the protocol requires it), so on a fresh install any app on the device could have driven SSH sessions with no user action. Existing installs keep whatever the toggle is already set to
+- **Locale plugin bundles must carry a connection ID, not just a name** — a fired bundle identifying its target by profile *name* is now rejected. Names are guessable, so accepting them let any app aim at a profile blind; IDs are opaque UUIDs that only TabSSH's own config screen hands out. Bundle validation is also fully exception-guarded, so a malformed payload from a host app can no longer crash the receiver or the config screen
 
 ### Fixed
 
