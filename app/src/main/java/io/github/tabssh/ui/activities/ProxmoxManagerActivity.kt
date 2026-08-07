@@ -570,6 +570,16 @@ class ProxmoxManagerActivity : AppCompatActivity() {
             .setView(input)
             .setPositiveButton("Create") { _, _ ->
                 val name = input.text.toString().trim()
+                // Proxmox rejects anything that is not a config ID; catching it here
+                // gives a usable message instead of a generic "Failed to create snapshot".
+                if (!Regex("^[A-Za-z][A-Za-z0-9_-]*$").matches(name)) {
+                    Toast.makeText(
+                        this@ProxmoxManagerActivity,
+                        "Name must start with a letter and contain only letters, digits, - or _",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return@setPositiveButton
+                }
                 lifecycleScope.launch {
                     try {
                         val success = client.createSnapshot(vm.node, vm.vmid, vm.type, name)

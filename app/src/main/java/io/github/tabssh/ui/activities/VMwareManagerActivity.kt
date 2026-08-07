@@ -546,7 +546,11 @@ class VMwareManagerActivity : AppCompatActivity() {
             .setMessage("Enter a name for the snapshot of ${vm.name}")
             .setView(input)
             .setPositiveButton("Create") { _, _ ->
-                val name = input.text.toString()
+                val name = input.text.toString().trim()
+                if (name.isEmpty()) {
+                    showError("Enter a name for the snapshot")
+                    return@setPositiveButton
+                }
                 lifecycleScope.launch {
                     try {
                         val success = currentClient?.createSnapshot(vm.vm, name) ?: false
