@@ -1,5 +1,6 @@
 package io.github.tabssh.ui.activities
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.MenuItem
 import android.view.View
@@ -266,6 +267,65 @@ class VMwareManagerActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Open a graphical VNC console for the VM via RemoteDisplay.vnc.* in the vmx.
+     * Reads host/port/password over the vim25 SOAP endpoint, opens a direct TCP
+     * socket to the ESXi host, and hands the stream to an ephemeral VNC tab —
+     * mirrors [LibvirtManagerActivity]'s openConsole flow.
+     */
+    private fun openVncConsole(vm: VMwareApiClient.VMwareVM) {
+        val client = currentClient ?: run {
+            Toast.makeText(this, "Not connected — please wait", Toast.LENGTH_SHORT).show()
+            return
+        }
+        lifecycleScope.launch {
+            showProgress("Opening console for ${vm.name}…")
+            try {
+                val (info, socket) = withContext(Dispatchers.IO) {
+                    val info = client.getVncConsoleInfo(vm.vm)
+                    val socket = java.net.Socket()
+                    try {
+                        socket.soTimeout = 30_000
+                        socket.connect(java.net.InetSocketAddress(info.host, info.port), 15_000)
+                    } catch (e: Throwable) {
+                        // Close the fd on connect failure so we never leak the socket
+                        try { socket.close() } catch (ignored: Exception) {}
+                        throw e
+                    }
+                    Pair(info, socket)
+                }
+                val rfbClient = io.github.tabssh.hypervisor.console.rfb.RfbClient(
+                    inputStream = socket.getInputStream(),
+                    outputStream = socket.getOutputStream(),
+                    vncPassword = info.password,
+                    rawSocket = socket,
+                    consoleMode = true
+                )
+                // Ephemeral hypervisor consoles never auto-relaunch on resize rejection
+                rfbClient.canRequestResize = false
+                val tab = app.tabManager.createVncTab(vncHost = null, ephemeralDisplayName = vm.name)
+                hideProgress()
+                if (tab == null) {
+                    try { rfbClient.stop() } catch (e: Exception) {
+                        Logger.d(TAG, "rfbClient.stop() suppressed after max-tabs reject: ${e.message}")
+                    }
+                    Toast.makeText(this@VMwareManagerActivity, "Maximum tabs reached", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+                tab.rfbClient = rfbClient
+                tab.setConnectionState(io.github.tabssh.ssh.connection.ConnectionState.CONNECTED)
+                startActivity(
+                    Intent(this@VMwareManagerActivity, TabTerminalActivity::class.java).apply {
+                        putExtra(TabTerminalActivity.EXTRA_TAB_ID, tab.tabId)
+                    }
+                )
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to open VNC console for ${vm.name}", e)
+                showError(e.message ?: "Failed to open VNC console for ${vm.name}")
+            }
+        }
+    }
+
     // ── UI helpers ────────────────────────────────────────────────────────────
 
     private fun showProgress(message: String) {
@@ -306,6 +366,7 @@ class VMwareManagerActivity : AppCompatActivity() {
             val rowConnect: android.widget.LinearLayout = view.findViewById(R.id.row_connect)
             val rowMain: android.widget.LinearLayout = view.findViewById(R.id.row_main)
             val rowSecondary: android.widget.LinearLayout = view.findViewById(R.id.row_secondary)
+            val btnConsole: MaterialButton = view.findViewById(R.id.btn_console)
             val btnSsh: MaterialButton = view.findViewById(R.id.btn_ssh)
             val btnStart: MaterialButton = view.findViewById(R.id.btn_start)
             val btnStop: MaterialButton = view.findViewById(R.id.btn_stop)
@@ -342,6 +403,7 @@ class VMwareManagerActivity : AppCompatActivity() {
             // Button visibility by power state
             when (vm.powerState.uppercase()) {
                 "POWERED_ON" -> {
+                    holder.btnConsole.visibility = View.VISIBLE
                     holder.btnSsh.visibility = if (!vm.ipAddress.isNullOrBlank()) View.VISIBLE else View.GONE
                     holder.btnStart.visibility = View.GONE
                     holder.btnStop.visibility = View.VISIBLE
@@ -349,6 +411,7 @@ class VMwareManagerActivity : AppCompatActivity() {
                     holder.btnReset.visibility = View.VISIBLE
                 }
                 "POWERED_OFF" -> {
+                    holder.btnConsole.visibility = View.GONE
                     holder.btnSsh.visibility = View.GONE
                     holder.btnStart.visibility = View.VISIBLE
                     holder.btnStop.visibility = View.GONE
@@ -356,6 +419,7 @@ class VMwareManagerActivity : AppCompatActivity() {
                     holder.btnReset.visibility = View.GONE
                 }
                 else -> {
+                    holder.btnConsole.visibility = View.GONE
                     holder.btnSsh.visibility = View.GONE
                     holder.btnStart.visibility = View.VISIBLE
                     holder.btnStop.visibility = View.VISIBLE
@@ -364,10 +428,11 @@ class VMwareManagerActivity : AppCompatActivity() {
                 }
             }
 
-            holder.rowConnect.visibility = if (holder.btnSsh.visibility == View.VISIBLE) View.VISIBLE else View.GONE
+            holder.rowConnect.visibility = if (holder.btnConsole.visibility == View.VISIBLE || holder.btnSsh.visibility == View.VISIBLE) View.VISIBLE else View.GONE
             holder.rowMain.visibility = if (holder.btnStart.visibility == View.VISIBLE || holder.btnStop.visibility == View.VISIBLE) View.VISIBLE else View.GONE
             holder.rowSecondary.visibility = if (holder.btnReboot.visibility == View.VISIBLE || holder.btnReset.visibility == View.VISIBLE) View.VISIBLE else View.GONE
 
+            holder.btnConsole.setOnClickListener { openVncConsole(vm) }
             holder.btnSsh.setOnClickListener { openSshConsole(vm) }
             holder.btnStart.setOnClickListener { vmAction(vm, client, "start") }
             holder.btnStop.setOnClickListener { confirmStop(vm, client) }

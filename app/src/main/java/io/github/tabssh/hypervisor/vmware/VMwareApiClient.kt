@@ -8,7 +8,10 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import org.json.JSONArray
+import org.xmlpull.v1.XmlPullParser
+import org.xmlpull.v1.XmlPullParserFactory
 import java.io.IOException
+import java.io.StringReader
 import java.security.cert.X509Certificate
 import javax.net.ssl.*
 
@@ -209,6 +212,246 @@ class VMwareApiClient(
                 throw IOException("API request failed: ${r.code}")
             }
         }
+    }
+
+    // ── VNC-via-vmx console (vim25 SOAP) ──────────────────────────────────────
+
+    /** Connection details for a VM's RemoteDisplay VNC server, read from the vmx via vim25 SOAP. */
+    data class VncConsoleInfo(
+        val host: String,
+        val port: Int,
+        val password: String?
+    )
+
+    /** One vim25 SOAP response: body plus the vmware_soap_session cookie when the server set one. */
+    private data class SoapResponse(val body: String, val sessionCookie: String?)
+
+    /**
+     * Read the RemoteDisplay.vnc.* options from the VM's vmx via the vim25 SOAP endpoint
+     * (/sdk) and resolve the ESXi host that runs the VM. The vSphere REST API does not
+     * expose extraConfig, so this is the only supported read path. Throws [IOException]
+     * with a user-actionable message when VNC is not enabled on the VM.
+     */
+    suspend fun getVncConsoleInfo(vmId: String): VncConsoleInfo = withContext(Dispatchers.IO) {
+        // ServiceInstance is the one well-known MoRef; everything else is resolved from it
+        val content = soapCall(
+            soapEnvelope(
+                "<vim25:RetrieveServiceContent>" +
+                    "<vim25:_this type=\"ServiceInstance\">ServiceInstance</vim25:_this>" +
+                    "</vim25:RetrieveServiceContent>"
+            ),
+            cookie = null
+        )
+        // Resolve the SessionManager MoRef instead of hardcoding ha-sessionmgr (fails on vCenter)
+        val sessionManager = parseTagText(content.body, "sessionManager")
+            ?: throw IOException("vim25: ServiceContent has no sessionManager")
+        val propertyCollector = parseTagText(content.body, "propertyCollector")
+            ?: throw IOException("vim25: ServiceContent has no propertyCollector")
+
+        val login = soapCall(
+            soapEnvelope(
+                "<vim25:Login>" +
+                    "<vim25:_this type=\"SessionManager\">${xmlEscape(sessionManager)}</vim25:_this>" +
+                    "<vim25:userName>${xmlEscape(username)}</vim25:userName>" +
+                    "<vim25:password>${xmlEscape(password)}</vim25:password>" +
+                    "</vim25:Login>"
+            ),
+            cookie = null
+        )
+        val cookie = login.sessionCookie
+            ?: throw IOException("vim25: Login returned no vmware_soap_session cookie")
+
+        try {
+            val props = soapCall(
+                soapEnvelope(
+                    "<vim25:RetrievePropertiesEx>" +
+                        "<vim25:_this type=\"PropertyCollector\">${xmlEscape(propertyCollector)}</vim25:_this>" +
+                        "<vim25:specSet>" +
+                        "<vim25:propSet>" +
+                        "<vim25:type>VirtualMachine</vim25:type>" +
+                        "<vim25:pathSet>config.extraConfig</vim25:pathSet>" +
+                        "<vim25:pathSet>runtime.host</vim25:pathSet>" +
+                        "</vim25:propSet>" +
+                        "<vim25:objectSet>" +
+                        "<vim25:obj type=\"VirtualMachine\">${xmlEscape(vmId)}</vim25:obj>" +
+                        "</vim25:objectSet>" +
+                        "</vim25:specSet>" +
+                        "<vim25:options/>" +
+                        "</vim25:RetrievePropertiesEx>"
+                ),
+                cookie
+            )
+            val (extraConfig, hostRef) = parseVmDisplayProps(props.body)
+
+            val enabled = extraConfig["RemoteDisplay.vnc.enabled"]
+            val port = extraConfig["RemoteDisplay.vnc.port"]?.trim()?.toIntOrNull()
+            if (!"TRUE".equals(enabled, ignoreCase = true) || port == null || port !in 1..65535) {
+                throw IOException(
+                    "VNC is not enabled on this VM. Set RemoteDisplay.vnc.enabled = TRUE and " +
+                        "RemoteDisplay.vnc.port in the VM's advanced settings (Edit Settings → " +
+                        "Advanced → Configuration Parameters), then power-cycle the VM."
+                )
+            }
+            val vncPassword = extraConfig["RemoteDisplay.vnc.password"]?.takeIf { it.isNotEmpty() }
+
+            // On vCenter the VNC server listens on the ESXi host running the VM, not on
+            // vCenter itself; resolve the HostSystem name and fall back to our own host.
+            val consoleHost = resolveHostSystemName(hostRef, propertyCollector, cookie) ?: host
+            Logger.i("VMwareAPI", "VNC console for $vmId at $consoleHost:$port")
+            VncConsoleInfo(host = consoleHost, port = port, password = vncPassword)
+        } finally {
+            try {
+                soapCall(
+                    soapEnvelope(
+                        "<vim25:Logout>" +
+                            "<vim25:_this type=\"SessionManager\">${xmlEscape(sessionManager)}</vim25:_this>" +
+                            "</vim25:Logout>"
+                    ),
+                    cookie
+                )
+            } catch (e: Exception) {
+                Logger.w("VMwareAPI", "vim25 Logout failed: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Resolve the display name of the HostSystem MoRef from runtime.host. Returns null
+     * (caller falls back to this client's host) when the ref is missing or lookup fails —
+     * on standalone ESXi the API host and the VNC host are the same machine anyway.
+     */
+    private fun resolveHostSystemName(hostRef: String?, propertyCollector: String, cookie: String): String? {
+        if (hostRef.isNullOrBlank()) return null
+        return try {
+            val resp = soapCall(
+                soapEnvelope(
+                    "<vim25:RetrievePropertiesEx>" +
+                        "<vim25:_this type=\"PropertyCollector\">${xmlEscape(propertyCollector)}</vim25:_this>" +
+                        "<vim25:specSet>" +
+                        "<vim25:propSet>" +
+                        "<vim25:type>HostSystem</vim25:type>" +
+                        "<vim25:pathSet>name</vim25:pathSet>" +
+                        "</vim25:propSet>" +
+                        "<vim25:objectSet>" +
+                        "<vim25:obj type=\"HostSystem\">${xmlEscape(hostRef)}</vim25:obj>" +
+                        "</vim25:objectSet>" +
+                        "</vim25:specSet>" +
+                        "<vim25:options/>" +
+                        "</vim25:RetrievePropertiesEx>"
+                ),
+                cookie
+            )
+            parseHostSystemName(resp.body)?.trim()?.takeIf { it.isNotEmpty() }
+        } catch (e: Exception) {
+            Logger.w("VMwareAPI", "HostSystem name lookup failed, falling back to $host: ${e.message}")
+            null
+        }
+    }
+
+    /** POST one SOAP envelope to https://host/sdk, reusing the pinned/TOFU OkHttp client. */
+    private fun soapCall(envelope: String, cookie: String?): SoapResponse {
+        val builder = Request.Builder()
+            .url("https://$host/sdk")
+            .post(envelope.toRequestBody("text/xml; charset=utf-8".toMediaType()))
+            .addHeader("SOAPAction", "\"urn:vim25/5.5\"")
+        if (cookie != null) builder.addHeader("Cookie", cookie)
+        client.newCall(builder.build()).execute().use { response ->
+            val body = response.body?.string() ?: ""
+            if (!response.isSuccessful) {
+                val fault = parseTagText(body, "faultstring")
+                val detail = if (fault != null) ": $fault" else ""
+                throw IOException("vim25 SOAP call failed: ${response.code}$detail")
+            }
+            val sessionCookie = response.headers("Set-Cookie")
+                .firstOrNull { it.startsWith("vmware_soap_session") }
+                ?.substringBefore(';')
+            return SoapResponse(body, sessionCookie)
+        }
+    }
+
+    /** Build the standard vim25 SOAP envelope around one operation body. */
+    private fun soapEnvelope(body: String): String =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+            "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" " +
+            "xmlns:vim25=\"urn:vim25\">" +
+            "<soapenv:Body>$body</soapenv:Body>" +
+            "</soapenv:Envelope>"
+
+    /** Escape the five XML special characters for safe embedding in a SOAP envelope. */
+    private fun xmlEscape(s: String): String = s
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\"", "&quot;")
+        .replace("'", "&apos;")
+
+    private fun newParser(xml: String): XmlPullParser {
+        val parser = XmlPullParserFactory.newInstance().newPullParser()
+        parser.setInput(StringReader(xml))
+        return parser
+    }
+
+    /** Return the text of the first element named [tag] anywhere in [xml], or null. */
+    private fun parseTagText(xml: String, tag: String): String? {
+        return try {
+            val parser = newParser(xml)
+            var event = parser.eventType
+            while (event != XmlPullParser.END_DOCUMENT) {
+                if (event == XmlPullParser.START_TAG && parser.name == tag) return parser.nextText()
+                event = parser.next()
+            }
+            null
+        } catch (e: Exception) {
+            Logger.w("VMwareAPI", "XML parse for <$tag> failed: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Parse a RetrievePropertiesEx response for a VirtualMachine: collects the
+     * config.extraConfig OptionValue key/value pairs and the runtime.host MoRef value.
+     */
+    private fun parseVmDisplayProps(xml: String): Pair<Map<String, String>, String?> {
+        val extraConfig = mutableMapOf<String, String>()
+        var hostRef: String? = null
+        var currentProp: String? = null
+        var currentKey: String? = null
+        val parser = newParser(xml)
+        var event = parser.eventType
+        while (event != XmlPullParser.END_DOCUMENT) {
+            if (event == XmlPullParser.START_TAG) {
+                when (parser.name) {
+                    // Each propSet carries <name>config.extraConfig|runtime.host</name>
+                    "name" -> currentProp = parser.nextText()
+                    "key" -> if (currentProp == "config.extraConfig") currentKey = parser.nextText()
+                    "value" -> if (currentProp == "config.extraConfig" && currentKey != null) {
+                        extraConfig[currentKey] = parser.nextText()
+                        currentKey = null
+                    }
+                    // runtime.host's <val> is a text-only ManagedObjectReference
+                    "val" -> if (currentProp == "runtime.host") hostRef = parser.nextText()
+                }
+            }
+            event = parser.next()
+        }
+        return Pair(extraConfig, hostRef)
+    }
+
+    /** Parse a RetrievePropertiesEx response for a HostSystem's name property. */
+    private fun parseHostSystemName(xml: String): String? {
+        var currentProp: String? = null
+        val parser = newParser(xml)
+        var event = parser.eventType
+        while (event != XmlPullParser.END_DOCUMENT) {
+            if (event == XmlPullParser.START_TAG) {
+                when (parser.name) {
+                    "name" -> currentProp = parser.nextText()
+                    "val" -> if (currentProp == "name") return parser.nextText()
+                }
+            }
+            event = parser.next()
+        }
+        return null
     }
 
     /**
