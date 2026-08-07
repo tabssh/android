@@ -1,5 +1,6 @@
 package io.github.tabssh.ui.tabs
 
+import io.github.tabssh.hypervisor.console.ConsoleDisconnectReason
 import io.github.tabssh.hypervisor.console.rfb.RfbClient
 import io.github.tabssh.hypervisor.vnc.VncBackgroundSessionStore
 import io.github.tabssh.ssh.connection.ConnectionState
@@ -50,8 +51,36 @@ class VncTab(
 
     // @Volatile: written from the connect/background-park coroutines (IO),
     // read from Main when wiring/unwiring this tab's VncView.
+    // The setter wires the client's session-end hook at attach time so every
+    // existing attach site (VncHostsActivity, MainActivity, manager activities)
+    // gets close-policy coverage without changing — and so a disconnect still
+    // reaches the tab while its page is recycled (view listeners are unbound).
     @Volatile
     var rfbClient: RfbClient? = null
+        set(value) {
+            field = value
+            if (value != null) {
+                // Fresh client — clear the previous end-of-session verdict.
+                lastDisconnectReason = null
+                lastDisconnectMessage = null
+                value.onSessionEnded = { reason, detail ->
+                    lastDisconnectReason = reason
+                    lastDisconnectMessage = detail
+                    setConnectionState(ConnectionState.DISCONNECTED)
+                }
+            }
+        }
+
+    // Why the last NON-user-initiated session end happened; null until the
+    // first such end and after each successful (re)connect. Read by
+    // TabTerminalActivity's close-policy gate: CLEAN → auto-close, ERROR →
+    // reconnect dialog. @Volatile: written from the RFB reader thread.
+    @Volatile
+    var lastDisconnectReason: ConsoleDisconnectReason? = null
+
+    // Human-readable detail accompanying lastDisconnectReason, for the dialog body.
+    @Volatile
+    var lastDisconnectMessage: String? = null
 
     private val _title = MutableStateFlow(ephemeralDisplayName ?: vncHost?.name ?: "VNC")
     val title: StateFlow<String> = _title.asStateFlow()

@@ -60,9 +60,9 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
     // each SSHTab's own `title` Flow — observers should collect both
     // this and the per-tab title flows.
     //
-    // SSH-only for backward compatibility (ConnectionsFragment's "Active
-    // Sessions" strip is SSH-only today) — see [allTabsFlow] for the
-    // sealed-type equivalent.
+    // SSH-only, kept for callers that still want only SSH tabs — the
+    // "Active Sessions" strip now consumes [allTabsFlow], the sealed-type
+    // equivalent that also carries VNC and console tabs.
     private val _tabsFlow = MutableStateFlow<List<SSHTab>>(emptyList())
     val tabsFlow: StateFlow<List<SSHTab>> = _tabsFlow.asStateFlow()
 
@@ -166,10 +166,10 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
 
     /**
      * Create a new VNC tab (VNC-tab-swipe integration step 3). Unlike
-     * [createTab] this does not wire a [TabManagerListener] observer yet —
-     * that interface is still SSH-only (see class doc); steps 4-6 add
-     * VNC-aware observation once TerminalPagerAdapter/TabTerminalActivity
-     * actually consume [allTabsFlow].
+     * [createTab] this does not wire a [TabManagerListener] observer —
+     * that interface is SSH-only (see class doc); VNC/console tabs are
+     * observed directly from [allTabsFlow] by their consumers
+     * (TabTerminalActivity's close-policy gate, the Active Sessions strip).
      */
     fun createVncTab(vncHost: io.github.tabssh.storage.database.entities.VncHost?, ephemeralDisplayName: String? = null): VncTab? = synchronized(tabsLock) {
         if (tabs.size >= maxTabs) {

@@ -1,5 +1,6 @@
 package io.github.tabssh.ui.tabs
 
+import io.github.tabssh.hypervisor.console.ConsoleDisconnectReason
 import io.github.tabssh.hypervisor.console.HypervisorConsoleManager
 import io.github.tabssh.hypervisor.console.rfb.RfbClient
 import io.github.tabssh.hypervisor.spice.SpiceClient
@@ -116,6 +117,24 @@ class ConsoleTab(val connectParams: ConsoleConnectParams) {
     @Volatile
     var onCleanup: (() -> Unit)? = null
 
+    // Why the last NON-user-initiated session end happened; null until the
+    // first such end and cleared by markGraphical/markSpice on (re)attach.
+    // Read by TabTerminalActivity's close-policy gate: CLEAN → auto-close,
+    // ERROR → reconnect dialog. @Volatile: written from client worker threads.
+    @Volatile
+    var lastDisconnectReason: ConsoleDisconnectReason? = null
+
+    // Human-readable detail accompanying lastDisconnectReason, for the dialog body.
+    @Volatile
+    var lastDisconnectMessage: String? = null
+
+    /** Shared [RfbClient.onSessionEnded]/[SpiceClient.onSessionEnded] target. */
+    private fun recordSessionEnd(reason: ConsoleDisconnectReason, detail: String) {
+        lastDisconnectReason = reason
+        lastDisconnectMessage = detail
+        setConnectionState(ConnectionState.DISCONNECTED)
+    }
+
     private val _title = MutableStateFlow(connectParams.vmName)
     val title: StateFlow<String> = _title.asStateFlow()
 
@@ -150,6 +169,11 @@ class ConsoleTab(val connectParams: ConsoleConnectParams) {
      */
     fun markGraphical(client: RfbClient) {
         rfbClient = client
+        // Wire the close-policy hook at attach time so a disconnect reaches
+        // this tab even while its page is recycled (view listeners unbound).
+        lastDisconnectReason = null
+        lastDisconnectMessage = null
+        client.onSessionEnded = ::recordSessionEnd
         _displayMode.value = ConsoleDisplayMode.RFB
         _isGraphicalMode.value = true
         Logger.d("ConsoleTab", "Console tab ${getDisplayTitle()} switched to graphical mode")
@@ -164,6 +188,10 @@ class ConsoleTab(val connectParams: ConsoleConnectParams) {
      */
     fun markSpice(client: SpiceClient) {
         spiceClient = client
+        // Same close-policy wiring as markGraphical, on the SPICE hook.
+        lastDisconnectReason = null
+        lastDisconnectMessage = null
+        client.onSessionEnded = ::recordSessionEnd
         _displayMode.value = ConsoleDisplayMode.SPICE
         _isGraphicalMode.value = true
         Logger.d("ConsoleTab", "Console tab ${getDisplayTitle()} switched to SPICE mode")

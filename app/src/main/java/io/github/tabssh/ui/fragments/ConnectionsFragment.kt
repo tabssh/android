@@ -35,6 +35,7 @@ import io.github.tabssh.ui.activities.TabTerminalActivity
 import io.github.tabssh.ui.adapters.ConnectionAdapter
 import io.github.tabssh.ui.adapters.GroupedConnectionAdapter
 import io.github.tabssh.ui.models.ConnectionListItem
+import io.github.tabssh.ui.tabs.Tab
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.replaceAllWithDiff
 import androidx.room.withTransaction
@@ -230,21 +231,36 @@ class ConnectionsFragment : Fragment() {
 
     /**
      * Issue #165 — wire the "Active Sessions" strip. Subscribes to
-     * `app.tabManager.tabsFlow` and to each tab's per-instance `title`
-     * + `connectionState` flows so the strip updates when a remote sets
-     * an OSC 0/2 title or a tab transitions state. Disambiguates same-
+     * `app.tabManager.allTabsFlow` (every kind of tab — SSH, VNC, and
+     * hypervisor console) and to each tab's per-instance `title` +
+     * `connectionState` flows so the strip updates when a remote sets an
+     * OSC 0/2 title or a tab transitions state. Disambiguates same-
      * default-title tabs (multiple tabs to one host with no OSC title)
      * by appending `(#N)`.
      */
     private fun setupActiveSessionsStrip() {
         // ViewStub-deferred — the strip's RecyclerView/header/container
-        // are NOT inflated yet. Just collect tabsFlow; the first non-empty
+        // are NOT inflated yet. Just collect allTabsFlow; the first non-empty
         // emission triggers ensureActiveSessionsInflated().
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                app.tabManager.tabsFlow.collect { tabs -> rebindActiveSessions(tabs) }
+                app.tabManager.allTabsFlow.collect { tabs -> rebindActiveSessions(tabs) }
             }
         }
+    }
+
+    /** Per-instance title flow for any tab kind — chip labels update live. */
+    private fun Tab.titleFlow() = when (this) {
+        is Tab.Ssh -> sshTab.title
+        is Tab.Vnc -> vncTab.title
+        is Tab.Console -> consoleTab.title
+    }
+
+    /** Per-instance connection-state flow for any tab kind — drives the dot. */
+    private fun Tab.stateFlow() = when (this) {
+        is Tab.Ssh -> sshTab.connectionState
+        is Tab.Vnc -> vncTab.connectionState
+        is Tab.Console -> consoleTab.connectionState
     }
 
     /**
@@ -272,7 +288,7 @@ class ConnectionsFragment : Fragment() {
         activeSessionAdapter = adapter
     }
 
-    private fun rebindActiveSessions(tabs: List<io.github.tabssh.ui.tabs.SSHTab>) {
+    private fun rebindActiveSessions(tabs: List<Tab>) {
         // Cancel observers for tabs that disappeared.
         val live = tabs.map { it.tabId }.toSet()
         (activeTabTitleObservers.keys - live).forEach { id ->
@@ -283,10 +299,10 @@ class ConnectionsFragment : Fragment() {
         tabs.forEach { tab ->
             if (tab.tabId !in activeTabTitleObservers) {
                 activeTabTitleObservers[tab.tabId] = viewLifecycleOwner.lifecycleScope.launch {
-                    tab.title.collect { renderActiveSessionRows() }
+                    tab.titleFlow().collect { renderActiveSessionRows() }
                 }
                 activeTabStateObservers[tab.tabId] = viewLifecycleOwner.lifecycleScope.launch {
-                    tab.connectionState.collect { renderActiveSessionRows() }
+                    tab.stateFlow().collect { renderActiveSessionRows() }
                 }
             }
         }
@@ -297,8 +313,8 @@ class ConnectionsFragment : Fragment() {
         // Only show tabs that are actively connecting or connected.
         // DISCONNECTED tabs are dead slots — showing them after a notification
         // disconnect misleads the user into thinking there is still a live session.
-        val tabs = app.tabManager.getAllTabs().filter {
-            it.connectionState.value != io.github.tabssh.ssh.connection.ConnectionState.DISCONNECTED
+        val tabs = app.tabManager.getAllTabsSealed().filter {
+            it.stateFlow().value != io.github.tabssh.ssh.connection.ConnectionState.DISCONNECTED
         }
         if (tabs.isEmpty()) {
             // Don't inflate the stub if we never had to. If it was already
@@ -311,17 +327,25 @@ class ConnectionsFragment : Fragment() {
         activeSessionsContainer?.visibility = View.VISIBLE
 
         // Build chip labels for the active sessions strip.
-        // Use the connection profile name as the primary label — it is always
-        // short and human-readable (e.g. "server20", "Production DB").
-        // Fall back to user@host when the profile has no custom name.
-        // Never use the OSC terminal title here: it is set by the remote shell
-        // and can be arbitrarily long (e.g. "root@ip:root@hostname:~/deep/path").
+        // SSH: use the connection profile name as the primary label — it is
+        // always short and human-readable (e.g. "server20", "Production DB");
+        // fall back to user@host when the profile has no custom name. Never
+        // use the OSC terminal title here: it is set by the remote shell and
+        // can be arbitrarily long (e.g. "root@ip:root@hostname:~/deep/path").
+        // VNC/console: the tab's own display title (host name / VM name) is
+        // already short and human-chosen, so it is used directly.
         val rawDisplays = tabs.map { tab ->
-            val profileName = tab.profile.name.trim()
-            val user = tab.profile.username
-            val host = tab.profile.host
-            val userHost = if (user.isNotBlank() && host.isNotBlank()) "$user@$host" else host
-            val display = if (profileName.isNotBlank() && profileName != userHost) profileName else userHost
+            val display = when (tab) {
+                is Tab.Ssh -> {
+                    val profileName = tab.sshTab.profile.name.trim()
+                    val user = tab.sshTab.profile.username
+                    val host = tab.sshTab.profile.host
+                    val userHost = if (user.isNotBlank() && host.isNotBlank()) "$user@$host" else host
+                    if (profileName.isNotBlank() && profileName != userHost) profileName else userHost
+                }
+                is Tab.Vnc -> tab.vncTab.getDisplayTitle()
+                is Tab.Console -> tab.consoleTab.getDisplayTitle()
+            }
             tab to display
         }
 
@@ -341,7 +365,7 @@ class ConnectionsFragment : Fragment() {
             io.github.tabssh.ui.adapters.ActiveSessionAdapter.Row(
                 tabId = tab.tabId,
                 title = label,
-                state = tab.connectionState.value
+                state = tab.stateFlow().value
             )
         }
         activeSessionAdapter?.submit(rows)

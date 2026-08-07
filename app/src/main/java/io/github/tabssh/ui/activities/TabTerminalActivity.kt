@@ -41,6 +41,7 @@ import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.databinding.ActivityTabTerminalBinding
 import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.hypervisor.console.ConsoleDisconnectReason
 import io.github.tabssh.ssh.connection.ConnectionState
 import io.github.tabssh.ui.tabs.SSHTab
 import io.github.tabssh.ui.tabs.Tab
@@ -436,6 +437,10 @@ class TabTerminalActivity : AppCompatActivity() {
             }
         }
         tabManager.addListener(tabManagerListener!!)
+
+        // VNC/SPICE tabs have no TabManagerListener coverage (it is SSH-typed
+        // by design) — wire their close-policy observers separately.
+        wireConsoleClosePolicy()
 
         // Pick up tabs that already exist in the shared manager — they
         // were created by a previous activity instance and outlived its
@@ -3204,6 +3209,202 @@ class TabTerminalActivity : AppCompatActivity() {
             )
             if (!isFinishing && !isDestroyed && dialog.isShowing) {
                 dialog.setMessage("${profile.getDisplayName()} disconnected.\n\n${result.userMessage}")
+            }
+        }
+    }
+
+    // Per-tab connectionState observers for Vnc/Console tabs, keyed by tabId.
+    // The SSH equivalent lives in TabManager (SSH-typed listener); these are
+    // activity-scoped so they die with the UI that would show the dialog.
+    private val consoleGateObservers = mutableMapOf<String, kotlinx.coroutines.Job>()
+
+    /**
+     * VNC/SPICE close policy — mirrors the SSH exit-code gate in
+     * [updateTabIcon]: a session that ended cleanly (orderly server EOF /
+     * native SPICE disconnect) closes its tab like `exit` status 0; an
+     * abrupt drop (reset, mid-stream EOF, protocol or native error) shows a
+     * reconnect dialog. Each Vnc/Console tab's connectionState is observed
+     * with the same has-been-connected gating TabManager applies to SSH
+     * tabs, so a freshly created (still DISCONNECTED) tab is never treated
+     * as a dead session.
+     */
+    private fun wireConsoleClosePolicy() {
+        lifecycleScope.launch {
+            tabManager.allTabsFlow.collect { tabs ->
+                // Drop observers for tabs that no longer exist.
+                val live = tabs.map { it.tabId }.toSet()
+                (consoleGateObservers.keys - live).forEach { id ->
+                    consoleGateObservers.remove(id)?.cancel()
+                }
+                tabs.forEach { tab ->
+                    if (tab.tabId in consoleGateObservers) return@forEach
+                    val stateFlow = when (tab) {
+                        is Tab.Ssh -> return@forEach
+                        is Tab.Vnc -> tab.vncTab.connectionState
+                        is Tab.Console -> tab.consoleTab.connectionState
+                    }
+                    consoleGateObservers[tab.tabId] = lifecycleScope.launch {
+                        var hasBeenConnected = false
+                        stateFlow.collect { state ->
+                            if (state == ConnectionState.CONNECTED) {
+                                hasBeenConnected = true
+                            } else if (state == ConnectionState.DISCONNECTED && hasBeenConnected) {
+                                hasBeenConnected = false
+                                handleConsoleTabDisconnected(tab)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * DISCONNECTED-after-CONNECTED handler for a Vnc/Console tab. The reason
+     * recorded by the client hooks (RfbClient/SpiceClient.onSessionEnded via
+     * VncTab/ConsoleTab) discriminates: CLEAN → auto-close like exit 0;
+     * ERROR → reconnect dialog. A null reason means the state flipped without
+     * the hooks firing — either a user-initiated close (tab already removed;
+     * the existence check below drops it) or a text-console/manager-driven
+     * disconnect, which is unexpected from the user's view → dialog.
+     */
+    private fun handleConsoleTabDisconnected(tab: Tab) {
+        val (reason, detail) = when (tab) {
+            is Tab.Ssh -> return
+            is Tab.Vnc -> Pair(tab.vncTab.lastDisconnectReason, tab.vncTab.lastDisconnectMessage)
+            is Tab.Console -> Pair(tab.consoleTab.lastDisconnectReason, tab.consoleTab.lastDisconnectMessage)
+        }
+        Logger.i("TabTerminalActivity",
+            "Console tab ${tab.tabId} disconnected (reason=$reason, detail=$detail)")
+        runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            // User-initiated closes also pass DISCONNECTED on their way out —
+            // by the time this runs, closeTab has already removed the tab, so
+            // a missing tab means the user ended the session: do nothing.
+            if (tabManager.getAllTabsSealed().none { it.tabId == tab.tabId }) return@runOnUiThread
+            if (reason == ConsoleDisconnectReason.CLEAN) {
+                // Clean server EOF — the session ended normally (e.g. the VM
+                // shut down or the server closed it): close like exit 0.
+                closeConsoleTab(tab.tabId)
+            } else {
+                showConsoleReconnectDialog(tab, detail)
+            }
+        }
+    }
+
+    /**
+     * Close a Vnc/Console tab by id and handle the UI work onTabClosed does
+     * for SSH tabs (the TabManagerListener is SSH-typed, so Vnc/Console
+     * closes never reach it): rebuild the pager and finish when empty.
+     */
+    private fun closeConsoleTab(tabId: String) {
+        val idx = tabManager.getAllTabsSealed().indexOfFirst { it.tabId == tabId }
+        if (idx < 0) return
+        tabManager.closeTab(idx)
+        removeTabFromUI(idx)
+        if (tabManager.getTabCount() == 0 && !isReconnecting) {
+            finish()
+        }
+    }
+
+    /**
+     * Reconnect / Close dialog for a Vnc/Console tab that dropped with an
+     * error — the console counterpart of [showReconnectDialog]. Reconnect is
+     * only offered for persisted-VncHost tabs: ephemeral hypervisor consoles
+     * need live authenticated API clients/tickets held by their manager
+     * activities (and libvirt SPICE needs its SSH port forward re-created),
+     * so those tabs get Close / Keep instead — the frozen framebuffer stays
+     * visible so the user can read the last screen before deciding.
+     */
+    private fun showConsoleReconnectDialog(tab: Tab, detail: String?) {
+        val title = when (tab) {
+            is Tab.Ssh -> return
+            is Tab.Vnc -> tab.vncTab.getDisplayTitle()
+            is Tab.Console -> tab.consoleTab.getDisplayTitle()
+        }
+        val reconnectableHost = (tab as? Tab.Vnc)?.vncTab?.vncHost
+        val body = buildString {
+            append(title).append(" disconnected.")
+            if (!detail.isNullOrBlank()) append("\n\n").append(detail)
+        }
+        val builder = androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Connection closed")
+            .setMessage(body)
+            .setCancelable(false)
+            .setNegativeButton("Close tab") { _, _ ->
+                Logger.i("TabTerminalActivity", "User chose CLOSE for console tab ${tab.tabId}")
+                closeConsoleTab(tab.tabId)
+            }
+            .setNeutralButton("Keep open") { d, _ -> d.dismiss() }
+        if (reconnectableHost != null) {
+            builder.setPositiveButton("Reconnect") { _, _ ->
+                Logger.i("TabTerminalActivity", "User chose RECONNECT for VNC tab ${tab.tabId}")
+                reconnectVncTab((tab as Tab.Vnc).vncTab)
+            }
+        }
+        builder.show()
+    }
+
+    /**
+     * In-place reconnect for a persisted-VncHost [io.github.tabssh.ui.tabs.VncTab]:
+     * resolve credentials the same way VncHostsActivity.openVncConsole does,
+     * dial a fresh RfbClient via VncDirectConnector, swap it onto the tab
+     * (the rfbClient setter rewires the close-policy hook), and rebind the
+     * page so VncViewHolder attaches + starts the new client.
+     */
+    private fun reconnectVncTab(vncTab: io.github.tabssh.ui.tabs.VncTab) {
+        val host = vncTab.vncHost ?: return
+        lifecycleScope.launch {
+            try {
+                val (password, username) = withContext(Dispatchers.IO) {
+                    val identityId = host.identityId
+                    // Per-host password override always takes priority.
+                    val hostPw = try {
+                        app.securePasswordManager.retrievePassword("vnc_host_${host.id}")
+                    } catch (e: Exception) {
+                        Logger.w("TabTerminalActivity", "Could not retrieve VNC host password: ${e.message}")
+                        null
+                    }
+                    if (hostPw != null) {
+                        val identityUsername = if (identityId != null) {
+                            app.database.vncIdentityDao().getById(identityId)?.username
+                        } else null
+                        Pair(hostPw, identityUsername)
+                    } else if (identityId != null) {
+                        val identity = app.database.vncIdentityDao().getById(identityId)
+                        val pw = try {
+                            app.securePasswordManager.retrievePassword("vnc_identity_$identityId")
+                        } catch (e: Exception) {
+                            Logger.w("TabTerminalActivity", "Could not retrieve VNC identity password: ${e.message}")
+                            null
+                        }
+                        Pair(pw, identity?.username)
+                    } else {
+                        Pair(null, null)
+                    }
+                }
+                val (rfbClient, _) = withContext(Dispatchers.IO) {
+                    io.github.tabssh.hypervisor.vnc.VncDirectConnector.connect(
+                        host, password, username, this@TabTerminalActivity)
+                }
+                // Drop whatever dead session is still parked under this tab's
+                // key so the rebind below can't reclaim the old client.
+                io.github.tabssh.hypervisor.vnc.VncBackgroundSessionStore.discard(vncTab.storeKey)
+                vncTab.rfbClient = rfbClient
+                vncTab.setConnectionState(ConnectionState.CONNECTED)
+                withContext(Dispatchers.IO) {
+                    app.database.vncHostDao().updateLastConnected(host.id, System.currentTimeMillis())
+                }
+                val idx = tabManager.getAllTabsSealed().indexOfFirst { it.tabId == vncTab.tabId }
+                if (idx >= 0) pagerAdapter?.notifyItemChanged(idx)
+            } catch (e: Exception) {
+                Logger.e("TabTerminalActivity", "VNC reconnect failed for '${host.name}'", e)
+                if (!isFinishing && !isDestroyed) {
+                    showToast("Reconnect failed: ${e.message}")
+                    // Put the decision back in front of the user.
+                    showConsoleReconnectDialog(
+                        Tab.Vnc(vncTab), e.message ?: "Connection failed")
+                }
             }
         }
     }

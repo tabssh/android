@@ -1,5 +1,6 @@
 package io.github.tabssh.hypervisor.spice
 
+import io.github.tabssh.hypervisor.console.ConsoleDisconnectReason
 import io.github.tabssh.utils.logging.Logger
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -48,6 +49,16 @@ class SpiceClient(
     private var nativeHandle: Long = 0L
 
     private val running = AtomicBoolean(false)
+
+    /**
+     * Session-end hook for the tab close-policy gate. Fired exactly once when
+     * the native layer ends the session while it was still running — i.e. any
+     * end that is NOT a user-initiated [stop] (stop() flips [running] first,
+     * so the native disconnect callback it triggers never fires this). Native
+     * already discriminates: onNativeDisconnected → CLEAN, onNativeError → ERROR.
+     * Lives on the client so it survives view recycling, like the RFB hook.
+     */
+    @Volatile var onSessionEnded: ((ConsoleDisconnectReason, String) -> Unit)? = null
 
     /**
      * Attempt to open the session. Returns `false` if SPICE is
@@ -233,10 +244,15 @@ class SpiceClient(
         // calls are no-ops even before the caller notices.
         val handle = nativeHandle
         nativeHandle = 0L
-        running.set(false)
+        // CAS instead of set: true→false means the session died on its own,
+        // false means stop() already claimed the shutdown (user-initiated).
+        val wasRunning = running.compareAndSet(true, false)
         listener?.onError(message)
         if (handle != 0L) {
             try { nativeDestroySession(handle) } catch (_: Throwable) {}
+        }
+        if (wasRunning) {
+            onSessionEnded?.invoke(ConsoleDisconnectReason.ERROR, message)
         }
     }
 
@@ -245,10 +261,16 @@ class SpiceClient(
     internal fun onNativeDisconnected(reason: String) {
         val handle = nativeHandle
         nativeHandle = 0L
-        running.set(false)
+        // CAS instead of set: only a still-running session reports CLEAN —
+        // the disconnect triggered by stop()'s own nativeStopSession is
+        // user-initiated and must not reach the close-policy gate.
+        val wasRunning = running.compareAndSet(true, false)
         listener?.onDisconnected(reason)
         if (handle != 0L) {
             try { nativeDestroySession(handle) } catch (_: Throwable) {}
+        }
+        if (wasRunning) {
+            onSessionEnded?.invoke(ConsoleDisconnectReason.CLEAN, reason)
         }
     }
 

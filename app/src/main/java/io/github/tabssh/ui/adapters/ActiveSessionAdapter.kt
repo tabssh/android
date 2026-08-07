@@ -8,16 +8,15 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import io.github.tabssh.R
 import io.github.tabssh.ssh.connection.ConnectionState
-import io.github.tabssh.ui.tabs.SSHTab
 
 /**
  * Issue #165 — adapter for the "Active Sessions" strip in the Connections
- * tab. Backed by a snapshot list of [SSHTab]s; each item shows the tab's
- * current display title (dynamic terminal title if the remote set one,
- * default `user@host:port` otherwise) plus a coloured dot indicating the
- * tab's connection state. Tap → callback with the tab's [SSHTab.tabId]
- * which the fragment uses to launch [TabTerminalActivity] focused on
- * that tab.
+ * tab. Backed by a snapshot of every kind of tab (SSH, VNC, hypervisor
+ * console); each item shows the tab's current display title (dynamic
+ * terminal title if the remote set one, profile/host/VM name otherwise)
+ * plus a coloured dot indicating the tab's connection state. Tap →
+ * callback with the tab's id which the fragment uses to launch
+ * [TabTerminalActivity] focused on that tab.
  *
  * Disambiguation for tabs that share a default title (multiple tabs to
  * the same host with no OSC title set) is handled by the fragment before

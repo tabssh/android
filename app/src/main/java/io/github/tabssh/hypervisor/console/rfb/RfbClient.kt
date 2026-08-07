@@ -1,5 +1,7 @@
 package io.github.tabssh.hypervisor.console.rfb
 
+import io.github.tabssh.hypervisor.console.ConsoleDisconnectClassifier
+import io.github.tabssh.hypervisor.console.ConsoleDisconnectReason
 import io.github.tabssh.hypervisor.console.rfb.PixelFormat.Companion.toBytes
 import io.github.tabssh.utils.logging.Logger
 import java.io.DataInputStream
@@ -127,6 +129,27 @@ class RfbClient(
     }
 
     var listener: RfbListener? = null
+
+    /**
+     * Session-end hook for the tab close-policy gate. Fired exactly once when
+     * the reader loop ends for any reason OTHER than a user-initiated [stop]
+     * (stop() clears `running` first, so its EOF/interrupt never reaches this).
+     * Lives on the client — not the view listener — because view-level
+     * listeners are detached whenever the tab's page is recycled, and a
+     * disconnect while unbound must still reach the owning tab.
+     */
+    @Volatile var onSessionEnded: ((ConsoleDisconnectReason, String) -> Unit)? = null
+
+    /**
+     * True only while the event loop is blocked reading the NEXT message-type
+     * byte — the sole stream position where a server EOF is an orderly close.
+     * Written by the reader thread, read by the same thread in the catch
+     * handler; volatile for visibility if the thread is ever swapped.
+     */
+    @Volatile private var atMessageBoundary = false
+
+    /** One-shot latch so [onSessionEnded] can never fire twice. */
+    private val sessionEndFired = AtomicBoolean(false)
 
     /**
      * When false, [sendSetDesktopSize] is a no-op. Set to false for servers
@@ -334,13 +357,31 @@ class RfbClient(
                     // simply ended because the server doesn't support resize.
                     Logger.i(TAG, "Server closed after resize rejection — treating as clean disconnect")
                     listener?.onDisconnected("Server closed after resize rejection")
+                    // For the tab gate this is still ERROR: the user did not ask
+                    // for the session to end, so offer reconnect, never auto-close.
+                    fireSessionEnded(ConsoleDisconnectReason.ERROR, "Server closed after resize rejection")
                 } else {
-                    Logger.e(TAG, "RFB protocol error", e)
-                    listener?.onError("VNC connection lost: ${e.message ?: e.javaClass.simpleName}")
+                    val reason = ConsoleDisconnectClassifier.classifyRfb(atMessageBoundary, e)
+                    if (reason == ConsoleDisconnectReason.CLEAN) {
+                        Logger.i(TAG, "RFB server closed the connection (orderly EOF)")
+                        listener?.onDisconnected("Server closed the connection")
+                        fireSessionEnded(ConsoleDisconnectReason.CLEAN, "Server closed the connection")
+                    } else {
+                        Logger.e(TAG, "RFB protocol error", e)
+                        listener?.onError("VNC connection lost: ${e.message ?: e.javaClass.simpleName}")
+                        fireSessionEnded(ConsoleDisconnectReason.ERROR, e.message ?: e.javaClass.simpleName)
+                    }
                 }
             }
         } finally {
             running.set(false)
+        }
+    }
+
+    /** Invoke [onSessionEnded] at most once per client instance. */
+    private fun fireSessionEnded(reason: ConsoleDisconnectReason, detail: String) {
+        if (sessionEndFired.compareAndSet(false, true)) {
+            onSessionEnded?.invoke(reason, detail)
         }
     }
 
@@ -855,7 +896,13 @@ class RfbClient(
 
     private fun eventLoop() {
         while (running.get()) {
-            when (val msgType = din.readUnsignedByte()) {
+            // A clean server shutdown can only surface as EOF on this read —
+            // the gap between messages. Mark the boundary so runProtocol()'s
+            // catch can tell orderly EOF apart from a mid-message drop.
+            atMessageBoundary = true
+            val msgType = din.readUnsignedByte()
+            atMessageBoundary = false
+            when (msgType) {
                 // ── RFC 6143 core messages ──────────────────────────────────
                 RfbConstants.S2C_FRAMEBUFFER_UPDATE      -> handleFramebufferUpdate()
                 RfbConstants.S2C_SET_COLOUR_MAP_ENTRIES  -> skipColourMap()

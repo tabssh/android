@@ -939,16 +939,7 @@ class TerminalView @JvmOverloads constructor(
         val clampedSize = sizeInSp.coerceIn(8, 32)
         textPaint.textSize = clampedSize * resources.displayMetrics.density
         calculateCellDimensions()
-
-        // Recalculate terminal dimensions based on new cell size
-        val availableWidth = width - paddingLeft - paddingRight
-        val availableHeight = height - paddingTop - paddingBottom
-
-        if (availableWidth > 0 && availableHeight > 0) {
-            terminalCols = (availableWidth / cellWidth).toInt().coerceAtLeast(80)
-            terminalRows = (availableHeight / cellHeight).toInt().coerceAtLeast(24)
-            terminalEmulator?.resize(terminalCols, terminalRows)
-        }
+        updateGridSize()
 
         invalidate()
         Logger.d("TerminalView", "Font size changed to ${clampedSize}sp (${terminalCols}x${terminalRows})")
@@ -969,16 +960,7 @@ class TerminalView @JvmOverloads constructor(
         val typeface = io.github.tabssh.utils.FontManager.getTypeface(context, fontValue)
         textPaint.typeface = typeface
         calculateCellDimensions()
-
-        // Recalculate terminal dimensions
-        val availableWidth = width - paddingLeft - paddingRight
-        val availableHeight = height - paddingTop - paddingBottom
-
-        if (availableWidth > 0 && availableHeight > 0) {
-            terminalCols = (availableWidth / cellWidth).toInt().coerceAtLeast(80)
-            terminalRows = (availableHeight / cellHeight).toInt().coerceAtLeast(24)
-            terminalEmulator?.resize(terminalCols, terminalRows)
-        }
+        updateGridSize()
 
         fullRedrawNeeded = true
         invalidate()
@@ -991,6 +973,7 @@ class TerminalView @JvmOverloads constructor(
     fun setTypeface(typeface: android.graphics.Typeface) {
         textPaint.typeface = typeface
         calculateCellDimensions()
+        updateGridSize()
         fullRedrawNeeded = true
         invalidate()
     }
@@ -1155,6 +1138,7 @@ class TerminalView @JvmOverloads constructor(
     fun setLineSpacingPercent(percent: Int) {
         lineSpacingMultiplier = (percent.coerceIn(100, 200)) / 100f
         calculateCellDimensions()
+        updateGridSize()
         requestLayout()
         invalidate()
     }
@@ -1163,6 +1147,49 @@ class TerminalView @JvmOverloads constructor(
         val fontMetrics = textPaint.fontMetrics
         cellHeight = (fontMetrics.bottom - fontMetrics.top) * lineSpacingMultiplier
         cellWidth = textPaint.measureText("M") // Use 'M' as reference for monospace
+    }
+
+    /**
+     * Y origin of the character grid. The view height rarely divides evenly into
+     * whole cell rows; the leftover slack (< one cell) is pushed ABOVE the grid
+     * so the last row sits flush against whatever is below the terminal (custom
+     * keyboard bar / IME) instead of leaving an odd blank band there. Slack is
+     * capped at one cell upward, but deliberately NOT floored at zero: if the
+     * grid transiently overflows the view (rows lag during the resize debounce),
+     * the negative offset shifts the grid up so the BOTTOM row — prompt / status
+     * line, the part the user is looking at — stays visible and the overflow
+     * clips at the top instead.
+     */
+    private val gridTop: Float
+        get() {
+            if (cellHeight <= 0f) return paddingTop.toFloat()
+            val slack = (height - paddingTop - paddingBottom) - terminalRows * cellHeight
+            return paddingTop + slack.coerceAtMost(cellHeight)
+        }
+
+    /**
+     * Recompute cols/rows from the current view size and cell dimensions, then
+     * push the new grid to the PTY and buffers. Called whenever EITHER input
+     * changes: the view size (onSizeChanged, debounced) or the cell metrics
+     * (font size / typeface / line-spacing setters, immediate). The setters
+     * previously updated cellHeight without recomputing rows — leaving
+     * rows*cellHeight larger than the view and clipping the bottom row — and
+     * the font-size path never resized the Termux PTY at all.
+     */
+    private fun updateGridSize() {
+        if (cellWidth <= 0f || cellHeight <= 0f) return
+        val availableWidth = width - paddingLeft - paddingRight
+        val availableHeight = height - paddingTop - paddingBottom
+        if (availableWidth <= 0 || availableHeight <= 0) return
+        val newCols = (availableWidth / cellWidth).toInt().coerceAtLeast(40)
+        val newRows = (availableHeight / cellHeight).toInt().coerceAtLeast(10)
+        if (newCols == terminalCols && newRows == terminalRows) return
+        terminalCols = newCols
+        terminalRows = newRows
+        termuxBridge?.resize(terminalCols, terminalRows)
+        terminalBuffer?.resize(terminalRows, terminalCols)
+        terminalEmulator?.resize(terminalRows, terminalCols)
+        Logger.d("TerminalView", "Terminal resized: ${terminalRows}x${terminalCols}")
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -1178,26 +1205,14 @@ class TerminalView @JvmOverloads constructor(
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
 
-        val availableWidth = w - paddingLeft - paddingRight
-        val availableHeight = h - paddingTop - paddingBottom
-
         if (cellWidth <= 0 || cellHeight <= 0) return
-
-        val newCols = (availableWidth / cellWidth).toInt().coerceAtLeast(40)
-        val newRows = (availableHeight / cellHeight).toInt().coerceAtLeast(10)
-
-        if (newCols == terminalCols && newRows == terminalRows) return
 
         // Cancel any resize that hasn't fired yet; the final settled size wins.
         pendingResize?.let { resizeHandler.removeCallbacks(it) }
 
         val r = Runnable {
             pendingResize = null
-            terminalCols = newCols
-            terminalRows = newRows
-            termuxBridge?.resize(terminalCols, terminalRows)
-            terminalBuffer?.resize(terminalRows, terminalCols)
-            Logger.d("TerminalView", "Terminal resized: ${terminalRows}x${terminalCols}")
+            updateGridSize()
         }
         pendingResize = r
         resizeHandler.postDelayed(r, RESIZE_DEBOUNCE_MS)
@@ -1226,14 +1241,14 @@ class TerminalView @JvmOverloads constructor(
         terminalRenderer?.let { renderer ->
             terminalBuffer?.let { buffer ->
                 Logger.d("TerminalView", "Rendering terminal: ${buffer.getRows()}x${buffer.getCols()}, scroll=$scrollYInt")
-                renderer.render(canvas, buffer, paddingLeft.toFloat(), paddingTop.toFloat(),
+                renderer.render(canvas, buffer, paddingLeft.toFloat(), gridTop,
                     cellWidth, cellHeight, scrollYInt)
                 // URL underline pass — drawn after text so underlines are on top of glyphs.
                 val rows = buffer.getRows()
                 val cols = buffer.getCols()
                 val urlUnderlineH = maxOf(2f, cellHeight * 0.06f)
                 for (row in 0 until rows) {
-                    val rowBottom = paddingTop + (row + 1) * cellHeight - scrollYInt
+                    val rowBottom = gridTop + (row + 1) * cellHeight - scrollYInt
                     if (rowBottom < 0 || rowBottom - cellHeight > height) continue
                     val line = buffer.getLine(row)
                     // Regex URL underlines
@@ -1289,7 +1304,7 @@ class TerminalView @JvmOverloads constructor(
         val cursorVisible = bridge.isCursorVisible()
 
         val startX = paddingLeft.toFloat()
-        val startY = paddingTop.toFloat()
+        val startY = gridTop
 
         // Convert pixel scroll offset to row offset (negative = into scrollback).
         val scrollRows = if (cellHeight > 0f) (scrollYInt / cellHeight).toInt() else 0
@@ -1654,7 +1669,7 @@ class TerminalView @JvmOverloads constructor(
         // pixels and integer-divides once, which gives different results from the
         // two-step version due to truncation and does not match the render path.
         val scrollRows = if (cellHeight > 0f) (scrollYInt / cellHeight).toInt() else 0
-        val screenRow  = if (cellHeight > 0f) ((y - paddingTop) / cellHeight).toInt() else 0
+        val screenRow  = if (cellHeight > 0f) ((y - gridTop) / cellHeight).toInt() else 0
         val row = screenRow + scrollRows
         val col = ((x - paddingLeft) / cellWidth).toInt()
 
@@ -1757,7 +1772,7 @@ class TerminalView @JvmOverloads constructor(
      */
     private fun detectUrlAtPosition(x: Float, y: Float): String? {
         val scrollRows = if (cellHeight > 0f) (scrollYInt / cellHeight).toInt() else 0
-        val screenRow  = if (cellHeight > 0f) ((y - paddingTop) / cellHeight).toInt() else 0
+        val screenRow  = if (cellHeight > 0f) ((y - gridTop) / cellHeight).toInt() else 0
         val row = (screenRow + scrollRows).coerceIn(0, terminalRows - 1)
         val col = ((x - paddingLeft) / cellWidth).toInt().coerceIn(0, terminalCols - 1)
 
@@ -2551,7 +2566,7 @@ class TerminalView @JvmOverloads constructor(
     private fun pixelToCell(x: Float, y: Float): Pair<Int, Int> {
         val col = ((x - paddingLeft) / cellWidth).toInt()
             .coerceIn(0, (terminalCols - 1).coerceAtLeast(0))
-        val row = ((y - paddingTop) / cellHeight).toInt()
+        val row = ((y - gridTop) / cellHeight).toInt()
             .coerceIn(0, (terminalRows - 1).coerceAtLeast(0))
         return col to row
     }
@@ -2750,7 +2765,7 @@ class TerminalView @JvmOverloads constructor(
     /** Pixel-center of the bottom edge of a given cell (where handles sit). */
     private fun cellCenterPx(col: Int, row: Int): Pair<Float, Float> {
         val px = paddingLeft + col * cellWidth + cellWidth / 2f
-        val py = paddingTop + row * cellHeight
+        val py = gridTop + row * cellHeight
         return px to py
     }
 
@@ -2764,7 +2779,7 @@ class TerminalView @JvmOverloads constructor(
         if (!selectionActive || cellWidth <= 0f || cellHeight <= 0f) return
         val (startRow, startCol, endRow, endCol) = normalisedSelection()
         val startX = paddingLeft.toFloat()
-        val startY = paddingTop.toFloat()
+        val startY = gridTop
 
         for (row in startRow..endRow) {
             val colA = if (row == startRow) startCol else 0
@@ -2793,7 +2808,7 @@ class TerminalView @JvmOverloads constructor(
     private fun drawSearchHighlights(canvas: Canvas, scrollRows: Int) {
         if (searchMatches.isEmpty() || cellWidth <= 0f || cellHeight <= 0f) return
         val startX = paddingLeft.toFloat()
-        val startY = paddingTop.toFloat()
+        val startY = gridTop
         for ((idx, match) in searchMatches.withIndex()) {
             val visualRow = match.externalRow + scrollRows
             if (visualRow < 0 || visualRow >= terminalRows) continue
