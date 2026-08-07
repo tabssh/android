@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+  android:layout_width="match_parent"
+  android:layout_height="match_parent">
+
+  <LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:text="Configure TabSSH Action"
+      android:textSize="20sp"
+      android:textStyle="bold"
+      android:textColor="?attr/colorOnSurface"
+      android:paddingBottom="16dp" />
+
+    <TextView
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:text="Action"
+      android:textSize="14sp"
+      android:textColor="?attr/colorOnSurfaceVariant" />
+
+    <Spinner
+      android:id="@+id/spinner_action"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:paddingBottom="8dp" />
+
+    <TextView
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:layout_marginTop="8dp"
+      android:text="Connection"
+      android:textSize="14sp"
+      android:textColor="?attr/colorOnSurfaceVariant" />
+
+    <Spinner
+      android:id="@+id/spinner_connection"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:paddingBottom="8dp" />
+
+    <EditText
+      android:id="@+id/input_command"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:layout_marginTop="8dp"
+      android:hint="Command to run"
+      android:inputType="text"
+      android:importantForAutofill="no"
+      android:visibility="gone" />
+
+    <CheckBox
+      android:id="@+id/check_wait_result"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:text="Wait for output (broadcast result)"
+      android:visibility="gone" />
+
+    <EditText
+      android:id="@+id/input_keys"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:layout_marginTop="8dp"
+      android:hint="Keys (e.g. ENTER, TAB, CTRL+C, or text)"
+      android:inputType="text"
+      android:importantForAutofill="no"
+      android:visibility="gone" />
+
+    <TextView
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:layout_marginTop="16dp"
+      android:text="Actions only run while Tasker integration is enabled in TabSSH settings."
+      android:textSize="12sp"
+      android:textColor="?attr/colorOnSurfaceVariant" />
+
+    <LinearLayout
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:layout_marginTop="16dp"
+      android:orientation="horizontal">
+
+      <Button
+        android:id="@+id/button_cancel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginEnd="8dp"
+        android:text="Cancel"
+        style="@style/Widget.Material3.Button.OutlinedButton" />
+
+      <Button
+        android:id="@+id/button_save"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:text="Save" />
+    </LinearLayout>
+
+  </LinearLayout>
+</ScrollView>

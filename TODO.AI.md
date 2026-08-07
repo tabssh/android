@@ -9,18 +9,7 @@ the codebase (57 spec features → 53 implemented, 4 partial, 0 missing).
 
 ## Open — spec feature gaps (priority order)
 
-### 4. Tasker/Locale plugin disabled (IDEA.md feature 54)
-
-Receiver code exists but is gated behind a signature-level permission and
-disabled in the manifest, and there is no twofortyfouram Locale plugin
-protocol — third-party Tasker cannot invoke connections. (Widgets + the
-public intent surface, features 55/56, do work.)
-
-- `automation/TaskerActionReceiver.kt`, `automation/TaskerWorker.kt` — exist but unreachable
-- `AndroidManifest.xml:87-101` — receiver gated behind `io.github.tabssh.permission.TASKER`; comment states Tasker support needs a different IPC design
-
-Redesign the IPC so external automation apps can launch connections, or
-implement the `com.twofortyfouram` Locale plugin protocol.
+None — all audit findings are resolved or user-side (see below).
 
 ## Needs verification
 
@@ -35,15 +24,21 @@ definition-of-done requires real hosts and must be run by the user:
 - QEMU direct VNC · TightVNC server via VNC profile
 - VMware: console button on a POWERED_ON VM with `RemoteDisplay.vnc.*` set
 
-### 7. spice-libs first CI release (PLAN item 8 remainder)
-
-Run `.github/workflows/spice-libs.yml` so CI cross-builds all four ABIs
-(only x86_64 is locally proven — armeabi-v7a may surface 32-bit issues) and
-publishes the first `spice-libs-0.42.0` prerelease. Until it is published,
-`scripts/fetch-spice-libs.sh` finds no release, `SpiceLoader.isSpiceAvailable()`
-returns false, and every SPICE path silently falls back to VNC (by design).
-
 ## Recently Shipped
+
+Former item 7 (spice-libs first CI release) verified 2026-08-06: the
+"SPICE Native Libraries" workflow_dispatch run succeeded and the
+`spice-libs-0.42.0` prerelease is published with all four ABI `.so`
+assets — `scripts/fetch-spice-libs.sh` now resolves a release and
+`SpiceLoader.isSpiceAvailable()` can return true on fetch-enabled builds.
+
+Former item 4 (Tasker/Locale plugin, IDEA.md feature 54) shipped: TabSSH
+implements the `com.twofortyfouram` Locale plugin protocol —
+`automation/LocaleEditActivity` (EDIT_SETTING config screen, in-app
+action/profile picker) + `automation/LocaleFireReceiver` (FIRE_SETTING,
+strict bundle validation, routes through TaskerWorker's runtime gates);
+the signature-gated `TaskerActionReceiver` stays for same-signature
+callers.
 
 Former item 5 (theme count 23 vs 22) resolved 2026-08-06 with no change:
 `BuiltInThemes.getAllThemes()` returns exactly 23 entries (3 system + 12

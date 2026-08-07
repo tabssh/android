@@ -85,15 +85,16 @@
     </queries>
 
     <!-- Custom signature-level permission protecting TaskerActionReceiver.
-         Without this, the (exported) intent service was reachable from any
+         Without this, the (exported) intent surface was reachable from any
          app on the device — an attacker app could fire CONNECT/SEND_COMMAND
          intents to drive arbitrary commands on the user's SSH targets.
          `signature` means callers must be signed with the same certificate
          as TabSSH itself; in practice that locks it down to same-developer
-         apps only. Tasker integration via this service is therefore
-         disabled until we redesign it (see TODO.AI.md "Tasker preferences
-         XML orphaned" — proper Tasker support needs a different IPC
-         shape; this is the secure-by-default stop-gap). -->
+         apps only. Third-party automation apps (Tasker/Locale/Automate)
+         instead use the com.twofortyfouram Locale plugin protocol below
+         (LocaleEditActivity + LocaleFireReceiver): configuration happens
+         inside TabSSH, and the fire receiver validates every replayed
+         bundle and routes through TaskerWorker's runtime gates. -->
     <permission
         android:name="io.github.tabssh.permission.TASKER"
         android:label="@string/app_name"
@@ -413,6 +414,31 @@
                 <action android:name="io.github.tabssh.action.DISCONNECT" />
                 <action android:name="io.github.tabssh.action.SEND_COMMAND" />
                 <action android:name="io.github.tabssh.action.SEND_KEYS" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Locale/Tasker plugin protocol (com.twofortyfouram). The edit
+             activity is the discovery point: automation hosts list every
+             app exporting EDIT_SETTING as an available plugin action. -->
+        <activity
+            android:name=".automation.LocaleEditActivity"
+            android:label="TabSSH Action"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.twofortyfouram.locale.intent.action.EDIT_SETTING" />
+            </intent-filter>
+        </activity>
+
+        <!-- Fire receiver for the Locale plugin protocol. Deliberately
+             unpermissioned (hosts have arbitrary signatures); safety comes
+             from strict bundle validation plus TaskerWorker's runtime
+             gates (integration toggle, unlock requirement, allowlist). -->
+        <receiver
+            android:name=".automation.LocaleFireReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.twofortyfouram.locale.intent.action.FIRE_SETTING" />
             </intent-filter>
         </receiver>
 
