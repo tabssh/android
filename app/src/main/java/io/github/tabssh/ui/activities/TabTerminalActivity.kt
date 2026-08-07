@@ -14,7 +14,9 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.tabs.TabLayout
@@ -2702,24 +2704,33 @@ class TabTerminalActivity : AppCompatActivity() {
      */
     private fun observeMultiplexerState(tab: io.github.tabssh.ui.tabs.SSHTab?) {
         multiplexerObserverJob?.cancel()
+        // The picker's item lambda captures the tab it was built for, so a
+        // dialog left over from the previous tab would drive a session the
+        // user is no longer looking at.
+        dismissMultiplexerDialogs()
         if (tab == null) {
             updatePrefixKeyVisual(null)
             return
         }
         multiplexerObserverJob = lifecycleScope.launch {
-            launch {
-                tab.activeMultiplexerTypeFlow.collect { type ->
-                    updatePrefixKeyVisual(type)
+            // STARTED-scoped: a request that lands while the activity is
+            // backgrounded must not show() on a stopped window; the StateFlow
+            // replays it on return to the foreground.
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch {
+                    tab.activeMultiplexerTypeFlow.collect { type ->
+                        updatePrefixKeyVisual(type)
+                    }
                 }
-            }
-            // ASK-mode picker (IDEA.md feature 21): the tab publishes a
-            // pending request after connect; show the attach/create dialog
-            // when this tab is the one being observed. StateFlow retention
-            // means a request raised while another tab was active still
-            // surfaces on switch-back.
-            launch {
-                tab.multiplexerAskRequestFlow.collect { req ->
-                    if (req != null) showMultiplexerAskDialog(tab, req)
+                // ASK-mode picker (IDEA.md feature 21): the tab publishes a
+                // pending request after connect; show the attach/create dialog
+                // when this tab is the one being observed. StateFlow retention
+                // means a request raised while another tab was active still
+                // surfaces on switch-back.
+                launch {
+                    tab.multiplexerAskRequestFlow.collect { req ->
+                        if (req != null) showMultiplexerAskDialog(tab, req)
+                    }
                 }
             }
         }
@@ -2728,6 +2739,18 @@ class TabTerminalActivity : AppCompatActivity() {
     // Tracks the visible ASK-mode picker so a re-emission (tab switch,
     // config change re-collect) never stacks a second dialog.
     private var multiplexerAskDialog: androidx.appcompat.app.AlertDialog? = null
+
+    // The follow-up name prompt is tracked for the same reason, and because
+    // both must be torn down before the window they are attached to.
+    private var multiplexerCreateDialog: androidx.appcompat.app.AlertDialog? = null
+
+    /** Tears down any visible ASK-mode dialog; safe to call repeatedly. */
+    private fun dismissMultiplexerDialogs() {
+        multiplexerCreateDialog?.dismiss()
+        multiplexerCreateDialog = null
+        multiplexerAskDialog?.dismiss()
+        multiplexerAskDialog = null
+    }
 
     /**
      * ASK-mode multiplexer picker: lists the remote's existing sessions with
@@ -2738,11 +2761,14 @@ class TabTerminalActivity : AppCompatActivity() {
         tab: io.github.tabssh.ui.tabs.SSHTab,
         req: io.github.tabssh.ui.tabs.SSHTab.MultiplexerAskRequest
     ) {
-        if (multiplexerAskDialog?.isShowing == true) return
+        if (multiplexerAskDialog?.isShowing == true || multiplexerCreateDialog?.isShowing == true) return
         val labels = req.sessions.map { "Attach: $it" } + "Create new session"
         multiplexerAskDialog = androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("${req.type} sessions on ${tab.profile.host}")
             .setItems(labels.toTypedArray()) { _, which ->
+                // setItems auto-dismisses, so drop the reference before the
+                // create prompt checks the stacking guard.
+                multiplexerAskDialog = null
                 if (which < req.sessions.size) {
                     tab.attachMultiplexerSession(req.type, req.sessions[which])
                 } else {
@@ -2766,7 +2792,7 @@ class TabTerminalActivity : AppCompatActivity() {
             setText(req.defaultSessionName)
             setSelection(text.length)
         }
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        multiplexerCreateDialog = androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("New ${req.type} session")
             .setMessage("Enter a name for the new session")
             .setView(input)
@@ -2775,11 +2801,14 @@ class TabTerminalActivity : AppCompatActivity() {
                 if (name.isNotEmpty() && !name.contains(' ')) {
                     tab.createMultiplexerSession(req.type, name)
                 } else {
-                    android.widget.Toast.makeText(
+                    // Re-prompt rather than clearing the request: a typo must not
+                    // strand the user on a plain shell with no way back to the picker.
+                    Toast.makeText(
                         this, "Session name must be non-empty with no spaces",
-                        android.widget.Toast.LENGTH_SHORT
+                        Toast.LENGTH_SHORT
                     ).show()
-                    tab.dismissMultiplexerAsk()
+                    multiplexerCreateDialog = null
+                    showMultiplexerCreateDialog(tab, req)
                 }
             }
             .setNegativeButton("Cancel") { _, _ -> tab.dismissMultiplexerAsk() }
@@ -4679,6 +4708,9 @@ class TabTerminalActivity : AppCompatActivity() {
         // Cancel the warnings collector so it doesn't outlive the Activity.
         warningsJob?.cancel()
         warningsJob = null
+
+        // The ASK-mode multiplexer dialogs hold this window's token.
+        dismissMultiplexerDialogs()
 
         // Disconnect the split-pane tab if the user never tapped "Close split".
         // The split tab is Activity-scoped (not in the Application TabManager)
