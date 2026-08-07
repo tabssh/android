@@ -1160,26 +1160,39 @@ class SSHTab(
          * on by default; GNU screen has no mouse-scroll support at all.
          */
         internal fun buildMultiplexerCommand(type: String, mode: String, name: String): String? {
-            val safeName = name.replace("'", "")
+            val safeName = shQuote(name)
             return when (type) {
                 "tmux" -> when (mode) {
-                    "AUTO_ATTACH", "ASK" -> "tmux new -A -s '$safeName' \\; set -q mouse on"
-                    "CREATE_NEW"         -> "tmux new -s '$safeName' \\; set -q mouse on"
+                    "AUTO_ATTACH", "ASK" -> "tmux new -A -s $safeName \\; set -q mouse on"
+                    "CREATE_NEW"         -> "tmux new -s $safeName \\; set -q mouse on"
                     else                 -> null
                 }
                 "screen" -> when (mode) {
-                    "AUTO_ATTACH", "ASK" -> "screen -RR '$safeName'"
-                    "CREATE_NEW"         -> "screen -S '$safeName'"
+                    "AUTO_ATTACH", "ASK" -> "screen -RR $safeName"
+                    "CREATE_NEW"         -> "screen -S $safeName"
                     else                 -> null
                 }
                 "zellij" -> when (mode) {
-                    "AUTO_ATTACH", "ASK" -> "zellij attach --create '$safeName'"
-                    "CREATE_NEW"         -> "zellij --session '$safeName'"
+                    "AUTO_ATTACH", "ASK" -> "zellij attach --create $safeName"
+                    "CREATE_NEW"         -> "zellij --session $safeName"
                     else                 -> null
                 }
                 else -> null
             }
         }
+
+        /**
+         * POSIX single-quote-escape [value] for interpolation into a remote
+         * shell command. Wraps it in single quotes and renders any embedded
+         * single quote as `'\''`, so nothing in [value] can break out of the
+         * argument — session names reach us from the remote host's own
+         * listing output and from free-text user input.
+         *
+         * Escaping rather than stripping: a session genuinely named `dev'box`
+         * must still attach, which a quote-stripping form silently breaks.
+         */
+        internal fun shQuote(value: String): String =
+            "'" + value.replace("'", "'\\''") + "'"
 
         /**
          * Attach command for an existing session chosen in the ASK-mode
@@ -1188,11 +1201,11 @@ class SSHTab(
          * whichever path launched the attach.
          */
         internal fun buildAttachCommand(type: String, session: String): String? {
-            val safe = session.replace("'", "")
+            val safe = shQuote(session)
             return when (type) {
-                "tmux"   -> "tmux attach -t '$safe' \\; set -q mouse on"
-                "screen" -> "screen -r '$safe'"
-                "zellij" -> "zellij attach '$safe'"
+                "tmux"   -> "tmux attach -t $safe \\; set -q mouse on"
+                "screen" -> "screen -r $safe"
+                "zellij" -> "zellij attach $safe"
                 else     -> null
             }
         }

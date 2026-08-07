@@ -46,9 +46,9 @@ class SSHTabMultiplexerCommandTest {
     }
 
     @Test
-    fun `session name is stripped of single quotes`() {
+    fun `single quotes in a session name are escaped, not dropped`() {
         assertEquals(
-            "tmux new -A -s 'devbox' \\; set -q mouse on",
+            "tmux new -A -s 'dev'\\''box' \\; set -q mouse on",
             cmd("tmux", "AUTO_ATTACH", "dev'box")
         )
     }
@@ -73,10 +73,27 @@ class SSHTabMultiplexerCommandTest {
     }
 
     @Test
-    fun `attach session name is stripped of single quotes`() {
+    fun `attach escapes single quotes in the session name`() {
         assertEquals(
-            "tmux attach -t 'devbox' \\; set -q mouse on",
+            "tmux attach -t 'dev'\\''box' \\; set -q mouse on",
             SSHTab.buildAttachCommand("tmux", "dev'box")
+        )
+    }
+
+    /**
+     * Session names come from the remote host's own listing output, so a
+     * compromised or hostile server controls this string. Single-quoting must
+     * leave every metacharacter inert inside one argument.
+     */
+    @Test
+    fun `shell metacharacters in a remote session name stay inert`() {
+        assertEquals(
+            "screen -r 'x'\\''; rm -rf ~; '\\'''",
+            SSHTab.buildAttachCommand("screen", "x'; rm -rf ~; '")
+        )
+        assertEquals(
+            "zellij attach '\$(id)`id`|cat;\nfoo'",
+            SSHTab.buildAttachCommand("zellij", "\$(id)`id`|cat;\nfoo")
         )
     }
 

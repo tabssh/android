@@ -14,6 +14,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Multiplexer session names with a single quote in them failed to attach** — the attach/create commands stripped `'` from the name instead of escaping it, so a session genuinely named `dev'box` was listed correctly by the picker but attached as `devbox` and failed with "session not found"; names are now POSIX-escaped, which both preserves them and keeps every shell metacharacter inert
+
 - **Swiping in a mosh session at a plain shell prompt typed literal arrow keys (`^[[A`/`^[[B`) into the shell** — mosh pins the terminal to the alternate screen for its entire lifetime, so the alt-screen swipe fallback (arrow-key forwarding meant for vim/less/man/htop) fired at the prompt and injected keystrokes; the fallback in `TerminalView.onScroll()` is now gated on cursor keys being in application mode (DECCKM/smkx), which full-screen terminfo apps enable at startup and a shell prompt never does — swipes at an alt-screen prompt are swallowed instead of typed, and the forwarded sequences are always the SS3 (`ESC O A/B`) variants since the gate guarantees application mode
 
 ### Changed
