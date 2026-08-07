@@ -481,7 +481,7 @@ class VMwareApiClient(
             }
             Logger.i("VMwareAPI", "Guest shutdown requested for $vmId")
         } catch (e: IOException) {
-            throw IOException("Guest shutdown failed — the VM must be powered on with VMware Tools running (${e.message})")
+            throw IOException("Guest shutdown failed${guestOpHint(e)} (${e.message})")
         }
     }
 
@@ -504,8 +504,22 @@ class VMwareApiClient(
             }
             Logger.i("VMwareAPI", "Guest reboot requested for $vmId")
         } catch (e: IOException) {
-            throw IOException("Guest restart failed — the VM must be powered on with VMware Tools running (${e.message})")
+            throw IOException("Guest restart failed${guestOpHint(e)} (${e.message})")
         }
+    }
+
+    /**
+     * VMware-Tools hint for a failed guest power operation, added only when the
+     * fault actually says so. Appending it unconditionally told users to check
+     * VMware Tools when the real cause was an auth failure, a TLS error, or a
+     * network timeout.
+     */
+    private fun guestOpHint(e: IOException): String {
+        val fault = e.message.orEmpty()
+        val toolsFault = fault.contains("ToolsUnavailable", ignoreCase = true) ||
+            fault.contains("InvalidPowerState", ignoreCase = true) ||
+            fault.contains("InvalidState", ignoreCase = true)
+        return if (toolsFault) " — the VM must be powered on with VMware Tools running" else ""
     }
 
     /**
