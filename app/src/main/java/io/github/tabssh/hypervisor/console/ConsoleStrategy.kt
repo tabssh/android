@@ -50,7 +50,12 @@ interface ConsoleStrategy<out T> {
  * "Fallbacks are not errors … silent until the last fallback fails, then it's
  * an actual error."
  */
-class ConsoleStrategyChain<T>(private val strategies: List<ConsoleStrategy<T>>) {
+class ConsoleStrategyChain<T>(
+    private val strategies: List<ConsoleStrategy<T>>,
+    // Invoked with the strategy name just before each attempt — low-key
+    // progress for a single UI spinner (PLAN 14); never treat as an error.
+    private val onAttempt: ((String) -> Unit)? = null
+) {
     companion object { private const val TAG = "ConsoleStrategyChain" }
 
     init {
@@ -64,6 +69,7 @@ class ConsoleStrategyChain<T>(private val strategies: List<ConsoleStrategy<T>>) 
     suspend fun resolve(): T {
         var lastError: Exception? = null
         for ((index, strategy) in strategies.withIndex()) {
+            onAttempt?.invoke(strategy.name)
             try {
                 val result = strategy.resolve()
                 Logger.i(TAG, "strategy ${strategy.name} succeeded (attempt ${index + 1}/${strategies.size})")

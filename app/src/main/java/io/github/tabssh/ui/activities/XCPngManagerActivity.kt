@@ -474,6 +474,13 @@ class XCPngManagerActivity : AppCompatActivity() {
                 override fun onError(message: String) {
                     Logger.w("XCPngManager", "Console error for ${vm.name}: $message")
                 }
+                override fun onStrategyAttempt(strategyName: String) {
+                    // One spinner; its text updates as the chain falls through (PLAN 14)
+                    runOnUiThread {
+                        statusText.text = "Connecting to ${vm.name} " +
+                            "(${io.github.tabssh.hypervisor.console.HypervisorConsoleManager.strategyLabel(strategyName)})…"
+                    }
+                }
                 override fun onSwitchToGraphical(
                     connection: io.github.tabssh.hypervisor.console.HypervisorConsoleManager.ConsoleConnection.Graphical
                 ) {

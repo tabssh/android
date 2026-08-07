@@ -263,6 +263,12 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                 override fun onError(message: String) {
                     Logger.w(TAG, "Console error for ${vm.name}: $message")
                 }
+                override fun onStrategyAttempt(strategyName: String) {
+                    // One spinner; its text updates as the chain falls through (PLAN 14)
+                    runOnUiThread {
+                        showProgress("Connecting to ${vm.name} (${HypervisorConsoleManager.strategyLabel(strategyName)})…")
+                    }
+                }
                 override fun onSwitchToGraphical(connection: HypervisorConsoleManager.ConsoleConnection.Graphical) {
                     runOnUiThread { consoleTab?.markGraphical(connection.rfbClient) }
                 }

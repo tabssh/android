@@ -32,6 +32,18 @@ import java.io.OutputStream
 class HypervisorConsoleManager {
     companion object {
         private const val TAG = "HypervisorConsole"
+
+        /**
+         * Map an internal [ConsoleStrategy.name] to the short user-facing label
+         * shown in the single connect spinner ("Connecting to vm (text console)…").
+         * Internal names stay in logs only; unknown names fall back to "console".
+         */
+        fun strategyLabel(strategyName: String): String = when (strategyName) {
+            "proxmox-termproxy", "xcpng-vt100" -> "text console"
+            "proxmox-spiceproxy" -> "SPICE display"
+            "proxmox-vncproxy", "xcpng-rfb", "xo-websocket" -> "VNC display"
+            else -> "console"
+        }
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -186,7 +198,7 @@ class HypervisorConsoleManager {
                 return ProxmoxTicket.Ws(vnc, ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_VNC)
             }
         })
-        val chain = ConsoleStrategyChain(strategies)
+        val chain = ConsoleStrategyChain(strategies) { listener?.onStrategyAttempt(it) }
         val resolved = try {
             chain.resolve()
         } catch (e: Exception) {
@@ -390,7 +402,7 @@ class HypervisorConsoleManager {
                         return XCPngApiClient.ConsoleInfo(url, "vt100")
                     }
                 },
-            ))
+            ), onAttempt = { listener?.onStrategyAttempt(it) })
             val consoleInfo = try {
                 xcpChain.resolve()
             } catch (e: Exception) {
@@ -500,10 +512,21 @@ class HypervisorConsoleManager {
         try {
             Logger.i(TAG, "Connecting to Xen Orchestra console: $vmName")
 
-            // Get console WebSocket URL from XO
-            val consoleUrl = client.getConsoleWebSocketUrl(vmId)
-            if (consoleUrl == null) {
-                Logger.e(TAG, "Failed to get XO console URL")
+            // XO exposes exactly one console transport, but it still goes
+            // through the strategy chain so every connector shares the same
+            // ranked-candidates model and attempt-progress reporting (PLAN 13).
+            val xoChain = ConsoleStrategyChain(listOf<ConsoleStrategy<String>>(
+                object : ConsoleStrategy<String> {
+                    override val name = "xo-websocket"
+                    override suspend fun resolve(): String =
+                        client.getConsoleWebSocketUrl(vmId)
+                            ?: throw java.io.IOException("no console WebSocket URL for VM")
+                },
+            ), onAttempt = { listener?.onStrategyAttempt(it) })
+            val consoleUrl = try {
+                xoChain.resolve()
+            } catch (e: Exception) {
+                Logger.e(TAG, "All Xen Orchestra console strategies exhausted for $vmName", e)
                 listener?.onError("Failed to get console URL from Xen Orchestra")
                 return@withContext null
             }
@@ -855,6 +878,15 @@ interface ConsoleEventListener {
      * Default no-op so callers that never encounter this path need not change.
      */
     fun onSerialConsoleUnavailable() {}
+
+    /**
+     * Called just before each console strategy attempt with the internal
+     * strategy name (see [HypervisorConsoleManager.strategyLabel] for the
+     * user-facing mapping). This is low-key progress for the single connect
+     * spinner — the UI may update its spinner text; it must never surface a
+     * per-strategy failure as an error. Default no-op.
+     */
+    fun onStrategyAttempt(strategyName: String) {}
 
     /**
      * Called when a text console falls back to a graphical (VNC/RFB) console
