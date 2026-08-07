@@ -206,6 +206,26 @@ make -j"$JOBS" >&2
 make install >&2
 cd ..
 
+# pixman's ARM SIMD runtime dispatch (pixman-arm.c) probes for NEON at
+# runtime via Android's legacy <cpu-features.h> / android_getCpuFeatures().
+# That header + symbol live in the NDK's cpufeatures module, which is not on
+# the default include/link path. Only armeabi-v7a compiles pixman-arm.c
+# (arm64 uses the always-present AArch64 NEON path; x86 has no ARM SIMD), so
+# stage cpufeatures for that ABI alone — keeping NEON rather than disabling
+# it. The header lands in $PREFIX/include (already on the meson c_args -I),
+# and libcpufeatures.a is appended to the final .so link below.
+CPUFEATURES_LINK=""
+if [ "$ABI" = "armeabi-v7a" ]; then
+    echo "──── cpufeatures (NDK, for pixman armv7 NEON dispatch) ────"
+    CPUFEATURES_SRC="$NDK/sources/android/cpufeatures"
+    cp "$CPUFEATURES_SRC/cpu-features.h" "$PREFIX/include/"
+    "$CC" -fPIC -O2 -I"$CPUFEATURES_SRC" -c "$CPUFEATURES_SRC/cpu-features.c" \
+        -o "$BUILD/cpu-features.o"
+    "$AR" rcs "$PREFIX/lib/libcpufeatures.a" "$BUILD/cpu-features.o"
+    "$RANLIB" "$PREFIX/lib/libcpufeatures.a"
+    CPUFEATURES_LINK="-lcpufeatures"
+fi
+
 # ── 7. pixman ──────────────────────────────────────────────────────────────
 echo "──── pixman 0.43.4 ────"
 tar xzf "$SRC_CACHE/pixman-0.43.4.tar.gz"
@@ -336,6 +356,7 @@ STATIC_LIBS="$(pkg-config --static --libs spice-client-glib-2.0)"
     -o "$OUT/libtabssh_native.so" \
     -Wl,--start-group \
     $STATIC_LIBS \
+    $CPUFEATURES_LINK \
     -Wl,--end-group \
     -llog -landroid
 "$STRIP" "$OUT/libtabssh_native.so"
