@@ -19,6 +19,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 
 - **VM snapshots on every hypervisor backend** — Proxmox, VMware, and libvirt/QEMU now have snapshot create/list/revert/delete to match XCP-ng/Xen Orchestra: long-press a VM row in any hypervisor manager to open the snapshot dialog (same UI as XCP-ng's). Proxmox uses the REST snapshot endpoints for both QEMU VMs and LXC containers; VMware uses vim25 SOAP task calls (`CreateSnapshot_Task`/`RevertToSnapshot_Task`/`RemoveSnapshot_Task`, no memory capture); libvirt shells out to `virsh snapshot-create-as`/`snapshot-revert`/`snapshot-delete` over SSH
+- **"Ask" multiplexer mode now actually asks** — a connection whose tmux/screen/zellij mode is set to Ask used to silently behave like Auto-Attach; it now lists the sessions found on the remote right after connect and shows a picker — attach to any existing session, create a new named one, or skip and keep a plain shell
 - **VMware guest shutdown and guest restart** — the VM row's Stop action now offers a clean "Shutdown Guest" (vim25 `ShutdownGuest`, needs VMware Tools) alongside hard "Power Off", and the reboot button is now a clean "Restart Guest" (`RebootGuest`) with the hard reset kept as "Hard Reset"
 
 ## [1.0.0] - 2026-07-30

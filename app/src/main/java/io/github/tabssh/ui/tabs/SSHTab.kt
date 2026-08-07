@@ -173,6 +173,26 @@ class SSHTab(
 
     private var multiplexerDetectionJob: Job? = null
 
+    /**
+     * Pending ASK-mode picker request (IDEA.md feature 21). Set once after
+     * connect when profile.multiplexerMode == "ASK": carries the multiplexer
+     * type, the session names found on the remote, and the profile's default
+     * session name. StateFlow (not SharedFlow) so a host activity that
+     * attaches late — tab switch, recreation — still sees the pending
+     * request. Cleared by [attachMultiplexerSession],
+     * [createMultiplexerSession], or [dismissMultiplexerAsk].
+     */
+    data class MultiplexerAskRequest(
+        val type: String,
+        val sessions: List<String>,
+        val defaultSessionName: String
+    )
+
+    private val _multiplexerAskRequest =
+        kotlinx.coroutines.flow.MutableStateFlow<MultiplexerAskRequest?>(null)
+    val multiplexerAskRequestFlow: kotlinx.coroutines.flow.StateFlow<MultiplexerAskRequest?> =
+        _multiplexerAskRequest.asStateFlow()
+
     // Screen change listener for UI updates
     private var onScreenChangedListener: (() -> Unit)? = null
 
@@ -849,10 +869,11 @@ class SSHTab(
      * default tmux), session name from profile.multiplexerSessionName
      * (default `tabssh`).
      *
-     * ASK mode is currently treated as AUTO_ATTACH — a future iteration
-     * could surface a tab-level dialog. AUTO_ATTACH and CREATE_NEW already
-     * cover the practical cases; a global "always create new" toggle has
-     * never landed in any SSH client we've copied from.
+     * ASK mode (IDEA.md feature 21) defers the launch: the remote's existing
+     * sessions are listed over an exec channel and surfaced through
+     * [multiplexerAskRequestFlow] so the host activity can show an
+     * attach/create picker; the chosen command is written to the shell only
+     * after the user picks. Cancelling the picker leaves a plain shell.
      */
     private fun runPostConnectCommands() {
         val lines = mutableListOf<String>()
@@ -875,16 +896,31 @@ class SSHTab(
                         .getString("gesture_multiplexer_type", "tmux")
                 } ?: "tmux"
             val name = profile.multiplexerSessionName?.takeIf { it.isNotBlank() } ?: "tabssh"
-            val cmd = buildMultiplexerCommand(type, profile.multiplexerMode, name)
-            if (cmd != null) {
-                Logger.i("SSHTab", "Multiplexer auto-launch: $cmd")
-                lines.add(cmd)
-                // Record the active type so the PREFIX keyboard key sends the
-                // right prefix byte without needing a global preference lookup.
-                // An "off" override keeps the key dimmed even while the
-                // profile's auto-launch still starts the multiplexer.
-                if (multiplexerOverride != "off") {
-                    _activeMultiplexerType.value = type
+            if (profile.multiplexerMode == "ASK") {
+                // ASK defers the launch to a user pick: list the remote's
+                // sessions on an exec channel, then publish the picker
+                // request; the host activity writes nothing until the user
+                // chooses attach / create / skip.
+                connectionScope.launch {
+                    // Give the login shell a moment so the listing exec
+                    // channel doesn't race initial connection setup.
+                    delay(1500)
+                    val sessions = listMultiplexerSessions(type)
+                    _multiplexerAskRequest.value =
+                        MultiplexerAskRequest(type, sessions, name)
+                }
+            } else {
+                val cmd = buildMultiplexerCommand(type, profile.multiplexerMode, name)
+                if (cmd != null) {
+                    Logger.i("SSHTab", "Multiplexer auto-launch: $cmd")
+                    lines.add(cmd)
+                    // Record the active type so the PREFIX keyboard key sends the
+                    // right prefix byte without needing a global preference lookup.
+                    // An "off" override keeps the key dimmed even while the
+                    // profile's auto-launch still starts the multiplexer.
+                    if (multiplexerOverride != "off") {
+                        _activeMultiplexerType.value = type
+                    }
                 }
             }
         }
@@ -1053,6 +1089,62 @@ class SSHTab(
         multiplexerDetectionJob = null
     }
 
+    /**
+     * List the remote's existing multiplexer session names for the ASK-mode
+     * picker. Runs on a lightweight exec channel; every failure path returns
+     * an empty list — the picker then simply offers only "create new".
+     */
+    private suspend fun listMultiplexerSessions(type: String): List<String> {
+        val conn = connection ?: return emptyList()
+        if (!conn.isConnected()) return emptyList()
+        val cmd = when (type) {
+            "tmux" -> "tmux ls -F '#S' 2>/dev/null"
+            "screen" -> "screen -ls 2>/dev/null"
+            "zellij" -> "zellij list-sessions -s 2>/dev/null || zellij list-sessions 2>/dev/null"
+            else -> return emptyList()
+        }
+        return try {
+            val raw = conn.executeCommand(cmd, timeoutMs = 5000L)
+            parseMultiplexerSessions(type, raw)
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * Write a multiplexer command chosen by the ASK-mode picker to the shell
+     * and record the active type (unless an "off" override pins the PRE key
+     * dark). Shared tail of [attachMultiplexerSession] and
+     * [createMultiplexerSession].
+     */
+    private fun sendAskModeCommand(type: String, cmd: String) {
+        _multiplexerAskRequest.value = null
+        Logger.i("SSHTab", "Multiplexer ASK pick: $cmd")
+        try {
+            termuxBridge.write((cmd + "\n").toByteArray(Charsets.UTF_8))
+            if (multiplexerOverride != "off") {
+                _activeMultiplexerType.value = type
+            }
+        } catch (e: Exception) {
+            Logger.w("SSHTab", "Failed to write ASK-mode multiplexer command: ${e.message}")
+        }
+    }
+
+    /** ASK-mode picker chose an existing session — attach to it. */
+    fun attachMultiplexerSession(type: String, session: String) {
+        buildAttachCommand(type, session)?.let { sendAskModeCommand(type, it) }
+    }
+
+    /** ASK-mode picker chose "create new" — start a fresh named session. */
+    fun createMultiplexerSession(type: String, name: String) {
+        buildMultiplexerCommand(type, "CREATE_NEW", name)?.let { sendAskModeCommand(type, it) }
+    }
+
+    /** ASK-mode picker dismissed — keep the plain shell, clear the request. */
+    fun dismissMultiplexerAsk() {
+        _multiplexerAskRequest.value = null
+    }
+
     // Companion-scoped and internal (not private on the instance) so the pure
     // command-assembly logic is unit-testable without constructing an SSHTab.
     internal companion object {
@@ -1086,6 +1178,48 @@ class SSHTab(
                     else                 -> null
                 }
                 else -> null
+            }
+        }
+
+        /**
+         * Attach command for an existing session chosen in the ASK-mode
+         * picker. tmux keeps the same session-scoped mouse-mode tail as
+         * [buildMultiplexerCommand] so scroll gestures behave identically
+         * whichever path launched the attach.
+         */
+        internal fun buildAttachCommand(type: String, session: String): String? {
+            val safe = session.replace("'", "")
+            return when (type) {
+                "tmux"   -> "tmux attach -t '$safe' \\; set -q mouse on"
+                "screen" -> "screen -r '$safe'"
+                "zellij" -> "zellij attach '$safe'"
+                else     -> null
+            }
+        }
+
+        /**
+         * Parse the session-listing output for the ASK-mode picker.
+         * tmux: one bare name per line (`tmux ls -F '#S'`). screen: extract
+         * `pid.name` tokens from `screen -ls` (that full token is what
+         * `screen -r` accepts unambiguously). zellij: first token per line,
+         * ANSI color codes stripped, boilerplate/error lines skipped.
+         */
+        internal fun parseMultiplexerSessions(type: String, raw: String): List<String> {
+            val lines = raw.lines().map { it.trim() }.filter { it.isNotEmpty() }
+            return when (type) {
+                "tmux" -> lines
+                "screen" -> {
+                    val token = Regex("([0-9]+\\.[^\\s(]+)")
+                    lines.mapNotNull { token.find(it)?.groupValues?.get(1) }
+                }
+                "zellij" -> {
+                    val ansi = Regex("\\u001B\\[[0-9;]*m")
+                    lines.map { ansi.replace(it, "") }
+                        .filter { it.isNotBlank() && !it.startsWith("No active") }
+                        .mapNotNull { it.split(Regex("\\s+")).firstOrNull() }
+                        .filter { it.isNotBlank() }
+                }
+                else -> emptyList()
             }
         }
     }

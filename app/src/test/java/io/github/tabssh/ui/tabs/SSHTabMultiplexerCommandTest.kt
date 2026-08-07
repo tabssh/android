@@ -60,4 +60,60 @@ class SSHTabMultiplexerCommandTest {
         assertNull(cmd("screen", "OFF"))
         assertNull(cmd("zellij", "OFF"))
     }
+
+    @Test
+    fun `attach commands target the chosen session`() {
+        assertEquals(
+            "tmux attach -t 'work' \\; set -q mouse on",
+            SSHTab.buildAttachCommand("tmux", "work")
+        )
+        assertEquals("screen -r '1234.work'", SSHTab.buildAttachCommand("screen", "1234.work"))
+        assertEquals("zellij attach 'work'", SSHTab.buildAttachCommand("zellij", "work"))
+        assertNull(SSHTab.buildAttachCommand("byobu", "work"))
+    }
+
+    @Test
+    fun `attach session name is stripped of single quotes`() {
+        assertEquals(
+            "tmux attach -t 'devbox' \\; set -q mouse on",
+            SSHTab.buildAttachCommand("tmux", "dev'box")
+        )
+    }
+
+    @Test
+    fun `tmux session list is one bare name per line`() {
+        assertEquals(
+            listOf("main", "work"),
+            SSHTab.parseMultiplexerSessions("tmux", "main\nwork\n")
+        )
+        assertEquals(emptyList(), SSHTab.parseMultiplexerSessions("tmux", "\n"))
+    }
+
+    @Test
+    fun `screen session list extracts pid-dot-name tokens`() {
+        val raw = """
+            There are screens on:
+                1234.work	(Detached)
+                5678.play	(Attached)
+            2 Sockets in /run/screen/S-user.
+        """.trimIndent()
+        assertEquals(
+            listOf("1234.work", "5678.play"),
+            SSHTab.parseMultiplexerSessions("screen", raw)
+        )
+    }
+
+    @Test
+    fun `zellij session list strips ansi and skips boilerplate`() {
+        val esc = "\u001B"
+        val raw = "${esc}[32;1mmain${esc}[m [Created 2h ago]\nwork [Created 1m ago]\n"
+        assertEquals(
+            listOf("main", "work"),
+            SSHTab.parseMultiplexerSessions("zellij", raw)
+        )
+        assertEquals(
+            emptyList(),
+            SSHTab.parseMultiplexerSessions("zellij", "No active zellij sessions found.\n")
+        )
+    }
 }

@@ -9,31 +9,6 @@ the codebase (57 spec features → 53 implemented, 4 partial, 0 missing).
 
 ## Open — spec feature gaps (priority order)
 
-### 2. Hypervisor snapshot missing on 3 of 4 backends (IDEA.md feature 40)
-
-Snapshot (and full power control) is only implemented for XCP-ng / Xen
-Orchestra. IDEA.md requires list/start/stop/shutdown/reboot/snapshot across
-all four hypervisors.
-
-- `hypervisor/proxmox/ProxmoxApiClient.kt` — start/stop/shutdown/reboot only; no snapshot
-- `hypervisor/vmware/VMwareApiClient.kt` — only startVM/stopVM/resetVM; no shutdown, reboot, or snapshot
-- `hypervisor/libvirt/LibvirtApiClient.kt` — start/destroy/shutdown/reboot only; no snapshot
-
-Add snapshot create/list/restore/delete for Proxmox, VMware, libvirt; add
-shutdown+reboot for VMware. (Console display for these is item 1's job; this
-item is the management API surface.)
-
-### 3. tmux/screen/zellij manual picker — ASK mode unimplemented (IDEA.md feature 21)
-
-Auto-attach, create-new, and live autodetection all work. The manual
-override picker (ASK mode) does not exist.
-
-- `ssh/SSHTab.kt:852` — ASK mode is treated as AUTO_ATTACH; comment defers the
-  tab-level picker dialog to "a future iteration"
-
-Surface a picker dialog when the multiplexer mode is ASK: list detected
-sessions with attach / create-new choices.
-
 ### 4. Tasker/Locale plugin disabled (IDEA.md feature 54)
 
 Receiver code exists but is gated behind a signature-level permission and
@@ -48,13 +23,6 @@ Redesign the IPC so external automation apps can launch connections, or
 implement the `com.twofortyfouram` Locale plugin protocol.
 
 ## Needs verification
-
-### 5. Built-in theme count: 23 (spec) vs 22 (code)
-
-IDEA.md § Accessibility and UI states "23 built-in terminal themes";
-`themes/definitions/BuiltInThemes` has 22 entries (including System Dark/Light
-auto). Confirm whether the spec is off by one or a theme is genuinely missing;
-reconcile spec and code either way.
 
 ### 6. Manual console smoke tests (user-side — no hypervisor hosts available here)
 
@@ -76,6 +44,21 @@ publishes the first `spice-libs-0.42.0` prerelease. Until it is published,
 returns false, and every SPICE path silently falls back to VNC (by design).
 
 ## Recently Shipped
+
+Former item 5 (theme count 23 vs 22) resolved 2026-08-06 with no change:
+`BuiltInThemes.getAllThemes()` returns exactly 23 entries (3 system + 12
+classic + 8 popular) — the audit miscounted; spec and code agree.
+
+- `aed92a064908` — snapshots on every hypervisor backend + VMware guest
+  shutdown/restart (former item 2, IDEA.md feature 40): Proxmox REST
+  qemu/lxc snapshot endpoints, VMware vim25 SOAP task calls +
+  ShutdownGuest/RebootGuest, libvirt virsh snapshot-* over SSH;
+  long-press snapshot dialog in all three manager activities
+- ASK-mode multiplexer picker (former item 3, IDEA.md feature 21):
+  ASK now lists the remote's tmux/screen/zellij sessions after connect
+  and shows an attach/create/skip dialog instead of silently
+  auto-attaching; unit tests for attach-command build + session-list
+  parsing
 
 VNC/SPICE console coverage (IDEA.md features 42, 43) — PLAN.AI.md completed
 and deleted 2026-08-06:

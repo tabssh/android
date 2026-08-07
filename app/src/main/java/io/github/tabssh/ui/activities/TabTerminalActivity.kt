@@ -2707,10 +2707,84 @@ class TabTerminalActivity : AppCompatActivity() {
             return
         }
         multiplexerObserverJob = lifecycleScope.launch {
-            tab.activeMultiplexerTypeFlow.collect { type ->
-                updatePrefixKeyVisual(type)
+            launch {
+                tab.activeMultiplexerTypeFlow.collect { type ->
+                    updatePrefixKeyVisual(type)
+                }
+            }
+            // ASK-mode picker (IDEA.md feature 21): the tab publishes a
+            // pending request after connect; show the attach/create dialog
+            // when this tab is the one being observed. StateFlow retention
+            // means a request raised while another tab was active still
+            // surfaces on switch-back.
+            launch {
+                tab.multiplexerAskRequestFlow.collect { req ->
+                    if (req != null) showMultiplexerAskDialog(tab, req)
+                }
             }
         }
+    }
+
+    // Tracks the visible ASK-mode picker so a re-emission (tab switch,
+    // config change re-collect) never stacks a second dialog.
+    private var multiplexerAskDialog: androidx.appcompat.app.AlertDialog? = null
+
+    /**
+     * ASK-mode multiplexer picker: lists the remote's existing sessions with
+     * an attach action each, plus "Create new session". Cancel/skip leaves
+     * the plain shell (the tab clears its request so the dialog won't recur).
+     */
+    private fun showMultiplexerAskDialog(
+        tab: io.github.tabssh.ui.tabs.SSHTab,
+        req: io.github.tabssh.ui.tabs.SSHTab.MultiplexerAskRequest
+    ) {
+        if (multiplexerAskDialog?.isShowing == true) return
+        val labels = req.sessions.map { "Attach: $it" } + "Create new session"
+        multiplexerAskDialog = androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("${req.type} sessions on ${tab.profile.host}")
+            .setItems(labels.toTypedArray()) { _, which ->
+                if (which < req.sessions.size) {
+                    tab.attachMultiplexerSession(req.type, req.sessions[which])
+                } else {
+                    showMultiplexerCreateDialog(tab, req)
+                }
+            }
+            .setNegativeButton("Skip") { _, _ -> tab.dismissMultiplexerAsk() }
+            .setOnCancelListener { tab.dismissMultiplexerAsk() }
+            .show()
+    }
+
+    /**
+     * Name prompt for the ASK-mode "Create new session" choice, prefilled
+     * with the profile's default session name.
+     */
+    private fun showMultiplexerCreateDialog(
+        tab: io.github.tabssh.ui.tabs.SSHTab,
+        req: io.github.tabssh.ui.tabs.SSHTab.MultiplexerAskRequest
+    ) {
+        val input = android.widget.EditText(this).apply {
+            setText(req.defaultSessionName)
+            setSelection(text.length)
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("New ${req.type} session")
+            .setMessage("Enter a name for the new session")
+            .setView(input)
+            .setPositiveButton("Create") { _, _ ->
+                val name = input.text.toString().trim()
+                if (name.isNotEmpty() && !name.contains(' ')) {
+                    tab.createMultiplexerSession(req.type, name)
+                } else {
+                    android.widget.Toast.makeText(
+                        this, "Session name must be non-empty with no spaces",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                    tab.dismissMultiplexerAsk()
+                }
+            }
+            .setNegativeButton("Cancel") { _, _ -> tab.dismissMultiplexerAsk() }
+            .setOnCancelListener { tab.dismissMultiplexerAsk() }
+            .show()
     }
 
     private fun updatePrefixKeyVisual(multiplexerType: String?) {
