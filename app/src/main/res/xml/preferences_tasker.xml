@@ -10,7 +10,7 @@
             android:key="tasker_enabled"
             android:title="Enable Tasker Integration"
             android:summary="Allow Tasker to control SSH connections"
-            android:defaultValue="true" />
+            android:defaultValue="false" />
 
         <Preference
             android:key="tasker_actions_help"

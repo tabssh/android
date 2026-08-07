@@ -775,7 +775,10 @@ class PreferenceManager(private val context: Context) {
 
     // --- Tasker ---
 
-    fun isTaskerEnabled(): Boolean = getBoolean(KEY_TASKER_ENABLED, true)
+    // Opt-in by default: LocaleFireReceiver is exported without a permission
+    // (the Locale plugin protocol requires it), so this toggle is the outer
+    // gate that keeps arbitrary apps from driving SSH sessions on a fresh install.
+    fun isTaskerEnabled(): Boolean = getBoolean(KEY_TASKER_ENABLED, false)
     fun setTaskerEnabled(enabled: Boolean) = setBoolean(KEY_TASKER_ENABLED, enabled)
 
     fun isTaskerRequireUnlockEnabled(): Boolean = getBoolean(KEY_TASKER_REQUIRE_UNLOCK, false)

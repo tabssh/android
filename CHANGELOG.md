@@ -7,6 +7,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Security
+
+- **Tasker integration is now opt-in (default OFF)** — the setting previously defaulted to ON, which was harmless while the only entry point was the signature-gated `TaskerActionReceiver`, but the new Locale plugin fire receiver is exported without a permission (the protocol requires it), so on a fresh install any app on the device could have driven SSH sessions with no user action. Existing installs keep whatever the toggle is already set to
+
 ### Fixed
 
 - **Swiping in a mosh session at a plain shell prompt typed literal arrow keys (`^[[A`/`^[[B`) into the shell** — mosh pins the terminal to the alternate screen for its entire lifetime, so the alt-screen swipe fallback (arrow-key forwarding meant for vim/less/man/htop) fired at the prompt and injected keystrokes; the fallback in `TerminalView.onScroll()` is now gated on cursor keys being in application mode (DECCKM/smkx), which full-screen terminfo apps enable at startup and a shell prompt never does — swipes at an alt-screen prompt are swallowed instead of typed, and the forwarded sequences are always the SS3 (`ESC O A/B`) variants since the gate guarantees application mode
