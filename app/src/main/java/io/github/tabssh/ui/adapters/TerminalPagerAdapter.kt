@@ -7,11 +7,16 @@ import androidx.recyclerview.widget.RecyclerView
 import io.github.tabssh.hypervisor.console.rfb.RfbClient
 import io.github.tabssh.hypervisor.console.rfb.RfbConstants
 import io.github.tabssh.hypervisor.console.rfb.RfbListener
+import io.github.tabssh.hypervisor.spice.SpiceClient
+import io.github.tabssh.hypervisor.spice.SpiceConstants
+import io.github.tabssh.hypervisor.spice.SpiceListener
 import io.github.tabssh.hypervisor.vnc.console.VncConsoleChannel
 import io.github.tabssh.themes.definitions.Theme
+import io.github.tabssh.ui.tabs.ConsoleDisplayMode
 import io.github.tabssh.ui.tabs.ConsoleTab
 import io.github.tabssh.ui.tabs.Tab
 import io.github.tabssh.ui.tabs.VncTab
+import io.github.tabssh.ui.views.SpiceView
 import io.github.tabssh.ui.views.TerminalView
 import io.github.tabssh.ui.views.VncView
 import io.github.tabssh.utils.logging.Logger
@@ -119,12 +124,12 @@ class TerminalPagerAdapter(
 
     /**
      * Get the VNC view at position (for zoom/reconnect controls). Returns
-     * null for an SSH page or a console page currently in text mode.
+     * null for an SSH page or a console page currently in text or SPICE mode.
      */
     fun getVncViewAt(position: Int): VncView? {
         boundViewHolders.filterIsInstance<VncViewHolder>()
             .find { it.bindingAdapterPosition == position }?.let { return it.vncView }
-        return boundConsoleHolders().find { it.bindingAdapterPosition == position && it.isGraphicalMode }
+        return boundConsoleHolders().find { it.bindingAdapterPosition == position && it.isRfbMode }
             ?.vncView
     }
 
@@ -157,6 +162,12 @@ class TerminalPagerAdapter(
                     FrameLayout.LayoutParams.MATCH_PARENT,
                     FrameLayout.LayoutParams.MATCH_PARENT
                 )
+                val spiceView = SpiceView(parent.context)
+                spiceView.layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+                spiceView.visibility = View.GONE
                 val container = FrameLayout(parent.context)
                 container.layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -164,7 +175,8 @@ class TerminalPagerAdapter(
                 )
                 container.addView(terminalView)
                 container.addView(vncView)
-                ConsoleViewHolder(container, terminalView, vncView, fontSize, fontValue)
+                container.addView(spiceView)
+                ConsoleViewHolder(container, terminalView, vncView, spiceView, fontSize, fontValue)
             }
             else -> {
                 val terminalView = TerminalView(parent.context)
@@ -387,6 +399,7 @@ class TerminalPagerAdapter(
         private val container: FrameLayout,
         val terminalView: TerminalView,
         val vncView: VncView,
+        val spiceView: SpiceView,
         private val fontSize: Int,
         private val fontValue: String
     ) : RecyclerView.ViewHolder(container) {
@@ -394,19 +407,29 @@ class TerminalPagerAdapter(
         private var channel: VncConsoleChannel? = null
         private var boundClient: RfbClient? = null
         private var boundListener: RfbListener? = null
+        private var boundSpiceClient: SpiceClient? = null
+        private var boundSpiceListener: SpiceListener? = null
         private var modeJob: Job? = null
         private var currentTheme: Theme? = null
         private val holderScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-        /** True once this page is showing the graphical (VNC) side. */
+        /** True once this page is showing a graphical (RFB or SPICE) side. */
         var isGraphicalMode: Boolean = false
+            private set
+
+        /** True only when the graphical side is RFB-driven — gates [getVncViewAt]. */
+        var isRfbMode: Boolean = false
             private set
 
         fun bind(consoleTab: ConsoleTab) {
             unbind()
             modeJob = holderScope.launch {
-                consoleTab.isGraphicalMode.collect { graphical ->
-                    if (graphical) bindGraphical(consoleTab) else bindText(consoleTab)
+                consoleTab.displayMode.collect { mode ->
+                    when (mode) {
+                        ConsoleDisplayMode.TEXT -> bindText(consoleTab)
+                        ConsoleDisplayMode.RFB -> bindGraphical(consoleTab)
+                        ConsoleDisplayMode.SPICE -> bindSpice(consoleTab)
+                    }
                 }
             }
         }
@@ -418,9 +441,12 @@ class TerminalPagerAdapter(
 
         private fun bindText(consoleTab: ConsoleTab) {
             isGraphicalMode = false
+            isRfbMode = false
             terminalView.visibility = View.VISIBLE
             vncView.visibility = View.GONE
+            spiceView.visibility = View.GONE
             unwireVnc()
+            unwireSpice()
             val bridge = consoleTab.termuxBridge
             if (bridge == null) {
                 Logger.d(
@@ -438,9 +464,12 @@ class TerminalPagerAdapter(
 
         private fun bindGraphical(consoleTab: ConsoleTab) {
             isGraphicalMode = true
+            isRfbMode = true
             terminalView.visibility = View.GONE
             vncView.visibility = View.VISIBLE
+            spiceView.visibility = View.GONE
             unwireVnc()
+            unwireSpice()
             val rfbClient = consoleTab.rfbClient
             if (rfbClient == null) {
                 Logger.d(
@@ -476,11 +505,77 @@ class TerminalPagerAdapter(
             Logger.d("TerminalPagerAdapter", "Bound console tab (graphical mode): ${consoleTab.getDisplayTitle()}")
         }
 
-        /** Called from [onViewRecycled] — drop the mode collector and VNC callbacks so a recycled page can't drive a stale session. */
+        private fun bindSpice(consoleTab: ConsoleTab) {
+            isGraphicalMode = true
+            isRfbMode = false
+            terminalView.visibility = View.GONE
+            vncView.visibility = View.GONE
+            spiceView.visibility = View.VISIBLE
+            unwireVnc()
+            unwireSpice()
+            val client = consoleTab.spiceClient
+            if (client == null) {
+                Logger.d(
+                    "TerminalPagerAdapter",
+                    "Bound console tab with no live SPICE session yet: ${consoleTab.getDisplayTitle()}"
+                )
+                return
+            }
+            boundSpiceClient = client
+            val listener = spiceView.asSpiceListener()
+            boundSpiceListener = listener
+            client.listener = listener
+            spiceView.onKeyEvent = { scancode, down -> client.sendKeyEvent(scancode, down) }
+            spiceView.onPointerMove = { x, y, mask -> client.sendPointerMove(x, y, mask) }
+            spiceView.onPointerButton = { button, state, down -> client.sendPointerButton(button, state, down) }
+            // Soft-keyboard text arrives as strings; each char maps to a PS/2
+            // make/break pair when possible, otherwise the vdagent clipboard
+            // carries it (covers non-Latin input the scancode table can't).
+            spiceView.onTextInput = { text ->
+                text.forEach { ch ->
+                    if (!spiceView.sendChar(ch)) client.sendClipboardText(ch.toString())
+                }
+            }
+            spiceView.onBackspace = {
+                client.sendKeyEvent(SpiceConstants.SC_BACKSPACE, true)
+                client.sendKeyEvent(SpiceConstants.SC_BACKSPACE, false)
+            }
+            // A SpiceClient is single-shot (no restart after stop), so exactly
+            // one bind may call start(); the tab arbitrates via an atomic flag.
+            // On rebind after page recycling the native session keeps running —
+            // the fresh listener repaints as display updates arrive (no local
+            // framebuffer replay is available from the native side this round).
+            if (consoleTab.shouldStartSpice()) {
+                if (!client.start()) {
+                    Logger.w("TerminalPagerAdapter", "SpiceClient.start() failed for ${consoleTab.getDisplayTitle()}")
+                }
+            }
+            Logger.d("TerminalPagerAdapter", "Bound console tab (SPICE mode): ${consoleTab.getDisplayTitle()}")
+        }
+
+        /** Called from [onViewRecycled] — drop the mode collector and VNC/SPICE callbacks so a recycled page can't drive a stale session. */
         fun unbind() {
             modeJob?.cancel()
             modeJob = null
             unwireVnc()
+            unwireSpice()
+        }
+
+        private fun unwireSpice() {
+            // Detach only if the client still points at THIS holder's listener —
+            // same identity-compare discipline as unwireVnc(); never stop the
+            // client, it outlives the ViewHolder (it lives on ConsoleTab).
+            if (boundSpiceClient?.listener === boundSpiceListener) {
+                boundSpiceClient?.listener = null
+            }
+            boundSpiceClient = null
+            boundSpiceListener = null
+            spiceView.onKeyEvent = null
+            spiceView.onPointerMove = null
+            spiceView.onPointerButton = null
+            spiceView.onTextInput = null
+            spiceView.onBackspace = null
+            spiceView.onViewSizeReady = null
         }
 
         private fun unwireVnc() {

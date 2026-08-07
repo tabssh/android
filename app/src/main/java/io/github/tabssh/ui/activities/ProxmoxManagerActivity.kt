@@ -332,6 +332,13 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                         tab.markGraphical(connection.rfbClient)
                         tab.setConnectionState(ConnectionState.CONNECTED)
                     }
+                    is HypervisorConsoleManager.ConsoleConnection.Spice -> {
+                        // Construct un-started; ConsoleViewHolder attaches the
+                        // SpiceView listener and performs the single start().
+                        val spiceClient = io.github.tabssh.hypervisor.spice.SpiceClient(connection.spiceParams)
+                        tab.markSpice(spiceClient)
+                        tab.setConnectionState(ConnectionState.CONNECTED)
+                    }
                 }
 
                 hideProgress()

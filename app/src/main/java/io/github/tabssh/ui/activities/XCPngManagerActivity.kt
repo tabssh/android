@@ -569,6 +569,15 @@ class XCPngManagerActivity : AppCompatActivity() {
                         tab.markGraphical(connection.rfbClient)
                         tab.setConnectionState(io.github.tabssh.ssh.connection.ConnectionState.CONNECTED)
                     }
+                    is io.github.tabssh.hypervisor.console.HypervisorConsoleManager.ConsoleConnection.Spice -> {
+                        // XCP-ng / Xen Orchestra consoles never resolve to SPICE
+                        // (XAPI only exposes rfb/vt100); branch kept for when-exhaustiveness.
+                        Logger.w("XCPngManager", "Unexpected SPICE console connection for ${vm.name}")
+                        manager.disconnect()
+                        progressBar.visibility = View.GONE
+                        statusText.visibility = View.GONE
+                        return@launch
+                    }
                 }
 
                 progressBar.visibility = View.GONE

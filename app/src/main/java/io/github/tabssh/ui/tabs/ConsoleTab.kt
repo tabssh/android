@@ -2,6 +2,7 @@ package io.github.tabssh.ui.tabs
 
 import io.github.tabssh.hypervisor.console.HypervisorConsoleManager
 import io.github.tabssh.hypervisor.console.rfb.RfbClient
+import io.github.tabssh.hypervisor.spice.SpiceClient
 import io.github.tabssh.hypervisor.vnc.VncBackgroundSessionStore
 import io.github.tabssh.ssh.connection.ConnectionState
 import io.github.tabssh.terminal.TermuxBridge
@@ -20,6 +21,15 @@ import java.util.UUID
  * instead), so there is nothing to port.
  */
 enum class HypervisorConsoleType { PROXMOX, XCPNG, XEN_ORCHESTRA }
+
+/**
+ * Which renderer a [ConsoleTab] is currently driving: TEXT (serial console
+ * via TermuxBridge), RFB (VNC framebuffer via [RfbClient]), or SPICE
+ * (native SPICE session via [SpiceClient]). TEXT→RFB is the existing
+ * one-way Proxmox mid-session flip; SPICE is decided at connect time and
+ * never changes afterward.
+ */
+enum class ConsoleDisplayMode { TEXT, RFB, SPICE }
 
 /**
  * Plain-value connect parameters a [ConsoleTab] needs to (re)establish a
@@ -89,6 +99,14 @@ class ConsoleTab(val connectParams: ConsoleConnectParams) {
     @Volatile
     var rfbClient: RfbClient? = null
 
+    /** Non-null once a SPICE session was assigned via [markSpice]. */
+    @Volatile
+    var spiceClient: SpiceClient? = null
+
+    // Set true by the first bind that calls SpiceClient.start(); rebinds must
+    // not start() again — a SpiceClient is single-shot (see SpiceClient docs).
+    private val spiceStartRequested = java.util.concurrent.atomic.AtomicBoolean(false)
+
     private val _title = MutableStateFlow(connectParams.vmName)
     val title: StateFlow<String> = _title.asStateFlow()
 
@@ -98,9 +116,13 @@ class ConsoleTab(val connectParams: ConsoleConnectParams) {
     private val _isActive = MutableStateFlow(false)
     val isActive: StateFlow<Boolean> = _isActive.asStateFlow()
 
-    /** False (text) until [markGraphical] is called; never reset to false afterward. */
+    /** False (text) until [markGraphical] or [markSpice] is called; never reset afterward. */
     private val _isGraphicalMode = MutableStateFlow(false)
     val isGraphicalMode: StateFlow<Boolean> = _isGraphicalMode.asStateFlow()
+
+    /** TEXT until [markGraphical] (→ RFB) or [markSpice] (→ SPICE); never reverts. */
+    private val _displayMode = MutableStateFlow(ConsoleDisplayMode.TEXT)
+    val displayMode: StateFlow<ConsoleDisplayMode> = _displayMode.asStateFlow()
 
     // Tab position and ordering — same role as SSHTab.tabIndex/VncTab.tabIndex.
     var tabIndex: Int = 0
@@ -119,9 +141,30 @@ class ConsoleTab(val connectParams: ConsoleConnectParams) {
      */
     fun markGraphical(client: RfbClient) {
         rfbClient = client
+        _displayMode.value = ConsoleDisplayMode.RFB
         _isGraphicalMode.value = true
         Logger.d("ConsoleTab", "Console tab ${getDisplayTitle()} switched to graphical mode")
     }
+
+    /**
+     * Record that this tab's session is SPICE-driven, attaching the (not yet
+     * started) [SpiceClient]. Decided at connect time; never changes afterward.
+     * SPICE sessions are NOT parked in [VncBackgroundSessionStore] — the native
+     * session has no detach/reattach support this round, so the client simply
+     * keeps running while the tab is backgrounded, like a text console.
+     */
+    fun markSpice(client: SpiceClient) {
+        spiceClient = client
+        _displayMode.value = ConsoleDisplayMode.SPICE
+        _isGraphicalMode.value = true
+        Logger.d("ConsoleTab", "Console tab ${getDisplayTitle()} switched to SPICE mode")
+    }
+
+    /**
+     * True exactly once — for the first bind of this tab's SPICE session.
+     * The caller that wins this race performs the single [SpiceClient.start].
+     */
+    fun shouldStartSpice(): Boolean = spiceStartRequested.compareAndSet(false, true)
 
     /** Set custom title (user-defined), same contract as SSHTab/VncTab. */
     fun setCustomTitle(newTitle: String) {
@@ -168,8 +211,14 @@ class ConsoleTab(val connectParams: ConsoleConnectParams) {
         } catch (e: Exception) {
             Logger.d("ConsoleTab", "rfbClient.stop() suppressed: ${e.message}")
         }
+        try {
+            spiceClient?.stop()
+        } catch (e: Exception) {
+            Logger.d("ConsoleTab", "spiceClient.stop() suppressed: ${e.message}")
+        }
         consoleManager = null
         rfbClient = null
+        spiceClient = null
         termuxBridge = null
         VncBackgroundSessionStore.discard(storeKey)
         _connectionState.value = ConnectionState.DISCONNECTED

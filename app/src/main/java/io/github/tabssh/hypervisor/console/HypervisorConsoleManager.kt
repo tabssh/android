@@ -2,6 +2,8 @@ package io.github.tabssh.hypervisor.console
 
 import io.github.tabssh.hypervisor.console.rfb.RfbClient
 import io.github.tabssh.hypervisor.proxmox.ProxmoxApiClient
+import io.github.tabssh.hypervisor.spice.SpiceConnectionParams
+import io.github.tabssh.hypervisor.spice.SpiceLoader
 import io.github.tabssh.hypervisor.xcpng.XCPngApiClient
 import io.github.tabssh.hypervisor.xcpng.XenOrchestraApiClient
 import io.github.tabssh.terminal.TermuxBridge
@@ -84,6 +86,15 @@ class HypervisorConsoleManager {
             override val hypervisorType: HypervisorType,
             val rfbClient: RfbClient
         ) : ConsoleConnection()
+
+        // Carries connection parameters instead of a live client so the UI can
+        // construct the SpiceClient, attach its view listener, and only then
+        // start() — mirroring how Graphical hands over an un-started RfbClient.
+        data class Spice(
+            override val vmName: String,
+            override val hypervisorType: HypervisorType,
+            val spiceParams: SpiceConnectionParams
+        ) : ConsoleConnection()
     }
 
     enum class HypervisorType {
@@ -92,6 +103,23 @@ class HypervisorConsoleManager {
         XEN_ORCHESTRA,
         VMWARE,
         LIBVIRT
+    }
+
+    /**
+     * Phase-1 result of the Proxmox console strategy chain: either a
+     * WebSocket-based ticket (termproxy text or vncproxy RFB) or a
+     * spiceproxy ticket that bypasses the WebSocket phase entirely
+     * (SPICE connects directly to the returned proxy host/port).
+     */
+    private sealed class ProxmoxTicket {
+        data class Ws(
+            val ticket: ProxmoxApiClient.TermProxyResult,
+            val protocol: ConsoleWebSocketClient.ConsoleProtocol
+        ) : ProxmoxTicket()
+
+        data class Spice(
+            val result: ProxmoxApiClient.SPICEProxyResult
+        ) : ProxmoxTicket()
     }
 
     /**
@@ -125,26 +153,41 @@ class HypervisorConsoleManager {
 
         // Phase 1: obtain a console ticket via an ordered strategy chain.
         // termproxy first — text consoles are the mobile-friendly default;
-        // vncproxy second — every running VM has a graphical framebuffer
+        // spiceproxy second — richest graphical protocol, but only for qemu
+        // VMs and only when the native SPICE library shipped in this APK;
+        // vncproxy last — every running VM has a graphical framebuffer
         // even without a serial device.  Intermediate failures are silent
         // (Logger.i inside the chain); only exhaustion surfaces to the user.
         Logger.i(TAG, "Connecting to Proxmox console: $vmName (vmid=$vmid)")
-        val chain = ConsoleStrategyChain(listOf<ConsoleStrategy<Pair<ProxmoxApiClient.TermProxyResult, ConsoleWebSocketClient.ConsoleProtocol>>>(
-            object : ConsoleStrategy<Pair<ProxmoxApiClient.TermProxyResult, ConsoleWebSocketClient.ConsoleProtocol>> {
+        val strategies = mutableListOf<ConsoleStrategy<ProxmoxTicket>>(
+            object : ConsoleStrategy<ProxmoxTicket> {
                 override val name = "proxmox-termproxy"
-                override suspend fun resolve() =
-                    client.getTermProxy(node, vmid, type) to ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_TERM
-            },
-            object : ConsoleStrategy<Pair<ProxmoxApiClient.TermProxyResult, ConsoleWebSocketClient.ConsoleProtocol>> {
-                override val name = "proxmox-vncproxy"
-                override suspend fun resolve(): Pair<ProxmoxApiClient.TermProxyResult, ConsoleWebSocketClient.ConsoleProtocol> {
-                    val vnc = client.getVNCProxy(node, vmid, type)
-                        ?: throw java.io.IOException("vncproxy returned no data")
-                    return vnc to ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_VNC
+                override suspend fun resolve(): ProxmoxTicket = ProxmoxTicket.Ws(
+                    client.getTermProxy(node, vmid, type),
+                    ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_TERM
+                )
+            }
+        )
+        if (type == "qemu" && SpiceLoader.isSpiceAvailable()) {
+            strategies.add(object : ConsoleStrategy<ProxmoxTicket> {
+                override val name = "proxmox-spiceproxy"
+                override suspend fun resolve(): ProxmoxTicket {
+                    val spice = client.getSPICEProxy(node, vmid)
+                        ?: throw java.io.IOException("spiceproxy returned no data")
+                    return ProxmoxTicket.Spice(spice)
                 }
-            },
-        ))
-        val (ticket, protocol) = try {
+            })
+        }
+        strategies.add(object : ConsoleStrategy<ProxmoxTicket> {
+            override val name = "proxmox-vncproxy"
+            override suspend fun resolve(): ProxmoxTicket {
+                val vnc = client.getVNCProxy(node, vmid, type)
+                    ?: throw java.io.IOException("vncproxy returned no data")
+                return ProxmoxTicket.Ws(vnc, ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_VNC)
+            }
+        })
+        val chain = ConsoleStrategyChain(strategies)
+        val resolved = try {
             chain.resolve()
         } catch (e: Exception) {
             Logger.e(TAG, "All Proxmox console strategies exhausted for $vmName (vmid=$vmid)", e)
@@ -165,6 +208,18 @@ class HypervisorConsoleManager {
             )
             return@withContext null
         }
+
+        // A spiceproxy ticket skips the WebSocket phase entirely: the SPICE
+        // native client dials the returned proxy host/port itself over TLS.
+        if (resolved is ProxmoxTicket.Spice) {
+            Logger.i(TAG, "Proxmox SPICE console resolved for $vmName (proxy=${resolved.result.proxy})")
+            return@withContext ConsoleConnection.Spice(
+                vmName = vmName,
+                hypervisorType = HypervisorType.PROXMOX,
+                spiceParams = resolved.result.toConnectionParams()
+            )
+        }
+        val (ticket, protocol) = (resolved as ProxmoxTicket.Ws)
 
         // Store params for the WebSocket-level VNC fallback (in case Proxmox
         // accepts the termproxy ticket but then sends a serial-error frame).
