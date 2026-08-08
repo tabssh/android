@@ -242,6 +242,9 @@ class BackupImporter(
         if (backupData.containsKey(BackupExporter.FILE_CONTAINER_AUTO_UPDATE_POLICIES)) {
             database.containerAutoUpdatePolicyDao().getAllList().forEach { database.containerAutoUpdatePolicyDao().delete(it) }
         }
+        if (backupData.containsKey(BackupExporter.FILE_DASHBOARD)) {
+            context.getSharedPreferences("multi_host_dashboard", android.content.Context.MODE_PRIVATE).edit().clear().apply()
+        }
         if (backupData.containsKey(BackupExporter.FILE_PREFS_TABSSH)) {
             context.getSharedPreferences("TabSSH", android.content.Context.MODE_PRIVATE).edit().clear().apply()
         }
