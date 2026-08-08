@@ -79,6 +79,17 @@
 
     </PreferenceCategory>
 
+    <PreferenceCategory android:title="Docker updates">
+
+        <!-- Master on/off switch for the Docker image update-check worker. -->
+        <SwitchPreferenceCompat
+            android:key="docker_update_check_enabled"
+            android:title="Docker image update checks"
+            android:summary="Periodically compare watched containers against their registry and alert when a newer image is available"
+            android:defaultValue="true" />
+
+    </PreferenceCategory>
+
     <PreferenceCategory android:title="Advanced">
 
         <SwitchPreferenceCompat

@@ -14,7 +14,7 @@ import io.github.tabssh.utils.logging.Logger
 /**
  * Main Room database for TabSSH.
  *
- * Current version: 8.
+ * Current version: 9.
  * Versions 1 and 2 never shipped to real users, so v3 is the effective schema
  * baseline and no fallback path exists for them. Every version bump from v3
  * onward MUST register a real Migration object via addMigrations(); destructive
@@ -43,9 +43,14 @@ import io.github.tabssh.utils.logging.Logger
         VncIdentity::class,
         SyncTombstone::class,
         SyncShadow::class,
-        PortForward::class
+        PortForward::class,
+        DockerHost::class,
+        ComposeStack::class,
+        SingleContainerConfig::class,
+        ContainerAutoUpdatePolicy::class,
+        RegistryCredential::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -73,6 +78,11 @@ abstract class TabSSHDatabase : RoomDatabase() {
     abstract fun syncTombstoneDao(): SyncTombstoneDao
     abstract fun syncShadowDao(): SyncShadowDao
     abstract fun portForwardDao(): PortForwardDao
+    abstract fun dockerHostDao(): DockerHostDao
+    abstract fun composeStackDao(): ComposeStackDao
+    abstract fun singleContainerConfigDao(): SingleContainerConfigDao
+    abstract fun containerAutoUpdatePolicyDao(): ContainerAutoUpdatePolicyDao
+    abstract fun registryCredentialDao(): RegistryCredentialDao
 
     companion object {
         @Volatile
@@ -237,6 +247,102 @@ abstract class TabSSHDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v8 → v9: add the five Docker-feature tables (docker_hosts,
+         * compose_stacks, single_container_configs,
+         * container_auto_update_policies, registry_credentials) — Docker
+         * host management data model (PLAN.AI.md Phase 1). New tables only;
+         * no data transform. DDL matches Room's generated schema exactly
+         * (column order, NOT NULL flags, and the five indices). All
+         * references between the tables are FK-by-convention, mirroring
+         * hypervisors.linked_connection_id. registry_credentials has no
+         * secret column — secrets live in the Keystore via
+         * RegistryCredentialStore.
+         */
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `docker_hosts` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`linked_connection_id` TEXT, " +
+                        "`socket_path` TEXT NOT NULL, " +
+                        "`transport_mode` TEXT NOT NULL, " +
+                        "`docker_cli_path` TEXT, " +
+                        "`compose_invocation` TEXT NOT NULL, " +
+                        "`pinned_api_version` TEXT, " +
+                        "`compose_base_path` TEXT NOT NULL, " +
+                        "`run_config_base_path` TEXT NOT NULL, " +
+                        "`notes` TEXT, " +
+                        "`last_connected` INTEGER NOT NULL, " +
+                        "`created_at` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_docker_hosts_linked_connection_id` " +
+                        "ON `docker_hosts` (`linked_connection_id`)"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `compose_stacks` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`docker_host_id` INTEGER NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`remote_path` TEXT NOT NULL, " +
+                        "`auto_update_enabled` INTEGER NOT NULL, " +
+                        "`last_known_status` TEXT, " +
+                        "`created_at` INTEGER NOT NULL, " +
+                        "`updated_at` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_compose_stacks_docker_host_id` " +
+                        "ON `compose_stacks` (`docker_host_id`)"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `single_container_configs` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`docker_host_id` INTEGER NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`remote_path` TEXT NOT NULL, " +
+                        "`config_format` TEXT NOT NULL, " +
+                        "`auto_update_enabled` INTEGER NOT NULL, " +
+                        "`last_known_status` TEXT, " +
+                        "`created_at` INTEGER NOT NULL, " +
+                        "`updated_at` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_single_container_configs_docker_host_id` " +
+                        "ON `single_container_configs` (`docker_host_id`)"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `container_auto_update_policies` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`docker_host_id` INTEGER NOT NULL, " +
+                        "`container_name_or_stack_name` TEXT NOT NULL, " +
+                        "`scope` TEXT NOT NULL, " +
+                        "`enabled` INTEGER NOT NULL, " +
+                        "`auto_recreate_on_update` INTEGER NOT NULL, " +
+                        "`registry_credential_id` INTEGER, " +
+                        "`last_checked_at` INTEGER NOT NULL, " +
+                        "`last_digest_seen` TEXT, " +
+                        "`pending_update_digest` TEXT)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_container_auto_update_policies_docker_host_id` " +
+                        "ON `container_auto_update_policies` (`docker_host_id`)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_container_auto_update_policies_registry_credential_id` " +
+                        "ON `container_auto_update_policies` (`registry_credential_id`)"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `registry_credentials` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`registry_host` TEXT NOT NULL, " +
+                        "`username` TEXT NOT NULL, " +
+                        "`auth_type` TEXT NOT NULL)"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): TabSSHDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -246,7 +352,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
                 )
                 .addCallback(DatabaseCallback())
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                 .build()
                 INSTANCE = instance
                 instance

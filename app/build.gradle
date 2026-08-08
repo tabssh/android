@@ -380,6 +380,15 @@ dependencies {
     
     // JSON handling
     implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0'
+
+    // YAML handling — Docker run.yml single-container configs
+    // (docker/runconfig). SnakeYAML's compose API exposes per-node source
+    // marks, which the strict run.yml parser uses to report line numbers in
+    // error messages; kaml (the kotlinx-serialization alternative) hides the
+    // node layer and cannot produce field-level line diagnostics or custom
+    // unknown-key hints. Only the safe compose/dump paths are used — no
+    // JavaBean reflection, so no java.beans dependency on Android.
+    implementation 'org.yaml:snakeyaml:2.4'
     
     // Charts - MPAndroidChart for performance graphs
     implementation 'com.github.PhilJay:MPAndroidChart:v3.1.0'
@@ -429,6 +438,10 @@ dependencies {
     // set fails to compile ("unresolved reference kotlin.test"). Pinned to the
     // project Kotlin version so the assertion API matches the compiler.
     testImplementation "org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version"
+    // Real org.json for local JVM unit tests — the mockable android.jar stubs
+    // JSONObject/JSONArray (returnDefaultValues), which would silently break
+    // the Docker transport parser tests. The real jar wins on the classpath.
+    testImplementation 'org.json:json:20240303'
     testImplementation 'org.mockito:mockito-core:5.7.0'
     testImplementation 'org.mockito:mockito-inline:5.2.0'
     testImplementation 'androidx.room:room-testing:2.8.4'

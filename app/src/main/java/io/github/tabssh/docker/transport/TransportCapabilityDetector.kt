@@ -1,0 +1,261 @@
+package io.github.tabssh.docker.transport
+
+import io.github.tabssh.ssh.forwarding.PortForwardingManager
+import io.github.tabssh.storage.database.dao.DockerHostDao
+import io.github.tabssh.storage.database.entities.DockerHost
+import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.util.concurrent.TimeUnit
+
+/**
+ * Three-tier transport detection (PLAN.AI.md step 14):
+ *  (a) direct-streamlocal relay + unversioned `GET /version`
+ *  (b) socat/nc bridge + TCP forward + `GET /version`
+ *  (c) `docker version --format '{{json .}}'` over SSH exec
+ *
+ * The winning tier is persisted to [DockerHost.transportMode] via
+ * [DockerHostDao]; a non-auto stored mode short-circuits detection until the
+ * user forces a retest ([detect] with force=true) — the tier is never
+ * silently downgraded behind the user's back.
+ *
+ * A socket-permission probe runs before the socket tiers: "permission denied"
+ * is surfaced as [DockerResult.PermissionDenied] carrying the docker-group
+ * remediation text ([DockerTransportMessages.SOCKET_PERMISSION_REMEDIATION])
+ * instead of falling through — the CLI talks to the same socket and would
+ * fail identically.
+ */
+class TransportCapabilityDetector(
+    private val dao: DockerHostDao
+) {
+
+    private companion object {
+        private const val TAG = "TransportCapabilityDetector"
+        private const val PROBE_TIMEOUT_S = 10L
+        private const val MODE_AUTO = "auto"
+        private const val MODE_API_STREAMLOCAL = "api_streamlocal"
+        private const val MODE_API_SOCAT = "api_socat"
+        private const val MODE_CLI_EXEC = "cli_exec"
+    }
+
+    /** Outcome of a successful detection. */
+    data class DetectedTransport(
+        /** Persisted DockerHost.transportMode value. */
+        val mode: String,
+        /** Ready-to-use transport for the winning tier. */
+        val transport: DockerTransport,
+        /** The relay backing an API-tier transport; null for cli_exec. */
+        val relay: SocketRelay?
+    )
+
+    private val probeClient = OkHttpClient.Builder()
+        .connectTimeout(PROBE_TIMEOUT_S, TimeUnit.SECONDS)
+        .readTimeout(PROBE_TIMEOUT_S, TimeUnit.SECONDS)
+        .build()
+
+    /**
+     * Detect (or re-detect with [force]) the best transport tier for [host].
+     * A stored non-auto mode is honored unless [force] is set. The winning
+     * tier is persisted before returning.
+     */
+    suspend fun detect(
+        host: DockerHost,
+        runner: SshExecRunner,
+        portForwardingManager: PortForwardingManager,
+        force: Boolean = false
+    ): DockerResult<DetectedTransport> = withContext(Dispatchers.IO) {
+        val pinned = host.transportMode.takeIf { it != MODE_AUTO && !force }
+        if (pinned != null) {
+            return@withContext openTier(pinned, host, runner, portForwardingManager)
+        }
+
+        // Socket-permission gate for the socket-based tiers (a) and (b).
+        val socketState = probeSocketAccess(host, runner)
+        if (socketState is DockerResult.PermissionDenied) {
+            return@withContext socketState
+        }
+        val socketUsable = socketState is DockerResult.Success && socketState.value
+
+        val failures = mutableListOf<String>()
+
+        if (socketUsable) {
+            for (mode in listOf(MODE_API_STREAMLOCAL, MODE_API_SOCAT)) {
+                when (val attempt = openTier(mode, host, runner, portForwardingManager)) {
+                    is DockerResult.Success -> {
+                        persist(host, mode)
+                        return@withContext attempt
+                    }
+                    is DockerResult.PermissionDenied -> return@withContext attempt
+                    is DockerResult.NotFound -> failures += "$mode: ${attempt.message}"
+                    is DockerResult.TransportUnavailable ->
+                        failures += "$mode: ${attempt.message}${attempt.detail?.let { " ($it)" } ?: ""}"
+                    is DockerResult.Error ->
+                        failures += "$mode: ${attempt.message}${attempt.detail?.let { " ($it)" } ?: ""}"
+                }
+            }
+        } else if (socketState is DockerResult.Success) {
+            failures += "socket: ${DockerTransportMessages.SOCKET_MISSING}"
+        } else {
+            failures += "socket probe failed"
+        }
+
+        when (val attempt = openTier(MODE_CLI_EXEC, host, runner, portForwardingManager)) {
+            is DockerResult.Success -> {
+                persist(host, MODE_CLI_EXEC)
+                return@withContext attempt
+            }
+            is DockerResult.PermissionDenied -> return@withContext attempt
+            is DockerResult.NotFound -> failures += "$MODE_CLI_EXEC: ${attempt.message}"
+            is DockerResult.TransportUnavailable ->
+                failures += "$MODE_CLI_EXEC: ${attempt.message}${attempt.detail?.let { " ($it)" } ?: ""}"
+            is DockerResult.Error ->
+                failures += "$MODE_CLI_EXEC: ${attempt.message}${attempt.detail?.let { " ($it)" } ?: ""}"
+        }
+
+        DockerResult.TransportUnavailable(
+            DockerTransportMessages.ALL_TIERS_FAILED,
+            detail = failures.joinToString("; ")
+        )
+    }
+
+    /** Open and verify one specific tier. */
+    private suspend fun openTier(
+        mode: String,
+        host: DockerHost,
+        runner: SshExecRunner,
+        portForwardingManager: PortForwardingManager
+    ): DockerResult<DetectedTransport> = when (mode) {
+        MODE_API_STREAMLOCAL -> openApiTier(mode, host, runner, portForwardingManager)
+        MODE_API_SOCAT -> openApiTier(mode, host, runner, portForwardingManager)
+        MODE_CLI_EXEC -> verifyCliTier(host, runner)
+        else -> DockerResult.Error("Unknown transport mode", mode)
+    }
+
+    /** Open a relay (streamlocal or socat), then verify with GET /version. */
+    private suspend fun openApiTier(
+        mode: String,
+        host: DockerHost,
+        runner: SshExecRunner,
+        portForwardingManager: PortForwardingManager
+    ): DockerResult<DetectedTransport> {
+        val relay = SocketRelay(host, runner, portForwardingManager)
+        return try {
+            val port = if (mode == MODE_API_STREAMLOCAL) {
+                relay.openStreamLocal()
+            } else {
+                relay.openSocatBridge()
+            }
+            when (val probe = probeApiVersion(port)) {
+                is DockerResult.Success -> {
+                    Logger.i(TAG, "$mode verified (engine ${probe.value.version}, api ${probe.value.apiVersion})")
+                    DockerResult.Success(
+                        DetectedTransport(mode, EngineApiTransport(host, relay, runner), relay)
+                    )
+                }
+                is DockerResult.PermissionDenied -> {
+                    relay.close()
+                    probe
+                }
+                is DockerResult.NotFound -> {
+                    relay.close()
+                    probe
+                }
+                is DockerResult.TransportUnavailable -> {
+                    relay.close()
+                    probe
+                }
+                is DockerResult.Error -> {
+                    relay.close()
+                    probe
+                }
+            }
+        } catch (e: TransportUnavailableException) {
+            relay.close()
+            DockerResult.TransportUnavailable(e.message.orEmpty(), e.detail)
+        } catch (e: Exception) {
+            relay.close()
+            DockerResult.Error("Transport $mode failed", e.message)
+        }
+    }
+
+    /** Unversioned GET /version through a relay port. */
+    private suspend fun probeApiVersion(port: Int): DockerResult<DockerVersionInfo> =
+        withContext(Dispatchers.IO) {
+            try {
+                val request = Request.Builder().url("http://127.0.0.1:$port/version").get().build()
+                probeClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        DockerResult.Error("GET /version failed", "HTTP ${response.code}")
+                    } else {
+                        DockerApiParsers.parseVersion(response.body?.string().orEmpty())
+                            ?.let { DockerResult.Success(it) }
+                            ?: DockerResult.Error("GET /version returned an unparsable body")
+                    }
+                }
+            } catch (e: java.io.IOException) {
+                DockerResult.TransportUnavailable("GET /version failed", e.message)
+            }
+        }
+
+    /** Verify the CLI tier with `docker version --format '{{json .}}'`. */
+    private suspend fun verifyCliTier(
+        host: DockerHost,
+        runner: SshExecRunner
+    ): DockerResult<DetectedTransport> {
+        val transport = CliExecTransport(host, runner)
+        return when (val version = transport.engineVersion()) {
+            is DockerResult.Success -> {
+                Logger.i(TAG, "cli_exec verified (engine ${version.value.version})")
+                DockerResult.Success(DetectedTransport(MODE_CLI_EXEC, transport, null))
+            }
+            is DockerResult.PermissionDenied -> version
+            is DockerResult.NotFound -> version
+            is DockerResult.TransportUnavailable -> version
+            is DockerResult.Error -> version
+        }
+    }
+
+    /**
+     * Probe socket accessibility. Success(true) = readable+writable,
+     * Success(false) = missing, PermissionDenied = present but inaccessible
+     * to the SSH user (docker-group remediation).
+     */
+    private suspend fun probeSocketAccess(
+        host: DockerHost,
+        runner: SshExecRunner
+    ): DockerResult<Boolean> {
+        return try {
+            val sock = SshExecRunner.shQuote(host.socketPath)
+            val cmd = "if [ -S $sock ]; then " +
+                "if [ -r $sock ] && [ -w $sock ]; then echo ok; else echo denied; fi; " +
+                "else echo missing; fi"
+            val result = runner.run(cmd)
+            when (result.stdout.trim()) {
+                "ok" -> DockerResult.Success(true)
+                "denied" -> DockerResult.PermissionDenied(
+                    DockerTransportMessages.SOCKET_PERMISSION_REMEDIATION,
+                    detail = host.socketPath
+                )
+                "missing" -> DockerResult.Success(false)
+                else -> DockerResult.Error("Socket probe returned unexpected output",
+                    result.stdout.trim().take(200))
+            }
+        } catch (e: TransportUnavailableException) {
+            DockerResult.TransportUnavailable(e.message.orEmpty(), e.detail)
+        } catch (e: Exception) {
+            DockerResult.Error("Socket probe failed", e.message)
+        }
+    }
+
+    /** Persist the winning tier so reconnects skip detection. */
+    private suspend fun persist(host: DockerHost, mode: String) {
+        try {
+            dao.update(host.copy(transportMode = mode))
+            Logger.i(TAG, "persisted transport tier '$mode' for host ${host.id}")
+        } catch (e: Exception) {
+            Logger.w(TAG, "failed to persist transport tier: ${e.message}")
+        }
+    }
+}

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/action_up"
+        android:title="@string/docker_stack_action_up"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_down"
+        android:title="@string/docker_stack_action_down"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_pull"
+        android:title="@string/docker_stack_action_pull"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_restart"
+        android:title="@string/docker_stack_action_restart"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_services"
+        android:title="@string/docker_stack_services"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_delete"
+        android:title="@string/delete"
+        app:showAsAction="never" />
+</menu>

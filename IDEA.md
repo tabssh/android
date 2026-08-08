@@ -143,3 +143,25 @@ version_code_scheme: manual
 - Embed cloud provider SDKs or require a cloud account for sync
 - Include analytics, crash reporting SDKs, or tracking pixels without explicit user opt-in
 - Require network access on first launch
+
+## JSch direct-streamlocal decision
+
+**Feasible — no custom channel class needed.** `com.github.mwiede:jsch:2.27.7`
+already ships `com.jcraft.jsch.ChannelDirectStreamLocal` (extends
+ChannelDirectTCPIP) and `Session.openChannel("direct-streamlocal@openssh.com")`
+returns it — verified via javap and string constants in the jar. Usage:
+open the channel, `setSocketPath("/var/run/docker.sock")`, then normal
+`getInputStream()`/`getOutputStream()` + `connect()`.
+
+Ground-truth test (2026-08-07): Dockerized OpenSSH 10.x (alpine) with a
+socat unix listener at `/tmp/test.sock`; a JVM client using the app's exact
+jsch jar read the socket's bytes end-to-end (`READ 23 bytes:
+hello-from-unix-socket`).
+
+Quirks found:
+- Server must have `AllowTcpForwarding yes` — with it off, sshd's local
+  permission set is empty and direct-streamlocal is denied even when
+  `AllowStreamLocalForwarding yes` ("request was denied" in sshd debug log).
+- JSch surfaces any server-side denial only as the generic
+  `JSchException: channel is not opened.` — transport code must map this to
+  a user-actionable hint (check AllowTcpForwarding/AllowStreamLocalForwarding).

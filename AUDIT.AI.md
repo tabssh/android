@@ -40,6 +40,11 @@ never deleted — its content is superseded by this file.
   broadcasts are a documented public contract that existing Tasker tasks
   depend on, so restricting them (custom permission, or dropping the screen
   content in favour of a result the host must pull) is a user-decision.
+  DECIDED (user, 2026-08-07): status-only broadcast by default — keep exit
+  status/metadata, drop screen content; add an "include command output in
+  broadcasts" toggle in Tasker settings, default OFF, restoring old payload
+  when enabled. Implement as its own commit after the Docker feature lands
+  (tree currently holds the uncommitted Docker feature).
 
 ## Pass 2: Code Quality
 

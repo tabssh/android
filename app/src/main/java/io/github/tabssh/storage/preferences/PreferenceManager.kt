@@ -152,6 +152,9 @@ class PreferenceManager(private val context: Context) {
         private const val KEY_MONITORING_DEFAULT_DISK_THRESHOLD = "monitoring_default_disk_threshold"
         private const val KEY_MONITORING_RUN_IN_BATTERY_SAVER = "monitoring_run_in_battery_saver"
 
+        // Docker update-check preferences — keys MUST match preferences_monitoring.xml.
+        private const val KEY_DOCKER_UPDATE_CHECK_ENABLED = "docker_update_check_enabled"
+
         // Tasker preferences — keys MUST match preferences_tasker.xml.
         // tasker_command_timeout is EditTextPreference (String-backed), routed
         // through getStringAsInt(). tasker_allowed_connections is a
@@ -772,6 +775,12 @@ class PreferenceManager(private val context: Context) {
     fun isMonitoringRunInBatterySaverEnabled(): Boolean = getBoolean(KEY_MONITORING_RUN_IN_BATTERY_SAVER, false)
     fun setMonitoringRunInBatterySaverEnabled(enabled: Boolean) =
         setBoolean(KEY_MONITORING_RUN_IN_BATTERY_SAVER, enabled)
+
+    // --- Docker update checks ---
+
+    fun isDockerUpdateCheckEnabled(): Boolean = getBoolean(KEY_DOCKER_UPDATE_CHECK_ENABLED, true)
+    fun setDockerUpdateCheckEnabled(enabled: Boolean) =
+        setBoolean(KEY_DOCKER_UPDATE_CHECK_ENABLED, enabled)
 
     // --- Tasker ---
 

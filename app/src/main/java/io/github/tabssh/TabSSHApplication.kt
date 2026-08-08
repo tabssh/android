@@ -412,6 +412,13 @@ class TabSSHApplication : Application() {
             io.github.tabssh.background.HostAvailabilityWorker.schedule(this)
         }
 
+        // Schedule periodic Docker image update checks (12 h cycle). Same
+        // KEEP-policy idempotence as HostMonitor; the master
+        // "docker_update_check_enabled" pref is checked inside the worker.
+        tryInit("DockerUpdateCheck") {
+            io.github.tabssh.background.DockerUpdateCheckWorker.schedule(this)
+        }
+
         // Bring up enabled auto-start port forwards on cold start too (not just
         // on boot). Unique work + network constraint make this idempotent and
         // safe on every launch; the enabled/auto-start filter lives in the DAO.

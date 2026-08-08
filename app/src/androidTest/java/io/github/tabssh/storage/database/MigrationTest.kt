@@ -11,7 +11,8 @@ import org.junit.Assert.assertTrue
 /**
  * Room migration tests for TabSSHDatabase.
  *
- * Coverage: v3 → v4 → v5 → v6 (all schema JSONs present in app/schemas/).
+ * Coverage: v3 → v4 → v5 → v6, plus v8 → v9 (all schema JSONs present in
+ * app/schemas/).
  *
  * Each single-step test verifies that the migration SQL runs without
  * error and that Room's schema validator agrees the resulting DB
@@ -137,17 +138,48 @@ class MigrationTest {
     }
 
     // -------------------------------------------------------------------------
-    // Full chain v3 → v6 — exercises every migration in sequence
+    // v8 → v9: the five Docker-feature tables created (PLAN.AI.md Phase 1)
     // -------------------------------------------------------------------------
 
     @Test
-    fun migrateChain3To6() {
+    fun migrate8To9_dockerTablesCreated() {
+        helper.createDatabase(testDbName, 8).close()
+        val db = helper.runMigrationsAndValidate(
+            testDbName, 9, true,
+            TabSSHDatabase.MIGRATION_8_9
+        )
+        db.use {
+            val expected = listOf(
+                "docker_hosts", "compose_stacks", "single_container_configs",
+                "container_auto_update_policies", "registry_credentials"
+            )
+            val tables = mutableListOf<String>()
+            val c = it.query(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name IN (" +
+                    expected.joinToString(",") { t -> "'$t'" } + ")"
+            )
+            c.use { while (c.moveToNext()) tables.add(c.getString(0)) }
+            for (table in expected) {
+                assertTrue("$table must exist after 8→9", table in tables)
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Full chain v3 → v9 — exercises every migration in sequence
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun migrateChain3To9() {
         helper.createDatabase(testDbName, 3).close()
         helper.runMigrationsAndValidate(
-            testDbName, 6, true,
+            testDbName, 9, true,
             TabSSHDatabase.MIGRATION_3_4,
             TabSSHDatabase.MIGRATION_4_5,
-            TabSSHDatabase.MIGRATION_5_6
+            TabSSHDatabase.MIGRATION_5_6,
+            TabSSHDatabase.MIGRATION_6_7,
+            TabSSHDatabase.MIGRATION_7_8,
+            TabSSHDatabase.MIGRATION_8_9
         ).close()
     }
 }
