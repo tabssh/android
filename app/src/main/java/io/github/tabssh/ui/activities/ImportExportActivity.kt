@@ -162,7 +162,7 @@ class ImportExportActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val bm = backupManager ?: run {
-                    android.widget.Toast.makeText(this@ImportExportActivity, "Backup system is still initialising — please wait a moment and try again.", android.widget.Toast.LENGTH_LONG).show()
+                    android.widget.Toast.makeText(this@ImportExportActivity, getString(R.string.import_export_backup_initialising), android.widget.Toast.LENGTH_LONG).show()
                     return@launch
                 }
                 val result = bm.restoreBackup(uri, password = null, overwriteExisting = false, replaceMode = replaceMode)
@@ -182,8 +182,8 @@ class ImportExportActivity : AppCompatActivity() {
                 } else {
                     Logger.e("ImportExportActivity", "Failed to import backup", e)
                     io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(
-                        this@ImportExportActivity, "Import Failed",
-                        "Failed to import backup:\n${e.message}"
+                        this@ImportExportActivity, getString(R.string.import_export_import_failed_title),
+                        getString(R.string.import_export_import_failed_message, e.message)
                     )
                 }
             }
@@ -195,7 +195,7 @@ class ImportExportActivity : AppCompatActivity() {
      */
     private fun showImportPasswordDialog(uri: android.net.Uri, replaceMode: Boolean) {
         val passwordInput = com.google.android.material.textfield.TextInputEditText(this).apply {
-            hint = "Enter backup password"
+            hint = getString(R.string.import_export_backup_password_hint)
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
 
@@ -206,18 +206,18 @@ class ImportExportActivity : AppCompatActivity() {
         }
 
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Encrypted Backup")
-            .setMessage("This backup is encrypted. Enter the password to decrypt it.")
+            .setTitle(R.string.import_export_encrypted_backup_title)
+            .setMessage(R.string.import_export_encrypted_backup_message)
             .setView(layout)
-            .setPositiveButton("Import") { _, _ ->
+            .setPositiveButton(R.string.conn_edit_import) { _, _ ->
                 val password = passwordInput.text.toString()
                 if (password.isNotBlank()) {
                     importBackupWithPassword(uri, password, replaceMode)
                 } else {
-                    Toast.makeText(this, "Password required", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, R.string.import_export_password_required, Toast.LENGTH_SHORT).show()
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -228,7 +228,7 @@ class ImportExportActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val bm = backupManager ?: run {
-                    android.widget.Toast.makeText(this@ImportExportActivity, "Backup system is still initialising — please wait a moment and try again.", android.widget.Toast.LENGTH_LONG).show()
+                    android.widget.Toast.makeText(this@ImportExportActivity, getString(R.string.import_export_backup_initialising), android.widget.Toast.LENGTH_LONG).show()
                     return@launch
                 }
                 val result = bm.restoreBackup(uri, password, overwriteExisting = false, replaceMode = replaceMode)
@@ -243,8 +243,8 @@ class ImportExportActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e("ImportExportActivity", "Failed to import backup with password", e)
                 io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(
-                    this@ImportExportActivity, "Import Failed",
-                    "Failed to import backup:\n${e.message}"
+                    this@ImportExportActivity, getString(R.string.import_export_import_failed_title),
+                    getString(R.string.import_export_import_failed_message, e.message)
                 )
             }
         }
@@ -255,19 +255,18 @@ class ImportExportActivity : AppCompatActivity() {
      */
     private fun showImportSuccessDialog(result: BackupManager.RestoreResult) {
         val message = buildString {
-            append("Import successful!\n\n")
-            append("Imported:\n")
+            append(getString(R.string.import_export_import_success_header))
             result.restoredItems.forEach { (type, count) ->
                 if (count > 0) {
-                    append("  • $count $type\n")
+                    append(getString(R.string.import_export_item_count_line, count, type))
                 }
             }
         }
 
         androidx.appcompat.app.AlertDialog.Builder(this@ImportExportActivity)
-            .setTitle("Backup Imported")
+            .setTitle(R.string.import_export_backup_imported_title)
             .setMessage(message)
-            .setPositiveButton("OK", null)
+            .setPositiveButton(R.string.ok, null)
             .show()
     }
 
@@ -294,18 +293,18 @@ class ImportExportActivity : AppCompatActivity() {
                 val text = io.github.tabssh.ssh.config.SSHConfigExporter.export(connections, groups)
                 withContext(Dispatchers.IO) {
                     contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray(Charsets.UTF_8)) }
-                        ?: throw java.io.IOException("Could not open output stream")
+                        ?: throw java.io.IOException(getString(R.string.import_export_could_not_open_output))
                 }
                 Toast.makeText(
                     this@ImportExportActivity,
-                    "Exported ${connections.size} connections",
+                    getString(R.string.import_export_exported_connections, connections.size),
                     Toast.LENGTH_SHORT
                 ).show()
             } catch (e: Exception) {
                 Logger.e("ImportExportActivity", "SSH config export failed", e)
                 Toast.makeText(
                     this@ImportExportActivity,
-                    "Export failed: ${e.message}",
+                    getString(R.string.import_export_export_failed, e.message),
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -321,20 +320,20 @@ class ImportExportActivity : AppCompatActivity() {
             try {
                 val text = withContext(Dispatchers.IO) {
                     contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-                } ?: throw Exception("Could not open file")
+                } ?: throw Exception(getString(R.string.import_export_could_not_open_file))
 
                 val result = io.github.tabssh.ssh.config.BulkImportParser.parse(text)
 
                 if (result.hosts.isEmpty()) {
                     val msg = buildString {
-                        append("No connections detected (${result.format.name}).")
+                        append(getString(R.string.import_export_no_connections_detected, result.format.name))
                         if (result.warnings.isNotEmpty()) {
                             append("\n\n")
                             append(result.warnings.joinToString("\n"))
                         }
                     }
                     androidx.appcompat.app.AlertDialog.Builder(this@ImportExportActivity)
-                        .setTitle("Bulk Import")
+                        .setTitle(R.string.import_export_bulk_import_title)
                         .setMessage(msg)
                         .setPositiveButton(android.R.string.ok, null)
                         .show()
@@ -345,7 +344,7 @@ class ImportExportActivity : AppCompatActivity() {
                 Logger.e("ImportExportActivity", "Bulk import failed", e)
                 Toast.makeText(
                     this@ImportExportActivity,
-                    "Bulk import failed: ${e.message}",
+                    getString(R.string.import_export_bulk_import_failed, e.message),
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -354,23 +353,29 @@ class ImportExportActivity : AppCompatActivity() {
 
     private fun showBulkImportPreviewDialog(result: io.github.tabssh.ssh.config.BulkImportParser.ParseResult) {
         val sample = result.hosts.take(20).joinToString("\n") { p ->
-            val auth = p.authType?.let { " · $it" }.orEmpty()
-            val grp = p.groupName?.let { " [${'$'}it]" }.orEmpty()
-            "• ${p.name} → ${p.username ?: "?"}@${p.host}:${p.port}$auth$grp"
+            val auth = p.authType?.let { getString(R.string.import_export_bulk_auth_suffix, it) }.orEmpty()
+            val grp = p.groupName?.let { getString(R.string.import_export_bulk_group_suffix, it) }.orEmpty()
+            getString(
+                R.string.import_export_bulk_preview_line,
+                p.name, p.username ?: "?", p.host, p.port, auth, grp
+            )
         }
-        val more = if (result.hosts.size > 20) "\n… and ${result.hosts.size - 20} more" else ""
+        val more = if (result.hosts.size > 20) {
+            getString(R.string.import_export_bulk_more_hosts, result.hosts.size - 20)
+        } else ""
         val warn = if (result.warnings.isNotEmpty()) {
-            "\n\nWarnings:\n" + result.warnings.take(8).joinToString("\n") { "  - $it" }
+            getString(R.string.import_export_bulk_warnings_header) +
+                result.warnings.take(8).joinToString("\n") { getString(R.string.import_export_bulk_warning_line, it) }
         } else ""
 
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Bulk Import: ${result.format.name}")
-            .setMessage("Found ${result.hosts.size} connection(s).\n\n$sample$more$warn")
-            .setPositiveButton("Import") { _, _ ->
+            .setTitle(getString(R.string.import_export_bulk_import_format_title, result.format.name))
+            .setMessage(getString(R.string.import_export_bulk_found_connections, result.hosts.size, sample, more, warn))
+            .setPositiveButton(R.string.conn_edit_import) { _, _ ->
                 val profiles = result.hosts.map { it.toConnectionProfile() }
                 importSSHConfigProfiles(profiles)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -386,7 +391,7 @@ class ImportExportActivity : AppCompatActivity() {
                     // the stream — assigning to a `val` first leaked the fd.
                     val configContent = contentResolver.openInputStream(uri)
                         ?.bufferedReader()?.use { it.readText() }
-                        ?: throw Exception("Could not open file")
+                        ?: throw Exception(getString(R.string.import_export_could_not_open_file))
                     val raw = io.github.tabssh.ssh.config.SSHConfigParser().parseConfig(configContent)
 
                     // Attempt to resolve each profile's IdentityFile path to a
@@ -431,7 +436,7 @@ class ImportExportActivity : AppCompatActivity() {
                 Logger.e("ImportExportActivity", "Failed to import SSH config", e)
                 Toast.makeText(
                     this@ImportExportActivity,
-                    "Failed to import SSH config: ${e.message}",
+                    getString(R.string.import_export_ssh_config_import_failed, e.message),
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -466,57 +471,55 @@ class ImportExportActivity : AppCompatActivity() {
         }.toSet()
 
         val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Import SSH Config")
+            .setTitle(R.string.import_export_import_ssh_config_title)
             .setMessage(buildString {
-                append("Found ${profiles.size} host(s)")
+                append(getString(R.string.import_export_found_hosts, profiles.size))
                 if (groups.isNotEmpty()) {
-                    append(" in ${groups.size} group(s)")
+                    append(getString(R.string.import_export_in_groups, groups.size))
                 }
                 append("\n\n")
 
                 if (groups.isNotEmpty()) {
-                    append("Groups to create:\n")
+                    append(getString(R.string.import_export_groups_to_create))
                     groups.sorted().forEach { group ->
                         val count = profiles.count { it.groupId == group }
-                        append("  [$group] ($count hosts)\n")
+                        append(getString(R.string.import_export_group_count_line, group, count))
                     }
                     append("\n")
                 }
 
                 if (profiles.isNotEmpty()) {
-                    append("Hosts:\n")
-                    val grouped = profiles.groupBy { it.groupId ?: "Ungrouped" }
+                    append(getString(R.string.import_export_hosts_header))
+                    val grouped = profiles.groupBy { it.groupId ?: getString(R.string.import_export_ungrouped) }
                     var shown = 0
                     grouped.forEach { (group, groupProfiles) ->
                         if (shown < 15) {
-                            append("[$group]\n")
+                            append(getString(R.string.import_export_group_header_line, group))
                             groupProfiles.take(5).forEach { profile ->
-                                append("  • ${profile.name}\n")
+                                append(getString(R.string.import_export_host_line, profile.name))
                                 shown++
                             }
                             if (groupProfiles.size > 5) {
-                                append("    ... and ${groupProfiles.size - 5} more\n")
+                                append(getString(R.string.import_export_more_in_group, groupProfiles.size - 5))
                             }
                         }
                     }
                     if (profiles.size > 15) {
-                        append("\n... and more hosts\n")
+                        append(getString(R.string.import_export_more_hosts))
                     }
                 }
 
                 // Identity file warning — must be last so it stands out
                 if (unresolvedKeyProfiles.isNotEmpty()) {
-                    append("\n⚠ ${unresolvedKeyProfiles.size} host(s) use SSH key auth but the key")
-                    append(" can't be resolved on this device:\n")
-                    unresolvedKeyPaths.forEach { path -> append("  $path\n") }
-                    append("\nAfter import: go to the Identities tab, import your")
-                    append(" private key, then edit each connection and select it.")
+                    append(getString(R.string.import_export_unresolved_keys_warning, unresolvedKeyProfiles.size))
+                    unresolvedKeyPaths.forEach { path -> append(getString(R.string.import_export_unresolved_key_path, path)) }
+                    append(getString(R.string.import_export_unresolved_keys_hint))
                 }
             })
-            .setPositiveButton("Import") { _, _ ->
+            .setPositiveButton(R.string.conn_edit_import) { _, _ ->
                 importSSHConfigProfiles(profiles, unresolvedKeyProfiles.isNotEmpty())
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .create()
 
         dialog.show()
@@ -584,12 +587,12 @@ class ImportExportActivity : AppCompatActivity() {
                 }
 
                 val message = buildString {
-                    append("✓ Imported $connectionsImported connection(s)")
+                    append(getString(R.string.import_export_imported_connections, connectionsImported))
                     if (connectionsSkipped > 0) {
-                        append("\n• Skipped $connectionsSkipped already-existing host(s)")
+                        append(getString(R.string.import_export_skipped_connections, connectionsSkipped))
                     }
                     if (groupsCreated > 0) {
-                        append("\n✓ Created $groupsCreated new group(s)")
+                        append(getString(R.string.import_export_created_groups, groupsCreated))
                     }
                 }
                 Toast.makeText(
@@ -605,9 +608,9 @@ class ImportExportActivity : AppCompatActivity() {
                     val rootView = window.decorView.findViewById<android.view.View>(android.R.id.content)
                     Snackbar.make(
                         rootView,
-                        "Some connections need an SSH key — go import it now",
+                        getString(R.string.import_export_need_key_snackbar),
                         Snackbar.LENGTH_INDEFINITE
-                    ).setAction("Identities") {
+                    ).setAction(R.string.import_export_identities_action) {
                         // Navigate to MainActivity and open the Identities tab (index 2).
                         val intent = Intent(this@ImportExportActivity, MainActivity::class.java).apply {
                             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -621,7 +624,7 @@ class ImportExportActivity : AppCompatActivity() {
                 Logger.e("ImportExportActivity", "Failed to save imported connections", e)
                 Toast.makeText(
                     this@ImportExportActivity,
-                    "Failed to save connections: ${e.message}",
+                    getString(R.string.import_export_save_connections_failed, e.message),
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -640,19 +643,19 @@ class ImportExportActivity : AppCompatActivity() {
      */
     private fun showExportOptionsDialog(uri: android.net.Uri) {
         val options = arrayOf(
-            "Export without encryption",
-            "Export with password protection"
+            getString(R.string.import_export_option_unencrypted),
+            getString(R.string.import_export_option_encrypted)
         )
 
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Export Options")
+            .setTitle(R.string.import_export_options_title)
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> showUnencryptedExportWarning(uri)
                     1 -> showExportPasswordDialog(uri)
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -662,21 +665,12 @@ class ImportExportActivity : AppCompatActivity() {
      */
     private fun showUnencryptedExportWarning(uri: android.net.Uri) {
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("⚠️ Unencrypted Backup")
-            .setMessage(
-                "This backup will be saved as plain, unencrypted JSON.\n\n" +
-                "A backup always contains everything — including your saved " +
-                "passwords and private keys — so that a restore reproduces the " +
-                "exact state of the app.\n\n" +
-                "Because this file is unencrypted, anyone who can read it will " +
-                "see all of that. Store it somewhere only you can access.\n\n" +
-                "For protection at rest, use an encrypted backup with a strong " +
-                "password instead."
-            )
-            .setPositiveButton("Export Without Encryption") { _, _ ->
+            .setTitle(R.string.import_export_unencrypted_warning_title)
+            .setMessage(R.string.import_export_unencrypted_warning_message)
+            .setPositiveButton(R.string.import_export_export_without_encryption) { _, _ ->
                 performExport(uri, password = null)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -685,12 +679,12 @@ class ImportExportActivity : AppCompatActivity() {
      */
     private fun showExportPasswordDialog(uri: android.net.Uri) {
         val passwordInput = com.google.android.material.textfield.TextInputEditText(this).apply {
-            hint = "Enter password"
+            hint = getString(R.string.import_export_password_hint)
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
 
         val confirmInput = com.google.android.material.textfield.TextInputEditText(this).apply {
-            hint = "Confirm password"
+            hint = getString(R.string.import_export_confirm_password_hint)
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
 
@@ -707,29 +701,29 @@ class ImportExportActivity : AppCompatActivity() {
         }
 
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Encrypt Backup")
-            .setMessage("Enter a password to encrypt your backup. The backup always includes everything; the password protects the file at rest.")
+            .setTitle(R.string.import_export_encrypt_backup_title)
+            .setMessage(R.string.import_export_encrypt_backup_message)
             .setView(layout)
-            .setPositiveButton("Export") { _, _ ->
+            .setPositiveButton(R.string.import_export_export) { _, _ ->
                 val password = passwordInput.text.toString()
                 val confirm = confirmInput.text.toString()
 
                 when {
                     password.isBlank() -> {
-                        Toast.makeText(this, "Password required", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, R.string.import_export_password_required, Toast.LENGTH_SHORT).show()
                     }
                     password != confirm -> {
-                        Toast.makeText(this, "Passwords do not match", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, R.string.sync_password_mismatch, Toast.LENGTH_SHORT).show()
                     }
                     password.length < 4 -> {
-                        Toast.makeText(this, "Password too short (minimum 4 characters)", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, R.string.import_export_password_too_short, Toast.LENGTH_SHORT).show()
                     }
                     else -> {
                         performExport(uri, password)
                     }
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -740,7 +734,7 @@ class ImportExportActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val bm = backupManager ?: run {
-                    android.widget.Toast.makeText(this@ImportExportActivity, "Backup system is still initialising — please wait a moment and try again.", android.widget.Toast.LENGTH_LONG).show()
+                    android.widget.Toast.makeText(this@ImportExportActivity, getString(R.string.import_export_backup_initialising), android.widget.Toast.LENGTH_LONG).show()
                     return@launch
                 }
                 val result = bm.createBackup(
@@ -750,26 +744,30 @@ class ImportExportActivity : AppCompatActivity() {
                 )
 
                 if (result.success) {
-                    val encryptedLabel = if (password != null) " (encrypted)" else " (unencrypted)"
+                    val encryptedLabel = if (password != null) {
+                        getString(R.string.import_export_label_encrypted)
+                    } else {
+                        getString(R.string.import_export_label_unencrypted)
+                    }
                     Toast.makeText(
                         this@ImportExportActivity,
-                        "Backup exported successfully$encryptedLabel",
+                        getString(R.string.import_export_backup_exported_toast, encryptedLabel),
                         Toast.LENGTH_LONG
                     ).show()
 
                     val message = buildString {
-                        append("Backup exported and verified successfully!")
+                        append(getString(R.string.import_export_export_verified))
                         if (password != null) {
-                            append("\n\n🔐 Encrypted with password")
+                            append(getString(R.string.import_export_encrypted_with_password))
                         } else {
-                            append("\n\n⚠️ Unencrypted — no password protection")
+                            append(getString(R.string.import_export_unencrypted_no_protection))
                         }
                         result.metadata?.itemCounts?.let { items ->
                             if (items.isNotEmpty()) {
-                                append("\n\nExported:\n")
+                                append(getString(R.string.import_export_exported_header))
                                 items.forEach { (type, count) ->
                                     if (count > 0) {
-                                        append("  • $count $type\n")
+                                        append(getString(R.string.import_export_item_count_line, count, type))
                                     }
                                 }
                             }
@@ -777,26 +775,26 @@ class ImportExportActivity : AppCompatActivity() {
                     }
 
                     androidx.appcompat.app.AlertDialog.Builder(this@ImportExportActivity)
-                        .setTitle("Export Complete")
+                        .setTitle(R.string.import_export_export_complete_title)
                         .setMessage(message)
-                        .setPositiveButton("OK", null)
+                        .setPositiveButton(R.string.ok, null)
                         .show()
 
                     Logger.i("ImportExportActivity", "Exported backup successfully")
                 } else {
-                    throw Exception("Export failed: ${result.message}")
+                    throw Exception(getString(R.string.import_export_export_failed, result.message))
                 }
 
             } catch (e: Exception) {
                 Logger.e("ImportExportActivity", "Failed to export backup", e)
                 Toast.makeText(
                     this@ImportExportActivity,
-                    "Backup export failed: ${e.message}",
+                    getString(R.string.import_export_backup_export_failed, e.message),
                     Toast.LENGTH_LONG
                 ).show()
                 io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(
-                    this@ImportExportActivity, "Export Failed",
-                    "Failed to export backup:\n${e.message}"
+                    this@ImportExportActivity, getString(R.string.import_export_export_failed_title),
+                    getString(R.string.import_export_export_failed_message, e.message)
                 )
             }
         }
