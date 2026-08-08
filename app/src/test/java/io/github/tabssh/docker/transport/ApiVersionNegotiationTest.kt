@@ -32,6 +32,30 @@ class ApiVersionNegotiationTest {
     }
 
     @Test
+    fun `server minimum above client ceiling raises negotiated version`() {
+        // Docker 29: ApiVersion 1.54, MinAPIVersion 1.44 — a 1.43 request
+        // would be rejected with HTTP 400, so negotiation lifts to the min.
+        assertEquals("1.44", DockerApiParsers.negotiateApiVersion("1.43", "1.54", "1.44"))
+    }
+
+    @Test
+    fun `server minimum below negotiated version changes nothing`() {
+        assertEquals("1.43", DockerApiParsers.negotiateApiVersion("1.43", "1.54", "1.24"))
+        assertEquals("1.41", DockerApiParsers.negotiateApiVersion("1.43", "1.41", "1.24"))
+    }
+
+    @Test
+    fun `server minimum above server maximum is ignored as malformed`() {
+        assertEquals("1.43", DockerApiParsers.negotiateApiVersion("1.43", "1.54", "1.60"))
+    }
+
+    @Test
+    fun `blank server minimum falls back to plain negotiation`() {
+        assertEquals("1.43", DockerApiParsers.negotiateApiVersion("1.43", "1.54", ""))
+        assertEquals("1.43", DockerApiParsers.negotiateApiVersion("1.43", "1.54", null))
+    }
+
+    @Test
     fun `comparison is numeric not lexicographic`() {
         // Lexicographic comparison would order "1.9" after "1.43".
         assertTrue(DockerApiParsers.compareApiVersions("1.9", "1.43") < 0)

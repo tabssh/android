@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
@@ -46,11 +47,25 @@ class EngineApiTransport(
 
     private val remoteOps = RemoteExecOps(runner, host)
 
-    /** Client for one-shot requests — bounded read timeout. */
+    /**
+     * Client for one-shot requests — bounded read timeout, no connection
+     * reuse. Every pooled-connection reuse against the SSH socket relay
+     * hangs until the read timeout (fresh connections always work — each
+     * gets its own SSH channel to the daemon socket), so keep-alive is
+     * disabled: `Connection: close` makes both sides tear the connection
+     * down after each exchange, and the zero-idle pool stops OkHttp from
+     * ever handing a used connection to a later request.
+     */
     private val client = OkHttpClient.Builder()
         .connectTimeout(CONNECT_TIMEOUT_S, TimeUnit.SECONDS)
         .readTimeout(READ_TIMEOUT_S, TimeUnit.SECONDS)
         .writeTimeout(READ_TIMEOUT_S, TimeUnit.SECONDS)
+        .connectionPool(ConnectionPool(0, 1, TimeUnit.SECONDS))
+        .addInterceptor { chain ->
+            chain.proceed(
+                chain.request().newBuilder().header("Connection", "close").build()
+            )
+        }
         .build()
 
     /** Client for follow/stream endpoints — no read timeout. */
@@ -79,10 +94,12 @@ class EngineApiTransport(
         val info = fetchVersionUnversioned()
         val negotiated = DockerApiParsers.negotiateApiVersion(
             DockerApiParsers.CLIENT_MAX_API_VERSION,
-            info?.apiVersion
+            info?.apiVersion,
+            info?.minApiVersion
         )
         negotiatedVersion = negotiated
-        Logger.i(TAG, "negotiated Engine API version $negotiated (server=${info?.apiVersion})")
+        Logger.i(TAG, "negotiated Engine API version $negotiated " +
+            "(server=${info?.apiVersion}, min=${info?.minApiVersion})")
         return "/v$negotiated"
     }
 

@@ -5,6 +5,7 @@ import io.github.tabssh.storage.database.entities.DockerHost
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
@@ -67,9 +68,19 @@ class TransportCapabilityDetector(
         val relay: SocketRelay?
     )
 
+    // No connection reuse: pooled-connection reuse against the SSH socket
+    // relay hangs (see EngineApiTransport.client), and a pooled probe
+    // connection could even outlive its relay and match a later relay's
+    // reused ephemeral port. One fresh connection per probe.
     private val probeClient = OkHttpClient.Builder()
         .connectTimeout(PROBE_TIMEOUT_S, TimeUnit.SECONDS)
         .readTimeout(PROBE_TIMEOUT_S, TimeUnit.SECONDS)
+        .connectionPool(ConnectionPool(0, 1, TimeUnit.SECONDS))
+        .addInterceptor { chain ->
+            chain.proceed(
+                chain.request().newBuilder().header("Connection", "close").build()
+            )
+        }
         .build()
 
     /**

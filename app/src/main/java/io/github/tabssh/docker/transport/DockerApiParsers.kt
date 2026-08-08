@@ -41,17 +41,34 @@ object DockerApiParsers {
     }
 
     /**
-     * Negotiated version = min(client ceiling, server-reported ApiVersion).
-     * A blank/absent server version falls back to the client ceiling — old
-     * engines ignore version prefixes they do not understand anyway.
+     * Negotiated version = min(client ceiling, server-reported ApiVersion),
+     * raised to the server's MinAPIVersion when the ceiling falls below it —
+     * Docker 29 raised the daemon minimum to 1.44, above this client's
+     * ceiling, and rejects lower-versioned requests with HTTP 400. Requesting
+     * the daemon's own minimum is safe: the API is backward-compatible for
+     * every field this client parses. A blank/absent server version falls
+     * back to the client ceiling — old engines ignore version prefixes they
+     * do not understand anyway.
      */
     fun negotiateApiVersion(
         clientMax: String,
-        serverApiVersion: String?
+        serverApiVersion: String?,
+        serverMinApiVersion: String? = null
     ): String {
         val server = serverApiVersion?.trim().orEmpty()
-        if (server.isEmpty()) return clientMax
-        return if (compareApiVersions(server, clientMax) < 0) server else clientMax
+        val negotiated = when {
+            server.isEmpty() -> clientMax
+            compareApiVersions(server, clientMax) < 0 -> server
+            else -> clientMax
+        }
+        val serverMin = serverMinApiVersion?.trim().orEmpty()
+        if (serverMin.isNotEmpty() &&
+            compareApiVersions(negotiated, serverMin) < 0 &&
+            (server.isEmpty() || compareApiVersions(serverMin, server) <= 0)
+        ) {
+            return serverMin
+        }
+        return negotiated
     }
 
     // ── Response object parsers ─────────────────────────────────────────────
