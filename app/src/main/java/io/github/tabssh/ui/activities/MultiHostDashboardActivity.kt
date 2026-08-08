@@ -13,7 +13,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.CheckBox
-import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
@@ -39,6 +38,7 @@ import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.background.BatteryOptimizationHelper
 import io.github.tabssh.storage.database.entities.MonitorSlot
+import io.github.tabssh.ui.dialogs.DialogFields
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.storage.preferences.PreferenceManager as TabPreferenceManager
 import android.text.Spannable
@@ -528,14 +528,14 @@ class MultiHostDashboardActivity : AppCompatActivity() {
     // ── Group CRUD ────────────────────────────────────────────────────────────
 
     private fun showAddGroupDialog() {
-        val et = EditText(this).apply {
-            hint = "Group name"
+        val form = DialogFields.form(this)
+        val et = DialogFields.addText(
+            form, getString(R.string.group_name_hint),
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
-            setPadding(dp(this@MultiHostDashboardActivity, 16))
-        }
+        )
         AlertDialog.Builder(this)
             .setTitle("New group")
-            .setView(et)
+            .setView(form.root)
             .setPositiveButton("Create") { _, _ ->
                 val name = et.text.toString().trim()
                 if (name.isBlank()) { toast("Group name cannot be empty"); return@setPositiveButton }
@@ -552,15 +552,15 @@ class MultiHostDashboardActivity : AppCompatActivity() {
     }
 
     private fun showRenameGroupDialog(group: DashboardGroup) {
-        val et = EditText(this).apply {
-            setText(group.name)
+        val form = DialogFields.form(this)
+        val et = DialogFields.addText(
+            form, getString(R.string.group_rename_hint), initial = group.name,
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
-            setPadding(dp(this@MultiHostDashboardActivity, 16))
-            setSelection(group.name.length)
-        }
+        )
+        et.setSelection(group.name.length)
         AlertDialog.Builder(this)
             .setTitle("Rename group")
-            .setView(et)
+            .setView(form.root)
             .setPositiveButton("Rename") { _, _ ->
                 val name = et.text.toString().trim()
                 if (name.isBlank()) { toast("Group name cannot be empty"); return@setPositiveButton }

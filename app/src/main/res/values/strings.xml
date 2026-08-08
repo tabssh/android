@@ -291,6 +291,70 @@
     <string name="port_forward_error_port_range">Enter a port from 1 to 65535</string>
     <string name="port_forward_error_host_ip">Enter the target host</string>
 
+    <!-- Infra tab (Docker / Hypervisors / Cloud sub-tabs) -->
+    <string name="infra_tab_hypervisors">Hypervisors</string>
+    <string name="infra_tab_cloud">Cloud</string>
+
+    <!-- Cloud accounts (Infra > Cloud) -->
+    <string name="cloud_empty_title">No cloud accounts yet</string>
+    <string name="cloud_empty_hint">Tap + to add your first cloud provider</string>
+    <string name="cloud_add_account_title">Add cloud account</string>
+    <string name="cloud_account_name_hint">Account name</string>
+    <string name="cloud_account_name_helper">A label of your choosing, e.g. work-do</string>
+    <string name="cloud_provider_hint">Cloud provider</string>
+    <string name="cloud_api_token_hint">API token / secret</string>
+    <string name="cloud_error_name_required">Account name is required</string>
+    <string name="cloud_error_token_required">API token is required</string>
+    <string name="cloud_error_field_required">Required</string>
+    <string name="cloud_oci_next_step">Credentials are entered in the next step.</string>
+    <string name="cloud_oci_title">OCI credentials — %1$s</string>
+    <string name="cloud_oci_tenancy_hint">Tenancy OCID</string>
+    <string name="cloud_oci_tenancy_helper">ocid1.tenancy.oc1…</string>
+    <string name="cloud_oci_user_hint">User OCID</string>
+    <string name="cloud_oci_user_helper">ocid1.user.oc1…</string>
+    <string name="cloud_oci_fingerprint_hint">API key fingerprint</string>
+    <string name="cloud_oci_fingerprint_helper">aa:bb:cc:…</string>
+    <string name="cloud_oci_region_hint">Region</string>
+    <string name="cloud_oci_region_helper">e.g. us-ashburn-1</string>
+    <string name="cloud_oci_compartment_hint">Compartment OCID</string>
+    <string name="cloud_oci_compartment_helper">Optional — blank scans the root compartment</string>
+    <string name="cloud_oci_pem_hint">RSA private key PEM</string>
+    <string name="cloud_oci_passphrase_hint">Key passphrase</string>
+    <string name="cloud_oci_passphrase_helper">Optional — only if the key is encrypted</string>
+    <string name="cloud_oci_import_config">Import .oci/config file…</string>
+    <string name="cloud_oci_import_key">Import .pem key file…</string>
+    <string name="cloud_edit_title">Edit: %1$s</string>
+    <string name="cloud_edit_token_hint">New API token</string>
+    <string name="cloud_edit_token_helper">Leave blank to keep the existing token</string>
+    <string name="cloud_delete_title">Delete %1$s?</string>
+    <string name="cloud_delete_message">Removes this cloud account record and its stored token.</string>
+    <string name="cloud_saved">Saved \'%1$s\'</string>
+    <string name="cloud_updated">Updated \'%1$s\'</string>
+    <string name="cloud_save_failed">Save failed: %1$s</string>
+    <string name="cloud_update_failed">Update failed: %1$s</string>
+    <string name="cloud_refreshing">Refreshing %1$s…</string>
+    <string name="cloud_refresh_failed">Refresh failed: %1$s</string>
+    <string name="cloud_enabled_toast">%1$s enabled</string>
+    <string name="cloud_disabled_toast">%1$s disabled</string>
+    <string name="cloud_disabled_refresh_hint">%1$s is disabled — enable to refresh</string>
+    <string name="cloud_token_missing">Token missing — re-add the account</string>
+    <string name="cloud_token_invalid">Token invalid — re-add the account (%1$s)</string>
+    <string name="cloud_unknown_provider">Unknown provider: %1$s</string>
+    <string name="cloud_no_file_selected">No file selected</string>
+    <string name="cloud_config_read_failed">Could not read the OCI config file — check the file and try again</string>
+    <string name="cloud_key_read_failed">Could not read the key file — check the file and try again</string>
+    <string name="cloud_credential_storage_failed">Credential storage failed — check device security settings (screen lock required)</string>
+    <string name="cloud_last_sync">Last sync: %1$s</string>
+    <string name="cloud_never_synced">Never synced</string>
+    <plurals name="cloud_instance_count">
+        <item quantity="one">%1$s: %2$d instance</item>
+        <item quantity="other">%1$s: %2$d instances</item>
+    </plurals>
+    <plurals name="cloud_host_count">
+        <item quantity="one">%d host</item>
+        <item quantity="other">%d hosts</item>
+    </plurals>
+
     <!-- Docker (Phase 4) -->
     <string name="docker_tab_title">Docker</string>
     <string name="docker_hosts_empty">No Docker hosts yet.\nTap + to add one.</string>
@@ -365,10 +429,15 @@
     <string name="docker_dashboard_cpu_mem_fmt">CPUs: %1$d · Memory: %2$s</string>
     <string name="docker_dashboard_disk_row_fmt">%1$s: %2$d (%3$d active) · %4$s (%5$s reclaimable)</string>
     <string name="docker_containers_empty">No containers</string>
+    <string name="docker_containers_empty_hint">Containers on this host appear here.\nTap + to create and run a container config.</string>
     <string name="docker_images_empty">No images</string>
+    <string name="docker_images_empty_hint">Images on this host appear here.\nTap + to pull one from a registry.</string>
     <string name="docker_volumes_empty">No volumes</string>
+    <string name="docker_volumes_empty_hint">Volumes on this host appear here.\nTap + to create one.</string>
     <string name="docker_networks_empty">No networks</string>
-    <string name="docker_stacks_empty">No compose stacks yet.\nTap + to add one.</string>
+    <string name="docker_networks_empty_hint">Networks on this host appear here.\nTap + to create one.</string>
+    <string name="docker_stacks_empty">No compose stacks</string>
+    <string name="docker_stacks_empty_hint">Compose stacks on this host appear here.\nTap + to add your first compose.yaml.</string>
     <string name="docker_update_available">Update available</string>
     <string name="docker_image_dangling">(dangling)</string>
     <string name="docker_new_container_config_desc">New container config</string>
@@ -449,6 +518,25 @@
     <string name="docker_run_env_hint">Environment (one per line, KEY=value)</string>
     <string name="docker_run_network_hint">Network (optional)</string>
     <string name="docker_run_command_hint">Command (optional)</string>
+
+    <!-- Tab terminal activity dialogs -->
+    <string name="cluster_broadcast_command_hint">Command → %1$d session(s)</string>
+    <string name="multiplexer_session_name_hint">Session name</string>
+    <string name="save_workspace_name_hint">Workspace name</string>
+    <string name="macro_name_hint">Macro name</string>
+    <string name="snippet_variable_default_hint">Enter value for %1$s</string>
+    <string name="search_snippets_hint">Search snippets…</string>
+
+    <!-- Connection edit activity dialogs -->
+    <string name="paste_ssh_key_hint">Paste your private key here (PEM format)</string>
+    <string name="key_generate_name_hint">Enter key name (e.g., \'My Server Key\')</string>
+    <string name="key_passphrase_hint">Key passphrase</string>
+    <string name="key_import_name_hint">Key name</string>
+    <string name="group_name_hint">Group name (e.g., Work Servers, Home Lab)</string>
+    <string name="port_knock_sequence_hint">7000:TCP,8000:TCP,9000:UDP</string>
+
+    <!-- Connections fragment dialogs -->
+    <string name="group_rename_hint">Group name</string>
     <string name="docker_run_advanced">Advanced: edit raw run.yml</string>
     <string name="docker_run_raw_hint">run.yml</string>
     <string name="docker_run_error_image">Enter an image</string>
@@ -464,15 +552,24 @@
     <string name="docker_pull_done">Pull complete</string>
     <string name="docker_pull_failed">Pull failed: %1$s</string>
     <string name="docker_registry_title">Registry Credentials</string>
-    <string name="docker_registry_empty">No registry credentials</string>
+    <string name="docker_registry_description">The auto-update checker queries registries directly from this device (HEAD /v2 manifest requests). Add a credential for private registries, private Docker Hub repositories, or to avoid Docker Hub anonymous rate limits.</string>
+    <string name="docker_registry_empty">No registry credentials yet. Public images on registries without rate limits work without any.</string>
     <string name="docker_registry_add">Add credential</string>
-    <string name="docker_registry_host_hint">Registry host (e.g. ghcr.io)</string>
+    <string name="docker_registry_edit_title">Edit credential</string>
+    <string name="docker_registry_host_hint">Registry host</string>
+    <string name="docker_registry_host_helper">Hostname only, e.g. ghcr.io — use docker.io for Docker Hub</string>
     <string name="docker_registry_username_hint">Username</string>
+    <string name="docker_registry_username_helper">Not needed for bearer-token or anonymous access</string>
     <string name="docker_registry_secret_hint">Password / token</string>
+    <string name="docker_registry_secret_helper">Encrypted in the Android Keystore — never stored in the database</string>
+    <string name="docker_registry_secret_keep_helper">Leave blank to keep the current secret</string>
     <string name="docker_registry_auth_type_hint">Auth type</string>
+    <string name="docker_registry_auth_basic">Basic (username + password)</string>
+    <string name="docker_registry_auth_token">Bearer token</string>
+    <string name="docker_registry_auth_anonymous">Anonymous (no credentials)</string>
     <string name="docker_registry_error_host">Enter a registry host</string>
     <string name="docker_registry_saved">Credential saved</string>
-    <string name="docker_registry_delete_message">Delete the credential for %1$s?</string>
+    <string name="docker_registry_delete_message">Delete the credential for %1$s? Update checks against this registry fall back to anonymous access.</string>
     <string name="docker_policy_title">Auto-update policy</string>
     <string name="docker_policy_enabled">Check for updates</string>
     <string name="docker_policy_auto_recreate">Auto-recreate on update</string>
@@ -500,4 +597,29 @@
     <string name="restore_mode_merge">Merge with existing</string>
     <string name="restore_mode_replace">Replace everything (exact snapshot)</string>
     <string name="restore_mode_continue">Continue</string>
+
+    <!-- Identities fragment dialogs -->
+    <string name="identity_export_passphrase_hint">Passphrase (leave blank for unencrypted)</string>
+    <string name="identity_cert_paste_hint">Paste *-cert.pub line (e.g. ssh-rsa-cert-v01@openssh.com AAAA…)</string>
+    <string name="identity_rename_key_hint">Enter new name</string>
+    <string name="identity_key_paste_hint">Paste your private key here (PEM format)</string>
+    <string name="identity_key_generate_name_hint">Key name (e.g. my-server-key)</string>
+    <string name="identity_import_name_hint">Display name</string>
+    <string name="identity_import_name_helper">Shown in the key list</string>
+    <string name="identity_import_alias_hint">SSH alias (e.g. id_ed25519)</string>
+    <string name="identity_import_alias_helper">Matches IdentityFile in ~/.ssh/config</string>
+    <string name="identity_import_passphrase_hint">Enter passphrase</string>
+
+    <!-- SFTP activity dialogs -->
+    <string name="sftp_create_folder_hint">Folder name</string>
+    <string name="sftp_rename_file_hint">New name</string>
+
+    <!-- Hypervisor manager create-snapshot dialogs -->
+    <string name="libvirt_snapshot_name_hint">Snapshot name</string>
+    <string name="vmware_snapshot_name_hint">Snapshot name</string>
+    <string name="xcpng_snapshot_name_hint">Snapshot name</string>
+    <string name="proxmox_snapshot_name_hint">Snapshot name</string>
+
+    <!-- Import from QR activity -->
+    <string name="import_qr_code_hint">6-digit code</string>
 </resources>

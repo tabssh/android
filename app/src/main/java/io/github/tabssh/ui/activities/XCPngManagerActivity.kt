@@ -16,6 +16,7 @@ import io.github.tabssh.hypervisor.xcpng.XCPngApiClient
 import io.github.tabssh.hypervisor.xcpng.XenOrchestraApiClient
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.HypervisorType
+import io.github.tabssh.ui.dialogs.DialogFields
 import io.github.tabssh.ui.tabs.HypervisorConsoleType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -888,14 +889,18 @@ class XCPngManagerActivity : AppCompatActivity() {
      * Show create snapshot dialog
      */
     private fun showCreateSnapshotDialog(vm: XCPngApiClient.XenVM, parentDialog: androidx.appcompat.app.AlertDialog) {
-        val input = EditText(this)
-        input.hint = "Snapshot name"
-        input.setText("Snapshot ${System.currentTimeMillis()}")
-        
+        val form = DialogFields.form(this)
+        val input = DialogFields.addText(
+            form,
+            hint = getString(R.string.xcpng_snapshot_name_hint),
+            initial = "Snapshot ${System.currentTimeMillis()}",
+            monospace = true
+        )
+
         MaterialAlertDialogBuilder(this)
             .setTitle("Create Snapshot")
             .setMessage("Enter a name for the snapshot of ${vm.name}")
-            .setView(input)
+            .setView(form.root)
             .setPositiveButton("Create") { _, _ ->
                 val name = input.text.toString()
                 lifecycleScope.launch {

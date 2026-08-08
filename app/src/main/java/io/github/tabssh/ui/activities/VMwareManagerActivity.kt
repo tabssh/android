@@ -6,7 +6,6 @@ import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
-import android.widget.EditText
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -25,6 +24,7 @@ import io.github.tabssh.hypervisor.vmware.VMwareApiClient
 import io.github.tabssh.storage.database.SystemGroupHelper
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HypervisorProfile
+import io.github.tabssh.ui.dialogs.DialogFields
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.replaceAllWithDiff
 import io.github.tabssh.utils.showError
@@ -537,14 +537,18 @@ class VMwareManagerActivity : AppCompatActivity() {
      * Show create snapshot dialog
      */
     private fun showCreateSnapshotDialog(vm: VMwareApiClient.VMwareVM, parentDialog: AlertDialog) {
-        val input = EditText(this)
-        input.hint = "Snapshot name"
-        input.setText("Snapshot ${System.currentTimeMillis()}")
+        val form = DialogFields.form(this)
+        val input = DialogFields.addText(
+            form,
+            hint = getString(R.string.vmware_snapshot_name_hint),
+            initial = "Snapshot ${System.currentTimeMillis()}",
+            monospace = true
+        )
 
         MaterialAlertDialogBuilder(this)
             .setTitle("Create Snapshot")
             .setMessage("Enter a name for the snapshot of ${vm.name}")
-            .setView(input)
+            .setView(form.root)
             .setPositiveButton("Create") { _, _ ->
                 val name = input.text.toString().trim()
                 if (name.isEmpty()) {

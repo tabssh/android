@@ -12,10 +12,11 @@ import androidx.viewpager2.widget.ViewPager2
 import io.github.tabssh.R
 
 /**
- * Combined "Infra" tab that hosts Hypervisors, Cloud Accounts, and Docker
- * Hosts as sub-tabs within a single main-tab slot. This replaces the
+ * Combined "Infra" tab that hosts Docker Hosts, Hypervisors, and Cloud
+ * Accounts as sub-tabs within a single main-tab slot. This replaces the
  * standalone "VMs" tab (HypervisorsFragment) and the Cloud Accounts drawer
- * entry; Docker was added in Phase 4.
+ * entry; Docker was added in Phase 4 and leads the order as the most-used
+ * section.
  */
 class InfraFragment : Fragment() {
 
@@ -41,9 +42,9 @@ class InfraFragment : Fragment() {
 
         TabLayoutMediator(tabLayout, viewPager) { tab, position ->
             tab.text = when (position) {
-                0 -> "Hypervisors"
-                1 -> "Cloud"
-                2 -> getString(R.string.docker_tab_title)
+                0 -> getString(R.string.docker_tab_title)
+                1 -> getString(R.string.infra_tab_hypervisors)
+                2 -> getString(R.string.infra_tab_cloud)
                 else -> ""
             }
         }.attach()
@@ -53,9 +54,9 @@ class InfraFragment : Fragment() {
         override fun getItemCount(): Int = 3
 
         override fun createFragment(position: Int): Fragment = when (position) {
-            0 -> HypervisorsFragment.newInstance()
-            1 -> CloudAccountsFragment.newInstance()
-            2 -> DockerHostsFragment.newInstance()
+            0 -> DockerHostsFragment.newInstance()
+            1 -> HypervisorsFragment.newInstance()
+            2 -> CloudAccountsFragment.newInstance()
             else -> error("Invalid Infra sub-tab position $position")
         }
     }

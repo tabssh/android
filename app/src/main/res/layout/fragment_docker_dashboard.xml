@@ -12,11 +12,11 @@
         android:orientation="vertical"
         android:padding="@dimen/space_md">
 
-        <!-- Loading Progress -->
+        <!-- Loading indicator, shown while the engine summary refreshes -->
         <ProgressBar
             android:id="@+id/progress_bar"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_width="@dimen/loading_indicator_size"
+            android:layout_height="@dimen/loading_indicator_size"
             android:layout_gravity="center_horizontal"
             android:layout_marginTop="@dimen/space_xl"
             android:visibility="gone" />

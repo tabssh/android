@@ -5,52 +5,59 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- Main Content -->
-    <LinearLayout
+    <!-- List -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recycler_list"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical">
+        android:clipToPadding="false"
+        android:padding="@dimen/space_md"
+        android:scrollbars="vertical" />
 
-        <!-- List -->
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/recycler_list"
+    <!-- Empty state: per-resource icon + title + hint, wired by each fragment -->
+    <LinearLayout
+        android:id="@+id/empty_state"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="@dimen/space_xl"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/image_empty"
+            android:layout_width="@dimen/icon_size_xlarge"
+            android:layout_height="@dimen/icon_size_xlarge"
+            android:layout_marginBottom="@dimen/space_md"
+            android:importantForAccessibility="no"
+            app:tint="?attr/colorOnSurfaceVariant" />
+
+        <TextView
+            android:id="@+id/text_empty"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:clipToPadding="false"
-            android:padding="@dimen/space_md"
-            android:scrollbars="vertical" />
-
-        <!-- Empty State -->
-        <LinearLayout
-            android:id="@+id/empty_state"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:padding="@dimen/space_xl"
-            android:visibility="gone">
-
-            <TextView
-                android:id="@+id/text_empty"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textSize="14sp"
-                android:gravity="center"
-                android:textColor="?attr/colorOnSurfaceVariant" />
-
-        </LinearLayout>
-
-        <!-- Loading Progress -->
-        <ProgressBar
-            android:id="@+id/progress_bar"
-            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:visibility="gone" />
+            android:gravity="center"
+            android:textSize="@dimen/text_size_subtitle"
+            android:textColor="?attr/colorOnSurface" />
+
+        <TextView
+            android:id="@+id/text_empty_hint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_sm"
+            android:gravity="center"
+            android:textSize="@dimen/text_size_body"
+            android:textColor="?attr/colorOnSurfaceVariant" />
 
     </LinearLayout>
+
+    <!-- Loading indicator, centered over the content while a refresh runs -->
+    <ProgressBar
+        android:id="@+id/progress_bar"
+        android:layout_width="@dimen/loading_indicator_size"
+        android:layout_height="@dimen/loading_indicator_size"
+        android:layout_gravity="center"
+        android:visibility="gone" />
 
     <!-- FAB (hidden by fragments that have no add action) -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton

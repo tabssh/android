@@ -18,6 +18,7 @@ import io.github.tabssh.sftp.SFTPManager
 import io.github.tabssh.sftp.TransferTask
 import io.github.tabssh.sftp.TransferListener
 import io.github.tabssh.ui.adapters.FileAdapter
+import io.github.tabssh.ui.dialogs.DialogFields
 import io.github.tabssh.ui.adapters.TransferAdapter
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.replaceAllWithDiff
@@ -604,11 +605,11 @@ class SFTPActivity : AppCompatActivity() {
     
     private fun showCreateFolderDialog() {
         val builder = androidx.appcompat.app.AlertDialog.Builder(this)
-        val input = android.widget.EditText(this)
-        input.hint = "Folder name"
-        
+        val form = DialogFields.form(this)
+        val input = DialogFields.addText(form, getString(R.string.sftp_create_folder_hint))
+
         builder.setTitle("Create Folder")
-            .setView(input)
+            .setView(form.root)
             .setPositiveButton("Create") { _, _ ->
                 val folderName = input.text.toString().trim()
                 if (folderName.isNotEmpty()) {
@@ -1057,13 +1058,14 @@ class SFTPActivity : AppCompatActivity() {
     
     private fun renameRemoteFile(file: RemoteFileInfo) {
         val builder = androidx.appcompat.app.AlertDialog.Builder(this)
-        val input = android.widget.EditText(this).apply {
-            setText(file.name)
-            selectAll()
-        }
-        
+        val form = DialogFields.form(this)
+        val input = DialogFields.addText(
+            form, getString(R.string.sftp_rename_file_hint), initial = file.name
+        )
+        input.selectAll()
+
         builder.setTitle("Rename ${file.name}")
-            .setView(input)
+            .setView(form.root)
             .setPositiveButton("Rename") { _, _ ->
                 val newName = input.text.toString().trim()
                 if (newName.isNotEmpty() && newName != file.name) {

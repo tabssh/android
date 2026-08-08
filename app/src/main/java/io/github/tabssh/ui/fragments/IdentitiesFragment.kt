@@ -5,7 +5,6 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.net.Uri
 import android.os.Bundle
-import android.text.InputType
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -24,6 +23,7 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import io.github.tabssh.R
+import io.github.tabssh.ui.dialogs.DialogFields
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.crypto.keys.GenerateResult
 import io.github.tabssh.crypto.keys.ImportResult
@@ -1043,14 +1043,14 @@ class IdentitiesFragment : Fragment() {
     }
 
     private fun showExportPrivateKeyDialog(key: StoredKey) {
-        val passphraseEdit = android.widget.EditText(requireContext()).apply {
-            hint = "Passphrase (leave blank for unencrypted)"
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-        }
+        val form = DialogFields.form(requireContext())
+        val passphraseEdit = DialogFields.addSecret(
+            form, getString(R.string.identity_export_passphrase_hint)
+        )
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Export Private Key")
             .setMessage("Enter a passphrase to encrypt the exported key, or leave blank to export without encryption.")
-            .setView(passphraseEdit)
+            .setView(form.root)
             .setPositiveButton("Export") { _, _ ->
                 val passphrase = passphraseEdit.text.toString().takeIf { it.isNotEmpty() }
                 triggerPrivateKeyExport(key, passphrase)
@@ -1096,15 +1096,14 @@ class IdentitiesFragment : Fragment() {
 
     /** Show a paste dialog pre-filled with clipboard if it looks like a cert. */
     private fun showPasteCertDialog(key: StoredKey) {
-        val edit = android.widget.EditText(requireContext()).apply {
-            hint = "Paste *-cert.pub line (e.g. ssh-rsa-cert-v01@openssh.com AAAA…)"
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
-            minLines = 4
-            maxLines = 8
-        }
+        val form = DialogFields.form(requireContext())
+        val edit = DialogFields.addMultiline(
+            form, getString(R.string.identity_cert_paste_hint),
+            minLines = 4, maxLines = 8, monospace = true
+        )
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Attach OpenSSH Certificate")
-            .setView(edit)
+            .setView(form.root)
             .setPositiveButton("Attach") { _, _ ->
                 val cert = edit.text.toString().trim()
                 if (validateCert(cert)) setKeyCert(key, cert, "Certificate attached")
@@ -1137,14 +1136,14 @@ class IdentitiesFragment : Fragment() {
     }
 
     private fun showRenameKeyDialog(key: StoredKey) {
-        val edit = android.widget.EditText(requireContext()).apply {
-            setText(key.name)
-            hint = "Enter new name"
-            selectAll()
-        }
+        val form = DialogFields.form(requireContext())
+        val edit = DialogFields.addText(
+            form, getString(R.string.identity_rename_key_hint), initial = key.name
+        )
+        edit.selectAll()
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Rename SSH Key")
-            .setView(edit)
+            .setView(form.root)
             .setPositiveButton("Rename") { _, _ ->
                 val newName = edit.text.toString().trim()
                 if (newName.isNotBlank() && newName != key.name) renameKey(key, newName)
@@ -1166,15 +1165,14 @@ class IdentitiesFragment : Fragment() {
     }
 
     private fun showKeyPasteDialog() {
-        val edit = android.widget.EditText(requireContext()).apply {
-            hint = "Paste your private key here (PEM format)"
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
-            minLines = 10
-            maxLines = 20
-        }
+        val form = DialogFields.form(requireContext())
+        val edit = DialogFields.addMultiline(
+            form, getString(R.string.identity_key_paste_hint),
+            minLines = 10, maxLines = 20, monospace = true
+        )
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Paste SSH Private Key")
-            .setView(edit)
+            .setView(form.root)
             .setPositiveButton("Next") { _, _ ->
                 val content = edit.text.toString()
                 if (content.isNotBlank()) {
@@ -1203,12 +1201,13 @@ class IdentitiesFragment : Fragment() {
             .setTitle("Generate SSH Key")
             .setSingleChoiceItems(keyTypes, selectedType) { _, which -> selectedType = which }
             .setPositiveButton("Next") { _, _ ->
-                val nameEdit = android.widget.EditText(requireContext()).apply {
-                    hint = "Key name (e.g. my-server-key)"
-                }
+                val nameForm = DialogFields.form(requireContext())
+                val nameEdit = DialogFields.addText(
+                    nameForm, getString(R.string.identity_key_generate_name_hint)
+                )
                 MaterialAlertDialogBuilder(requireContext())
                     .setTitle("Key Name")
-                    .setView(nameEdit)
+                    .setView(nameForm.root)
                     .setPositiveButton("Generate") { _, _ ->
                         val keyName = nameEdit.text.toString().trim().ifBlank { "generated-key" }
                         val (type, size) = when (selectedType) {
@@ -1276,36 +1275,28 @@ class IdentitiesFragment : Fragment() {
         onConfirm: (name: String, alias: String) -> Unit
     ) {
         val ctx = requireContext()
-        val layout = android.widget.LinearLayout(ctx).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            val pad = (16 * resources.displayMetrics.density).toInt()
-            setPadding(pad, pad / 2, pad, 0)
-        }
+        val form = DialogFields.form(ctx)
 
-        val nameEdit = android.widget.EditText(ctx).apply {
-            setText(defaultName)
-            setSelection(text.length)
-            hint = "Display name"
-        }
-        val nameLabel = android.widget.TextView(ctx).apply { text = "Name (shown in key list)" }
+        val nameEdit = DialogFields.addText(
+            form,
+            hint = getString(R.string.identity_import_name_hint),
+            initial = defaultName,
+            helper = getString(R.string.identity_import_name_helper)
+        )
+        nameEdit.setSelection(nameEdit.text?.length ?: 0)
 
-        val aliasEdit = android.widget.EditText(ctx).apply {
-            setText(defaultAlias)
-            setSelection(text.length)
-            hint = "SSH alias (e.g. id_ed25519)"
-        }
-        val aliasLabel = android.widget.TextView(ctx).apply {
-            text = "Alias (matches IdentityFile in ~/.ssh/config)"
-        }
-
-        layout.addView(nameLabel)
-        layout.addView(nameEdit)
-        layout.addView(aliasLabel)
-        layout.addView(aliasEdit)
+        val aliasEdit = DialogFields.addText(
+            form,
+            hint = getString(R.string.identity_import_alias_hint),
+            initial = defaultAlias,
+            helper = getString(R.string.identity_import_alias_helper),
+            monospace = true
+        )
+        aliasEdit.setSelection(aliasEdit.text?.length ?: 0)
 
         MaterialAlertDialogBuilder(ctx)
             .setTitle("Import SSH Key")
-            .setView(layout)
+            .setView(form.root)
             .setPositiveButton("Import") { _, _ ->
                 val name = nameEdit.text.toString().trim().ifBlank { defaultName }
                 val alias = aliasEdit.text.toString().trim().ifBlank { defaultAlias }
@@ -1351,14 +1342,12 @@ class IdentitiesFragment : Fragment() {
     }
 
     private fun showPassphraseDialog(keyContent: String, filename: String, keyAlias: String? = null) {
-        val edit = android.widget.EditText(requireContext()).apply {
-            hint = "Enter passphrase"
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-        }
+        val form = DialogFields.form(requireContext())
+        val edit = DialogFields.addSecret(form, getString(R.string.identity_import_passphrase_hint))
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Encrypted Key")
             .setMessage("This key is encrypted. Enter the passphrase to import it.")
-            .setView(edit)
+            .setView(form.root)
             .setPositiveButton("Import") { _, _ ->
                 val passphrase = edit.text.toString()
                 importKeyWithPassphrase(keyContent, filename, passphrase, keyAlias)

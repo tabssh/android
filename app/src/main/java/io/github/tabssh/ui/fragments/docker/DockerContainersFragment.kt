@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -57,6 +58,8 @@ class DockerContainersFragment : DockerPageFragment() {
         fabAction = view.findViewById(R.id.fab_action)
 
         textEmpty.setText(R.string.docker_containers_empty)
+        view.findViewById<TextView>(R.id.text_empty_hint).setText(R.string.docker_containers_empty_hint)
+        view.findViewById<ImageView>(R.id.image_empty).setImageResource(R.drawable.ic_docker_container)
         fabAction.contentDescription = getString(R.string.docker_new_container_config_desc)
 
         adapter = DockerContainerAdapter()

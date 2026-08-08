@@ -165,28 +165,40 @@ EngineApiTransport; new mode "api_stdio"; legacy pinned "api_socat"
 falls back to auto detection; tier order streamlocal → dial-stdio →
 cli_exec. Agent implementing.
 
-### E. Infra tab reorder + UI/UX polish
-Reorder infra tab sections to Docker → Hypervisors → Cloud; polish
-UI/UX across the app with specific attention to the cloud section.
-Designer-level pass (designer agent). Additional user-flagged items:
-- Registry credentials UI must explain WHAT they are for (on-device
-  registry digest checks for the auto-update checker — HEAD /v2
-  manifest calls from the phone; needed for private registries and
-  Docker Hub rate limits/private repos) — helper/description text in
-  the credentials list and add dialog
-- RegistryCredentialDialog add/edit flow needs full polish (currently
-  bare-bones)
-- Screenshot evidence (pste.us/raw/dnaTE0LS, Docker host manager):
-  Add-credential dialog uses bare EditTexts in a programmatic
-  AlertDialog — convert to Material TextInputLayouts (outlined,
-  floating labels, helper text); auth type is a FREE-TEXT field
-  ("basic") — must be a dropdown/exposed menu (Basic/Bearer);
-  password/token field unmasked, needs inputType + visibility
-  toggle; first tab in the Docker manager tab bar renders with NO
-  label (blank selected tab left of Containers) — bug; empty
-  content pane shows a stray tiny dot (mis-sized progress
-  indicator?) and has no empty-state message. Sweep ALL similar
-  programmatic dialogs app-wide for the same bare-EditText pattern
+### E. Infra tab reorder + UI/UX polish — DONE (2026-08-08, pending commit)
+Completed by the designer agent; awaiting `make check` + commit by the
+main instance:
+- Infra tabs reordered to Docker → Hypervisors → Cloud (InfraFragment)
+- Registry credentials: list and editor dialogs now explain the
+  purpose (on-device HEAD /v2 digest checks by the auto-update
+  checker); editor rebuilt with outlined TextInputLayouts, auth-type
+  exposed dropdown (Basic / Bearer token / Anonymous wire values
+  preserved), masked secret with visibility toggle, inline host
+  validation that no longer dismisses the dialog on error
+- Docker manager: fragment_docker_list/hosts/dashboard progress
+  indicators sized 48dp and centered (stray-dot fix); list empty
+  states now icon + title + hint (new ic_docker_container/image/
+  volume/network/stack drawables)
+- Cloud section: all dialogs on MaterialAlertDialogBuilder; OCI
+  credentials dialog rebuilt on DialogFields (monospace OCIDs,
+  masked passphrase, per-field inline required errors); every
+  hardcoded string extracted to cloud_* resources incl. plurals
+- App-wide bare-EditText dialog sweep via shared DialogFields
+  helper: TabTerminalActivity (7), ConnectionEditActivity (6),
+  ConnectionsFragment (1), IdentitiesFragment (7), SFTPActivity (2),
+  MultiHostDashboardActivity (2), ImportFromQrActivity (1),
+  Libvirt/VMware/XCPng/Proxmox manager dialogs; passphrase/password
+  prompts now masked. Deliberately left: PinLockActivity pin field,
+  RemoteFileEditorActivity editor, ThemeEditorActivity in-activity
+  fields, PaletteDialog live filter box (none are dialogs)
+- Blank-first-tab bug needed no code change (fixed earlier via
+  themes.xml tabSelectedTextColor)
+
+Remaining follow-up (logged, not done): hardcoded dialog titles/
+button labels predating this task in TabTerminalActivity and
+ConnectionEditActivity dialogs, and the emoji empty-state glyphs in
+fragment_cloud_accounts.xml / fragment_docker_hosts.xml (deliberate
+style, revisit only if a full icon pass is wanted).
 
 ## Needs verification
 

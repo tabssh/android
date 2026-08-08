@@ -1847,15 +1847,14 @@ class ConnectionEditActivity : AppCompatActivity() {
     }
 
     private fun pasteKey() {
-        val editText = android.widget.EditText(this).apply {
-            hint = "Paste your private key here (PEM format)"
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
-            minLines = 10
-            maxLines = 20
-        }
+        val form = io.github.tabssh.ui.dialogs.DialogFields.form(this)
+        val editText = io.github.tabssh.ui.dialogs.DialogFields.addMultiline(
+            form, hint = getString(R.string.paste_ssh_key_hint),
+            minLines = 10, maxLines = 20, monospace = true
+        )
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Paste SSH Private Key")
-            .setView(editText)
+            .setView(form.root)
             .setPositiveButton("Next") { _, _ ->
                 val keyContent = editText.text.toString().trim()
                 if (keyContent.isNotEmpty()) {
@@ -1899,21 +1898,22 @@ class ConnectionEditActivity : AppCompatActivity() {
     }
 
     private fun showKeyNamingDialog(keyType: KeyType, keySize: Int) {
-        val editText = android.widget.EditText(this).apply {
-            hint = "Enter key name (e.g., 'My Server Key')"
-            val keyName = when (keyType) {
-                KeyType.RSA -> "RSA ${keySize}-bit"
-                KeyType.ECDSA -> "ECDSA P-${keySize}"
-                KeyType.ED25519 -> "Ed25519"
-                KeyType.DSA -> "DSA ${keySize}-bit"
-            }
-            setText("Generated $keyName Key")
-            selectAll()
+        val keyName = when (keyType) {
+            KeyType.RSA -> "RSA ${keySize}-bit"
+            KeyType.ECDSA -> "ECDSA P-${keySize}"
+            KeyType.ED25519 -> "Ed25519"
+            KeyType.DSA -> "DSA ${keySize}-bit"
         }
+        val form = io.github.tabssh.ui.dialogs.DialogFields.form(this)
+        val editText = io.github.tabssh.ui.dialogs.DialogFields.addText(
+            form, hint = getString(R.string.key_generate_name_hint),
+            initial = "Generated $keyName Key"
+        )
+        editText.selectAll()
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Name Your Key")
             .setMessage("Give your new SSH key a descriptive name.")
-            .setView(editText)
+            .setView(form.root)
             .setPositiveButton("Generate Key") { _, _ ->
                 val keyName = editText.text.toString().trim()
                 if (keyName.isNotEmpty()) generateKeyPair(keyType, keySize, keyName)
@@ -2007,19 +2007,14 @@ class ConnectionEditActivity : AppCompatActivity() {
     }
 
     private fun showKeyPassphraseDialog(keyContent: String, filename: String) {
-        val passphraseInput = android.widget.EditText(this).apply {
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-            hint = "Key passphrase"
-        }
-        val layout = android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(50, 40, 50, 10)
-            addView(passphraseInput)
-        }
+        val form = io.github.tabssh.ui.dialogs.DialogFields.form(this)
+        val passphraseInput = io.github.tabssh.ui.dialogs.DialogFields.addSecret(
+            form, hint = getString(R.string.key_passphrase_hint)
+        )
         android.app.AlertDialog.Builder(this)
             .setTitle("🔐 Encrypted SSH Key")
             .setMessage("This key is encrypted. Enter passphrase to decrypt.")
-            .setView(layout)
+            .setView(form.root)
             .setPositiveButton("Import") { _, _ ->
                 val passphrase = passphraseInput.text.toString()
                 if (passphrase.isEmpty()) { showToast("Passphrase is required"); return@setPositiveButton }
@@ -2162,15 +2157,15 @@ class ConnectionEditActivity : AppCompatActivity() {
     }
 
     private fun promptForKeyName(suggestion: String, onConfirm: (String) -> Unit) {
-        val edit = android.widget.EditText(this).apply {
-            setText(suggestion)
-            setSelection(text.length)
-            hint = "Key name"
-        }
+        val form = io.github.tabssh.ui.dialogs.DialogFields.form(this)
+        val edit = io.github.tabssh.ui.dialogs.DialogFields.addText(
+            form, hint = getString(R.string.key_import_name_hint), initial = suggestion
+        )
+        edit.setSelection(edit.text?.length ?: 0)
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Name this key")
             .setMessage("This is the label TabSSH will show in the keys list.")
-            .setView(edit)
+            .setView(form.root)
             .setPositiveButton("Import") { _, _ ->
                 val name = edit.text.toString().trim().ifBlank { suggestion }
                 onConfirm(name)
@@ -2180,14 +2175,15 @@ class ConnectionEditActivity : AppCompatActivity() {
     }
 
     private fun showGroupSelectionDialog() {
-        val editText = android.widget.EditText(this).apply {
-            hint = "Group name (e.g., Work Servers, Home Lab)"
-            setText(if (selectedGroupName == "No Group") "" else selectedGroupName)
-        }
+        val form = io.github.tabssh.ui.dialogs.DialogFields.form(this)
+        val editText = io.github.tabssh.ui.dialogs.DialogFields.addText(
+            form, hint = getString(R.string.group_name_hint),
+            initial = if (selectedGroupName == "No Group") "" else selectedGroupName
+        )
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Set Connection Group")
             .setMessage("Organize your connections into groups.\n\nLeave empty for 'No Group'.")
-            .setView(editText)
+            .setView(form.root)
             .setPositiveButton("Set") { _, _ ->
                 val groupName = editText.text.toString().trim()
                 if (groupName.isEmpty()) {
@@ -2413,27 +2409,21 @@ class ConnectionEditActivity : AppCompatActivity() {
     }
 
     private fun showPortKnockConfigDialog() {
-        val dialogView = android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(50, 40, 50, 10)
-        }
+        val form = io.github.tabssh.ui.dialogs.DialogFields.form(this)
         val textView = android.widget.TextView(this).apply {
             text = "Enter port knock sequence (format: port:protocol, comma-separated)\nExample: 7000:TCP,8000:TCP,9000:UDP"
             textSize = 14f
         }
-        dialogView.addView(textView)
-        val editText = android.widget.EditText(this).apply {
-            hint = "7000:TCP,8000:TCP,9000:UDP"
-            setSingleLine(false)
-            maxLines = 3
-        }
-        dialogView.addView(editText)
+        form.column.addView(textView, 0)
         // Pre-fill with any previously entered sequence.
-        pendingKnockSequence?.let { editText.setText(it) }
+        val editText = io.github.tabssh.ui.dialogs.DialogFields.addMultiline(
+            form, hint = getString(R.string.port_knock_sequence_hint),
+            initial = pendingKnockSequence, minLines = 1, maxLines = 3, monospace = true
+        )
 
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Port Knock Sequence")
-            .setView(dialogView)
+            .setView(form.root)
             .setPositiveButton("Save") { _, _ ->
                 val sequence = editText.text.toString().trim()
                 pendingKnockSequence = sequence.ifBlank { null }

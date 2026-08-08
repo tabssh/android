@@ -6,7 +6,6 @@ import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
-import android.widget.EditText
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -28,6 +27,7 @@ import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.storage.database.SystemGroupHelper
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HypervisorProfile
+import io.github.tabssh.ui.dialogs.DialogFields
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.replaceAllWithDiff
 import kotlinx.coroutines.Dispatchers
@@ -608,14 +608,18 @@ class LibvirtManagerActivity : AppCompatActivity() {
      * is validated before the command is sent.
      */
     private fun showCreateSnapshotDialog(vm: LibvirtVm, client: LibvirtApiClient, parentDialog: AlertDialog) {
-        val input = EditText(this)
-        input.hint = "Snapshot name"
-        input.setText("snapshot-${System.currentTimeMillis()}")
+        val form = DialogFields.form(this)
+        val input = DialogFields.addText(
+            form,
+            hint = getString(R.string.libvirt_snapshot_name_hint),
+            initial = "snapshot-${System.currentTimeMillis()}",
+            monospace = true
+        )
 
         AlertDialog.Builder(this)
             .setTitle("Create Snapshot")
             .setMessage("Enter a name for the snapshot of ${vm.name}")
-            .setView(input)
+            .setView(form.root)
             .setPositiveButton("Create") { _, _ ->
                 val name = input.text.toString().trim()
                 if (name.isEmpty()) {

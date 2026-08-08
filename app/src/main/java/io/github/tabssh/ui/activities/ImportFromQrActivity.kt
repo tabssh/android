@@ -7,7 +7,6 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.text.InputType
 import android.view.View
-import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -27,6 +26,7 @@ import io.github.tabssh.pairing.PairingDecryptor
 import io.github.tabssh.pairing.PairingImporter
 import io.github.tabssh.pairing.PairingPayload
 import io.github.tabssh.pairing.PairingResult
+import io.github.tabssh.ui.dialogs.DialogFields
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -119,9 +119,10 @@ class ImportFromQrActivity : AppCompatActivity() {
     private fun promptForCode() {
         statusText.text = "Enter the 6-digit code shown on your desktop."
 
-        val edit = EditText(this).apply {
-            inputType = InputType.TYPE_CLASS_NUMBER
-            hint = "6-digit code"
+        val form = DialogFields.form(this)
+        val edit = DialogFields.addText(
+            form, getString(R.string.import_qr_code_hint), inputType = InputType.TYPE_CLASS_NUMBER
+        ).apply {
             setSelectAllOnFocus(true)
             // Soft keyboard hint; doesn't enforce length (we validate on confirm).
             filters = arrayOf(android.text.InputFilter.LengthFilter(6))
@@ -134,7 +135,7 @@ class ImportFromQrActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("Enter pairing code")
             .setMessage("Type the 6-digit code shown by TabSSH on your desktop.$attemptsHint")
-            .setView(edit)
+            .setView(form.root)
             .setPositiveButton("Decrypt") { _, _ ->
                 val code = edit.text.toString().trim()
                 if (code.length != 6 || !code.all { it.isDigit() }) {

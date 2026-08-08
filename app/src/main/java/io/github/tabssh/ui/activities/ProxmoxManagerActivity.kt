@@ -24,6 +24,7 @@ import io.github.tabssh.hypervisor.proxmox.ProxmoxApiClient
 import io.github.tabssh.ssh.connection.ConnectionState
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.terminal.TermuxBridge
+import io.github.tabssh.ui.dialogs.DialogFields
 import io.github.tabssh.ui.tabs.ConsoleConnectParams
 import io.github.tabssh.ui.tabs.HypervisorConsoleType
 import io.github.tabssh.utils.logging.Logger
@@ -559,15 +560,19 @@ class ProxmoxManagerActivity : AppCompatActivity() {
      * Show create snapshot dialog
      */
     private fun showCreateSnapshotDialog(vm: ProxmoxApiClient.ProxmoxVM, client: ProxmoxApiClient, parentDialog: AlertDialog) {
-        val input = android.widget.EditText(this)
-        input.hint = "Snapshot name"
+        val form = DialogFields.form(this)
         // Proxmox snapshot names must be config IDs (letter first, no spaces) — default differs from XCPng's
-        input.setText("snap${System.currentTimeMillis()}")
+        val input = DialogFields.addText(
+            form,
+            hint = getString(R.string.proxmox_snapshot_name_hint),
+            initial = "snap${System.currentTimeMillis()}",
+            monospace = true
+        )
 
         AlertDialog.Builder(this)
             .setTitle("Create Snapshot")
             .setMessage("Enter a name for the snapshot of ${vm.name}")
-            .setView(input)
+            .setView(form.root)
             .setPositiveButton("Create") { _, _ ->
                 val name = input.text.toString().trim()
                 // Proxmox rejects anything that is not a config ID; catching it here

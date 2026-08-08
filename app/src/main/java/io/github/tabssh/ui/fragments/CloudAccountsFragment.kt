@@ -16,6 +16,7 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -34,6 +35,7 @@ import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.databinding.ItemCloudAccountBinding
 import io.github.tabssh.storage.database.entities.CloudAccount
 import io.github.tabssh.ui.activities.CloudAccountManagerActivity
+import io.github.tabssh.ui.dialogs.DialogFields
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -110,7 +112,7 @@ class CloudAccountsFragment : Fragment() {
         val uri = result.data?.data
         if (uri == null) {
             if (isAdded) {
-                Toast.makeText(requireContext(), "No file selected", Toast.LENGTH_LONG).show()
+                Toast.makeText(requireContext(), R.string.cloud_no_file_selected, Toast.LENGTH_LONG).show()
                 showOciCredentialsDialog()
             }
             return@registerForActivityResult
@@ -128,7 +130,7 @@ class CloudAccountsFragment : Fragment() {
             }
             if (parsed == null) {
                 if (!isAdded) return@launch
-                Toast.makeText(requireContext(), "Could not read OCI config file — check the file and try again", Toast.LENGTH_LONG).show()
+                Toast.makeText(requireContext(), R.string.cloud_config_read_failed, Toast.LENGTH_LONG).show()
                 showOciCredentialsDialog()
                 return@launch
             }
@@ -158,7 +160,7 @@ class CloudAccountsFragment : Fragment() {
         val uri = result.data?.data
         if (uri == null) {
             if (isAdded) {
-                Toast.makeText(requireContext(), "No file selected", Toast.LENGTH_LONG).show()
+                Toast.makeText(requireContext(), R.string.cloud_no_file_selected, Toast.LENGTH_LONG).show()
                 showOciCredentialsDialog()
             }
             return@registerForActivityResult
@@ -175,7 +177,7 @@ class CloudAccountsFragment : Fragment() {
             }
             if (pem == null) {
                 if (!isAdded) return@launch
-                Toast.makeText(requireContext(), "Could not read key file — check the file and try again", Toast.LENGTH_LONG).show()
+                Toast.makeText(requireContext(), R.string.cloud_key_read_failed, Toast.LENGTH_LONG).show()
                 showOciCredentialsDialog()
                 return@launch
             }
@@ -253,12 +255,16 @@ class CloudAccountsFragment : Fragment() {
             b.textAccountName.text  = account.name
             b.textProviderDetail.text = buildString {
                 append(providerType?.displayName ?: account.provider)
-                if (account.lastCount > 0) append(" · ${account.lastCount} hosts")
+                if (account.lastCount > 0) {
+                    append(" · ")
+                    append(resources.getQuantityString(
+                        R.plurals.cloud_host_count, account.lastCount, account.lastCount))
+                }
             }
             b.textLastRefresh.text = if (account.lastRefreshAt > 0) {
-                "Last sync: ${ROW_FORMATTER.format(Date(account.lastRefreshAt))}"
+                getString(R.string.cloud_last_sync, ROW_FORMATTER.format(Date(account.lastRefreshAt)))
             } else {
-                "Never synced"
+                getString(R.string.cloud_never_synced)
             }
 
             // Detach listener BEFORE updating isChecked so DiffUtil-driven
@@ -304,24 +310,25 @@ class CloudAccountsFragment : Fragment() {
             val pt = CloudProviderType.entries[position]
             val isOci = pt == CloudProviderType.OCI
             tilToken.visibility  = if (isOci) android.view.View.GONE else android.view.View.VISIBLE
-            tvTokenHelp.text     = if (isOci) "Credentials are entered in the next step." else pt.tokenHelp
+            tvTokenHelp.text     = if (isOci) getString(R.string.cloud_oci_next_step) else pt.tokenHelp
             tilToken.helperText  = if (isOci) "" else pt.tokenHelp
         }
 
-        val dialog = AlertDialog.Builder(ctx)
-            .setTitle("Add cloud account")
+        val dialog = MaterialAlertDialogBuilder(ctx)
+            .setTitle(R.string.cloud_add_account_title)
             .setView(dialogView)
-            .setPositiveButton("Save") { _, _ -> /* overridden below */ }
-            .setNegativeButton("Cancel", null)
+            .setPositiveButton(R.string.save, null)
+            .setNegativeButton(R.string.cancel, null)
             .create()
         dialog.show()
 
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             val name = editName.text?.toString()?.trim().orEmpty()
             if (name.isBlank()) {
-                tilName.error = "Account name is required"
+                tilName.error = getString(R.string.cloud_error_name_required)
                 return@setOnClickListener
             }
+            tilName.error = null
             val selectedLabel = spinProvider.text?.toString().orEmpty()
             val providerType  = CloudProviderType.entries
                 .firstOrNull { it.displayName == selectedLabel }
@@ -336,9 +343,10 @@ class CloudAccountsFragment : Fragment() {
 
             val token = editToken.text?.toString().orEmpty()
             if (token.isBlank()) {
-                tilToken.error = "API token is required"
+                tilToken.error = getString(R.string.cloud_error_token_required)
                 return@setOnClickListener
             }
+            tilToken.error = null
             dialog.dismiss()
             saveAccount(name, providerType, token)
         }
@@ -356,51 +364,28 @@ class CloudAccountsFragment : Fragment() {
         val ctx = requireContext()
         val dp  = resources.displayMetrics.density
 
-        val scroll = android.widget.ScrollView(ctx)
-        val ll = android.widget.LinearLayout(ctx).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            val pad = (16 * dp).toInt()
-            setPadding(pad, pad, pad, pad)
-        }
-        scroll.addView(ll)
-
-        fun field(hint: String, initial: String = "", multiLine: Boolean = false, password: Boolean = false): TextInputEditText {
-            val til = TextInputLayout(ctx, null,
-                com.google.android.material.R.attr.textInputOutlinedStyle).apply {
-                this.hint = hint
-                layoutParams = android.widget.LinearLayout.LayoutParams(
-                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
-                ).also { it.bottomMargin = (8 * dp).toInt() }
-            }
-            val edit = TextInputEditText(til.context).apply {
-                layoutParams = android.widget.LinearLayout.LayoutParams(
-                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
-                )
-                inputType = when {
-                    multiLine -> android.text.InputType.TYPE_CLASS_TEXT or
-                                 android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
-                    password  -> android.text.InputType.TYPE_CLASS_TEXT or
-                                 android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-                    else      -> android.text.InputType.TYPE_CLASS_TEXT
-                }
-                if (!multiLine) setSingleLine(true)
-                if (multiLine) { minLines = 3; maxLines = 12 }
-                setText(initial)
-            }
-            til.addView(edit)
-            ll.addView(til)
-            return edit
-        }
-
-        val editTenancy     = field("Tenancy OCID  (ocid1.tenancy.oc1.…)",          initial = state.tenancy)
-        val editUser        = field("User OCID  (ocid1.user.oc1.…)",                initial = state.user)
-        val editFingerprint = field("API key fingerprint  (aa:bb:cc:…)",             initial = state.fingerprint)
-        val editRegion      = field("Region  (e.g. us-ashburn-1)",                   initial = state.region)
-        val editCompartment = field("Compartment OCID  (optional — blank = root)",   initial = state.compartment)
-        val editPem         = field("RSA private key PEM", initial = state.pem,      multiLine = true)
-        val editPassphrase  = field("Key passphrase  (optional)", initial = state.passphrase, password = true)
+        val form = DialogFields.form(ctx)
+        val editTenancy = DialogFields.addText(form,
+            getString(R.string.cloud_oci_tenancy_hint), state.tenancy,
+            getString(R.string.cloud_oci_tenancy_helper), monospace = true)
+        val editUser = DialogFields.addText(form,
+            getString(R.string.cloud_oci_user_hint), state.user,
+            getString(R.string.cloud_oci_user_helper), monospace = true)
+        val editFingerprint = DialogFields.addText(form,
+            getString(R.string.cloud_oci_fingerprint_hint), state.fingerprint,
+            getString(R.string.cloud_oci_fingerprint_helper), monospace = true)
+        val editRegion = DialogFields.addText(form,
+            getString(R.string.cloud_oci_region_hint), state.region,
+            getString(R.string.cloud_oci_region_helper), monospace = true)
+        val editCompartment = DialogFields.addText(form,
+            getString(R.string.cloud_oci_compartment_hint), state.compartment,
+            getString(R.string.cloud_oci_compartment_helper), monospace = true)
+        val editPem = DialogFields.addMultiline(form,
+            getString(R.string.cloud_oci_pem_hint), state.pem, monospace = true)
+        val editPassphrase = DialogFields.addSecret(form,
+            getString(R.string.cloud_oci_passphrase_hint), state.passphrase,
+            getString(R.string.cloud_oci_passphrase_helper))
+        val ll = form.column
 
         /** Snapshot the current field values into pendingOciState before leaving the dialog. */
         fun snapshotFields() {
@@ -417,7 +402,7 @@ class CloudAccountsFragment : Fragment() {
 
         // Button to import tenancy/user/fingerprint/region from ~/.oci/config INI file.
         val btnImportConfig = com.google.android.material.button.MaterialButton(ctx).apply {
-            text = "Import .oci/config file…"
+            text = getString(R.string.cloud_oci_import_config)
             layoutParams = android.widget.LinearLayout.LayoutParams(
                 android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
                 android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
@@ -427,7 +412,7 @@ class CloudAccountsFragment : Fragment() {
 
         // Button to import the RSA private key PEM content from the key file.
         val btnImportKey = com.google.android.material.button.MaterialButton(ctx).apply {
-            text = "Import .pem key file…"
+            text = getString(R.string.cloud_oci_import_key)
             layoutParams = android.widget.LinearLayout.LayoutParams(
                 android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
                 android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
@@ -435,11 +420,11 @@ class CloudAccountsFragment : Fragment() {
         }
         ll.addView(btnImportKey)
 
-        val dialog = AlertDialog.Builder(ctx)
-            .setTitle("OCI credentials — ${state.accountName}")
-            .setView(scroll)
-            .setPositiveButton("Save") { _, _ -> /* overridden below */ }
-            .setNegativeButton("Cancel", null)
+        val dialog = MaterialAlertDialogBuilder(ctx)
+            .setTitle(getString(R.string.cloud_oci_title, state.accountName))
+            .setView(form.root)
+            .setPositiveButton(R.string.save, null)
+            .setNegativeButton(R.string.cancel, null)
             .create()
         dialog.show()
 
@@ -470,13 +455,19 @@ class CloudAccountsFragment : Fragment() {
             val pem         = editPem.text?.toString()?.trim().orEmpty()
             val passphrase  = editPassphrase.text?.toString().orEmpty()
 
-            if (tenancy.isBlank() || user.isBlank() || fingerprint.isBlank() ||
-                    region.isBlank() || pem.isBlank()) {
-                Toast.makeText(ctx,
-                    "Tenancy, User, Fingerprint, Region, and PEM key are required",
-                    Toast.LENGTH_LONG).show()
-                return@setOnClickListener
+            // Mark every missing required field inline instead of a single toast.
+            var valid = true
+            listOf(editTenancy to tenancy, editUser to user, editFingerprint to fingerprint,
+                editRegion to region, editPem to pem).forEach { (edit, value) ->
+                val til = DialogFields.layoutOf(edit)
+                if (value.isBlank()) {
+                    til?.error = getString(R.string.cloud_error_field_required)
+                    valid = false
+                } else {
+                    til?.error = null
+                }
             }
+            if (!valid) return@setOnClickListener
 
             val tokenJson = org.json.JSONObject()
                 .put("tenancy",     tenancy)
@@ -516,7 +507,7 @@ class CloudAccountsFragment : Fragment() {
                         if (!stored) {
                             // Roll back the name change so the record stays consistent.
                             app.database.cloudAccountDao().update(existing)
-                            throw Exception("Credential storage failed — check device security settings (screen lock required)")
+                            throw Exception(getString(R.string.cloud_credential_storage_failed))
                         }
                     } else {
                         val account = CloudAccount(name = name, provider = CloudProviderType.OCI.tag)
@@ -528,17 +519,22 @@ class CloudAccountsFragment : Fragment() {
                         if (!stored) {
                             // Roll back the DB insert so there is no orphaned account row.
                             app.database.cloudAccountDao().delete(account)
-                            throw Exception("Credential storage failed — check device security settings (screen lock required)")
+                            throw Exception(getString(R.string.cloud_credential_storage_failed))
                         }
                     }
                 }
                 if (!isAdded) return@launch
-                val verb = if (existing != null) "Updated" else "Saved"
-                Toast.makeText(requireContext(), "$verb '$name'", Toast.LENGTH_SHORT).show()
+                val message = if (existing != null) {
+                    getString(R.string.cloud_updated, name)
+                } else {
+                    getString(R.string.cloud_saved, name)
+                }
+                Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Logger.e(TAG, "OCI account save failed", e)
                 if (!isAdded) return@launch
-                Toast.makeText(requireContext(), "Save failed: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(requireContext(),
+                    getString(R.string.cloud_save_failed, e.message), Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -557,11 +553,13 @@ class CloudAccountsFragment : Fragment() {
                     )
                 }
                 if (!isAdded) return@launch
-                Toast.makeText(requireContext(), "Saved '${account.name}'", Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(),
+                    getString(R.string.cloud_saved, account.name), Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Logger.e(TAG, "Save cloud account failed", e)
                 if (!isAdded) return@launch
-                Toast.makeText(requireContext(), "Save failed: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(requireContext(),
+                    getString(R.string.cloud_save_failed, e.message), Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -588,13 +586,18 @@ class CloudAccountsFragment : Fragment() {
                 if (!isAdded) return@launch
                 Toast.makeText(
                     requireContext(),
-                    if (enabled) "${account.name} enabled" else "${account.name} disabled",
+                    if (enabled) {
+                        getString(R.string.cloud_enabled_toast, account.name)
+                    } else {
+                        getString(R.string.cloud_disabled_toast, account.name)
+                    },
                     Toast.LENGTH_SHORT
                 ).show()
             } catch (e: Exception) {
                 Logger.e(TAG, "Toggle enabled failed for ${account.name}", e)
                 if (!isAdded) return@launch
-                Toast.makeText(requireContext(), "Save failed: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(requireContext(),
+                    getString(R.string.cloud_save_failed, e.message), Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -603,23 +606,25 @@ class CloudAccountsFragment : Fragment() {
         if (!isAdded) return
         if (!account.enabled) {
             Toast.makeText(requireContext(),
-                "${account.name} is disabled — enable to refresh", Toast.LENGTH_SHORT).show()
+                getString(R.string.cloud_disabled_refresh_hint, account.name), Toast.LENGTH_SHORT).show()
             return
         }
-        Toast.makeText(requireContext(), "Refreshing ${account.name}…", Toast.LENGTH_SHORT).show()
+        Toast.makeText(requireContext(),
+            getString(R.string.cloud_refreshing, account.name), Toast.LENGTH_SHORT).show()
         viewLifecycleOwner.lifecycleScope.launch {
             val token = withContext(Dispatchers.IO) {
                 app.securePasswordManager.retrievePassword("cloud_token_${account.id}")
             }
             if (token.isNullOrBlank()) {
                 if (!isAdded) return@launch
-                Toast.makeText(requireContext(), "Token missing — re-add account", Toast.LENGTH_LONG).show()
+                Toast.makeText(requireContext(), R.string.cloud_token_missing, Toast.LENGTH_LONG).show()
                 return@launch
             }
             val providerType = CloudProviderType.fromTag(account.provider)
             if (providerType == null) {
                 if (!isAdded) return@launch
-                Toast.makeText(requireContext(), "Unknown provider: ${account.provider}", Toast.LENGTH_LONG).show()
+                Toast.makeText(requireContext(),
+                    getString(R.string.cloud_unknown_provider, account.provider), Toast.LENGTH_LONG).show()
                 return@launch
             }
             val count = try {
@@ -630,12 +635,13 @@ class CloudAccountsFragment : Fragment() {
                 Logger.e(TAG, "Inventory auth failed for ${account.name}", e)
                 if (!isAdded) return@launch
                 Toast.makeText(requireContext(),
-                    "Token invalid — re-add account (${e.message})", Toast.LENGTH_LONG).show()
+                    getString(R.string.cloud_token_invalid, e.message), Toast.LENGTH_LONG).show()
                 return@launch
             } catch (e: Exception) {
                 Logger.e(TAG, "Inventory fetch failed", e)
                 if (!isAdded) return@launch
-                Toast.makeText(requireContext(), "Refresh failed: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(requireContext(),
+                    getString(R.string.cloud_refresh_failed, e.message), Toast.LENGTH_LONG).show()
                 return@launch
             }
             try {
@@ -651,7 +657,7 @@ class CloudAccountsFragment : Fragment() {
             if (!isAdded) return@launch
             Toast.makeText(
                 requireContext(),
-                "${account.name}: $count instance${if (count == 1) "" else "s"}",
+                resources.getQuantityString(R.plurals.cloud_instance_count, count, account.name, count),
                 Toast.LENGTH_SHORT
             ).show()
         }
@@ -659,10 +665,10 @@ class CloudAccountsFragment : Fragment() {
 
     private fun confirmDelete(account: CloudAccount) {
         if (!isAdded) return
-        AlertDialog.Builder(requireContext())
-            .setTitle("Delete ${account.name}?")
-            .setMessage("Removes this cloud account record and its stored token.")
-            .setPositiveButton("Delete") { _, _ ->
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(getString(R.string.cloud_delete_title, account.name))
+            .setMessage(R.string.cloud_delete_message)
+            .setPositiveButton(R.string.delete) { _, _ ->
                 viewLifecycleOwner.lifecycleScope.launch {
                     try {
                         withContext(Dispatchers.IO) {
@@ -676,7 +682,7 @@ class CloudAccountsFragment : Fragment() {
                     }
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -715,45 +721,19 @@ class CloudAccountsFragment : Fragment() {
         }
 
         val ctx = requireContext()
-        val dp  = resources.displayMetrics.density
 
-        val scroll = android.widget.ScrollView(ctx)
-        val ll = android.widget.LinearLayout(ctx).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            val pad = (16 * dp).toInt()
-            setPadding(pad, pad, pad, pad)
-        }
-        scroll.addView(ll)
+        val form = DialogFields.form(ctx)
+        val editName = DialogFields.addText(form,
+            getString(R.string.cloud_account_name_hint), account.name,
+            getString(R.string.cloud_account_name_helper))
+        val editToken = DialogFields.addSecret(form,
+            getString(R.string.cloud_edit_token_hint), null,
+            getString(R.string.cloud_edit_token_helper))
 
-        fun addEditField(hint: String, initialText: String = ""): TextInputEditText {
-            val til = TextInputLayout(ctx, null,
-                com.google.android.material.R.attr.textInputOutlinedStyle).apply {
-                this.hint = hint
-                layoutParams = android.widget.LinearLayout.LayoutParams(
-                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
-                ).also { it.bottomMargin = (8 * dp).toInt() }
-            }
-            val edit = TextInputEditText(til.context).apply {
-                layoutParams = android.widget.LinearLayout.LayoutParams(
-                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
-                )
-                setSingleLine(true)
-                setText(initialText)
-            }
-            til.addView(edit)
-            ll.addView(til)
-            return edit
-        }
-
-        val editName  = addEditField("Account name", account.name)
-        val editToken = addEditField("New API token (leave blank to keep existing)")
-
-        AlertDialog.Builder(ctx)
-            .setTitle("Edit: ${account.name}")
-            .setView(scroll)
-            .setPositiveButton("Save") { _, _ ->
+        MaterialAlertDialogBuilder(ctx)
+            .setTitle(getString(R.string.cloud_edit_title, account.name))
+            .setView(form.root)
+            .setPositiveButton(R.string.save) { _, _ ->
                 val newName  = editName.text?.toString()?.trim().orEmpty().ifBlank { account.name }
                 val newToken = editToken.text?.toString().orEmpty()
                 viewLifecycleOwner.lifecycleScope.launch {
@@ -770,15 +750,17 @@ class CloudAccountsFragment : Fragment() {
                             }
                         }
                         if (!isAdded) return@launch
-                        Toast.makeText(requireContext(), "Updated '$newName'", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(requireContext(),
+                            getString(R.string.cloud_updated, newName), Toast.LENGTH_SHORT).show()
                     } catch (e: Exception) {
                         Logger.e(TAG, "Edit account failed", e)
                         if (!isAdded) return@launch
-                        Toast.makeText(requireContext(), "Update failed: ${e.message}", Toast.LENGTH_LONG).show()
+                        Toast.makeText(requireContext(),
+                            getString(R.string.cloud_update_failed, e.message), Toast.LENGTH_LONG).show()
                     }
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 

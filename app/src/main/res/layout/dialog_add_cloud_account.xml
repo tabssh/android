@@ -13,7 +13,8 @@
         style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Account name (e.g. work-do)"
+        android:hint="@string/cloud_account_name_hint"
+        app:helperText="@string/cloud_account_name_helper"
         android:layout_marginBottom="@dimen/space_sm">
 
         <com.google.android.material.textfield.TextInputEditText
@@ -32,7 +33,7 @@
         style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Cloud provider"
+        android:hint="@string/cloud_provider_hint"
         android:layout_marginBottom="@dimen/space_sm">
 
         <com.google.android.material.textfield.MaterialAutoCompleteTextView
@@ -50,7 +51,7 @@
         style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="API token / secret"
+        android:hint="@string/cloud_api_token_hint"
         app:endIconMode="password_toggle"
         android:layout_marginBottom="@dimen/space_xs">
 

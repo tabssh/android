@@ -521,14 +521,14 @@ class ConnectionsFragment : Fragment() {
     }
 
     private fun renameGroup(group: io.github.tabssh.storage.database.entities.ConnectionGroup) {
-        val editText = android.widget.EditText(requireContext()).apply {
-            setText(group.name)
-            hint = "Group name"
-        }
+        val form = io.github.tabssh.ui.dialogs.DialogFields.form(requireContext())
+        val editText = io.github.tabssh.ui.dialogs.DialogFields.addText(
+            form, hint = getString(R.string.group_rename_hint), initial = group.name
+        )
 
         AlertDialog.Builder(requireContext())
             .setTitle("Rename Group")
-            .setView(editText)
+            .setView(form.root)
             .setPositiveButton("Rename") { _, _ ->
                 val newName = editText.text.toString().trim()
                 if (newName.isNotBlank() && newName != group.name) {

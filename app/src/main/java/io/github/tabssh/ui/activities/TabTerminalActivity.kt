@@ -1578,18 +1578,19 @@ class TabTerminalActivity : AppCompatActivity() {
             Toast.makeText(this, "No active sessions", Toast.LENGTH_SHORT).show()
             return
         }
-        val input = android.widget.EditText(this).apply {
-            hint = "Command to broadcast"
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or
-                android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-            setSingleLine(true)
-        }
         // setMessage and setView both occupy the dialog body — using both silently
-        // drops the message. Count is in the title; hint on the EditText adds context.
-        input.hint = "Command → ${tabs.size} session(s)"
+        // drops the message. Count is in the title; hint on the field adds context.
+        val form = io.github.tabssh.ui.dialogs.DialogFields.form(this)
+        val input = io.github.tabssh.ui.dialogs.DialogFields.addText(
+            form,
+            hint = getString(R.string.cluster_broadcast_command_hint, tabs.size),
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS,
+            monospace = true
+        )
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Cluster broadcast (${tabs.size} sessions)")
-            .setView(input)
+            .setView(form.root)
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Next") { _, _ ->
                 val cmd = input.text.toString()
@@ -2819,14 +2820,17 @@ class TabTerminalActivity : AppCompatActivity() {
         tab: io.github.tabssh.ui.tabs.SSHTab,
         req: io.github.tabssh.ui.tabs.SSHTab.MultiplexerAskRequest
     ) {
-        val input = android.widget.EditText(this).apply {
-            setText(req.defaultSessionName)
-            setSelection(text.length)
-        }
+        val form = io.github.tabssh.ui.dialogs.DialogFields.form(this)
+        val input = io.github.tabssh.ui.dialogs.DialogFields.addText(
+            form,
+            hint = getString(R.string.multiplexer_session_name_hint),
+            initial = req.defaultSessionName
+        )
+        input.setSelection(input.text?.length ?: 0)
         multiplexerCreateDialog = androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("New ${req.type} session")
             .setMessage("Enter a name for the new session")
-            .setView(input)
+            .setView(form.root)
             .setPositiveButton("Create") { _, _ ->
                 val name = input.text.toString().trim()
                 if (name.isNotEmpty() && !name.contains(' ')) {
@@ -3575,13 +3579,13 @@ class TabTerminalActivity : AppCompatActivity() {
             Toast.makeText(this, "No open tabs", Toast.LENGTH_SHORT).show()
             return
         }
-        val edit = android.widget.EditText(this).apply {
-            hint = "Workspace name"
-            inputType = android.text.InputType.TYPE_CLASS_TEXT
-        }
+        val form = io.github.tabssh.ui.dialogs.DialogFields.form(this)
+        val edit = io.github.tabssh.ui.dialogs.DialogFields.addText(
+            form, hint = getString(R.string.save_workspace_name_hint)
+        )
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Save workspace (${tabs.size} tab${if (tabs.size == 1) "" else "s"})")
-            .setView(edit)
+            .setView(form.root)
             .setPositiveButton("Save") { _, _ ->
                 val name = edit.text.toString().trim().ifBlank { "Workspace ${System.currentTimeMillis() / 1000}" }
                 val ids = tabs.map { it.profile.id }
@@ -3877,13 +3881,13 @@ class TabTerminalActivity : AppCompatActivity() {
             Toast.makeText(this, "No keystrokes recorded", Toast.LENGTH_SHORT).show()
             return
         }
-        val input = android.widget.EditText(this).apply {
-            hint = "Macro name"
-            setSingleLine(true)
-        }
+        val form = io.github.tabssh.ui.dialogs.DialogFields.form(this)
+        val input = io.github.tabssh.ui.dialogs.DialogFields.addText(
+            form, hint = getString(R.string.macro_name_hint)
+        )
         com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setTitle("Save macro (${bytes.size} bytes)")
-            .setView(input)
+            .setView(form.root)
             .setPositiveButton("Save") { _, _ ->
                 val name = input.text.toString().trim().ifBlank { "Macro ${System.currentTimeMillis()}" }
                 lifecycleScope.launch {
@@ -4699,45 +4703,40 @@ class TabTerminalActivity : AppCompatActivity() {
             return
         }
         val recallPrefs = getSharedPreferences("snippet_var_recall", android.content.Context.MODE_PRIVATE)
-        val inputs = mutableListOf<android.widget.EditText>()
+        val inputs = mutableListOf<com.google.android.material.textfield.TextInputEditText>()
 
-        val layout = android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(50, 20, 50, 20)
-        }
+        val form = io.github.tabssh.ui.dialogs.DialogFields.form(this)
 
         specs.forEach { spec ->
-            val label = android.widget.TextView(this).apply {
-                text = if (spec.isPassword) "${spec.name} (masked)" else spec.name
-                textSize = 14f
+            // Pre-fill: last-used > declared default > blank.
+            // For password-typed variables we never recall the prior
+            // value — only the declared default is honoured (and even
+            // that only because if the user wrote the default in
+            // plaintext into the snippet, they've already opted in).
+            val recall = if (spec.isPassword) null
+                else recallPrefs.getString("${snippet.id}/${spec.name}", null)
+            val initial = recall ?: spec.default
+            // Floating label carries the variable name; the masking toggle on
+            // secret fields replaces the old "(masked)" suffix in the label text.
+            val helper = spec.hint ?: getString(R.string.snippet_variable_default_hint, spec.name)
+            val input = if (spec.isPassword) {
+                io.github.tabssh.ui.dialogs.DialogFields.addSecret(
+                    form, hint = spec.name, initial = initial, helper = helper
+                )
+            } else {
+                io.github.tabssh.ui.dialogs.DialogFields.addText(
+                    form, hint = spec.name, initial = initial, helper = helper
+                )
             }
-            val input = android.widget.EditText(this).apply {
-                hint = spec.hint ?: "Enter value for ${spec.name}"
-                if (spec.isPassword) {
-                    inputType = android.text.InputType.TYPE_CLASS_TEXT or
-                        android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-                }
-                // Pre-fill: last-used > declared default > blank.
-                // For password-typed variables we never recall the prior
-                // value — only the declared default is honoured (and even
-                // that only because if the user wrote the default in
-                // plaintext into the snippet, they've already opted in).
-                val recall = if (spec.isPassword) null
-                    else recallPrefs.getString("${snippet.id}/${spec.name}", null)
-                val initial = recall ?: spec.default
-                if (!initial.isNullOrEmpty()) {
-                    setText(initial)
-                    setSelection(text.length)
-                }
+            if (!initial.isNullOrEmpty()) {
+                input.setSelection(input.text?.length ?: 0)
             }
             inputs.add(input)
-            layout.addView(label)
-            layout.addView(input)
         }
 
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Fill Variables")
-            .setView(layout)
+            .setView(form.root)
             .setPositiveButton("Insert") { _, _ ->
                 val values = mutableMapOf<String, String>()
                 val recallEdits = recallPrefs.edit()
@@ -4846,13 +4845,14 @@ class TabTerminalActivity : AppCompatActivity() {
      * Show search snippets dialog
      */
     private fun showSearchSnippetsDialog() {
-        val input = android.widget.EditText(this).apply {
-            hint = "Search snippets..."
-        }
+        val form = io.github.tabssh.ui.dialogs.DialogFields.form(this)
+        val input = io.github.tabssh.ui.dialogs.DialogFields.addText(
+            form, hint = getString(R.string.search_snippets_hint)
+        )
 
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Search Snippets")
-            .setView(input)
+            .setView(form.root)
             .setPositiveButton("Search") { _, _ ->
                 val query = input.text.toString().trim()
                 if (query.isNotBlank()) {
@@ -4923,27 +4923,21 @@ class TabTerminalActivity : AppCompatActivity() {
      */
     private suspend fun promptForPassword(message: String): String? =
         kotlinx.coroutines.suspendCancellableCoroutine { cont ->
-            val editText = android.widget.EditText(this).apply {
-                inputType = android.text.InputType.TYPE_CLASS_TEXT or
-                    android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-                hint = "Password"
-            }
-            val padding = (16 * resources.displayMetrics.density).toInt()
-            val container = android.widget.FrameLayout(this).apply {
-                setPadding(padding, 0, padding, 0)
-                addView(editText)
-            }
+            val form = io.github.tabssh.ui.dialogs.DialogFields.form(this)
             // setMessage and setView both own the dialog's content area — using both
             // silently drops the message on most ROMs. Show the message as a TextView
-            // inside the same container so both the prompt and the EditText are visible.
+            // inside the same form column so both the prompt and the field are visible.
             val promptLabel = android.widget.TextView(this).apply {
                 text = message
                 setPadding(0, 0, 0, (8 * resources.displayMetrics.density).toInt())
             }
-            container.addView(promptLabel, 0)
+            form.column.addView(promptLabel, 0)
+            val editText = io.github.tabssh.ui.dialogs.DialogFields.addSecret(
+                form, hint = getString(R.string.password_hint)
+            )
             val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
                 .setTitle("Authentication Required")
-                .setView(container)
+                .setView(form.root)
                 .setPositiveButton("Connect") { _, _ ->
                     if (cont.isActive) cont.resume(editText.text.toString()) {}
                 }
