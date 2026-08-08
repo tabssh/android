@@ -92,6 +92,15 @@ class TransportCapabilityDetector(
 
         val failures = mutableListOf<String>()
 
+        // Log each tier's failure the moment it happens — when a lower tier
+        // later succeeds, these are the only record of WHY the better tiers
+        // were skipped (the collected list is surfaced only on total failure).
+        fun recordFailure(mode: String, message: String, detail: String?) {
+            val entry = "$mode: $message${detail?.let { " ($it)" } ?: ""}"
+            Logger.w(TAG, "tier failed — $entry")
+            failures += entry
+        }
+
         if (socketUsable) {
             for (mode in listOf(MODE_API_STREAMLOCAL, MODE_API_STDIO)) {
                 when (val attempt = openTier(mode, host, runner)) {
@@ -100,17 +109,17 @@ class TransportCapabilityDetector(
                         return@withContext attempt
                     }
                     is DockerResult.PermissionDenied -> return@withContext attempt
-                    is DockerResult.NotFound -> failures += "$mode: ${attempt.message}"
+                    is DockerResult.NotFound -> recordFailure(mode, attempt.message, null)
                     is DockerResult.TransportUnavailable ->
-                        failures += "$mode: ${attempt.message}${attempt.detail?.let { " ($it)" } ?: ""}"
+                        recordFailure(mode, attempt.message, attempt.detail)
                     is DockerResult.Error ->
-                        failures += "$mode: ${attempt.message}${attempt.detail?.let { " ($it)" } ?: ""}"
+                        recordFailure(mode, attempt.message, attempt.detail)
                 }
             }
         } else if (socketState is DockerResult.Success) {
-            failures += "socket: ${DockerTransportMessages.SOCKET_MISSING}"
+            recordFailure("socket", DockerTransportMessages.SOCKET_MISSING, null)
         } else {
-            failures += "socket probe failed"
+            recordFailure("socket", "probe failed", null)
         }
 
         when (val attempt = openTier(MODE_CLI_EXEC, host, runner)) {
@@ -119,11 +128,11 @@ class TransportCapabilityDetector(
                 return@withContext attempt
             }
             is DockerResult.PermissionDenied -> return@withContext attempt
-            is DockerResult.NotFound -> failures += "$MODE_CLI_EXEC: ${attempt.message}"
+            is DockerResult.NotFound -> recordFailure(MODE_CLI_EXEC, attempt.message, null)
             is DockerResult.TransportUnavailable ->
-                failures += "$MODE_CLI_EXEC: ${attempt.message}${attempt.detail?.let { " ($it)" } ?: ""}"
+                recordFailure(MODE_CLI_EXEC, attempt.message, attempt.detail)
             is DockerResult.Error ->
-                failures += "$MODE_CLI_EXEC: ${attempt.message}${attempt.detail?.let { " ($it)" } ?: ""}"
+                recordFailure(MODE_CLI_EXEC, attempt.message, attempt.detail)
         }
 
         DockerResult.TransportUnavailable(

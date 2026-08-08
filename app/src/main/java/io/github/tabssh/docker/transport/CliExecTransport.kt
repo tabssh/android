@@ -59,8 +59,10 @@ class CliExecTransport(
         } catch (e: TransportUnavailableException) {
             Logger.w("CliExecTransport", "$context: transport unavailable: ${e.message}")
             DockerResult.TransportUnavailable(e.message.orEmpty(), e.detail)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
-            Logger.w("CliExecTransport", "$context failed: ${e.message}")
+            Logger.w("CliExecTransport", "$context: ${e.message}")
             DockerResult.Error(context, e.message)
         }
     }
