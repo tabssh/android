@@ -746,6 +746,7 @@ class BackupImporter(
             preferenceManager.setSyncCertificatesEnabled(s.optBoolean("syncCertificates", true))
             preferenceManager.setSyncDashboardEnabled(s.optBoolean("syncDashboard", false))
             preferenceManager.setSyncDockerEnabled(s.optBoolean("syncDocker", true))
+            preferenceManager.setSyncPortForwardsEnabled(s.optBoolean("syncPortForwards", true))
             preferenceManager.setAutoResolveConflicts(s.optBoolean("autoResolve", true))
         }
         root.optJSONObject("multiplexer")?.let { m ->

@@ -656,6 +656,7 @@ class BackupExporter(
             put("syncCertificates",       preferenceManager.isSyncCertificatesEnabled())
             put("syncDashboard",          preferenceManager.isSyncDashboardEnabled())
             put("syncDocker",             preferenceManager.isSyncDockerEnabled())
+            put("syncPortForwards",       preferenceManager.isSyncPortForwardsEnabled())
             put("autoResolve",            preferenceManager.isAutoResolveConflictsEnabled())
         })
 
