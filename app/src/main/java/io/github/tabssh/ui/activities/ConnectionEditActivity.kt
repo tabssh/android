@@ -834,13 +834,13 @@ class ConnectionEditActivity : AppCompatActivity() {
                     return
                 }
                 androidx.appcompat.app.AlertDialog.Builder(this@ConnectionEditActivity)
-                    .setTitle("Discard changes?")
-                    .setMessage("You have unsaved changes. Leave without saving?")
-                    .setPositiveButton("Discard") { _, _ ->
+                    .setTitle(R.string.conn_edit_discard_changes_title)
+                    .setMessage(R.string.conn_edit_discard_changes_message)
+                    .setPositiveButton(R.string.discard) { _, _ ->
                         isEnabled = false
                         finish()
                     }
-                    .setNegativeButton("Keep editing", null)
+                    .setNegativeButton(R.string.conn_edit_keep_editing, null)
                     .show()
             }
         })
@@ -853,10 +853,10 @@ class ConnectionEditActivity : AppCompatActivity() {
                 finish()
             } else {
                 androidx.appcompat.app.AlertDialog.Builder(this)
-                    .setTitle("Discard changes?")
-                    .setMessage("You have unsaved changes. Leave without saving?")
-                    .setPositiveButton("Discard") { _, _ -> finish() }
-                    .setNegativeButton("Keep editing", null)
+                    .setTitle(R.string.conn_edit_discard_changes_title)
+                    .setMessage(R.string.conn_edit_discard_changes_message)
+                    .setPositiveButton(R.string.discard) { _, _ -> finish() }
+                    .setNegativeButton(R.string.conn_edit_keep_editing, null)
                     .show()
             }
         }
@@ -873,13 +873,13 @@ class ConnectionEditActivity : AppCompatActivity() {
     private fun showColorTagPicker() {
         val labels = colorTagPresets.map { it.second }.toTypedArray()
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Pick color tag")
+            .setTitle(R.string.conn_edit_pick_color_tag_title)
             .setItems(labels) { _, which ->
                 currentColorTag = colorTagPresets[which].first
                 renderColorTagPreview()
             }
-            .setNeutralButton("Clear") { _, _ -> currentColorTag = 0; renderColorTagPreview() }
-            .setNegativeButton("Cancel", null)
+            .setNeutralButton(R.string.conn_edit_clear) { _, _ -> currentColorTag = 0; renderColorTagPreview() }
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -1315,19 +1315,19 @@ class ConnectionEditActivity : AppCompatActivity() {
                 }
                 if (duplicate != null && duplicate.id != existingProfile?.id) {
                     com.google.android.material.dialog.MaterialAlertDialogBuilder(this@ConnectionEditActivity)
-                        .setTitle("Duplicate connection")
-                        .setMessage("A connection to ${profile.username}@${profile.host}:${profile.port} already exists (\"${duplicate.name}\"). What would you like to do?")
-                        .setPositiveButton("Save as New") { _, _ ->
+                        .setTitle(R.string.conn_edit_duplicate_title)
+                        .setMessage(getString(R.string.conn_edit_duplicate_message, profile.username, profile.host, profile.port, duplicate.name))
+                        .setPositiveButton(R.string.conn_edit_save_as_new) { _, _ ->
                             // bug-16: profile.id still holds the existing ID when in edit mode;
                             // forceInsert bypasses the isEditMode branch in doSave().
                             lifecycleScope.launch {
                                 doSave(profile.copy(id = java.util.UUID.randomUUID().toString()), forceInsert = true)
                             }
                         }
-                        .setNeutralButton("Update Existing") { _, _ ->
+                        .setNeutralButton(R.string.conn_edit_update_existing) { _, _ ->
                             lifecycleScope.launch { doSave(profile.copy(id = duplicate.id)) }
                         }
-                        .setNegativeButton("Cancel", null)
+                        .setNegativeButton(R.string.cancel, null)
                         .show()
                     return@launch
                 }
@@ -1814,13 +1814,13 @@ class ConnectionEditActivity : AppCompatActivity() {
 
     private fun showKeyManagementDialog() {
         val options = arrayOf(
-            "Import SSH Key (File)",
-            "Paste SSH Key",
-            "Generate New Key Pair",
-            "Browse Existing Keys"
+            getString(R.string.conn_edit_key_option_import_file),
+            getString(R.string.conn_edit_key_option_paste),
+            getString(R.string.conn_edit_key_option_generate),
+            getString(R.string.conn_edit_key_option_browse)
         )
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("SSH Key Management")
+            .setTitle(R.string.conn_edit_key_management_title)
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> importKeyFromFile()
@@ -1829,7 +1829,7 @@ class ConnectionEditActivity : AppCompatActivity() {
                     3 -> browseExistingKeys()
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -1853,9 +1853,9 @@ class ConnectionEditActivity : AppCompatActivity() {
             minLines = 10, maxLines = 20, monospace = true
         )
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Paste SSH Private Key")
+            .setTitle(R.string.conn_edit_paste_key_title)
             .setView(form.root)
-            .setPositiveButton("Next") { _, _ ->
+            .setPositiveButton(R.string.next) { _, _ ->
                 val keyContent = editText.text.toString().trim()
                 if (keyContent.isNotEmpty()) {
                     promptForKeyName("Pasted Key") { confirmedName ->
@@ -1865,7 +1865,7 @@ class ConnectionEditActivity : AppCompatActivity() {
                     showToast("Key content is empty")
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -1873,11 +1873,11 @@ class ConnectionEditActivity : AppCompatActivity() {
 
     private fun showKeyGenerationDialog() {
         val keyTypes = arrayOf(
-            "RSA 2048-bit (Compatible)",
-            "RSA 4096-bit (Secure)",
-            "ECDSA P-256 (Modern)",
-            "ECDSA P-384 (High Security)",
-            "Ed25519 (Recommended)"
+            getString(R.string.conn_edit_key_type_rsa_2048),
+            getString(R.string.conn_edit_key_type_rsa_4096),
+            getString(R.string.conn_edit_key_type_ecdsa_256),
+            getString(R.string.conn_edit_key_type_ecdsa_384),
+            getString(R.string.conn_edit_key_type_ed25519)
         )
         var selectedType = 4
         val keyTypeMapping = mapOf(
@@ -1886,14 +1886,14 @@ class ConnectionEditActivity : AppCompatActivity() {
             4 to Pair(KeyType.ED25519, 256)
         )
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Generate SSH Key Pair")
-            .setMessage("Choose the key type to generate. Ed25519 is recommended for best security and performance.")
+            .setTitle(R.string.conn_edit_generate_key_title)
+            .setMessage(R.string.conn_edit_generate_key_message)
             .setSingleChoiceItems(keyTypes, selectedType) { _, which -> selectedType = which }
-            .setPositiveButton("Generate") { _, _ ->
+            .setPositiveButton(R.string.conn_edit_generate) { _, _ ->
                 val (keyType, keySize) = keyTypeMapping[selectedType] ?: Pair(KeyType.ED25519, 256)
                 showKeyNamingDialog(keyType, keySize)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -1911,22 +1911,22 @@ class ConnectionEditActivity : AppCompatActivity() {
         )
         editText.selectAll()
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Name Your Key")
-            .setMessage("Give your new SSH key a descriptive name.")
+            .setTitle(R.string.conn_edit_name_key_title)
+            .setMessage(R.string.conn_edit_name_key_message)
             .setView(form.root)
-            .setPositiveButton("Generate Key") { _, _ ->
+            .setPositiveButton(R.string.conn_edit_generate_key_button) { _, _ ->
                 val keyName = editText.text.toString().trim()
                 if (keyName.isNotEmpty()) generateKeyPair(keyType, keySize, keyName)
                 else showToast("Key name is required")
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
     private fun generateKeyPair(keyType: KeyType, keySize: Int, keyName: String) {
         val progressDialog = androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Generating SSH Key")
-            .setMessage("Creating ${keyType.name} ${keySize}-bit key pair…\nThis may take a moment.")
+            .setTitle(R.string.conn_edit_generating_key_title)
+            .setMessage(getString(R.string.conn_edit_generating_key_message, keyType.name, keySize))
             .setCancelable(false)
             .create()
         progressDialog.show()
@@ -1957,9 +1957,9 @@ class ConnectionEditActivity : AppCompatActivity() {
 
     private fun showKeyGenerationSuccess(message: String, fingerprint: String) {
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("✅ Key Generated Successfully")
-            .setMessage("$message\n\nFingerprint:\n$fingerprint\n\nThe key has been securely stored and is ready to use.")
-            .setPositiveButton("OK") { _, _ -> loadAvailableKeys() }
+            .setTitle(R.string.conn_edit_key_generated_title)
+            .setMessage(getString(R.string.conn_edit_key_generated_message, message, fingerprint))
+            .setPositiveButton(R.string.ok) { _, _ -> loadAvailableKeys() }
             .show()
         showToast("🔑 SSH key generated successfully!")
     }
@@ -1980,14 +1980,14 @@ class ConnectionEditActivity : AppCompatActivity() {
         }
         val keyNames = availableKeys.map { it.getDisplayName() }.toTypedArray()
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Select SSH Key")
+            .setTitle(R.string.select_key)
             .setItems(keyNames) { _, which ->
                 selectedKeyIndex = which + 1
                 val selectedKey = availableKeys[which]
                 binding.spinnerSshKey.setText(selectedKey.getDisplayName(), false)
                 showToast("Selected: ${selectedKey.getDisplayName()}")
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -2012,15 +2012,15 @@ class ConnectionEditActivity : AppCompatActivity() {
             form, hint = getString(R.string.key_passphrase_hint)
         )
         android.app.AlertDialog.Builder(this)
-            .setTitle("🔐 Encrypted SSH Key")
-            .setMessage("This key is encrypted. Enter passphrase to decrypt.")
+            .setTitle(R.string.conn_edit_encrypted_key_title)
+            .setMessage(R.string.conn_edit_encrypted_key_message)
             .setView(form.root)
-            .setPositiveButton("Import") { _, _ ->
+            .setPositiveButton(R.string.conn_edit_import) { _, _ ->
                 val passphrase = passphraseInput.text.toString()
                 if (passphrase.isEmpty()) { showToast("Passphrase is required"); return@setPositiveButton }
                 lifecycleScope.launch { performKeyImport(keyContent, filename, passphrase) }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -2163,14 +2163,14 @@ class ConnectionEditActivity : AppCompatActivity() {
         )
         edit.setSelection(edit.text?.length ?: 0)
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Name this key")
-            .setMessage("This is the label TabSSH will show in the keys list.")
+            .setTitle(R.string.conn_edit_name_this_key_title)
+            .setMessage(R.string.conn_edit_name_this_key_message)
             .setView(form.root)
-            .setPositiveButton("Import") { _, _ ->
+            .setPositiveButton(R.string.conn_edit_import) { _, _ ->
                 val name = edit.text.toString().trim().ifBlank { suggestion }
                 onConfirm(name)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -2181,10 +2181,10 @@ class ConnectionEditActivity : AppCompatActivity() {
             initial = if (selectedGroupName == "No Group") "" else selectedGroupName
         )
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Set Connection Group")
-            .setMessage("Organize your connections into groups.\n\nLeave empty for 'No Group'.")
+            .setTitle(R.string.conn_edit_set_group_title)
+            .setMessage(R.string.conn_edit_set_group_message)
             .setView(form.root)
-            .setPositiveButton("Set") { _, _ ->
+            .setPositiveButton(R.string.conn_edit_set) { _, _ ->
                 val groupName = editText.text.toString().trim()
                 if (groupName.isEmpty()) {
                     selectedGroupId = null
@@ -2220,8 +2220,8 @@ class ConnectionEditActivity : AppCompatActivity() {
                     }
                 }
             }
-            .setNegativeButton("Cancel", null)
-            .setNeutralButton("Clear") { _, _ ->
+            .setNegativeButton(R.string.cancel, null)
+            .setNeutralButton(R.string.conn_edit_clear) { _, _ ->
                 selectedGroupId = null
                 selectedGroupName = "No Group"
                 supportActionBar?.subtitle = null
@@ -2422,16 +2422,16 @@ class ConnectionEditActivity : AppCompatActivity() {
         )
 
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Port Knock Sequence")
+            .setTitle(R.string.conn_edit_port_knock_title)
             .setView(form.root)
-            .setPositiveButton("Save") { _, _ ->
+            .setPositiveButton(R.string.save) { _, _ ->
                 val sequence = editText.text.toString().trim()
                 pendingKnockSequence = sequence.ifBlank { null }
                 val count = if (sequence.isNotBlank()) sequence.split(",").size else 0
                 android.widget.Toast.makeText(this, "✓ Knock sequence saved: $count ports", android.widget.Toast.LENGTH_SHORT).show()
             }
-            .setNegativeButton("Cancel", null)
-            .setNeutralButton("Clear") { _, _ ->
+            .setNegativeButton(R.string.cancel, null)
+            .setNeutralButton(R.string.conn_edit_clear) { _, _ ->
                 pendingKnockSequence = null
                 android.widget.Toast.makeText(this, "Sequence cleared", android.widget.Toast.LENGTH_SHORT).show()
             }

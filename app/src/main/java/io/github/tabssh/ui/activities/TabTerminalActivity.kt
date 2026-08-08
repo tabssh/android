@@ -1206,15 +1206,15 @@ class TabTerminalActivity : AppCompatActivity() {
      */
     private fun showBrowserLinkDialog(url: String) {
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Open this URL?")
-            .setMessage("$url\n\nThis will open in your browser. Tap Open only if you meant to follow this link.")
-            .setPositiveButton("Open") { _, _ ->
+            .setTitle(R.string.terminal_open_url_title)
+            .setMessage(getString(R.string.terminal_open_url_message, url))
+            .setPositiveButton(R.string.docker_option_open) { _, _ ->
                 openUrl(url)
             }
-            .setNeutralButton("Copy") { _, _ ->
+            .setNeutralButton(R.string.copy) { _, _ ->
                 copyToClipboard("URL", url)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -1227,15 +1227,15 @@ class TabTerminalActivity : AppCompatActivity() {
         val display = (action.username?.let { "$it@" } ?: "") + action.host +
             if (action.port != 22) ":${action.port}" else ""
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("SSH link")
-            .setMessage("$display\n\nConnect opens a new session to this host.")
-            .setPositiveButton("Connect") { _, _ ->
+            .setTitle(R.string.terminal_ssh_link_title)
+            .setMessage(getString(R.string.terminal_ssh_link_message, display))
+            .setPositiveButton(R.string.connect_button) { _, _ ->
                 connectSshLink(action)
             }
-            .setNeutralButton("Copy") { _, _ ->
+            .setNeutralButton(R.string.copy) { _, _ ->
                 copyToClipboard("SSH link", action.url)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -1273,15 +1273,15 @@ class TabTerminalActivity : AppCompatActivity() {
         val display = (action.username?.let { "$it@" } ?: "") + action.host +
             if (action.port != 22) ":${action.port}" else ""
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("SFTP link")
-            .setMessage("$display\nRemote path: ${action.path}\n\nConnect opens a new session and browses this path over SFTP.")
-            .setPositiveButton("Connect") { _, _ ->
+            .setTitle(R.string.terminal_sftp_link_title)
+            .setMessage(getString(R.string.terminal_sftp_link_message, display, action.path))
+            .setPositiveButton(R.string.connect_button) { _, _ ->
                 connectSftpLink(action)
             }
-            .setNeutralButton("Copy") { _, _ ->
+            .setNeutralButton(R.string.copy) { _, _ ->
                 copyToClipboard("SFTP link", action.url)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -1327,8 +1327,8 @@ class TabTerminalActivity : AppCompatActivity() {
             arrayOf("Copy path")
         }
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Remote file path")
-            .setMessage("${action.path}\n\nThis path refers to a file on the remote host, not this device.")
+            .setTitle(R.string.terminal_remote_file_title)
+            .setMessage(getString(R.string.terminal_remote_file_message, action.path))
             .setItems(items) { _, which ->
                 if (which < 0 || which >= items.size) return@setItems
                 when (items[which]) {
@@ -1337,7 +1337,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     "Copy path" -> copyToClipboard("Path", action.path)
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -1402,19 +1402,19 @@ class TabTerminalActivity : AppCompatActivity() {
             false
         }
         val message = if (hasHandler) {
-            "$url\n\nThis will open in an app that handles ${action.scheme}:// links."
+            getString(R.string.terminal_open_link_handler_message, url, action.scheme)
         } else {
-            "$url\n\nNo app on this device can open ${action.scheme}:// links."
+            getString(R.string.terminal_open_link_no_handler_message, url, action.scheme)
         }
         val builder = androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Open this link?")
+            .setTitle(R.string.terminal_open_link_title)
             .setMessage(message)
-            .setNeutralButton("Copy") { _, _ ->
+            .setNeutralButton(R.string.copy) { _, _ ->
                 copyToClipboard("URL", url)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
         if (hasHandler) {
-            builder.setPositiveButton("Open") { _, _ ->
+            builder.setPositiveButton(R.string.docker_option_open) { _, _ ->
                 openUrl(url)
             }
         }
@@ -1501,7 +1501,7 @@ class TabTerminalActivity : AppCompatActivity() {
         }
         
         val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("SSH Connection Failed: ${errorInfo.errorType}")
+            .setTitle(getString(R.string.terminal_ssh_failed_title, errorInfo.errorType))
             .setView(dialogView)
             .setOnCancelListener { finish() }
             .create()
@@ -1589,10 +1589,10 @@ class TabTerminalActivity : AppCompatActivity() {
             monospace = true
         )
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Cluster broadcast (${tabs.size} sessions)")
+            .setTitle(getString(R.string.terminal_cluster_broadcast_title, tabs.size))
             .setView(form.root)
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Next") { _, _ ->
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.next) { _, _ ->
                 val cmd = input.text.toString()
                 if (cmd.isBlank()) {
                     Toast.makeText(this, "Empty command", Toast.LENGTH_SHORT).show()
@@ -1603,14 +1603,14 @@ class TabTerminalActivity : AppCompatActivity() {
                 // catchable before the keys hit the wire.
                 val hostList = tabs.joinToString("\n") { "• ${it.profile.getDisplayName()}" }
                 androidx.appcompat.app.AlertDialog.Builder(this)
-                    .setTitle("Confirm broadcast")
+                    .setTitle(R.string.terminal_confirm_broadcast_title)
                     .setMessage(
                         "Send to ${tabs.size} session(s)?\n\n" +
                         "Command: $cmd\n\n" +
                         hostList
                     )
-                    .setNegativeButton("Cancel", null)
-                    .setPositiveButton("Send to all") { _, _ ->
+                    .setNegativeButton(R.string.cancel, null)
+                    .setPositiveButton(R.string.terminal_send_to_all) { _, _ ->
                         val payload = (cmd + "\n").toByteArray(Charsets.UTF_8)
                         // Route via each tab's TermuxBridge so the write hits
                         // the writeScope (Dispatchers.IO) + writeLock funnel
@@ -2130,9 +2130,9 @@ class TabTerminalActivity : AppCompatActivity() {
                                 "Session ${i + 1}: ${tab.getShortTitle()}"
                             }.toTypedArray()
                             androidx.appcompat.app.AlertDialog.Builder(this)
-                                .setTitle("Multiple sessions open for ${profile.name}")
+                                .setTitle(getString(R.string.terminal_multiple_sessions_title, profile.name))
                                 .setItems(labels) { _, which -> cont.resumeWith(Result.success(liveTabs[which])) }
-                                .setNegativeButton("Open new") { _, _ -> cont.resumeWith(Result.success(null)) }
+                                .setNegativeButton(R.string.terminal_open_new) { _, _ -> cont.resumeWith(Result.success(null)) }
                                 .setOnCancelListener { cont.resumeWith(Result.success(null)) }
                                 .show()
                         }
@@ -2796,7 +2796,7 @@ class TabTerminalActivity : AppCompatActivity() {
         if (multiplexerAskDialog?.isShowing == true || multiplexerCreateDialog?.isShowing == true) return
         val labels = req.sessions.map { "Attach: $it" } + "Create new session"
         multiplexerAskDialog = androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("${req.type} sessions on ${tab.profile.host}")
+            .setTitle(getString(R.string.terminal_multiplexer_sessions_title, req.type, tab.profile.host))
             .setItems(labels.toTypedArray()) { _, which ->
                 // setItems auto-dismisses, so drop the reference before the
                 // create prompt checks the stacking guard.
@@ -2807,7 +2807,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     showMultiplexerCreateDialog(tab, req)
                 }
             }
-            .setNegativeButton("Skip") { _, _ -> tab.dismissMultiplexerAsk() }
+            .setNegativeButton(R.string.terminal_skip) { _, _ -> tab.dismissMultiplexerAsk() }
             .setOnCancelListener { tab.dismissMultiplexerAsk() }
             .show()
     }
@@ -2828,10 +2828,10 @@ class TabTerminalActivity : AppCompatActivity() {
         )
         input.setSelection(input.text?.length ?: 0)
         multiplexerCreateDialog = androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("New ${req.type} session")
-            .setMessage("Enter a name for the new session")
+            .setTitle(getString(R.string.terminal_new_multiplexer_session_title, req.type))
+            .setMessage(R.string.terminal_new_multiplexer_session_message)
             .setView(form.root)
-            .setPositiveButton("Create") { _, _ ->
+            .setPositiveButton(R.string.docker_create) { _, _ ->
                 val name = input.text.toString().trim()
                 if (name.isNotEmpty() && !name.contains(' ')) {
                     tab.createMultiplexerSession(req.type, name)
@@ -2846,7 +2846,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     showMultiplexerCreateDialog(tab, req)
                 }
             }
-            .setNegativeButton("Cancel") { _, _ -> tab.dismissMultiplexerAsk() }
+            .setNegativeButton(R.string.cancel) { _, _ -> tab.dismissMultiplexerAsk() }
             .setOnCancelListener { tab.dismissMultiplexerAsk() }
             .show()
     }
@@ -2931,7 +2931,7 @@ class TabTerminalActivity : AppCompatActivity() {
         // setMessage and setItems both occupy the dialog body — using both silently
         // hides the item list. Move the hint into the title so the list renders.
         com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-            .setTitle("PRE key multiplexer")
+            .setTitle(R.string.terminal_pre_key_multiplexer_title)
             .setItems(types) { _, which ->
                 if (keys[which] == "toggle") {
                     val newValue = !enabled
@@ -2958,7 +2958,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     "Multiplexer override set to ${override ?: "auto"} for ${tab.profile.getDisplayName()}"
                 )
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -3138,10 +3138,10 @@ class TabTerminalActivity : AppCompatActivity() {
         }
 
         val builder = androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Connection closed")
-            .setMessage("${profile.getDisplayName()} disconnected.\nDiagnosing connection…")
+            .setTitle(R.string.terminal_connection_closed_title)
+            .setMessage(getString(R.string.terminal_disconnected_diagnosing, profile.getDisplayName()))
             .setCancelable(false)
-            .setPositiveButton("Reconnect") { _, _ ->
+            .setPositiveButton(R.string.terminal_reconnect) { _, _ ->
                 Logger.i("TabTerminalActivity", "User chose RECONNECT for tab $tabId")
                 // Close the dead tab object then start a fresh connect to the
                 // same profile — keeps the slot in the tab strip. The
@@ -3169,7 +3169,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     }
                 }
             }
-            .setNegativeButton("Close tab") { _, _ ->
+            .setNegativeButton(R.string.terminal_close_tab) { _, _ ->
                 Logger.i("TabTerminalActivity", "User chose CLOSE for tab $tabId")
                 val idx = tabManager.getAllTabs().indexOfFirst { it.tabId == tabId }
                 if (idx >= 0) {
@@ -3181,7 +3181,7 @@ class TabTerminalActivity : AppCompatActivity() {
         if (isMoshFastFail) {
             // UDP is likely blocked by the carrier. Offer a one-shot SSH reconnect
             // without permanently changing the saved profile.
-            builder.setNeutralButton("Try SSH instead") { _, _ ->
+            builder.setNeutralButton(R.string.terminal_try_ssh_instead) { _, _ ->
                 Logger.i("TabTerminalActivity", "User chose SSH FALLBACK for mosh tab $tabId")
                 isReconnecting = true
                 val idx = tabManager.getAllTabs().indexOfFirst { it.tabId == tabId }
@@ -3214,7 +3214,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 moshFailedFast = isMoshFastFail,
             )
             if (!isFinishing && !isDestroyed && dialog.isShowing) {
-                dialog.setMessage("${profile.getDisplayName()} disconnected.\n\n${result.userMessage}")
+                dialog.setMessage(getString(R.string.terminal_disconnected_detail, profile.getDisplayName(), result.userMessage))
             }
         }
     }
@@ -3334,16 +3334,16 @@ class TabTerminalActivity : AppCompatActivity() {
             if (!detail.isNullOrBlank()) append("\n\n").append(detail)
         }
         val builder = androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Connection closed")
+            .setTitle(R.string.terminal_connection_closed_title)
             .setMessage(body)
             .setCancelable(false)
-            .setNegativeButton("Close tab") { _, _ ->
+            .setNegativeButton(R.string.terminal_close_tab) { _, _ ->
                 Logger.i("TabTerminalActivity", "User chose CLOSE for console tab ${tab.tabId}")
                 closeConsoleTab(tab.tabId)
             }
-            .setNeutralButton("Keep open") { d, _ -> d.dismiss() }
+            .setNeutralButton(R.string.terminal_keep_open) { d, _ -> d.dismiss() }
         if (reconnectableHost != null) {
-            builder.setPositiveButton("Reconnect") { _, _ ->
+            builder.setPositiveButton(R.string.terminal_reconnect) { _, _ ->
                 Logger.i("TabTerminalActivity", "User chose RECONNECT for VNC tab ${tab.tabId}")
                 reconnectVncTab((tab as Tab.Vnc).vncTab)
             }
@@ -3537,17 +3537,17 @@ class TabTerminalActivity : AppCompatActivity() {
         val checked = BooleanArray(others.size) { i -> broadcastTargetIds.contains(others[i].tabId) }
 
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Broadcast input from current tab")
+            .setTitle(R.string.terminal_broadcast_input_title)
             .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
                 val tabId = others[which].tabId
                 if (isChecked) broadcastTargetIds.add(tabId) else broadcastTargetIds.remove(tabId)
             }
-            .setPositiveButton("Apply") { _, _ -> applyBroadcastTargets() }
-            .setNeutralButton("Stop broadcasting") { _, _ ->
+            .setPositiveButton(R.string.terminal_apply) { _, _ -> applyBroadcastTargets() }
+            .setNeutralButton(R.string.terminal_stop_broadcasting) { _, _ ->
                 broadcastTargetIds.clear()
                 applyBroadcastTargets()
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -3584,9 +3584,9 @@ class TabTerminalActivity : AppCompatActivity() {
             form, hint = getString(R.string.save_workspace_name_hint)
         )
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Save workspace (${tabs.size} tab${if (tabs.size == 1) "" else "s"})")
+            .setTitle(resources.getQuantityString(R.plurals.terminal_save_workspace_title, tabs.size, tabs.size))
             .setView(form.root)
-            .setPositiveButton("Save") { _, _ ->
+            .setPositiveButton(R.string.save) { _, _ ->
                 val name = edit.text.toString().trim().ifBlank { "Workspace ${System.currentTimeMillis() / 1000}" }
                 val ids = tabs.map { it.profile.id }
                 val json = org.json.JSONArray(ids).toString()
@@ -3608,7 +3608,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     }
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -3630,10 +3630,10 @@ class TabTerminalActivity : AppCompatActivity() {
                     "${ws.name} ($n tab${if (n == 1) "" else "s"})"
                 }.toTypedArray()
                 androidx.appcompat.app.AlertDialog.Builder(this@TabTerminalActivity)
-                    .setTitle("Open workspace")
+                    .setTitle(R.string.terminal_open_workspace_title)
                     .setItems(labels) { _, which -> openWorkspace(all[which]) }
-                    .setNeutralButton("Delete…") { _, _ -> showDeleteWorkspaceDialog(all) }
-                    .setNegativeButton("Cancel", null)
+                    .setNeutralButton(R.string.terminal_delete_workspace_action) { _, _ -> showDeleteWorkspaceDialog(all) }
+                    .setNegativeButton(R.string.cancel, null)
                     .show()
             }
         }
@@ -3675,7 +3675,7 @@ class TabTerminalActivity : AppCompatActivity() {
     private fun showDeleteWorkspaceDialog(all: List<io.github.tabssh.storage.database.entities.Workspace>) {
         val labels = all.map { it.name }.toTypedArray()
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Delete workspace")
+            .setTitle(R.string.terminal_delete_workspace_title)
             .setItems(labels) { _, which ->
                 val ws = all[which]
                 lifecycleScope.launch {
@@ -3693,7 +3693,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     }
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -3739,9 +3739,9 @@ class TabTerminalActivity : AppCompatActivity() {
                 }
                 val labels = recent.map { it.getDisplayName() }.toTypedArray()
                 androidx.appcompat.app.AlertDialog.Builder(this@TabTerminalActivity)
-                    .setTitle("Split — open in bottom pane")
+                    .setTitle(R.string.terminal_split_bottom_pane_title)
                     .setItems(labels) { _, which -> openSplitWithProfile(recent[which]) }
-                    .setNegativeButton("Cancel", null)
+                    .setNegativeButton(R.string.cancel, null)
                     .show()
             }
         }
@@ -3886,9 +3886,9 @@ class TabTerminalActivity : AppCompatActivity() {
             form, hint = getString(R.string.macro_name_hint)
         )
         com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-            .setTitle("Save macro (${bytes.size} bytes)")
+            .setTitle(getString(R.string.terminal_save_macro_title, bytes.size))
             .setView(form.root)
-            .setPositiveButton("Save") { _, _ ->
+            .setPositiveButton(R.string.save) { _, _ ->
                 val name = input.text.toString().trim().ifBlank { "Macro ${System.currentTimeMillis()}" }
                 lifecycleScope.launch {
                     try {
@@ -3904,7 +3904,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     }
                 }
             }
-            .setNegativeButton("Discard", null)
+            .setNegativeButton(R.string.discard, null)
             .show()
     }
 
@@ -3930,7 +3930,7 @@ class TabTerminalActivity : AppCompatActivity() {
             }
             val labels = macros.map { "${it.name} (${it.decodedSequence().size}b)" }.toTypedArray()
             com.google.android.material.dialog.MaterialAlertDialogBuilder(this@TabTerminalActivity)
-                .setTitle("Replay macro")
+                .setTitle(R.string.terminal_replay_macro_title)
                 .setItems(labels) { _, which ->
                     val m = macros[which]
                     val bytes = m.decodedSequence()
@@ -3942,7 +3942,7 @@ class TabTerminalActivity : AppCompatActivity() {
                         catch (_: Exception) {}
                     }
                 }
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(R.string.cancel, null)
                 .show()
         }
     }
@@ -3979,20 +3979,18 @@ class TabTerminalActivity : AppCompatActivity() {
                         val termuxLauncher = io.github.tabssh.protocols.mosh.TermuxMoshLauncher
                         val termuxStatus = termuxLauncher.status(this@TabTerminalActivity)
                         val builder = androidx.appcompat.app.AlertDialog.Builder(this@TabTerminalActivity)
-                            .setTitle("Mosh handoff ready")
+                            .setTitle(R.string.terminal_mosh_handoff_ready_title)
                         when (termuxStatus) {
                             is io.github.tabssh.protocols.mosh.TermuxMoshLauncher.Status.Ready,
                             is io.github.tabssh.protocols.mosh.TermuxMoshLauncher.Status.Unknown -> {
                                 builder.setMessage(
-                                    "mosh-server is listening on UDP :${info.port}.\n\n" +
-                                    "Termux is installed — TabSSH can hand off to it directly. " +
-                                    "Tap **Open in Termux** to start the Mosh session there. " +
-                                    "Closing your SSH tab does NOT kill mosh-server.\n\n" +
-                                    "If Termux refuses, ensure `allow-external-apps=true` is set " +
-                                    "in `${io.github.tabssh.protocols.mosh.TermuxMoshLauncher.TERMUX_PROPS_HINT}` " +
-                                    "and that you've granted the RUN_COMMAND permission."
+                                    getString(
+                                        R.string.terminal_mosh_termux_ready_message,
+                                        info.port,
+                                        io.github.tabssh.protocols.mosh.TermuxMoshLauncher.TERMUX_PROPS_HINT
+                                    )
                                 )
-                                .setPositiveButton("Open in Termux") { _, _ ->
+                                .setPositiveButton(R.string.terminal_open_in_termux) { _, _ ->
                                     val ok = termuxLauncher.launch(
                                         this@TabTerminalActivity,
                                         info.host, info.port, info.keyBase64, info.username
@@ -4002,40 +4000,34 @@ class TabTerminalActivity : AppCompatActivity() {
                                             "Termux refused — check RUN_COMMAND permission + allow-external-apps", Toast.LENGTH_LONG).show()
                                     }
                                 }
-                                .setNeutralButton("Copy command") { _, _ ->
+                                .setNeutralButton(R.string.terminal_copy_command) { _, _ ->
                                     io.github.tabssh.utils.ClipboardHelper.copy(this@TabTerminalActivity, "mosh handoff", cmd, sensitive = false)
                                     Toast.makeText(this@TabTerminalActivity, "Copied", Toast.LENGTH_SHORT).show()
                                 }
-                                .setNegativeButton("Close", null)
+                                .setNegativeButton(R.string.close, null)
                             }
                             io.github.tabssh.protocols.mosh.TermuxMoshLauncher.Status.MoshNotInstalled -> {
                                 builder.setMessage(
-                                    "mosh-server is listening on UDP :${info.port}.\n\n" +
-                                    "Termux is installed but `mosh-client` isn't available. Open " +
-                                    "Termux and run:\n  pkg install mosh\n\nThen come back and " +
-                                    "tap Mosh handoff again.\n\nMeanwhile, copy this command:\n$cmd"
+                                    getString(R.string.terminal_mosh_termux_no_mosh_message, info.port, cmd)
                                 )
-                                .setPositiveButton("Copy command") { _, _ ->
+                                .setPositiveButton(R.string.terminal_copy_command) { _, _ ->
                                     io.github.tabssh.utils.ClipboardHelper.copy(this@TabTerminalActivity, "mosh handoff", cmd, sensitive = false)
                                     Toast.makeText(this@TabTerminalActivity, "Copied", Toast.LENGTH_SHORT).show()
                                 }
-                                .setNegativeButton("Close", null)
+                                .setNegativeButton(R.string.close, null)
                             }
                             io.github.tabssh.protocols.mosh.TermuxMoshLauncher.Status.TermuxMissing -> {
                                 builder.setMessage(
-                                    "mosh-server is listening on UDP :${info.port}.\n\n" +
-                                    "Install Termux + mosh to attach. F-Droid is the recommended " +
-                                    "source. Without it, you'll need to run this command on any " +
-                                    "Mosh-capable client:\n\n$cmd"
+                                    getString(R.string.terminal_mosh_no_termux_message, info.port, cmd)
                                 )
-                                .setPositiveButton("Install Termux") { _, _ ->
+                                .setPositiveButton(R.string.terminal_install_termux) { _, _ ->
                                     termuxLauncher.openTermuxListing(this@TabTerminalActivity)
                                 }
-                                .setNeutralButton("Copy command") { _, _ ->
+                                .setNeutralButton(R.string.terminal_copy_command) { _, _ ->
                                     io.github.tabssh.utils.ClipboardHelper.copy(this@TabTerminalActivity, "mosh handoff", cmd, sensitive = false)
                                     Toast.makeText(this@TabTerminalActivity, "Copied", Toast.LENGTH_SHORT).show()
                                 }
-                                .setNegativeButton("Close", null)
+                                .setNegativeButton(R.string.close, null)
                             }
                         }
                         builder.show()
@@ -4599,10 +4591,10 @@ class TabTerminalActivity : AppCompatActivity() {
             }
             runOnUiThread {
                 val labels = connections.map { it.getDisplayName() }.toTypedArray()
-                val items = arrayOf("+ Add new connection…") + labels
+                val items = arrayOf(getString(R.string.terminal_add_new_connection)) + labels
 
                 androidx.appcompat.app.AlertDialog.Builder(this@TabTerminalActivity)
-                    .setTitle("Open new tab")
+                    .setTitle(R.string.terminal_open_new_tab_title)
                     .setItems(items) { _, which ->
                         if (which == 0) {
                             startActivity(Intent(this@TabTerminalActivity, ConnectionEditActivity::class.java))
@@ -4613,7 +4605,7 @@ class TabTerminalActivity : AppCompatActivity() {
                             lifecycleScope.launch { connectToProfile(profile, forceNew = true) }
                         }
                     }
-                    .setNegativeButton("Cancel", null)
+                    .setNegativeButton(R.string.cancel, null)
                     .show()
             }
         }
@@ -4645,15 +4637,15 @@ class TabTerminalActivity : AppCompatActivity() {
 
                 runOnUiThread {
                     androidx.appcompat.app.AlertDialog.Builder(this@TabTerminalActivity)
-                        .setTitle("Insert Snippet")
+                        .setTitle(R.string.terminal_insert_snippet_title)
                         .setItems(snippetNames) { _, which ->
                             val snippet = snippets[which]
                             insertSnippet(snippet)
                         }
-                        .setNeutralButton("Manage Snippets") { _, _ ->
+                        .setNeutralButton(R.string.terminal_manage_snippets) { _, _ ->
                             showManageSnippetsMenu()
                         }
-                        .setNegativeButton("Cancel", null)
+                        .setNegativeButton(R.string.cancel, null)
                         .show()
                 }
             } catch (e: Exception) {
@@ -4735,9 +4727,9 @@ class TabTerminalActivity : AppCompatActivity() {
         }
 
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Fill Variables")
+            .setTitle(R.string.terminal_fill_variables_title)
             .setView(form.root)
-            .setPositiveButton("Insert") { _, _ ->
+            .setPositiveButton(R.string.terminal_insert) { _, _ ->
                 val values = mutableMapOf<String, String>()
                 val recallEdits = recallPrefs.edit()
                 specs.forEachIndexed { i, spec ->
@@ -4756,7 +4748,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 }
                 Logger.d("TabTerminalActivity", "Inserted snippet with variables: ${snippet.name}")
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -4764,10 +4756,14 @@ class TabTerminalActivity : AppCompatActivity() {
      * Show manage snippets menu
      */
     private fun showManageSnippetsMenu() {
-        val options = arrayOf("Create New Snippet", "View All Snippets", "Search Snippets")
+        val options = arrayOf(
+            getString(R.string.terminal_create_new_snippet),
+            getString(R.string.terminal_view_all_snippets),
+            getString(R.string.terminal_search_snippets_title)
+        )
 
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Manage Snippets")
+            .setTitle(R.string.terminal_manage_snippets)
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> showCreateSnippetDialog()
@@ -4775,7 +4771,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     2 -> showSearchSnippetsDialog()
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -4790,9 +4786,9 @@ class TabTerminalActivity : AppCompatActivity() {
         val inputCategory = dialogView.findViewById<android.widget.AutoCompleteTextView>(R.id.edit_snippet_category)
 
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Create Snippet")
+            .setTitle(R.string.terminal_create_snippet_title)
             .setView(dialogView)
-            .setPositiveButton("Create") { _, _ ->
+            .setPositiveButton(R.string.docker_create) { _, _ ->
                 val name = inputName.text.toString().trim()
                 val command = inputCommand.text.toString().trim()
                 val category = inputCategory.text.toString().trim().ifBlank { "General" }
@@ -4811,7 +4807,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     }
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -4831,11 +4827,11 @@ class TabTerminalActivity : AppCompatActivity() {
 
             runOnUiThread {
                 androidx.appcompat.app.AlertDialog.Builder(this@TabTerminalActivity)
-                    .setTitle("All Snippets")
+                    .setTitle(R.string.terminal_all_snippets_title)
                     .setItems(snippetNames) { _, which ->
                         insertSnippet(allSnippets[which])
                     }
-                    .setNegativeButton("Close", null)
+                    .setNegativeButton(R.string.close, null)
                     .show()
             }
         }
@@ -4851,15 +4847,15 @@ class TabTerminalActivity : AppCompatActivity() {
         )
 
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Search Snippets")
+            .setTitle(R.string.terminal_search_snippets_title)
             .setView(form.root)
-            .setPositiveButton("Search") { _, _ ->
+            .setPositiveButton(R.string.terminal_search) { _, _ ->
                 val query = input.text.toString().trim()
                 if (query.isNotBlank()) {
                     searchAndShowSnippets(query)
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -4888,11 +4884,11 @@ class TabTerminalActivity : AppCompatActivity() {
             if (isFinishing || isDestroyed) return@launch
             val snippetNames = results.map { "${it.name} - ${it.category}" }.toTypedArray()
             androidx.appcompat.app.AlertDialog.Builder(this@TabTerminalActivity)
-                .setTitle("Search Results")
+                .setTitle(R.string.terminal_search_results_title)
                 .setItems(snippetNames) { _, which ->
                     insertSnippet(results[which])
                 }
-                .setNegativeButton("Close", null)
+                .setNegativeButton(R.string.close, null)
                 .show()
         }
     }
@@ -4936,12 +4932,12 @@ class TabTerminalActivity : AppCompatActivity() {
                 form, hint = getString(R.string.password_hint)
             )
             val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Authentication Required")
+                .setTitle(R.string.terminal_auth_required_title)
                 .setView(form.root)
-                .setPositiveButton("Connect") { _, _ ->
+                .setPositiveButton(R.string.connect_button) { _, _ ->
                     if (cont.isActive) cont.resume(editText.text.toString()) {}
                 }
-                .setNegativeButton("Cancel") { _, _ ->
+                .setNegativeButton(R.string.cancel) { _, _ ->
                     if (cont.isActive) cont.resume(null) {}
                 }
                 .setCancelable(false)
