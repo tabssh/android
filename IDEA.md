@@ -1,6 +1,6 @@
 ## Project description
 
-TabSSH is an Android SSH client that brings browser-style tabbed sessions to the terminal. Users manage multiple concurrent SSH connections as swipe-able tabs, browse remote filesystems over SFTP, manage SSH keys and reusable credential identities, and optionally control Proxmox, XCP-ng, VMware, and OCI hypervisors — all from a single app. Sync across devices uses Android's Storage Access Framework so users supply their own cloud storage (Drive, Dropbox, Nextcloud, local, etc.) with no cloud accounts required by the app itself.
+TabSSH is an Android SSH client that brings browser-style tabbed sessions to the terminal. Users manage multiple concurrent SSH connections as swipe-able tabs, browse remote filesystems over SFTP, manage SSH keys and reusable credential identities, and optionally control Proxmox, XCP-ng, VMware, and OCI hypervisors, cloud instances, and Docker hosts — all from a single app. Sync across devices uses Android's Storage Access Framework so users supply their own cloud storage (Drive, Dropbox, Nextcloud, local, etc.) with no cloud accounts required by the app itself.
 
 ## Project variables
 
@@ -107,6 +107,18 @@ version_code_scheme: manual
 - Cloud account credentials must never be stored in the database
 - No vendor SDKs embedded — all providers accessed via their REST APIs
 
+### Docker host management
+- Portainer-class management of Docker hosts reached over the user's existing SSH connections — no host agent, no exposed Docker API port required
+- A Docker Hosts section in the Hypervisors tab; a host links to a saved SSH connection
+- Containers: list, inspect, start/stop/restart/pause/kill/rename/remove, live-follow logs, live stats; enter any running container as a normal terminal tab via docker exec (shell auto-detected)
+- Images (pull with progress, remove, prune), volumes, networks, and an engine dashboard with disk usage
+- Compose stacks are paste-first: paste a complete compose file and it is saved to a per-host configurable remote directory (default `/srv/$USER/tabssh/docker/compose/{name}`) and run; up/down/pull/restart with per-service status; remote directories are created on demand
+- Single-container run configs: a form-based `run.yml` (mirroring `docker run` flags) per container under a second configurable remote directory (default `/srv/$USER/tabssh/docker/docker/{name}`), with a raw-YAML advanced toggle
+- Hybrid transport: Docker Engine API over an SSH forward of the host's unix socket when the server permits it, automatic fallback to the docker CLI over SSH exec — every feature works on CLI-only hosts, with documented degradation (stats become polled)
+- Socket forwarding requires sshd `AllowTcpForwarding yes` and `AllowStreamLocalForwarding yes`; a denial must produce an actionable remediation hint, never a silent permanent downgrade — a manual "retest transport" action exists
+- App-driven, watchtower-style updates: periodic registry digest checks flag stale containers (notification + in-app badge); unattended pull+recreate is opt-in per policy and must preserve the container's configuration, with automatic rollback if the replacement fails
+- Docker Hub and private registries (Basic/Bearer) supported; registry credentials are Keystore-only, never a database column
+
 ### Accessibility and UI
 - TalkBack support with content descriptions on all interactive elements
 - High-contrast mode and large-text mode
@@ -144,24 +156,11 @@ version_code_scheme: manual
 - Include analytics, crash reporting SDKs, or tracking pixels without explicit user opt-in
 - Require network access on first launch
 
-## JSch direct-streamlocal decision
+## Accepted design decisions
 
-**Feasible — no custom channel class needed.** `com.github.mwiede:jsch:2.27.7`
-already ships `com.jcraft.jsch.ChannelDirectStreamLocal` (extends
-ChannelDirectTCPIP) and `Session.openChannel("direct-streamlocal@openssh.com")`
-returns it — verified via javap and string constants in the jar. Usage:
-open the channel, `setSocketPath("/var/run/docker.sock")`, then normal
-`getInputStream()`/`getOutputStream()` + `connect()`.
-
-Ground-truth test (2026-08-07): Dockerized OpenSSH 10.x (alpine) with a
-socat unix listener at `/tmp/test.sock`; a JVM client using the app's exact
-jsch jar read the socket's bytes end-to-end (`READ 23 bytes:
-hello-from-unix-socket`).
-
-Quirks found:
-- Server must have `AllowTcpForwarding yes` — with it off, sshd's local
-  permission set is empty and direct-streamlocal is denied even when
-  `AllowStreamLocalForwarding yes` ("request was denied" in sshd debug log).
-- JSch surfaces any server-side denial only as the generic
-  `JSchException: channel is not opened.` — transport code must map this to
-  a user-actionable hint (check AllowTcpForwarding/AllowStreamLocalForwarding).
+- Docker unix-socket forwarding uses the SSH library's native
+  `direct-streamlocal@openssh.com` support (no custom protocol code) —
+  verified working end-to-end against a real sshd on 2026-08-07. The server
+  must allow both TCP and stream-local forwarding; the server reports a
+  denial only generically, so the app maps that failure to an actionable
+  sshd-configuration hint rather than showing a raw error.

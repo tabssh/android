@@ -98,6 +98,20 @@ Manage instances across 8 cloud providers from a single Cloud Accounts screen.
 - **Connect** shortcut — launches SSH session to running instances with a public IP
 - Accounts editable after creation; OCI credentials importable from `~/.oci/config` via file picker
 
+### Docker Management 🐳
+
+Portainer-class Docker management over the SSH connections you already have — no agent, no exposed API port.
+
+- **Docker Hosts** section in the Hypervisors tab — add any saved SSH connection as a Docker host
+- **Containers** — start/stop/restart/pause/kill/rename/remove, live-follow logs, live stats, inspect
+- **Enter Terminal** — one tap opens `docker exec` into a container as a normal swipeable terminal tab (shell auto-detected)
+- **Images / Volumes / Networks** — list, inspect, create, remove, prune; image pull with per-layer progress
+- **Compose stacks, paste-first** — paste a complete `compose.yaml` and it's saved to a configurable remote directory (default `/srv/$USER/tabssh/docker/compose/{name}`, created automatically) with up/down/pull/restart and per-service status
+- **Single-container run configs** — form-based `run.yml` editor mirroring `docker run` flags, with a raw-YAML advanced toggle
+- **Watchtower-style updates** — a background worker checks registry digests every 12 h and flags stale containers (notification + badge); opt-in per-container auto-recreate updates them unattended with automatic rollback on failure
+- **Registry support** — Docker Hub (anonymous token flow) and private registries (Basic/Bearer); credentials stored in the Android Keystore only
+- **Hybrid transport** — Docker Engine API over an SSH unix-socket forward when sshd allows it (`AllowTcpForwarding` + `AllowStreamLocalForwarding`), automatic fallback to the docker CLI over SSH exec with actionable hints — works either way
+
 ### VNC Console *(alpha)* 🖥️
 
 Pixel-perfect graphical console access to VMs — no separate VNC viewer required.

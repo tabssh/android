@@ -1,5 +1,84 @@
 # What's New
 
+## Wave 66 — Docker management, Tasker plugin, console polish
+
+### Docker hosts
+
+- **Manage Docker like Portainer, right from your phone** — add any
+  server you already SSH into as a Docker host (new section in the
+  Hypervisors tab) and get a full management UI: containers with
+  start/stop/restart/pause/kill/rename/remove, live-follow logs,
+  live stats, images with per-layer pull progress, volumes,
+  networks, and an engine dashboard with disk usage.
+- **Compose stacks, paste-first** — paste a complete `compose.yaml`,
+  give it a name, and the app saves it to a folder on the server
+  (location configurable per host, created automatically) and runs
+  it. Up / down / pull / restart with per-service status, plus a
+  built-in editor for the compose file and its `.env`.
+- **Single containers via a form** — a `run.yml` editor mirrors
+  `docker run` flags (image, ports, volumes, env, restart policy,
+  …) with a raw-YAML toggle for power users.
+- **Enter any container as a terminal tab** — one tap opens
+  `docker exec` in a normal swipeable tab, shell auto-detected.
+- **Watchtower-style update checks** — the app compares your
+  running containers against the registry every 12 hours and flags
+  stale ones with a notification and an in-app badge. Optional
+  per-container auto-update recreates the container from the new
+  image unattended — keeping its full configuration — and rolls
+  back automatically if the new one fails to come up. Docker Hub
+  and private registries supported; credentials live in the
+  Android Keystore, never the database.
+- **No special server setup** — the app talks to the Docker socket
+  through your existing SSH connection; if the server's sshd
+  doesn't allow socket forwarding it falls back to the docker CLI
+  automatically, and tells you exactly what to enable if you want
+  the faster path.
+### Tasker / Locale plugin
+
+- **TabSSH is now a real Tasker/Locale plugin** — build Tasker
+  tasks that connect, disconnect, run commands, or send keys over
+  your saved connections, configured through TabSSH's own picker
+  instead of hand-typed intents.
+- **Locked down by default** — the integration ships disabled;
+  turn it on in Settings → Tasker. Plugin bundles must reference a
+  connection by its internal ID (handed out only by the config
+  screen), so other apps can't target your servers by guessing
+  names.
+- **Privacy: command-result broadcasts no longer include terminal
+  output by default** — any app on the device could read those
+  broadcasts, so they now carry only the command's status. A new
+  "Include Command Output in Broadcasts" toggle in Tasker settings
+  (default off) restores the old behaviour if your flows need the
+  output.
+
+### Terminal and console polish
+
+- **VM snapshots on every hypervisor** — Proxmox, VMware, and
+  libvirt/QEMU join XCP-ng: long-press a VM to create, list,
+  revert, or delete snapshots.
+- **"Ask" multiplexer mode now actually asks** — connections set
+  to Ask show a session picker right after connect: attach to any
+  existing tmux/screen/zellij session, create a named one, or keep
+  a plain shell.
+- **The bottom terminal row is never cut off any more** — changing
+  font, typeface, or line spacing could clip the prompt or tmux
+  status line; the grid now always fits, and the last row sits
+  flush against the key bar (no more odd blank band above it).
+- **VNC and console tabs now react when their session ends** — a
+  VM shutting down closes the tab cleanly (like `exit` does), and
+  an abrupt drop shows a "Connection closed" dialog with one-tap
+  Reconnect for saved VNC hosts.
+- **VNC/console tabs take keyboard input properly** — the keyboard
+  toggle, the custom key bar (ESC, arrows, F-keys), and latched
+  Ctrl/Alt/Shift all work inside graphical sessions now.
+- **VNC and console tabs appear in Active Sessions** — the
+  Connections tab's session strip now lists every live tab, not
+  just SSH; tap a chip to jump straight to it.
+- **A real desktop-style scrollbar** — the terminal now shows a
+  persistent right-edge scrollbar (konsole-style) instead of a
+  vanishing overlay thumb, and swipe-scrolling is geared like a
+  desktop mouse wheel (3 lines per line of travel).
+
 ## Wave 65 — Tab swiping works again
 
 - **Fixed tab swiping breaking after touching the middle of the
