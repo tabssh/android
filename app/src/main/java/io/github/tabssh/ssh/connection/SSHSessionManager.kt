@@ -371,7 +371,10 @@ class SSHSessionManager(private val context: Context) {
      * Check if a connection is active for a profile
      */
     fun isConnectionActive(profileId: String): Boolean {
-        return activeConnections[profileId]?.isConnected() == true
+        // Monitoring-only connections (docker hosts, dashboards, host detail)
+        // are infrastructure plumbing — never show them as active sessions.
+        val connection = activeConnections[profileId] ?: return false
+        return !connection.isMonitoringOnly && connection.isConnected()
     }
     
     /**

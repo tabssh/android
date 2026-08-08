@@ -385,9 +385,11 @@ class DockerHostEditActivity : AppCompatActivity() {
                         getString(R.string.docker_host_error_connection)
                     )
                 }
+                // connectForMonitoring: a connection test is plumbing, not a user
+                // session — it must not show up as an active SSH session.
                 val ssh = app.sshSessionManager.getConnection(profile.id)
                     ?.takeIf { it.isConnected() }
-                    ?: app.sshSessionManager.connectToServer(profile)
+                    ?: app.sshSessionManager.connectForMonitoring(profile)
                 val detected = if (ssh == null) {
                     DockerResult.TransportUnavailable(
                         getString(R.string.docker_msg_ssh_unavailable),

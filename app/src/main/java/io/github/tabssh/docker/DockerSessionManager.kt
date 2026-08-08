@@ -99,10 +99,14 @@ object DockerSessionManager {
                     }
             }
 
+            // connectForMonitoring, not connectToServer: docker-owned connections are
+            // infrastructure plumbing — they must not surface as active SSH sessions,
+            // start the foreground service, or fire session alerts. A live user
+            // terminal session to the same profile is still reused as-is above.
             Logger.d(TAG, "opening SSH connection for docker host $hostId")
             val connection = app.sshSessionManager.getConnection(profile.id)
                 ?.takeIf { it.isConnected() }
-                ?: app.sshSessionManager.connectToServer(profile)
+                ?: app.sshSessionManager.connectForMonitoring(profile)
                 ?: run {
                     Logger.w(TAG, "acquire failed: SSH connection could not be opened for host $hostId")
                     return@withContext DockerResult.TransportUnavailable(
