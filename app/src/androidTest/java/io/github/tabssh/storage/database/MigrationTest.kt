@@ -166,20 +166,56 @@ class MigrationTest {
     }
 
     // -------------------------------------------------------------------------
-    // Full chain v3 → v9 — exercises every migration in sequence
+    // v9 → v10: docker_hosts gains the six custom-endpoint columns
     // -------------------------------------------------------------------------
 
     @Test
-    fun migrateChain3To9() {
+    fun migrate9To10_customEndpointColumnsAdded() {
+        helper.createDatabase(testDbName, 9).apply {
+            execSQL(
+                "INSERT INTO docker_hosts (name, linked_connection_id, socket_path, " +
+                    "transport_mode, compose_invocation, compose_base_path, " +
+                    "run_config_base_path, last_connected, created_at) VALUES " +
+                    "('h1', 'conn1', '/var/run/docker.sock', 'auto', 'auto', " +
+                    "'/srv/\$USER/tabssh/docker/compose', '/srv/\$USER/tabssh/docker/docker', 0, 0)"
+            )
+            close()
+        }
+        val db = helper.runMigrationsAndValidate(
+            testDbName, 10, true,
+            TabSSHDatabase.MIGRATION_9_10
+        )
+        db.use {
+            val c = it.query(
+                "SELECT custom_host, custom_port, custom_username, custom_auth_type, " +
+                    "custom_key_id, custom_identity_id, name FROM docker_hosts WHERE name = 'h1'"
+            )
+            c.use { rc ->
+                assertTrue("pre-migration row must survive", rc.moveToFirst())
+                for (i in 0..5) {
+                    assertTrue("custom column $i must default to NULL", rc.isNull(i))
+                }
+                assertTrue("name must be preserved", rc.getString(6) == "h1")
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Full chain v3 → v10 — exercises every migration in sequence
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun migrateChain3To10() {
         helper.createDatabase(testDbName, 3).close()
         helper.runMigrationsAndValidate(
-            testDbName, 9, true,
+            testDbName, 10, true,
             TabSSHDatabase.MIGRATION_3_4,
             TabSSHDatabase.MIGRATION_4_5,
             TabSSHDatabase.MIGRATION_5_6,
             TabSSHDatabase.MIGRATION_6_7,
             TabSSHDatabase.MIGRATION_7_8,
-            TabSSHDatabase.MIGRATION_8_9
+            TabSSHDatabase.MIGRATION_8_9,
+            TabSSHDatabase.MIGRATION_9_10
         ).close()
     }
 }

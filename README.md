@@ -102,7 +102,7 @@ Manage instances across 8 cloud providers from a single Cloud Accounts screen.
 
 Portainer-class Docker management over the SSH connections you already have — no agent, no exposed API port.
 
-- **Docker Hosts** section in the Hypervisors tab — add any saved SSH connection as a Docker host
+- **Docker Hosts** section in the Hypervisors tab — add any saved SSH connection as a Docker host, or give the host its own custom SSH endpoint (address, port, username, password/key/identity — password Keystore-only) kept separate from your connection list
 - **Containers** — start/stop/restart/pause/kill/rename/remove, live-follow logs, live stats, inspect
 - **Enter Terminal** — one tap opens `docker exec` into a container as a normal swipeable terminal tab (shell auto-detected)
 - **Images / Volumes / Networks** — list, inspect, create, remove, prune; image pull with per-layer progress

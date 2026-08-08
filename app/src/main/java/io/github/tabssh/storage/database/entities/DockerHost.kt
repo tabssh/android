@@ -33,9 +33,31 @@ data class DockerHost(
     @ColumnInfo(name = "name")
     val name: String,
 
-    /** Reference to existing SSH connection (ConnectionProfile.id). */
+    /** Reference to existing SSH connection (ConnectionProfile.id). NULL = custom endpoint. */
     @ColumnInfo(name = "linked_connection_id")
     val linkedConnectionId: String? = null,
+
+    /** Custom SSH endpoint hostname — used when no saved connection is linked. */
+    @ColumnInfo(name = "custom_host")
+    val customHost: String? = null,
+
+    @ColumnInfo(name = "custom_port")
+    val customPort: Int? = null,
+
+    @ColumnInfo(name = "custom_username")
+    val customUsername: String? = null,
+
+    /** "password", "key", or "identity" — auth method for the custom endpoint. */
+    @ColumnInfo(name = "custom_auth_type")
+    val customAuthType: String? = null,
+
+    /** StoredKey.keyId when [customAuthType] is "key". */
+    @ColumnInfo(name = "custom_key_id")
+    val customKeyId: String? = null,
+
+    /** Identity.id when [customAuthType] is "identity". */
+    @ColumnInfo(name = "custom_identity_id")
+    val customIdentityId: String? = null,
 
     @ColumnInfo(name = "socket_path")
     val socketPath: String = "/var/run/docker.sock",
@@ -72,4 +94,15 @@ data class DockerHost(
 
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis()
-)
+) {
+    /** True when this host connects via its own endpoint instead of a saved connection. */
+    fun usesCustomEndpoint(): Boolean = linkedConnectionId == null && !customHost.isNullOrBlank()
+
+    /**
+     * Id of the ephemeral ConnectionProfile built for a custom endpoint.
+     * Doubles as the Keystore alias for the custom-endpoint password
+     * (namespace `docker_host_{id}` per AI.md PART 6), so SSHConnection's
+     * standard retrievePassword(profile.id) lookup finds it unmodified.
+     */
+    fun ephemeralProfileId(): String = "docker_host_$id"
+}

@@ -50,7 +50,7 @@ import io.github.tabssh.utils.logging.Logger
         ContainerAutoUpdatePolicy::class,
         RegistryCredential::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -343,6 +343,25 @@ abstract class TabSSHDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v9 → v10: add the six nullable custom-endpoint columns to
+         * docker_hosts (custom_host/port/username/auth_type/key_id/
+         * identity_id) so a Docker host can use its own SSH endpoint
+         * instead of a saved connection. Additive only; no data
+         * transform. The custom-endpoint password is Keystore-only
+         * (DockerHostPasswordStore) — no secret column.
+         */
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `docker_hosts` ADD COLUMN `custom_host` TEXT")
+                db.execSQL("ALTER TABLE `docker_hosts` ADD COLUMN `custom_port` INTEGER")
+                db.execSQL("ALTER TABLE `docker_hosts` ADD COLUMN `custom_username` TEXT")
+                db.execSQL("ALTER TABLE `docker_hosts` ADD COLUMN `custom_auth_type` TEXT")
+                db.execSQL("ALTER TABLE `docker_hosts` ADD COLUMN `custom_key_id` TEXT")
+                db.execSQL("ALTER TABLE `docker_hosts` ADD COLUMN `custom_identity_id` TEXT")
+            }
+        }
+
         fun getDatabase(context: Context): TabSSHDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -352,7 +371,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
                 )
                 .addCallback(DatabaseCallback())
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                 .build()
                 INSTANCE = instance
                 instance

@@ -6,6 +6,7 @@ import io.github.tabssh.docker.transport.DockerTransport
 import io.github.tabssh.docker.transport.SocketRelay
 import io.github.tabssh.docker.transport.SshExecRunner
 import io.github.tabssh.docker.transport.TransportCapabilityDetector
+import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.ssh.forwarding.PortForwardingManager
 import io.github.tabssh.storage.database.entities.ConnectionProfile
@@ -77,13 +78,17 @@ object DockerSessionManager {
             val host = dao.getById(hostId)
                 ?: return@withContext DockerResult.NotFound("Docker host not found", "id=$hostId")
             val linkedId = host.linkedConnectionId
-                ?: return@withContext DockerResult.Error(
-                    "No SSH connection is linked to this Docker host"
-                )
-            val profile = app.database.connectionDao().getConnectionById(linkedId)
-                ?: return@withContext DockerResult.NotFound(
-                    "The linked SSH connection no longer exists", linkedId
-                )
+            val profile = if (linkedId != null) {
+                app.database.connectionDao().getConnectionById(linkedId)
+                    ?: return@withContext DockerResult.NotFound(
+                        "The linked SSH connection no longer exists", linkedId
+                    )
+            } else {
+                resolveCustomProfile(app, host)
+                    ?: return@withContext DockerResult.Error(
+                        "No SSH connection is linked to this Docker host"
+                    )
+            }
 
             val connection = app.sshSessionManager.getConnection(profile.id)
                 ?.takeIf { it.isConnected() }
@@ -118,6 +123,45 @@ object DockerSessionManager {
                 is DockerResult.Error -> detected
             }
         }
+    }
+
+    /**
+     * Build the ephemeral, never-persisted ConnectionProfile for a
+     * custom-endpoint Docker host. Its id equals the Keystore alias of the
+     * stored password (`docker_host_{id}`), so password auth resolves
+     * through SSHConnection's standard retrievePassword(profile.id) path;
+     * identity auth resolves through the identity_{id} alias like any
+     * saved connection. Because the profile is not in the connections
+     * table, exec tabs opened from it are automatically excluded from
+     * recents, connection stats, and session persistence — Docker hosts
+     * are a separate domain, like hypervisors. Returns null when the
+     * custom endpoint is incomplete.
+     */
+    suspend fun resolveCustomProfile(
+        app: TabSSHApplication,
+        host: DockerHost
+    ): ConnectionProfile? {
+        val endpoint = host.customHost?.takeIf { it.isNotBlank() } ?: return null
+        val username = host.customUsername?.takeIf { it.isNotBlank() } ?: return null
+        val identity = if (host.customAuthType == "identity") {
+            host.customIdentityId?.let { app.database.identityDao().getIdentityById(it) }
+        } else null
+        val authType = when (host.customAuthType) {
+            "key" -> AuthType.PUBLIC_KEY
+            "identity" -> identity?.authType ?: AuthType.PASSWORD
+            else -> AuthType.PASSWORD
+        }
+        return ConnectionProfile(
+            id = host.ephemeralProfileId(),
+            name = host.name.ifBlank { endpoint },
+            host = endpoint,
+            port = host.customPort ?: 22,
+            username = username,
+            authType = authType.name,
+            keyId = host.customKeyId?.takeIf { host.customAuthType == "key" },
+            identityId = identity?.id,
+            multiplexerMode = "OFF"
+        )
     }
 
     /** Close and forget the session for [hostId]; the SSH connection stays up. */

@@ -91,9 +91,14 @@ class DockerHostAdapter(
             // Transport-tier badge: the persisted mode, or "auto" pre-detection.
             textTransportMode.text = host.transportMode
 
-            // Linked SSH connection name, falling back to the raw socket path.
+            // Linked SSH connection name; custom endpoints show user@host;
+            // final fallback is the raw socket path.
             textConnection.text = host.linkedConnectionId
                 ?.let { connectionNames[it] }
+                ?: host.customHost?.takeIf { it.isNotBlank() }?.let { endpoint ->
+                    host.customUsername?.takeIf { it.isNotBlank() }
+                        ?.let { "$it@$endpoint" } ?: endpoint
+                }
                 ?: host.socketPath
 
             if (host.lastConnected > 0) {

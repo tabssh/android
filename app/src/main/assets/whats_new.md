@@ -10,6 +10,12 @@
   start/stop/restart/pause/kill/rename/remove, live-follow logs,
   live stats, images with per-layer pull progress, volumes,
   networks, and an engine dashboard with disk usage.
+- **Custom endpoints** — a Docker host doesn't have to reference a
+  saved SSH connection: give it its own address, port, username,
+  and auth (password, SSH key, or saved identity) and it stays
+  fully separate from your connection list, like hypervisors.
+  Passwords live only in the Android Keystore. Naming is optional —
+  it defaults to the connection name or the endpoint hostname.
 - **Compose stacks, paste-first** — paste a complete `compose.yaml`,
   give it a name, and the app saves it to a folder on the server
   (location configurable per host, created automatically) and runs

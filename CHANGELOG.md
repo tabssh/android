@@ -7,6 +7,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Docker hosts can now use a custom SSH endpoint** — instead of linking a saved SSH connection, a Docker host can carry its own address, port, username, and auth (password, SSH key, or saved identity), keeping Docker infrastructure separate from the connection list the way hypervisors already are. The password is stored only in the Android Keystore, never in the database. The host name is now optional and defaults to the linked connection's name (or the endpoint hostname for custom endpoints). Enter Terminal, transport testing, and watchtower-style update checks all work for custom endpoints; their sessions and `docker exec` tabs stay out of the Active Sessions strip, recents, connection stats, and session restore
+
 ### Security
 
 - **Tasker integration is now opt-in (default OFF)** — the setting previously defaulted to ON, which was harmless while the only entry point was the signature-gated `TaskerActionReceiver`, but the new Locale plugin fire receiver is exported without a permission (the protocol requires it), so on a fresh install any app on the device could have driven SSH sessions with no user action. Existing installs keep whatever the toggle is already set to

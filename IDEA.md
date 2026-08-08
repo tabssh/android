@@ -109,7 +109,8 @@ version_code_scheme: manual
 
 ### Docker host management
 - Portainer-class management of Docker hosts reached over the user's existing SSH connections — no host agent, no exposed Docker API port required
-- A Docker Hosts section in the Hypervisors tab; a host links to a saved SSH connection
+- A Docker Hosts section in the Hypervisors tab; a host links to a saved SSH connection or carries its own custom SSH endpoint (address, port, username, auth via password/SSH key/saved identity) — the host name is optional, defaulting to the connection name or endpoint hostname
+- Docker is a separate domain like hypervisors: custom-endpoint sessions and container exec tabs never appear in the active-sessions list, recents, connection stats, or session restore; custom-endpoint passwords are Keystore-only, never a database column
 - Containers: list, inspect, start/stop/restart/pause/kill/rename/remove, live-follow logs, live stats; enter any running container as a normal terminal tab via docker exec (shell auto-detected)
 - Images (pull with progress, remove, prune), volumes, networks, and an engine dashboard with disk usage
 - Compose stacks are paste-first: paste a complete compose file and it is saved to a per-host configurable remote directory (default `/srv/$USER/tabssh/docker/compose/{name}`) and run; up/down/pull/restart with per-service status; remote directories are created on demand

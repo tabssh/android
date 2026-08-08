@@ -313,8 +313,12 @@ class ConnectionsFragment : Fragment() {
         // Only show tabs that are actively connecting or connected.
         // DISCONNECTED tabs are dead slots — showing them after a notification
         // disconnect misleads the user into thinking there is still a live session.
-        val tabs = app.tabManager.getAllTabsSealed().filter {
-            it.stateFlow().value != io.github.tabssh.ssh.connection.ConnectionState.DISCONNECTED
+        // Docker exec tabs (profile id "docker-exec:…") are excluded: Docker is
+        // a separate domain like hypervisors, not part of the SSH connection
+        // list, so its container shells don't belong in the sessions strip.
+        val tabs = app.tabManager.getAllTabsSealed().filter { tab ->
+            tab.stateFlow().value != io.github.tabssh.ssh.connection.ConnectionState.DISCONNECTED &&
+                (tab as? Tab.Ssh)?.sshTab?.profile?.id?.startsWith("docker-exec:") != true
         }
         if (tabs.isEmpty()) {
             // Don't inflate the stub if we never had to. If it was already

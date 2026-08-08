@@ -203,6 +203,9 @@ class DockerHostsFragment : Fragment() {
             .setTitle(R.string.docker_delete_host_title)
             .setMessage(getString(R.string.docker_delete_host_message, host.name))
             .setPositiveButton(R.string.delete) { _, _ ->
+                // Captured at click time — the IO block below must not call
+                // requireContext() after a potential detach.
+                val appContext = requireContext().applicationContext
                 // viewLifecycleOwner: scope ends at onDestroyView so the toast
                 // below cannot fire against a dead view tree.
                 viewLifecycleOwner.lifecycleScope.launch {
@@ -211,6 +214,11 @@ class DockerHostsFragment : Fragment() {
                             // Convention cascade — the docker_* child tables have
                             // no real FKs, so clean them up alongside the host.
                             DockerSessionManager.release(host.id)
+                            // Custom-endpoint password lives only in the
+                            // Keystore — clear it so a future row id reuse
+                            // can't inherit this host's secret.
+                            io.github.tabssh.crypto.storage.DockerHostPasswordStore
+                                .clear(appContext, host.id)
                             app.database.composeStackDao().deleteForHost(host.id)
                             app.database.singleContainerConfigDao().deleteForHost(host.id)
                             app.database.containerAutoUpdatePolicyDao().deleteForHost(host.id)

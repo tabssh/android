@@ -187,12 +187,16 @@ class DockerUpdateCheckWorker(
         val cached = DockerSessionManager.cached(host.id)
         var ownTransport: DockerTransport? = null
         val transport: DockerTransport = cached?.transport ?: run {
-            val linkedId = host.linkedConnectionId ?: run {
-                Logger.w(TAG, "Host ${host.name} has no linked SSH connection — skipping")
-                return
-            }
+            // Custom-endpoint hosts key their session on the ephemeral
+            // profile id; the piggyback-only rule below applies unchanged.
+            val sessionKey = host.linkedConnectionId
+                ?: host.takeIf { it.usesCustomEndpoint() }?.ephemeralProfileId()
+                ?: run {
+                    Logger.w(TAG, "Host ${host.name} has no linked SSH connection — skipping")
+                    return
+                }
             // Piggyback-only: never open a new SSH session from the background.
-            val connection = app.sshSessionManager.getConnection(linkedId)
+            val connection = app.sshSessionManager.getConnection(sessionKey)
                 ?.takeIf { it.isConnected() }
                 ?: run {
                     Logger.d(TAG, "No live SSH session for ${host.name} — skipping this cycle")
