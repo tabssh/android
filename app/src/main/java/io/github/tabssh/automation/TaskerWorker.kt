@@ -51,6 +51,7 @@ class TaskerWorker(
         const val KEY_COMMAND = "command"
         const val KEY_KEYS = "keys"
         const val KEY_RESULT = "result"
+        const val KEY_STATUS = "status"
         const val KEY_ERROR = "error"
         const val KEY_WAIT_FOR_RESULT = "wait_for_result"
         const val KEY_TIMEOUT_MS = "timeout_ms"
@@ -215,14 +216,20 @@ class TaskerWorker(
             try {
                 withTimeout(timeoutMs) {
                     delay(500)
-                    val output = tab.termuxBridge.getScreenContent()
-                    broadcastCommandResult(profile, command, output)
+                    // Screen content is only captured when the user opted in — the
+                    // event.* broadcasts are unprotected and readable by every app.
+                    val output = if (app.preferencesManager.isTaskerIncludeOutputEnabled()) {
+                        tab.termuxBridge.getScreenContent()
+                    } else {
+                        null
+                    }
+                    broadcastCommandResult(profile, command, "completed", output)
                 }
             } catch (_: TimeoutCancellationException) {
                 broadcastError("Command timeout")
             }
         } else {
-            broadcastCommandResult(profile, command, "Command sent")
+            broadcastCommandResult(profile, command, "sent", null)
         }
     }
 
@@ -266,12 +273,18 @@ class TaskerWorker(
         })
     }
 
-    private fun broadcastCommandResult(profile: ConnectionProfile, command: String, result: String) {
+    // COMMAND_RESULT is an implicit, unprotected broadcast (public Tasker contract),
+    // so by default it carries status metadata only. Terminal screen content — which
+    // can hold credentials — is included in `result` solely when the user enables
+    // "Include Command Output in Broadcasts"; otherwise `result` mirrors `status`
+    // so existing Tasker tasks reading `result` keep receiving a value.
+    private fun broadcastCommandResult(profile: ConnectionProfile, command: String, status: String, output: String?) {
         applicationContext.sendBroadcast(Intent(EVENT_COMMAND_RESULT).apply {
             putExtra(KEY_CONNECTION_ID, profile.id)
             putExtra(KEY_CONNECTION_NAME, profile.name)
             putExtra(KEY_COMMAND, command)
-            putExtra(KEY_RESULT, result)
+            putExtra(KEY_STATUS, status)
+            putExtra(KEY_RESULT, output ?: status)
         })
     }
 

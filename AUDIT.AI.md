@@ -31,7 +31,7 @@ never deleted — its content is superseded by this file.
   controls the payload; unparcelling a class this process cannot load throws,
   and an uncaught throw in `onReceive`/`onCreate` is a crash any installed app
   could trigger. — FIXED: validation wrapped, defaults to reject.
-- [ ] `automation/TaskerWorker.kt:269-276`: **`broadcastCommandResult` puts
+- [x] `automation/TaskerWorker.kt:269-276`: **`broadcastCommandResult` puts
   `termuxBridge.getScreenContent()` into an implicit, unprotected
   `sendBroadcast`.** Every app on the device can register for
   `io.github.tabssh.event.COMMAND_RESULT` and read terminal output —
@@ -43,8 +43,12 @@ never deleted — its content is superseded by this file.
   DECIDED (user, 2026-08-07): status-only broadcast by default — keep exit
   status/metadata, drop screen content; add an "include command output in
   broadcasts" toggle in Tasker settings, default OFF, restoring old payload
-  when enabled. Implement as its own commit after the Docker feature lands
-  (tree currently holds the uncommitted Docker feature).
+  when enabled. — FIXED (2026-08-07, own commit after the Docker feature):
+  new `status` extra (`completed`/`sent`); `result` mirrors `status` unless
+  the new `tasker_include_output` toggle (default OFF) is on, in which case
+  it carries the screen content as before. Screen content is not captured
+  at all when the toggle is off. Events help dialog updated to document the
+  contract.
 
 ## Pass 2: Code Quality
 

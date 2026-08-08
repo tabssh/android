@@ -870,8 +870,9 @@ class TaskerSettingsFragment : PreferenceFragmentCompat() {
             Extras: connection_id, connection_name
             
             📊 COMMAND_RESULT
-            Broadcast command output
-            Extras: connection_id, connection_name, command, result
+            Broadcast when a command completes
+            Extras: connection_id, connection_name, command, status, result
+            result carries terminal output only when "Include Command Output in Broadcasts" is enabled; otherwise it mirrors status
             
             ⚠️ ERROR
             Broadcast when error occurs

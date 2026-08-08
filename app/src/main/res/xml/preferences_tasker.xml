@@ -36,6 +36,13 @@
             android:defaultValue="false"
             android:dependency="tasker_enabled" />
 
+        <SwitchPreferenceCompat
+            android:key="tasker_include_output"
+            android:title="Include Command Output in Broadcasts"
+            android:summary="COMMAND_RESULT carries status only when off; on includes terminal screen content, readable by any installed app"
+            android:defaultValue="false"
+            android:dependency="tasker_enabled" />
+
         <MultiSelectListPreference
             android:key="tasker_allowed_connections"
             android:title="Allowed Connections"

@@ -162,6 +162,7 @@ class PreferenceManager(private val context: Context) {
         private const val KEY_TASKER_ENABLED = "tasker_enabled"
         private const val KEY_TASKER_REQUIRE_UNLOCK = "tasker_require_unlock"
         private const val KEY_TASKER_ALLOWED_CONNECTIONS = "tasker_allowed_connections"
+        private const val KEY_TASKER_INCLUDE_OUTPUT = "tasker_include_output"
         private const val KEY_TASKER_LOG_EVENTS = "tasker_log_events"
         private const val KEY_TASKER_COMMAND_TIMEOUT = "tasker_command_timeout"
 
@@ -800,6 +801,10 @@ class PreferenceManager(private val context: Context) {
     }
 
     fun isTaskerLogEventsEnabled(): Boolean = getBoolean(KEY_TASKER_LOG_EVENTS, true)
+
+    // Default OFF: COMMAND_RESULT broadcasts are readable by every installed app,
+    // so terminal screen content is only included when the user opts in.
+    fun isTaskerIncludeOutputEnabled(): Boolean = getBoolean(KEY_TASKER_INCLUDE_OUTPUT, false)
     fun setTaskerLogEventsEnabled(enabled: Boolean) = setBoolean(KEY_TASKER_LOG_EVENTS, enabled)
 
     fun getTaskerCommandTimeoutMs(): Int = getStringAsInt(KEY_TASKER_COMMAND_TIMEOUT, 30000)
