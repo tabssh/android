@@ -214,7 +214,7 @@ class DockerHostsFragment : Fragment() {
                         withContext(Dispatchers.IO) {
                             // Convention cascade — the docker_* child tables have
                             // no real FKs, so clean them up alongside the host.
-                            DockerSessionManager.release(host.id)
+                            DockerSessionManager.release(app, host.id)
                             // Custom-endpoint password lives only in the
                             // Keystore — clear it so a future row id reuse
                             // can't inherit this host's secret.

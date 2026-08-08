@@ -397,6 +397,9 @@
     <string name="docker_host_run_base_hint">Run-config base path</string>
     <string name="docker_host_cli_path_hint">Docker CLI path (optional)</string>
     <string name="docker_host_notes_hint">Notes</string>
+    <string name="docker_host_update_check_switch">Check for image updates</string>
+    <string name="docker_host_update_interval_hint">Update check interval (hours)</string>
+    <string name="docker_host_update_interval_helper">Blank = default (every 12 hours)</string>
     <string name="docker_host_base_path_helper">$USER and $HOME expand on the remote host</string>
     <string name="docker_host_error_connection">Choose a saved SSH connection</string>
     <string name="docker_host_saved">Docker host saved</string>

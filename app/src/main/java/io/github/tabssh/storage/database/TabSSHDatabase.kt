@@ -14,7 +14,7 @@ import io.github.tabssh.utils.logging.Logger
 /**
  * Main Room database for TabSSH.
  *
- * Current version: 9.
+ * Current version: 11.
  * Versions 1 and 2 never shipped to real users, so v3 is the effective schema
  * baseline and no fallback path exists for them. Every version bump from v3
  * onward MUST register a real Migration object via addMigrations(); destructive
@@ -50,7 +50,7 @@ import io.github.tabssh.utils.logging.Logger
         ContainerAutoUpdatePolicy::class,
         RegistryCredential::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -362,6 +362,20 @@ abstract class TabSSHDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v10 → v11: per-host image-update-check override on docker_hosts —
+         * update_check_enabled (default on), update_check_interval_hours
+         * (NULL = global twice-daily default), and last_update_check (the
+         * worker's per-host due-time bookkeeping). Additive only.
+         */
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `docker_hosts` ADD COLUMN `update_check_enabled` INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE `docker_hosts` ADD COLUMN `update_check_interval_hours` INTEGER")
+                db.execSQL("ALTER TABLE `docker_hosts` ADD COLUMN `last_update_check` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun getDatabase(context: Context): TabSSHDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -371,7 +385,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
                 )
                 .addCallback(DatabaseCallback())
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
                 .build()
                 INSTANCE = instance
                 instance

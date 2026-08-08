@@ -173,6 +173,7 @@ class UpdateChecker(
             runningDigest == null && policy.lastDigestSeen == null -> Status.BASELINED
             else -> Status.UP_TO_DATE
         }
+        Logger.d(TAG, "check for policy ${policy.id} (${policy.containerNameOrStackName}): $status")
         return CheckResult(policy, status, registryDigest, imageRefRaw)
     }
 

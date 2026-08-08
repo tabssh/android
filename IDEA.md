@@ -117,7 +117,9 @@ version_code_scheme: manual
 - Single-container run configs: a form-based `run.yml` (mirroring `docker run` flags) per container under a second configurable remote directory (default `/srv/$USER/tabssh/docker/docker/{name}`), with a raw-YAML advanced toggle
 - Hybrid transport: Docker Engine API over an SSH forward of the host's unix socket when the server permits it, automatic fallback to the docker CLI over SSH exec — every feature works on CLI-only hosts, with documented degradation (stats become polled)
 - Socket forwarding requires sshd `AllowTcpForwarding yes` and `AllowStreamLocalForwarding yes`; a denial must produce an actionable remediation hint, never a silent permanent downgrade — a manual "retest transport" action exists
+- Docker sessions are pooled per host: one SSH connection per host opened on demand, locked per host (parallel across hosts), LRU-capped at 16 open sessions, disconnected after 10 minutes idle, and dead sessions evicted with their relays closed — monitoring-only SSH connections are released with the session, user terminal connections never are
 - App-driven, watchtower-style updates: periodic registry digest checks flag stale containers (notification + in-app badge); unattended pull+recreate is opt-in per policy and must preserve the container's configuration, with automatic rollback if the replacement fails
+- Update checks run twice daily by default, at most 2 hosts concurrently; each Docker host can disable checks or set its own interval in hours (blank = default), stored on the host row via an additive migration
 - Docker Hub and private registries (Basic/Bearer) supported; registry credentials are Keystore-only, never a database column
 
 ### Accessibility and UI

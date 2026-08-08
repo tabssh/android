@@ -31,6 +31,9 @@ interface DockerHostDao {
     @Query("UPDATE docker_hosts SET last_connected = :timestamp WHERE id = :id")
     suspend fun updateLastConnected(id: Long, timestamp: Long)
 
+    @Query("UPDATE docker_hosts SET last_update_check = :timestamp WHERE id = :id")
+    suspend fun updateLastUpdateCheck(id: Long, timestamp: Long)
+
     /**
      * Orphan-safe connection delete — nullify linked_connection_id for all
      * Docker hosts that reference the deleted ConnectionProfile. Call

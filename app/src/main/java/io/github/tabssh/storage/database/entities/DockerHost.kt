@@ -86,6 +86,18 @@ data class DockerHost(
     @ColumnInfo(name = "run_config_base_path")
     val runConfigBasePath: String = "/srv/\$USER/tabssh/docker/docker",
 
+    /** Per-host image-update-check opt-out — false skips this host entirely. */
+    @ColumnInfo(name = "update_check_enabled", defaultValue = "1")
+    val updateCheckEnabled: Boolean = true,
+
+    /** Per-host check interval override in hours. NULL = global default (twice daily). */
+    @ColumnInfo(name = "update_check_interval_hours")
+    val updateCheckIntervalHours: Int? = null,
+
+    /** Millis timestamp of the last completed update check for this host. */
+    @ColumnInfo(name = "last_update_check", defaultValue = "0")
+    val lastUpdateCheck: Long = 0,
+
     @ColumnInfo(name = "notes")
     val notes: String? = null,
 

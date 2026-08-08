@@ -27,7 +27,9 @@
 - **Enter any container as a terminal tab** — one tap opens
   `docker exec` in a normal swipeable tab, shell auto-detected.
 - **Watchtower-style update checks** — the app compares your
-  running containers against the registry every 12 hours and flags
+  running containers against the registry twice a day (each host
+  can turn checks off or set its own interval, and at most two
+  hosts are checked at a time) and flags
   stale ones with a notification and an in-app badge. Optional
   per-container auto-update recreates the container from the new
   image unattended — keeping its full configuration — and rolls
@@ -39,6 +41,7 @@
   doesn't allow socket forwarding it falls back to the docker CLI
   automatically, and tells you exactly what to enable if you want
   the faster path.
+
 ### Tasker / Locale plugin
 
 - **TabSSH is now a real Tasker/Locale plugin** — build Tasker

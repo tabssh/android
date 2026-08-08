@@ -158,3 +158,64 @@ never deleted — its content is superseded by this file.
 - ASK-picker dialog lifecycle, Proxmox/VMware snapshot-name validation,
   VMware guest-op error text, Proxmox delete error body.
 - CHANGELOG entries and `LocalePluginBundleTest` added.
+
+---
+
+# Docker Implementation Audit (2026-08-07)
+
+Scope: the whole Docker feature — transport tiers, session manager,
+update-check worker, registry client, exec tabs, logging. All findings
+fixed in the working tree, uncommitted, for user review.
+
+## Findings
+
+- [x] `docker/DockerSessionManager.kt`: **one global `Mutex` serialized
+  every host** — opening host B waited behind host A's full SSH connect +
+  transport detection; hundreds of hosts meant a strictly serial queue. —
+  FIXED: per-host `Mutex` map; slow work runs under the host's own lock,
+  shared cache state under a monitor lock only.
+- [x] `docker/DockerSessionManager.kt`: **cached sessions lived forever
+  with no cap, no idle timeout, and no dead-session eviction** — a dead
+  SSH connection left its `SocketRelay` listening and was handed back as
+  live; heavy multi-host use accumulated one open SSH connection per host
+  unbounded. — FIXED: access-ordered LRU capped at `MAX_OPEN_SESSIONS`
+  (16), `IDLE_TIMEOUT_MS` (10 min) idle disconnect via a 60 s background
+  sweeper, dead sessions evicted; eviction closes the transport/relay and
+  disconnects the monitoring-only SSH connection unless another cached
+  session or a user terminal shares the profile. Pure eviction logic
+  extracted to `DockerSessionPolicy` with JVM tests
+  (`DockerSessionPolicyTest`, 9 cases).
+- [x] `background/DockerUpdateCheckWorker.kt`: **hosts were checked
+  serially with no per-host cadence control** — every 12 h run hit every
+  host. — FIXED: `Semaphore(2)`-bounded concurrent fan-out
+  (`MAX_CONCURRENT_HOSTS = 2`), per-host due-time gate extracted to
+  `UpdateCheckGate` (JVM tests, 6 cases), `last_update_check` persisted
+  per host only after a completed pass.
+- [x] `storage/database/entities/DockerHost.kt` + `TabSSHDatabase.kt`:
+  **no per-host update-check settings existed.** — FIXED: three additive
+  columns (`update_check_enabled` default 1, `update_check_interval_hours`
+  nullable, `last_update_check` default 0), `MIGRATION_10_11` (DB v11,
+  additive `ALTER TABLE` only), `DockerHostDao.updateLastUpdateCheck`,
+  host-editor UI (switch + interval field, `strings.xml` entries).
+- [x] `storage/database/TabSSHDatabase.kt`: class kdoc still claimed
+  "Current version: 9". — FIXED: 11.
+- [x] `docker/registry/UpdateChecker.kt` / `UpdateApplier.kt`: check
+  outcomes and apply starts were not logged, leaving the debug log blind
+  on the two most support-relevant paths. — FIXED: `Logger.d`/`Logger.i`
+  lines added; all Logger app-log output already passes
+  `sanitizeForPublic`, and no raw credential/token is logged anywhere in
+  the docker tree (verified: RegistryClient logs only the auth realm URL).
+- [x] `CHANGELOG.md`: two `### Added` sections under `[Unreleased]`. —
+  FIXED: merged into one.
+
+## Verified sound (no change)
+
+- Do-not-re-break list intact: IPv4 loopback bind in `SocketRelay`;
+  `Connection: close` + zero-idle pool in `EngineApiTransport` and
+  `TransportCapabilityDetector`; `MinAPIVersion` lift logic; `cli_exec`
+  never fast-pathed; monitoring-only SSH connections; `SshExecRunner`
+  timeout drain.
+- Exec tabs already appear in the tab strip and long-press terminal
+  context menu (they are ordinary `TabTerminalActivity` tabs); their
+  exclusion from Active Sessions, recents, stats, and session restore is
+  structural (ephemeral `docker-exec:` profile ids) and deliberate.

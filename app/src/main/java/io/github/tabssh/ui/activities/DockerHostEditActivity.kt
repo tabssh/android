@@ -13,6 +13,7 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.switchmaterial.SwitchMaterial
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import io.github.tabssh.R
@@ -69,6 +70,9 @@ class DockerHostEditActivity : AppCompatActivity() {
     private lateinit var editComposeBase: TextInputEditText
     private lateinit var editRunBase: TextInputEditText
     private lateinit var editCliPath: TextInputEditText
+    private lateinit var switchUpdateCheck: SwitchMaterial
+    private lateinit var layoutUpdateInterval: TextInputLayout
+    private lateinit var editUpdateInterval: TextInputEditText
     private lateinit var editNotes: TextInputEditText
     private lateinit var buttonTestTransport: MaterialButton
     private lateinit var progressTest: ProgressBar
@@ -116,6 +120,12 @@ class DockerHostEditActivity : AppCompatActivity() {
         editComposeBase = findViewById(R.id.edit_compose_base)
         editRunBase = findViewById(R.id.edit_run_base)
         editCliPath = findViewById(R.id.edit_cli_path)
+        switchUpdateCheck = findViewById(R.id.switch_update_check)
+        layoutUpdateInterval = findViewById(R.id.layout_update_interval)
+        editUpdateInterval = findViewById(R.id.edit_update_interval)
+        switchUpdateCheck.setOnCheckedChangeListener { _, checked ->
+            layoutUpdateInterval.visibility = if (checked) View.VISIBLE else View.GONE
+        }
         editNotes = findViewById(R.id.edit_notes)
         buttonTestTransport = findViewById(R.id.button_test_transport)
         progressTest = findViewById(R.id.progress_test)
@@ -216,6 +226,10 @@ class DockerHostEditActivity : AppCompatActivity() {
 
             editName.setText(host.name)
             editCliPath.setText(host.dockerCliPath ?: "")
+            switchUpdateCheck.isChecked = host.updateCheckEnabled
+            layoutUpdateInterval.visibility =
+                if (host.updateCheckEnabled) View.VISIBLE else View.GONE
+            editUpdateInterval.setText(host.updateCheckIntervalHours?.toString() ?: "")
             editNotes.setText(host.notes ?: "")
             if (host.usesCustomEndpoint()) {
                 radioMode.check(R.id.radio_mode_custom)
@@ -309,6 +323,9 @@ class DockerHostEditActivity : AppCompatActivity() {
             runConfigBasePath = editRunBase.text?.toString()?.trim()
                 ?.takeIf { it.isNotEmpty() } ?: entityDefaults.runConfigBasePath,
             dockerCliPath = editCliPath.text?.toString()?.trim()?.takeIf { it.isNotEmpty() },
+            updateCheckEnabled = switchUpdateCheck.isChecked,
+            updateCheckIntervalHours = editUpdateInterval.text?.toString()?.trim()
+                ?.toIntOrNull()?.takeIf { it > 0 },
             notes = editNotes.text?.toString()?.trim()?.takeIf { it.isNotEmpty() }
         )
     }
@@ -337,7 +354,7 @@ class DockerHostEditActivity : AppCompatActivity() {
                     // A custom endpoint's ephemeral profile is cached by the
                     // session managers — drop any stale session so the next
                     // acquire uses the edited endpoint.
-                    DockerSessionManager.release(savedId)
+                    DockerSessionManager.release(app, savedId)
                 }
                 Toast.makeText(
                     this@DockerHostEditActivity,

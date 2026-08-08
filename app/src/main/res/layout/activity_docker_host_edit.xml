@@ -316,6 +316,33 @@
 
             </com.google.android.material.textfield.TextInputLayout>
 
+            <!-- Update Checks: per-host override of the twice-daily default -->
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/switch_update_check"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_md"
+                android:checked="true"
+                android:text="@string/docker_host_update_check_switch" />
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/layout_update_interval"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_md"
+                android:hint="@string/docker_host_update_interval_hint"
+                app:helperText="@string/docker_host_update_interval_helper"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/edit_update_interval"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    android:maxLines="1" />
+
+            </com.google.android.material.textfield.TextInputLayout>
+
             <!-- Notes -->
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"

@@ -21,15 +21,22 @@ import io.github.tabssh.storage.database.entities.DockerHost
 import io.github.tabssh.utils.NotificationHelper
 import io.github.tabssh.utils.logging.Logger
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 /**
  * Periodic app-driven Docker image update checker (PLAN.AI.md step 31).
  *
- * Every cycle (default 12 h) the worker walks all enabled
+ * Every cycle (default 12 h — twice daily) the worker walks all enabled
  * [ContainerAutoUpdatePolicy] rows grouped by Docker host and, for each host
  * it can reach WITHOUT opening a new SSH session, runs an
  * [UpdateChecker.checkAll] pass: running digest (inspect RepoDigests) vs the
- * registry's current manifest digest.
+ * registry's current manifest digest. Each host carries its own override
+ * (DockerHost.updateCheckEnabled / updateCheckIntervalHours, gated by
+ * [UpdateCheckGate]), and at most [MAX_CONCURRENT_HOSTS] hosts are checked
+ * concurrently — fan-out is semaphore-bounded, never unbounded.
  *
  * ## Piggyback-only SSH
  *
@@ -65,8 +72,11 @@ class DockerUpdateCheckWorker(
         /** Unique work name used with [ExistingPeriodicWorkPolicy.KEEP]. */
         const val WORK_NAME = "docker_update_check"
 
-        /** Check cycle length — registry digests move slowly; 12 h is plenty. */
-        private const val INTERVAL_HOURS = 12L
+        /** Default check cadence (twice daily) — registry digests move slowly; 12 h is plenty. */
+        const val INTERVAL_HOURS = 12L
+
+        /** Hard cap on hosts checked concurrently per cycle — never unbounded fan-out. */
+        private const val MAX_CONCURRENT_HOSTS = 2
 
         /**
          * Enqueue (or keep) the periodic worker. Safe to call multiple times —
@@ -157,13 +167,36 @@ class DockerUpdateCheckWorker(
         ) { credentialId -> RegistryCredentialStore.retrieve(appContext, credentialId) }
         val applier = UpdateApplier(db.containerAutoUpdatePolicyDao())
 
-        for ((hostId, hostPolicies) in policies.groupBy { it.dockerHostId }) {
-            val host = db.dockerHostDao().getById(hostId)
-            if (host == null) {
-                Logger.w(TAG, "Policies reference missing Docker host $hostId — skipping")
-                continue
+        // Bounded fan-out: at most MAX_CONCURRENT_HOSTS hosts in flight at
+        // once; each host is gated by its per-host enable/interval override.
+        val hostSemaphore = Semaphore(MAX_CONCURRENT_HOSTS)
+        val now = System.currentTimeMillis()
+        coroutineScope {
+            for ((hostId, hostPolicies) in policies.groupBy { it.dockerHostId }) {
+                val host = db.dockerHostDao().getById(hostId)
+                if (host == null) {
+                    Logger.w(TAG, "Policies reference missing Docker host $hostId — skipping")
+                    continue
+                }
+                if (!UpdateCheckGate.isHostDue(
+                        host.updateCheckEnabled, host.lastUpdateCheck,
+                        host.updateCheckIntervalHours, INTERVAL_HOURS, now
+                    )
+                ) {
+                    Logger.d(TAG, "Host ${host.name} not due (enabled=${host.updateCheckEnabled}) — skipping")
+                    continue
+                }
+                launch {
+                    hostSemaphore.withPermit {
+                        val checked = checkHost(app, host, hostPolicies, checker, applier)
+                        // Only a completed pass advances the per-host clock —
+                        // a piggyback skip retries on the next cycle.
+                        if (checked) {
+                            db.dockerHostDao().updateLastUpdateCheck(host.id, System.currentTimeMillis())
+                        }
+                    }
+                }
             }
-            checkHost(app, host, hostPolicies, checker, applier)
         }
 
         Logger.d(TAG, "Docker update check complete")
@@ -174,6 +207,8 @@ class DockerUpdateCheckWorker(
      * Check all [hostPolicies] on [host] over a piggybacked transport.
      * Reuses a cached UI DockerSession when one is live; otherwise builds a
      * private transport on the existing SSH connection and closes it after.
+     * Returns true when a check pass actually ran (advances the per-host
+     * clock); false when the host was skipped this cycle.
      */
     private suspend fun checkHost(
         app: TabSSHApplication,
@@ -181,7 +216,7 @@ class DockerUpdateCheckWorker(
         hostPolicies: List<ContainerAutoUpdatePolicy>,
         checker: UpdateChecker,
         applier: UpdateApplier
-    ) {
+    ): Boolean {
         // Prefer the UI's cached session — same relay, zero extra setup.
         val cached = DockerSessionManager.cached(host.id)
         var ownTransport: DockerTransport? = null
@@ -192,14 +227,14 @@ class DockerUpdateCheckWorker(
                 ?: host.takeIf { it.usesCustomEndpoint() }?.ephemeralProfileId()
                 ?: run {
                     Logger.w(TAG, "Host ${host.name} has no linked SSH connection — skipping")
-                    return
+                    return false
                 }
             // Piggyback-only: never open a new SSH session from the background.
             val connection = app.sshSessionManager.getConnection(sessionKey)
                 ?.takeIf { it.isConnected() }
                 ?: run {
                     Logger.d(TAG, "No live SSH session for ${host.name} — skipping this cycle")
-                    return
+                    return false
                 }
             val runner = SshExecRunner { connection.jschSession() }
             val detector = TransportCapabilityDetector(app.database.dockerHostDao())
@@ -207,7 +242,7 @@ class DockerUpdateCheckWorker(
                 is DockerResult.Success -> detected.value.transport.also { ownTransport = it }
                 else -> {
                     Logger.w(TAG, "Transport detection failed for ${host.name} — skipping")
-                    return
+                    return false
                 }
             }
         }
@@ -240,6 +275,7 @@ class DockerUpdateCheckWorker(
                 Logger.w(TAG, "transport close failed for ${host.name}: ${e.message}")
             }
         }
+        return true
     }
 
     /** Run the unattended pull-and-recreate for one policy and notify. */

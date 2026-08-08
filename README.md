@@ -108,7 +108,7 @@ Portainer-class Docker management over the SSH connections you already have — 
 - **Images / Volumes / Networks** — list, inspect, create, remove, prune; image pull with per-layer progress
 - **Compose stacks, paste-first** — paste a complete `compose.yaml` and it's saved to a configurable remote directory (default `/srv/$USER/tabssh/docker/compose/{name}`, created automatically) with up/down/pull/restart and per-service status
 - **Single-container run configs** — form-based `run.yml` editor mirroring `docker run` flags, with a raw-YAML advanced toggle
-- **Watchtower-style updates** — a background worker checks registry digests every 12 h and flags stale containers (notification + badge); opt-in per-container auto-recreate updates them unattended with automatic rollback on failure
+- **Watchtower-style updates** — a background worker checks registry digests twice a day (per-host toggle and interval override, at most 2 hosts at a time) and flags stale containers (notification + badge); opt-in per-container auto-recreate updates them unattended with automatic rollback on failure
 - **Registry support** — Docker Hub (anonymous token flow) and private registries (Basic/Bearer); credentials stored in the Android Keystore only
 - **Hybrid transport** — Docker Engine API over an SSH unix-socket forward when sshd allows it (`AllowTcpForwarding` + `AllowStreamLocalForwarding`), automatic fallback to the docker CLI over SSH exec with actionable hints — works either way
 

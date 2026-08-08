@@ -76,6 +76,7 @@ class UpdateApplier(
         }
         val name = policy.containerNameOrStackName
         val oldName = RecreateContainer.oldName(name)
+        Logger.i(TAG, "applying pending update for policy ${policy.id} ($name)")
 
         // Snapshot the running container before touching anything.
         val inspect = when (val r = transport.inspectContainer(name)) {
