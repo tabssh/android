@@ -1,12 +1,17 @@
 package io.github.tabssh.backup.validation
 
 import io.github.tabssh.backup.BackupManager
+import io.github.tabssh.utils.logging.Logger
 import org.json.JSONObject
 
 /**
  * Validates backup data integrity and format
  */
 class BackupValidator {
+
+    private companion object {
+        private const val TAG = "BackupValidator"
+    }
 
     data class ValidationResult(
         val isValid: Boolean,
@@ -111,6 +116,7 @@ class BackupValidator {
                 }
             }
         } catch (e: Exception) {
+            Logger.w(TAG, "Failed to parse connections.json: ${e.message}")
             errors.add("Invalid JSON in connections.json: ${e.message}")
         }
 
@@ -142,6 +148,7 @@ class BackupValidator {
                 }
             }
         } catch (e: Exception) {
+            Logger.w(TAG, "Failed to parse keys.json: ${e.message}")
             errors.add("Invalid JSON in keys.json: ${e.message}")
         }
 
@@ -183,6 +190,7 @@ class BackupValidator {
                 }
             }
         } catch (e: Exception) {
+            Logger.w(TAG, "Failed to parse preferences.json: ${e.message}")
             errors.add("Invalid JSON in preferences.json: ${e.message}")
         }
 
@@ -214,6 +222,7 @@ class BackupValidator {
                 }
             }
         } catch (e: Exception) {
+            Logger.w(TAG, "Failed to parse themes.json: ${e.message}")
             errors.add("Invalid JSON in themes.json: ${e.message}")
         }
 

@@ -14,6 +14,10 @@ interface ContainerAutoUpdatePolicyDao {
     @Query("SELECT * FROM container_auto_update_policies WHERE enabled = 1")
     suspend fun getEnabledList(): List<ContainerAutoUpdatePolicy>
 
+    /** Every policy regardless of [ContainerAutoUpdatePolicy.enabled] — backup export and sync collection. */
+    @Query("SELECT * FROM container_auto_update_policies")
+    suspend fun getAllList(): List<ContainerAutoUpdatePolicy>
+
     @Query("SELECT * FROM container_auto_update_policies WHERE id = :id")
     suspend fun getById(id: Long): ContainerAutoUpdatePolicy?
 

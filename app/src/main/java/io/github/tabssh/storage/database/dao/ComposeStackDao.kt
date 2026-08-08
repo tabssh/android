@@ -13,6 +13,10 @@ interface ComposeStackDao {
     @Query("SELECT * FROM compose_stacks WHERE docker_host_id = :hostId ORDER BY name ASC")
     suspend fun getStacksForHostList(hostId: Long): List<ComposeStack>
 
+    /** All stacks across every host — backup export and sync collection. */
+    @Query("SELECT * FROM compose_stacks")
+    suspend fun getAllList(): List<ComposeStack>
+
     @Query("SELECT * FROM compose_stacks WHERE id = :id")
     suspend fun getById(id: Long): ComposeStack?
 

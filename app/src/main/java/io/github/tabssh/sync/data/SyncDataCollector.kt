@@ -101,6 +101,8 @@ class SyncDataCollector {
         val syncCloudAccounts      = preferenceManager.isSyncCloudAccountsEnabled()
         val syncCertificates       = preferenceManager.isSyncCertificatesEnabled()
         val syncDashboard          = preferenceManager.isSyncDashboardEnabled()
+        val syncPortForwards       = preferenceManager.isSyncPortForwardsEnabled()
+        val syncDocker             = preferenceManager.isSyncDockerEnabled()
 
         val connections        = if (syncConns)              collectConnections()        else emptyList()
         val keys               = if (syncKeys)               collectKeys()               else emptyList()
@@ -120,6 +122,12 @@ class SyncDataCollector {
         val vncIdentities      = if (syncVncIdentities)      collectVncIdentities()      else emptyList()
         val cloudAccounts      = if (syncCloudAccounts)      collectCloudAccounts()      else emptyList()
         val dashboardConfig    = if (syncDashboard)          collectDashboardConfig()    else emptyMap()
+        val portForwards       = if (syncPortForwards)       collectPortForwards()       else emptyList()
+        val dockerHosts                = if (syncDocker) collectDockerHosts()                else emptyList()
+        val registryCredentials        = if (syncDocker) collectRegistryCredentials()        else emptyList()
+        val composeStacks              = if (syncDocker) collectComposeStacks()               else emptyList()
+        val singleContainerConfigs     = if (syncDocker) collectSingleContainerConfigs()      else emptyList()
+        val containerAutoUpdatePolicies = if (syncDocker) collectContainerAutoUpdatePolicies() else emptyList()
 
         val itemCounts = SyncItemCounts(
             connections        = connections.size,
@@ -139,7 +147,13 @@ class SyncDataCollector {
             vncHosts           = vncHosts.size,
             vncIdentities      = vncIdentities.size,
             cloudAccounts      = cloudAccounts.size,
-            dashboard          = dashboardConfig.size
+            dashboard          = dashboardConfig.size,
+            portForwards       = portForwards.size,
+            dockerHosts                     = dockerHosts.size,
+            registryCredentials             = registryCredentials.size,
+            composeStacks                   = composeStacks.size,
+            singleContainerConfigs          = singleContainerConfigs.size,
+            containerAutoUpdatePolicies     = containerAutoUpdatePolicies.size
         )
 
         val metadata = metadataManager.createSyncMetadata(itemCounts)
@@ -168,6 +182,12 @@ class SyncDataCollector {
             vncIdentities      = vncIdentities,
             cloudAccounts      = cloudAccounts,
             dashboardConfig    = dashboardConfig,
+            portForwards       = portForwards,
+            dockerHosts                 = dockerHosts,
+            registryCredentials         = registryCredentials,
+            composeStacks               = composeStacks,
+            singleContainerConfigs      = singleContainerConfigs,
+            containerAutoUpdatePolicies = containerAutoUpdatePolicies,
             secrets            = secrets,
             tombstones         = tombstones
         )
@@ -266,6 +286,66 @@ class SyncDataCollector {
         }
     }
 
+    /** Saved SSH port-forward rules. No secrets; all columns are safe to sync. */
+    private suspend fun collectPortForwards(): List<io.github.tabssh.storage.database.entities.PortForward> {
+        return try {
+            database.portForwardDao().getAllList()
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to collect port forwards", e)
+            emptyList()
+        }
+    }
+
+    /** Docker host connection profiles. Custom-endpoint password travels via secrets. */
+    private suspend fun collectDockerHosts(): List<io.github.tabssh.storage.database.entities.DockerHost> {
+        return try {
+            database.dockerHostDao().getAllList()
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to collect Docker hosts", e)
+            emptyList()
+        }
+    }
+
+    /** Private registry credential metadata. The secret itself travels via secrets. */
+    private suspend fun collectRegistryCredentials(): List<io.github.tabssh.storage.database.entities.RegistryCredential> {
+        return try {
+            database.registryCredentialDao().getAllList()
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to collect registry credentials", e)
+            emptyList()
+        }
+    }
+
+    /** Compose stack definitions tracked per Docker host. No secrets. */
+    private suspend fun collectComposeStacks(): List<io.github.tabssh.storage.database.entities.ComposeStack> {
+        return try {
+            database.composeStackDao().getAllList()
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to collect compose stacks", e)
+            emptyList()
+        }
+    }
+
+    /** Single-container run configs tracked per Docker host. No secrets. */
+    private suspend fun collectSingleContainerConfigs(): List<io.github.tabssh.storage.database.entities.SingleContainerConfig> {
+        return try {
+            database.singleContainerConfigDao().getAllList()
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to collect single-container configs", e)
+            emptyList()
+        }
+    }
+
+    /** Container/stack auto-update policies — user config, not audit data. */
+    private suspend fun collectContainerAutoUpdatePolicies(): List<io.github.tabssh.storage.database.entities.ContainerAutoUpdatePolicy> {
+        return try {
+            database.containerAutoUpdatePolicyDao().getAllList()
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to collect container auto-update policies", e)
+            emptyList()
+        }
+    }
+
     /** Wave 11 — command macros (reusable multi-step sequences). */
     private suspend fun collectMacros(): List<io.github.tabssh.storage.database.entities.Macro> {
         return try {
@@ -336,6 +416,8 @@ class SyncDataCollector {
         val syncCloudAccounts      = preferenceManager.isSyncCloudAccountsEnabled()
         val syncCertificates       = preferenceManager.isSyncCertificatesEnabled()
         val syncDashboard          = preferenceManager.isSyncDashboardEnabled()
+        val syncPortForwards       = preferenceManager.isSyncPortForwardsEnabled()
+        val syncDocker             = preferenceManager.isSyncDockerEnabled()
 
         val connections = if (syncConns)      collectConnections().filter { it.modifiedAt > timestamp } else emptyList()
         val keys        = if (syncKeys)       collectKeys().filter { it.modifiedAt > timestamp }        else emptyList()
@@ -362,6 +444,19 @@ class SyncDataCollector {
         val cloudAccounts = if (syncCloudAccounts) collectCloudAccounts() else emptyList()
         // Dashboard — SharedPrefs has no per-key timestamp; include all keys when enabled.
         val dashboardConfig = if (syncDashboard) collectDashboardConfig() else emptyMap()
+        // PortForward has modifiedAt; delta-filter it like the other simple entities.
+        val portForwards = if (syncPortForwards)
+            collectPortForwards().filter { it.modifiedAt > timestamp } else emptyList()
+        // DockerHost/RegistryCredential/ContainerAutoUpdatePolicy have no modifiedAt
+        // column — low-volume, always include in full like HypervisorProfile above.
+        // ComposeStack/SingleContainerConfig have updatedAt, so delta-filter them.
+        val dockerHosts = if (syncDocker) collectDockerHosts() else emptyList()
+        val registryCredentials = if (syncDocker) collectRegistryCredentials() else emptyList()
+        val composeStacks = if (syncDocker)
+            collectComposeStacks().filter { it.updatedAt > timestamp } else emptyList()
+        val singleContainerConfigs = if (syncDocker)
+            collectSingleContainerConfigs().filter { it.updatedAt > timestamp } else emptyList()
+        val containerAutoUpdatePolicies = if (syncDocker) collectContainerAutoUpdatePolicies() else emptyList()
 
         val preferences = if (syncSettings && hasPreferencesChanged(timestamp)) {
             collectPreferences()
@@ -387,7 +482,13 @@ class SyncDataCollector {
             vncHosts           = vncHosts.size,
             vncIdentities      = vncIdentities.size,
             cloudAccounts      = cloudAccounts.size,
-            dashboard          = dashboardConfig.size
+            dashboard          = dashboardConfig.size,
+            portForwards       = portForwards.size,
+            dockerHosts                     = dockerHosts.size,
+            registryCredentials             = registryCredentials.size,
+            composeStacks                   = composeStacks.size,
+            singleContainerConfigs          = singleContainerConfigs.size,
+            containerAutoUpdatePolicies     = containerAutoUpdatePolicies.size
         )
 
         val metadata = metadataManager.createSyncMetadata(itemCounts)
@@ -419,6 +520,12 @@ class SyncDataCollector {
             vncIdentities      = vncIdentities,
             cloudAccounts      = cloudAccounts,
             dashboardConfig    = dashboardConfig,
+            portForwards       = portForwards,
+            dockerHosts                 = dockerHosts,
+            registryCredentials         = registryCredentials,
+            composeStacks               = composeStacks,
+            singleContainerConfigs      = singleContainerConfigs,
+            containerAutoUpdatePolicies = containerAutoUpdatePolicies,
             secrets            = secrets,
             tombstones         = tombstones
         )
@@ -458,6 +565,14 @@ class SyncDataCollector {
         if (preferenceManager.isSyncVncHostsEnabled())           out += TombstoneRecorder.VNC_HOST
         if (preferenceManager.isSyncVncIdentitiesEnabled())      out += TombstoneRecorder.VNC_IDENTITY
         if (preferenceManager.isSyncCloudAccountsEnabled())      out += TombstoneRecorder.CLOUD_ACCOUNT
+        if (preferenceManager.isSyncPortForwardsEnabled())       out += TombstoneRecorder.PORT_FORWARD
+        if (preferenceManager.isSyncDockerEnabled()) {
+            out += TombstoneRecorder.DOCKER_HOST
+            out += TombstoneRecorder.REGISTRY_CREDENTIAL
+            out += TombstoneRecorder.COMPOSE_STACK
+            out += TombstoneRecorder.SINGLE_CONTAINER_CONFIG
+            out += TombstoneRecorder.CONTAINER_AUTO_UPDATE_POLICY
+        }
         return out
     }
 
@@ -481,6 +596,12 @@ class SyncDataCollector {
         TombstoneRecorder.VNC_HOST          -> collectVncHosts().map { it.id }
         TombstoneRecorder.VNC_IDENTITY      -> collectVncIdentities().map { it.id }
         TombstoneRecorder.CLOUD_ACCOUNT     -> collectCloudAccounts().map { it.id }
+        TombstoneRecorder.PORT_FORWARD      -> collectPortForwards().map { it.id }
+        TombstoneRecorder.DOCKER_HOST       -> collectDockerHosts().map { TombstoneRecorder.naturalKey(it) }
+        TombstoneRecorder.REGISTRY_CREDENTIAL -> collectRegistryCredentials().map { TombstoneRecorder.naturalKey(it) }
+        TombstoneRecorder.COMPOSE_STACK     -> collectComposeStacks().map { TombstoneRecorder.naturalKey(it) }
+        TombstoneRecorder.SINGLE_CONTAINER_CONFIG -> collectSingleContainerConfigs().map { TombstoneRecorder.naturalKey(it) }
+        TombstoneRecorder.CONTAINER_AUTO_UPDATE_POLICY -> collectContainerAutoUpdatePolicies().map { TombstoneRecorder.naturalKey(it) }
         else -> emptyList()
     }
 
@@ -533,7 +654,10 @@ class SyncDataCollector {
             TombstoneRecorder.IDENTITY, TombstoneRecorder.GROUP, TombstoneRecorder.HYPERVISOR,
             TombstoneRecorder.CERTIFICATE, TombstoneRecorder.MACRO, TombstoneRecorder.MONITOR_SLOT,
             TombstoneRecorder.HYPERVISOR_ACCOUNT, TombstoneRecorder.VNC_HOST,
-            TombstoneRecorder.VNC_IDENTITY, TombstoneRecorder.CLOUD_ACCOUNT
+            TombstoneRecorder.VNC_IDENTITY, TombstoneRecorder.CLOUD_ACCOUNT,
+            TombstoneRecorder.PORT_FORWARD, TombstoneRecorder.DOCKER_HOST,
+            TombstoneRecorder.REGISTRY_CREDENTIAL, TombstoneRecorder.COMPOSE_STACK,
+            TombstoneRecorder.SINGLE_CONTAINER_CONFIG, TombstoneRecorder.CONTAINER_AUTO_UPDATE_POLICY
         )
         for (type in allTypes) {
             try {
@@ -554,69 +678,133 @@ class SyncDataCollector {
      * when neither SecurePasswordManager nor KeyStorage is accessible (e.g. in
      * unit tests). Values are plaintext because the sync payload is AES-GCM
      * encrypted before it leaves the device.
+     *
+     * Unlike the backup exporter (which always exports everything), each
+     * alias family here is gated by the sync toggle that owns its category —
+     * a credential whose category is excluded from sync must not leak into
+     * the sync payload even though it always belongs in a backup.
      */
     private suspend fun collectSecrets(): Map<String, String> {
         val out = mutableMapOf<String, String>()
         val pm: SecurePasswordManager? = app?.securePasswordManager
         val ks: KeyStorage? = app?.keyStorage
+        val syncIdentities  = preferenceManager.isSyncIdentitiesEnabled()
+        val syncConnections = preferenceManager.isSyncConnectionsEnabled()
+        val syncKeys         = preferenceManager.isSyncKeysEnabled()
+        val syncHypervisors  = preferenceManager.isSyncHypervisorsEnabled()
+        val syncHypervisorAccounts = preferenceManager.isSyncHypervisorAccountsEnabled()
+        val syncVncHosts      = preferenceManager.isSyncVncHostsEnabled()
+        val syncVncIdentities = preferenceManager.isSyncVncIdentitiesEnabled()
+        val syncCloudAccounts = preferenceManager.isSyncCloudAccountsEnabled()
+        val syncDocker = preferenceManager.isSyncDockerEnabled()
         try {
             if (pm != null) {
                 // Identity passwords — alias: identity_{id}
-                database.identityDao().getAllIdentitiesList().forEach { id ->
-                    pm.retrievePassword("identity_${id.id}")
-                        ?.takeIf { it.isNotEmpty() }
-                        ?.let { out["identity_${id.id}"] = it }
+                if (syncIdentities) {
+                    database.identityDao().getAllIdentitiesList().forEach { id ->
+                        pm.retrievePassword("identity_${id.id}")
+                            ?.takeIf { it.isNotEmpty() }
+                            ?.let { out["identity_${id.id}"] = it }
+                    }
                 }
 
                 // Per-host hypervisor passwords (no linked account)
-                database.hypervisorDao().getAllList()
-                    .filter { it.accountId == null }
-                    .forEach { h ->
-                        pm.retrievePassword("hypervisor_${h.id}")
-                            ?.takeIf { it.isNotEmpty() }
-                            ?.let { out["hypervisor_${h.id}"] = it }
-                    }
+                if (syncHypervisors) {
+                    database.hypervisorDao().getAllList()
+                        .filter { it.accountId == null }
+                        .forEach { h ->
+                            pm.retrievePassword("hypervisor_${h.id}")
+                                ?.takeIf { it.isNotEmpty() }
+                                ?.let { out["hypervisor_${h.id}"] = it }
+                        }
+                }
 
                 // Hypervisor account passwords + OCI secrets
-                database.hypervisorAccountDao().getAllAccountsList().forEach { a ->
-                    pm.retrievePassword("hypervisor_account_${a.id}")
-                        ?.takeIf { it.isNotEmpty() }
-                        ?.let { out["hypervisor_account_${a.id}"] = it }
-                    pm.retrievePassword("oci_private_key_account_${a.id}")
-                        ?.takeIf { it.isNotEmpty() }
-                        ?.let { out["oci_private_key_account_${a.id}"] = it }
-                    pm.retrievePassword("oci_passphrase_account_${a.id}")
-                        ?.takeIf { it.isNotEmpty() }
-                        ?.let { out["oci_passphrase_account_${a.id}"] = it }
+                if (syncHypervisorAccounts) {
+                    database.hypervisorAccountDao().getAllAccountsList().forEach { a ->
+                        pm.retrievePassword("hypervisor_account_${a.id}")
+                            ?.takeIf { it.isNotEmpty() }
+                            ?.let { out["hypervisor_account_${a.id}"] = it }
+                        pm.retrievePassword("oci_private_key_account_${a.id}")
+                            ?.takeIf { it.isNotEmpty() }
+                            ?.let { out["oci_private_key_account_${a.id}"] = it }
+                        pm.retrievePassword("oci_passphrase_account_${a.id}")
+                            ?.takeIf { it.isNotEmpty() }
+                            ?.let { out["oci_passphrase_account_${a.id}"] = it }
+                    }
                 }
 
                 // VNC identity passwords — alias: vnc_identity_{id}
-                database.vncIdentityDao().getAllIdentitiesList().forEach { vi ->
-                    pm.retrievePassword("vnc_identity_${vi.id}")
-                        ?.takeIf { it.isNotEmpty() }
-                        ?.let { out["vnc_identity_${vi.id}"] = it }
+                if (syncVncIdentities) {
+                    database.vncIdentityDao().getAllIdentitiesList().forEach { vi ->
+                        pm.retrievePassword("vnc_identity_${vi.id}")
+                            ?.takeIf { it.isNotEmpty() }
+                            ?.let { out["vnc_identity_${vi.id}"] = it }
+                    }
+                }
+
+                // VNC host passwords — alias: vnc_host_{id}
+                if (syncVncHosts) {
+                    database.vncHostDao().getAllHostsList().forEach { vh ->
+                        pm.retrievePassword("vnc_host_${vh.id}")
+                            ?.takeIf { it.isNotEmpty() }
+                            ?.let { out["vnc_host_${vh.id}"] = it }
+                    }
                 }
 
                 // Cloud account tokens — alias: cloud_token_{id}
-                database.cloudAccountDao().getAll().forEach { ca ->
-                    pm.retrievePassword("cloud_token_${ca.id}")
-                        ?.takeIf { it.isNotEmpty() }
-                        ?.let { out["cloud_token_${ca.id}"] = it }
+                if (syncCloudAccounts) {
+                    database.cloudAccountDao().getAll().forEach { ca ->
+                        pm.retrievePassword("cloud_token_${ca.id}")
+                            ?.takeIf { it.isNotEmpty() }
+                            ?.let { out["cloud_token_${ca.id}"] = it }
+                    }
+                }
+
+                // SSH key passphrases — alias: key_passphrase_{keyId}
+                if (syncKeys) {
+                    database.keyDao().getAllKeys().first().forEach { key ->
+                        pm.retrievePassword("key_passphrase_${key.keyId}")
+                            ?.takeIf { it.isNotEmpty() }
+                            ?.let { out["key_passphrase_${key.keyId}"] = it }
+                    }
+                }
+
+                // Docker host custom-endpoint passwords — alias: docker_host_{id}
+                if (syncDocker) {
+                    database.dockerHostDao().getAllList()
+                        .filter { it.usesCustomEndpoint() }
+                        .forEach { h ->
+                            pm.retrievePassword("docker_host_${h.id}")
+                                ?.takeIf { it.isNotEmpty() }
+                                ?.let { out["docker_host_${h.id}"] = it }
+                        }
+                }
+
+                // Registry credential secrets — alias: registry_credential_{id}
+                if (syncDocker) {
+                    database.registryCredentialDao().getAllList().forEach { c ->
+                        pm.retrievePassword("registry_credential_${c.id}")
+                            ?.takeIf { it.isNotEmpty() }
+                            ?.let { out["registry_credential_${c.id}"] = it }
+                    }
                 }
             }
 
             // Connection passwords — stored in PreferenceManager SharedPreferences under
             // "password_{connectionId}" (not SecurePasswordManager). Alias: conn_pw_{id}.
-            database.connectionDao().getAllConnections().first()
-                .filter { c -> c.getAuthTypeEnum() == io.github.tabssh.ssh.auth.AuthType.PASSWORD }
-                .forEach { c ->
-                    preferenceManager.getConnectionPassword(c.id)
-                        ?.takeIf { it.isNotEmpty() }
-                        ?.let { out["conn_pw_${c.id}"] = it }
-                }
+            if (syncConnections) {
+                database.connectionDao().getAllConnections().first()
+                    .filter { c -> c.getAuthTypeEnum() == io.github.tabssh.ssh.auth.AuthType.PASSWORD }
+                    .forEach { c ->
+                        preferenceManager.getConnectionPassword(c.id)
+                            ?.takeIf { it.isNotEmpty() }
+                            ?.let { out["conn_pw_${c.id}"] = it }
+                    }
+            }
 
             // SSH private key JSch bytes — stored as "ssh_key_{keyId}"
-            if (ks != null) {
+            if (ks != null && syncKeys) {
                 database.keyDao().getAllKeys().first().forEach { key ->
                     val bytes = ks.retrieveJSchBytes(key.keyId)
                     if (bytes != null) {
@@ -821,6 +1009,7 @@ class SyncDataCollector {
             "syncCloudAccounts"     to preferenceManager.isSyncCloudAccountsEnabled(),
             "syncCertificates"      to preferenceManager.isSyncCertificatesEnabled(),
             "syncDashboard"         to preferenceManager.isSyncDashboardEnabled(),
+            "syncPortForwards"      to preferenceManager.isSyncPortForwardsEnabled(),
             "autoResolve"           to preferenceManager.isAutoResolveConflictsEnabled()
         )
     }
@@ -956,7 +1145,8 @@ class SyncDataCollector {
             vncHosts          = try { database.vncHostDao().getAllHostsList().size } catch (_: Exception) { 0 },
             vncIdentities     = try { database.vncIdentityDao().getAllIdentitiesList().size } catch (_: Exception) { 0 },
             cloudAccounts     = try { database.cloudAccountDao().getAll().size } catch (_: Exception) { 0 },
-            dashboard         = try { collectDashboardConfig().size } catch (_: Exception) { 0 }
+            dashboard         = try { collectDashboardConfig().size } catch (_: Exception) { 0 },
+            portForwards      = try { database.portForwardDao().getAllList().size } catch (_: Exception) { 0 }
         )
     }
 

@@ -34,7 +34,7 @@ class ImportExportActivity : AppCompatActivity() {
     private val importConnectionsLauncher = registerForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
     ) { uri ->
-        uri?.let { importBackupFromUri(it) }
+        uri?.let { showRestoreModeDialog(it) }
     }
 
     // SAF launcher — write a ZIP backup
@@ -122,17 +122,50 @@ class ImportExportActivity : AppCompatActivity() {
     }
 
     /**
+     * Ask the user whether to merge the backup into the current data (default,
+     * safe) or replace everything with an exact snapshot of the backup, then
+     * continue the restore flow with that choice.
+     */
+    private fun showRestoreModeDialog(uri: android.net.Uri) {
+        val radioGroup = android.widget.RadioGroup(this).apply {
+            orientation = android.widget.RadioGroup.VERTICAL
+            setPadding(64, 32, 64, 0)
+        }
+        val mergeOption = android.widget.RadioButton(this).apply {
+            text = getString(R.string.restore_mode_merge)
+            id = android.view.View.generateViewId()
+            isChecked = true
+        }
+        val replaceOption = android.widget.RadioButton(this).apply {
+            text = getString(R.string.restore_mode_replace)
+            id = android.view.View.generateViewId()
+        }
+        radioGroup.addView(mergeOption)
+        radioGroup.addView(replaceOption)
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(R.string.restore_mode_title)
+            .setView(radioGroup)
+            .setPositiveButton(R.string.restore_mode_continue) { _, _ ->
+                val replaceMode = radioGroup.checkedRadioButtonId == replaceOption.id
+                importBackupFromUri(uri, replaceMode)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    /**
      * Attempt to restore a backup from [uri] without a password first.
      * Falls back to the password dialog when the backup appears to be encrypted.
      */
-    private fun importBackupFromUri(uri: android.net.Uri) {
+    private fun importBackupFromUri(uri: android.net.Uri, replaceMode: Boolean) {
         lifecycleScope.launch {
             try {
                 val bm = backupManager ?: run {
                     android.widget.Toast.makeText(this@ImportExportActivity, "Backup system is still initialising — please wait a moment and try again.", android.widget.Toast.LENGTH_LONG).show()
                     return@launch
                 }
-                val result = bm.restoreBackup(uri, password = null, overwriteExisting = false)
+                val result = bm.restoreBackup(uri, password = null, overwriteExisting = false, replaceMode = replaceMode)
 
                 if (result.success) {
                     showImportSuccessDialog(result)
@@ -145,7 +178,7 @@ class ImportExportActivity : AppCompatActivity() {
                 if (e.message?.contains("encrypted", ignoreCase = true) == true ||
                     e.message?.contains("password", ignoreCase = true) == true ||
                     e.message?.contains("decrypt", ignoreCase = true) == true) {
-                    showImportPasswordDialog(uri)
+                    showImportPasswordDialog(uri, replaceMode)
                 } else {
                     Logger.e("ImportExportActivity", "Failed to import backup", e)
                     io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(
@@ -160,7 +193,7 @@ class ImportExportActivity : AppCompatActivity() {
     /**
      * Show a password input dialog when the selected backup is encrypted.
      */
-    private fun showImportPasswordDialog(uri: android.net.Uri) {
+    private fun showImportPasswordDialog(uri: android.net.Uri, replaceMode: Boolean) {
         val passwordInput = com.google.android.material.textfield.TextInputEditText(this).apply {
             hint = "Enter backup password"
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
@@ -179,7 +212,7 @@ class ImportExportActivity : AppCompatActivity() {
             .setPositiveButton("Import") { _, _ ->
                 val password = passwordInput.text.toString()
                 if (password.isNotBlank()) {
-                    importBackupWithPassword(uri, password)
+                    importBackupWithPassword(uri, password, replaceMode)
                 } else {
                     Toast.makeText(this, "Password required", Toast.LENGTH_SHORT).show()
                 }
@@ -191,14 +224,14 @@ class ImportExportActivity : AppCompatActivity() {
     /**
      * Retry the backup restore with the supplied [password].
      */
-    private fun importBackupWithPassword(uri: android.net.Uri, password: String) {
+    private fun importBackupWithPassword(uri: android.net.Uri, password: String, replaceMode: Boolean) {
         lifecycleScope.launch {
             try {
                 val bm = backupManager ?: run {
                     android.widget.Toast.makeText(this@ImportExportActivity, "Backup system is still initialising — please wait a moment and try again.", android.widget.Toast.LENGTH_LONG).show()
                     return@launch
                 }
-                val result = bm.restoreBackup(uri, password, overwriteExisting = false)
+                val result = bm.restoreBackup(uri, password, overwriteExisting = false, replaceMode = replaceMode)
 
                 if (result.success) {
                     showImportSuccessDialog(result)

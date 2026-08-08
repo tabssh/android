@@ -205,6 +205,44 @@ interface DockerTransport {
     suspend fun composePs(stackDir: String): DockerResult<String>
 
     /**
+     * Follow `compose logs` for a Room-tracked stack directory. [service]
+     * scopes the stream to one service; null aggregates every service.
+     */
+    fun composeLogs(stackDir: String, service: String? = null, tail: Int = 200): Flow<String>
+
+    /**
+     * Discover every compose project on the host, tracked or not
+     * (`docker compose ls --all --format json`). Hosts without compose
+     * installed surface as [DockerResult.TransportUnavailable] — callers
+     * treat that as "no external stacks" rather than a hard failure.
+     */
+    suspend fun composeLs(): DockerResult<List<ComposeLsEntry>>
+
+    /**
+     * Compose lifecycle actions for a project discovered by [composeLs] that
+     * has no Room row — addressed by `-f <configFile> -p <name>` rather than
+     * a `cd` into a stack directory, matching how [composeUp] et al. build
+     * their commands for tracked stacks.
+     */
+    suspend fun composeUpByProject(name: String, configFile: String): DockerResult<String>
+
+    suspend fun composeDownByProject(name: String, configFile: String): DockerResult<String>
+
+    suspend fun composePullByProject(name: String, configFile: String): DockerResult<String>
+
+    suspend fun composeRestartByProject(name: String, configFile: String): DockerResult<String>
+
+    suspend fun composePsByProject(name: String, configFile: String): DockerResult<String>
+
+    /** Follow `compose logs` for an untracked project; see [composeLogs]. */
+    fun composeLogsByProject(
+        name: String,
+        configFile: String,
+        service: String? = null,
+        tail: Int = 200
+    ): Flow<String>
+
+    /**
      * Detect whether the host has the compose plugin (`docker compose`) or
      * the standalone `docker-compose` binary. Result is cached per transport
      * instance; a host-level pin in DockerHost.composeInvocation short-circuits

@@ -5,12 +5,14 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import kotlinx.serialization.Serializable
 import java.util.UUID
 
 /**
  * Database entity representing an audit log entry
  * Tracks all terminal commands and activities for security/compliance
  */
+@Serializable
 @Entity(
     tableName = "audit_log",
     foreignKeys = [

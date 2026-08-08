@@ -39,6 +39,12 @@ class ContainerDetailActivity : AppCompatActivity() {
         const val EXTRA_HOST_ID = "docker_host_id"
         const val EXTRA_CONTAINER_ID = "container_id"
         const val EXTRA_CONTAINER_NAME = "container_name"
+        /** Which tab to open on ([TAB_INSPECT] et al.) — defaults to inspect. */
+        const val EXTRA_INITIAL_TAB = "initial_tab"
+        const val TAB_INSPECT = 0
+        const val TAB_CONFIG = 1
+        const val TAB_LOGS = 2
+        const val TAB_STATS = 3
         private const val MAX_LOG_LINES = 2000
         // CSI sequences, OSC sequences (BEL or ST terminated), and stray ESCs.
         private val ANSI_REGEX = Regex(
@@ -140,6 +146,11 @@ class ContainerDetailActivity : AppCompatActivity() {
             override fun onTabUnselected(tab: TabLayout.Tab) {}
             override fun onTabReselected(tab: TabLayout.Tab) {}
         })
+        val initialTab = intent.getIntExtra(EXTRA_INITIAL_TAB, TAB_INSPECT)
+            .coerceIn(TAB_INSPECT, TAB_STATS)
+        if (initialTab != TAB_INSPECT) {
+            tabLayout.getTabAt(initialTab)?.select()
+        }
     }
 
     private fun showSection(position: Int) {
@@ -160,6 +171,10 @@ class ContainerDetailActivity : AppCompatActivity() {
                     session = result.value
                     progressBar.visibility = View.GONE
                     loadInspect()
+                    // A non-inspect EXTRA_INITIAL_TAB selected its tab before
+                    // the session existed, so its stream never started — kick
+                    // it off now that session is available.
+                    showSection(tabLayout.selectedTabPosition)
                 }
                 else -> {
                     progressBar.visibility = View.GONE
@@ -440,11 +455,23 @@ class ContainerDetailActivity : AppCompatActivity() {
             progressBar.visibility = View.GONE
             val shell = probe.stdout.trim().lines().lastOrNull()?.trim()
                 .takeIf { it == "bash" } ?: "sh"
+            // docker exec -it needs a client-side PTY; the exec channel only
+            // allocates one when requestTTY is yes/force (auto = no PTY), so
+            // force it on the ephemeral profile while preserving other settings
+            val adv = try {
+                org.json.JSONObject(
+                    current.profile.advancedSettings?.takeIf { it.isNotBlank() } ?: "{}"
+                )
+            } catch (_: Exception) {
+                org.json.JSONObject()
+            }
+            adv.put("requestTTY", "force")
             val execProfile = current.profile.copy(
                 id = "docker-exec:$hostId:$containerId",
                 name = "docker: $containerName",
                 remoteCommand = "$docker exec -it $quotedId $shell",
-                multiplexerMode = "OFF"
+                multiplexerMode = "OFF",
+                advancedSettings = adv.toString()
             )
             startActivity(
                 TabTerminalActivity.createIntent(

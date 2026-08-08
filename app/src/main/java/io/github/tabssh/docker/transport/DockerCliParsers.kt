@@ -219,4 +219,66 @@ object DockerCliParsers {
             parts.getOrElse(1) { "" }.trim()
         )
     }
+
+    /**
+     * Parse `docker compose ls --all --format json` output into
+     * [ComposeLsEntry] rows. The plugin emits a single JSON array; hosts
+     * without compose (or with nothing running) may emit an empty array or
+     * blank output — both yield an empty list rather than an error, since
+     * "no external stacks" is a normal outcome, not a failure.
+     */
+    fun parseComposeLs(output: String): List<ComposeLsEntry> {
+        val trimmed = output.trim()
+        if (trimmed.isEmpty()) return emptyList()
+        return try {
+            val array = org.json.JSONArray(trimmed)
+            (0 until array.length()).mapNotNull { i ->
+                val obj = array.optJSONObject(i) ?: return@mapNotNull null
+                val name = obj.optString("Name")
+                if (name.isEmpty()) return@mapNotNull null
+                ComposeLsEntry(
+                    name = name,
+                    status = obj.optString("Status"),
+                    configFiles = obj.optString("ConfigFiles")
+                        .split(",")
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() }
+                )
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * Parse `docker compose ps --format json` output into the distinct
+     * service names it reports. Compose has emitted this either as one JSON
+     * array or as NDJSON (one object per line) across versions — both forms
+     * are tried, falling back to the container Name with the project prefix
+     * stripped when the Service field itself is absent.
+     */
+    fun parseComposePsServices(output: String): List<String> {
+        val trimmed = output.trim()
+        if (trimmed.isEmpty()) return emptyList()
+        val objects: List<JSONObject> = try {
+            val array = org.json.JSONArray(trimmed)
+            (0 until array.length()).mapNotNull { array.optJSONObject(it) }
+        } catch (_: Exception) {
+            trimmed.lineSequence()
+                .map { it.trim() }
+                .filter { it.startsWith("{") }
+                .mapNotNull {
+                    try {
+                        JSONObject(it)
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+                .toList()
+        }
+        return objects
+            .map { it.optString("Service").ifEmpty { it.optString("Name") } }
+            .filter { it.isNotEmpty() }
+            .distinct()
+    }
 }

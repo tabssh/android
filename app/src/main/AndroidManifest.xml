@@ -274,6 +274,13 @@
             android:parentActivityName=".ui.activities.DockerHostManagerActivity"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- Compose stack logs (tracked or discovered/external) -->
+        <activity
+            android:name=".ui.activities.StackLogsActivity"
+            android:exported="false"
+            android:label="Stack Logs"
+            android:parentActivityName=".ui.activities.DockerHostManagerActivity" />
+
         <!-- System-wide ssh:// and sftp:// link handler — see
              LinkHandlerActivity for the security rationale (untrusted-input
              parsing, never auto-connect, transient profile only).

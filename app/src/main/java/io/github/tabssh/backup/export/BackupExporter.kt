@@ -3,17 +3,25 @@ package io.github.tabssh.backup.export
 import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.storage.database.TabSSHDatabase
+import io.github.tabssh.storage.database.entities.AuditLogEntry
 import io.github.tabssh.storage.database.entities.CloudAccount
+import io.github.tabssh.storage.database.entities.ComposeStack
 import io.github.tabssh.storage.database.entities.ConnectionGroup
 import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.storage.database.entities.ContainerAutoUpdatePolicy
+import io.github.tabssh.storage.database.entities.DockerHost
 import io.github.tabssh.storage.database.entities.HostKeyEntry
 import io.github.tabssh.storage.database.entities.HypervisorAccount
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.Identity
 import io.github.tabssh.storage.database.entities.Macro
 import io.github.tabssh.storage.database.entities.MonitorSlot
+import io.github.tabssh.storage.database.entities.PortForward
+import io.github.tabssh.storage.database.entities.RegistryCredential
+import io.github.tabssh.storage.database.entities.SingleContainerConfig
 import io.github.tabssh.storage.database.entities.Snippet
 import io.github.tabssh.storage.database.entities.StoredKey
+import io.github.tabssh.storage.database.entities.TabSession
 import io.github.tabssh.storage.database.entities.ThemeDefinition
 import io.github.tabssh.storage.database.entities.TrustedCertificate
 import io.github.tabssh.storage.database.entities.VncHost
@@ -102,12 +110,41 @@ class BackupExporter(
         const val FILE_MONITOR_SLOTS     = "monitor_slots.json"
         const val FILE_VNC_HOSTS         = "vnc_hosts.json"
         const val FILE_VNC_IDENTITIES    = "vnc_identities.json"
+        const val FILE_PORT_FORWARDS     = "port_forwards.json"
+        /**
+         * Docker subsystem — hosts, private registry credentials, compose stacks,
+         * single-container run configs, and container/stack auto-update policies.
+         * Custom-endpoint SSH passwords and registry secrets live in [FILE_SECRETS]
+         * under `docker_host_{id}` / `registry_credential_{id}`.
+         */
+        const val FILE_DOCKER_HOSTS      = "docker_hosts.json"
+        const val FILE_REGISTRY_CREDENTIALS = "registry_credentials.json"
+        const val FILE_COMPOSE_STACKS    = "compose_stacks.json"
+        const val FILE_SINGLE_CONTAINER_CONFIGS = "single_container_configs.json"
+        const val FILE_CONTAINER_AUTO_UPDATE_POLICIES = "container_auto_update_policies.json"
         /**
          * Multi-host dashboard configuration — dashboard groups and per-group
          * host membership.  Stored in the `multi_host_dashboard` SharedPreferences
          * file (not the Room DB), so it must be backed up and restored separately.
          */
         const val FILE_DASHBOARD         = "dashboard_config.json"
+        /**
+         * Non-default SharedPreferences files with user data outside the Room DB:
+         * "TabSSH" (host list sort orders), "cluster_commands" (saved cluster
+         * command history), "snippet_var_recall" (last-used snippet variable
+         * values). Same flat-string-map wire shape as [FILE_DASHBOARD].
+         */
+        const val FILE_PREFS_TABSSH             = "prefs_tabssh.json"
+        const val FILE_PREFS_CLUSTER_COMMANDS   = "prefs_cluster_commands.json"
+        const val FILE_PREFS_SNIPPET_VAR_RECALL = "prefs_snippet_var_recall.json"
+        /**
+         * Backup-only snapshot state — never synced between devices (open tabs
+         * and audit history are local-device concerns, not shared data). Lets a
+         * restore reproduce exactly which tabs were open and the full audit
+         * trail at capture time.
+         */
+        const val FILE_TAB_SESSIONS      = "tab_sessions.json"
+        const val FILE_AUDIT_LOG         = "audit_log.json"
         /**
          * All credentials — Keystore-backed passwords, tokens, OCI PEM keys,
          * SSH key JSch bytes, and connection passwords. Always written by
@@ -147,7 +184,18 @@ class BackupExporter(
         out[FILE_MONITOR_SLOTS]    = exportMonitorSlots()
         out[FILE_VNC_HOSTS]        = exportVncHosts()
         out[FILE_VNC_IDENTITIES]   = exportVncIdentities()
+        out[FILE_PORT_FORWARDS]    = exportPortForwards()
+        out[FILE_DOCKER_HOSTS]     = exportDockerHosts()
+        out[FILE_REGISTRY_CREDENTIALS] = exportRegistryCredentials()
+        out[FILE_COMPOSE_STACKS]   = exportComposeStacks()
+        out[FILE_SINGLE_CONTAINER_CONFIGS] = exportSingleContainerConfigs()
+        out[FILE_CONTAINER_AUTO_UPDATE_POLICIES] = exportContainerAutoUpdatePolicies()
         out[FILE_DASHBOARD]        = exportDashboardConfig()
+        out[FILE_PREFS_TABSSH]             = exportSharedPrefs("TabSSH")
+        out[FILE_PREFS_CLUSTER_COMMANDS]   = exportSharedPrefs("cluster_commands")
+        out[FILE_PREFS_SNIPPET_VAR_RECALL] = exportSharedPrefs("snippet_var_recall")
+        out[FILE_TAB_SESSIONS]     = exportTabSessions()
+        out[FILE_AUDIT_LOG]        = exportAuditLog()
         out[FILE_SECRETS]          = exportSecrets()
 
         out
@@ -257,6 +305,46 @@ class BackupExporter(
         encodeEntities(ListSerializer(VncIdentity.serializer()),
             database.vncIdentityDao().getAllIdentitiesList())
 
+    private suspend fun exportTabSessions(): String =
+        // Backup-only: open tabs are local-device state, never synced.
+        encodeEntities(ListSerializer(TabSession.serializer()),
+            database.tabSessionDao().getActiveSessionsList())
+
+    private suspend fun exportAuditLog(): String =
+        // Backup-only: audit history is local-device state, never synced.
+        encodeEntities(ListSerializer(AuditLogEntry.serializer()),
+            database.auditLogDao().getAllFlow().first())
+
+    private suspend fun exportPortForwards(): String =
+        encodeEntities(ListSerializer(PortForward.serializer()),
+            database.portForwardDao().getAllList())
+
+    private suspend fun exportDockerHosts(): String =
+        // No secret column — custom-endpoint passwords live in exportSecrets()
+        // under `docker_host_{id}`. All row fields are safe to export as-is.
+        encodeEntities(ListSerializer(DockerHost.serializer()),
+            database.dockerHostDao().getAllList())
+
+    private suspend fun exportRegistryCredentials(): String =
+        // No secret column — the credential value lives in exportSecrets()
+        // under `registry_credential_{id}`.
+        encodeEntities(ListSerializer(RegistryCredential.serializer()),
+            database.registryCredentialDao().getAllList())
+
+    private suspend fun exportComposeStacks(): String =
+        encodeEntities(ListSerializer(ComposeStack.serializer()),
+            database.composeStackDao().getAllList())
+
+    private suspend fun exportSingleContainerConfigs(): String =
+        encodeEntities(ListSerializer(SingleContainerConfig.serializer()),
+            database.singleContainerConfigDao().getAllList())
+
+    private suspend fun exportContainerAutoUpdatePolicies(): String =
+        // User config, not audit data — ContainerAutoUpdatePolicy syncs like
+        // the rest of the Docker subsystem, unlike AuditLogEntry/TabSession.
+        encodeEntities(ListSerializer(ContainerAutoUpdatePolicy.serializer()),
+            database.containerAutoUpdatePolicyDao().getAllList())
+
     /**
      * Export the multi-host dashboard configuration — groups JSON and per-group
      * host membership — from the `multi_host_dashboard` SharedPreferences file.
@@ -275,6 +363,21 @@ class BackupExporter(
         return json.encodeToString(JsonObject.serializer(), obj)
     }
 
+    /**
+     * Export a non-default SharedPreferences file as a flat string map, same
+     * wire shape as [exportDashboardConfig] (`{"v":WIRE_VERSION,"<key>":"<value>",...}`).
+     */
+    private fun exportSharedPrefs(prefsName: String): String {
+        val prefs = context.getSharedPreferences(prefsName, android.content.Context.MODE_PRIVATE)
+        val obj = buildJsonObject {
+            put("v", WIRE_VERSION)
+            prefs.all.forEach { (k, v) ->
+                put(k, v?.toString() ?: "")
+            }
+        }
+        return json.encodeToString(JsonObject.serializer(), obj)
+    }
+
     // ── Secrets (encrypted backup only) ─────────────────────────────────────
 
     /**
@@ -286,9 +389,15 @@ class BackupExporter(
      *   `hypervisor_account_{id}`        — hypervisor account password (SecurePasswordManager)
      *   `oci_private_key_account_{id}`   — OCI API private key PEM (SecurePasswordManager)
      *   `oci_passphrase_account_{id}`    — OCI API key passphrase (SecurePasswordManager)
+     *   `oci_private_key_{profileId}`    — legacy profile-keyed OCI private key PEM (SecurePasswordManager)
+     *   `oci_passphrase_{profileId}`     — legacy profile-keyed OCI key passphrase (SecurePasswordManager)
      *   `vnc_identity_{id}`              — VNC identity password (SecurePasswordManager)
+     *   `vnc_host_{id}`                  — VNC host password (SecurePasswordManager)
      *   `cloud_token_{id}`               — cloud provider API token (SecurePasswordManager)
+     *   `key_passphrase_{keyId}`         — SSH private key passphrase (SecurePasswordManager)
      *   `conn_pw_{id}`                   — SSH connection password (PreferenceManager)
+     *   `docker_host_{id}`               — Docker host custom-endpoint SSH password (SecurePasswordManager)
+     *   `registry_credential_{id}`       — private registry credential secret (SecurePasswordManager)
      *
      * SSH private key JSch bytes are exported separately under `ssh_keys` keyed
      * by [StoredKey.keyId], re-encrypted under the backup password by the outer
@@ -333,6 +442,17 @@ class BackupExporter(
                     ?.let { passwords["oci_passphrase_account_${a.id}"] = it }
             }
 
+            // Legacy profile-keyed OCI secrets — alias: oci_private_key_{profileId} /
+            // oci_passphrase_{profileId} (predates the account-scoped variant above).
+            database.hypervisorDao().getAllList().forEach { h ->
+                pm.retrievePassword("oci_private_key_${h.id}")
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { passwords["oci_private_key_${h.id}"] = it }
+                pm.retrievePassword("oci_passphrase_${h.id}")
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { passwords["oci_passphrase_${h.id}"] = it }
+            }
+
             // VNC identity passwords — alias: vnc_identity_{id}
             database.vncIdentityDao().getAllIdentitiesList().forEach { vi ->
                 pm.retrievePassword("vnc_identity_${vi.id}")
@@ -340,11 +460,41 @@ class BackupExporter(
                     ?.let { passwords["vnc_identity_${vi.id}"] = it }
             }
 
+            // VNC host passwords — alias: vnc_host_{id}
+            database.vncHostDao().getAllHostsList().forEach { vh ->
+                pm.retrievePassword("vnc_host_${vh.id}")
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { passwords["vnc_host_${vh.id}"] = it }
+            }
+
             // Cloud account tokens — alias: cloud_token_{id}
             database.cloudAccountDao().getAll().forEach { ca ->
                 pm.retrievePassword("cloud_token_${ca.id}")
                     ?.takeIf { it.isNotEmpty() }
                     ?.let { passwords["cloud_token_${ca.id}"] = it }
+            }
+
+            // SSH key passphrases — alias: key_passphrase_{keyId}
+            database.keyDao().getAllKeys().first().forEach { key ->
+                pm.retrievePassword("key_passphrase_${key.keyId}")
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { passwords["key_passphrase_${key.keyId}"] = it }
+            }
+
+            // Docker host custom-endpoint passwords — alias: docker_host_{id}
+            database.dockerHostDao().getAllList()
+                .filter { it.usesCustomEndpoint() }
+                .forEach { h ->
+                    pm.retrievePassword("docker_host_${h.id}")
+                        ?.takeIf { it.isNotEmpty() }
+                        ?.let { passwords["docker_host_${h.id}"] = it }
+                }
+
+            // Registry credential secrets — alias: registry_credential_{id}
+            database.registryCredentialDao().getAllList().forEach { c ->
+                pm.retrievePassword("registry_credential_${c.id}")
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { passwords["registry_credential_${c.id}"] = it }
             }
         }
 
@@ -505,6 +655,7 @@ class BackupExporter(
             put("syncCloudAccounts",      preferenceManager.isSyncCloudAccountsEnabled())
             put("syncCertificates",       preferenceManager.isSyncCertificatesEnabled())
             put("syncDashboard",          preferenceManager.isSyncDashboardEnabled())
+            put("syncDocker",             preferenceManager.isSyncDockerEnabled())
             put("autoResolve",            preferenceManager.isAutoResolveConflictsEnabled())
         })
 

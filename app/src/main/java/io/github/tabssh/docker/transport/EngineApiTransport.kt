@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit
 /**
  * Primary transport: Docker Engine REST API over `http://127.0.0.1:{relayPort}`
  * where [relayPort] is the local end of a [SocketRelay] (streamlocal channel
- * or socat bridge) to the host's docker.sock.
+ * or dial-stdio relay) to the host's docker.sock.
  *
  * API version negotiation (PLAN.AI.md architectural findings): one
  * unversioned `GET /version`, negotiated = min(client ceiling
@@ -383,6 +383,34 @@ class EngineApiTransport(
 
     override suspend fun composePs(stackDir: String): DockerResult<String> =
         remoteOps.composePs(stackDir)
+
+    override fun composeLogs(stackDir: String, service: String?, tail: Int): Flow<String> =
+        remoteOps.composeLogs(stackDir, service, tail)
+
+    override suspend fun composeLs(): DockerResult<List<ComposeLsEntry>> =
+        remoteOps.composeLs()
+
+    override suspend fun composeUpByProject(name: String, configFile: String): DockerResult<String> =
+        remoteOps.composeUpByProject(name, configFile)
+
+    override suspend fun composeDownByProject(name: String, configFile: String): DockerResult<String> =
+        remoteOps.composeDownByProject(name, configFile)
+
+    override suspend fun composePullByProject(name: String, configFile: String): DockerResult<String> =
+        remoteOps.composePullByProject(name, configFile)
+
+    override suspend fun composeRestartByProject(name: String, configFile: String): DockerResult<String> =
+        remoteOps.composeRestartByProject(name, configFile)
+
+    override suspend fun composePsByProject(name: String, configFile: String): DockerResult<String> =
+        remoteOps.composePsByProject(name, configFile)
+
+    override fun composeLogsByProject(
+        name: String,
+        configFile: String,
+        service: String?,
+        tail: Int
+    ): Flow<String> = remoteOps.composeLogsByProject(name, configFile, service, tail)
 
     override suspend fun detectComposeInvocation(): DockerResult<ComposeInvocation> =
         remoteOps.detectComposeInvocation()

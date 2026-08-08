@@ -131,4 +131,49 @@ class LoggerSanitizerTest {
         assertFalse(out.contains("203.0.113.7"))
         assertTrue("expected IP alias: $out", Regex("""IP\d+""").containsMatchIn(out))
     }
+
+    // ── URL query-string secrets, auth headers, JSON credentials ─────────
+
+    @Test
+    fun `console url query secrets are redacted`() {
+        val out = Logger.sanitize(
+            "Connecting to console: wss://host/console?vncticket=abc123XYZ&port=5900"
+        )
+        assertFalse("vncticket leaked: $out", out.contains("abc123XYZ"))
+        assertTrue("expected redaction marker: $out", out.contains("[REDACTED]"))
+    }
+
+    @Test
+    fun `session id and access token query params are redacted`() {
+        val out = Logger.sanitize(
+            "wss://xo.example.com/api?session_id=deadbeef1234&access_token=topsecrettoken"
+        )
+        assertFalse("session_id leaked: $out", out.contains("deadbeef1234"))
+        assertFalse("access_token leaked: $out", out.contains("topsecrettoken"))
+    }
+
+    @Test
+    fun `authorization basic header is redacted`() {
+        val out = Logger.sanitize("Authorization: Basic dXNlcjpwYXNzd29yZA==")
+        assertFalse("basic credentials leaked: $out", out.contains("dXNlcjpwYXNzd29yZA=="))
+        assertTrue("expected redaction marker: $out", out.contains("Authorization: [REDACTED]"))
+    }
+
+    @Test
+    fun `authorization bearer header is redacted`() {
+        val out = Logger.sanitize("authorization: Bearer eyJhbGciOiJIUzI1NiJ9.secret.payload")
+        assertFalse("bearer token leaked: $out", out.contains("eyJhbGciOiJIUzI1NiJ9"))
+        assertTrue("expected redaction marker: $out", out.contains("Authorization: [REDACTED]"))
+    }
+
+    @Test
+    fun `json quoted credentials are redacted`() {
+        val out = Logger.sanitize(
+            """{"username":"bob","password":"hunter2","api_key":"sk-abcdef123456"}"""
+        )
+        assertFalse("password leaked: $out", out.contains("hunter2"))
+        assertFalse("api_key leaked: $out", out.contains("sk-abcdef123456"))
+        assertTrue("expected xxxxx marker: $out", out.contains("\"password\": \"xxxxx\""))
+        assertTrue("expected xxxxx marker: $out", out.contains("\"api_key\": \"xxxxx\""))
+    }
 }

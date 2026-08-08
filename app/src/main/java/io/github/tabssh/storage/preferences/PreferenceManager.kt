@@ -691,6 +691,12 @@ class PreferenceManager(private val context: Context) {
     fun isSyncCertificatesEnabled(): Boolean = getBoolean("sync_certificates", true)
     fun setSyncCertificatesEnabled(enabled: Boolean) = setBoolean("sync_certificates", enabled)
 
+    fun isSyncPortForwardsEnabled(): Boolean = getBoolean("sync_port_forwards", true)
+    fun setSyncPortForwardsEnabled(enabled: Boolean) = setBoolean("sync_port_forwards", enabled)
+
+    fun isSyncDockerEnabled(): Boolean = getBoolean("sync_docker", true)
+    fun setSyncDockerEnabled(enabled: Boolean) = setBoolean("sync_docker", enabled)
+
     // Dashboard config is per-device by default — the user must explicitly opt in to sync it
     // so that each device keeps its own dashboard layout. Useful for migrating to a new device.
     fun isSyncDashboardEnabled(): Boolean = getBoolean("sync_dashboard", false)

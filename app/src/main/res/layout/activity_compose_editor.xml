@@ -82,8 +82,9 @@
 
             </com.google.android.material.textfield.TextInputLayout>
 
-            <!-- Optional .env -->
+            <!-- Optional .env (hidden for external-file edits; no known env sibling path) -->
             <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/layout_env"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_md"

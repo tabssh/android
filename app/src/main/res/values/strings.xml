@@ -431,6 +431,13 @@
     <string name="docker_stack_action_running">Running %1$s…</string>
     <string name="docker_stack_action_output_title">%1$s output</string>
     <string name="docker_stack_services">Services</string>
+    <string name="docker_action_logs">Logs</string>
+    <string name="docker_stack_external_status">External · %1$s</string>
+    <string name="docker_stack_load_error">Couldn\'t load %1$s: %2$s</string>
+    <string name="docker_stack_logs_title">%1$s logs</string>
+    <string name="docker_stack_logs_all_services">All services</string>
+    <string name="docker_stack_logs_service_label">Service</string>
+    <string name="docker_run_container_not_found">Container not found</string>
     <string name="docker_run_new_title">New Container Config</string>
     <string name="docker_run_edit_title">Edit Container Config</string>
     <string name="docker_run_name_hint">Config name</string>
@@ -478,13 +485,19 @@
     <string name="docker_msg_socket_permission">Permission denied on the Docker socket. On the host, add your SSH user to the docker group (sudo usermod -aG docker &lt;user&gt;), then log out and back in — or connect as a user that is already in the docker group. Afterwards use \"Retest transport\" on this host.</string>
     <string name="docker_msg_streamlocal_denied">The SSH server refused the unix-socket forward. Ensure sshd_config has BOTH AllowTcpForwarding yes AND AllowStreamLocalForwarding yes (AllowTcpForwarding no silently blocks socket forwards too), then restart sshd and use \"Retest transport\".</string>
     <string name="docker_msg_socket_missing">The Docker socket was not found at the configured path. Check that Docker is running on the host and that the socket path is correct.</string>
-    <string name="docker_msg_bridge_tool_missing">Neither socat nor nc is installed on the host, so the socket-bridge transport is unavailable. Install socat, or rely on the CLI transport.</string>
+    <string name="docker_msg_dial_stdio_unsupported">The docker CLI on the host is missing or too old to support \"docker system dial-stdio\" (needs Docker 18.09+). Install or upgrade Docker, or rely on the CLI transport.</string>
     <string name="docker_msg_cli_missing">The docker command was not found on the host. Install Docker, or set an explicit docker CLI path for this host.</string>
     <string name="docker_msg_compose_missing">Neither the docker compose plugin nor docker-compose is installed on the host. Install the compose plugin to manage stacks.</string>
     <string name="docker_msg_ssh_unavailable">The SSH session for this Docker host is not connected.</string>
-    <string name="docker_msg_all_tiers_failed">No Docker transport is available on this host. Socket forwarding, the socat bridge, and the docker CLI all failed.</string>
+    <string name="docker_msg_all_tiers_failed">No Docker transport is available on this host. Socket forwarding, the dial-stdio relay, and the docker CLI all failed.</string>
     <plurals name="docker_stack_running_services">
         <item quantity="one">%1$d service</item>
         <item quantity="other">%1$d services</item>
     </plurals>
+
+    <!-- Backup restore mode dialog -->
+    <string name="restore_mode_title">Restore Backup</string>
+    <string name="restore_mode_merge">Merge with existing</string>
+    <string name="restore_mode_replace">Replace everything (exact snapshot)</string>
+    <string name="restore_mode_continue">Continue</string>
 </resources>

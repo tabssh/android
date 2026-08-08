@@ -149,7 +149,8 @@
     <style name="Widget.TabSSH.TabLayout" parent="Widget.Material3.TabLayout">
         <item name="tabBackground">@drawable/tab_background_selector</item>
         <item name="tabTextColor">@color/tab_text</item>
-        <item name="tabSelectedTextColor">@color/primary_500</item>
+        <!-- Selected tab bg is primary blue; label must contrast, never match it -->
+        <item name="tabSelectedTextColor">@color/tab_text</item>
         <item name="tabIndicatorColor">@color/primary_500</item>
         <item name="tabIndicatorHeight">3dp</item>
     </style>

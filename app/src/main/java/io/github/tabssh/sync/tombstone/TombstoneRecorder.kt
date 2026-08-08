@@ -2,8 +2,13 @@ package io.github.tabssh.sync.tombstone
 
 import android.content.Context
 import io.github.tabssh.storage.database.TabSSHDatabase
+import io.github.tabssh.storage.database.entities.ComposeStack
+import io.github.tabssh.storage.database.entities.ContainerAutoUpdatePolicy
+import io.github.tabssh.storage.database.entities.DockerHost
 import io.github.tabssh.storage.database.entities.HypervisorAccount
 import io.github.tabssh.storage.database.entities.HypervisorProfile
+import io.github.tabssh.storage.database.entities.RegistryCredential
+import io.github.tabssh.storage.database.entities.SingleContainerConfig
 import io.github.tabssh.storage.database.entities.SyncTombstone
 import io.github.tabssh.sync.metadata.SyncMetadataManager
 import io.github.tabssh.utils.logging.Logger
@@ -24,8 +29,9 @@ import io.github.tabssh.utils.logging.Logger
  * lost, the backstop still tombstones the vanished row on the next collect.
  *
  * [entityKey] is the stable cross-device identity, NOT the raw Room PK. For the
- * 14 UUID-keyed entities pass the UUID. For the two Long-autoincrement entities
- * pass [naturalKey] — their Long id is meaningless across devices.
+ * 14 UUID-keyed entities pass the UUID. For the Long-autoincrement entities
+ * (HypervisorProfile, HypervisorAccount, and the five Docker entities) pass
+ * [naturalKey] — their Long id is meaningless across devices.
  */
 object TombstoneRecorder {
 
@@ -45,6 +51,12 @@ object TombstoneRecorder {
     const val VNC_HOST = "vnc_host"
     const val VNC_IDENTITY = "vnc_identity"
     const val CLOUD_ACCOUNT = "cloud_account"
+    const val PORT_FORWARD = "port_forward"
+    const val DOCKER_HOST = "docker_host"
+    const val REGISTRY_CREDENTIAL = "registry_credential"
+    const val COMPOSE_STACK = "compose_stack"
+    const val SINGLE_CONTAINER_CONFIG = "single_container_config"
+    const val CONTAINER_AUTO_UPDATE_POLICY = "container_auto_update_policy"
 
     /**
      * Stable cross-device key for the Long-PK [HypervisorProfile]: its id is a
@@ -59,6 +71,42 @@ object TombstoneRecorder {
      */
     fun naturalKey(account: HypervisorAccount): String =
         "${account.name}|${account.authType}|${account.username}"
+
+    /**
+     * Stable cross-device key for the Long-PK [DockerHost]: the user-facing
+     * `name` plus whichever endpoint identifier is set, since two devices'
+     * autoincrement ids for the same host are unrelated.
+     */
+    fun naturalKey(host: DockerHost): String =
+        "${host.name}|${host.linkedConnectionId ?: ""}|${host.customHost ?: ""}"
+
+    /**
+     * Stable cross-device key for the Long-PK [RegistryCredential]: a registry
+     * host plus username together identify one credential entry.
+     */
+    fun naturalKey(credential: RegistryCredential): String =
+        "${credential.registryHost}|${credential.username}"
+
+    /**
+     * Stable cross-device key for the Long-PK [ComposeStack]: scoped by its
+     * parent [DockerHost.id] (FK-by-convention, not remapped — see AI.md
+     * PART 6) plus the stack name, which is unique per host.
+     */
+    fun naturalKey(stack: ComposeStack): String = "${stack.dockerHostId}|${stack.name}"
+
+    /**
+     * Stable cross-device key for the Long-PK [SingleContainerConfig]: scoped
+     * by its parent [DockerHost.id] plus the config name, unique per host.
+     */
+    fun naturalKey(config: SingleContainerConfig): String = "${config.dockerHostId}|${config.name}"
+
+    /**
+     * Stable cross-device key for the Long-PK [ContainerAutoUpdatePolicy]:
+     * scoped by its parent [DockerHost.id] plus the container/stack name and
+     * scope discriminator, which together are unique per host.
+     */
+    fun naturalKey(policy: ContainerAutoUpdatePolicy): String =
+        "${policy.dockerHostId}|${policy.containerNameOrStackName}|${policy.scope}"
 
     /**
      * Record a tombstone for a just-deleted synced entity. Best-effort — never

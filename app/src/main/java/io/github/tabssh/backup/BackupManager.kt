@@ -151,12 +151,22 @@ class BackupManager(private val context: Context) {
     }
 
     /**
-     * Restore from backup
+     * Restore from backup.
+     *
+     * @param overwriteExisting merge-mode granularity: when true, a row already
+     *   present locally is overwritten by the backup's copy; when false it is
+     *   left untouched. Ignored when [replaceMode] is true.
+     * @param replaceMode true snapshot restore: every entity table present in
+     *   the backup is cleared before the backup's rows are inserted, and
+     *   preferences are restored in full — the device ends up an exact copy
+     *   of the backup for everything the backup contains. Defaults to false
+     *   (merge) for safety.
      */
     suspend fun restoreBackup(
         inputUri: Uri,
         password: String? = null,
-        overwriteExisting: Boolean = false
+        overwriteExisting: Boolean = false,
+        replaceMode: Boolean = false
     ): RestoreResult = withContext(Dispatchers.IO) {
         try {
             Logger.i("BackupManager", "Starting restore...")
@@ -218,7 +228,7 @@ class BackupManager(private val context: Context) {
             }
 
             // Restore data
-            val restoredItems = importer.restoreBackupData(backupData, overwriteExisting)
+            val restoredItems = importer.restoreBackupData(backupData, overwriteExisting, replaceMode)
 
             Logger.i("BackupManager", "Restore completed successfully")
             return@withContext RestoreResult(

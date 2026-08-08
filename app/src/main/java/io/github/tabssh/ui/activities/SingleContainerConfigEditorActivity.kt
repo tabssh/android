@@ -1,6 +1,9 @@
 package io.github.tabssh.ui.activities
 
+import android.content.Intent
 import android.os.Bundle
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
 import android.view.WindowManager
 import android.widget.LinearLayout
@@ -302,6 +305,64 @@ class SingleContainerConfigEditorActivity : AppCompatActivity() {
             ).show()
             supportActionBar?.setTitle(R.string.docker_run_edit_title)
             editName.isEnabled = false
+            invalidateOptionsMenu()
+        }
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        // Logs only makes sense once the config has a remote directory to
+        // resolve a container name/id against.
+        if (configId != 0L) {
+            menuInflater.inflate(R.menu.menu_run_config_editor, menu)
+        }
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_logs -> {
+                openLogs()
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
+    }
+
+    /**
+     * Resolve the run config's container (its explicit `name:` field, falling
+     * back to the config's own directory-keying name since Docker
+     * auto-generates a name when the run.yml has none) via `docker ps -a
+     * --filter name=^<name>$` and open the existing container log flow for
+     * it. Toasts a not-found error when no matching container exists.
+     */
+    private fun openLogs() {
+        val current = session ?: return
+        val savedConfig = config ?: return
+        // The form field mirrors RunConfig.name (populated by fillForm on
+        // load); an empty run.yml name means Docker auto-generated one, so
+        // fall back to the config's own directory-keying name.
+        val containerName = editContainerName.text?.toString()?.trim()
+            ?.takeIf { it.isNotEmpty() } ?: savedConfig.name
+        progressBar.visibility = View.VISIBLE
+        lifecycleScope.launch {
+            val docker = current.host.dockerCliPath ?: "docker"
+            val filter = SshExecRunner.shQuote("name=^$containerName$")
+            val result = current.runner.run("$docker ps -a --filter $filter --format '{{.ID}}'")
+            progressBar.visibility = View.GONE
+            val containerId = result.stdout.trim().lineSequence().firstOrNull { it.isNotBlank() }
+            if (containerId.isNullOrBlank()) {
+                Toast.makeText(
+                    this@SingleContainerConfigEditorActivity,
+                    R.string.docker_run_container_not_found, Toast.LENGTH_SHORT
+                ).show()
+                return@launch
+            }
+            val intent = Intent(this@SingleContainerConfigEditorActivity, ContainerDetailActivity::class.java)
+            intent.putExtra(ContainerDetailActivity.EXTRA_HOST_ID, hostId)
+            intent.putExtra(ContainerDetailActivity.EXTRA_CONTAINER_ID, containerId)
+            intent.putExtra(ContainerDetailActivity.EXTRA_CONTAINER_NAME, containerName)
+            intent.putExtra(ContainerDetailActivity.EXTRA_INITIAL_TAB, ContainerDetailActivity.TAB_LOGS)
+            startActivity(intent)
         }
     }
 

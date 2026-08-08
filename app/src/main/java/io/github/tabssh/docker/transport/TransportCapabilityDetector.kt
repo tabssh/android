@@ -1,6 +1,5 @@
 package io.github.tabssh.docker.transport
 
-import io.github.tabssh.ssh.forwarding.PortForwardingManager
 import io.github.tabssh.storage.database.dao.DockerHostDao
 import io.github.tabssh.storage.database.entities.DockerHost
 import io.github.tabssh.utils.logging.Logger
@@ -13,13 +12,16 @@ import java.util.concurrent.TimeUnit
 /**
  * Three-tier transport detection (PLAN.AI.md step 14):
  *  (a) direct-streamlocal relay + unversioned `GET /version`
- *  (b) socat/nc bridge + TCP forward + `GET /version`
+ *  (b) `docker system dial-stdio` relay + unversioned `GET /version`
  *  (c) `docker version --format '{{json .}}'` over SSH exec
  *
  * The winning tier is persisted to [DockerHost.transportMode] via
  * [DockerHostDao]; a non-auto stored mode short-circuits detection until the
  * user forces a retest ([detect] with force=true) — the tier is never
- * silently downgraded behind the user's back.
+ * silently downgraded behind the user's back. The legacy pinned mode
+ * "api_socat" (the removed socat/nc bridge tier) is treated as [MODE_AUTO]
+ * so an old pin falls through to full detection instead of failing outright;
+ * the freshly detected tier is persisted over it.
  *
  * A socket-permission probe runs before the socket tiers: "permission denied"
  * is surfaced as [DockerResult.PermissionDenied] carrying the docker-group
@@ -31,13 +33,24 @@ class TransportCapabilityDetector(
     private val dao: DockerHostDao
 ) {
 
-    private companion object {
+    internal companion object {
         private const val TAG = "TransportCapabilityDetector"
         private const val PROBE_TIMEOUT_S = 10L
         private const val MODE_AUTO = "auto"
         private const val MODE_API_STREAMLOCAL = "api_streamlocal"
-        private const val MODE_API_SOCAT = "api_socat"
+        private const val MODE_API_STDIO = "api_stdio"
         private const val MODE_CLI_EXEC = "cli_exec"
+
+        /** Removed socat/nc bridge tier — a stored pin of this value migrates to auto. */
+        private const val LEGACY_MODE_API_SOCAT = "api_socat"
+
+        /**
+         * True when [mode] should be treated as [MODE_AUTO] — either the
+         * literal auto value, or the legacy socat-bridge pin left over from
+         * before the dial-stdio migration.
+         */
+        internal fun isAutoOrLegacy(mode: String): Boolean =
+            mode == MODE_AUTO || mode == LEGACY_MODE_API_SOCAT
     }
 
     /** Outcome of a successful detection. */
@@ -63,12 +76,11 @@ class TransportCapabilityDetector(
     suspend fun detect(
         host: DockerHost,
         runner: SshExecRunner,
-        portForwardingManager: PortForwardingManager,
         force: Boolean = false
     ): DockerResult<DetectedTransport> = withContext(Dispatchers.IO) {
-        val pinned = host.transportMode.takeIf { it != MODE_AUTO && !force }
+        val pinned = host.transportMode.takeIf { !isAutoOrLegacy(it) && !force }
         if (pinned != null) {
-            return@withContext openTier(pinned, host, runner, portForwardingManager)
+            return@withContext openTier(pinned, host, runner)
         }
 
         // Socket-permission gate for the socket-based tiers (a) and (b).
@@ -81,8 +93,8 @@ class TransportCapabilityDetector(
         val failures = mutableListOf<String>()
 
         if (socketUsable) {
-            for (mode in listOf(MODE_API_STREAMLOCAL, MODE_API_SOCAT)) {
-                when (val attempt = openTier(mode, host, runner, portForwardingManager)) {
+            for (mode in listOf(MODE_API_STREAMLOCAL, MODE_API_STDIO)) {
+                when (val attempt = openTier(mode, host, runner)) {
                     is DockerResult.Success -> {
                         persist(host, mode)
                         return@withContext attempt
@@ -101,7 +113,7 @@ class TransportCapabilityDetector(
             failures += "socket probe failed"
         }
 
-        when (val attempt = openTier(MODE_CLI_EXEC, host, runner, portForwardingManager)) {
+        when (val attempt = openTier(MODE_CLI_EXEC, host, runner)) {
             is DockerResult.Success -> {
                 persist(host, MODE_CLI_EXEC)
                 return@withContext attempt
@@ -124,28 +136,26 @@ class TransportCapabilityDetector(
     private suspend fun openTier(
         mode: String,
         host: DockerHost,
-        runner: SshExecRunner,
-        portForwardingManager: PortForwardingManager
+        runner: SshExecRunner
     ): DockerResult<DetectedTransport> = when (mode) {
-        MODE_API_STREAMLOCAL -> openApiTier(mode, host, runner, portForwardingManager)
-        MODE_API_SOCAT -> openApiTier(mode, host, runner, portForwardingManager)
+        MODE_API_STREAMLOCAL -> openApiTier(mode, host, runner)
+        MODE_API_STDIO -> openApiTier(mode, host, runner)
         MODE_CLI_EXEC -> verifyCliTier(host, runner)
         else -> DockerResult.Error("Unknown transport mode", mode)
     }
 
-    /** Open a relay (streamlocal or socat), then verify with GET /version. */
+    /** Open a relay (streamlocal or dial-stdio), then verify with GET /version. */
     private suspend fun openApiTier(
         mode: String,
         host: DockerHost,
-        runner: SshExecRunner,
-        portForwardingManager: PortForwardingManager
+        runner: SshExecRunner
     ): DockerResult<DetectedTransport> {
-        val relay = SocketRelay(host, runner, portForwardingManager)
+        val relay = SocketRelay(host, runner)
         return try {
             val port = if (mode == MODE_API_STREAMLOCAL) {
                 relay.openStreamLocal()
             } else {
-                relay.openSocatBridge()
+                relay.openDialStdio()
             }
             when (val probe = probeApiVersion(port)) {
                 is DockerResult.Success -> {

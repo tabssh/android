@@ -32,8 +32,8 @@ object DockerErrorPresenter {
                 context.getString(R.string.docker_msg_streamlocal_denied)
             DockerTransportMessages.SOCKET_MISSING ->
                 context.getString(R.string.docker_msg_socket_missing)
-            DockerTransportMessages.BRIDGE_TOOL_MISSING ->
-                context.getString(R.string.docker_msg_bridge_tool_missing)
+            DockerTransportMessages.DIAL_STDIO_UNSUPPORTED ->
+                context.getString(R.string.docker_msg_dial_stdio_unsupported)
             DockerTransportMessages.DOCKER_CLI_MISSING ->
                 context.getString(R.string.docker_msg_cli_missing)
             DockerTransportMessages.COMPOSE_MISSING ->

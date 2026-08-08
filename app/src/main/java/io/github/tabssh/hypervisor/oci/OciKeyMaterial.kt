@@ -8,6 +8,7 @@ import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter
 import org.bouncycastle.openssl.jcajce.JceOpenSSLPKCS8DecryptorProviderBuilder
 import org.bouncycastle.openssl.jcajce.JcePEMDecryptorProviderBuilder
 import org.bouncycastle.pkcs.PKCS8EncryptedPrivateKeyInfo
+import io.github.tabssh.utils.logging.Logger
 import java.io.StringReader
 import java.security.KeyPair
 import java.security.MessageDigest
@@ -76,6 +77,7 @@ class OciKeyMaterial private constructor(
                 is PEMKeyPair -> try {
                     converter.getKeyPair(obj)
                 } catch (e: Exception) {
+                    Logger.w("OciKeyMaterial", "Failed to convert PEM keypair: ${e.message}")
                     throw IllegalArgumentException("Failed to load key: ${e.message}", e)
                 }
                 is PKCS8EncryptedPrivateKeyInfo -> {
@@ -90,8 +92,10 @@ class OciKeyMaterial private constructor(
                 is PrivateKeyInfo -> try {
                     privateKeyInfoToKeyPair(obj, converter)
                 } catch (e: IllegalArgumentException) {
+                    Logger.w("OciKeyMaterial", "Failed to load private key info: ${e.message}")
                     throw e
                 } catch (e: Exception) {
+                    Logger.w("OciKeyMaterial", "Failed to load private key info: ${e.message}")
                     throw IllegalArgumentException("Failed to load key: ${e.message}", e)
                 }
                 else -> throw IllegalArgumentException(

@@ -174,6 +174,10 @@ object RegistryCredentialDialog {
                     app.database.containerAutoUpdatePolicyDao()
                         .clearRegistryCredentialId(credential.id)
                     app.database.registryCredentialDao().delete(credential)
+                    io.github.tabssh.sync.tombstone.TombstoneRecorder.record(
+                        activity.applicationContext,
+                        io.github.tabssh.sync.tombstone.TombstoneRecorder.REGISTRY_CREDENTIAL,
+                        io.github.tabssh.sync.tombstone.TombstoneRecorder.naturalKey(credential))
                 }
             }
             .setNegativeButton(R.string.cancel, null)

@@ -1583,7 +1583,7 @@ class SSHConnection(
                 shellChannelRawIn = execIn
                 shellChannelRawOut = execOut
                 openChannels.add(exec)
-                Logger.i("SSHConnection", "Opened exec channel: ${remoteCmd.take(60)} (pty=$requestTTY)")
+                Logger.i("SSHConnection", "Opened exec channel: ${Logger.commandForLogging(remoteCmd)} (pty=$requestTTY)")
                 return@withContext exec
                 } catch (e: Exception) {
                     // Channel was opened (allocated on the Session) but not yet
@@ -1781,7 +1781,7 @@ class SSHConnection(
                     if (n == -1) break
                     if (n > 0) output.append(String(buffer, 0, n, Charsets.UTF_8))
                 }
-            } ?: Logger.w("SSHConnection", "executeCommand timed out after ${timeoutMs}ms: $command")
+            } ?: Logger.w("SSHConnection", "executeCommand timed out after ${timeoutMs}ms: ${Logger.commandForLogging(command)}")
 
             // Drain stderr after stdout EOF (channel is closed by remote at this point)
             val errorOutput = StringBuilder()
@@ -1792,13 +1792,13 @@ class SSHConnection(
 
             val exitStatus = channel.exitStatus
             if (exitStatus != 0 && errorOutput.isNotEmpty()) {
-                Logger.w("SSHConnection", "Command '$command' exit $exitStatus — stderr: $errorOutput")
+                Logger.w("SSHConnection", "Command '${Logger.commandForLogging(command)}' exit $exitStatus — stderr: $errorOutput")
             }
 
             output.toString()
 
         } catch (e: Exception) {
-            Logger.e("SSHConnection", "Failed to execute command: $command", e)
+            Logger.e("SSHConnection", "Failed to execute command: ${Logger.commandForLogging(command)}", e)
             throw e
         } finally {
             try { channel?.disconnect() } catch (_: Exception) {}

@@ -233,7 +233,9 @@ class ConsoleWebSocketClient(
             }
             val request = requestBuilder.build()
 
-            Logger.i(TAG, "Connecting to console: $url")
+            // Log scheme+host+path only — the query string carries a live
+            // vncticket/session credential that must never reach any log.
+            Logger.i(TAG, "Connecting to console: ${Logger.urlForLogging(url)}")
 
             // Create WebSocket connection
             webSocket = client.newWebSocket(request, object : WebSocketListener() {
@@ -286,14 +288,16 @@ class ConsoleWebSocketClient(
                                         // add a serial port (socket) and restart the VM, OR
                                         // switch to VNC mode.
                                         if (isProxmoxSerialError(msg)) {
-                                            Logger.w(TAG, "Proxmox serial console error: $msg")
+                                            // Log length/type only — the frame is terminal
+                                            // content and must never be written to logs.
+                                            Logger.w(TAG, "Proxmox serial console error (${msg.length} chars)")
                                             isConnected = false
                                             connectionListener?.onSerialConsoleUnavailable()
                                             return@onMessage
                                         }
                                         msg
                                     } else {
-                                        Logger.w(TAG, "Malformed Proxmox message: $text")
+                                        Logger.w(TAG, "Malformed Proxmox message (${text.length} chars)")
                                         text
                                     }
                                 } else {
@@ -301,12 +305,12 @@ class ConsoleWebSocketClient(
                                     // Check for the serial error here too — some Proxmox
                                     // versions send it without the "0:N:" envelope.
                                     if (isProxmoxSerialError(text)) {
-                                        Logger.w(TAG, "Proxmox serial error (plain frame): $text")
+                                        Logger.w(TAG, "Proxmox serial error, plain frame (${text.length} chars)")
                                         isConnected = false
                                         connectionListener?.onSerialConsoleUnavailable()
                                         return@onMessage
                                     }
-                                    Logger.d(TAG, "Non-data Proxmox message: $text")
+                                    Logger.d(TAG, "Non-data Proxmox message (${text.length} chars)")
                                     return@onMessage
                                 }
                             }
@@ -346,7 +350,8 @@ class ConsoleWebSocketClient(
                             val text = bytes.utf8()
                             val stripped = if (bytes.size > 1) text.drop(1) else text
                             if (isProxmoxSerialError(text) || isProxmoxSerialError(stripped)) {
-                                Logger.w(TAG, "Proxmox serial error (binary frame): $text")
+                                // Log length only — this is raw terminal content.
+                                Logger.w(TAG, "Proxmox serial error, binary frame (${text.length} chars)")
                                 isConnected = false
                                 connectionListener?.onSerialConsoleUnavailable()
                                 return

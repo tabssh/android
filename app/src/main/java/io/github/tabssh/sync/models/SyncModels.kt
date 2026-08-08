@@ -35,12 +35,22 @@ data class SyncItemCounts(
     /** Wave 14 (2026-05-21) — cloud provider account metadata (token stays Keystore-bound). */
     val cloudAccounts: Int = 0,
     /** Multi-host dashboard config — groups and host membership from SharedPreferences. */
-    val dashboard: Int = 0
+    val dashboard: Int = 0,
+    /** Saved SSH port-forward rules. */
+    val portForwards: Int = 0,
+    /** Docker subsystem: hosts, registry credentials, compose stacks, single-container
+     *  run configs, and auto-update policies. */
+    val dockerHosts: Int = 0,
+    val registryCredentials: Int = 0,
+    val composeStacks: Int = 0,
+    val singleContainerConfigs: Int = 0,
+    val containerAutoUpdatePolicies: Int = 0
 ) {
     fun total(): Int = connections + keys + themes + preferences + hostKeys +
         workspaces + snippets + identities + groups + hypervisors + certificates +
         macros + monitorSlots + hypervisorAccounts + vncHosts + vncIdentities +
-        cloudAccounts + dashboard
+        cloudAccounts + dashboard + portForwards + dockerHosts + registryCredentials +
+        composeStacks + singleContainerConfigs + containerAutoUpdatePolicies
 }
 
 /**
@@ -103,6 +113,18 @@ data class SyncDataPackage(
      *  `dash_groups_json`, `dash_hosts_<groupId>`); values are stored strings.
      *  Empty when the sync_dashboard switch is off (per-device, the default). */
     val dashboardConfig: Map<String, String> = emptyMap(),
+    /** Saved SSH port-forward rules, last-write-wins REPLACE on UUID PK. */
+    val portForwards: List<io.github.tabssh.storage.database.entities.PortForward> = emptyList(),
+    /** Docker subsystem — all use autoGenerate Long PKs, so cross-device ID collisions
+     *  are possible (same caveat as HypervisorProfile above, documented in AI.md §9.4).
+     *  DockerHost's custom-endpoint SSH password and RegistryCredential's secret stay
+     *  Keystore-bound under `docker_host_{id}` / `registry_credential_{id}` and travel
+     *  via the secrets map only. */
+    val dockerHosts: List<io.github.tabssh.storage.database.entities.DockerHost> = emptyList(),
+    val registryCredentials: List<io.github.tabssh.storage.database.entities.RegistryCredential> = emptyList(),
+    val composeStacks: List<io.github.tabssh.storage.database.entities.ComposeStack> = emptyList(),
+    val singleContainerConfigs: List<io.github.tabssh.storage.database.entities.SingleContainerConfig> = emptyList(),
+    val containerAutoUpdatePolicies: List<io.github.tabssh.storage.database.entities.ContainerAutoUpdatePolicy> = emptyList(),
     /** Keystore-backed credentials — included only in encrypted sync payloads.
      *  Map keys are alias names; values are plaintext (safe inside AES-GCM envelope).
      *  SSH private key material is base64-encoded JSch bytes under key

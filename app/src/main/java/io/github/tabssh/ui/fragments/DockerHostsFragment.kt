@@ -24,6 +24,7 @@ import io.github.tabssh.ui.activities.DockerHostEditActivity
 import io.github.tabssh.ui.activities.DockerHostManagerActivity
 import io.github.tabssh.ui.adapters.DockerHostAdapter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -219,10 +220,31 @@ class DockerHostsFragment : Fragment() {
                             // can't inherit this host's secret.
                             io.github.tabssh.crypto.storage.DockerHostPasswordStore
                                 .clear(appContext, host.id)
+                            // Tombstone every cascaded child before the bulk
+                            // delete removes it — deleteForHost() gives back
+                            // no rows, so the natural keys must be captured first.
+                            app.database.composeStackDao().getStacksForHostList(host.id).forEach { stack ->
+                                io.github.tabssh.sync.tombstone.TombstoneRecorder.record(
+                                    appContext, io.github.tabssh.sync.tombstone.TombstoneRecorder.COMPOSE_STACK,
+                                    io.github.tabssh.sync.tombstone.TombstoneRecorder.naturalKey(stack))
+                            }
+                            app.database.singleContainerConfigDao().getConfigsForHostList(host.id).forEach { config ->
+                                io.github.tabssh.sync.tombstone.TombstoneRecorder.record(
+                                    appContext, io.github.tabssh.sync.tombstone.TombstoneRecorder.SINGLE_CONTAINER_CONFIG,
+                                    io.github.tabssh.sync.tombstone.TombstoneRecorder.naturalKey(config))
+                            }
+                            app.database.containerAutoUpdatePolicyDao().getPoliciesForHost(host.id).first().forEach { policy ->
+                                io.github.tabssh.sync.tombstone.TombstoneRecorder.record(
+                                    appContext, io.github.tabssh.sync.tombstone.TombstoneRecorder.CONTAINER_AUTO_UPDATE_POLICY,
+                                    io.github.tabssh.sync.tombstone.TombstoneRecorder.naturalKey(policy))
+                            }
                             app.database.composeStackDao().deleteForHost(host.id)
                             app.database.singleContainerConfigDao().deleteForHost(host.id)
                             app.database.containerAutoUpdatePolicyDao().deleteForHost(host.id)
                             app.database.dockerHostDao().delete(host)
+                            io.github.tabssh.sync.tombstone.TombstoneRecorder.record(
+                                appContext, io.github.tabssh.sync.tombstone.TombstoneRecorder.DOCKER_HOST,
+                                io.github.tabssh.sync.tombstone.TombstoneRecorder.naturalKey(host))
                         }
                         if (!isAdded) return@launch
                         Toast.makeText(

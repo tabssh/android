@@ -62,7 +62,7 @@ data class DockerHost(
     @ColumnInfo(name = "socket_path")
     val socketPath: String = "/var/run/docker.sock",
 
-    /** "auto", "api_streamlocal", "api_socat", "cli_exec". */
+    /** "auto", "api_streamlocal", "api_stdio", "cli_exec". */
     @ColumnInfo(name = "transport_mode")
     val transportMode: String = "auto",
 

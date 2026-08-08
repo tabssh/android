@@ -58,7 +58,9 @@ class ClusterCommandExecutor(private val app: TabSSHApplication) {
         maxConcurrent: Int = 10
     ): List<ExecutionResult> = withContext(Dispatchers.IO) {
         
-        Logger.i("ClusterCommand", "Executing on ${connections.size} servers: $command")
+        // Log the program name + shape only — full command lines can carry
+        // secrets passed as arguments.
+        Logger.i("ClusterCommand", "Executing on ${connections.size} servers: ${Logger.commandForLogging(command)}")
         
         val results = mutableListOf<ExecutionResult>()
         

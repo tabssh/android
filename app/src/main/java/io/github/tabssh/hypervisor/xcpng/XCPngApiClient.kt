@@ -373,12 +373,14 @@ class XCPngApiClient(
                     "wss://$host/console?ref=$consoleRef&session_id=$sessionId"
                 }
 
-                Logger.i("XCPngAPI", "Console URL: $wsUrl")
+                // Log scheme+host+path only — the query string carries the
+                // live session_id credential.
+                Logger.i("XCPngAPI", "Console URL: ${Logger.urlForLogging(wsUrl)}")
                 wsUrl
             } else {
                 // Fallback: construct console URL manually
                 val fallbackUrl = "wss://$host/console?ref=$consoleRef&session_id=$sessionId"
-                Logger.i("XCPngAPI", "Using fallback console URL: $fallbackUrl")
+                Logger.i("XCPngAPI", "Using fallback console URL: ${Logger.urlForLogging(fallbackUrl)}")
                 fallbackUrl
             }
         } catch (e: Exception) {
@@ -428,7 +430,9 @@ class XCPngApiClient(
                     location.isNotEmpty()           -> location
                     else                            -> "wss://$host/console?ref=$ref&session_id=$sessionId"
                 }
-                Logger.i("XCPngAPI", "Resolved $proto console for VM: $url")
+                // Log scheme+host+path only — the query string carries the
+                // live session_id credential.
+                Logger.i("XCPngAPI", "Resolved $proto console for VM: ${Logger.urlForLogging(url)}")
                 return@withContext ConsoleInfo(url, proto.lowercase())
             }
             null

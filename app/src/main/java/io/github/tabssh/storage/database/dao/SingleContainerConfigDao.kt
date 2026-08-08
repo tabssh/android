@@ -13,6 +13,10 @@ interface SingleContainerConfigDao {
     @Query("SELECT * FROM single_container_configs WHERE docker_host_id = :hostId ORDER BY name ASC")
     suspend fun getConfigsForHostList(hostId: Long): List<SingleContainerConfig>
 
+    /** All configs across every host — backup export and sync collection. */
+    @Query("SELECT * FROM single_container_configs")
+    suspend fun getAllList(): List<SingleContainerConfig>
+
     @Query("SELECT * FROM single_container_configs WHERE id = :id")
     suspend fun getById(id: Long): SingleContainerConfig?
 

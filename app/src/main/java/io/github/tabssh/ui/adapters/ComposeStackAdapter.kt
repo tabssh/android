@@ -7,38 +7,39 @@ import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import io.github.tabssh.R
-import io.github.tabssh.storage.database.entities.ComposeStack
 
 /**
  * Compose stack list rows (PLAN.AI.md step 22): name, remote path, and the
- * last-known per-service status snapshot (refreshed via composePs).
+ * last-known per-service status snapshot (refreshed via composePs) for
+ * Room-tracked stacks; discovered-but-untracked stacks (TODO.AI.md § D) show
+ * their `docker compose ls` config file path and an "External" badge.
  */
 class ComposeStackAdapter(
-    private var stacks: List<ComposeStack> = emptyList()
+    private var items: List<StackListItem> = emptyList()
 ) : RecyclerView.Adapter<ComposeStackAdapter.ViewHolder>() {
 
-    private var onItemClickListener: ((ComposeStack) -> Unit)? = null
-    private var onItemLongClickListener: ((ComposeStack) -> Unit)? = null
+    private var onItemClickListener: ((StackListItem) -> Unit)? = null
+    private var onItemLongClickListener: ((StackListItem) -> Unit)? = null
 
-    fun setOnItemClickListener(listener: (ComposeStack) -> Unit) {
+    fun setOnItemClickListener(listener: (StackListItem) -> Unit) {
         onItemClickListener = listener
     }
 
-    fun setOnItemLongClickListener(listener: (ComposeStack) -> Unit) {
+    fun setOnItemLongClickListener(listener: (StackListItem) -> Unit) {
         onItemLongClickListener = listener
     }
 
-    fun updateList(newList: List<ComposeStack>) {
-        val old = stacks
+    fun updateList(newList: List<StackListItem>) {
+        val old = items
         val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
             override fun getOldListSize(): Int = old.size
             override fun getNewListSize(): Int = newList.size
             override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
-                old[oldItemPosition].id == newList[newItemPosition].id
+                old[oldItemPosition].listKey == newList[newItemPosition].listKey
             override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
                 old[oldItemPosition] == newList[newItemPosition]
         })
-        stacks = newList
+        items = newList
         diff.dispatchUpdatesTo(this)
     }
 
@@ -49,10 +50,10 @@ class ComposeStackAdapter(
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        holder.bind(stacks[position])
+        holder.bind(items[position])
     }
 
-    override fun getItemCount(): Int = stacks.size
+    override fun getItemCount(): Int = items.size
 
     inner class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val textName: TextView = itemView.findViewById(R.id.text_name)
@@ -63,14 +64,14 @@ class ComposeStackAdapter(
             itemView.setOnClickListener {
                 val position = bindingAdapterPosition
                 if (position != RecyclerView.NO_POSITION) {
-                    onItemClickListener?.invoke(stacks[position])
+                    onItemClickListener?.invoke(items[position])
                 }
             }
 
             itemView.setOnLongClickListener {
                 val position = bindingAdapterPosition
                 if (position != RecyclerView.NO_POSITION) {
-                    onItemLongClickListener?.invoke(stacks[position])
+                    onItemLongClickListener?.invoke(items[position])
                     true
                 } else {
                     false
@@ -78,10 +79,15 @@ class ComposeStackAdapter(
             }
         }
 
-        fun bind(stack: ComposeStack) {
-            textName.text = stack.name
-            textPath.text = stack.remotePath
-            val status = stack.lastKnownStatus
+        fun bind(item: StackListItem) {
+            textName.text = item.name
+            textPath.text = item.statusLine
+            val status = when (item) {
+                is StackListItem.Tracked -> item.stack.lastKnownStatus
+                is StackListItem.External -> itemView.context.getString(
+                    R.string.docker_stack_external_status, item.entry.status
+                )
+            }
             if (status.isNullOrBlank()) {
                 textStatus.visibility = View.GONE
             } else {

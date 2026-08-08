@@ -555,8 +555,13 @@ class TabSSHApplication : Application() {
                     // no disk I/O, no race between write and read).
                     // Secondary path: SharedPreferences on disk as a fallback for the
                     // case where Android restarts CrashReportActivity in a new process.
+                    // Sanitize before persisting to disk — the Intent extra
+                    // path below stays raw for in-process developer
+                    // readability, but the SharedPreferences fallback
+                    // survives a process restart and must not carry
+                    // hostnames/IPs/credentials in plaintext.
                     getSharedPreferences(STARTUP_PREFS, MODE_PRIVATE).edit()
-                        .putString(KEY_LAST_CRASH,   trace)
+                        .putString(KEY_LAST_CRASH,   Logger.sanitize(trace))
                         .putString(KEY_CRASH_THREAD, thread.name)
                         .putLong(KEY_CRASH_TIME,     crashTime)
                         .commit() // synchronous; ignore return value — Intent extras are primary

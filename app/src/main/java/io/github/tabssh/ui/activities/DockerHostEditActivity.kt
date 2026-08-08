@@ -22,7 +22,6 @@ import io.github.tabssh.docker.DockerSessionManager
 import io.github.tabssh.docker.transport.DockerResult
 import io.github.tabssh.docker.transport.SshExecRunner
 import io.github.tabssh.docker.transport.TransportCapabilityDetector
-import io.github.tabssh.ssh.forwarding.PortForwardingManager
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.DockerHost
 import io.github.tabssh.storage.database.entities.Identity
@@ -397,9 +396,7 @@ class DockerHostEditActivity : AppCompatActivity() {
                 } else {
                     val runner = SshExecRunner { ssh.jschSession() }
                     val detector = TransportCapabilityDetector(app.database.dockerHostDao())
-                    val probe = detector.detect(
-                        host, runner, PortForwardingManager(ssh), force = true
-                    )
+                    val probe = detector.detect(host, runner, force = true)
                     // The probe transport is single-use — close its relay.
                     probe.valueOrNull()?.transport?.close()
                     probe

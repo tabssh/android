@@ -1443,7 +1443,9 @@ class TabTerminalActivity : AppCompatActivity() {
         // don't get hidden behind the system clipboard preview shield.
         io.github.tabssh.utils.ClipboardHelper.copy(this, label, text, sensitive = false)
         Toast.makeText(this, "$label copied to clipboard", Toast.LENGTH_SHORT).show()
-        Logger.d("TabTerminalActivity", "Copied $label to clipboard: $text")
+        // Log label + length only — the copied text may be a path or link
+        // that reveals private infrastructure details, never the contents.
+        Logger.d("TabTerminalActivity", "Copied $label to clipboard (${text.length} chars)")
     }
 
     /**

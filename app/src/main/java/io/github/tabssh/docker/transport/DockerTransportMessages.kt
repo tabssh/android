@@ -30,10 +30,11 @@ object DockerTransportMessages {
         "The Docker socket was not found at the configured path. Check that " +
         "Docker is running on the host and that the socket path is correct."
 
-    /** Shown when neither socat nor nc is available for the bridge tier. */
-    const val BRIDGE_TOOL_MISSING =
-        "Neither socat nor nc is installed on the host, so the socket-bridge " +
-        "transport is unavailable. Install socat, or rely on the CLI transport."
+    /** Shown when `docker system dial-stdio --help` fails or the docker CLI is missing. */
+    const val DIAL_STDIO_UNSUPPORTED =
+        "The docker CLI on the host is missing or too old to support " +
+        "\"docker system dial-stdio\" (needs Docker 18.09+). Install or " +
+        "upgrade Docker, or rely on the CLI transport."
 
     /** Shown when the docker CLI cannot be found on the remote PATH. */
     const val DOCKER_CLI_MISSING =
@@ -52,5 +53,5 @@ object DockerTransportMessages {
     /** Shown when every transport tier failed during detection. */
     const val ALL_TIERS_FAILED =
         "No Docker transport is available on this host. Socket forwarding, " +
-        "the socat bridge, and the docker CLI all failed."
+        "the dial-stdio relay, and the docker CLI all failed."
 }

@@ -5,17 +5,25 @@ import io.github.tabssh.backup.export.BackupExporter
 import io.github.tabssh.crypto.keys.KeyStorage
 import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.storage.database.TabSSHDatabase
+import io.github.tabssh.storage.database.entities.AuditLogEntry
 import io.github.tabssh.storage.database.entities.CloudAccount
+import io.github.tabssh.storage.database.entities.ComposeStack
 import io.github.tabssh.storage.database.entities.ConnectionGroup
 import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.storage.database.entities.ContainerAutoUpdatePolicy
+import io.github.tabssh.storage.database.entities.DockerHost
 import io.github.tabssh.storage.database.entities.HostKeyEntry
 import io.github.tabssh.storage.database.entities.HypervisorAccount
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.Identity
 import io.github.tabssh.storage.database.entities.Macro
 import io.github.tabssh.storage.database.entities.MonitorSlot
+import io.github.tabssh.storage.database.entities.PortForward
+import io.github.tabssh.storage.database.entities.RegistryCredential
+import io.github.tabssh.storage.database.entities.SingleContainerConfig
 import io.github.tabssh.storage.database.entities.Snippet
 import io.github.tabssh.storage.database.entities.StoredKey
+import io.github.tabssh.storage.database.entities.TabSession
 import io.github.tabssh.storage.database.entities.ThemeDefinition
 import io.github.tabssh.storage.database.entities.TrustedCertificate
 import io.github.tabssh.storage.database.entities.VncHost
@@ -24,6 +32,7 @@ import io.github.tabssh.storage.database.entities.Workspace
 import io.github.tabssh.storage.preferences.PreferenceManager
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
@@ -58,12 +67,22 @@ class BackupImporter(
      * Restore everything present in [backupData]. Returns a per-table count of
      * rows inserted (skipping rows that already exist when [overwriteExisting]
      * is false).
+     *
+     * @param replaceMode true snapshot restore: every entity table present in
+     *   [backupData] is cleared first (see [clearTablesForReplace]), so the
+     *   restored rows are all that remain — no leftover local-only rows
+     *   survive. Forces overwrite-on-conflict semantics for every table since
+     *   the table is empty going in. Tables absent from the backup are left
+     *   untouched either way.
      */
     suspend fun restoreBackupData(
         backupData: Map<String, String>,
-        overwriteExisting: Boolean
+        overwriteExisting: Boolean,
+        replaceMode: Boolean = false
     ): Map<String, Int> = withContext(Dispatchers.IO) {
         val out = mutableMapOf<String, Int>()
+        val effectiveOverwrite = overwriteExisting || replaceMode
+        if (replaceMode) clearTablesForReplace(backupData)
 
         suspend fun <R> table(
             key: String,
@@ -81,46 +100,79 @@ class BackupImporter(
         }
 
         table(BackupExporter.FILE_CONNECTIONS, "connections",
-            { restoreConnections(it, overwriteExisting) }) { out["connections"] = it; Logger.d(TAG, "Restored $it connections") }
+            { restoreConnections(it, effectiveOverwrite) }) { out["connections"] = it; Logger.d(TAG, "Restored $it connections") }
         table(BackupExporter.FILE_KEYS, "keys",
-            { restoreKeys(it, overwriteExisting) }) { out["keys"] = it; Logger.d(TAG, "Restored $it keys") }
+            { restoreKeys(it, effectiveOverwrite) }) { out["keys"] = it; Logger.d(TAG, "Restored $it keys") }
         backupData[BackupExporter.FILE_PREFERENCES]?.let {
             restorePreferences(it); out["preferences"] = 1
             Logger.d(TAG, "Restored preferences")
         } ?: Logger.d(TAG, "Skipping preferences — not in backup")
         table(BackupExporter.FILE_THEMES, "themes",
-            { restoreThemes(it, overwriteExisting) }) { out["themes"] = it; Logger.d(TAG, "Restored $it themes") }
+            { restoreThemes(it, effectiveOverwrite) }) { out["themes"] = it; Logger.d(TAG, "Restored $it themes") }
         table(BackupExporter.FILE_CERTIFICATES, "certificates",
-            { restoreCertificates(it, overwriteExisting) }) { out["certificates"] = it; Logger.d(TAG, "Restored $it certificates") }
+            { restoreCertificates(it, effectiveOverwrite) }) { out["certificates"] = it; Logger.d(TAG, "Restored $it certificates") }
         table(BackupExporter.FILE_HOST_KEYS, "host_keys",
-            { restoreHostKeys(it, overwriteExisting) }) { out["host_keys"] = it; Logger.d(TAG, "Restored $it host keys") }
+            { restoreHostKeys(it, effectiveOverwrite) }) { out["host_keys"] = it; Logger.d(TAG, "Restored $it host keys") }
         table(BackupExporter.FILE_IDENTITIES, "identities",
-            { restoreIdentities(it, overwriteExisting) }) { out["identities"] = it; Logger.d(TAG, "Restored $it identities") }
+            { restoreIdentities(it, effectiveOverwrite) }) { out["identities"] = it; Logger.d(TAG, "Restored $it identities") }
         table(BackupExporter.FILE_GROUPS, "connection_groups",
-            { restoreGroups(it, overwriteExisting) }) { out["connection_groups"] = it; Logger.d(TAG, "Restored $it connection groups") }
+            { restoreGroups(it, effectiveOverwrite) }) { out["connection_groups"] = it; Logger.d(TAG, "Restored $it connection groups") }
         table(BackupExporter.FILE_SNIPPETS, "snippets",
-            { restoreSnippets(it, overwriteExisting) }) { out["snippets"] = it; Logger.d(TAG, "Restored $it snippets") }
+            { restoreSnippets(it, effectiveOverwrite) }) { out["snippets"] = it; Logger.d(TAG, "Restored $it snippets") }
         table(BackupExporter.FILE_HYPERVISORS, "hypervisors",
-            { restoreHypervisors(it, overwriteExisting) }) { out["hypervisors"] = it; Logger.d(TAG, "Restored $it hypervisors") }
+            { restoreHypervisors(it, effectiveOverwrite) }) { out["hypervisors"] = it; Logger.d(TAG, "Restored $it hypervisors") }
         table(BackupExporter.FILE_HYPERVISOR_ACCTS, "hypervisor_accounts",
-            { restoreHypervisorAccounts(it, overwriteExisting) }) { out["hypervisor_accounts"] = it; Logger.d(TAG, "Restored $it hypervisor accounts") }
+            { restoreHypervisorAccounts(it, effectiveOverwrite) }) { out["hypervisor_accounts"] = it; Logger.d(TAG, "Restored $it hypervisor accounts") }
         table(BackupExporter.FILE_WORKSPACES, "workspaces",
-            { restoreWorkspaces(it, overwriteExisting) }) { out["workspaces"] = it; Logger.d(TAG, "Restored $it workspaces") }
+            { restoreWorkspaces(it, effectiveOverwrite) }) { out["workspaces"] = it; Logger.d(TAG, "Restored $it workspaces") }
         table(BackupExporter.FILE_CLOUD_ACCOUNTS, "cloud_accounts",
-            { restoreCloudAccounts(it, overwriteExisting) }) { out["cloud_accounts"] = it; Logger.d(TAG, "Restored $it cloud accounts") }
+            { restoreCloudAccounts(it, effectiveOverwrite) }) { out["cloud_accounts"] = it; Logger.d(TAG, "Restored $it cloud accounts") }
         table(BackupExporter.FILE_MACROS, "macros",
-            { restoreMacros(it, overwriteExisting) }) { out["macros"] = it; Logger.d(TAG, "Restored $it macros") }
+            { restoreMacros(it, effectiveOverwrite) }) { out["macros"] = it; Logger.d(TAG, "Restored $it macros") }
         table(BackupExporter.FILE_MONITOR_SLOTS, "monitor_slots",
-            { restoreMonitorSlots(it, overwriteExisting) }) { out["monitor_slots"] = it; Logger.d(TAG, "Restored $it monitor slots") }
+            { restoreMonitorSlots(it, effectiveOverwrite) }) { out["monitor_slots"] = it; Logger.d(TAG, "Restored $it monitor slots") }
         table(BackupExporter.FILE_VNC_HOSTS, "vnc_hosts",
-            { restoreVncHosts(it, overwriteExisting) }) { out["vnc_hosts"] = it; Logger.d(TAG, "Restored $it VNC hosts") }
+            { restoreVncHosts(it, effectiveOverwrite) }) { out["vnc_hosts"] = it; Logger.d(TAG, "Restored $it VNC hosts") }
         table(BackupExporter.FILE_VNC_IDENTITIES, "vnc_identities",
-            { restoreVncIdentities(it, overwriteExisting) }) { out["vnc_identities"] = it; Logger.d(TAG, "Restored $it VNC identities") }
+            { restoreVncIdentities(it, effectiveOverwrite) }) { out["vnc_identities"] = it; Logger.d(TAG, "Restored $it VNC identities") }
+        table(BackupExporter.FILE_PORT_FORWARDS, "port_forwards",
+            { restorePortForwards(it, effectiveOverwrite) }) { out["port_forwards"] = it; Logger.d(TAG, "Restored $it port forwards") }
+        table(BackupExporter.FILE_DOCKER_HOSTS, "docker_hosts",
+            { restoreDockerHosts(it, effectiveOverwrite) }) { out["docker_hosts"] = it; Logger.d(TAG, "Restored $it Docker hosts") }
+        table(BackupExporter.FILE_REGISTRY_CREDENTIALS, "registry_credentials",
+            { restoreRegistryCredentials(it, effectiveOverwrite) }) { out["registry_credentials"] = it; Logger.d(TAG, "Restored $it registry credentials") }
+        table(BackupExporter.FILE_COMPOSE_STACKS, "compose_stacks",
+            { restoreComposeStacks(it, effectiveOverwrite) }) { out["compose_stacks"] = it; Logger.d(TAG, "Restored $it compose stacks") }
+        table(BackupExporter.FILE_SINGLE_CONTAINER_CONFIGS, "single_container_configs",
+            { restoreSingleContainerConfigs(it, effectiveOverwrite) }) { out["single_container_configs"] = it; Logger.d(TAG, "Restored $it single-container configs") }
+        table(BackupExporter.FILE_CONTAINER_AUTO_UPDATE_POLICIES, "container_auto_update_policies",
+            { restoreContainerAutoUpdatePolicies(it, effectiveOverwrite) }) { out["container_auto_update_policies"] = it; Logger.d(TAG, "Restored $it container auto-update policies") }
         backupData[BackupExporter.FILE_DASHBOARD]?.let {
-            val n = restoreDashboardConfig(it, overwriteExisting)
+            val n = restoreDashboardConfig(it, effectiveOverwrite)
             out["dashboard_config"] = n
             Logger.d(TAG, "Restored $n dashboard config keys")
         } ?: Logger.d(TAG, "Skipping dashboard config — not in backup (pre-v4)")
+
+        backupData[BackupExporter.FILE_PREFS_TABSSH]?.let {
+            val n = restoreSharedPrefs("TabSSH", it, effectiveOverwrite)
+            out["prefs_tabssh"] = n
+            Logger.d(TAG, "Restored $n TabSSH prefs keys")
+        } ?: Logger.d(TAG, "Skipping TabSSH prefs — not in backup")
+        backupData[BackupExporter.FILE_PREFS_CLUSTER_COMMANDS]?.let {
+            val n = restoreSharedPrefs("cluster_commands", it, effectiveOverwrite)
+            out["prefs_cluster_commands"] = n
+            Logger.d(TAG, "Restored $n cluster_commands prefs keys")
+        } ?: Logger.d(TAG, "Skipping cluster_commands prefs — not in backup")
+        backupData[BackupExporter.FILE_PREFS_SNIPPET_VAR_RECALL]?.let {
+            val n = restoreSharedPrefs("snippet_var_recall", it, effectiveOverwrite)
+            out["prefs_snippet_var_recall"] = n
+            Logger.d(TAG, "Restored $n snippet_var_recall prefs keys")
+        } ?: Logger.d(TAG, "Skipping snippet_var_recall prefs — not in backup")
+
+        table(BackupExporter.FILE_TAB_SESSIONS, "tab_sessions",
+            { restoreTabSessions(it, effectiveOverwrite) }) { out["tab_sessions"] = it; Logger.d(TAG, "Restored $it tab sessions") }
+        table(BackupExporter.FILE_AUDIT_LOG, "audit_log",
+            { restoreAuditLog(it, effectiveOverwrite) }) { out["audit_log"] = it; Logger.d(TAG, "Restored $it audit log entries") }
 
         // Secrets must be restored AFTER entity rows so all IDs are present.
         backupData[BackupExporter.FILE_SECRETS]?.let {
@@ -130,6 +182,77 @@ class BackupImporter(
         } ?: Logger.d(TAG, "Skipping secrets — not in backup (pre-v3 or unencrypted backup)")
 
         out
+    }
+
+    /**
+     * True snapshot restore support — clear every entity table [backupData]
+     * contains before the row-by-row restore runs, so no local-only row that
+     * is absent from the backup survives. Tables not present in the backup
+     * are left untouched. Themes only clear custom (non-built-in) rows so the
+     * built-in theme set is never lost.
+     */
+    private suspend fun clearTablesForReplace(backupData: Map<String, String>) {
+        if (backupData.containsKey(BackupExporter.FILE_CONNECTIONS)) database.connectionDao().deleteAllConnections()
+        if (backupData.containsKey(BackupExporter.FILE_KEYS)) database.keyDao().deleteAllKeys()
+        if (backupData.containsKey(BackupExporter.FILE_THEMES)) database.themeDao().deleteAllCustomThemes()
+        if (backupData.containsKey(BackupExporter.FILE_CERTIFICATES)) database.certificateDao().deleteAllCertificates()
+        if (backupData.containsKey(BackupExporter.FILE_HOST_KEYS)) database.hostKeyDao().deleteAllHostKeys()
+        if (backupData.containsKey(BackupExporter.FILE_IDENTITIES)) database.identityDao().deleteAll()
+        if (backupData.containsKey(BackupExporter.FILE_GROUPS)) database.connectionGroupDao().clearAllGroups()
+        if (backupData.containsKey(BackupExporter.FILE_SNIPPETS)) database.snippetDao().clearAllSnippets()
+        if (backupData.containsKey(BackupExporter.FILE_HYPERVISORS)) {
+            database.hypervisorDao().getAllList().forEach { database.hypervisorDao().delete(it) }
+        }
+        if (backupData.containsKey(BackupExporter.FILE_HYPERVISOR_ACCTS)) {
+            database.hypervisorAccountDao().getAllAccountsList().forEach { database.hypervisorAccountDao().delete(it) }
+        }
+        if (backupData.containsKey(BackupExporter.FILE_WORKSPACES)) {
+            database.workspaceDao().getAll().forEach { database.workspaceDao().delete(it) }
+        }
+        if (backupData.containsKey(BackupExporter.FILE_CLOUD_ACCOUNTS)) {
+            database.cloudAccountDao().getAll().forEach { database.cloudAccountDao().delete(it) }
+        }
+        if (backupData.containsKey(BackupExporter.FILE_MACROS)) {
+            database.macroDao().getAllMacrosList().forEach { database.macroDao().deleteMacro(it) }
+        }
+        if (backupData.containsKey(BackupExporter.FILE_MONITOR_SLOTS)) {
+            database.monitorSlotDao().getAllSlots().first().forEach { database.monitorSlotDao().delete(it) }
+        }
+        if (backupData.containsKey(BackupExporter.FILE_VNC_HOSTS)) {
+            database.vncHostDao().getAllHostsList().forEach { database.vncHostDao().delete(it) }
+        }
+        if (backupData.containsKey(BackupExporter.FILE_VNC_IDENTITIES)) {
+            database.vncIdentityDao().getAllIdentitiesList().forEach { database.vncIdentityDao().delete(it) }
+        }
+        if (backupData.containsKey(BackupExporter.FILE_PORT_FORWARDS)) {
+            database.portForwardDao().getAllList().forEach { database.portForwardDao().delete(it) }
+        }
+        if (backupData.containsKey(BackupExporter.FILE_DOCKER_HOSTS)) {
+            database.dockerHostDao().getAllList().forEach { database.dockerHostDao().delete(it) }
+        }
+        if (backupData.containsKey(BackupExporter.FILE_REGISTRY_CREDENTIALS)) {
+            database.registryCredentialDao().getAllList().forEach { database.registryCredentialDao().delete(it) }
+        }
+        if (backupData.containsKey(BackupExporter.FILE_COMPOSE_STACKS)) {
+            database.composeStackDao().getAllList().forEach { database.composeStackDao().delete(it) }
+        }
+        if (backupData.containsKey(BackupExporter.FILE_SINGLE_CONTAINER_CONFIGS)) {
+            database.singleContainerConfigDao().getAllList().forEach { database.singleContainerConfigDao().delete(it) }
+        }
+        if (backupData.containsKey(BackupExporter.FILE_CONTAINER_AUTO_UPDATE_POLICIES)) {
+            database.containerAutoUpdatePolicyDao().getAllList().forEach { database.containerAutoUpdatePolicyDao().delete(it) }
+        }
+        if (backupData.containsKey(BackupExporter.FILE_PREFS_TABSSH)) {
+            context.getSharedPreferences("TabSSH", android.content.Context.MODE_PRIVATE).edit().clear().apply()
+        }
+        if (backupData.containsKey(BackupExporter.FILE_PREFS_CLUSTER_COMMANDS)) {
+            context.getSharedPreferences("cluster_commands", android.content.Context.MODE_PRIVATE).edit().clear().apply()
+        }
+        if (backupData.containsKey(BackupExporter.FILE_PREFS_SNIPPET_VAR_RECALL)) {
+            context.getSharedPreferences("snippet_var_recall", android.content.Context.MODE_PRIVATE).edit().clear().apply()
+        }
+        if (backupData.containsKey(BackupExporter.FILE_TAB_SESSIONS)) database.tabSessionDao().deleteAllSessions()
+        if (backupData.containsKey(BackupExporter.FILE_AUDIT_LOG)) database.auditLogDao().deleteAll()
     }
 
     // ── Connections ──────────────────────────────────────────────────────────
@@ -348,6 +471,81 @@ class BackupImporter(
             database.vncIdentityDao().insert(vi); true
         }
 
+    private suspend fun restorePortForwards(data: String, overwriteExisting: Boolean): Int =
+        restoreV2List(data, ListSerializer(PortForward.serializer())) { pf ->
+            val existing = database.portForwardDao().getById(pf.id)
+            if (existing != null && !overwriteExisting) return@restoreV2List false
+            database.portForwardDao().insert(pf); true
+        }
+
+    // ── Docker ───────────────────────────────────────────────────────────────
+
+    private suspend fun restoreDockerHosts(data: String, overwriteExisting: Boolean): Int =
+        // Custom-endpoint SSH password is NOT in this entity (it lives in
+        // SecurePasswordManager under docker_host_{id}); restored from the
+        // secrets file when present in the backup.
+        restoreV2List(data, ListSerializer(DockerHost.serializer())) { h ->
+            val existing = database.dockerHostDao().getById(h.id)
+            if (existing != null && !overwriteExisting) return@restoreV2List false
+            if (existing == null) database.dockerHostDao().insert(h)
+            else database.dockerHostDao().update(h)
+            true
+        }
+
+    private suspend fun restoreRegistryCredentials(data: String, overwriteExisting: Boolean): Int =
+        // Credential secret is NOT in this entity (it lives in SecurePasswordManager
+        // under registry_credential_{id}); restored from the secrets file when present.
+        restoreV2List(data, ListSerializer(RegistryCredential.serializer())) { c ->
+            val existing = database.registryCredentialDao().getById(c.id)
+            if (existing != null && !overwriteExisting) return@restoreV2List false
+            if (existing == null) database.registryCredentialDao().insert(c)
+            else database.registryCredentialDao().update(c)
+            true
+        }
+
+    private suspend fun restoreComposeStacks(data: String, overwriteExisting: Boolean): Int =
+        restoreV2List(data, ListSerializer(ComposeStack.serializer())) { s ->
+            val existing = database.composeStackDao().getById(s.id)
+            if (existing != null && !overwriteExisting) return@restoreV2List false
+            if (existing == null) database.composeStackDao().insert(s)
+            else database.composeStackDao().update(s)
+            true
+        }
+
+    private suspend fun restoreSingleContainerConfigs(data: String, overwriteExisting: Boolean): Int =
+        restoreV2List(data, ListSerializer(SingleContainerConfig.serializer())) { c ->
+            val existing = database.singleContainerConfigDao().getById(c.id)
+            if (existing != null && !overwriteExisting) return@restoreV2List false
+            if (existing == null) database.singleContainerConfigDao().insert(c)
+            else database.singleContainerConfigDao().update(c)
+            true
+        }
+
+    private suspend fun restoreContainerAutoUpdatePolicies(data: String, overwriteExisting: Boolean): Int =
+        restoreV2List(data, ListSerializer(ContainerAutoUpdatePolicy.serializer())) { p ->
+            val existing = database.containerAutoUpdatePolicyDao().getById(p.id)
+            if (existing != null && !overwriteExisting) return@restoreV2List false
+            if (existing == null) database.containerAutoUpdatePolicyDao().insert(p)
+            else database.containerAutoUpdatePolicyDao().update(p)
+            true
+        }
+
+    // ── Tab sessions / audit log (backup-only, never synced) ────────────────
+
+    private suspend fun restoreTabSessions(data: String, overwriteExisting: Boolean): Int =
+        restoreV2List(data, ListSerializer(TabSession.serializer())) { s ->
+            val existing = database.tabSessionDao().getSessionByTabId(s.tabId)
+            if (existing != null && !overwriteExisting) return@restoreV2List false
+            database.tabSessionDao().insertSession(s); true
+        }
+
+    private suspend fun restoreAuditLog(data: String, overwriteExisting: Boolean): Int =
+        restoreV2List(data, ListSerializer(AuditLogEntry.serializer())) { a ->
+            val existing = database.auditLogDao().getById(a.id)
+            if (existing != null && !overwriteExisting) return@restoreV2List false
+            database.auditLogDao().insert(a); true
+        }
+
     private suspend fun <T> restoreV2List(
         data: String,
         serializer: kotlinx.serialization.KSerializer<List<T>>,
@@ -547,6 +745,7 @@ class BackupImporter(
             preferenceManager.setSyncCloudAccountsEnabled(s.optBoolean("syncCloudAccounts", true))
             preferenceManager.setSyncCertificatesEnabled(s.optBoolean("syncCertificates", true))
             preferenceManager.setSyncDashboardEnabled(s.optBoolean("syncDashboard", false))
+            preferenceManager.setSyncDockerEnabled(s.optBoolean("syncDocker", true))
             preferenceManager.setAutoResolveConflicts(s.optBoolean("autoResolve", true))
         }
         root.optJSONObject("multiplexer")?.let { m ->
@@ -616,6 +815,33 @@ class BackupImporter(
             count
         } catch (e: Exception) {
             Logger.w(TAG, "Failed to restore dashboard config: ${e.message}")
+            0
+        }
+    }
+
+    // ── Other non-default SharedPreferences files ───────────────────────────
+
+    /**
+     * Restore a flat key→value JSON blob written by [BackupExporter.exportSharedPrefs]
+     * into the named SharedPreferences file. Same "v" skip / overwrite semantics
+     * as [restoreDashboardConfig].
+     */
+    private fun restoreSharedPrefs(prefsName: String, data: String, overwriteExisting: Boolean): Int {
+        return try {
+            val root = json.parseToJsonElement(data).jsonObject
+            val prefs = context.getSharedPreferences(prefsName, android.content.Context.MODE_PRIVATE)
+            val editor = prefs.edit()
+            var count = 0
+            for ((k, v) in root) {
+                if (k == "v") continue
+                if (!overwriteExisting && prefs.contains(k)) continue
+                editor.putString(k, v.jsonPrimitive.content)
+                count++
+            }
+            editor.apply()
+            count
+        } catch (e: Exception) {
+            Logger.w(TAG, "Failed to restore SharedPreferences '$prefsName': ${e.message}")
             0
         }
     }

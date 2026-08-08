@@ -1,11 +1,13 @@
 package io.github.tabssh.storage.database.entities
 
 import androidx.room.*
+import kotlinx.serialization.Serializable
 
 /**
  * Entity representing a saved tab session for persistence across app restarts
  * Stores terminal state, connection info, and session data
  */
+@Serializable
 @Entity(
     tableName = "tab_sessions",
     foreignKeys = [

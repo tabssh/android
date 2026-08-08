@@ -1,6 +1,7 @@
 package io.github.tabssh.docker.transport
 
 import io.github.tabssh.storage.database.entities.DockerHost
+import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -56,8 +57,10 @@ class CliExecTransport(
                 DockerResult.Success(transform(result.stdout))
             }
         } catch (e: TransportUnavailableException) {
+            Logger.w("CliExecTransport", "$context: transport unavailable: ${e.message}")
             DockerResult.TransportUnavailable(e.message.orEmpty(), e.detail)
         } catch (e: Exception) {
+            Logger.w("CliExecTransport", "$context failed: ${e.message}")
             DockerResult.Error(context, e.message)
         }
     }
@@ -216,6 +219,34 @@ class CliExecTransport(
 
     override suspend fun composePs(stackDir: String): DockerResult<String> =
         remoteOps.composePs(stackDir)
+
+    override fun composeLogs(stackDir: String, service: String?, tail: Int): Flow<String> =
+        remoteOps.composeLogs(stackDir, service, tail)
+
+    override suspend fun composeLs(): DockerResult<List<ComposeLsEntry>> =
+        remoteOps.composeLs()
+
+    override suspend fun composeUpByProject(name: String, configFile: String): DockerResult<String> =
+        remoteOps.composeUpByProject(name, configFile)
+
+    override suspend fun composeDownByProject(name: String, configFile: String): DockerResult<String> =
+        remoteOps.composeDownByProject(name, configFile)
+
+    override suspend fun composePullByProject(name: String, configFile: String): DockerResult<String> =
+        remoteOps.composePullByProject(name, configFile)
+
+    override suspend fun composeRestartByProject(name: String, configFile: String): DockerResult<String> =
+        remoteOps.composeRestartByProject(name, configFile)
+
+    override suspend fun composePsByProject(name: String, configFile: String): DockerResult<String> =
+        remoteOps.composePsByProject(name, configFile)
+
+    override fun composeLogsByProject(
+        name: String,
+        configFile: String,
+        service: String?,
+        tail: Int
+    ): Flow<String> = remoteOps.composeLogsByProject(name, configFile, service, tail)
 
     override suspend fun detectComposeInvocation(): DockerResult<ComposeInvocation> =
         remoteOps.detectComposeInvocation()

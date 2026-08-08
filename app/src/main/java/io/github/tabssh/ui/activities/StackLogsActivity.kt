@@ -1,0 +1,196 @@
+package io.github.tabssh.ui.activities
+
+import android.os.Bundle
+import android.view.View
+import android.view.WindowManager
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
+import android.widget.ProgressBar
+import android.widget.ScrollView
+import android.widget.Spinner
+import android.widget.TextView
+import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import com.google.android.material.appbar.MaterialToolbar
+import io.github.tabssh.R
+import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.docker.DockerSessionManager
+import io.github.tabssh.docker.transport.DockerCliParsers
+import io.github.tabssh.docker.transport.DockerResult
+import io.github.tabssh.ui.dialogs.DockerErrorPresenter
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
+
+/**
+ * Compose stack log viewer (TODO.AI.md § D): `compose logs --follow`,
+ * ANSI-stripped and auto-scrolling, for either a Room-tracked stack
+ * directory or a discovered project addressed by name + config file. A
+ * spinner scopes the stream to one service or aggregates all of them,
+ * mirroring [ContainerDetailActivity]'s log tab.
+ * FLAG_SECURE because log output routinely contains secrets.
+ */
+class StackLogsActivity : AppCompatActivity() {
+
+    companion object {
+        const val EXTRA_HOST_ID = "docker_host_id"
+        const val EXTRA_STACK_NAME = "compose_stack_name"
+        const val EXTRA_STACK_DIR = "compose_stack_dir"
+        const val EXTRA_CONFIG_FILE = "compose_config_file"
+        const val EXTRA_EXTERNAL_NAME = "compose_external_name"
+        private const val MAX_LOG_LINES = 2000
+        // CSI sequences, OSC sequences (BEL or ST terminated), and stray ESCs.
+        private val ANSI_REGEX = Regex(
+            "\u001B\\[[0-9;?]*[ -/]*[@-~]|\u001B\\][^\u0007\u001B]*(\u0007|\u001B\\\\)?|\u001B"
+        )
+    }
+
+    private lateinit var app: TabSSHApplication
+    private lateinit var toolbar: MaterialToolbar
+    private lateinit var spinnerService: Spinner
+    private lateinit var progressBar: ProgressBar
+    private lateinit var scrollLogs: ScrollView
+    private lateinit var textLogs: TextView
+
+    private var hostId: Long = 0
+    private var stackName: String = ""
+    private var stackDir: String? = null
+    private var configFile: String? = null
+    private var externalName: String? = null
+    private var session: DockerSessionManager.DockerSession? = null
+    private var logsJob: Job? = null
+    private val logLines = ArrayDeque<String>()
+    private var services: List<String> = emptyList()
+    private var suppressSpinnerCallback = false
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        window.setFlags(
+            WindowManager.LayoutParams.FLAG_SECURE,
+            WindowManager.LayoutParams.FLAG_SECURE
+        )
+        setContentView(R.layout.activity_stack_logs)
+
+        app = application as TabSSHApplication
+        hostId = intent.getLongExtra(EXTRA_HOST_ID, 0)
+        stackName = intent.getStringExtra(EXTRA_STACK_NAME).orEmpty()
+        stackDir = intent.getStringExtra(EXTRA_STACK_DIR)
+        configFile = intent.getStringExtra(EXTRA_CONFIG_FILE)
+        externalName = intent.getStringExtra(EXTRA_EXTERNAL_NAME)
+
+        toolbar = findViewById(R.id.toolbar)
+        spinnerService = findViewById(R.id.spinner_service)
+        progressBar = findViewById(R.id.progress_bar)
+        scrollLogs = findViewById(R.id.scroll_logs)
+        textLogs = findViewById(R.id.text_logs)
+
+        setSupportActionBar(toolbar)
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        toolbar.title = getString(R.string.docker_stack_logs_title, stackName)
+        toolbar.setNavigationOnClickListener { finish() }
+
+        spinnerService.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(
+                parent: AdapterView<*>?, view: View?, position: Int, id: Long
+            ) {
+                if (suppressSpinnerCallback) return
+                startLogs(services.getOrNull(position - 1))
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
+        acquireSession()
+    }
+
+    private fun acquireSession() {
+        progressBar.visibility = View.VISIBLE
+        lifecycleScope.launch {
+            when (val result = DockerSessionManager.acquire(app, hostId)) {
+                is DockerResult.Success -> {
+                    session = result.value
+                    loadServices()
+                    startLogs(service = null)
+                }
+                else -> {
+                    progressBar.visibility = View.GONE
+                    DockerErrorPresenter.present(this@StackLogsActivity, result)
+                }
+            }
+        }
+    }
+
+    /** Populate the service chooser from `compose ps`; failures just leave it aggregated-only. */
+    private fun loadServices() {
+        val current = session ?: return
+        lifecycleScope.launch {
+            val output = psOutput(current)
+            services = output?.let { DockerCliParsers.parseComposePsServices(it) }.orEmpty()
+            val labels = mutableListOf(getString(R.string.docker_stack_logs_all_services))
+            labels.addAll(services)
+            val adapter = ArrayAdapter(
+                this@StackLogsActivity, android.R.layout.simple_spinner_item, labels
+            )
+            adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            suppressSpinnerCallback = true
+            spinnerService.adapter = adapter
+            spinnerService.setSelection(0, false)
+            suppressSpinnerCallback = false
+        }
+    }
+
+    private suspend fun psOutput(session: DockerSessionManager.DockerSession): String? {
+        val dir = stackDir
+        val name = externalName
+        val file = configFile
+        val result = if (dir != null) {
+            session.transport.composePs(dir)
+        } else if (name != null && file != null) {
+            session.transport.composePsByProject(name, file)
+        } else {
+            null
+        }
+        return result?.valueOrNull()
+    }
+
+    private fun startLogs(service: String?) {
+        val current = session ?: return
+        logsJob?.cancel()
+        logLines.clear()
+        textLogs.text = ""
+        progressBar.visibility = View.VISIBLE
+        val flow: Flow<String> = composeLogsFlow(current, service) ?: return
+        logsJob = lifecycleScope.launch {
+            flow.collect { line ->
+                progressBar.visibility = View.GONE
+                logLines.addLast(ANSI_REGEX.replace(line, ""))
+                while (logLines.size > MAX_LOG_LINES) {
+                    logLines.removeFirst()
+                }
+                textLogs.text = logLines.joinToString("\n")
+                scrollLogs.post { scrollLogs.fullScroll(View.FOCUS_DOWN) }
+            }
+            progressBar.visibility = View.GONE
+        }
+    }
+
+    private fun composeLogsFlow(
+        session: DockerSessionManager.DockerSession,
+        service: String?
+    ): Flow<String>? {
+        val dir = stackDir
+        val name = externalName
+        val file = configFile
+        return when {
+            dir != null -> session.transport.composeLogs(dir, service, tail = 200)
+            name != null && file != null ->
+                session.transport.composeLogsByProject(name, file, service, tail = 200)
+            else -> null
+        }
+    }
+
+    override fun onDestroy() {
+        logsJob?.cancel()
+        super.onDestroy()
+    }
+}

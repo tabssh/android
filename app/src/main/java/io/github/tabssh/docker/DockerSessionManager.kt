@@ -8,7 +8,6 @@ import io.github.tabssh.docker.transport.SshExecRunner
 import io.github.tabssh.docker.transport.TransportCapabilityDetector
 import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.ssh.connection.SSHConnection
-import io.github.tabssh.ssh.forwarding.PortForwardingManager
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.DockerHost
 import io.github.tabssh.utils.logging.Logger
@@ -74,34 +73,48 @@ object DockerSessionManager {
                 sessions.remove(hostId)
             }
 
+            Logger.i(TAG, "acquiring docker session for host $hostId (force=$force)")
             val dao = app.database.dockerHostDao()
             val host = dao.getById(hostId)
-                ?: return@withContext DockerResult.NotFound("Docker host not found", "id=$hostId")
+                ?: run {
+                    Logger.w(TAG, "acquire failed: docker host $hostId not in database")
+                    return@withContext DockerResult.NotFound("Docker host not found", "id=$hostId")
+                }
             val linkedId = host.linkedConnectionId
             val profile = if (linkedId != null) {
                 app.database.connectionDao().getConnectionById(linkedId)
-                    ?: return@withContext DockerResult.NotFound(
-                        "The linked SSH connection no longer exists", linkedId
-                    )
+                    ?: run {
+                        Logger.w(TAG, "acquire failed: linked connection missing for host $hostId")
+                        return@withContext DockerResult.NotFound(
+                            "The linked SSH connection no longer exists", linkedId
+                        )
+                    }
             } else {
                 resolveCustomProfile(app, host)
-                    ?: return@withContext DockerResult.Error(
-                        "No SSH connection is linked to this Docker host"
-                    )
+                    ?: run {
+                        Logger.w(TAG, "acquire failed: host $hostId has no linked connection or custom endpoint")
+                        return@withContext DockerResult.Error(
+                            "No SSH connection is linked to this Docker host"
+                        )
+                    }
             }
 
+            Logger.d(TAG, "opening SSH connection for docker host $hostId")
             val connection = app.sshSessionManager.getConnection(profile.id)
                 ?.takeIf { it.isConnected() }
                 ?: app.sshSessionManager.connectToServer(profile)
-                ?: return@withContext DockerResult.TransportUnavailable(
-                    "Could not open the SSH connection for this Docker host",
-                    profile.name
-                )
+                ?: run {
+                    Logger.w(TAG, "acquire failed: SSH connection could not be opened for host $hostId")
+                    return@withContext DockerResult.TransportUnavailable(
+                        "Could not open the SSH connection for this Docker host",
+                        profile.name
+                    )
+                }
 
             val runner = SshExecRunner { connection.jschSession() }
-            val portForwardingManager = PortForwardingManager(connection)
             val detector = TransportCapabilityDetector(dao)
-            when (val detected = detector.detect(host, runner, portForwardingManager, force)) {
+            Logger.d(TAG, "detecting docker transport for host $hostId (force=$force)")
+            when (val detected = detector.detect(host, runner, force)) {
                 is DockerResult.Success -> {
                     val session = DockerSession(
                         host = host,
@@ -117,10 +130,22 @@ object DockerSessionManager {
                     Logger.i(TAG, "acquired docker session for host $hostId via ${session.mode}")
                     DockerResult.Success(session)
                 }
-                is DockerResult.PermissionDenied -> detected
-                is DockerResult.NotFound -> detected
-                is DockerResult.TransportUnavailable -> detected
-                is DockerResult.Error -> detected
+                is DockerResult.PermissionDenied -> {
+                    Logger.w(TAG, "transport detection denied for host $hostId: ${detected.message}")
+                    detected
+                }
+                is DockerResult.NotFound -> {
+                    Logger.w(TAG, "transport detection not-found for host $hostId: ${detected.message}")
+                    detected
+                }
+                is DockerResult.TransportUnavailable -> {
+                    Logger.w(TAG, "transport unavailable for host $hostId: ${detected.message}")
+                    detected
+                }
+                is DockerResult.Error -> {
+                    Logger.w(TAG, "transport detection error for host $hostId: ${detected.message}")
+                    detected
+                }
             }
         }
     }

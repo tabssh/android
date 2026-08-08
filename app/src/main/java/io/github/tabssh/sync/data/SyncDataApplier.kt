@@ -113,156 +113,182 @@ class SyncDataApplier {
             database.withTransaction {
             // Apply groups FIRST — connection.groupId references depend on
             // the remap this loop builds.
-            data.groups.forEach { g ->
-                try {
-                    if (suppressed(TombstoneRecorder.GROUP, g.id, g.modifiedAt)) return@forEach
-                    val existing = database.connectionGroupDao()
-                        .findByNaturalKey(g.name, g.parentId, g.id)
-                    if (existing != null) {
-                        groupIdRemap[g.id] = existing.id
-                        val merged = mergeGroupFields(existing, g)
-                        if (merged != existing) {
-                            database.connectionGroupDao().updateGroup(merged)
+            if (preferenceManager.isSyncGroupsEnabled()) {
+                data.groups.forEach { g ->
+                    try {
+                        if (suppressed(TombstoneRecorder.GROUP, g.id, g.modifiedAt)) return@forEach
+                        val existing = database.connectionGroupDao()
+                            .findByNaturalKey(g.name, g.parentId, g.id)
+                        if (existing != null) {
+                            groupIdRemap[g.id] = existing.id
+                            val merged = mergeGroupFields(existing, g)
+                            if (merged != existing) {
+                                database.connectionGroupDao().updateGroup(merged)
+                            }
+                        } else {
+                            database.connectionGroupDao().insertGroup(g)
                         }
-                    } else {
-                        database.connectionGroupDao().insertGroup(g)
+                        appliedCount++
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to apply group: ${g.name}", e)
                     }
-                    appliedCount++
-                } catch (e: Exception) {
-                    Logger.w(TAG, "Failed to apply group: ${g.name}", e)
                 }
             }
 
             // Apply connections — natural-key match on (host, port, username)
             // collapses records that were created independently on two devices
             // with different UUIDs.
-            data.connections.forEach { connection ->
-                try {
-                    if (suppressed(TombstoneRecorder.CONNECTION, connection.id, connection.modifiedAt)) return@forEach
-                    val remappedGroupId = connection.groupId?.let { groupIdRemap[it] ?: it }
-                    val incoming = if (remappedGroupId != connection.groupId)
-                        connection.copy(groupId = remappedGroupId)
-                    else connection
-                    val existing = database.connectionDao()
-                        .findDuplicate(incoming.host, incoming.port, incoming.username, incoming.id)
-                    if (existing != null) {
-                        val merged = mergeConnectionFields(existing, incoming)
-                        database.connectionDao().updateConnection(merged)
-                    } else {
-                        database.connectionDao().insertConnection(incoming)
+            if (preferenceManager.isSyncConnectionsEnabled()) {
+                data.connections.forEach { connection ->
+                    try {
+                        if (suppressed(TombstoneRecorder.CONNECTION, connection.id, connection.modifiedAt)) return@forEach
+                        val remappedGroupId = connection.groupId?.let { groupIdRemap[it] ?: it }
+                        val incoming = if (remappedGroupId != connection.groupId)
+                            connection.copy(groupId = remappedGroupId)
+                        else connection
+                        val existing = database.connectionDao()
+                            .findDuplicate(incoming.host, incoming.port, incoming.username, incoming.id)
+                        if (existing != null) {
+                            val merged = mergeConnectionFields(existing, incoming)
+                            database.connectionDao().updateConnection(merged)
+                        } else {
+                            database.connectionDao().insertConnection(incoming)
+                        }
+                        appliedCount++
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to apply connection: ${connection.name}", e)
                     }
-                    appliedCount++
-                } catch (e: Exception) {
-                    Logger.w(TAG, "Failed to apply connection: ${connection.name}", e)
                 }
             }
 
             // Apply keys
-            data.keys.forEach { key ->
-                try {
-                    if (suppressed(TombstoneRecorder.KEY, key.keyId, key.modifiedAt)) return@forEach
-                    database.keyDao().insertKey(key)
-                    appliedCount++
-                } catch (e: Exception) {
-                    Logger.w(TAG, "Failed to apply key: ${key.name}", e)
+            if (preferenceManager.isSyncKeysEnabled()) {
+                data.keys.forEach { key ->
+                    try {
+                        if (suppressed(TombstoneRecorder.KEY, key.keyId, key.modifiedAt)) return@forEach
+                        database.keyDao().insertKey(key)
+                        appliedCount++
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to apply key: ${key.name}", e)
+                    }
                 }
             }
 
             // Apply themes
-            data.themes.forEach { theme ->
-                try {
-                    if (suppressed(TombstoneRecorder.THEME, theme.themeId, theme.modifiedAt)) return@forEach
-                    database.themeDao().insertTheme(theme)
-                    appliedCount++
-                } catch (e: Exception) {
-                    Logger.w(TAG, "Failed to apply theme: ${theme.name}", e)
+            if (preferenceManager.isSyncThemesEnabled()) {
+                data.themes.forEach { theme ->
+                    try {
+                        if (suppressed(TombstoneRecorder.THEME, theme.themeId, theme.modifiedAt)) return@forEach
+                        database.themeDao().insertTheme(theme)
+                        appliedCount++
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to apply theme: ${theme.name}", e)
+                    }
                 }
             }
 
             // Apply host keys
-            data.hostKeys.forEach { hostKey ->
-                try {
-                    if (suppressed(TombstoneRecorder.HOST_KEY, hostKey.id, hostKey.modifiedAt)) return@forEach
-                    database.hostKeyDao().insertHostKey(hostKey)
-                    appliedCount++
-                } catch (e: Exception) {
-                    Logger.w(TAG, "Failed to apply host key: ${hostKey.hostname}", e)
+            if (preferenceManager.isSyncHostKeysEnabled()) {
+                data.hostKeys.forEach { hostKey ->
+                    try {
+                        if (suppressed(TombstoneRecorder.HOST_KEY, hostKey.id, hostKey.modifiedAt)) return@forEach
+                        database.hostKeyDao().insertHostKey(hostKey)
+                        appliedCount++
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to apply host key: ${hostKey.hostname}", e)
+                    }
                 }
             }
 
             // Apply preferences
-            appliedCount += applyPreferences(data.preferences)
+            if (preferenceManager.isSyncSettingsEnabled()) {
+                appliedCount += applyPreferences(data.preferences)
+            }
 
             // Wave 5.3 — apply workspaces (last-write-wins via REPLACE).
-            data.workspaces.forEach { ws ->
-                try {
-                    if (suppressed(TombstoneRecorder.WORKSPACE, ws.id, ws.modifiedAt)) return@forEach
-                    database.workspaceDao().upsert(ws)
-                    appliedCount++
-                } catch (e: Exception) {
-                    Logger.w(TAG, "Failed to apply workspace: ${ws.name}", e)
+            if (preferenceManager.isSyncWorkspacesEnabled()) {
+                data.workspaces.forEach { ws ->
+                    try {
+                        if (suppressed(TombstoneRecorder.WORKSPACE, ws.id, ws.modifiedAt)) return@forEach
+                        database.workspaceDao().upsert(ws)
+                        appliedCount++
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to apply workspace: ${ws.name}", e)
+                    }
                 }
             }
 
             // Wave 5.4 — snippets / identities / groups, REPLACE on PK conflict.
-            data.snippets.forEach { s ->
-                try {
-                    if (suppressed(TombstoneRecorder.SNIPPET, s.id, s.modifiedAt)) return@forEach
-                    database.snippetDao().insertSnippet(s)
-                    appliedCount++
-                } catch (e: Exception) {
-                    Logger.w(TAG, "Failed to apply snippet: ${s.name}", e)
+            if (preferenceManager.isSyncSnippetsEnabled()) {
+                data.snippets.forEach { s ->
+                    try {
+                        if (suppressed(TombstoneRecorder.SNIPPET, s.id, s.modifiedAt)) return@forEach
+                        database.snippetDao().insertSnippet(s)
+                        appliedCount++
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to apply snippet: ${s.name}", e)
+                    }
                 }
             }
-            data.identities.forEach { id ->
-                try {
-                    if (suppressed(TombstoneRecorder.IDENTITY, id.id, id.modifiedAt)) return@forEach
-                    database.identityDao().insert(id)
-                    appliedCount++
-                } catch (e: Exception) {
-                    Logger.w(TAG, "Failed to apply identity: ${id.name}", e)
+            if (preferenceManager.isSyncIdentitiesEnabled()) {
+                data.identities.forEach { id ->
+                    try {
+                        if (suppressed(TombstoneRecorder.IDENTITY, id.id, id.modifiedAt)) return@forEach
+                        database.identityDao().insert(id)
+                        appliedCount++
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to apply identity: ${id.name}", e)
+                    }
                 }
             }
             // (Groups already applied at the top of the transaction so the
             // connection loop above could see the natural-key remap.)
 
             // Wave 7.1 — hypervisors / trusted_certificates, REPLACE on PK conflict.
-            data.hypervisors.forEach { h ->
-                try {
-                    if (suppressed(TombstoneRecorder.HYPERVISOR, TombstoneRecorder.naturalKey(h), null)) return@forEach
-                    database.hypervisorDao().upsertForSync(h)
-                    appliedCount++
-                } catch (e: Exception) {
-                    Logger.w(TAG, "Failed to apply hypervisor: ${h.name}", e)
+            if (preferenceManager.isSyncHypervisorsEnabled()) {
+                data.hypervisors.forEach { h ->
+                    try {
+                        if (suppressed(TombstoneRecorder.HYPERVISOR, TombstoneRecorder.naturalKey(h), null)) return@forEach
+                        database.hypervisorDao().upsertForSync(h)
+                        appliedCount++
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to apply hypervisor: ${h.name}", e)
+                    }
                 }
             }
-            data.certificates.forEach { c ->
-                try {
-                    if (suppressed(TombstoneRecorder.CERTIFICATE, c.id, null)) return@forEach
-                    database.certificateDao().insertCertificate(c)
-                    appliedCount++
-                } catch (e: Exception) {
-                    Logger.w(TAG, "Failed to apply certificate: ${c.fingerprint}", e)
+            if (preferenceManager.isSyncCertificatesEnabled()) {
+                data.certificates.forEach { c ->
+                    try {
+                        if (suppressed(TombstoneRecorder.CERTIFICATE, c.id, null)) return@forEach
+                        database.certificateDao().insertCertificate(c)
+                        appliedCount++
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to apply certificate: ${c.fingerprint}", e)
+                    }
                 }
             }
 
             // Wave 11 — macros / monitor_slots, REPLACE on PK conflict.
-            data.macros.forEach { m ->
-                try {
-                    if (suppressed(TombstoneRecorder.MACRO, m.id, m.modifiedAt)) return@forEach
-                    database.macroDao().insertMacro(m)
-                    appliedCount++
-                } catch (e: Exception) {
-                    Logger.w(TAG, "Failed to apply macro: ${m.id}", e)
+            if (preferenceManager.isSyncMacrosEnabled()) {
+                data.macros.forEach { m ->
+                    try {
+                        if (suppressed(TombstoneRecorder.MACRO, m.id, m.modifiedAt)) return@forEach
+                        database.macroDao().insertMacro(m)
+                        appliedCount++
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to apply macro: ${m.id}", e)
+                    }
                 }
             }
-            data.monitorSlots.forEach { slot ->
-                try {
-                    if (suppressed(TombstoneRecorder.MONITOR_SLOT, slot.id, null)) return@forEach
-                    database.monitorSlotDao().insertOrReplace(slot)
-                    appliedCount++
-                } catch (e: Exception) {
-                    Logger.w(TAG, "Failed to apply monitor slot: ${slot.id}", e)
+            if (preferenceManager.isSyncMonitorSlotsEnabled()) {
+                data.monitorSlots.forEach { slot ->
+                    try {
+                        if (suppressed(TombstoneRecorder.MONITOR_SLOT, slot.id, null)) return@forEach
+                        database.monitorSlotDao().insertOrReplace(slot)
+                        appliedCount++
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to apply monitor slot: ${slot.id}", e)
+                    }
                 }
             }
 
@@ -270,51 +296,132 @@ class SyncDataApplier {
             // remains Keystore-bound on each device, not transferred.
             // Cross-device Long-PK collision risk is the same as
             // HypervisorProfile; documented in AI.md §9.4.
-            data.hypervisorAccounts.forEach { a ->
-                try {
-                    if (suppressed(TombstoneRecorder.HYPERVISOR_ACCOUNT, TombstoneRecorder.naturalKey(a), a.modifiedAt)) return@forEach
-                    val existing = database.hypervisorAccountDao().getById(a.id)
-                    if (existing == null) {
-                        database.hypervisorAccountDao().insert(a)
-                    } else {
-                        database.hypervisorAccountDao().update(a)
+            if (preferenceManager.isSyncHypervisorAccountsEnabled()) {
+                data.hypervisorAccounts.forEach { a ->
+                    try {
+                        if (suppressed(TombstoneRecorder.HYPERVISOR_ACCOUNT, TombstoneRecorder.naturalKey(a), a.modifiedAt)) return@forEach
+                        val existing = database.hypervisorAccountDao().getById(a.id)
+                        if (existing == null) {
+                            database.hypervisorAccountDao().insert(a)
+                        } else {
+                            database.hypervisorAccountDao().update(a)
+                        }
+                        appliedCount++
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to apply hypervisor account: ${a.name}", e)
                     }
-                    appliedCount++
-                } catch (e: Exception) {
-                    Logger.w(TAG, "Failed to apply hypervisor account: ${a.name}", e)
                 }
             }
 
             // Wave 13 — VNC hosts (last-write-wins REPLACE on UUID PK).
-            data.vncHosts.forEach { h ->
-                try {
-                    if (suppressed(TombstoneRecorder.VNC_HOST, h.id, h.modifiedAt)) return@forEach
-                    database.vncHostDao().insert(h)
-                    appliedCount++
-                } catch (e: Exception) {
-                    Logger.w(TAG, "Failed to apply VNC host: ${h.name}", e)
+            if (preferenceManager.isSyncVncHostsEnabled()) {
+                data.vncHosts.forEach { h ->
+                    try {
+                        if (suppressed(TombstoneRecorder.VNC_HOST, h.id, h.modifiedAt)) return@forEach
+                        database.vncHostDao().insert(h)
+                        appliedCount++
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to apply VNC host: ${h.name}", e)
+                    }
                 }
             }
             // Wave 13 — VNC identity metadata (password not in row; Keystore-bound on each device).
-            data.vncIdentities.forEach { vi ->
-                try {
-                    if (suppressed(TombstoneRecorder.VNC_IDENTITY, vi.id, vi.modifiedAt)) return@forEach
-                    database.vncIdentityDao().insert(vi)
-                    appliedCount++
-                } catch (e: Exception) {
-                    Logger.w(TAG, "Failed to apply VNC identity: ${vi.name}", e)
+            if (preferenceManager.isSyncVncIdentitiesEnabled()) {
+                data.vncIdentities.forEach { vi ->
+                    try {
+                        if (suppressed(TombstoneRecorder.VNC_IDENTITY, vi.id, vi.modifiedAt)) return@forEach
+                        database.vncIdentityDao().insert(vi)
+                        appliedCount++
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to apply VNC identity: ${vi.name}", e)
+                    }
                 }
             }
 
             // Wave 14 — cloud provider account metadata. Token comes through the
             // secrets mechanism (cloud_token_{id}) and is applied outside the tx.
-            data.cloudAccounts.forEach { ca ->
-                try {
-                    if (suppressed(TombstoneRecorder.CLOUD_ACCOUNT, ca.id, ca.modifiedAt)) return@forEach
-                    database.cloudAccountDao().upsert(ca)
-                    appliedCount++
-                } catch (e: Exception) {
-                    Logger.w(TAG, "Failed to apply cloud account: ${ca.name}", e)
+            if (preferenceManager.isSyncCloudAccountsEnabled()) {
+                data.cloudAccounts.forEach { ca ->
+                    try {
+                        if (suppressed(TombstoneRecorder.CLOUD_ACCOUNT, ca.id, ca.modifiedAt)) return@forEach
+                        database.cloudAccountDao().upsert(ca)
+                        appliedCount++
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to apply cloud account: ${ca.name}", e)
+                    }
+                }
+            }
+
+            // Saved SSH port-forward rules (last-write-wins REPLACE on UUID PK).
+            if (preferenceManager.isSyncPortForwardsEnabled()) {
+                data.portForwards.forEach { pf ->
+                    try {
+                        if (suppressed(TombstoneRecorder.PORT_FORWARD, pf.id, pf.modifiedAt)) return@forEach
+                        database.portForwardDao().insert(pf)
+                        appliedCount++
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to apply port forward: ${pf.name}", e)
+                    }
+                }
+            }
+
+            // Docker subsystem — five Long-PK entities, applied by raw id (see
+            // TombstoneRecorder KDoc); tombstone suppression keys on naturalKey().
+            if (preferenceManager.isSyncDockerEnabled()) {
+                data.dockerHosts.forEach { h ->
+                    try {
+                        if (suppressed(TombstoneRecorder.DOCKER_HOST, TombstoneRecorder.naturalKey(h), null)) return@forEach
+                        val existing = database.dockerHostDao().getById(h.id)
+                        if (existing == null) database.dockerHostDao().insert(h)
+                        else database.dockerHostDao().update(h)
+                        appliedCount++
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to apply Docker host: ${h.name}", e)
+                    }
+                }
+                data.registryCredentials.forEach { c ->
+                    try {
+                        if (suppressed(TombstoneRecorder.REGISTRY_CREDENTIAL, TombstoneRecorder.naturalKey(c), null)) return@forEach
+                        val existing = database.registryCredentialDao().getById(c.id)
+                        if (existing == null) database.registryCredentialDao().insert(c)
+                        else database.registryCredentialDao().update(c)
+                        appliedCount++
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to apply registry credential: ${c.registryHost}", e)
+                    }
+                }
+                data.composeStacks.forEach { s ->
+                    try {
+                        if (suppressed(TombstoneRecorder.COMPOSE_STACK, TombstoneRecorder.naturalKey(s), s.updatedAt)) return@forEach
+                        val existing = database.composeStackDao().getById(s.id)
+                        if (existing == null) database.composeStackDao().insert(s)
+                        else database.composeStackDao().update(s)
+                        appliedCount++
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to apply compose stack: ${s.name}", e)
+                    }
+                }
+                data.singleContainerConfigs.forEach { c ->
+                    try {
+                        if (suppressed(TombstoneRecorder.SINGLE_CONTAINER_CONFIG, TombstoneRecorder.naturalKey(c), c.updatedAt)) return@forEach
+                        val existing = database.singleContainerConfigDao().getById(c.id)
+                        if (existing == null) database.singleContainerConfigDao().insert(c)
+                        else database.singleContainerConfigDao().update(c)
+                        appliedCount++
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to apply single-container config: ${c.name}", e)
+                    }
+                }
+                data.containerAutoUpdatePolicies.forEach { p ->
+                    try {
+                        if (suppressed(TombstoneRecorder.CONTAINER_AUTO_UPDATE_POLICY, TombstoneRecorder.naturalKey(p), null)) return@forEach
+                        val existing = database.containerAutoUpdatePolicyDao().getById(p.id)
+                        if (existing == null) database.containerAutoUpdatePolicyDao().insert(p)
+                        else database.containerAutoUpdatePolicyDao().update(p)
+                        appliedCount++
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to apply container auto-update policy: ${p.containerNameOrStackName}", e)
+                    }
                 }
             }
 
@@ -336,7 +443,7 @@ class SyncDataApplier {
             }
 
             // Dashboard config lives in SharedPreferences outside the Room DB.
-            if (data.dashboardConfig.isNotEmpty()) {
+            if (data.dashboardConfig.isNotEmpty() && preferenceManager.isSyncDashboardEnabled()) {
                 appliedCount += applyDashboardConfig(data.dashboardConfig)
             }
 
@@ -379,6 +486,32 @@ class SyncDataApplier {
         val accountsByKey =
             if (tombstones.any { it.entityType == TombstoneRecorder.HYPERVISOR_ACCOUNT })
                 database.hypervisorAccountDao().getAllAccountsList()
+                    .associateBy { TombstoneRecorder.naturalKey(it) }
+            else emptyMap()
+        // Same natural-key treatment for the five Long-PK Docker entities.
+        val dockerHostsByKey =
+            if (tombstones.any { it.entityType == TombstoneRecorder.DOCKER_HOST })
+                database.dockerHostDao().getAllList()
+                    .associateBy { TombstoneRecorder.naturalKey(it) }
+            else emptyMap()
+        val registryCredentialsByKey =
+            if (tombstones.any { it.entityType == TombstoneRecorder.REGISTRY_CREDENTIAL })
+                database.registryCredentialDao().getAllList()
+                    .associateBy { TombstoneRecorder.naturalKey(it) }
+            else emptyMap()
+        val composeStacksByKey =
+            if (tombstones.any { it.entityType == TombstoneRecorder.COMPOSE_STACK })
+                database.composeStackDao().getAllList()
+                    .associateBy { TombstoneRecorder.naturalKey(it) }
+            else emptyMap()
+        val singleContainerConfigsByKey =
+            if (tombstones.any { it.entityType == TombstoneRecorder.SINGLE_CONTAINER_CONFIG })
+                database.singleContainerConfigDao().getAllList()
+                    .associateBy { TombstoneRecorder.naturalKey(it) }
+            else emptyMap()
+        val containerAutoUpdatePoliciesByKey =
+            if (tombstones.any { it.entityType == TombstoneRecorder.CONTAINER_AUTO_UPDATE_POLICY })
+                database.containerAutoUpdatePolicyDao().getAllList()
                     .associateBy { TombstoneRecorder.naturalKey(it) }
             else emptyMap()
 
@@ -449,6 +582,11 @@ class SyncDataApplier {
                             if (row != null && row.modifiedAt > t.deletedAt) true
                             else { if (row != null) database.cloudAccountDao().deleteById(t.entityKey); false }
                         }
+                        TombstoneRecorder.PORT_FORWARD -> {
+                            val row = database.portForwardDao().getById(t.entityKey)
+                            if (row != null && row.modifiedAt > t.deletedAt) true
+                            else { if (row != null) database.portForwardDao().deleteById(t.entityKey); false }
+                        }
                         TombstoneRecorder.HYPERVISOR_ACCOUNT -> {
                             val row = accountsByKey[t.entityKey]
                             if (row != null && row.modifiedAt > t.deletedAt) true
@@ -470,6 +608,33 @@ class SyncDataApplier {
                             val row = database.monitorSlotDao().getById(t.entityKey)
                             if (row != null) database.monitorSlotDao().delete(row)
                             false
+                        }
+                        TombstoneRecorder.DOCKER_HOST -> {
+                            val row = dockerHostsByKey[t.entityKey]
+                            if (row != null) database.dockerHostDao().delete(row)
+                            false
+                        }
+                        TombstoneRecorder.REGISTRY_CREDENTIAL -> {
+                            val row = registryCredentialsByKey[t.entityKey]
+                            if (row != null) database.registryCredentialDao().delete(row)
+                            false
+                        }
+                        TombstoneRecorder.CONTAINER_AUTO_UPDATE_POLICY -> {
+                            val row = containerAutoUpdatePoliciesByKey[t.entityKey]
+                            if (row != null) database.containerAutoUpdatePolicyDao().delete(row)
+                            false
+                        }
+                        // ComposeStack/SingleContainerConfig have updatedAt, so
+                        // last-write-wins applies the same way as HYPERVISOR_ACCOUNT.
+                        TombstoneRecorder.COMPOSE_STACK -> {
+                            val row = composeStacksByKey[t.entityKey]
+                            if (row != null && row.updatedAt > t.deletedAt) true
+                            else { if (row != null) database.composeStackDao().delete(row); false }
+                        }
+                        TombstoneRecorder.SINGLE_CONTAINER_CONFIG -> {
+                            val row = singleContainerConfigsByKey[t.entityKey]
+                            if (row != null && row.updatedAt > t.deletedAt) true
+                            else { if (row != null) database.singleContainerConfigDao().delete(row); false }
                         }
                         else -> false
                     }
@@ -497,6 +662,10 @@ class SyncDataApplier {
      * Entries whose key starts with "ssh_key_" are base64-encoded JSch bytes
      * and are stored via [KeyStorage.importKeyFromBackup]. All other entries
      * are password/token strings stored via [SecurePasswordManager.storePassword].
+     *
+     * Each alias family is gated by the local sync toggle that owns its
+     * category — a device that has, say, VNC sync disabled must not adopt
+     * `vnc_host_*` secrets from a peer even if that peer had it enabled.
      */
     private suspend fun applySecrets(secrets: Map<String, String>) {
         val pm: SecurePasswordManager? = app?.securePasswordManager
@@ -507,6 +676,7 @@ class SyncDataApplier {
         var keyCount = 0
         secrets.forEach { (alias, value) ->
             if (value.isEmpty()) return@forEach
+            if (!isSecretAliasEnabled(alias)) return@forEach
             try {
                 if (alias.startsWith("ssh_key_")) {
                     if (ks != null) {
@@ -533,6 +703,28 @@ class SyncDataApplier {
             }
         }
         Logger.i(TAG, "Restored $passwordCount passwords and $keyCount SSH keys from sync")
+    }
+
+    /**
+     * Maps a secret alias to the local sync toggle that owns its category.
+     * Aliases with no owning toggle (unrecognised prefix) are allowed
+     * through unchanged for forward compatibility.
+     */
+    private fun isSecretAliasEnabled(alias: String): Boolean = when {
+        alias.startsWith("identity_") -> preferenceManager.isSyncIdentitiesEnabled()
+        alias.startsWith("conn_pw_") -> preferenceManager.isSyncConnectionsEnabled()
+        alias.startsWith("key_passphrase_") || alias.startsWith("ssh_key_") ->
+            preferenceManager.isSyncKeysEnabled()
+        alias.startsWith("hypervisor_account_") ||
+            alias.startsWith("oci_private_key_account_") ||
+            alias.startsWith("oci_passphrase_account_") -> preferenceManager.isSyncHypervisorAccountsEnabled()
+        alias.startsWith("hypervisor_") -> preferenceManager.isSyncHypervisorsEnabled()
+        alias.startsWith("vnc_identity_") -> preferenceManager.isSyncVncIdentitiesEnabled()
+        alias.startsWith("vnc_host_") -> preferenceManager.isSyncVncHostsEnabled()
+        alias.startsWith("cloud_token_") -> preferenceManager.isSyncCloudAccountsEnabled()
+        alias.startsWith("docker_host_") || alias.startsWith("registry_credential_") ->
+            preferenceManager.isSyncDockerEnabled()
+        else -> true
     }
 
     /**
@@ -850,6 +1042,8 @@ class SyncDataApplier {
                     "syncCloudAccounts"     -> preferenceManager.setSyncCloudAccountsEnabled(value as Boolean)
                     "syncCertificates"      -> preferenceManager.setSyncCertificatesEnabled(value as Boolean)
                     "syncDashboard"         -> preferenceManager.setSyncDashboardEnabled(value as Boolean)
+                    "syncPortForwards"      -> preferenceManager.setSyncPortForwardsEnabled(value as Boolean)
+                    "syncDocker"            -> preferenceManager.setSyncDockerEnabled(value as Boolean)
                     "autoResolve"           -> preferenceManager.setAutoResolveConflicts(value as Boolean)
                 }
                 count++

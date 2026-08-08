@@ -212,7 +212,9 @@ class XenOrchestraApiClient(
                             Logger.i(TAG, "Authentication successful with $version, token: ${token.take(20)}...")
                             true
                         } else {
-                            Logger.d(TAG, "No token in response: $responseBody")
+                            // Log response length/status only — the body may
+                            // contain credential or session data.
+                            Logger.d(TAG, "No token in response (HTTP ${response.code}, ${responseBody.length} bytes)")
                             false
                         }
                     } else {
@@ -1244,7 +1246,7 @@ class XenOrchestraApiClient(
         }
         
         val wsUrl = "wss://$host:$port/api/"
-        Logger.d(TAG, "Connecting WebSocket to $wsUrl")
+        Logger.d(TAG, "Connecting WebSocket to ${Logger.urlForLogging(wsUrl)}")
         
         val request = Request.Builder()
             .url(wsUrl)
@@ -1266,7 +1268,9 @@ class XenOrchestraApiClient(
             }
             
             override fun onMessage(webSocket: WebSocket, text: String) {
-                Logger.d(TAG, "WebSocket message: $text")
+                // Log length only — the payload carries VM/pool state and
+                // possibly credential data, never the raw content.
+                Logger.d(TAG, "WebSocket message: ${text.length} bytes")
                 
                 try {
                     val json = JSONObject(text)
@@ -1434,7 +1438,9 @@ class XenOrchestraApiClient(
                         val consoleUrl = json.optString("url")
 
                         if (consoleUrl.isNotEmpty()) {
-                            Logger.i(TAG, "Got console URL from API: $consoleUrl")
+                            // Log scheme+host+path only — the query string
+                            // carries a live console session credential.
+                            Logger.i(TAG, "Got console URL from API: ${Logger.urlForLogging(consoleUrl)}")
                             return@withContext consoleUrl
                         }
                     }
@@ -1445,13 +1451,13 @@ class XenOrchestraApiClient(
 
             // Fallback: construct WebSocket URL directly
             val wsUrl = "wss://$host:$port/api/console/$vmId"
-            Logger.i(TAG, "Using constructed console URL: $wsUrl")
+            Logger.i(TAG, "Using constructed console URL: ${Logger.urlForLogging(wsUrl)}")
             wsUrl
         } catch (e: Exception) {
             // API endpoint might not exist, use fallback
             Logger.d(TAG, "Console API not available, using fallback URL")
             val wsUrl = "wss://$host:$port/api/console/$vmId"
-            Logger.i(TAG, "Fallback console URL: $wsUrl")
+            Logger.i(TAG, "Fallback console URL: ${Logger.urlForLogging(wsUrl)}")
             wsUrl
         }
     }

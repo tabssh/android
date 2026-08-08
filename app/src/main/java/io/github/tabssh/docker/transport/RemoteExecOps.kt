@@ -3,6 +3,9 @@ package io.github.tabssh.docker.transport
 import android.util.Base64
 import io.github.tabssh.storage.database.entities.DockerHost
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 
 /**
  * SSH-exec-backed operations shared by BOTH transports: compose commands
@@ -197,6 +200,89 @@ class RemoteExecOps(
     suspend fun composePs(stackDir: String): DockerResult<String> =
         composeCommand(stackDir, "ps --format json")
 
+    /**
+     * Follow `compose logs` for a Room-tracked stack directory, optionally
+     * scoped to one [service]. Mirrors [CliExecTransport.streamLogs]'s
+     * merged-stream convention (`2>&1`).
+     */
+    fun composeLogs(stackDir: String, service: String? = null, tail: Int = 200): Flow<String> = flow {
+        val invocation = resolveInvocationOrNull() ?: return@flow
+        val prefix = invocationPrefix(invocation)
+        val expanded = when (val exp = expandRemotePath(stackDir)) {
+            is DockerResult.Success -> exp.value
+            else -> stackDir
+        }
+        val svc = service?.let { " ${SshExecRunner.shQuote(it)}" }.orEmpty()
+        val cmd = "cd ${SshExecRunner.shQuote(expanded)} && " +
+            "$prefix logs --tail $tail --follow$svc 2>&1"
+        emitAll(runner.stream(cmd))
+    }
+
+    // ── Compose (discovered / untracked projects) ─────────────────────────────
+
+    /** `docker compose ls --all --format json` — every project on the host. */
+    suspend fun composeLs(): DockerResult<List<ComposeLsEntry>> {
+        val invocation = when (val detected = detectComposeInvocation()) {
+            is DockerResult.Success -> detected.value
+            is DockerResult.PermissionDenied -> return detected
+            is DockerResult.NotFound -> return detected
+            is DockerResult.TransportUnavailable -> return detected
+            is DockerResult.Error -> return detected
+        }
+        val prefix = invocationPrefix(invocation)
+        return try {
+            val result = runner.run("$prefix ls --all --format json", COMPOSE_TIMEOUT_MS)
+            if (!result.isSuccess) {
+                return DockerCliParsers.classifyFailure(
+                    "compose ls failed", result.stderr, result.stdout
+                )
+            }
+            DockerResult.Success(DockerCliParsers.parseComposeLs(result.stdout))
+        } catch (e: TransportUnavailableException) {
+            DockerResult.TransportUnavailable(e.message.orEmpty(), e.detail)
+        } catch (e: Exception) {
+            DockerResult.Error("compose ls failed", e.message)
+        }
+    }
+
+    suspend fun composeUpByProject(name: String, configFile: String): DockerResult<String> =
+        composeCommandByProject(name, configFile, "up -d")
+
+    suspend fun composeDownByProject(name: String, configFile: String): DockerResult<String> =
+        composeCommandByProject(name, configFile, "down")
+
+    suspend fun composePullByProject(name: String, configFile: String): DockerResult<String> =
+        composeCommandByProject(name, configFile, "pull")
+
+    suspend fun composeRestartByProject(name: String, configFile: String): DockerResult<String> =
+        composeCommandByProject(name, configFile, "restart")
+
+    suspend fun composePsByProject(name: String, configFile: String): DockerResult<String> =
+        composeCommandByProject(name, configFile, "ps --format json")
+
+    /**
+     * Follow `compose logs` for an untracked project, addressed by its
+     * `-f <configfile> -p <name>` pair rather than a `cd` into a stack
+     * directory — the discovery-only path a Room row was never created for.
+     */
+    fun composeLogsByProject(
+        name: String,
+        configFile: String,
+        service: String? = null,
+        tail: Int = 200
+    ): Flow<String> = flow {
+        val invocation = resolveInvocationOrNull() ?: return@flow
+        val prefix = invocationPrefix(invocation)
+        val expanded = when (val exp = expandRemotePath(configFile)) {
+            is DockerResult.Success -> exp.value
+            else -> configFile
+        }
+        val svc = service?.let { " ${SshExecRunner.shQuote(it)}" }.orEmpty()
+        val cmd = "$prefix -f ${SshExecRunner.shQuote(expanded)} -p ${SshExecRunner.shQuote(name)} " +
+            "logs --tail $tail --follow$svc 2>&1"
+        emitAll(runner.stream(cmd))
+    }
+
     /** Run one compose subcommand inside the (expanded) stack directory. */
     private suspend fun composeCommand(stackDir: String, args: String): DockerResult<String> {
         val invocation = when (val detected = detectComposeInvocation()) {
@@ -206,10 +292,7 @@ class RemoteExecOps(
             is DockerResult.TransportUnavailable -> return detected
             is DockerResult.Error -> return detected
         }
-        val prefix = when (invocation) {
-            ComposeInvocation.PLUGIN -> "$dockerBin compose"
-            ComposeInvocation.STANDALONE -> "docker-compose"
-        }
+        val prefix = invocationPrefix(invocation)
         return withExpanded(stackDir) { real ->
             val cmd = "cd ${SshExecRunner.shQuote(real)} && $prefix $args"
             val result = runner.run(cmd, COMPOSE_TIMEOUT_MS)
@@ -224,6 +307,47 @@ class RemoteExecOps(
             DockerResult.Success(result.stdout.ifEmpty { result.stderr })
         }
     }
+
+    /**
+     * Run one compose subcommand against an untracked project via
+     * `-f <configfile> -p <name>` instead of `cd`-ing into a stack directory.
+     */
+    private suspend fun composeCommandByProject(
+        name: String,
+        configFile: String,
+        args: String
+    ): DockerResult<String> {
+        val invocation = when (val detected = detectComposeInvocation()) {
+            is DockerResult.Success -> detected.value
+            is DockerResult.PermissionDenied -> return detected
+            is DockerResult.NotFound -> return detected
+            is DockerResult.TransportUnavailable -> return detected
+            is DockerResult.Error -> return detected
+        }
+        val prefix = invocationPrefix(invocation)
+        return withExpanded(configFile) { real ->
+            val cmd = "$prefix -f ${SshExecRunner.shQuote(real)} -p ${SshExecRunner.shQuote(name)} $args"
+            val result = runner.run(cmd, COMPOSE_TIMEOUT_MS)
+            if (!result.isSuccess) {
+                return@withExpanded DockerCliParsers.classifyFailure(
+                    "compose $args failed",
+                    result.stderr,
+                    result.stdout
+                )
+            }
+            DockerResult.Success(result.stdout.ifEmpty { result.stderr })
+        }
+    }
+
+    /** The `docker compose` / `docker-compose` command prefix for [invocation]. */
+    private fun invocationPrefix(invocation: ComposeInvocation): String = when (invocation) {
+        ComposeInvocation.PLUGIN -> "$dockerBin compose"
+        ComposeInvocation.STANDALONE -> "docker-compose"
+    }
+
+    /** [detectComposeInvocation], swallowing failures for Flow builders (no suspend catch there). */
+    private suspend fun resolveInvocationOrNull(): ComposeInvocation? =
+        (detectComposeInvocation() as? DockerResult.Success)?.value
 
     // ── Helpers ─────────────────────────────────────────────────────────────
 

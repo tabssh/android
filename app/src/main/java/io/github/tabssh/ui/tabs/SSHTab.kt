@@ -74,6 +74,9 @@ class SSHTab(
     // Track if title was set by OSC sequence (should not be overwritten by status)
     private var titleSetByTerminal = false
 
+    // Last logged title with spinner glyphs stripped — gates title-change log spam
+    private var lastLoggedTitle: String? = null
+
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
 
@@ -344,7 +347,14 @@ class SSHTab(
                     conn.terminalTitle = title.takeIf { it.isNotBlank() }
                     conn.notifyMetadataChanged()
                 }
-                Logger.d("SSHTab", "Tab title changed to: $title")
+                // Mosh animates the title with Braille spinner glyphs (U+2800–U+28FF)
+                // about once a second — log only when the title changed beyond the
+                // spinner frame so the debug log is not flooded
+                val stableTitle = title.filterNot { it.code in 0x2800..0x28FF }
+                if (stableTitle != lastLoggedTitle) {
+                    lastLoggedTitle = stableTitle
+                    Logger.d("SSHTab", "Tab title changed to: $title")
+                }
             }
 
             override fun onBell() {

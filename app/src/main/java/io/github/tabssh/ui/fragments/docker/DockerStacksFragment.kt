@@ -15,18 +15,23 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import io.github.tabssh.R
 import io.github.tabssh.docker.DockerSessionManager
+import io.github.tabssh.docker.transport.ComposeLsEntry
 import io.github.tabssh.docker.transport.DockerResult
 import io.github.tabssh.storage.database.entities.ComposeStack
 import io.github.tabssh.ui.activities.ComposeEditorActivity
+import io.github.tabssh.ui.activities.StackLogsActivity
 import io.github.tabssh.ui.adapters.ComposeStackAdapter
+import io.github.tabssh.ui.adapters.StackListItem
 import io.github.tabssh.ui.dialogs.DockerErrorPresenter
 import io.github.tabssh.ui.dialogs.DockerInspectDialog
 import kotlinx.coroutines.launch
 
 /**
  * Compose stacks destination (PLAN.AI.md step 25): Room-backed stack list,
- * FAB opens the paste-first editor, tap edits, long-press runs compose
- * lifecycle actions with their command output shown in a dialog.
+ * merged with projects discovered via `docker compose ls` that have no Room
+ * row (TODO.AI.md § D). FAB opens the paste-first editor, tap edits,
+ * long-press runs compose lifecycle actions with their command output shown
+ * in a dialog.
  */
 class DockerStacksFragment : DockerPageFragment() {
 
@@ -36,6 +41,9 @@ class DockerStacksFragment : DockerPageFragment() {
     private lateinit var progressBar: ProgressBar
     private lateinit var fabAction: FloatingActionButton
     private lateinit var adapter: ComposeStackAdapter
+
+    private var trackedStacks: List<ComposeStack> = emptyList()
+    private var externalEntries: List<ComposeLsEntry> = emptyList()
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -59,8 +67,8 @@ class DockerStacksFragment : DockerPageFragment() {
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
         recyclerView.adapter = adapter
 
-        adapter.setOnItemClickListener { stack -> openEditor(stack) }
-        adapter.setOnItemLongClickListener { stack -> showStackMenu(stack) }
+        adapter.setOnItemClickListener { item -> openEditor(item) }
+        adapter.setOnItemLongClickListener { item -> showStackMenu(item) }
 
         fabAction.setOnClickListener { openEditor(null) }
 
@@ -70,24 +78,46 @@ class DockerStacksFragment : DockerPageFragment() {
         super.onViewCreated(view, savedInstanceState)
     }
 
-    /** Room is the source of truth for the stack list. */
+    /** Room is the source of truth for tracked stacks. */
     private fun observeStacks() {
         viewLifecycleOwner.lifecycleScope.launch {
             app.database.composeStackDao().getStacksForHost(manager.hostId).collect { stacks ->
                 if (!isAdded) return@collect
-                adapter.updateList(stacks)
-                val empty = stacks.isEmpty()
-                recyclerView.visibility = if (empty) View.GONE else View.VISIBLE
-                emptyState.visibility = if (empty) View.VISIBLE else View.GONE
+                trackedStacks = stacks
+                renderList()
             }
         }
     }
 
     override fun onSessionReady(session: DockerSessionManager.DockerSession) {
         refreshStatuses(session)
+        discoverExternalStacks(session)
     }
 
-    /** Refresh each stack's per-service status snapshot via compose ps. */
+    /** `docker compose ls` — projects on the host with no Room row yet. */
+    private fun discoverExternalStacks(session: DockerSessionManager.DockerSession) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            // TransportUnavailable (no compose on the host) just means "no
+            // external stacks to show" — not a failure worth surfacing here.
+            val result = session.transport.composeLs()
+            if (!isAdded) return@launch
+            externalEntries = result.valueOrNull().orEmpty()
+            renderList()
+        }
+    }
+
+    /** Merge tracked + discovered stacks, excluding externals already tracked by name. */
+    private fun renderList() {
+        val trackedNames = trackedStacks.map { it.name }.toSet()
+        val items = trackedStacks.map { StackListItem.Tracked(it) } +
+            externalEntries.filter { it.name !in trackedNames }.map { StackListItem.External(it) }
+        adapter.updateList(items)
+        val empty = items.isEmpty()
+        recyclerView.visibility = if (empty) View.GONE else View.VISIBLE
+        emptyState.visibility = if (empty) View.VISIBLE else View.GONE
+    }
+
+    /** Refresh each tracked stack's per-service status snapshot via compose ps. */
     private fun refreshStatuses(session: DockerSessionManager.DockerSession) {
         viewLifecycleOwner.lifecycleScope.launch {
             progressBar.visibility = View.VISIBLE
@@ -110,46 +140,110 @@ class DockerStacksFragment : DockerPageFragment() {
         }
     }
 
-    private fun openEditor(stack: ComposeStack?) {
+    private fun openEditor(item: StackListItem?) {
         if (!isAdded) return
         val intent = Intent(requireContext(), ComposeEditorActivity::class.java)
         intent.putExtra(ComposeEditorActivity.EXTRA_HOST_ID, manager.hostId)
-        if (stack != null) {
-            intent.putExtra(ComposeEditorActivity.EXTRA_STACK_ID, stack.id)
+        when (item) {
+            is StackListItem.Tracked -> intent.putExtra(
+                ComposeEditorActivity.EXTRA_STACK_ID, item.stack.id
+            )
+            is StackListItem.External -> {
+                intent.putExtra(
+                    ComposeEditorActivity.EXTRA_EXTERNAL_CONFIG_FILE, item.entry.primaryConfigFile
+                )
+                intent.putExtra(ComposeEditorActivity.EXTRA_EXTERNAL_NAME, item.entry.name)
+            }
+            null -> {}
         }
         startActivity(intent)
     }
 
-    private fun showStackMenu(stack: ComposeStack) {
+    private fun showStackMenu(item: StackListItem) {
         if (!isAdded) return
-        val options = arrayOf(
-            getString(R.string.docker_stack_action_up),
-            getString(R.string.docker_stack_action_down),
-            getString(R.string.docker_stack_action_pull),
-            getString(R.string.docker_stack_action_restart),
-            getString(R.string.docker_stack_services),
-            getString(R.string.delete)
-        )
+        val options = buildList {
+            add(getString(R.string.docker_stack_action_up))
+            add(getString(R.string.docker_stack_action_down))
+            add(getString(R.string.docker_stack_action_pull))
+            add(getString(R.string.docker_stack_action_restart))
+            add(getString(R.string.docker_stack_services))
+            add(getString(R.string.docker_action_logs))
+            // Deleting a Room row makes no sense for a stack that has none.
+            if (item is StackListItem.Tracked) add(getString(R.string.delete))
+        }
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle(stack.name)
-            .setItems(options) { _, which ->
+            .setTitle(item.name)
+            .setItems(options.toTypedArray()) { _, which ->
                 val current = session ?: return@setItems
                 when (which) {
-                    0 -> runComposeAction(stack) { current.transport.composeUp(stack.remotePath) }
-                    1 -> runComposeAction(stack) { current.transport.composeDown(stack.remotePath) }
-                    2 -> runComposeAction(stack) { current.transport.composePull(stack.remotePath) }
-                    3 -> runComposeAction(stack) {
-                        current.transport.composeRestart(stack.remotePath)
+                    0 -> runComposeAction(item) {
+                        composeAction(
+                            current, item,
+                            { t, d -> t.composeUp(d) },
+                            { t, n, f -> t.composeUpByProject(n, f) }
+                        )
                     }
-                    4 -> runComposeAction(stack) { current.transport.composePs(stack.remotePath) }
-                    5 -> confirmDelete(stack)
+                    1 -> runComposeAction(item) {
+                        composeAction(
+                            current, item,
+                            { t, d -> t.composeDown(d) },
+                            { t, n, f -> t.composeDownByProject(n, f) }
+                        )
+                    }
+                    2 -> runComposeAction(item) {
+                        composeAction(
+                            current, item,
+                            { t, d -> t.composePull(d) },
+                            { t, n, f -> t.composePullByProject(n, f) }
+                        )
+                    }
+                    3 -> runComposeAction(item) {
+                        composeAction(
+                            current, item,
+                            { t, d -> t.composeRestart(d) },
+                            { t, n, f -> t.composeRestartByProject(n, f) }
+                        )
+                    }
+                    4 -> runComposeAction(item) {
+                        composeAction(
+                            current, item,
+                            { t, d -> t.composePs(d) },
+                            { t, n, f -> t.composePsByProject(n, f) }
+                        )
+                    }
+                    5 -> openLogs(item)
+                    6 -> if (item is StackListItem.Tracked) confirmDelete(item.stack)
                 }
             }
             .show()
     }
 
+    /**
+     * Dispatch a compose verb to the tracked-directory transport call for a
+     * Room-tracked stack, or the matching *ByProject call for a discovered
+     * (external) stack — mirrors the split in [openLogs] and the editor.
+     */
+    private suspend fun composeAction(
+        session: DockerSessionManager.DockerSession,
+        item: StackListItem,
+        trackedCall: suspend (
+            transport: io.github.tabssh.docker.transport.DockerTransport,
+            stackDir: String
+        ) -> DockerResult<String>,
+        externalCall: suspend (
+            transport: io.github.tabssh.docker.transport.DockerTransport,
+            name: String,
+            configFile: String
+        ) -> DockerResult<String>
+    ): DockerResult<String> = when (item) {
+        is StackListItem.Tracked -> trackedCall(session.transport, item.stack.remotePath)
+        is StackListItem.External -> externalCall(
+            session.transport, item.entry.name, item.entry.primaryConfigFile
+        )
+    }
+
     private fun runComposeAction(
-        stack: ComposeStack,
+        item: StackListItem,
         action: suspend () -> DockerResult<String>
     ) {
         progressBar.visibility = View.VISIBLE
@@ -161,14 +255,33 @@ class DockerStacksFragment : DockerPageFragment() {
                 is DockerResult.Success -> {
                     DockerInspectDialog.show(
                         requireContext(),
-                        getString(R.string.docker_stack_action_output_title, stack.name),
+                        getString(R.string.docker_stack_action_output_title, item.name),
                         result.value.ifBlank { getString(R.string.docker_action_success) }
                     )
-                    session?.let { refreshStatuses(it) }
+                    session?.let {
+                        refreshStatuses(it)
+                        discoverExternalStacks(it)
+                    }
                 }
                 else -> DockerErrorPresenter.present(requireContext(), result)
             }
         }
+    }
+
+    private fun openLogs(item: StackListItem) {
+        if (!isAdded) return
+        val intent = Intent(requireContext(), StackLogsActivity::class.java)
+        intent.putExtra(StackLogsActivity.EXTRA_HOST_ID, manager.hostId)
+        intent.putExtra(StackLogsActivity.EXTRA_STACK_NAME, item.name)
+        when (item) {
+            is StackListItem.Tracked ->
+                intent.putExtra(StackLogsActivity.EXTRA_STACK_DIR, item.stack.remotePath)
+            is StackListItem.External -> {
+                intent.putExtra(StackLogsActivity.EXTRA_CONFIG_FILE, item.entry.primaryConfigFile)
+                intent.putExtra(StackLogsActivity.EXTRA_EXTERNAL_NAME, item.entry.name)
+            }
+        }
+        startActivity(intent)
     }
 
     private fun confirmDelete(stack: ComposeStack) {
@@ -186,6 +299,9 @@ class DockerStacksFragment : DockerPageFragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             session?.transport?.composeDown(stack.remotePath)
             app.database.composeStackDao().delete(stack)
+            io.github.tabssh.sync.tombstone.TombstoneRecorder.record(
+                app.applicationContext, io.github.tabssh.sync.tombstone.TombstoneRecorder.COMPOSE_STACK,
+                io.github.tabssh.sync.tombstone.TombstoneRecorder.naturalKey(stack))
             if (!isAdded) return@launch
             progressBar.visibility = View.GONE
         }

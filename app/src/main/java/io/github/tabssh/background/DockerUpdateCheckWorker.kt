@@ -16,7 +16,6 @@ import io.github.tabssh.docker.transport.DockerResult
 import io.github.tabssh.docker.transport.DockerTransport
 import io.github.tabssh.docker.transport.SshExecRunner
 import io.github.tabssh.docker.transport.TransportCapabilityDetector
-import io.github.tabssh.ssh.forwarding.PortForwardingManager
 import io.github.tabssh.storage.database.entities.ContainerAutoUpdatePolicy
 import io.github.tabssh.storage.database.entities.DockerHost
 import io.github.tabssh.utils.NotificationHelper
@@ -204,7 +203,7 @@ class DockerUpdateCheckWorker(
                 }
             val runner = SshExecRunner { connection.jschSession() }
             val detector = TransportCapabilityDetector(app.database.dockerHostDao())
-            when (val detected = detector.detect(host, runner, PortForwardingManager(connection))) {
+            when (val detected = detector.detect(host, runner)) {
                 is DockerResult.Success -> detected.value.transport.also { ownTransport = it }
                 else -> {
                     Logger.w(TAG, "Transport detection failed for ${host.name} — skipping")

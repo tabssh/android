@@ -138,6 +138,72 @@ class DockerCliParsersTest {
     }
 
     @Test
+    fun `parses compose ls json array`() {
+        val fixture = """
+            [
+              {"ConfigFiles":"/home/user/stacks/blog/compose.yaml","Name":"blog","Status":"running(2)"},
+              {"ConfigFiles":"/opt/apps/db/compose.yaml,/opt/apps/db/compose.override.yaml","Name":"db","Status":"exited(1)"}
+            ]
+        """.trimIndent()
+
+        val entries = DockerCliParsers.parseComposeLs(fixture)
+
+        assertEquals(2, entries.size)
+        assertEquals("blog", entries[0].name)
+        assertEquals("running(2)", entries[0].status)
+        assertEquals(listOf("/home/user/stacks/blog/compose.yaml"), entries[0].configFiles)
+        assertEquals("/home/user/stacks/blog/compose.yaml", entries[0].primaryConfigFile)
+        assertEquals(
+            listOf("/opt/apps/db/compose.yaml", "/opt/apps/db/compose.override.yaml"),
+            entries[1].configFiles
+        )
+    }
+
+    @Test
+    fun `compose ls tolerates blank and malformed output`() {
+        assertTrue(DockerCliParsers.parseComposeLs("").isEmpty())
+        assertTrue(DockerCliParsers.parseComposeLs("   ").isEmpty())
+        assertTrue(DockerCliParsers.parseComposeLs("not json").isEmpty())
+        assertTrue(DockerCliParsers.parseComposeLs("[]").isEmpty())
+    }
+
+    @Test
+    fun `parses compose ps services from a json array`() {
+        val fixture = """
+            [
+              {"Name":"blog-web-1","Service":"web","State":"running"},
+              {"Name":"blog-db-1","Service":"db","State":"running"}
+            ]
+        """.trimIndent()
+
+        val services = DockerCliParsers.parseComposePsServices(fixture)
+
+        assertEquals(listOf("web", "db"), services)
+    }
+
+    @Test
+    fun `parses compose ps services from ndjson lines`() {
+        val fixture = """
+            {"Name":"blog-web-1","Service":"web","State":"running"}
+            {"Name":"blog-web-1","Service":"web","State":"running"}
+            {"Name":"blog-db-1","Service":"db","State":"exited"}
+        """.trimIndent()
+
+        val services = DockerCliParsers.parseComposePsServices(fixture)
+
+        assertEquals(listOf("web", "db"), services)
+    }
+
+    @Test
+    fun `compose ps services falls back to name when service field absent`() {
+        val fixture = """[{"Name":"blog-web-1","State":"running"}]"""
+
+        val services = DockerCliParsers.parseComposePsServices(fixture)
+
+        assertEquals(listOf("blog-web-1"), services)
+    }
+
+    @Test
     fun `size parsing covers decimal binary and edge cases`() {
         assertEquals(0L, DockerCliParsers.parseSizeToBytes(""))
         assertEquals(0L, DockerCliParsers.parseSizeToBytes("N/A"))

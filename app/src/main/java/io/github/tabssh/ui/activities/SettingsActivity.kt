@@ -1096,7 +1096,10 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
                     .setView(scrollView)
                     .setPositiveButton("Close", null)
                     .setNeutralButton("Copy") { _, _ ->
-                        io.github.tabssh.utils.ClipboardHelper.copy(requireContext(), logFile.name, displayContent, sensitive = false)
+                        // Host logs contain real hostnames/usernames (never sanitized —
+                        // see Logger.logHostEvent) — mark sensitive so the clipboard
+                        // auto-clear timeout applies.
+                        io.github.tabssh.utils.ClipboardHelper.copy(requireContext(), logFile.name, displayContent, sensitive = true)
                         android.widget.Toast.makeText(requireContext(), "Log copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
                     }
                     .show()

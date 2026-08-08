@@ -3,6 +3,7 @@ package io.github.tabssh.utils.logging
 import android.content.Context
 import android.os.Build
 import android.util.Log
+import io.github.tabssh.BuildConfig
 import java.io.File
 import java.io.FileWriter
 import java.text.SimpleDateFormat
@@ -111,6 +112,17 @@ object Logger {
     private val RE_SECRET     = Regex("""(?i)\bsecret[=:]\s*\S+""")
     private val RE_AUTH_KV    = Regex("""(?i)\bauth(?:key|token)?[=:]\s*\S+""")
     private val RE_APIKEY     = Regex("""(?i)api[_-]?key[=:]\s*\S+""")
+    // URL query-string secrets, e.g. "...?vncticket=abc123&host=..." (Proxmox/
+    // XCP-ng/Xen Orchestra console URLs embed live session tickets in the query).
+    private val RE_URL_QUERY_SECRET = Regex(
+        """(?i)\b(vncticket|ticket|session_id|sessionid|access_token|sig|signature)=[^&\s]+"""
+    )
+    // HTTP Authorization headers (Basic/Bearer credentials).
+    private val RE_AUTH_HEADER = Regex("""(?i)authorization\s*[:=]\s*(basic|bearer)\s+\S+""")
+    // JSON-quoted credential fields, e.g. {"password":"hunter2"}.
+    private val RE_JSON_CREDENTIAL = Regex(
+        """(?i)"(password|passwd|token|secret|api_key|apikey|passphrase)"\s*:\s*"[^"]*""""
+    )
     private val RE_SSH_PRIV   = Regex("""-----BEGIN[^-]+-----[\s\S]*?-----END[^-]+-----""")
     private val RE_SSH_PUB    = Regex("""ssh-(rsa|ed25519|ecdsa|dss)\s+\S+""")
     // SSH key fingerprints: SHA256:base64 or MD5:xx:xx:... (produced by ssh-keygen -l)
@@ -244,9 +256,14 @@ object Logger {
         minLevel = levelFromPref(io.github.tabssh.TabSSHApplication.get().preferencesManager.getDebugLogLevel())
     }
 
+    // logcat itself is only sanitized in release builds — debug builds keep
+    // raw logcat output so local development can see full message content.
+    private fun logcatMessage(message: String): String =
+        if (BuildConfig.DEBUG) message else sanitizeForPublic(message)
+
     fun d(tag: String, message: String, throwable: Throwable? = null) {
         if (debugMode && shouldLog(LVL_DEBUG)) {
-            Log.d("$TAG_PREFIX:$tag", message, throwable)
+            Log.d("$TAG_PREFIX:$tag", logcatMessage(message), throwable)
             writeToFile("D", tag, message, throwable)
         }
         // Debug messages NOT written to app log (too verbose, may contain sensitive data)
@@ -254,7 +271,7 @@ object Logger {
 
     fun i(tag: String, message: String, throwable: Throwable? = null) {
         if (!shouldLog(LVL_INFO)) return
-        Log.i("$TAG_PREFIX:$tag", message, throwable)
+        Log.i("$TAG_PREFIX:$tag", logcatMessage(message), throwable)
         if (logToFile) {
             writeToFile("I", tag, message, throwable)
         }
@@ -264,7 +281,7 @@ object Logger {
 
     fun w(tag: String, message: String, throwable: Throwable? = null) {
         if (!shouldLog(LVL_WARNING)) return
-        Log.w("$TAG_PREFIX:$tag", message, throwable)
+        Log.w("$TAG_PREFIX:$tag", logcatMessage(message), throwable)
         if (logToFile) {
             writeToFile("W", tag, message, throwable)
         }
@@ -274,7 +291,7 @@ object Logger {
 
     fun e(tag: String, message: String, throwable: Throwable? = null) {
         if (!shouldLog(LVL_ERROR)) return
-        Log.e("$TAG_PREFIX:$tag", message, throwable)
+        Log.e("$TAG_PREFIX:$tag", logcatMessage(message), throwable)
         if (logToFile) {
             writeToFile("E", tag, message, throwable)
         }
@@ -283,7 +300,7 @@ object Logger {
     }
 
     fun wtf(tag: String, message: String, throwable: Throwable? = null) {
-        Log.wtf("$TAG_PREFIX:$tag", message, throwable)
+        Log.wtf("$TAG_PREFIX:$tag", logcatMessage(message), throwable)
         if (logToFile) {
             writeToFile("WTF", tag, message, throwable)
         }
@@ -448,6 +465,14 @@ object Logger {
     private fun sanitizeForPublic(message: String): String {
         var s = message
 
+        // ── URL query-string secrets / auth headers / JSON credentials ────
+        // Run before the host/IP rewriting passes below so tickets embedded
+        // in console URLs are redacted before any host anonymization touches
+        // the same string.
+        s = RE_URL_QUERY_SECRET.replace(s) { m -> "${m.groupValues[1]}=[REDACTED]" }
+        s = RE_AUTH_HEADER.replace(s, "Authorization: [REDACTED]")
+        s = RE_JSON_CREDENTIAL.replace(s) { m -> "\"${m.groupValues[1]}\": \"xxxxx\"" }
+
         // ── credentials (key=value / key:value pairs) ─────────────────────
         s = RE_PASSWORD .replace(s, "password=[REDACTED]")
         s = RE_PASSWD   .replace(s, "passwd=[REDACTED]")
@@ -532,6 +557,32 @@ object Logger {
      * stored outside the normal logging path before sharing them).
      */
     fun sanitize(text: String): String = sanitizeForPublic(text)
+
+    /**
+     * Strip the query string (and fragment) from [url] before logging it.
+     *
+     * Console URLs (Proxmox `vncticket=`, XCP-ng/Xen Orchestra `session_id=`)
+     * carry live, single-use session credentials in the query — logging the
+     * whole URL leaks a working session ticket even after sanitizeForPublic()
+     * runs. Callers that need to log a console/API URL should log only
+     * scheme+host+path via this helper, never the raw URL.
+     */
+    fun urlForLogging(url: String): String =
+        url.substringBefore('?').substringBefore('#')
+
+    /**
+     * Reduce a shell command line to something safe to log: the first
+     * token (the program name / argv[0]) plus a token count and total
+     * length. Full command lines can carry secrets passed as arguments
+     * (e.g. `mysql -p<password>`, tokens on a curl invocation) and must
+     * never be logged verbatim.
+     */
+    fun commandForLogging(command: String): String {
+        val trimmed = command.trim()
+        val firstToken = trimmed.substringBefore(' ')
+        val tokenCount = if (trimmed.isEmpty()) 0 else trimmed.split(Regex("\\s+")).size
+        return "$firstToken (${tokenCount} tokens, ${command.length} chars)"
+    }
 
     /**
      * Sanitize stack trace for public sharing
@@ -823,16 +874,15 @@ object Logger {
      * Get debug logs as string
      */
     fun getDebugLogs(): String {
-        val debugLog = appContext?.let { File(it.filesDir, "debug.log") }
-        return if (debugLog?.exists() == true) {
-            debugLog.readText()
-        } else {
-            logFile?.let { file ->
-                if (file.exists()) {
-                    file.readLines().filter { it.contains(" D/") }.takeLast(200).joinToString("\n")
-                } else ""
-            } ?: "Debug logging not enabled"
-        }
+        // The raw `files/debug.log` path was dead code — nothing in this
+        // app ever wrote to that file. Only the sanitized `logFile` path
+        // (written via writeToFile(), which calls sanitizeForPublic())
+        // is a real source of debug logs.
+        return logFile?.let { file ->
+            if (file.exists()) {
+                file.readLines().filter { it.contains(" D/") }.takeLast(200).joinToString("\n")
+            } else ""
+        } ?: "Debug logging not enabled"
     }
 
     // ── Per-host log ─────────────────────────────────────────────────────────
