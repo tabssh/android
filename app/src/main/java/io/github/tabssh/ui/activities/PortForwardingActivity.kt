@@ -16,6 +16,7 @@ import com.google.android.material.snackbar.Snackbar
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.PortForward
+import io.github.tabssh.sync.tombstone.TombstoneRecorder
 import io.github.tabssh.ui.adapters.PortForwardAdapter
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
@@ -170,6 +171,9 @@ class PortForwardingActivity : AppCompatActivity() {
             }
             withContext(Dispatchers.IO) {
                 app.database.portForwardDao().delete(pf)
+                TombstoneRecorder.record(
+                    this@PortForwardingActivity, TombstoneRecorder.PORT_FORWARD, pf.id
+                )
             }
         }
     }
