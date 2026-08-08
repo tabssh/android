@@ -7,7 +7,27 @@ is in progress.
 Source: 2026-08-06 feature-coverage audit of IDEA.md § Business logic against
 the codebase (57 spec features → 53 implemented, 4 partial, 0 missing).
 
-## Open — 2026-08-07 user batch (resolved dependency order)
+## Open
+
+Nothing open. The 2026-08-07 user batch (items A–E + D2 below) shipped
+across commits 632203855a18 (batch), 2cf1c3dcc31a (designer pass), and
+87220911946e (transport-tier failure logging); its follow-up findings
+shipped 2026-08-08 as 9458ed91ac26 (sync_port_forwards backup pref),
+0b4229c4eef5 (port forward delete tombstone), 3cd8e0f4578c (dashboard
+replace-mode clear), fa54172b5d0d (terminal/connection-editor string
+externalization), and 28af0eb99ac6 (ImportExportActivity string
+externalization incl. the bulk-import group-suffix display fix).
+
+Deferred by design (revisit only on request): emoji empty-state glyphs
+in fragment_cloud_accounts.xml / fragment_docker_hosts.xml (deliberate
+style — replace only if a full icon pass is wanted); mosh-wrapped
+docker exec phone↔host leg (offered, not confirmed by user). Open
+diagnostic: debug log from build 2cf1c3dc showed streamlocal and
+dial-stdio probes failing silently and falling back to cli_exec — the
+new tier-failure logging (87220911946e) will name the cause in the
+next debug log; fix the real cause then.
+
+## Shipped — 2026-08-07 user batch (resolved dependency order)
 
 Resolved order: A (independent quick fix) → B (logging audit, feeds C) →
 C (backup/sync completeness) → D (stack edit + logs, pending research) →
@@ -85,17 +105,13 @@ open — explicitly out of scope for that pass, owned by a separate task.
    - Test: SyncDataApplierSecretGatingTest.kt gained
      "docker secrets are gated by sync_docker" verifying both
      docker_host_ and registry_credential_ aliases respect the toggle.
-   - Gaps found but NOT fixed (separate from this item, logged here per
-     project convention): (a) sync_port_forwards toggle is missing from
-     both BackupExporter.exportPreferences() and
-     BackupImporter.restorePreferences()'s "sync" JSONObject blocks —
-     item 4 above wired the toggle everywhere except backup-of-the-toggle-
-     itself; the toggle still functions for sync, just isn't preserved by
-     a preferences-only backup/restore round-trip. (b) PortForward
-     tombstone recording does not appear to be wired at its own
-     delete-flow site (PortForwardingActivity) despite item 4 claiming
-     full tombstone wiring — not verified further since it's outside this
-     item's scope; worth a follow-up audit.
+   - Gaps found during this pass, both fixed 2026-08-08: (a)
+     sync_port_forwards missing from the backup "sync" preferences
+     blocks — fixed in 9458ed91ac26; (b) PortForward tombstone not
+     recorded at PortForwardingActivity's delete flow — fixed in
+     0b4229c4eef5 (audit confirmed the other two delete call sites,
+     replace-mode restore clear and the sync tombstone applier,
+     correctly do not record).
 2. DONE — key_passphrase_{keyId} exported/restored in backup secrets.json
    and sync collectSecrets/applySecrets (SyncDataApplier.isSecretAliasEnabled
    gates on sync_keys; unit-tested in SyncDataApplierSecretGatingTest.kt)
@@ -115,7 +131,9 @@ open — explicitly out of scope for that pass, owned by a separate task.
    Note: several DAOs (Hypervisor, HypervisorAccount, Workspace,
    CloudAccount, Macro, MonitorSlot, VncHost, VncIdentity, PortForward)
    have no bulk deleteAll — clearTablesForReplace uses getAll+forEach
-   delete for those instead of adding new DAO methods.
+   delete for those instead of adding new DAO methods. The
+   FILE_DASHBOARD replace-mode asymmetry noted under item 8 was fixed
+   2026-08-08 in 3cd8e0f4578c (full multi_host_dashboard prefs clear).
 7. DONE — legacy oci_private_key_{profileId}/oci_passphrase_{profileId}
    aliases exported/restored alongside the _account_ variants
 8. DONE — non-default prefs files now in backup+restore via generic
@@ -137,12 +155,10 @@ open — explicitly out of scope for that pass, owned by a separate task.
     (tabSessionDao().deleteAllSessions() / auditLogDao().deleteAll());
     merge mode: skip rows that already exist (by tab_id / id).
 
-Minor observation (not fixed, out of scope for this pass): in
-ImportExportActivity.kt, the entire pre-existing file uses inline string
-literals for dialog text rather than res/values/strings.xml — conflicts
-with the global string-externalization rule. Only the 4 new restore-mode
-strings were externalized (matching the rule for new UI); retrofitting
-the rest of the file would be an unrelated refactor.
+Minor observation resolved 2026-08-08: ImportExportActivity.kt's
+inline dialog/toast strings were fully externalized in 28af0eb99ac6
+(69 import_export_* resources; also fixed the bulk-import group
+suffix rendering the literal " [$it]").
 
 ### D. Compose stacks: edit existing (incl. outside compose dir) + logs
 Research done. Gaps to implement: (1) stack discovery via
@@ -156,18 +172,16 @@ runContainer() only toasts; wire to existing streamLogs container flow.
 Also: ComposeEditorActivity silently shows empty fields when the remote
 compose file is unreadable (valueOrNull) — surface an error instead.
 
-### D2. Replace socat/nc bridge with `docker system dial-stdio` (in progress)
+### D2. Replace socat/nc bridge with `docker system dial-stdio` — DONE
 User rejected socat/nc as too fragile. Tier b becomes a dial-stdio
 relay (per-connection exec channel running `docker system dial-stdio`,
 piped like tier a; DOCKER_HOST=unix://{socketPath} for non-default
 sockets). Delete socat/nc bridge + the nc singleConnection mutex in
 EngineApiTransport; new mode "api_stdio"; legacy pinned "api_socat"
 falls back to auto detection; tier order streamlocal → dial-stdio →
-cli_exec. Agent implementing.
+cli_exec. Shipped in 632203855a18.
 
-### E. Infra tab reorder + UI/UX polish — DONE (2026-08-08, pending commit)
-Completed by the designer agent; awaiting `make check` + commit by the
-main instance:
+### E. Infra tab reorder + UI/UX polish — DONE (shipped 2cf1c3dcc31a)
 - Infra tabs reordered to Docker → Hypervisors → Cloud (InfraFragment)
 - Registry credentials: list and editor dialogs now explain the
   purpose (on-device HEAD /v2 digest checks by the auto-update
@@ -194,11 +208,10 @@ main instance:
 - Blank-first-tab bug needed no code change (fixed earlier via
   themes.xml tabSelectedTextColor)
 
-Remaining follow-up (logged, not done): hardcoded dialog titles/
-button labels predating this task in TabTerminalActivity and
-ConnectionEditActivity dialogs, and the emoji empty-state glyphs in
-fragment_cloud_accounts.xml / fragment_docker_hosts.xml (deliberate
-style, revisit only if a full icon pass is wanted).
+Follow-up resolved 2026-08-08: hardcoded dialog titles/button labels
+in TabTerminalActivity and ConnectionEditActivity externalized in
+fa54172b5d0d (102 new resources, 9 reused). Emoji empty-state glyphs
+remain deliberate style (see Deferred by design above).
 
 ## Needs verification
 
