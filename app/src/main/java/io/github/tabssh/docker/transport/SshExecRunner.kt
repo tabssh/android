@@ -80,9 +80,18 @@ class SshExecRunner(
                     delay(POLL_INTERVAL_MS)
                 }
             }
-            // Drain any bytes that arrived between the last poll and close.
-            drainFully(stdout, outBuf, buf)
-            drainFully(stderr, errBuf, buf)
+            if (channel.isClosed) {
+                // Drain any bytes that arrived between the last poll and close.
+                drainFully(stdout, outBuf, buf)
+                drainFully(stderr, errBuf, buf)
+            } else {
+                // Timeout with the channel still open: never block-read it — on a
+                // dead (black-holed) connection the read would hang forever, and on
+                // a slow command it would defeat the timeout. Take what's buffered.
+                Logger.w(TAG, "run: timeout after ${timeoutMs}ms cmdLen=${command.length}")
+                drainAvailable(stdout, outBuf, buf)
+                drainAvailable(stderr, errBuf, buf)
+            }
             val exit = if (channel.isClosed) channel.exitStatus else -1
             Logger.d(TAG, "run: exit=$exit cmdLen=${command.length}")
             ExecResult(
