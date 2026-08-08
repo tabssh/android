@@ -232,12 +232,17 @@ class SocketRelay(
 
     /** Start the local listener and accept loop, returning the bound port. */
     private fun startAcceptLoop(opener: () -> OpenedChannel): Int {
-        val server = ServerSocket(0, 8, InetAddress.getLoopbackAddress())
+        // Bind explicitly to IPv4 127.0.0.1 — every consumer (probeApiVersion,
+        // EngineApiTransport baseUrl) dials the literal "127.0.0.1", but
+        // getLoopbackAddress() returns ::1 on IPv6-preferring devices (e.g.
+        // IPv6-only mobile carriers), leaving the relay listening on IPv6
+        // loopback only and every probe failing with connection refused.
+        val server = ServerSocket(0, 8, InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1)))
         serverSocket = server
         relayScope.launch { acceptLoop(server, opener) }
         val port = server.localPort
         localPort = port
-        Logger.i(TAG, "relay listening on 127.0.0.1:$port -> ${host.socketPath}")
+        Logger.i(TAG, "relay listening on ${server.inetAddress.hostAddress}:$port -> ${host.socketPath}")
         return port
     }
 
