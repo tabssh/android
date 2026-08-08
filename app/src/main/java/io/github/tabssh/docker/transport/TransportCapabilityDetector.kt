@@ -16,12 +16,16 @@ import java.util.concurrent.TimeUnit
  *  (c) `docker version --format '{{json .}}'` over SSH exec
  *
  * The winning tier is persisted to [DockerHost.transportMode] via
- * [DockerHostDao]; a non-auto stored mode short-circuits detection until the
- * user forces a retest ([detect] with force=true) — the tier is never
- * silently downgraded behind the user's back. The legacy pinned mode
- * "api_socat" (the removed socat/nc bridge tier) is treated as [MODE_AUTO]
- * so an old pin falls through to full detection instead of failing outright;
- * the freshly detected tier is persisted over it.
+ * [DockerHostDao]; a stored API tier short-circuits detection until the user
+ * forces a retest ([detect] with force=true) — the tier is never silently
+ * downgraded behind the user's back. A stored "cli_exec" (the bottom tier)
+ * never short-circuits: the full ladder re-runs on every detect so the host
+ * auto-upgrades the moment a better tier starts working, and the per-tier
+ * failure reasons are logged each time instead of being hidden behind the
+ * pin. The legacy pinned mode "api_socat" (the removed socat/nc bridge tier)
+ * is treated as [MODE_AUTO] so an old pin falls through to full detection
+ * instead of failing outright; the freshly detected tier is persisted over
+ * it.
  *
  * A socket-permission probe runs before the socket tiers: "permission denied"
  * is surfaced as [DockerResult.PermissionDenied] carrying the docker-group
@@ -70,15 +74,20 @@ class TransportCapabilityDetector(
 
     /**
      * Detect (or re-detect with [force]) the best transport tier for [host].
-     * A stored non-auto mode is honored unless [force] is set. The winning
-     * tier is persisted before returning.
+     * A stored API-tier mode is honored unless [force] is set; a stored
+     * cli_exec re-runs the full ladder (see class doc). The winning tier is
+     * persisted before returning.
      */
     suspend fun detect(
         host: DockerHost,
         runner: SshExecRunner,
         force: Boolean = false
     ): DockerResult<DetectedTransport> = withContext(Dispatchers.IO) {
-        val pinned = host.transportMode.takeIf { !isAutoOrLegacy(it) && !force }
+        // A stored cli_exec is the bottom tier — never fast-path it, or the
+        // host stays pinned there forever and the API-tier failure reasons
+        // are never logged. Re-running the ladder is what auto-upgrades it.
+        val pinned = host.transportMode
+            .takeIf { !isAutoOrLegacy(it) && it != MODE_CLI_EXEC && !force }
         if (pinned != null) {
             return@withContext openTier(pinned, host, runner)
         }
