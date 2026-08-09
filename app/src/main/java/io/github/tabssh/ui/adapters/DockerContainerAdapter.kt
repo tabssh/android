@@ -4,16 +4,19 @@ import android.content.res.ColorStateList
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageButton
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.color.MaterialColors
 import io.github.tabssh.R
 import io.github.tabssh.docker.transport.DockerContainerSummary
 
 /**
- * Container list rows (PLAN.AI.md step 22): status dot, name, image, ports,
- * and the pending-update badge driven by ContainerAutoUpdatePolicy rows whose
- * pendingUpdateDigest is set ([updatePendingNames]).
+ * Container list rows: status dot, name, image, ports, the pending-update
+ * badge ([updatePendingNames]), and an always-visible quick-action strip —
+ * state-aware start/stop, logs, exec terminal, and an overflow sheet.
  */
 class DockerContainerAdapter(
     private var containers: List<DockerContainerSummary> = emptyList()
@@ -21,14 +24,31 @@ class DockerContainerAdapter(
 
     private var pendingUpdateNames: Set<String> = emptySet()
     private var onItemClickListener: ((DockerContainerSummary) -> Unit)? = null
-    private var onItemLongClickListener: ((DockerContainerSummary) -> Unit)? = null
+    private var onPrimaryActionListener: ((DockerContainerSummary) -> Unit)? = null
+    private var onLogsClickListener: ((DockerContainerSummary) -> Unit)? = null
+    private var onTerminalClickListener: ((DockerContainerSummary) -> Unit)? = null
+    private var onMoreClickListener: ((DockerContainerSummary) -> Unit)? = null
 
     fun setOnItemClickListener(listener: (DockerContainerSummary) -> Unit) {
         onItemClickListener = listener
     }
 
-    fun setOnItemLongClickListener(listener: (DockerContainerSummary) -> Unit) {
-        onItemLongClickListener = listener
+    /** State-aware lifecycle button: start when stopped, stop when running, unpause when paused. */
+    fun setOnPrimaryActionListener(listener: (DockerContainerSummary) -> Unit) {
+        onPrimaryActionListener = listener
+    }
+
+    fun setOnLogsClickListener(listener: (DockerContainerSummary) -> Unit) {
+        onLogsClickListener = listener
+    }
+
+    fun setOnTerminalClickListener(listener: (DockerContainerSummary) -> Unit) {
+        onTerminalClickListener = listener
+    }
+
+    /** Overflow button and long-press both open the full action sheet. */
+    fun setOnMoreClickListener(listener: (DockerContainerSummary) -> Unit) {
+        onMoreClickListener = listener
     }
 
     fun updateList(newList: List<DockerContainerSummary>) {
@@ -71,27 +91,39 @@ class DockerContainerAdapter(
         private val textImage: TextView = itemView.findViewById(R.id.text_image)
         private val textStatus: TextView = itemView.findViewById(R.id.text_status)
         private val textPorts: TextView = itemView.findViewById(R.id.text_ports)
+        private val buttonPrimary: ImageButton = itemView.findViewById(R.id.button_primary_action)
+        private val buttonLogs: ImageButton = itemView.findViewById(R.id.button_logs)
+        private val buttonTerminal: ImageButton = itemView.findViewById(R.id.button_terminal)
+        private val buttonMore: ImageButton = itemView.findViewById(R.id.button_more)
 
         init {
             itemView.setOnClickListener {
-                val position = bindingAdapterPosition
-                if (position != RecyclerView.NO_POSITION) {
-                    onItemClickListener?.invoke(containers[position])
-                }
+                current()?.let { onItemClickListener?.invoke(it) }
             }
-
             itemView.setOnLongClickListener {
-                val position = bindingAdapterPosition
-                if (position != RecyclerView.NO_POSITION) {
-                    onItemLongClickListener?.invoke(containers[position])
-                    true
-                } else {
-                    false
-                }
+                current()?.let { onMoreClickListener?.invoke(it); true } ?: false
+            }
+            buttonPrimary.setOnClickListener {
+                current()?.let { onPrimaryActionListener?.invoke(it) }
+            }
+            buttonLogs.setOnClickListener {
+                current()?.let { onLogsClickListener?.invoke(it) }
+            }
+            buttonTerminal.setOnClickListener {
+                current()?.let { onTerminalClickListener?.invoke(it) }
+            }
+            buttonMore.setOnClickListener {
+                current()?.let { onMoreClickListener?.invoke(it) }
             }
         }
 
+        private fun current(): DockerContainerSummary? {
+            val position = bindingAdapterPosition
+            return if (position != RecyclerView.NO_POSITION) containers[position] else null
+        }
+
         fun bind(container: DockerContainerSummary) {
+            val context = itemView.context
             val name = container.names.firstOrNull()?.removePrefix("/")
                 ?: container.id.take(12)
             textName.text = name
@@ -105,15 +137,39 @@ class DockerContainerAdapter(
                 textPorts.text = container.ports
             }
 
-            // Status dot color: green=running, amber=paused/restarting,
-            // red=exited/dead, grey=created (CloudInstanceAdapter palette).
+            // Status dot: semantic color resources — green running, amber
+            // paused/restarting, red exited/dead, outline grey otherwise.
             val dotColor = when (container.state) {
-                "running" -> 0xFF4CAF50.toInt()
-                "paused", "restarting" -> 0xFFFF9800.toInt()
-                "exited", "dead" -> 0xFFF44336.toInt()
-                else -> 0xFF9E9E9E.toInt()
+                "running" -> ContextCompat.getColor(context, R.color.success)
+                "paused", "restarting" -> ContextCompat.getColor(context, R.color.warning)
+                "exited", "dead" -> ContextCompat.getColor(context, R.color.error)
+                else -> MaterialColors.getColor(
+                    itemView, com.google.android.material.R.attr.colorOutline
+                )
             }
             viewStatus.backgroundTintList = ColorStateList.valueOf(dotColor)
+
+            // Primary lifecycle button follows state; exec only exists while running.
+            val running = container.state == "running"
+            val paused = container.state == "paused"
+            when {
+                running -> {
+                    buttonPrimary.setImageResource(R.drawable.ic_stop)
+                    buttonPrimary.contentDescription =
+                        context.getString(R.string.docker_action_stop)
+                }
+                paused -> {
+                    buttonPrimary.setImageResource(R.drawable.ic_play)
+                    buttonPrimary.contentDescription =
+                        context.getString(R.string.docker_action_unpause)
+                }
+                else -> {
+                    buttonPrimary.setImageResource(R.drawable.ic_play)
+                    buttonPrimary.contentDescription =
+                        context.getString(R.string.docker_action_start)
+                }
+            }
+            buttonTerminal.visibility = if (running) View.VISIBLE else View.GONE
 
             textUpdateBadge.visibility =
                 if (name in pendingUpdateNames) View.VISIBLE else View.GONE

@@ -12,6 +12,7 @@ import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.textfield.TextInputEditText
@@ -20,18 +21,22 @@ import io.github.tabssh.docker.DockerSessionManager
 import io.github.tabssh.docker.transport.DockerNetworkSummary
 import io.github.tabssh.docker.transport.DockerResult
 import io.github.tabssh.ui.adapters.DockerNetworkAdapter
+import io.github.tabssh.ui.dialogs.DockerActionSheet
 import io.github.tabssh.ui.dialogs.DockerErrorPresenter
 import io.github.tabssh.ui.dialogs.DockerInspectDialog
 import kotlinx.coroutines.launch
 
 /**
- * Networks destination (PLAN.AI.md step 22): list with driver/scope, FAB
- * creates a network, long-press offers inspect/remove.
+ * Networks destination: list with driver/scope, FAB creates a network, tap
+ * (or long-press) opens the action sheet with inspect first and destructive
+ * remove last. Load failures render inline with retry.
  */
 class DockerNetworksFragment : DockerPageFragment() {
 
     private lateinit var recyclerView: RecyclerView
     private lateinit var emptyState: LinearLayout
+    private lateinit var errorState: LinearLayout
+    private lateinit var textError: TextView
     private lateinit var textEmpty: TextView
     private lateinit var progressBar: ProgressBar
     private lateinit var fabAction: FloatingActionButton
@@ -48,6 +53,8 @@ class DockerNetworksFragment : DockerPageFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         recyclerView = view.findViewById(R.id.recycler_list)
         emptyState = view.findViewById(R.id.empty_state)
+        errorState = view.findViewById(R.id.error_state)
+        textError = view.findViewById(R.id.text_error)
         textEmpty = view.findViewById(R.id.text_empty)
         progressBar = view.findViewById(R.id.progress_bar)
         fabAction = view.findViewById(R.id.fab_action)
@@ -66,12 +73,17 @@ class DockerNetworksFragment : DockerPageFragment() {
 
         fabAction.setOnClickListener { showCreateDialog() }
 
+        view.findViewById<MaterialButton>(R.id.button_retry).setOnClickListener {
+            session?.let { onSessionReady(it) }
+        }
+
         // Base class wires sessionFlow/refreshFlow into onSessionReady.
         super.onViewCreated(view, savedInstanceState)
     }
 
     override fun onSessionReady(session: DockerSessionManager.DockerSession) {
         progressBar.visibility = View.VISIBLE
+        errorState.visibility = View.GONE
         viewLifecycleOwner.lifecycleScope.launch {
             val result = session.transport.listNetworks()
             if (!isAdded) return@launch
@@ -83,7 +95,12 @@ class DockerNetworksFragment : DockerPageFragment() {
                     recyclerView.visibility = if (empty) View.GONE else View.VISIBLE
                     emptyState.visibility = if (empty) View.VISIBLE else View.GONE
                 }
-                else -> DockerErrorPresenter.present(requireContext(), result)
+                else -> {
+                    recyclerView.visibility = View.GONE
+                    emptyState.visibility = View.GONE
+                    errorState.visibility = View.VISIBLE
+                    textError.text = DockerErrorPresenter.messageFor(requireContext(), result)
+                }
             }
         }
     }
@@ -128,19 +145,19 @@ class DockerNetworksFragment : DockerPageFragment() {
 
     private fun showNetworkMenu(network: DockerNetworkSummary) {
         if (!isAdded) return
-        val options = arrayOf(
-            getString(R.string.docker_option_inspect),
-            getString(R.string.docker_action_remove)
-        )
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(network.name)
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> inspectNetwork(network)
-                    1 -> confirmRemove(network)
+        DockerActionSheet.show(
+            requireContext(), network.name, network.driver,
+            listOf(
+                DockerActionSheet.Action(R.drawable.ic_info, getString(R.string.docker_option_inspect)) {
+                    inspectNetwork(network)
+                },
+                DockerActionSheet.Action(
+                    R.drawable.ic_clear, getString(R.string.docker_action_remove), destructive = true
+                ) {
+                    confirmRemove(network)
                 }
-            }
-            .show()
+            )
+        )
     }
 
     private fun inspectNetwork(network: DockerNetworkSummary) {

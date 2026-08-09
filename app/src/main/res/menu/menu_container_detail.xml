@@ -3,15 +3,16 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <item
+        android:id="@+id/action_terminal"
+        android:title="@string/docker_action_terminal"
+        android:icon="@drawable/ic_terminal"
+        app:showAsAction="ifRoom" />
+
+    <item
         android:id="@+id/action_refresh"
         android:title="@string/docker_refresh"
         android:icon="@drawable/ic_refresh"
         app:showAsAction="ifRoom" />
-
-    <item
-        android:id="@+id/action_terminal"
-        android:title="@string/docker_action_terminal"
-        app:showAsAction="never" />
 
     <item
         android:id="@+id/action_start"
@@ -19,13 +20,13 @@
         app:showAsAction="never" />
 
     <item
-        android:id="@+id/action_stop"
-        android:title="@string/docker_action_stop"
+        android:id="@+id/action_restart"
+        android:title="@string/docker_action_restart"
         app:showAsAction="never" />
 
     <item
-        android:id="@+id/action_restart"
-        android:title="@string/docker_action_restart"
+        android:id="@+id/action_stop"
+        android:title="@string/docker_action_stop"
         app:showAsAction="never" />
 
     <item
@@ -39,13 +40,13 @@
         app:showAsAction="never" />
 
     <item
-        android:id="@+id/action_kill"
-        android:title="@string/docker_action_kill"
+        android:id="@+id/action_rename"
+        android:title="@string/docker_action_rename"
         app:showAsAction="never" />
 
     <item
-        android:id="@+id/action_rename"
-        android:title="@string/docker_action_rename"
+        android:id="@+id/action_kill"
+        android:title="@string/docker_action_kill"
         app:showAsAction="never" />
 
     <item

@@ -474,6 +474,9 @@
     <string name="docker_action_remove">Remove…</string>
     <string name="docker_action_terminal">Enter terminal</string>
     <string name="docker_action_auto_update">Auto-update policy…</string>
+    <string name="docker_action_details">Details</string>
+    <string name="docker_more_actions_desc">More actions</string>
+    <string name="docker_menu_reconnect">Reconnect</string>
     <string name="docker_action_success">Done</string>
     <string name="docker_remove_container_message">Remove container %1$s? A running container is killed first.</string>
     <string name="docker_rename_title">Rename container</string>

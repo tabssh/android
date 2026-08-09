@@ -19,9 +19,9 @@ import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.docker.DockerSessionManager
 import io.github.tabssh.docker.transport.ContainerAction
 import io.github.tabssh.docker.transport.DockerResult
-import io.github.tabssh.docker.transport.SshExecRunner
 import io.github.tabssh.ui.dialogs.ContainerRenameDialog
 import io.github.tabssh.ui.dialogs.DockerErrorPresenter
+import io.github.tabssh.ui.utils.DockerExecLauncher
 import io.github.tabssh.ui.views.SparklineView
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -436,49 +436,19 @@ class ContainerDetailActivity : AppCompatActivity() {
     }
 
     /**
-     * Probe for bash (falling back to sh), then open a terminal tab whose
-     * remote command is docker exec -it into this container. The ephemeral
-     * profile copies the linked connection's endpoint and auth and is never
-     * saved to the database.
+     * Open a terminal tab running docker exec -it into this container via the
+     * shared DockerExecLauncher (bash/sh probe + ephemeral profile).
      */
     private fun enterTerminal() {
         val current = session ?: return
         progressBar.visibility = View.VISIBLE
         Toast.makeText(this, R.string.docker_terminal_probing, Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
-            val docker = current.host.dockerCliPath ?: "docker"
-            val quotedId = SshExecRunner.shQuote(containerId)
-            val probe = current.runner.run(
-                "$docker exec $quotedId sh -c " +
-                    "'command -v bash >/dev/null 2>&1 && echo bash || echo sh'"
+            val intent = DockerExecLauncher.buildExecIntent(
+                this@ContainerDetailActivity, current, hostId, containerId, containerName
             )
             progressBar.visibility = View.GONE
-            val shell = probe.stdout.trim().lines().lastOrNull()?.trim()
-                .takeIf { it == "bash" } ?: "sh"
-            // docker exec -it needs a client-side PTY; the exec channel only
-            // allocates one when requestTTY is yes/force (auto = no PTY), so
-            // force it on the ephemeral profile while preserving other settings
-            val adv = try {
-                org.json.JSONObject(
-                    current.profile.advancedSettings?.takeIf { it.isNotBlank() } ?: "{}"
-                )
-            } catch (_: Exception) {
-                org.json.JSONObject()
-            }
-            adv.put("requestTTY", "force")
-            val execProfile = current.profile.copy(
-                id = "docker-exec:$hostId:$containerId",
-                name = "docker: $containerName",
-                remoteCommand = "$docker exec -it $quotedId $shell",
-                multiplexerMode = "OFF",
-                advancedSettings = adv.toString()
-            )
-            startActivity(
-                TabTerminalActivity.createIntent(
-                    this@ContainerDetailActivity, execProfile,
-                    autoConnect = true, forceNew = true
-                )
-            )
+            startActivity(intent)
         }
     }
 

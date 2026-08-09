@@ -3,6 +3,7 @@ package io.github.tabssh.ui.adapters
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageButton
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
@@ -20,6 +21,7 @@ class ComposeStackAdapter(
 
     private var onItemClickListener: ((StackListItem) -> Unit)? = null
     private var onItemLongClickListener: ((StackListItem) -> Unit)? = null
+    private var onMoreClickListener: ((StackListItem) -> Unit)? = null
 
     fun setOnItemClickListener(listener: (StackListItem) -> Unit) {
         onItemClickListener = listener
@@ -27,6 +29,11 @@ class ComposeStackAdapter(
 
     fun setOnItemLongClickListener(listener: (StackListItem) -> Unit) {
         onItemLongClickListener = listener
+    }
+
+    /** Row overflow button — opens the same action sheet as a long-press. */
+    fun setOnMoreClickListener(listener: (StackListItem) -> Unit) {
+        onMoreClickListener = listener
     }
 
     fun updateList(newList: List<StackListItem>) {
@@ -59,8 +66,16 @@ class ComposeStackAdapter(
         private val textName: TextView = itemView.findViewById(R.id.text_name)
         private val textPath: TextView = itemView.findViewById(R.id.text_path)
         private val textStatus: TextView = itemView.findViewById(R.id.text_status)
+        private val buttonMore: ImageButton = itemView.findViewById(R.id.button_more)
 
         init {
+            buttonMore.setOnClickListener {
+                val position = bindingAdapterPosition
+                if (position != RecyclerView.NO_POSITION) {
+                    onMoreClickListener?.invoke(items[position])
+                }
+            }
+
             itemView.setOnClickListener {
                 val position = bindingAdapterPosition
                 if (position != RecyclerView.NO_POSITION) {

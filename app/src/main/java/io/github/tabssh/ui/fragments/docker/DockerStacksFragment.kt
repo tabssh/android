@@ -23,16 +23,17 @@ import io.github.tabssh.ui.activities.ComposeEditorActivity
 import io.github.tabssh.ui.activities.StackLogsActivity
 import io.github.tabssh.ui.adapters.ComposeStackAdapter
 import io.github.tabssh.ui.adapters.StackListItem
+import io.github.tabssh.ui.dialogs.DockerActionSheet
 import io.github.tabssh.ui.dialogs.DockerErrorPresenter
 import io.github.tabssh.ui.dialogs.DockerInspectDialog
 import kotlinx.coroutines.launch
 
 /**
- * Compose stacks destination (PLAN.AI.md step 25): Room-backed stack list,
- * merged with projects discovered via `docker compose ls` that have no Room
- * row (TODO.AI.md § D). FAB opens the paste-first editor, tap edits,
- * long-press runs compose lifecycle actions with their command output shown
- * in a dialog.
+ * Compose stacks destination: Room-backed stack list, merged with projects
+ * discovered via `docker compose ls` that have no Room row. FAB opens the
+ * paste-first editor, tap edits, and the row's overflow button (or a
+ * long-press) opens the compose action sheet with command output shown in a
+ * dialog and the destructive delete last.
  */
 class DockerStacksFragment : DockerPageFragment() {
 
@@ -72,6 +73,7 @@ class DockerStacksFragment : DockerPageFragment() {
 
         adapter.setOnItemClickListener { item -> openEditor(item) }
         adapter.setOnItemLongClickListener { item -> showStackMenu(item) }
+        adapter.setOnMoreClickListener { item -> showStackMenu(item) }
 
         fabAction.setOnClickListener { openEditor(null) }
 
@@ -162,63 +164,75 @@ class DockerStacksFragment : DockerPageFragment() {
         startActivity(intent)
     }
 
+    /**
+     * Action sheet ordered by frequency — read-only logs/services first,
+     * lifecycle verbs next, service-stopping down and destructive delete last.
+     */
     private fun showStackMenu(item: StackListItem) {
         if (!isAdded) return
-        val options = buildList {
-            add(getString(R.string.docker_stack_action_up))
-            add(getString(R.string.docker_stack_action_down))
-            add(getString(R.string.docker_stack_action_pull))
-            add(getString(R.string.docker_stack_action_restart))
-            add(getString(R.string.docker_stack_services))
-            add(getString(R.string.docker_action_logs))
-            // Deleting a Room row makes no sense for a stack that has none.
-            if (item is StackListItem.Tracked) add(getString(R.string.delete))
+        val current = session ?: return
+        val actions = mutableListOf<DockerActionSheet.Action>()
+        actions += DockerActionSheet.Action(R.drawable.ic_logs, getString(R.string.docker_action_logs)) {
+            openLogs(item)
         }
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(item.name)
-            .setItems(options.toTypedArray()) { _, which ->
-                val current = session ?: return@setItems
-                when (which) {
-                    0 -> runComposeAction(item) {
-                        composeAction(
-                            current, item,
-                            { t, d -> t.composeUp(d) },
-                            { t, n, f -> t.composeUpByProject(n, f) }
-                        )
-                    }
-                    1 -> runComposeAction(item) {
-                        composeAction(
-                            current, item,
-                            { t, d -> t.composeDown(d) },
-                            { t, n, f -> t.composeDownByProject(n, f) }
-                        )
-                    }
-                    2 -> runComposeAction(item) {
-                        composeAction(
-                            current, item,
-                            { t, d -> t.composePull(d) },
-                            { t, n, f -> t.composePullByProject(n, f) }
-                        )
-                    }
-                    3 -> runComposeAction(item) {
-                        composeAction(
-                            current, item,
-                            { t, d -> t.composeRestart(d) },
-                            { t, n, f -> t.composeRestartByProject(n, f) }
-                        )
-                    }
-                    4 -> runComposeAction(item) {
-                        composeAction(
-                            current, item,
-                            { t, d -> t.composePs(d) },
-                            { t, n, f -> t.composePsByProject(n, f) }
-                        )
-                    }
-                    5 -> openLogs(item)
-                    6 -> if (item is StackListItem.Tracked) confirmDelete(item.stack)
-                }
+        actions += DockerActionSheet.Action(R.drawable.ic_info, getString(R.string.docker_stack_services)) {
+            runComposeAction(item) {
+                composeAction(
+                    current, item,
+                    { t, d -> t.composePs(d) },
+                    { t, n, f -> t.composePsByProject(n, f) }
+                )
             }
-            .show()
+        }
+        actions += DockerActionSheet.Action(R.drawable.ic_arrow_up, getString(R.string.docker_stack_action_up)) {
+            runComposeAction(item) {
+                composeAction(
+                    current, item,
+                    { t, d -> t.composeUp(d) },
+                    { t, n, f -> t.composeUpByProject(n, f) }
+                )
+            }
+        }
+        actions += DockerActionSheet.Action(R.drawable.ic_refresh, getString(R.string.docker_stack_action_restart)) {
+            runComposeAction(item) {
+                composeAction(
+                    current, item,
+                    { t, d -> t.composeRestart(d) },
+                    { t, n, f -> t.composeRestartByProject(n, f) }
+                )
+            }
+        }
+        actions += DockerActionSheet.Action(R.drawable.ic_download, getString(R.string.docker_stack_action_pull)) {
+            runComposeAction(item) {
+                composeAction(
+                    current, item,
+                    { t, d -> t.composePull(d) },
+                    { t, n, f -> t.composePullByProject(n, f) }
+                )
+            }
+        }
+        actions += DockerActionSheet.Action(R.drawable.ic_arrow_down, getString(R.string.docker_stack_action_down)) {
+            runComposeAction(item) {
+                composeAction(
+                    current, item,
+                    { t, d -> t.composeDown(d) },
+                    { t, n, f -> t.composeDownByProject(n, f) }
+                )
+            }
+        }
+        // Deleting a Room row makes no sense for a stack that has none.
+        if (item is StackListItem.Tracked) {
+            actions += DockerActionSheet.Action(
+                R.drawable.ic_clear, getString(R.string.delete), destructive = true
+            ) {
+                confirmDelete(item.stack)
+            }
+        }
+        val subtitle = when (item) {
+            is StackListItem.Tracked -> item.stack.remotePath
+            is StackListItem.External -> item.entry.primaryConfigFile
+        }
+        DockerActionSheet.show(requireContext(), item.name, subtitle, actions)
     }
 
     /**

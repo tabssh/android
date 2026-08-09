@@ -23,6 +23,7 @@ import io.github.tabssh.storage.database.entities.DockerHost
 import io.github.tabssh.ui.activities.DockerHostEditActivity
 import io.github.tabssh.ui.activities.DockerHostManagerActivity
 import io.github.tabssh.ui.adapters.DockerHostAdapter
+import io.github.tabssh.ui.dialogs.DockerActionSheet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -31,7 +32,8 @@ import kotlinx.coroutines.withContext
 /**
  * Docker host list — third Infra sub-tab (PLAN.AI.md step 19).
  * Same structure as HypervisorsFragment: DAO Flow → DiffUtil adapter, FAB /
- * empty-state add, long-press options (Open / Edit / Delete / Retest).
+ * empty-state add. Row overflow button and long-press open the same action
+ * sheet (Open / Test connection / Edit / Delete — destructive last).
  */
 class DockerHostsFragment : Fragment() {
 
@@ -102,6 +104,10 @@ class DockerHostsFragment : Fragment() {
         }
 
         adapter.setOnItemLongClickListener { host ->
+            showDockerHostMenu(host)
+        }
+
+        adapter.setOnMoreClickListener { host ->
             showDockerHostMenu(host)
         }
     }
@@ -177,24 +183,25 @@ class DockerHostsFragment : Fragment() {
     private fun showDockerHostMenu(host: DockerHost) {
         if (!isAdded) return
 
-        val options = arrayOf(
-            getString(R.string.docker_option_open),
-            getString(R.string.edit),
-            getString(R.string.delete),
-            getString(R.string.docker_option_retest)
-        )
-
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(host.name)
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> openDockerHostManager(host)
-                    1 -> openDockerHostEdit(host)
-                    2 -> deleteDockerHost(host)
-                    3 -> retestTransport(host)
+        DockerActionSheet.show(
+            requireContext(),
+            host.name,
+            null,
+            listOf(
+                DockerActionSheet.Action(R.drawable.ic_forward, getString(R.string.docker_option_open)) {
+                    openDockerHostManager(host)
+                },
+                DockerActionSheet.Action(R.drawable.ic_connection, getString(R.string.docker_option_retest)) {
+                    retestTransport(host)
+                },
+                DockerActionSheet.Action(R.drawable.ic_edit, getString(R.string.edit)) {
+                    openDockerHostEdit(host)
+                },
+                DockerActionSheet.Action(R.drawable.ic_clear, getString(R.string.delete), destructive = true) {
+                    deleteDockerHost(host)
                 }
-            }
-            .show()
+            )
+        )
     }
 
     private fun deleteDockerHost(host: DockerHost) {

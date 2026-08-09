@@ -1,0 +1,15 @@
+<!--
+    Log-lines icon for the container/stack logs shortcuts.
+    Material Symbols "subject" (24dp), tinted via app:tint at the use site.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorOnSurface">
+
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M4,5h16v2H4V5z M4,9h16v2H4V9z M4,13h10v2H4V13z M4,17h16v2H4V17z"/>
+</vector>

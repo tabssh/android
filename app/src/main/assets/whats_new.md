@@ -41,6 +41,16 @@
   doesn't allow socket forwarding it falls back to the docker CLI
   automatically, and tells you exactly what to enable if you want
   the faster path.
+- **One-tap container actions** — container rows now show the
+  actions you use most: a start/stop button that follows the
+  container's state, Logs, and Terminal, plus an overflow menu.
+  Logs and exec dropped from three taps to one, and nothing hides
+  behind a long-press any more (it still works as a shortcut).
+- **Smarter layout everywhere** — manager tabs are ordered by how
+  often you use them (Containers first, Dashboard last), every
+  action menu is a bottom sheet with icons and destructive actions
+  set apart at the bottom, and a failed connection shows an inline
+  message with a Retry button instead of a dead-end screen.
 
 ### Tasker / Locale plugin
 

@@ -6,6 +6,7 @@ import android.view.MenuItem
 import android.view.View
 import android.view.WindowManager
 import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
@@ -13,6 +14,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 import io.github.tabssh.R
@@ -35,11 +37,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Docker host manager (PLAN.AI.md step 21): six destinations — Dashboard,
- * Containers, Images, Volumes, Networks, Stacks — as fragments in a
- * TabLayout + ViewPager2. The transport is acquired ONCE via
+ * Docker host manager: six destinations ordered by frequency of use —
+ * Containers, Stacks, Images, Volumes, Networks, Dashboard — as fragments in
+ * a TabLayout + ViewPager2. The transport is acquired ONCE via
  * DockerSessionManager and shared with the fragments through [sessionFlow];
- * fragments re-load when [refreshFlow] ticks.
+ * fragments re-load when [refreshFlow] ticks. Connect failures render an
+ * inline error state with retry instead of a dialog over a blank screen.
  */
 class DockerHostManagerActivity : AppCompatActivity() {
 
@@ -52,6 +55,8 @@ class DockerHostManagerActivity : AppCompatActivity() {
     private lateinit var tabLayout: TabLayout
     private lateinit var viewPager: ViewPager2
     private lateinit var connectingState: LinearLayout
+    private lateinit var errorState: LinearLayout
+    private lateinit var textError: TextView
 
     /** The shared per-host session; null until acquisition completes. */
     private val mutableSessionFlow = MutableStateFlow<DockerSessionManager.DockerSession?>(null)
@@ -86,6 +91,11 @@ class DockerHostManagerActivity : AppCompatActivity() {
         tabLayout = findViewById(R.id.tab_layout)
         viewPager = findViewById(R.id.view_pager)
         connectingState = findViewById(R.id.connecting_state)
+        errorState = findViewById(R.id.error_state)
+        textError = findViewById(R.id.text_error)
+        findViewById<MaterialButton>(R.id.button_retry).setOnClickListener {
+            acquireSession(force = true)
+        }
 
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
@@ -103,13 +113,15 @@ class DockerHostManagerActivity : AppCompatActivity() {
         viewPager.adapter = DockerPagerAdapter(this)
         // Six destinations — keep neighbors alive so switching is instant.
         viewPager.offscreenPageLimit = 2
+        // Ordered by frequency of use: the containers you manage daily first,
+        // glanceable engine info (Dashboard) last.
         val titles = intArrayOf(
-            R.string.docker_manager_tab_dashboard,
             R.string.docker_manager_tab_containers,
+            R.string.docker_manager_tab_stacks,
             R.string.docker_manager_tab_images,
             R.string.docker_manager_tab_volumes,
             R.string.docker_manager_tab_networks,
-            R.string.docker_manager_tab_stacks
+            R.string.docker_manager_tab_dashboard
         )
         TabLayoutMediator(tabLayout, viewPager) { tab, position ->
             tab.setText(titles[position])
@@ -118,6 +130,7 @@ class DockerHostManagerActivity : AppCompatActivity() {
 
     private fun acquireSession(force: Boolean) {
         connectingState.visibility = View.VISIBLE
+        errorState.visibility = View.GONE
         viewPager.visibility = View.GONE
         lifecycleScope.launch {
             when (val result = DockerSessionManager.acquire(app, hostId, force)) {
@@ -130,7 +143,10 @@ class DockerHostManagerActivity : AppCompatActivity() {
                 }
                 else -> {
                     connectingState.visibility = View.GONE
-                    DockerErrorPresenter.present(this@DockerHostManagerActivity, result)
+                    errorState.visibility = View.VISIBLE
+                    textError.text = DockerErrorPresenter.messageFor(
+                        this@DockerHostManagerActivity, result
+                    )
                 }
             }
         }
@@ -210,12 +226,12 @@ class DockerHostManagerActivity : AppCompatActivity() {
         override fun getItemCount(): Int = 6
 
         override fun createFragment(position: Int): Fragment = when (position) {
-            0 -> DockerDashboardFragment()
-            1 -> DockerContainersFragment()
+            0 -> DockerContainersFragment()
+            1 -> DockerStacksFragment()
             2 -> DockerImagesFragment()
             3 -> DockerVolumesFragment()
             4 -> DockerNetworksFragment()
-            5 -> DockerStacksFragment()
+            5 -> DockerDashboardFragment()
             else -> error("Invalid Docker manager tab position $position")
         }
     }

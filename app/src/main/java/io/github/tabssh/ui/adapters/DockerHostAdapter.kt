@@ -3,6 +3,7 @@ package io.github.tabssh.ui.adapters
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageButton
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
@@ -24,6 +25,7 @@ class DockerHostAdapter(
     private var connectionNames: Map<String, String> = emptyMap()
     private var onItemClickListener: ((DockerHost) -> Unit)? = null
     private var onItemLongClickListener: ((DockerHost) -> Unit)? = null
+    private var onMoreClickListener: ((DockerHost) -> Unit)? = null
 
     fun setOnItemClickListener(listener: (DockerHost) -> Unit) {
         onItemClickListener = listener
@@ -31,6 +33,11 @@ class DockerHostAdapter(
 
     fun setOnItemLongClickListener(listener: (DockerHost) -> Unit) {
         onItemLongClickListener = listener
+    }
+
+    /** Row overflow button — opens the same action sheet as a long-press. */
+    fun setOnMoreClickListener(listener: (DockerHost) -> Unit) {
+        onMoreClickListener = listener
     }
 
     fun updateList(newList: List<DockerHost>, newConnectionNames: Map<String, String>) {
@@ -65,8 +72,16 @@ class DockerHostAdapter(
         private val textTransportMode: TextView = itemView.findViewById(R.id.text_transport_mode)
         private val textConnection: TextView = itemView.findViewById(R.id.text_connection)
         private val textLastConnected: TextView = itemView.findViewById(R.id.text_last_connected)
+        private val buttonMore: ImageButton = itemView.findViewById(R.id.button_more)
 
         init {
+            buttonMore.setOnClickListener {
+                val position = bindingAdapterPosition
+                if (position != RecyclerView.NO_POSITION) {
+                    onMoreClickListener?.invoke(hosts[position])
+                }
+            }
+
             itemView.setOnClickListener {
                 val position = bindingAdapterPosition
                 if (position != RecyclerView.NO_POSITION) {
